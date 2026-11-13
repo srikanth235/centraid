@@ -1998,7 +1998,7 @@ fn a_refused_save_keeps_every_field_the_member_changed_as_an_earlier_version() {
     assert_eq!(held("event.travel_min"), 30);
     assert_eq!(held("event.calendar_id"), other_calendar.as_str());
     assert_eq!(held("event.url"), "https://example.test/room");
-    assert_eq!(held("event.reminders"), "[30]");
+    assert_eq!(held("reminder[30]")["offset_min"], 30);
     assert_eq!(held(&format!("attendee[{maya}]"))["to_id"], maya.as_str());
     // The event itself stands as the other surface left it.
     let row = world.event_row(&id).expect("event");

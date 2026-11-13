@@ -150,8 +150,14 @@ pub fn lines(wording: Wording<'_>, found: &[Difference]) -> Lines {
             ));
         }
     }
-    if let Some(alerts) = stated_text("reminders")
-        .and_then(|text| serde_json::from_str::<Vec<i64>>(&text).ok())
+    // The vault states alerts as a list of minutes; a source's older word may be that list as text.
+    if let Some(alerts) = follow::of(found, "reminders")
+        .and_then(|difference| match &difference.stated {
+            Value::Array(list) => Some(list.iter().filter_map(Value::as_i64).collect::<Vec<_>>()),
+            other => {
+                follow::text(other).and_then(|text| serde_json::from_str::<Vec<i64>>(&text).ok())
+            }
+        })
         .filter(|alerts| !alerts.is_empty())
     {
         let shown: Vec<String> = alerts

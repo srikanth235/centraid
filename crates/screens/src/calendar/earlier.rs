@@ -119,25 +119,6 @@ fn guest(field: &Field) -> Option<(&str, Option<&str>)> {
     Some((id, column.strip_prefix('.')))
 }
 
-/// The reminders' leads in minutes, whether stored as numbers or as `{minutes_before}` objects.
-fn leads(value: &Value) -> Vec<i64> {
-    let list: Value = match value {
-        Value::String(raw) => serde_json::from_str(raw).unwrap_or(Value::Null),
-        other => other.clone(),
-    };
-    list.as_array()
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(|item| {
-                    item.as_i64()
-                        .or_else(|| item.get("minutes_before").and_then(Value::as_i64))
-                })
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 /// The one line an event's fields read as.
 fn parts(look: &Look, fields: &[Field]) -> Vec<String> {
     let locale = look.locale;
@@ -186,18 +167,20 @@ fn parts(look: &Look, fields: &[Field]) -> Vec<String> {
     );
     parts.push(own("event.url"));
     parts.push(own("event.rule").map(|rule| rule_words::stored(locale, &rule)));
-    parts.push(
-        named("event.reminders")
-            .map(|field| leads(&field.value))
-            .filter(|l| !l.is_empty())
-            .map(|leads| {
-                leads
-                    .iter()
-                    .map(|minutes| reminder_label(locale, *minutes))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            }),
-    );
+    // An alert is a row of its own, named `reminder[<minutes>]`; one that is not held is null.
+    let mut held: Vec<i64> = fields
+        .iter()
+        .filter(|field| field.name.starts_with("reminder["))
+        .filter_map(|field| field.value.get("offset_min").and_then(Value::as_i64))
+        .collect();
+    held.sort_unstable();
+    parts.push(Some(held).filter(|l| !l.is_empty()).map(|leads| {
+        leads
+            .iter()
+            .map(|minutes| reminder_label(locale, *minutes))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }));
     parts.push(
         named("event.travel_min")
             .and_then(|field| field.value.as_i64())
