@@ -3096,6 +3096,70 @@
       "w": 390,
       "x": 3290,
       "y": 34200
+    },
+    "BackupMovedOn.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Another phone took over the backup (#1191)",
+      "w": 390,
+      "x": 7520,
+      "y": 19740
+    },
+    "BackupPaused.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · A backup device is paused by its operator (#1191)",
+      "w": 390,
+      "x": 7520,
+      "y": 20680
+    },
+    "BackupTooOld.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · A backup device needs an update (#1191)",
+      "w": 390,
+      "x": 7520,
+      "y": 21620
+    },
+    "BackupHeld.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Old backup files waiting to go, with Undo (#1191)",
+      "w": 390,
+      "x": 7520,
+      "y": 22560
+    },
+    "BackupDeviceNotes.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · A backup that can’t be read, a piece sent again (#1191)",
+      "w": 390,
+      "x": 7520,
+      "y": 23500
+    },
+    "BackupVaultDamaged.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · This phone’s vault is damaged (#1191)",
+      "w": 390,
+      "x": 7520,
+      "y": 24440
+    },
+    "BackupChecked.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Check my backup, stated rate (#1191)",
+      "w": 390,
+      "x": 7520,
+      "y": 25380
+    },
+    "RestoreAsk.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Restore, the newest backup found may not be the newest (#1191)",
+      "w": 390,
+      "x": 7520,
+      "y": 26320
     }
   },
   "createdOnFiles": {
@@ -3943,7 +4007,15 @@
     "RestoreWorking.dc.html",
     "BackupTooLarge.dc.html",
     "BackupRefusing.dc.html",
-    "RestoreUnfinished.dc.html"
+    "RestoreUnfinished.dc.html",
+    "BackupMovedOn.dc.html",
+    "BackupPaused.dc.html",
+    "BackupTooOld.dc.html",
+    "BackupHeld.dc.html",
+    "BackupDeviceNotes.dc.html",
+    "BackupVaultDamaged.dc.html",
+    "BackupChecked.dc.html",
+    "RestoreAsk.dc.html"
   ],
   "pages": [
     {

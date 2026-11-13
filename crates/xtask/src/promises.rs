@@ -3065,7 +3065,7 @@ fn link_missing(root: &Path, app: &str) -> Vec<String> {
 /// **BACKUP** (#1188, Part B). Backup is the vault's, so no app has a row; each promise names the
 /// tests that prove it, and the rule fails when a named test is gone, renamed or `#[ignore]`d.
 /// `(promise, [(file, test)])`.
-pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 8] = [
+pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 9] = [
     (
         "every paired backup device receives every pass",
         &[
@@ -3219,6 +3219,35 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 8] = [
             (
                 "crates/screens/src/backup/tests.rs",
                 "a_refusal_is_worded_for_its_own_remedy",
+            ),
+        ],
+    ),
+    (
+        "each backup device says what happened to it, in the fixture's words on both phones: another phone took over, paused by whoever runs it, too old, an old backup it cannot read, a piece sent again, deletes held for a week with Undo; a damaged vault is never called backed up; a check states what it read; a restore that cannot prove the newest backup asks",
+        &[
+            (
+                "crates/screens/tests/backup_page.rs",
+                "each_device_says_how_it_stands_and_what_it_holds_for_a_week",
+            ),
+            (
+                "crates/screens/tests/backup_page.rs",
+                "a_device_that_is_not_simply_behind_is_named_with_its_reason",
+            ),
+            (
+                "crates/screens/tests/backup_page.rs",
+                "a_damaged_vault_says_so_and_is_never_called_backed_up",
+            ),
+            (
+                "crates/screens/tests/backup_page.rs",
+                "the_rate_sentence_states_what_was_read",
+            ),
+            (
+                "crates/screens/tests/backup_page.rs",
+                "the_restore_ask_names_the_date_and_the_device_and_does_not_claim",
+            ),
+            (
+                "crates/screens/tests/backup_page.rs",
+                "no_sentence_says_what_the_member_is_never_told",
             ),
         ],
     ),

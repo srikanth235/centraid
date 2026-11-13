@@ -18,7 +18,7 @@ use crate::kit::read::{Reading as Read, read};
 use crate::screen::Ctx;
 
 /// One paired gateway, as the ledger remembers it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Destination {
     pub gateway_id: String,
     pub label: String,
@@ -49,6 +49,21 @@ pub struct Destination {
     pub paired_at_ms: Option<i64>,
     /// The originals it still owes, per app: (app id, files).
     pub waiting_apps: Vec<(String, u64)>,
+    /// ANOTHER PHONE TOOK OVER HERE (#1191, E4): this device answered with a claim, verified by the
+    /// core, above the epoch this phone holds. Only this device's pass stops.
+    pub moved: bool,
+    /// Whoever runs it paused it (`FROZEN`, E6). The phone asks again next pass.
+    pub paused: bool,
+    /// It runs a protocol older than this phone needs (E13).
+    pub too_old: bool,
+    /// One kept old backup there cannot be read, so collection there is stopped (E9).
+    pub unreadable_backup: bool,
+    /// Read-back found a stored piece damaged; it is queued to be sent again (E10).
+    pub damage_found: bool,
+    /// Files this phone deleted there that it holds for a week, and when the first goes, on that
+    /// device's clock (E6). Zero and `None` with none held.
+    pub held_files: u64,
+    pub held_until_ms: Option<i64>,
 }
 
 /// Where one backup device stands, best first: the order is the ranking, so the greatest is the worst (#1188, NB1).
@@ -66,12 +81,24 @@ pub enum Footing {
     Refusing,
     /// It holds an older backup than this phone sent.
     RolledBack,
+    /// Whoever runs it paused it (#1191).
+    Paused,
+    /// It runs an older version than this phone needs (#1191).
+    TooOld,
+    /// Another phone took over there (#1191).
+    Moved,
 }
 
 impl Destination {
     #[must_use]
     pub fn footing(&self) -> Footing {
-        if self.rolled_back {
+        if self.moved {
+            Footing::Moved
+        } else if self.too_old {
+            Footing::TooOld
+        } else if self.paused {
+            Footing::Paused
+        } else if self.rolled_back {
             Footing::RolledBack
         } else if self.reach == wire::WaitReason::Refused as i32 {
             Footing::Full
@@ -88,7 +115,7 @@ impl Destination {
 }
 
 /// The ledger's reading of one vault's backup.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Reading {
     pub destinations: Vec<Destination>,
     /// When the latest snapshot a gateway holds was taken, phone clock.
@@ -121,6 +148,11 @@ pub struct Reading {
     /// The videos the member left out, and their bytes.
     pub left_out_items: u64,
     pub left_out_bytes: u64,
+    /// THIS PHONE'S VAULT IS DAMAGED (#1191, V21): the quick check at open or before a head found
+    /// it, so no new backup is made and the restore door is offered.
+    pub damaged: bool,
+    /// What the last read-back read: `(pieces read, pieces stored)` (E10); `None` before one ran.
+    pub sample: Option<(u64, u64)>,
 }
 
 impl Reading {
@@ -170,6 +202,9 @@ impl Reading {
                         .iter()
                         .map(|w| (w.app_id.clone(), w.files))
                         .collect(),
+                    // THE WIRE DOES NOT CARRY THESE YET (#1191, B16): the core's reading gains them
+                    // with the device-state tables (B14). Until then none is claimed.
+                    ..Destination::default()
                 })
                 .collect(),
             last_snapshot_ms: status.last_snapshot_ms,
@@ -187,6 +222,8 @@ impl Reading {
             confirmed_bytes: status.confirmed_bytes,
             left_out_items: status.left_out_items,
             left_out_bytes: status.left_out_bytes,
+            damaged: false,
+            sample: None,
         }
     }
 }

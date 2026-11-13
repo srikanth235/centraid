@@ -189,39 +189,15 @@ mod tests {
         Destination {
             gateway_id: format!("id-{label}"),
             label: label.to_owned(),
-            addrs: Vec::new(),
-            last_seen_ms: None,
             last_ack_ms: ack,
-            pair_again: false,
-            held_bytes: 0,
-            behind_files: 0,
-            behind_bytes: 0,
-            records_behind: false,
-            reach: 0,
-            refused_limit_bytes: 0,
-            rolled_back: false,
-            paired_at_ms: None,
-            waiting_apps: Vec::new(),
+            ..Destination::default()
         }
     }
 
     fn reading(devices: Vec<Destination>) -> Reading {
         let mut r = Reading {
             destinations: devices,
-            last_snapshot_ms: None,
-            last_ack_ms: None,
-            content_total: 0,
-            content_confirmed: 0,
-            pending_bytes: 0,
-            spool_bytes: 0,
-            waiting: std::collections::BTreeMap::new(),
-            oldest_waiting_ms: None,
-            frozen: false,
-            apps: Vec::new(),
-            total_bytes: 0,
-            confirmed_bytes: 0,
-            left_out_items: 0,
-            left_out_bytes: 0,
+            ..Reading::default()
         };
         r.last_ack_ms = r.destinations.iter().filter_map(|d| d.last_ack_ms).max();
         r
