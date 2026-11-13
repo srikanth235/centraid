@@ -47,12 +47,15 @@ async fn a_gateway_that_goes_silent_ends_a_call_instead_of_holding_it() {
     let gateway = spawn(dir.path()).await.expect("spawned");
     let (vault, client) = paired(&gateway).await;
     // A healthy call first, so the connection is live and kept.
-    client.head_state(&vault).await.expect("answers");
+    client
+        .head_state(&vault, &gateway.gateway_id)
+        .await
+        .expect("answers");
 
     gateway.cable().stall();
     client.set_limits(tiny());
     let error = client
-        .head_state(&vault)
+        .head_state(&vault, &gateway.gateway_id)
         .await
         .expect_err("a silent gateway is not waited for ever");
     assert!(
@@ -66,7 +69,10 @@ async fn a_cancel_is_observed_while_a_call_waits_on_a_silent_gateway() {
     let dir = tempfile::tempdir().expect("a temp dir");
     let gateway = spawn(dir.path()).await.expect("spawned");
     let (vault, client) = paired(&gateway).await;
-    client.head_state(&vault).await.expect("answers");
+    client
+        .head_state(&vault, &gateway.gateway_id)
+        .await
+        .expect("answers");
 
     gateway.cable().stall();
     // The limits are long: only the stop can end this call. It is raised on the third look, so
@@ -81,7 +87,7 @@ async fn a_cancel_is_observed_while_a_call_waits_on_a_silent_gateway() {
     let stop: Stop = Arc::new(move || seen.fetch_add(1, Ordering::SeqCst) >= 2);
     client.set_stop(Some(stop));
     let error = client
-        .head_state(&vault)
+        .head_state(&vault, &gateway.gateway_id)
         .await
         .expect_err("a cancel ends the wait");
     assert!(

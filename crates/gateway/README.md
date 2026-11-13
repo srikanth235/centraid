@@ -158,5 +158,6 @@ The container image is [`deploy/gateway/Dockerfile`](../../deploy/gateway/Docker
 | `tests/operator.rs` | `purge-now` needs `--yes` and an unfrozen vault; `delete-vault` needs a frozen one and removes everything; the binary's exit codes |
 | `tests/plans.rs` | every listing seeks an index, and the test sees a planted scan, sort and offset |
 | `tests/bundle_commit.rs` | a bundle is one transaction; a child process killed with SIGKILL between a bundle's renames and its commit leaves files and no row, and the orphan sweep takes them once the clock says they are old; a sweep during an open bundle removes nothing |
+| `tests/head_state.rs` | `Client::head_state` verifies the head and the standing claim against the vault key and the paired gateway id before it hands out an epoch: a stub that lies in each field, and the wrong gateway or vault, is `Unverified` |
 | `tests/older_gateway.rs` | a stub playing a protocol-2 gateway: the real client returns `GatewayTooOld` |
 | `tests/signing_vectors.rs` | the vectors in `contracts/crypto/gateway-signing-vectors.json` |

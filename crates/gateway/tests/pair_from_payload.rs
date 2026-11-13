@@ -53,7 +53,7 @@ async fn a_phone_pairs_from_the_text_of_a_qr_and_hands_off_an_upload() {
     assert_eq!(destination.cert_der, gateway.cert_der);
     assert_eq!(destination.token, paired.token);
     let later = Client::new(&destination);
-    let state = later.head_state(&vault).await.expect("reads");
+    let state = later.head_state(&vault, &payload.gw).await.expect("reads");
     assert_eq!((state.epoch, state.head), (1, None));
 
     // The same secret, again: spent.

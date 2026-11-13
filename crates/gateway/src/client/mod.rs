@@ -73,9 +73,10 @@ use tokio_rustls::rustls::pki_types::ServerName;
 use crate::client::tls::{Trust, client_config, is_untrusted};
 use crate::rules::bundle::{Decoder, Frame, HEADER_LEN, Step, header as frame_header};
 use crate::rules::code::{Code, Refusal, RefusalBody};
-use crate::rules::ids::{Digest, Name, Pin, Token, VaultId};
+use crate::rules::ids::{Digest, GatewayId, Name, Pin, Token, VaultId};
 use crate::rules::limits::{LIST_LIMIT, MAX_BUNDLE_BYTES, MAX_OBJECT_BYTES, REQUIRED_PROTOCOL};
 use crate::rules::range::ByteRange;
+use crate::rules::signing::{HeadFields, verify_claim, verify_head};
 use crate::rules::wire::{
     BundleAnswer, CODE_HEADER, DIGEST_HEADER, DeleteAnswer, DeleteRequest, HeadView, HeldEntry,
     Info, Missing, Names, NonceAnswer, ObjectEntry, PairRequest, Paired, Revoked, SetHead,
@@ -166,6 +167,11 @@ pub enum ClientError {
         /// [`REQUIRED_PROTOCOL`].
         required: u32,
     },
+    /// An answer's signature does not verify against the vault's key and the
+    /// gateway's id the phone knows: a gateway that lies, or the wrong one.
+    /// Names what failed.
+    #[error("{0} is not signed by this vault for this gateway")]
+    Unverified(&'static str),
     /// A route that needs a token, on a client that has none.
     #[error("this client has no token")]
     NoToken,
@@ -536,22 +542,57 @@ impl Client {
     }
 
     /// `GET head`, with `NO_HEAD` folded into an answer: what a restore reads
-    /// before it claims one past the epoch.
+    /// before it claims one past the epoch. **The epoch is verified, never
+    /// taken on the gateway's word**: the head's signature and the standing
+    /// claim's are checked against `vault` (the identity public key) and
+    /// `gateway` (the id the phone learned at pairing, not one this answer
+    /// names), and the writer epoch is the greater of the two verified epochs
+    /// — or 1, the pairing's, when the vault has neither. An unsigned number
+    /// in the answer, `NO_HEAD`'s included, is not read.
     ///
     /// # Errors
     ///
-    /// [`ClientError`].
-    pub async fn head_state(&self, vault: &VaultId) -> Result<HeadState, ClientError> {
-        match self.head(vault).await {
-            Ok(head) => Ok(HeadState {
-                epoch: head.epoch.max(head.claim.map_or(0, |claim| claim.epoch)),
-                head: Some(head),
-            }),
-            Err(ClientError::Refused(Refusal::NoHead { epoch, .. })) => {
-                Ok(HeadState { epoch, head: None })
+    /// [`ClientError`]; [`ClientError::Unverified`] when the head or the claim
+    /// is not signed by this vault for this gateway.
+    pub async fn head_state(
+        &self,
+        vault: &VaultId,
+        gateway: &GatewayId,
+    ) -> Result<HeadState, ClientError> {
+        let (head, claim) = match self.head(vault).await {
+            Ok(head) => (Some(head), head.claim),
+            Err(ClientError::Refused(Refusal::NoHead { claim, .. })) => (None, claim.map(|c| *c)),
+            Err(error) => return Err(error),
+        };
+        let mut epoch = 1;
+        if let Some(head) = &head {
+            let fields = HeadFields {
+                epoch: head.epoch,
+                generation: head.generation,
+                writes: head.writes,
+                taken_at_ms: head.taken_at_ms,
+                manifest: head.name,
+                prev: head.prev,
+            };
+            if !verify_head(gateway, vault, &fields, &head.signature) {
+                return Err(ClientError::Unverified("the head"));
             }
-            Err(error) => Err(error),
+            epoch = epoch.max(head.epoch);
         }
+        if let Some(claim) = &claim {
+            if !verify_claim(
+                gateway,
+                vault,
+                claim.epoch,
+                claim.head_seen.as_ref(),
+                &claim.nonce,
+                &claim.signature,
+            ) {
+                return Err(ClientError::Unverified("the standing claim"));
+            }
+            epoch = epoch.max(claim.epoch);
+        }
+        Ok(HeadState { epoch, head })
     }
 
     /// `PUT head`: compare-and-set on `prev`.
