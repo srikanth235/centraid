@@ -53,6 +53,8 @@ pub enum Reach {
     /// The gateway runs a protocol below the required one.
     GatewayOld,
     Busy,
+    /// A machine answered that is not the gateway paired (its certificate differs).
+    Untrusted,
 }
 
 impl Reach {
@@ -70,6 +72,7 @@ impl Reach {
             Self::Frozen => "frozen",
             Self::GatewayOld => "gateway_old",
             Self::Busy => "busy",
+            Self::Untrusted => "untrusted",
         }
     }
 
@@ -85,6 +88,7 @@ impl Reach {
             "frozen" => Self::Frozen,
             "gateway_old" => Self::GatewayOld,
             "busy" => Self::Busy,
+            "untrusted" => Self::Untrusted,
             _ => return None,
         })
     }
@@ -122,6 +126,16 @@ pub struct Gateway {
     pub sample_counter: u64,
     /// The member's gateways changed since the directory was written (E8).
     pub directory_dirty: bool,
+    /// The `taken_at_ms` of the newest snapshot spooled for this gateway, in
+    /// flight or set: where the hour runs from, and what a row's age is judged against.
+    pub snapshot_ms: Option<u64>,
+    /// The `taken_at_ms` of the snapshot the head names: how current the records there are.
+    pub head_ms: Option<u64>,
+    /// The manifest of the newest snapshot spooled for this gateway, in flight or set, with its
+    /// `writes` (`snapshot_ms` is its `taken_at_ms`): what the head moves to once nothing of it
+    /// is owed.
+    pub snapshot: Option<Name>,
+    pub snapshot_writes: u64,
 }
 
 impl std::fmt::Debug for Gateway {
@@ -172,6 +186,10 @@ impl Gateway {
             ack_ms: None,
             sample_counter: 0,
             directory_dirty: true,
+            snapshot_ms: None,
+            head_ms: None,
+            snapshot: None,
+            snapshot_writes: 0,
         }
     }
 }
@@ -264,6 +282,9 @@ pub struct Outbox {
     pub handed_ms: Option<u64>,
     pub attempts: u32,
     pub last_error: Option<String>,
+    /// A thumbnail, preview or poster rather than an original (blobs only):
+    /// what the member's rule weighs differently.
+    pub derivative: bool,
 }
 
 impl Outbox {
@@ -292,6 +313,7 @@ impl Outbox {
             handed_ms: None,
             attempts: 0,
             last_error: None,
+            derivative: false,
         }
     }
 
@@ -369,7 +391,7 @@ fn bad_text(
 }
 
 const GATEWAY_COLUMNS: &str = "gateway_id, addrs, cert_der, label, epoch, head, generation, writes,
-     cursor, reach, moved_epoch, reach_ms, paired_ms, seen_ms, ack_ms, sample_counter, directory_dirty";
+     cursor, reach, moved_epoch, reach_ms, paired_ms, seen_ms, ack_ms, sample_counter, directory_dirty, snapshot_ms, head_ms, snapshot, snapshot_writes";
 
 fn read_gateway(row: &rusqlite::Row<'_>) -> rusqlite::Result<Gateway> {
     let addrs: String = row.get(1)?;
@@ -400,11 +422,18 @@ fn read_gateway(row: &rusqlite::Row<'_>) -> rusqlite::Result<Gateway> {
         ack_ms: opt(14)?,
         sample_counter: read_u64(row.get(15)?)?,
         directory_dirty: row.get::<_, i64>(16)? != 0,
+        snapshot_ms: opt(17)?,
+        head_ms: opt(18)?,
+        snapshot: row
+            .get::<_, Option<String>>(19)?
+            .map(|text| Name::from_hex(&text).map_err(|error| bad_text(19, error)))
+            .transpose()?,
+        snapshot_writes: read_u64(row.get(20)?)?,
     })
 }
 
 const OUTBOX_COLUMNS: &str = "gateway_id, name, kind, hash, part_path, waiting, size, digest,
-     media_type, created_ms, handed_ms, attempts, last_error";
+     media_type, created_ms, handed_ms, attempts, last_error, derivative";
 
 fn read_outbox(row: &rusqlite::Row<'_>) -> rusqlite::Result<Outbox> {
     let name: String = row.get(1)?;
@@ -440,6 +469,7 @@ fn read_outbox(row: &rusqlite::Row<'_>) -> rusqlite::Result<Outbox> {
         attempts: u32::try_from(row.get::<_, i64>(11)?)
             .map_err(|_| rusqlite::Error::IntegralValueOutOfRange(11, 0))?,
         last_error: row.get(12)?,
+        derivative: row.get::<_, i64>(13)? != 0,
     })
 }
 
@@ -587,15 +617,16 @@ impl DeviceState {
         self.connection.execute(
             "INSERT INTO gateway (gateway_id, addrs, cert_der, label, epoch, head, generation,
                                   writes, cursor, reach, moved_epoch, reach_ms, paired_ms, seen_ms,
-                                  ack_ms, sample_counter, directory_dirty)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+                                  ack_ms, sample_counter, directory_dirty, snapshot_ms, head_ms, snapshot, snapshot_writes)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
              ON CONFLICT (gateway_id) DO UPDATE SET
                addrs = excluded.addrs, cert_der = excluded.cert_der, label = excluded.label,
                epoch = excluded.epoch, head = excluded.head, generation = excluded.generation,
                writes = excluded.writes, cursor = excluded.cursor, reach = excluded.reach,
                moved_epoch = excluded.moved_epoch, reach_ms = excluded.reach_ms,
                paired_ms = excluded.paired_ms, sample_counter = excluded.sample_counter,
-               directory_dirty = excluded.directory_dirty",
+               directory_dirty = excluded.directory_dirty, snapshot_ms = excluded.snapshot_ms, head_ms = excluded.head_ms, snapshot = excluded.snapshot,
+               snapshot_writes = excluded.snapshot_writes",
             params![
                 gateway.gateway_id,
                 addrs,
@@ -614,6 +645,10 @@ impl DeviceState {
                 gateway.ack_ms.map(ms).transpose()?,
                 ms(gateway.sample_counter)?,
                 i64::from(gateway.directory_dirty),
+                gateway.snapshot_ms.map(ms).transpose()?,
+                gateway.head_ms.map(ms).transpose()?,
+                gateway.snapshot.map(|name| name.to_hex()),
+                ms(gateway.snapshot_writes)?,
             ],
         )?;
         Ok(())
@@ -753,10 +788,39 @@ impl DeviceState {
         head: &Name,
         generation: u64,
         writes: u64,
+        taken_at_ms: u64,
     ) -> Result<()> {
         self.connection.execute(
-            "UPDATE gateway SET head = ?2, generation = ?3, writes = ?4 WHERE gateway_id = ?1",
-            params![gateway_id, head.to_hex(), ms(generation)?, ms(writes)?],
+            "UPDATE gateway SET head = ?2, generation = ?3, writes = ?4, head_ms = ?5
+             WHERE gateway_id = ?1",
+            params![
+                gateway_id,
+                head.to_hex(),
+                ms(generation)?,
+                ms(writes)?,
+                ms(taken_at_ms)?
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// The snapshot `name`, taken at `taken_at_ms` with `writes` commits behind it, was spooled
+    /// for this gateway: the head moves to it once nothing of it is owed.
+    ///
+    /// # Errors
+    ///
+    /// SQLite's refusal.
+    pub fn set_snapshot(
+        &self,
+        gateway_id: &str,
+        name: &Name,
+        taken_at_ms: u64,
+        writes: u64,
+    ) -> Result<()> {
+        self.connection.execute(
+            "UPDATE gateway SET snapshot = ?2, snapshot_ms = ?3, snapshot_writes = ?4
+             WHERE gateway_id = ?1",
+            params![gateway_id, name.to_hex(), ms(taken_at_ms)?, ms(writes)?],
         )?;
         Ok(())
     }
@@ -886,9 +950,12 @@ impl DeviceState {
     pub fn put_outbox(&self, row: &Outbox) -> Result<()> {
         self.connection.execute(
             "INSERT INTO outbox (gateway_id, name, kind, hash, part_path, waiting, size, digest,
-                                 media_type, created_ms, handed_ms, attempts, last_error)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
-             ON CONFLICT (gateway_id, name) DO NOTHING",
+                                 media_type, created_ms, handed_ms, attempts, last_error, derivative)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+             ON CONFLICT (gateway_id, name) DO UPDATE SET
+                 part_path = excluded.part_path, size = excluded.size, digest = excluded.digest,
+                 waiting = NULL
+             WHERE outbox.part_path IS NULL AND excluded.part_path IS NOT NULL",
             params![
                 row.gateway_id,
                 row.name.to_hex(),
@@ -905,6 +972,7 @@ impl DeviceState {
                 row.handed_ms.map(ms).transpose()?,
                 i64::from(row.attempts),
                 row.last_error,
+                i64::from(row.derivative),
             ],
         )?;
         Ok(())
@@ -1024,6 +1092,167 @@ impl DeviceState {
         }
         transaction.commit()?;
         Ok(())
+    }
+
+    /// The gateway refused the sealed part as damaged: the sealed file is no
+    /// good and the row waits to be sealed again. Answers how many times in a
+    /// row that same refusal has come for this name (1 for the first).
+    ///
+    /// # Errors
+    ///
+    /// SQLite's refusal.
+    pub fn unseal(&self, gateway_id: &str, name: &Name, error: &str) -> Result<u32> {
+        let transaction = self.connection.unchecked_transaction()?;
+        let before: Option<(i64, Option<String>)> = transaction
+            .query_row(
+                "SELECT attempts, last_error FROM outbox WHERE gateway_id = ?1 AND name = ?2",
+                params![gateway_id, name.to_hex()],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        let count = match before {
+            Some((attempts, Some(last))) if last == error => {
+                u32::try_from(attempts).unwrap_or(u32::MAX).saturating_add(1)
+            }
+            _ => 1,
+        };
+        transaction.execute(
+            "UPDATE outbox SET part_path = NULL, size = NULL, digest = NULL, handed_ms = NULL,
+                               attempts = ?3, last_error = ?4
+             WHERE gateway_id = ?1 AND name = ?2",
+            params![gateway_id, name.to_hex(), i64::from(count), error],
+        )?;
+        transaction.commit()?;
+        Ok(count)
+    }
+
+    /// The cursor walk's step, in one transaction: the rows it found and the cursor it reached.
+    ///
+    /// # Errors
+    ///
+    /// SQLite's refusal; nothing is written then.
+    pub fn advance(&self, gateway_id: &str, rows: &[Outbox], cursor: u64) -> Result<()> {
+        let transaction = self.connection.unchecked_transaction()?;
+        for row in rows {
+            self.put_outbox(row)?;
+        }
+        self.connection.execute(
+            "UPDATE gateway SET cursor = ?2 WHERE gateway_id = ?1",
+            params![gateway_id, ms(cursor)?],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// The blob rows a gateway owes that are not sealed yet and do not wait for anything else,
+    /// newest first.
+    ///
+    /// # Errors
+    ///
+    /// SQLite's refusal, or a row this build cannot read.
+    pub fn outbox_unsealed(&self, gateway_id: &str) -> Result<Vec<Outbox>> {
+        let mut statement = self.connection.prepare(&format!(
+            "SELECT {OUTBOX_COLUMNS} FROM outbox
+             WHERE gateway_id = ?1 AND kind = 'blob' AND part_path IS NULL AND waiting IS NULL
+             ORDER BY created_ms DESC, name"
+        ))?;
+        let rows = statement.query_map(params![gateway_id], read_outbox)?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    /// A sealed copy of `name` some gateway's row already carries: the spool holds one file per
+    /// name, shared by every gateway that owes it.
+    ///
+    /// # Errors
+    ///
+    /// SQLite's refusal, or a row this build cannot read.
+    pub fn sealed_copy(&self, name: &Name) -> Result<Option<Outbox>> {
+        Ok(self
+            .connection
+            .query_row(
+                &format!(
+                    "SELECT {OUTBOX_COLUMNS} FROM outbox WHERE name = ?1 AND part_path IS NOT NULL LIMIT 1"
+                ),
+                params![name.to_hex()],
+                read_outbox,
+            )
+            .optional()?)
+    }
+
+    /// Fill every gateway's unsealed row of `name` with the sealed file just written. Answers
+    /// how many rows it filled.
+    ///
+    /// # Errors
+    ///
+    /// SQLite's refusal.
+    pub fn seal_everywhere(
+        &self,
+        name: &Name,
+        part_path: &Path,
+        size: u64,
+        digest: &Digest,
+    ) -> Result<usize> {
+        Ok(self.connection.execute(
+            "UPDATE outbox SET part_path = ?2, size = ?3, digest = ?4, waiting = NULL
+             WHERE name = ?1 AND part_path IS NULL",
+            params![
+                name.to_hex(),
+                part_path.to_string_lossy(),
+                ms(size)?,
+                digest.to_hex()
+            ],
+        )?)
+    }
+
+    /// Mark a row as waiting for the vault's own collection (a lapsed blob), or as waiting no
+    /// more.
+    ///
+    /// # Errors
+    ///
+    /// SQLite's refusal.
+    pub fn set_waiting(
+        &self,
+        gateway_id: &str,
+        name: &Name,
+        waiting: Option<Waiting>,
+    ) -> Result<()> {
+        self.connection.execute(
+            "UPDATE outbox SET waiting = ?3 WHERE gateway_id = ?1 AND name = ?2 AND part_path IS NULL",
+            params![gateway_id, name.to_hex(), waiting.map(Waiting::as_str)],
+        )?;
+        Ok(())
+    }
+
+    /// Which of `names` any gateway is still owed.
+    ///
+    /// # Errors
+    ///
+    /// SQLite's refusal.
+    pub fn owed_among(&self, names: &[Name]) -> Result<std::collections::BTreeSet<Name>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT 1 FROM outbox WHERE name = ?1 LIMIT 1")?;
+        let mut out = std::collections::BTreeSet::new();
+        for name in names {
+            if statement.exists(params![name.to_hex()])? {
+                out.insert(*name);
+            }
+        }
+        Ok(out)
+    }
+
+    /// The sealed rows owed since before `before_ms`, oldest first.
+    ///
+    /// # Errors
+    ///
+    /// SQLite's refusal, or a row this build cannot read.
+    pub fn outbox_older_than(&self, before_ms: u64) -> Result<Vec<Outbox>> {
+        let mut statement = self.connection.prepare(&format!(
+            "SELECT {OUTBOX_COLUMNS} FROM outbox WHERE created_ms < ?1 AND waiting IS NULL
+             ORDER BY created_ms, gateway_id, name"
+        ))?;
+        let rows = statement.query_map(params![ms(before_ms)?], read_outbox)?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
     /// A send failed: count it and keep why.

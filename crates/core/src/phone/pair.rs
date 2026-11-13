@@ -68,7 +68,7 @@ use centraid_gateway::rules::signing::{sign_claim, sign_pair, sign_read};
 use centraid_gateway::rules::wire::{
     ClaimBody, PairKind, PairRequest, Paired, ReadBody, SecretBody,
 };
-use centraid_vault::backup::ledger::Destination;
+use centraid_vault::backup::state::Gateway;
 use centraid_vault::backup::naming::Name as PlaneName;
 use centraid_vault::backup::snapshot::{History, Manifest};
 
@@ -387,17 +387,15 @@ pub fn pair(
     // A SUPERSEDED PHONE PAIRS NOTHING (the module header's "superseded").
     // Asked of the ledger before anything is dialled, claimed or cleared:
     // clearing this gateway's row below would clear the mark that freezes it.
-    let ledger = plane.ledger()?;
+    let ledger = plane.state()?;
     let gateway_hex = payload.gw.hex();
     // AT THIS GATEWAY (E4): a takeover another gateway proved says nothing of
     // this one, whose own claim decides.
-    if let Some(epoch) = ledger.moved(&gateway_hex).map_err(plane_error)? {
+    let before = ledger.gateway(&gateway_hex).map_err(plane_error)?;
+    if let Some(epoch) = before.as_ref().and_then(|row| row.moved_epoch) {
         return Err(superseded(epoch));
     }
-    let held = ledger
-        .destination(&gateway_hex)
-        .map_err(plane_error)?
-        .map(|destination| destination.epoch);
+    let held = before.map(|row| row.epoch);
     let client = first_contact(&payload, runtime)?;
     // THE SECRET PROVES NOTHING ALONE (E7): the vault key signs it with the
     // gateway's id and a fresh nonce, so a photograph of the code cannot
@@ -427,9 +425,11 @@ pub fn pair(
             match take_over(&client, keyring, &payload.gw, held, own, runtime) {
                 // LEARNED HERE, AS A PASS WOULD HAVE: the phone freezes.
                 Err(CoreError::VaultMoved { current_epoch, .. }) => {
-                    ledger
-                        .set_moved(&gateway_hex, current_epoch)
-                        .map_err(plane_error)?;
+                    if ledger.gateway(&gateway_hex).map_err(plane_error)?.is_some() {
+                        ledger
+                            .set_moved(&gateway_hex, current_epoch, now_ms())
+                            .map_err(plane_error)?;
+                    }
                     return Err(superseded(current_epoch));
                 }
                 taken => taken?,
@@ -443,17 +443,16 @@ pub fn pair(
     let token: Token = paired.token;
     let gateway_id = paired.gateway_id.hex();
     let now = now_ms();
-    let destination = Destination {
-        gateway_id: gateway_id.clone(),
-        addrs: payload.addrs.clone(),
+    let mut destination = Gateway::paired(
+        gateway_id.clone(),
+        payload.addrs.clone(),
         cert_der,
-        token: token.hex(),
-        epoch: paired.epoch,
-        label: label_of(&payload),
-        paired_at_ms: now,
-        last_seen_ms: Some(now),
-        last_ack_ms: None,
-    };
+        label_of(&payload),
+        paired.epoch,
+        now,
+    );
+    destination.seen_ms = Some(now);
+    destination.head = head.map(|head| centraid_vault::backup::naming::Name::from_bytes(*head.as_bytes()));
     // A PAIRING STARTS THIS GATEWAY'S RECORD OVER (#1080, the sweep's B3 and
     // R-1080-C17). Whatever the ledger kept under this gateway's id from an
     // earlier pairing — every acknowledgement, the head this phone last set
@@ -470,18 +469,15 @@ pub fn pair(
     // its meta with it; the head is the one the claim named. Nothing is sent
     // again blindly: a pass asks `exists` about every name before it seals
     // one, which moves no bytes.
-    ledger
-        .remove_destination(&gateway_id)
-        .map_err(plane_error)?;
-    ledger.put_destination(&destination).map_err(plane_error)?;
-    if let Some(head) = head {
-        ledger
-            .set_head(
-                &gateway_id,
-                &centraid_vault::backup::naming::Name::from_bytes(*head.as_bytes()),
-            )
-            .map_err(plane_error)?;
-    }
+    ledger.remove_gateway(&gateway_id).map_err(plane_error)?;
+    ledger.put_gateway(&destination).map_err(plane_error)?;
+    // THE DIRECTORY OF GATEWAYS CHANGED (E8): every gateway owes a snapshot that writes it.
+    ledger.mark_directories_dirty().map_err(plane_error)?;
+    plane.set_tokens({
+        let mut held = plane.tokens();
+        held.insert(gateway_id.clone(), token);
+        held
+    });
     Ok(wire::PairResponse {
         safety_number: safety_number(keyring, &payload.pin),
         destination: Some(wire_destination(&destination)),

@@ -1,272 +1,165 @@
-//! The heavy read-back: one confirmed part above the everyday sample's cap, read from a
-//! gateway and opened, so an original is verified too (#1188).
+//! The phone's read-back: a keyed random sample of what a gateway says it holds, read and
+//! opened, so a gateway that lost or damaged a part is found by the next pass and not by a
+//! restore (#1188, B4; #1191, E10).
 //!
-//! The everyday sample reads three small parts whole into memory
-//! ([`super::ledger::SAMPLE_MAX_BYTES`]), which can never reach a photograph's original: a
-//! `NAME_TAKEN` answer counts as an acknowledgement, so without this a gateway that lost or
-//! damaged an original would be believed forever. Each pass reads back ONE large part per
-//! gateway: the one that gateway was **least recently read back for** (never read back first),
-//! so over the passes every original comes up. The part is **streamed**: the gateway's bytes go
-//! to a temporary file in the spool (a `.partial`, which [`Spool::open`] sweeps if a crash
-//! leaves it) and are opened from there chunk by chunk, so no more than one 4 MiB chunk is ever
-//! in memory, however large the part.
+//! **THE DRAW IS KEYED AND COUNTED.** Which parts a pass reads is a function of a key only the
+//! phone has (`K_name`), the gateway's id and a per-gateway counter the phone keeps
+//! ([`super::state::DeviceState::next_sample_counter`]), never of a clock and never of anything
+//! the gateway can see: a gateway cannot tell in advance which parts will be read, so it
+//! cannot keep only those. Passes draw [`SAMPLE_CHUNKS`] parts, or [`SAMPLE_CHUNKS_METERED`]
+//! on a metered link. A part is a whole sealed range here (one chunk of 64 KiB plus framing);
+//! it is opened under its own name, which proves its bytes are the plaintext that name was
+//! computed from.
 //!
-//! A part that is no longer held, or no longer opens, is **unconfirmed**, so the next pass
-//! seals and sends it again, and the outcome says so for the pass to count. The caller owns the
-//! member's transfer rule: this reads a whole part over the link, so it is never asked of a
-//! metered one.
+//! A part that is gone, will not open, or opens to other bytes than its name says is
+//! [`Sampled::wrong`]; the caller sends it again. The gateway's silence is
+//! [`Sampled::unanswered`] and records nothing.
 
-use std::fs::File;
-use std::io::{self, BufReader, Write};
-
-use super::ledger::Ledger;
 use centraid_media::sealed;
 
-use super::Result;
 use super::naming::{BackupKeys, Name};
-use super::spool::{Spool, sealed_bound};
 use super::store::{Store, StoreError};
 
-/// What one heavy read-back found.
-#[derive(Debug)]
-pub enum ReadBack {
-    /// The gateway holds no confirmed part above the cap.
-    Nothing,
-    /// The part was read back and opened.
-    Held(Name),
-    /// The part is gone or damaged at the gateway: it is unconfirmed, to be sent again.
-    Wrong(Name),
-    /// The gateway did not answer the read; nothing was recorded.
-    Unanswered(StoreError),
+/// How many parts a pass reads back from each gateway.
+pub const SAMPLE_CHUNKS: usize = 64;
+
+/// How many on a metered link.
+pub const SAMPLE_CHUNKS_METERED: usize = 8;
+
+/// What one gateway's sample found.
+#[derive(Debug, Default)]
+pub struct Sampled {
+    /// Parts read and opened.
+    pub checked: usize,
+    /// Parts gone, damaged or not the bytes their name says.
+    pub wrong: Vec<Name>,
+    /// The gateway stopped answering part-way; the parts read before it are counted.
+    pub unanswered: Option<StoreError>,
 }
 
-/// A sink that stops taking bytes past what any part may seal to.
-struct Bounded {
-    file: File,
-    left: u64,
-    /// The gateway sent more than any part can seal to.
-    overflowed: bool,
-}
-
-impl Write for Bounded {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        if bytes.len() as u64 > self.left {
-            self.overflowed = true;
-            return Err(io::Error::other("a part larger than any part can seal to"));
-        }
-        self.left -= bytes.len() as u64;
-        self.file.write(bytes)
+/// The `count` positions of `of` the draw `counter` picks for `gateway_id`, distinct and in
+/// draw order: a partial Fisher-Yates shuffle driven by BLAKE3's keyed extendable output.
+#[must_use]
+pub fn draw(keys: &BackupKeys, gateway_id: &str, counter: u64, of: usize, count: usize) -> Vec<usize> {
+    let mut hasher = blake3::Hasher::new_keyed(keys.k_name());
+    hasher.update(b"centraid-sample-v1");
+    hasher.update(gateway_id.as_bytes());
+    hasher.update(&counter.to_be_bytes());
+    let mut stream = hasher.finalize_xof();
+    let mut positions: Vec<usize> = (0..of).collect();
+    let take = count.min(of);
+    for at in 0..take {
+        let mut word = [0_u8; 8];
+        stream.fill(&mut word);
+        let span = u64::try_from(of - at).unwrap_or(u64::MAX);
+        let pick = at + usize::try_from(u64::from_be_bytes(word) % span).unwrap_or(0);
+        positions.swap(at, pick);
     }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.file.flush()
-    }
+    positions.truncate(take);
+    positions
 }
 
-/// Removes the temporary file however the read ends.
-struct Temp(std::path::PathBuf);
-
-impl Drop for Temp {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
-    }
-}
-
-/// Read back the confirmed part above the cap that `store` was least recently read back for.
+/// Read back `count` of `names` from `store`, drawn by `counter`, and open each under its name.
 ///
 /// # Errors
-/// The ledger's or the filesystem's refusal; the gateway's silence is [`ReadBack::Unanswered`].
-pub fn read_back_large(
-    ledger: &Ledger,
-    spool: &Spool,
+/// None of its own; a store's silence is in the outcome.
+pub fn sample(
     store: &dyn Store,
     keys: &BackupKeys,
-    now_ms: u64,
-) -> Result<ReadBack> {
-    let gateway = store.gateway_id();
-    let Some((name, _size)) = ledger.oldest_verified_large(gateway)? else {
-        return Ok(ReadBack::Nothing);
-    };
-    let temp = Temp(spool.temp_path("verify", 0));
-    let mut sink = Bounded {
-        file: File::create(&temp.0)?,
-        left: sealed_bound(sealed::PART_BYTES),
-        overflowed: false,
-    };
-    match store.get(&name, &mut sink) {
-        Ok(_) => {}
-        Err(StoreError::Missing(_) | StoreError::Damaged(_)) => {
-            ledger.unconfirm(&name, gateway)?;
-            return Ok(ReadBack::Wrong(name));
+    names: &[Name],
+    counter: u64,
+    count: usize,
+) -> Sampled {
+    let mut out = Sampled::default();
+    for position in draw(keys, store.gateway_id(), counter, names.len(), count) {
+        let Some(name) = names.get(position) else {
+            continue;
+        };
+        let mut bytes = Vec::new();
+        match store.get(name, &mut bytes) {
+            Ok(_) => {
+                out.checked += 1;
+                if sealed::open_whole(keys, name, &bytes).is_err() {
+                    out.wrong.push(*name);
+                }
+            }
+            Err(StoreError::Missing(_) | StoreError::Damaged(_)) => {
+                out.checked += 1;
+                out.wrong.push(*name);
+            }
+            Err(error) => {
+                out.unanswered = Some(error);
+                return out;
+            }
         }
-        // MORE BYTES THAN ANY PART SEALS TO is a copy that is not ours, however it arrived.
-        Err(_) if sink.overflowed => {
-            ledger.unconfirm(&name, gateway)?;
-            return Ok(ReadBack::Wrong(name));
-        }
-        Err(error) => return Ok(ReadBack::Unanswered(error)),
     }
-    sink.file.sync_all()?;
-    drop(sink);
-    let opened = sealed::open_part_to(keys, BufReader::new(File::open(&temp.0)?), &mut io::sink());
-    if opened.is_err() {
-        ledger.unconfirm(&name, gateway)?;
-        return Ok(ReadBack::Wrong(name));
-    }
-    ledger.mark_verified(&name, gateway, now_ms)?;
-    Ok(ReadBack::Held(name))
+    out
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backup::ledger::Destination;
-    use crate::backup::naming::{Digest, PlaintextHash, name};
+    use crate::backup::naming::{PlaintextHash, name};
     use crate::backup::store::MemoryStore;
 
-    struct Rig {
-        _dir: tempfile::TempDir,
-        ledger: Ledger,
-        spool: Spool,
-        store: MemoryStore,
-        keys: BackupKeys,
+    fn keys() -> BackupKeys {
+        BackupKeys::from_root(&[5; 32])
     }
 
-    fn rig() -> Rig {
-        let dir = tempfile::tempdir().expect("a directory");
-        let ledger = Ledger::open(dir.path().join("v.backup.db")).expect("a ledger");
-        ledger
-            .put_destination(&Destination {
-                gateway_id: "gw".to_owned(),
-                addrs: Vec::new(),
-                cert_der: Vec::new(),
-                token: "t".to_owned(),
-                epoch: 1,
-                label: "laptop".to_owned(),
-                paired_at_ms: 0,
-                last_seen_ms: None,
-                last_ack_ms: None,
-            })
-            .expect("pairs");
-        Rig {
-            spool: Spool::open(dir.path().join("v.spool")).expect("a spool"),
-            _dir: dir,
-            ledger,
-            store: MemoryStore::new("gw"),
-            keys: BackupKeys::from_root(&[5; 32]),
-        }
-    }
-
-    /// `len` bytes that do not compress, so the sealed part is above the sample's cap.
-    fn noise(seed: u8, len: usize) -> Vec<u8> {
-        let mut bytes = vec![0_u8; len];
-        blake3::Hasher::new()
-            .update(&[seed])
-            .finalize_xof()
-            .fill(&mut bytes);
-        bytes
-    }
-
-    /// Seal part `index` of the file hashed `h` over `plaintext`, hold it at the gateway and
-    /// confirm it in the ledger. Answers its name.
-    fn hold(rig: &Rig, h: &PlaintextHash, index: u32, plaintext: &[u8]) -> Name {
-        let sealed = sealed::seal_part(&rig.keys, index, plaintext, false).expect("seals");
-        let part = name(&rig.keys, h, index);
-        rig.store
-            .put(
-                &part,
-                &Digest::of(&sealed),
-                sealed.len() as u64,
-                &mut &sealed[..],
-            )
-            .expect("held");
-        rig.ledger
-            .confirm(&part, "gw", 1, sealed.len() as u64)
-            .expect("confirms");
+    /// Seal `plaintext` as a whole part and hold it at `store` under its name.
+    fn hold(store: &MemoryStore, keys: &BackupKeys, plaintext: &[u8]) -> Name {
+        let part = name(keys, &PlaintextHash::of(plaintext), 0);
+        let sealed = sealed::seal_part(keys, 0, plaintext, true).expect("seals");
+        let digest = crate::backup::naming::Digest::of(&sealed);
+        store
+            .put(&part, &digest, sealed.len() as u64, &mut sealed.as_slice())
+            .expect("holds");
         part
     }
 
-    fn read(rig: &Rig, now_ms: u64) -> ReadBack {
-        read_back_large(&rig.ledger, &rig.spool, &rig.store, &rig.keys, now_ms).expect("reads back")
-    }
-
+    /// The draw is a pure function of the key, the gateway, the counter and the sizes.
     #[test]
-    fn nothing_above_the_cap_is_nothing_to_read_back() {
-        let rig = rig();
-        hold(&rig, &PlaintextHash::of(b"small"), 0, &noise(1, 4_096));
-        assert!(matches!(read(&rig, 10), ReadBack::Nothing));
-    }
-
-    /// **A MULTI-PART ORIGINAL IS COVERED PART BY PART, LEAST RECENTLY VERIFIED FIRST:** three
-    /// passes read three different parts, and the fourth comes back to the first.
-    #[test]
-    fn every_part_of_a_multi_part_original_comes_up_in_turn() {
-        let rig = rig();
-        let h = PlaintextHash::of(b"a long film");
-        let parts: Vec<Name> = (0..3)
-            .map(|index| hold(&rig, &h, index, &noise(index as u8, 1_500_000)))
-            .collect();
-        let mut seen = Vec::new();
-        for pass in 0..3_u64 {
-            match read(&rig, 100 + pass) {
-                ReadBack::Held(name) => seen.push(name),
-                other => panic!("pass {pass}: {other:?}"),
-            }
-        }
-        let mut sorted = seen.clone();
-        sorted.sort();
-        sorted.dedup();
-        assert_eq!(sorted.len(), 3, "three passes, three different parts");
-        assert!(parts.iter().all(|part| seen.contains(part)));
-        match read(&rig, 200) {
-            ReadBack::Held(name) => assert_eq!(name, seen[0], "back to the least recent"),
-            other => panic!("{other:?}"),
-        }
-        assert!(
-            rig.spool.dir().read_dir().expect("lists").next().is_none(),
-            "no temp file left"
+    fn the_draw_is_deterministic_distinct_and_moves_with_the_counter() {
+        let keys = keys();
+        let one = draw(&keys, "gw", 1, 100, 10);
+        assert_eq!(one, draw(&keys, "gw", 1, 100, 10), "same inputs, same draw");
+        let mut distinct = one.clone();
+        distinct.sort_unstable();
+        distinct.dedup();
+        assert_eq!(distinct.len(), 10, "no position twice");
+        assert_ne!(one, draw(&keys, "gw", 2, 100, 10), "the counter moves the draw");
+        assert_ne!(one, draw(&keys, "other", 1, 100, 10), "the gateway moves the draw");
+        assert_ne!(
+            one,
+            draw(&BackupKeys::from_root(&[6; 32]), "gw", 1, 100, 10),
+            "the key moves the draw"
         );
+        assert_eq!(draw(&keys, "gw", 1, 3, 10).len(), 3, "never more than there are");
     }
 
-    /// A part the gateway lost, or whose bytes no longer open, is unconfirmed so it is sent
-    /// again.
     #[test]
-    fn a_lost_or_damaged_part_is_unconfirmed() {
-        let rig = rig();
-        let lost = hold(&rig, &PlaintextHash::of(b"lost"), 0, &noise(1, 1_200_000));
-        rig.store.set_clock_ms(1_000);
-        rig.store.delete(&[lost]).expect("the gateway deleted it");
-        rig.store
-            .set_clock_ms(1_000 + crate::backup::store::TOMBSTONE_GRACE_MS);
-        rig.store.purge();
-        match read(&rig, 10) {
-            ReadBack::Wrong(name) => assert_eq!(name, lost),
-            other => panic!("{other:?}"),
-        }
-        assert!(!rig.ledger.is_confirmed(&lost, "gw").expect("asks"));
+    fn a_gone_part_is_wrong_and_a_held_one_opens() {
+        let keys = keys();
+        let store = MemoryStore::new("gw");
+        let held = hold(&store, &keys, b"held bytes");
+        let gone = name(&keys, &PlaintextHash::of(b"gone bytes"), 0);
+        let found = sample(&store, &keys, &[held, gone], 0, 2);
+        assert_eq!(found.checked, 2);
+        assert_eq!(found.wrong, vec![gone]);
+        assert!(found.unanswered.is_none());
+    }
 
-        let h = PlaintextHash::of(b"damaged");
-        let mut sealed =
-            sealed::seal_part(&rig.keys, 0, &noise(2, 1_200_000), false).expect("seals");
-        let middle = sealed.len() / 2;
-        sealed[middle] ^= 0xff;
-        let damaged = name(&rig.keys, &h, 0);
-        rig.store
-            .put(
-                &damaged,
-                &Digest::of(&sealed),
-                sealed.len() as u64,
-                &mut &sealed[..],
-            )
-            .expect("held");
-        rig.ledger
-            .confirm(&damaged, "gw", 1, sealed.len() as u64)
-            .expect("confirms");
-        match read(&rig, 11) {
-            ReadBack::Wrong(name) => assert_eq!(name, damaged),
-            other => panic!("{other:?}"),
-        }
-        assert!(!rig.ledger.is_confirmed(&damaged, "gw").expect("asks"));
-        assert!(matches!(read(&rig, 12), ReadBack::Nothing));
+    /// Bytes under a name that opens but is not the plaintext the name was computed from.
+    #[test]
+    fn bytes_that_open_to_something_else_are_wrong() {
+        let keys = keys();
+        let store = MemoryStore::new("gw");
+        let lie = name(&keys, &PlaintextHash::of(b"what the name says"), 0);
+        let sealed = sealed::seal_part(&keys, 0, b"something else", true).expect("seals");
+        let digest = crate::backup::naming::Digest::of(&sealed);
+        store
+            .put(&lie, &digest, sealed.len() as u64, &mut sealed.as_slice())
+            .expect("holds");
+        assert_eq!(sample(&store, &keys, &[lie], 0, 1).wrong, vec![lie]);
     }
 }

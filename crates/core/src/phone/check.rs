@@ -31,7 +31,7 @@ use centraid_media::sealed::Assembler;
 use centraid_vault::Vault;
 use centraid_vault::backup::PlaneError;
 use centraid_vault::backup::files::{ContentFile, content_files};
-use centraid_vault::backup::ledger::Destination;
+use centraid_vault::backup::state::{DeviceState, Gateway as Destination};
 use centraid_vault::backup::naming::{BackupKeys, Name, names_of};
 use centraid_vault::backup::restore::{RestoreError, fetch_and_assemble};
 use centraid_vault::backup::store::{self, Store, StoreError};
@@ -166,8 +166,8 @@ pub(crate) fn run(
     progress: &Progress,
 ) -> Result<wire::CheckBackupResponse> {
     let plane = handle.plane();
-    let ledger = plane.ledger()?;
-    let mut destinations = ledger.destinations().map_err(plane_error)?;
+    let ledger = plane.state()?;
+    let mut destinations = ledger.gateways().map_err(plane_error)?;
     if !request.gateway_id.is_empty() {
         destinations.retain(|d| d.gateway_id == request.gateway_id);
     }
@@ -259,10 +259,18 @@ fn one(
     runtime: &tokio::runtime::Handle,
     cancellation: &Cancellation,
     progress: &Progress,
-    ledger: &centraid_vault::backup::ledger::Ledger,
+    ledger: &DeviceState,
 ) -> Result<wire::DeviceCheck> {
-    let mut store =
-        GatewayStore::for_destination(destination, keyring.vault.identity.signing(), runtime)?;
+    // A GATEWAY THE SHELL HOLDS NO TOKEN FOR is one to pair again: it cannot be read.
+    let Some(token) = plane.tokens().get(&destination.gateway_id).copied() else {
+        return Ok(not_run(destination, NotRun::DidNotAnswer));
+    };
+    let mut store = GatewayStore::for_gateway(
+        destination,
+        token,
+        keyring.vault.identity.signing(),
+        runtime,
+    )?;
     store.set_cancellation(Some(cancellation.clone()));
     let head = match store.head() {
         Ok(Some(head)) => head,
@@ -410,7 +418,7 @@ fn files_of(
     request: &wire::CheckBackupRequest,
     cancellation: &Cancellation,
     progress: &Progress,
-    ledger: &centraid_vault::backup::ledger::Ledger,
+    ledger: &DeviceState,
 ) -> Result<wire::DeviceCheck> {
     let keys = &keyring.backup;
     let vault = Vault::open(scratch.file()).map_err(|error| CoreError::BackupUnreadable {
@@ -438,9 +446,12 @@ fn files_of(
         .count() as u64;
     // What it lacks is owed again at the next pass.
     let lacked: Vec<Name> = absent.iter().copied().collect();
-    ledger
-        .unconfirm_many(&lacked, &destination.gateway_id)
-        .map_err(plane_error)?;
+    if !lacked.is_empty() {
+        // The blob walk starts again, so `exists` finds what it lacks and owes it.
+        ledger
+            .set_cursor(&destination.gateway_id, 0)
+            .map_err(plane_error)?;
+    }
 
     // 3. A SAMPLE, READ BACK WHOLE.
     let picked = pick_sample(
@@ -470,8 +481,11 @@ fn files_of(
             Err(OpenFailed::Silent) => return Ok(not_run(destination, NotRun::DidNotAnswer)),
             Err(OpenFailed::Bad) => {
                 damaged += 1;
+                // A DAMAGED COPY is deleted (a damaged name is freed at once, decision 30) and the
+                // blob walk starts again, so the file is sealed and sent anew.
+                store::delete_all(store, &parts_of(keys, file)).map_err(super::store_error)?;
                 ledger
-                    .unconfirm_many(&parts_of(keys, file), &destination.gateway_id)
+                    .set_cursor(&destination.gateway_id, 0)
                     .map_err(plane_error)?;
             }
         }

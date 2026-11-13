@@ -116,6 +116,88 @@ pub fn content_files(vault: &Vault) -> Result<Vec<ContentFile>> {
     Ok(out)
 }
 
+/// What the vault says of one hash a walk of its claims met.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Found {
+    /// Rented, or not yet named by anyone: the member's to keep safe.
+    Live(ContentFile),
+    /// Only lapsed entities rent it: the vault's own collection will take it.
+    Lapsed,
+}
+
+/// [`content_files`] for the named hashes alone: each that has a `blob` row, as [`Found::Live`]
+/// or [`Found::Lapsed`]. A hash with no row is absent from the answer (collected since the
+/// walk saw it). The B12 cursor walks a page of claims and asks this about the page.
+///
+/// # Errors
+/// As [`content_files`].
+pub fn content_files_for(
+    vault: &Vault,
+    hashes: &[PlaintextHash],
+) -> Result<std::collections::BTreeMap<PlaintextHash, Found>> {
+    type Row = (String, i64, Option<String>, Option<String>, String);
+    let lapsed = lapsed_blobs(vault)?;
+    let mut out = std::collections::BTreeMap::new();
+    let rows: Vec<Row> = vault.read(|connection| {
+        let mut statement = connection.prepare(
+            "SELECT b.hash, b.size,
+                    (SELECT variant FROM derivative WHERE out = b.hash LIMIT 1),
+                    COALESCE((SELECT media_type FROM derivative WHERE out = b.hash LIMIT 1),
+                             (SELECT media_type FROM photo WHERE blob = b.hash),
+                             (SELECT media_type FROM document WHERE blob = b.hash LIMIT 1),
+                             (SELECT media_type FROM revision WHERE blob = b.hash LIMIT 1)),
+                    COALESCE((SELECT created_at FROM derivative WHERE out = b.hash LIMIT 1),
+                             (SELECT e.created_at FROM photo p JOIN entity e ON e.id = p.id
+                               WHERE p.blob = b.hash),
+                             (SELECT e.created_at FROM document d JOIN entity e ON e.id = d.id
+                               WHERE d.blob = b.hash LIMIT 1),
+                             (SELECT at FROM revision WHERE blob = b.hash LIMIT 1),
+                             '')
+               FROM blob b WHERE b.hash = ?1",
+        )?;
+        let mut rows = Vec::new();
+        for hash in hashes {
+            let found = statement
+                .query_map([hash.to_hex()], |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                })?
+                .collect::<rusqlite::Result<Vec<Row>>>()?;
+            rows.extend(found);
+        }
+        Ok(rows)
+    })?;
+    for (hash, size, variant, media_type, created_at) in rows {
+        let h = PlaintextHash::from_hex(&hash)
+            .map_err(|_| invariant(format!("a blob's hash `{hash}` cannot be named")))?;
+        if lapsed.contains(&hash) {
+            out.insert(h, Found::Lapsed);
+            continue;
+        }
+        let len = u64::try_from(size)
+            .map_err(|_| invariant(format!("blob `{hash}` has a negative size")))?;
+        let media_type = media_type.unwrap_or_else(|| "application/octet-stream".to_owned());
+        let video = media_type.trim().to_ascii_lowercase().starts_with("video/");
+        out.insert(
+            h,
+            Found::Live(ContentFile {
+                h,
+                len,
+                media_type,
+                variant,
+                video,
+                created_at,
+            }),
+        );
+    }
+    Ok(out)
+}
+
 /// Every column that rents a blob, as `(table, column, the SQL that names the
 /// renting row's entity)`: [`lapsed_blobs`] asks each of them whose the bytes are.
 /// `derivative.out` is not here: a derivative's file is its original's.

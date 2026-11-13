@@ -63,9 +63,8 @@ use centraid_gateway::rules::wire::{
     ClaimView, DeleteRequest, HeadView, HeldKind as WireHeldKind, Info, NameState as WireState,
     SetHead, UndoRequest,
 };
-use centraid_vault::backup::ledger::{Destination, Ledger};
+use centraid_vault::backup::state::{DeviceState, Gateway, Reach};
 use centraid_vault::backup::naming::{Digest, Name};
-use centraid_vault::backup::state::Gateway;
 use centraid_vault::backup::store::{
     Deleted, Head, HeldEntry, HeldKind, NameState, ObjectEntry, Outgoing, PartAnswer, Put, Refusal,
     SnapshotEntry, Store, StoreError,
@@ -196,42 +195,6 @@ pub struct GatewayStore {
 }
 
 impl GatewayStore {
-    /// The store for a ledger destination, trusting its certificate by its
-    /// exact bytes and writing under its token. The generation starts at
-    /// zero and is learned from the gateway: the standing head, or one
-    /// `OUT_OF_ORDER`, raises it (E3).
-    ///
-    /// # Errors
-    /// [`CoreError::Invariant`] for a ledger row whose token or id will not
-    /// read.
-    pub fn for_destination(
-        destination: &Destination,
-        identity: &ed25519_dalek::SigningKey,
-        runtime: &tokio::runtime::Handle,
-    ) -> Result<Self> {
-        let token: Token = destination
-            .token
-            .parse()
-            .map_err(|error| CoreError::Invariant {
-                context: format!(
-                    "the ledger's token for gateway {} will not read: {error}",
-                    destination.gateway_id
-                ),
-            })?;
-        Self::over(
-            Client::new(&Pinned {
-                addrs: destination.addrs.clone(),
-                cert_der: destination.cert_der.clone(),
-                token,
-            }),
-            identity,
-            destination.gateway_id.clone(),
-            destination.epoch,
-            0,
-            runtime,
-        )
-    }
-
     /// The store for a paired gateway row, trusting its certificate by its
     /// exact bytes and writing under `token`.
     ///
@@ -808,16 +771,16 @@ impl Store for GatewayStore {
 /// kept in memory, never written.
 pub type Tokens = BTreeMap<String, Token>;
 
-/// A destination that answered, and the store to it.
+/// A gateway that answered, and the store to it.
 pub struct Reached {
-    pub destination: Destination,
+    pub gateway: Gateway,
     pub store: GatewayStore,
     /// The gateway's clock when it answered: what a `MOVED` heard in this pass
     /// is dated by, since the refusal itself carries no time a client reads.
     pub gateway_ms: i64,
 }
 
-/// Why no destination was reached.
+/// Why no gateway was reached.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Unreached {
     /// None answered, or none is paired.
@@ -827,19 +790,20 @@ pub enum Unreached {
     Untrusted,
 }
 
-/// The first of `destinations`, in the ledger's order, that answers `info` as itself: the
-/// head of [`reach_all`]'s fleet. When none does, whether any machine answered that is not the
-/// pinned gateway.
+/// The first of `gateways`, in pairing order, that answers `info` as itself: the head of
+/// [`reach_all`]'s fleet. When none does, whether any machine answered that is not the pinned
+/// gateway.
 ///
 /// # Errors
-/// The ledger's refusal, or a destination row whose token will not read.
+/// The device state's refusal.
 pub fn reach(
-    destinations: &[Destination],
-    ledger: &Ledger,
+    gateways: &[Gateway],
+    state: &DeviceState,
+    tokens: &Tokens,
     identity: &ed25519_dalek::SigningKey,
     runtime: &tokio::runtime::Handle,
 ) -> Result<std::result::Result<Reached, Unreached>> {
-    let fleet = reach_all(destinations, ledger, identity, runtime)?;
+    let fleet = reach_all(gateways, state, tokens, identity, runtime)?;
     let unreached = if fleet.untrusted.is_empty() {
         Unreached::Silent
     } else {
@@ -848,14 +812,16 @@ pub fn reach(
     Ok(fleet.reached.into_iter().next().ok_or(unreached))
 }
 
-/// Every paired destination a pass found: those that answered as themselves, and for the rest
+/// Every paired gateway a pass found: those that answered as themselves, and for the rest
 /// whether they were silent or another machine answered. Every paired gateway is fed in a pass
 /// (#1188, B1), so none is skipped for another having answered.
 pub struct Fleet {
-    /// The ledger's order, a gateway that refused this phone's token last.
+    /// Pairing order, a gateway that refused this phone's token last.
     pub reached: Vec<Reached>,
     pub silent: Vec<String>,
     pub untrusted: Vec<String>,
+    /// Gateways the shell handed no token for (E12): they are marked to pair again and left out.
+    pub pair_again: Vec<String>,
 }
 
 /// The one cap on asking a fleet whether it is there: a dead gateway costs this much of a pass
@@ -870,20 +836,21 @@ enum Probe {
     Silent,
 }
 
-/// Ask every destination `info` **at once**, under one overall cap ([`REACH_CAP`]): a gateway
-/// that is asleep costs the cap, not a turn in a queue the healthy one waits in. A destination
+/// Ask every gateway `info` **at once**, under one overall cap ([`REACH_CAP`]): a gateway
+/// that is asleep costs the cap, not a turn in a queue the healthy one waits in. A gateway
 /// this phone was superseded at is left out (its writes are refused and its reads have nothing
-/// a pass needs).
+/// a pass needs), and so is one the shell holds no token for (it is marked to pair again).
 ///
 /// # Errors
-/// The ledger's refusal, or a destination row whose token will not read.
+/// The device state's refusal.
 pub fn reach_all(
-    destinations: &[Destination],
-    ledger: &Ledger,
+    gateways: &[Gateway],
+    state: &DeviceState,
+    tokens: &Tokens,
     identity: &ed25519_dalek::SigningKey,
     runtime: &tokio::runtime::Handle,
 ) -> Result<Fleet> {
-    reach_all_capped(destinations, ledger, identity, runtime, REACH_CAP)
+    reach_all_capped(gateways, state, tokens, identity, runtime, REACH_CAP)
 }
 
 /// [`reach_all`] under `cap`, for a test that does not wait for the product's.
@@ -891,65 +858,66 @@ pub fn reach_all(
 /// # Errors
 /// As [`reach_all`].
 pub fn reach_all_capped(
-    destinations: &[Destination],
-    ledger: &Ledger,
+    gateways: &[Gateway],
+    state: &DeviceState,
+    tokens: &Tokens,
     identity: &ed25519_dalek::SigningKey,
     runtime: &tokio::runtime::Handle,
     cap: std::time::Duration,
 ) -> Result<Fleet> {
-    let mut ordered: Vec<(bool, &Destination)> = Vec::with_capacity(destinations.len());
-    for destination in destinations {
-        let refused = ledger
-            .unauthorized(&destination.gateway_id)
-            .map_err(super::plane_error)?;
-        ordered.push((refused, destination));
-    }
-    ordered.sort_by_key(|(refused, _)| *refused);
-    let mut asking: Vec<(&Destination, GatewayStore)> = Vec::new();
-    for (_, destination) in ordered {
-        if ledger
-            .moved(&destination.gateway_id)
-            .map_err(super::plane_error)?
-            .is_some()
-        {
+    let mut fleet = Fleet {
+        reached: Vec::new(),
+        silent: Vec::new(),
+        untrusted: Vec::new(),
+        pair_again: Vec::new(),
+    };
+    let mut ordered: Vec<&Gateway> = gateways
+        .iter()
+        .filter(|gateway| gateway.reach != Reach::Moved)
+        .collect();
+    ordered.sort_by_key(|gateway| gateway.reach == Reach::PairAgain);
+    let mut asking: Vec<(&Gateway, GatewayStore)> = Vec::new();
+    for gateway in ordered {
+        let Some(token) = tokens.get(&gateway.gateway_id) else {
+            // NO TOKEN HELD (E12): the shell's secret store lost it, or never had it. The row says to
+            // pair again; opening and every other door go on.
+            state
+                .set_reach(&gateway.gateway_id, Reach::PairAgain, super::now_ms())
+                .map_err(super::plane_error)?;
+            fleet.pair_again.push(gateway.gateway_id.clone());
             continue;
-        }
+        };
         asking.push((
-            destination,
-            GatewayStore::for_destination(destination, identity, runtime)?,
+            gateway,
+            GatewayStore::for_gateway(gateway, *token, identity, runtime)?,
         ));
     }
     let answers = runtime.block_on(probe_all(
         asking.iter().map(|(_, store)| store.probe()),
         cap,
     ));
-    let mut fleet = Fleet {
-        reached: Vec::new(),
-        silent: Vec::new(),
-        untrusted: Vec::new(),
-    };
-    for ((destination, store), answer) in asking.into_iter().zip(answers) {
+    for ((gateway, store), answer) in asking.into_iter().zip(answers) {
         match answer {
             Probe::Answered(time_ms) => {
-                ledger
-                    .touch_seen(&destination.gateway_id, super::now_ms())
+                state
+                    .touch_seen(&gateway.gateway_id, super::now_ms())
                     .map_err(super::plane_error)?;
                 fleet.reached.push(Reached {
-                    destination: destination.clone(),
+                    gateway: gateway.clone(),
                     store,
                     gateway_ms: time_ms,
                 });
             }
             Probe::Untrusted => {
                 tracing::warn!(
-                    gateway = %destination.gateway_id,
+                    gateway = %gateway.gateway_id,
                     "a machine that is not the pinned gateway answered"
                 );
-                fleet.untrusted.push(destination.gateway_id.clone());
+                fleet.untrusted.push(gateway.gateway_id.clone());
             }
             Probe::Old | Probe::Silent => {
-                tracing::debug!(gateway = %destination.gateway_id, "a paired gateway did not answer, or is older than this build");
-                fleet.silent.push(destination.gateway_id.clone());
+                tracing::debug!(gateway = %gateway.gateway_id, "a paired gateway did not answer, or is older than this build");
+                fleet.silent.push(gateway.gateway_id.clone());
             }
         }
     }

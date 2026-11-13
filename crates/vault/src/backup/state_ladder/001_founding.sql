@@ -2,7 +2,7 @@
 -- key-value table. The gateway token is not here (E12): the shell keeps it.
 
 CREATE TABLE gateway (
-  gateway_id      TEXT PRIMARY KEY CHECK (length(gateway_id) = 32 AND gateway_id NOT GLOB '*[^0-9a-f]*'),
+  gateway_id      TEXT PRIMARY KEY CHECK (length(gateway_id) BETWEEN 1 AND 64),
   addrs           TEXT NOT NULL,
   cert_der        BLOB NOT NULL,
   label           TEXT NOT NULL,
@@ -13,14 +13,18 @@ CREATE TABLE gateway (
   cursor          INTEGER NOT NULL DEFAULT 0 CHECK (cursor >= 0),
   reach           TEXT NOT NULL DEFAULT 'ok' CHECK (reach IN
                     ('ok', 'unreachable', 'pair_again', 'refused_disk', 'refused_large', 'refused_other',
-                     'moved', 'frozen', 'gateway_old', 'busy')),
+                     'moved', 'frozen', 'gateway_old', 'busy', 'untrusted')),
   moved_epoch     INTEGER CHECK ((reach = 'moved') = (moved_epoch IS NOT NULL)),
   reach_ms        INTEGER,
   paired_ms       INTEGER NOT NULL,
   seen_ms         INTEGER,
   ack_ms          INTEGER,
   sample_counter  INTEGER NOT NULL DEFAULT 0 CHECK (sample_counter >= 0),
-  directory_dirty INTEGER NOT NULL DEFAULT 1 CHECK (directory_dirty IN (0, 1))
+  directory_dirty INTEGER NOT NULL DEFAULT 1 CHECK (directory_dirty IN (0, 1)),
+  snapshot_ms     INTEGER,
+  head_ms         INTEGER,
+  snapshot        TEXT CHECK (snapshot IS NULL OR (length(snapshot) = 64 AND snapshot NOT GLOB '*[^0-9a-f]*')),
+  snapshot_writes INTEGER NOT NULL DEFAULT 0 CHECK (snapshot_writes >= 0)
 ) STRICT;
 
 CREATE TABLE outbox (
@@ -37,6 +41,7 @@ CREATE TABLE outbox (
   handed_ms  INTEGER,
   attempts   INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
   last_error TEXT,
+  derivative INTEGER NOT NULL DEFAULT 0 CHECK (derivative IN (0, 1) AND (derivative = 0 OR kind = 'blob')),
   PRIMARY KEY (gateway_id, name)
 ) STRICT, WITHOUT ROWID;
 

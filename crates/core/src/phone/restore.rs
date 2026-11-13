@@ -90,7 +90,7 @@ use centraid_gateway::rules::payload::PairPayload;
 use centraid_vault::Vault;
 use centraid_vault::backup::PlaneError;
 use centraid_vault::backup::files::{ContentFile, content_files};
-use centraid_vault::backup::ledger::Destination;
+use centraid_vault::backup::state::Gateway;
 use centraid_vault::backup::naming::Name;
 use centraid_vault::backup::restore::{RestoreError, Restored, fetch_and_assemble};
 use centraid_vault::backup::store::StoreError;
@@ -336,6 +336,7 @@ fn run_controlled(
             unclaimed: Vec::new(),
             older_offers: offers,
             tokens: Vec::new(),
+            unproven_newest: Vec::new(),
         });
     }
 
@@ -389,6 +390,7 @@ fn run_controlled(
         unclaimed,
         older_offers: Vec::new(),
         tokens: scan.minted.take(),
+        unproven_newest: Vec::new(),
     })
 }
 
@@ -908,51 +910,34 @@ impl Scan<'_> {
                 })?;
         }
         let plane = Plane::of(kept);
-        let ledger = plane.ledger()?;
-        ledger.reset().map_err(plane_error)?;
-        // THE SAME PHONE: a copy this one held is an older copy of this vault,
-        // and its marker of a move, if it ever had one, is not the truth of the
-        // vault restored over it.
-        ledger.clear_moved(&gateway_id).map_err(plane_error)?;
+        let ledger = plane.state()?;
+        // THE SAME PHONE: a copy this one held is an older copy of this vault. What it owed is
+        // not what the vault restored over it owes, so the outbox is emptied, and this gateway's
+        // row starts over below (its moved mark, if it ever had one, is not the truth of the
+        // vault restored over it).
+        ledger.reset_for_restore(&[]).map_err(plane_error)?;
         let now = now_ms();
-        ledger
-            .put_destination(&Destination {
-                gateway_id: gateway_id.clone(),
-                addrs: self.payload.addrs.clone(),
-                cert_der: self.cert_der.to_vec(),
-                token: paired.token.hex(),
-                epoch: paired.epoch,
-                label: pair::label_of(self.payload),
-                paired_at_ms: now,
-                last_seen_ms: Some(now),
-                last_ack_ms: None,
-            })
-            .map_err(plane_error)?;
-        // THE HEAD THIS PHONE NOW CONTINUES, as a snapshot it set: the first
-        // pass's compare-and-set names it, and retention reads its manifest.
+        // THE HEAD THIS PHONE NOW CONTINUES, as a snapshot it set: the first pass's
+        // compare-and-set names it, and settle sees nothing owed.
         let manifest = &staged.restored.manifest;
         let name = staged.restored.manifest_name;
-        let json = manifest.to_json().map_err(plane_error)?;
-        let json = String::from_utf8(json).map_err(|_| CoreError::Invariant {
-            context: "the restored manifest is not UTF-8".to_owned(),
-        })?;
-        ledger
-            .record_snapshot(&name, manifest.taken_at_ms, &json)
-            .map_err(plane_error)?;
-        ledger.ack_snapshot(&name, now).map_err(plane_error)?;
-        ledger.set_head(&gateway_id, &name).map_err(plane_error)?;
-        ledger
-            .set_head_acked(&gateway_id, u64::try_from(staged.head_set_ms).unwrap_or(0))
-            .map_err(plane_error)?;
-        let mut held: Vec<(Name, u64)> = manifest
-            .ranges
-            .iter()
-            .map(|range| (range.name, range.len))
-            .collect();
-        held.push((name, json.len() as u64));
-        ledger
-            .confirm_many(&held, &gateway_id, now)
-            .map_err(plane_error)?;
+        let mut row = Gateway::paired(
+            gateway_id.clone(),
+            self.payload.addrs.clone(),
+            self.cert_der.to_vec(),
+            pair::label_of(self.payload),
+            paired.epoch,
+            now,
+        );
+        row.seen_ms = Some(now);
+        row.ack_ms = Some(u64::try_from(staged.head_set_ms).unwrap_or(0));
+        row.head = Some(name);
+        row.head_ms = Some(manifest.taken_at_ms);
+        row.writes = manifest.writes;
+        row.snapshot = Some(name);
+        row.snapshot_ms = Some(manifest.taken_at_ms);
+        row.snapshot_writes = manifest.writes;
+        ledger.put_gateway(&row).map_err(plane_error)?;
 
         // THE FILE FIRST: it takes the name `vault.db`, so a failure fetching the grid below can
         // never lose the vault itself.
@@ -1151,9 +1136,9 @@ mod cancellation_tests {
                 let vault = Vault::open(&file).expect("the adopted vault opens");
                 vault.close().expect("closes");
                 let destinations = Plane::of(&file)
-                    .ledger()
+                    .state()
                     .expect("ledger")
-                    .destinations()
+                    .gateways()
                     .expect("destinations");
                 assert_eq!(
                     destinations.len(),

@@ -134,7 +134,7 @@ mod tests {
     fn the_two_application_ids_are_distinct_tags() {
         assert_eq!(APPLICATION_ID.to_be_bytes()[4..], *b"CEN2");
         assert_eq!(EARLIER_APPLICATION_ID.to_be_bytes()[4..], *b"CEN1");
-        assert_ne!(APPLICATION_ID, crate::backup::ledger::LEDGER_APPLICATION_ID);
+        assert_ne!(APPLICATION_ID, crate::backup::state::STATE_APPLICATION_ID);
     }
 
     /// THE CONSTANT IS THE FOUNDED FILE'S DIGEST. A change to the baseline moves it; when this

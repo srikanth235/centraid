@@ -59,8 +59,8 @@ use centraid_gateway::rules::ids::VaultId;
 use centraid_vault::Vault;
 use centraid_vault::backup::PlaneError;
 use centraid_vault::backup::files::{ContentFile, content_files};
-use centraid_vault::backup::ledger::{Destination, Ledger, LocalSource};
-use centraid_vault::backup::naming::{BackupKeys, Name, PlaintextHash, keys_from_root, names_of};
+use centraid_vault::backup::state::{DeviceState, Gateway, LocalSource, Reach};
+use centraid_vault::backup::naming::{BackupKeys, Name, PlaintextHash, keys_from_root};
 use centraid_vault::backup::spool::Spool;
 use centraid_vault::backup::store::StoreError;
 
@@ -143,6 +143,14 @@ pub struct Plane {
     pretend_free: std::sync::atomic::AtomicU64,
     /// The gateway tokens the shell handed over (#1191, E12), in memory only.
     tokens: std::sync::Mutex<link::Tokens>,
+    /// What the last drain request told this core, kept for the doors that carry no request
+    /// of their own (a hand-off, a settle): the member's rule and the link as that pass saw
+    /// them. In memory only: the rule is the shell's to send again with every request (#1191).
+    conditions: std::sync::Mutex<Option<drain::Conditions>>,
+    /// A snapshot the shell asked for that no pass has taken yet.
+    snapshot_owed: std::sync::atomic::AtomicBool,
+    /// The last snapshot could not be copied for want of room.
+    no_room: std::sync::atomic::AtomicBool,
 }
 
 impl Plane {
@@ -156,7 +164,47 @@ impl Plane {
             asked: std::sync::atomic::AtomicBool::new(false),
             pretend_free: std::sync::atomic::AtomicU64::new(u64::MAX),
             tokens: std::sync::Mutex::new(link::Tokens::new()),
+            conditions: std::sync::Mutex::new(None),
+            snapshot_owed: std::sync::atomic::AtomicBool::new(false),
+            no_room: std::sync::atomic::AtomicBool::new(false),
         }
+    }
+
+    /// Remember what a drain request said (the rule and the link).
+    pub(crate) fn remember(&self, conditions: drain::Conditions) {
+        *self
+            .conditions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(conditions);
+    }
+
+    /// What the last drain request said, when one has run in this core's life.
+    pub(crate) fn remembered(&self) -> Option<drain::Conditions> {
+        *self
+            .conditions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Whether a snapshot the shell asked for is still owed.
+    pub(crate) fn snapshot_owed(&self) -> bool {
+        self.snapshot_owed
+            .load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    pub(crate) fn set_snapshot_owed(&self, owed: bool) {
+        self.snapshot_owed
+            .store(owed, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Whether the last snapshot could not be copied for want of room.
+    pub(crate) fn no_room(&self) -> bool {
+        self.no_room.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    pub(crate) fn set_no_room(&self, no_room: bool) {
+        self.no_room
+            .store(no_room, std::sync::atomic::Ordering::SeqCst);
     }
 
     /// Replace the gateway tokens held in memory (#1191, E12).
@@ -208,10 +256,10 @@ impl Plane {
         self
     }
 
-    /// `<stem>.backup.db`.
+    /// `<stem>.state.db`.
     #[must_use]
-    pub fn ledger_path(&self) -> PathBuf {
-        Ledger::path_for(&self.vault_file)
+    pub fn state_path(&self) -> PathBuf {
+        DeviceState::path_for(&self.vault_file)
     }
 
     /// `<stem>.spool/`.
@@ -237,13 +285,13 @@ impl Plane {
         }
     }
 
-    /// Open the ledger, creating it when absent.
+    /// Open the device state, creating it when absent. A ledger found beside the vault is
+    /// deleted unread (decision 8: dev state is not migrated).
     ///
     /// # Errors
-    /// A file that is not a ledger, one a newer build wrote, or SQLite's
-    /// refusal.
-    pub fn ledger(&self) -> Result<Ledger> {
-        Ledger::open(self.ledger_path()).map_err(plane_error)
+    /// A file that is not a device state, one a newer build wrote, or SQLite's refusal.
+    pub fn state(&self) -> Result<DeviceState> {
+        DeviceState::open_beside(&self.vault_file).map_err(plane_error)
     }
 
     /// The spool, opened — and swept of a part a crash left half-written, and
@@ -265,13 +313,7 @@ impl Plane {
         // before anything this core runs can be halfway through writing one
         // (`Spool::sweep_unqueued`). A part handed to the operating system is
         // queued, so one the OS is still uploading by path stays.
-        let queued: BTreeSet<Name> = self
-            .ledger()?
-            .queued()
-            .map_err(plane_error)?
-            .into_iter()
-            .map(|part| part.name)
-            .collect();
+        let queued: BTreeSet<Name> = self.state()?.owed_names().map_err(plane_error)?;
         let freed = opened.sweep_unqueued(&queued).map_err(plane_error)?;
         if freed > 0 {
             tracing::info!(freed, "the spool held parts no queue row names; they went");
@@ -388,25 +430,25 @@ pub(crate) fn store_error(error: StoreError) -> CoreError {
     }
 }
 
-/// A ledger destination as a shell draws it. Nothing here is a token.
+/// A paired gateway as a shell draws it. Nothing here is a token.
 #[must_use]
-pub fn wire_destination(destination: &Destination) -> wire::Destination {
+pub fn wire_destination(gateway: &Gateway) -> wire::Destination {
     wire::Destination {
-        gateway_id: destination.gateway_id.clone(),
-        label: destination.label.clone(),
-        addrs: destination.addrs.clone(),
-        cert_der: destination.cert_der.clone(),
-        last_seen_ms: destination
-            .last_seen_ms
+        gateway_id: gateway.gateway_id.clone(),
+        label: gateway.label.clone(),
+        addrs: gateway.addrs.clone(),
+        cert_der: gateway.cert_der.clone(),
+        last_seen_ms: gateway
+            .seen_ms
             .and_then(|ms| i64::try_from(ms).ok())
             .unwrap_or(0),
-        last_ack_ms: destination
-            .last_ack_ms
+        last_ack_ms: gateway
+            .ack_ms
             .and_then(|ms| i64::try_from(ms).ok())
             .unwrap_or(0),
-        // `backup_status` reads the ledger's mark; a pairing's answer and the
-        // pins are the destination as it was written.
-        pair_again: false,
+        // `backup_status` reads the row's reach; a pairing's answer and the
+        // pins are the gateway as it was written.
+        pair_again: gateway.reach == Reach::PairAgain,
         held_bytes: 0,
         behind_files: 0,
         behind_bytes: 0,
@@ -414,7 +456,7 @@ pub fn wire_destination(destination: &Destination) -> wire::Destination {
         head_snapshot_ms: None,
         reach: wire::WaitReason::Unspecified as i32,
         rolled_back: false,
-        paired_at_ms: i64::try_from(destination.paired_at_ms).unwrap_or(0),
+        paired_at_ms: i64::try_from(gateway.paired_ms).unwrap_or(0),
         waiting_apps: Vec::new(),
         refused_limit_bytes: 0,
     }
@@ -428,10 +470,10 @@ pub fn wire_destination(destination: &Destination) -> wire::Destination {
 ///
 /// # Errors
 /// The ledger's refusal.
-pub fn moved(ledger: &Ledger) -> Result<Option<(String, u64)>> {
-    for destination in ledger.destinations().map_err(plane_error)? {
-        if let Some(epoch) = ledger.moved(&destination.gateway_id).map_err(plane_error)? {
-            return Ok(Some((destination.gateway_id, epoch)));
+pub fn moved(state: &DeviceState) -> Result<Option<(String, u64)>> {
+    for gateway in state.gateways().map_err(plane_error)? {
+        if let Some(epoch) = gateway.moved_epoch {
+            return Ok(Some((gateway.gateway_id, epoch)));
         }
     }
     Ok(None)
@@ -442,11 +484,11 @@ pub fn moved(ledger: &Ledger) -> Result<Option<(String, u64)>> {
 /// and a door that writes refuses [`CoreError::VaultMoved`] (#1191, E4).
 ///
 /// # Errors
-/// The ledger's refusal.
-pub fn superseded_everywhere(ledger: &Ledger) -> Result<Option<u64>> {
+/// The device state's refusal.
+pub fn superseded_everywhere(state: &DeviceState) -> Result<Option<u64>> {
     let mut highest = None;
-    for destination in ledger.destinations().map_err(plane_error)? {
-        match ledger.moved(&destination.gateway_id).map_err(plane_error)? {
+    for gateway in state.gateways().map_err(plane_error)? {
+        match gateway.moved_epoch {
             Some(epoch) => highest = Some(highest.map_or(epoch, |seen: u64| seen.max(epoch))),
             None => return Ok(None),
         }
@@ -496,11 +538,11 @@ pub fn gateway_tokens(
         held.insert(given.gateway_id.clone(), token);
     }
     let paired: Vec<String> = plane
-        .ledger()?
-        .destinations()
+        .state()?
+        .gateways()
         .map_err(plane_error)?
         .into_iter()
-        .map(|destination| destination.gateway_id)
+        .map(|gateway| gateway.gateway_id)
         .collect();
     let pair_again = paired
         .into_iter()
@@ -518,10 +560,10 @@ pub fn gateway_tokens(
 /// # Errors
 /// The ledger's refusal.
 pub fn pins(plane: &Plane) -> Result<wire::PinsResponse> {
-    let ledger = plane.ledger()?;
+    let state = plane.state()?;
     Ok(wire::PinsResponse {
-        destinations: ledger
-            .destinations()
+        destinations: state
+            .gateways()
             .map_err(plane_error)?
             .iter()
             .map(wire_destination)
@@ -560,28 +602,30 @@ pub fn forget_destination(
     runtime: &tokio::runtime::Handle,
     request: &wire::ForgetDestinationRequest,
 ) -> Result<wire::ForgetDestinationResponse> {
-    let ledger = plane.ledger()?;
+    let state = plane.state()?;
+    let Some(destination) = state.gateway(&request.gateway_id).map_err(plane_error)? else {
+        return Ok(wire::ForgetDestinationResponse::default());
+    };
     // ONLY THE GATEWAY THAT PROVED A TAKEOVER is refused (E4): its row is what
     // carries the mark.
-    if let Some(epoch) = ledger.moved(&request.gateway_id).map_err(plane_error)? {
+    if let Some(epoch) = destination.moved_epoch {
         return Err(CoreError::VaultMoved {
             current_epoch: epoch,
             moved_at_ms: 0,
         });
     }
-    let Some(destination) = ledger
-        .destination(&request.gateway_id)
-        .map_err(plane_error)?
-    else {
-        return Ok(wire::ForgetDestinationResponse::default());
-    };
-    ledger
-        .remove_destination(&request.gateway_id)
+    // The row goes (its outbox rows with it); the token is read from memory first.
+    let token = plane.tokens().get(&request.gateway_id).copied();
+    state
+        .remove_gateway(&request.gateway_id)
         .map_err(plane_error)?;
-    drain::forget_reach(&ledger, &request.gateway_id)?;
-    // FORGETTING THE LAST GATEWAY LEAVES NOTHING QUEUED: no gateway owes the spooled parts now.
-    centraid_vault::backup::mover::sweep_unowed(&ledger, &plane.spool()?).map_err(plane_error)?;
-    let revoked = keyring.is_some_and(|keyring| revoke(&destination, keyring, runtime));
+    // FORGETTING THE LAST GATEWAY LEAVES NOTHING QUEUED: no gateway owes the spooled parts now,
+    // and a file only the forgotten gateway's rows named is nobody's.
+    let spool = plane.spool()?;
+    spool
+        .sweep_unqueued(&state.owed_names().map_err(plane_error)?)
+        .map_err(plane_error)?;
+    let revoked = keyring.is_some_and(|keyring| revoke(&destination, token, keyring, runtime));
     Ok(wire::ForgetDestinationResponse {
         forgotten: true,
         revoked,
@@ -627,21 +671,18 @@ pub fn refresh_destination(
 ) -> Result<wire::RefreshDestinationResponse> {
     use centraid_gateway::client::Client;
 
-    let ledger = plane.ledger()?;
+    let state = plane.state()?;
+    let Some(destination) = state.gateway(&request.gateway_id).map_err(plane_error)? else {
+        return Ok(wire::RefreshDestinationResponse::default());
+    };
     // ONLY THE GATEWAY THAT PROVED A TAKEOVER is refused (E4): its row is what
     // carries the mark.
-    if let Some(epoch) = ledger.moved(&request.gateway_id).map_err(plane_error)? {
+    if let Some(epoch) = destination.moved_epoch {
         return Err(CoreError::VaultMoved {
             current_epoch: epoch,
             moved_at_ms: 0,
         });
     }
-    let Some(destination) = ledger
-        .destination(&request.gateway_id)
-        .map_err(plane_error)?
-    else {
-        return Ok(wire::RefreshDestinationResponse::default());
-    };
     let candidates = refresh_candidates(&request.candidates);
     let mut answered: Vec<String> = Vec::new();
     for candidate in candidates {
@@ -671,8 +712,8 @@ pub fn refresh_destination(
         }
     }
     addrs.truncate(ADDRESS_CAP);
-    ledger
-        .set_destination_addrs(&destination.gateway_id, &addrs)
+    state
+        .set_addrs(&destination.gateway_id, &addrs)
         .map_err(plane_error)?;
     Ok(wire::RefreshDestinationResponse {
         refreshed: true,
@@ -711,18 +752,28 @@ pub(crate) fn refresh_candidates(given: &[String]) -> Vec<String> {
 
 /// Ask `destination` to revoke this phone's token for `vault`. Whether the
 /// pinned gateway answered that the token opens nothing there now.
-fn revoke(destination: &Destination, keyring: &Keyring, runtime: &tokio::runtime::Handle) -> bool {
+fn revoke(
+    destination: &Gateway,
+    token: Option<centraid_gateway::rules::ids::Token>,
+    keyring: &Keyring,
+    runtime: &tokio::runtime::Handle,
+) -> bool {
     use centraid_gateway::client::ClientError;
     use centraid_gateway::rules::Refusal;
+    // NO TOKEN IN MEMORY (the shell never handed one): there is nothing to revoke with.
+    let Some(token) = token else {
+        return false;
+    };
     let vault = keyring.vault_id();
-    let store = match link::GatewayStore::for_destination(
+    let store = match link::GatewayStore::for_gateway(
         destination,
+        token,
         keyring.vault.identity.signing(),
         runtime,
     ) {
         Ok(store) => store,
         Err(error) => {
-            tracing::debug!(%error, "a forgotten gateway's token does not read");
+            tracing::debug!(%error, "a forgotten gateway's store does not open");
             return false;
         }
     };
@@ -746,15 +797,42 @@ fn revoke(destination: &Destination, keyring: &Keyring, runtime: &tokio::runtime
 /// clock: every row committed before it is in a backup a restore brings back.
 ///
 /// # Errors
-/// The ledger's refusal.
-pub(crate) fn records_backed_up_at(ledger: &Ledger) -> Result<Option<u64>> {
-    Ok(ledger
-        .snapshots()
+/// The device state's refusal.
+pub(crate) fn records_backed_up_at(state: &DeviceState) -> Result<Option<u64>> {
+    Ok(state
+        .gateways()
         .map_err(plane_error)?
         .iter()
-        .filter(|snapshot| snapshot.acked_ms.is_some())
-        .map(|snapshot| snapshot.taken_at_ms)
+        .filter_map(|gateway| gateway.head_ms)
         .max())
+}
+
+/// What a gateway is behind on, as hashes: every blob it is owed in its outbox (a lapsed one
+/// is not the member's to keep safe), and every claim the vault made past the gateway's cursor
+/// that the walk has not met yet.
+///
+/// # Errors
+/// The device state's or the vault's refusal.
+pub(crate) fn behind_hashes(
+    state: &DeviceState,
+    vault: &Vault,
+    gateway: &Gateway,
+) -> Result<BTreeSet<PlaintextHash>> {
+    use centraid_vault::backup::state::Waiting;
+    let mut behind: BTreeSet<PlaintextHash> = state
+        .outbox(&gateway.gateway_id)
+        .map_err(plane_error)?
+        .into_iter()
+        .filter(|row| row.waiting != Some(Waiting::Lapsed))
+        .filter_map(|row| row.hash)
+        .collect();
+    let after = i64::try_from(gateway.cursor).unwrap_or(i64::MAX);
+    for claim in
+        centraid_vault::backup::naming::claims_after(vault, after, usize::MAX >> 1).map_err(plane_error)?
+    {
+        behind.insert(claim.hash);
+    }
+    Ok(behind)
 }
 
 /// **A FILE'S ROW IS BACKED UP** when it was written before the newest
@@ -783,6 +861,8 @@ pub(crate) struct Standing {
     pub outcomes: Vec<Outcome>,
     /// Each paired gateway's own count of the files it is behind on, by id (NB1).
     pub replicas: BTreeMap<String, (u64, u64)>,
+    /// The plaintext bytes each paired gateway holds whole, by id.
+    pub held_bytes: BTreeMap<String, u64>,
     /// For each file counted, in the same order, the gateways still behind on it (empty when it
     /// is backed up everywhere or left out).
     pub lagging: Vec<Vec<String>>,
@@ -801,31 +881,18 @@ pub(crate) enum Outcome {
     LeftOut,
 }
 
-/// When the records at `gateway_id` are current as of, on the vault's clock: the snapshot its
-/// head names. A ledger from before a head's time was kept beside it is read by the snapshot
-/// the head names.
-pub(crate) fn records_at_gateway(ledger: &Ledger, gateway_id: &str) -> Result<Option<u64>> {
-    if let Some(head) = ledger.head(gateway_id).map_err(plane_error)?
-        && let Some(taken) = ledger
-            .snapshots()
-            .map_err(plane_error)?
-            .iter()
-            .find(|snapshot| snapshot.name == head)
-            .map(|snapshot| snapshot.taken_at_ms)
-    {
-        return Ok(Some(taken));
-    }
-    ledger.head_taken(gateway_id).map_err(plane_error)
-}
-
 /// One paired gateway as a file is judged against it.
 struct Replica {
     id: String,
-    confirmed: BTreeSet<Name>,
+    /// What the gateway is behind on (`behind_hashes`).
+    behind: BTreeSet<PlaintextHash>,
+    /// The files it is owed that have a part sealed in the spool.
+    sealed: BTreeSet<PlaintextHash>,
     records_at: Option<u64>,
     reach: Option<wire::WaitReason>,
     behind_files: u64,
     behind_bytes: u64,
+    held_bytes: u64,
 }
 
 /// Count where the vault's files stand. `files` and `keys` are absent on a
@@ -835,60 +902,58 @@ struct Replica {
 /// NAMES HOLDS ITS ROW** (#1188, NB1): every gateway is a full replica, so one being current
 /// says nothing of another. A gateway a newer writer superseded is not one this phone feeds.
 pub(crate) fn standing(
-    ledger: &Ledger,
+    state: &DeviceState,
+    vault: &Vault,
     files: &[ContentFile],
-    keys: &BackupKeys,
     asking: bool,
+    remembered: drain::Conditions,
+    no_room: bool,
 ) -> Result<Standing> {
-    let queued: BTreeMap<Name, centraid_vault::backup::ledger::Queued> = ledger
-        .queued()
-        .map_err(plane_error)?
-        .into_iter()
-        .map(|part| (part.name, part))
-        .collect();
     // WHILE THE MEMBER'S TAP RUNS, its pass is the one that answers: it lets
     // a video through off the charger (`may_prepare`), and a status that
     // still said "waiting for a charger" would contradict the upload under it.
     let conditions = drain::Conditions {
         asked: asking,
-        ..drain::Conditions::remembered(ledger)?
+        ..remembered
     };
-    // THE LAST SNAPSHOT COULD NOT BE COPIED for want of room on this phone (`drain::NO_ROOM_KEY`).
-    let no_room = ledger
-        .meta(drain::NO_ROOM_KEY)
-        .map_err(plane_error)?
-        .is_some_and(|text| text == "1");
     let mut replicas: Vec<Replica> = Vec::new();
     // A WAIT CANNOT BEGIN BEFORE THERE WAS A GATEWAY TO WAIT FOR: the earliest pairing among the
     // gateways this phone feeds is the floor of the oldest waiting item.
     let mut earliest_pairing: Option<i64> = None;
-    for destination in ledger.destinations().map_err(plane_error)? {
-        if ledger
-            .moved(&destination.gateway_id)
-            .map_err(plane_error)?
-            .is_some()
-        {
+    for gateway in state.gateways().map_err(plane_error)? {
+        if gateway.moved_epoch.is_some() {
             continue;
         }
-        let paired = i64::try_from(destination.paired_at_ms).unwrap_or(0);
+        let paired = i64::try_from(gateway.paired_ms).unwrap_or(0);
         earliest_pairing = Some(earliest_pairing.map_or(paired, |old| old.min(paired)));
+        let sealed: BTreeSet<PlaintextHash> = state
+            .outbox(&gateway.gateway_id)
+            .map_err(plane_error)?
+            .into_iter()
+            .filter(|row| row.part_path.is_some())
+            .filter_map(|row| row.hash)
+            .collect();
         replicas.push(Replica {
-            confirmed: ledger
-                .confirmed_names(&destination.gateway_id)
-                .map_err(plane_error)?,
-            records_at: records_at_gateway(ledger, &destination.gateway_id)?,
-            reach: drain::gateway_reach(ledger, &destination.gateway_id)?,
-            id: destination.gateway_id,
+            behind: behind_hashes(state, vault, &gateway)?,
+            sealed,
+            records_at: gateway.head_ms,
+            reach: drain::gateway_reach(state, &gateway.gateway_id)?,
+            id: gateway.gateway_id,
             behind_files: 0,
             behind_bytes: 0,
+            held_bytes: 0,
         });
     }
     let mut out = Standing::default();
     for file in files {
         out.total += 1;
-        let names = names_of(keys, &file.h, file.len);
+        for replica in &mut replicas {
+            if !replica.behind.contains(&file.h) {
+                replica.held_bytes = replica.held_bytes.saturating_add(file.len);
+            }
+        }
         // BACKED UP IS THE BYTES AND THE ROW, AT EVERY GATEWAY: either alone restores nothing.
-        let held = |replica: &Replica| names.iter().all(|name| replica.confirmed.contains(name));
+        let held = |replica: &Replica| !replica.behind.contains(&file.h);
         let lagging: Vec<usize> = replicas
             .iter()
             .enumerate()
@@ -945,12 +1010,9 @@ pub(crate) fn standing(
                         wire::WaitReason::Wifi
                     }
                 } else {
-                    let spooled = names
-                        .iter()
-                        .filter(|name| !replica.confirmed.contains(name))
-                        .all(|name| queued.contains_key(name));
+                    let spooled = replica.sealed.contains(&file.h);
                     let library = !spooled
-                        && ledger
+                        && state
                             .local(&file.h)
                             .map_err(plane_error)?
                             .is_some_and(|local| local.source == LocalSource::Os);
@@ -963,6 +1025,10 @@ pub(crate) fn standing(
     out.oldest_waiting_ms = out
         .oldest_waiting_ms
         .map(|made| made.max(earliest_pairing.unwrap_or(0)));
+    out.held_bytes = replicas
+        .iter()
+        .map(|replica| (replica.id.clone(), replica.held_bytes))
+        .collect();
     out.replicas = replicas
         .into_iter()
         .map(|replica| (replica.id, (replica.behind_files, replica.behind_bytes)))
@@ -981,38 +1047,40 @@ pub fn backup_status(
     vault: Option<&Vault>,
     keys: Option<&Keyring>,
 ) -> Result<wire::BackupStatusResponse> {
-    let ledger = plane.ledger()?;
+    let state = plane.state()?;
     let spool = plane.spool()?;
-    let destinations = ledger.destinations().map_err(plane_error)?;
+    let destinations = state.gateways().map_err(plane_error)?;
     let mut acked_at_ms: Option<u64> = None;
     for destination in &destinations {
-        if let Some(at) = ledger
-            .head_acked(&destination.gateway_id)
-            .map_err(plane_error)?
-        {
+        if let Some(at) = destination.ack_ms {
             // THE OLDEST HEAD, not the newest: "backed up" says all are current (NB1).
             acked_at_ms = Some(acked_at_ms.map_or(at, |held| held.min(at)));
         }
     }
-    let newest_taken = ledger
-        .snapshots()
-        .map_err(plane_error)?
+    let newest_taken = destinations
         .iter()
-        .map(|snapshot| snapshot.taken_at_ms)
+        .filter_map(|gateway| gateway.snapshot_ms)
         .max();
     let mut last_snapshot_ms: Option<u64> = None;
     for destination in &destinations {
-        if let Some(at) = records_at_gateway(&ledger, &destination.gateway_id)? {
+        if let Some(at) = destination.head_ms {
             last_snapshot_ms = Some(last_snapshot_ms.map_or(at, |held| held.min(at)));
         }
     }
     let (standing, held) = match (vault, keys) {
-        (Some(vault), Some(keys)) => {
+        (Some(vault), Some(_)) => {
             let files = content_files(vault).map_err(plane_error)?;
-            let standing = standing(&ledger, &files, &keys.backup, plane.asking())?;
+            let standing = standing(
+                &state,
+                vault,
+                &files,
+                plane.asking(),
+                drain::Conditions::remembered(plane),
+                plane.no_room(),
+            )?;
             let held = holdings::read(
                 vault,
-                &ledger,
+                &state,
                 &files,
                 &standing.outcomes,
                 &standing.lagging,
@@ -1021,13 +1089,18 @@ pub fn backup_status(
         }
         _ => (Standing::default(), holdings::Held::default()),
     };
-    let records_waiting: u64 = ledger
-        .queued()
-        .map_err(plane_error)?
-        .iter()
-        .filter(|part| drain::Kind::of_part(part) == drain::Kind::Records)
-        .map(|part| part.size)
-        .sum();
+    let mut records_waiting: u64 = 0;
+    for destination in &destinations {
+        records_waiting = records_waiting.saturating_add(
+            state
+                .outbox(&destination.gateway_id)
+                .map_err(plane_error)?
+                .iter()
+                .filter(|row| drain::Kind::of_part(row) == drain::Kind::Records)
+                .filter_map(|row| row.size)
+                .sum::<u64>(),
+        );
+    }
     // A GATEWAY THAT REFUSED THIS PHONE'S TOKEN IS NOT BACKING UP, however
     // many acknowledgements the ledger still holds for it (#1080, the sweep's
     // F2): the mark rides on the destination, so a line that would read "all
@@ -1035,12 +1108,12 @@ pub fn backup_status(
     let mut wired = Vec::with_capacity(destinations.len());
     for destination in &destinations {
         let mut row = wire_destination(destination);
-        row.pair_again = ledger
-            .unauthorized(&destination.gateway_id)
-            .map_err(plane_error)?;
-        row.held_bytes = ledger
-            .held_bytes(&destination.gateway_id)
-            .map_err(plane_error)?;
+        row.pair_again = destination.reach == Reach::PairAgain;
+        row.held_bytes = standing
+            .held_bytes
+            .get(&destination.gateway_id)
+            .copied()
+            .unwrap_or_default();
         let behind = standing
             .replicas
             .get(&destination.gateway_id)
@@ -1048,7 +1121,7 @@ pub fn backup_status(
             .unwrap_or_default();
         row.behind_files = behind.0;
         row.behind_bytes = behind.1;
-        let records_at = records_at_gateway(&ledger, &destination.gateway_id)?;
+        let records_at = destination.head_ms;
         row.head_snapshot_ms = records_at.and_then(|at| i64::try_from(at).ok());
         row.records_behind = match (records_at, newest_taken) {
             // A GATEWAY WHOSE HEAD NAMES NO SNAPSHOT is behind only when this phone has taken one:
@@ -1069,10 +1142,8 @@ pub fn backup_status(
                     .collect()
             })
             .unwrap_or_default();
-        row.rolled_back = ledger
-            .rolled_back(&destination.gateway_id)
-            .map_err(plane_error)?;
-        let reach = drain::gateway_reach(&ledger, &destination.gateway_id)?
+        row.rolled_back = false;
+        let reach = drain::gateway_reach(&state, &destination.gateway_id)?
             .unwrap_or(wire::WaitReason::Unspecified);
         row.reach = reach as i32;
         if reach == wire::WaitReason::TooLarge {
@@ -1096,7 +1167,7 @@ pub fn backup_status(
                 count: *count,
             })
             .collect(),
-        frozen: moved(&ledger)?.is_some(),
+        frozen: moved(&state)?.is_some(),
         total_bytes: held.total_bytes,
         confirmed_bytes: held.confirmed_bytes,
         left_out_items: held.left_out_items,
@@ -1128,7 +1199,7 @@ pub fn releasable(
     plane: &Plane,
     vault_file: &Path,
     vault: &Vault,
-    keys: &Keyring,
+    _keys: &Keyring,
     request: &wire::ReleasableRequest,
 ) -> Result<wire::ReleasableResponse> {
     if request.limit == 0 {
@@ -1137,9 +1208,19 @@ pub fn releasable(
                 .to_owned(),
         });
     }
-    let ledger = plane.ledger()?;
-    let confirmed = ledger.confirmed_anywhere().map_err(plane_error)?;
-    let records_at = records_backed_up_at(&ledger)?;
+    let state = plane.state()?;
+    // HELD WHOLE AT EVERY GATEWAY THIS PHONE FEEDS, and at least one: a file one gateway lacks
+    // is not safe to release.
+    let mut behind_anywhere: BTreeSet<PlaintextHash> = BTreeSet::new();
+    let mut fed = 0_usize;
+    for gateway in state.gateways().map_err(plane_error)? {
+        if gateway.moved_epoch.is_some() {
+            continue;
+        }
+        fed += 1;
+        behind_anywhere.extend(behind_hashes(&state, vault, &gateway)?);
+    }
+    let records_at = records_backed_up_at(&state)?;
     let kept_albums = crate::originals::KeptAlbums::read(vault_file)?.album_ids;
     let kept = centraid_vault::originals::kept_hashes(vault, &kept_albums)?;
     let files: BTreeMap<PlaintextHash, ContentFile> = content_files(vault)
@@ -1150,9 +1231,9 @@ pub fn releasable(
         .collect();
     // ONE LIBRARY ITEM, EVERY HASH UNDER IT (A20): a Live Photo is a still and
     // a film under one identifier, and the item is offered whole or not at all.
-    let mut by_ref: BTreeMap<String, Vec<centraid_vault::backup::ledger::LocalBytes>> =
+    let mut by_ref: BTreeMap<String, Vec<centraid_vault::backup::state::LocalBytes>> =
         BTreeMap::new();
-    for local in ledger.locals().map_err(plane_error)? {
+    for local in state.locals().map_err(plane_error)? {
         if local.source == LocalSource::Os
             && let Some(os_ref) = local.os_ref.as_deref()
         {
@@ -1177,9 +1258,8 @@ pub fn releasable(
             let safe = !local.edited
                 && !kept.contains(&local.hash.to_hex())
                 && row_backed_up(file, records_at)
-                && names_of(&keys.backup, &file.h, file.len)
-                    .iter()
-                    .all(|name| confirmed.contains(name));
+                && fed > 0
+                && !behind_anywhere.contains(&file.h);
             if safe {
                 if created.is_empty() || file.created_at < created {
                     created.clone_from(&file.created_at);
@@ -1230,7 +1310,7 @@ pub fn released(
     vault: &Vault,
     request: &wire::ReleasedRequest,
 ) -> Result<(wire::ReleasedResponse, Vec<String>)> {
-    let ledger = plane.ledger()?;
+    let ledger = plane.state()?;
     let mut recorded = 0_u32;
     let mut gone: BTreeSet<String> = BTreeSet::new();
     for raw in &request.content_hash {
@@ -1280,11 +1360,10 @@ pub fn library_assets(
     if wanted.is_empty() {
         return Ok(wire::LibraryAssetsResponse::default());
     }
-    // THE NEWEST ITEM STAGED UNDER EACH REF: a ref an edit re-staged holds two
-    // hashes, and the edit's source is the version before it, which is the
-    // newer of the two at the moment the shell asks (it asks before staging).
-    let mut newest: BTreeMap<&str, centraid_vault::backup::ledger::LocalBytes> = BTreeMap::new();
-    let locals = plane.ledger()?.locals().map_err(plane_error)?;
+    // ONE ITEM STAGED UNDER EACH REF: a ref an edit re-staged holds two hashes; the device state
+    // keeps no time for them, so the greater hash answers (deterministic).
+    let mut newest: BTreeMap<&str, centraid_vault::backup::state::LocalBytes> = BTreeMap::new();
+    let locals = plane.state()?.locals().map_err(plane_error)?;
     for local in locals {
         if local.source != LocalSource::Os {
             continue;
@@ -1297,7 +1376,7 @@ pub fn library_assets(
             continue;
         };
         let newer = newest.get(os_ref).is_none_or(|held| {
-            (local.verified_ms, local.hash.to_hex()) > (held.verified_ms, held.hash.to_hex())
+            local.hash.to_hex() > held.hash.to_hex()
         });
         if newer {
             newest.insert(os_ref, local);

@@ -715,8 +715,8 @@ impl HandleState {
                 "the byte store adopted the layout it had before #1080"
             );
         }
-        let ledger_path = centraid_vault::backup::ledger::Ledger::path_for(&self.path);
-        let door = match centraid_vault::backup::ledger::Ledger::open(&ledger_path) {
+        let ledger_path = centraid_vault::backup::state::DeviceState::path_for(&self.path);
+        let door = match centraid_vault::backup::state::DeviceState::open_beside(&self.path) {
             Ok(ledger) => {
                 centraid_blobs::ContentBytes::new(store).with_ledger(Arc::new(Mutex::new(ledger)))
             }
@@ -1816,8 +1816,8 @@ impl HandleState {
     ) -> wire::CheckBackupResponse {
         let devices = self
             .plane
-            .ledger()
-            .and_then(|ledger| ledger.destinations().map_err(crate::phone::plane_error))
+            .state()
+            .and_then(|ledger| ledger.gateways().map_err(crate::phone::plane_error))
             .unwrap_or_default()
             .into_iter()
             .filter(|d| request.gateway_id.is_empty() || d.gateway_id == request.gateway_id)
@@ -1909,8 +1909,8 @@ impl HandleState {
         let store = self.bytes().map(|door| door.store().clone());
         let plane = &self.plane;
         let paired = !plane
-            .ledger()?
-            .destinations()
+            .state()?
+            .gateways()
             .map_err(crate::phone::plane_error)?
             .is_empty();
         let seal = match (&self.keys, paired) {
@@ -1996,7 +1996,7 @@ impl HandleState {
                 sealed,
             } => {
                 let plane = &self.plane;
-                let ledger = plane.ledger()?;
+                let ledger = plane.state()?;
                 let in_store = self.bytes().is_some_and(|door| {
                     door.store()
                         .is_complete(centraid_blobs::ContentHash::from_bytes(*h.as_bytes()))
@@ -2008,11 +2008,10 @@ impl HandleState {
                         .map_err(crate::phone::plane_error)?
                         .is_some();
                 ledger
-                    .put_local(&centraid_vault::backup::ledger::LocalBytes {
+                    .put_local(&centraid_vault::backup::state::LocalBytes {
                         hash: h,
-                        source: centraid_vault::backup::ledger::LocalSource::Os,
+                        source: centraid_vault::backup::state::LocalSource::Os,
                         os_ref: Some(os_ref),
-                        verified_ms: Some(crate::phone::now_ms()),
                         edited,
                     })
                     .map_err(crate::phone::plane_error)?;
@@ -2356,7 +2355,7 @@ mod tests {
             door.path_of(&id).expect("it answers").is_some(),
             "nothing is inlined, so a grid has a file to open"
         );
-        assert!(door.ledger().is_some(), "the door reads the backup ledger");
+        assert!(door.state().is_some(), "the door reads the backup ledger");
         assert!(
             scratch.dir.join("vault.backup.db").is_file(),
             "the ledger is beside the vault, where the backup plane keeps it"
@@ -2438,14 +2437,13 @@ mod tests {
             .expect("a blob is named by its hash")
             .to_owned();
         std::fs::remove_file(&path).expect("the store's copy goes");
-        let local = centraid_vault::backup::ledger::LocalBytes {
+        let local = centraid_vault::backup::state::LocalBytes {
             hash: centraid_vault::backup::naming::PlaintextHash::from_hex(&hash).expect("a hash"),
-            source: centraid_vault::backup::ledger::LocalSource::Os,
+            source: centraid_vault::backup::state::LocalSource::Os,
             os_ref: Some("library-item-1".to_owned()),
-            verified_ms: Some(1),
             edited: false,
         };
-        let ledger = door.ledger().expect("the door reads the ledger");
+        let ledger = door.state().expect("the door reads the ledger");
         ledger
             .lock()
             .expect("the ledger")

@@ -543,15 +543,15 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
     // ever removed — AND every opened one: a range that leaked a Locker secret
     // into the plaintext it seals is a leak the moment its key is lost.
     {
-        use centraid_vault::backup::ledger::Ledger;
+        use centraid_vault::backup::state::DeviceState;
         use centraid_vault::backup::naming::keys_from_root;
         use centraid_vault::backup::snapshot::{self, APP};
         use centraid_vault::backup::spool::{SPOOL_CEILING_BYTES, Spool};
-        use centraid_vault::backup::store::MemoryStore;
+        use centraid_vault::backup::store::{MemoryStore, Store as _};
 
         let vault = &sealed_vault.scratch.vault;
         let keys = keys_from_root(&[0x5a; 32]);
-        let ledger = Ledger::open(Ledger::path_for(vault.path())).expect("a ledger");
+        let state = DeviceState::open_beside(vault.path()).expect("a device state");
         let spool = Spool::open(Spool::dir_for(vault.path())).expect("a spool");
         let taken = snapshot::take(
             vault,
@@ -561,12 +561,23 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
             APP,
         )
         .expect("a snapshot is taken");
-        let plan = snapshot::plan(&taken, &MemoryStore::new("laptop")).expect("plans");
+        let laptop = MemoryStore::new("laptop");
+        let plan = snapshot::plan(&taken, &laptop).expect("plans");
+        state
+            .put_gateway(&centraid_vault::backup::state::Gateway::paired(
+                laptop.gateway_id().to_owned(),
+                Vec::new(),
+                Vec::new(),
+                "The laptop".to_owned(),
+                1,
+                1,
+            ))
+            .expect("pairs");
         let spooled = snapshot::spool(
             &taken,
-            &plan,
+            &[(laptop.gateway_id().to_owned(), plan)],
             &spool,
-            &ledger,
+            &state,
             &keys,
             SPOOL_CEILING_BYTES,
             1,

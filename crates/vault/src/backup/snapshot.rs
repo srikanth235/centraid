@@ -75,7 +75,7 @@ use centraid_media::sealed;
 use rusqlite::{Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 
-use super::ledger::{Ledger, PartKind, Queued};
+use super::state::{DeviceState, Outbox, OutboxKind};
 use super::naming::{BackupKeys, Digest, Name, PlaintextHash, name};
 use super::spool::Spool;
 use super::store::{self, Head, Store, StoreError};
@@ -706,49 +706,10 @@ pub fn union(snapshot: &Snapshot, plans: &[Plan]) -> Plan {
     }
 }
 
-/// Record what `plan` found `gateway_id` already holds: every range and the
-/// manifest its `exists` did not name missing. Answers how many names that
-/// was.
-///
-/// The ledger is a cache of the destination's own answer (#1080 ruling 7), and
-/// [`settle`] moves the head only over names the ledger confirms. A range held
-/// before this device's ledger knew of it — every range of the first snapshot
-/// after a restore, or after the ledger was lost — is confirmed here or never,
-/// because nothing seals or sends it again.
-///
-/// # Errors
-/// The ledger's refusal.
-pub fn confirm_held(
-    snapshot: &Snapshot,
-    plan: &Plan,
-    ledger: &Ledger,
-    gateway_id: &str,
-    now_ms: u64,
-) -> Result<usize> {
-    let missing: BTreeSet<Name> = plan
-        .missing_ranges
-        .iter()
-        .filter_map(|index| snapshot.ranges.get(usize::try_from(*index).ok()?))
-        .map(|range| range.name)
-        .collect();
-    let mut held: BTreeMap<Name, u64> = BTreeMap::new();
-    for range in &snapshot.ranges {
-        if !missing.contains(&range.name) {
-            held.insert(range.name, range.len);
-        }
-    }
-    if !plan.manifest_missing {
-        held.insert(snapshot.manifest_name, snapshot.manifest_json.len() as u64);
-    }
-    let held: Vec<(Name, u64)> = held.into_iter().collect();
-    ledger.confirm_many(&held, gateway_id, now_ms)?;
-    Ok(held.len())
-}
-
 /// What [`spool`] did.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Spooled {
-    /// Sealed into the spool and queued, or found already there.
+    /// Sealed into the spool and owed, or found already there.
     pub spooled: Vec<Name>,
     /// Left for a later pass: the spool was at its budget.
     pub deferred: Vec<Name>,
@@ -756,70 +717,102 @@ pub struct Spooled {
     pub bytes: u64,
 }
 
-/// Seal what `plan` found missing into the spool and queue it, the manifest
-/// last and only once every range it names is spooled. The snapshot is
-/// recorded in the ledger first, so a collection that runs before it settles
-/// knows its names are in flight.
+/// Seal what the gateways between them are missing into the spool and owe each gateway what
+/// its own plan found missing, the manifest last and only once every range it names is
+/// spooled. `plans` pairs each gateway with what it lacks of `snapshot`. A name no gateway
+/// lacks is not sealed; a name every gateway holds has no row, which is how [`settle`] knows
+/// the head may move.
 ///
 /// # Errors
-/// The filesystem's, the ledger's or the cipher's refusal.
+/// The filesystem's, the state's or the cipher's refusal.
 pub fn spool(
     snapshot: &Snapshot,
-    plan: &Plan,
+    plans: &[(String, Plan)],
     spool: &Spool,
-    ledger: &Ledger,
+    state: &DeviceState,
     keys: &BackupKeys,
     budget: u64,
     now_ms: u64,
 ) -> Result<Spooled> {
-    let json = std::str::from_utf8(&snapshot.manifest_json)
-        .map_err(|_| invariant("the manifest is not UTF-8"))?;
-    ledger.record_snapshot(&snapshot.manifest_name, snapshot.manifest.taken_at_ms, json)?;
+    let owing = |index: Option<u32>, manifest: bool| -> Vec<&str> {
+        plans
+            .iter()
+            .filter(|(_, plan)| match index {
+                Some(index) => plan.missing_ranges.contains(&index),
+                None => manifest && plan.manifest_missing,
+            })
+            .map(|(gateway, _)| gateway.as_str())
+            .collect()
+    };
+    let union_plan = union(
+        snapshot,
+        &plans.iter().map(|(_, plan)| plan.clone()).collect::<Vec<_>>(),
+    );
+    // THE GATEWAY'S SNAPSHOT IN FLIGHT is recorded first, so the pass that moves its parts, or a
+    // later one, knows which manifest the head moves to.
+    for (gateway, _) in plans {
+        state.set_snapshot(
+            gateway,
+            &snapshot.manifest_name,
+            snapshot.manifest.taken_at_ms,
+            snapshot.manifest.writes,
+        )?;
+    }
     let mut held = spool.bytes()?;
     let mut out = Spooled::default();
     let mut file = File::open(&snapshot.path)?;
     let mut buffer = Vec::new();
 
-    // THE QUEUE ROWS GO IN BATCHES, one transaction each (`PENDING_ROWS` parts): a snapshot of
+    // THE OUTBOX ROWS GO IN BATCHES, one transaction each (`PENDING_ROWS` parts): a snapshot of
     // hundreds of ranges is a handful of syncs, not one per range. A part's file is written
     // before its row, so a crash between leaves a file the opener sweeps.
     const PENDING_ROWS: usize = 256;
-    let mut pending: Vec<Queued> = Vec::new();
-    let flush = |pending: &mut Vec<Queued>| -> Result<()> {
-        ledger.enqueue_many(pending)?;
+    let mut pending: Vec<Outbox> = Vec::new();
+    let flush = |pending: &mut Vec<Outbox>| -> Result<()> {
+        state.put_outbox_many(pending)?;
         pending.clear();
         Ok(())
     };
     let put = |name: Name,
-               kind: PartKind,
+               kind: OutboxKind,
+               gateways: &[&str],
                sealed: &[u8],
                out: &mut Spooled,
-               pending: &mut Vec<Queued>|
+               pending: &mut Vec<Outbox>|
      -> Result<u64> {
         let path = spool.write(&name, sealed)?;
-        pending.push(Queued {
-            name,
-            part_path: path,
-            size: sealed.len() as u64,
-            digest: Digest::of(sealed),
-            kind,
-            media_type: None,
-            created_ms: now_ms,
-            handed_off_ms: None,
-            attempts: 0,
-            last_error: None,
-        });
+        let digest = Digest::of(sealed);
+        for gateway in gateways {
+            pending.push(Outbox::sealed(
+                gateway,
+                name,
+                kind,
+                path.clone(),
+                sealed.len() as u64,
+                digest,
+                now_ms,
+            ));
+        }
         out.bytes += sealed.len() as u64;
         out.spooled.push(name);
         Ok(sealed.len() as u64)
     };
 
-    for index in &plan.missing_ranges {
+    for index in &union_plan.missing_ranges {
         let range = snapshot
             .ranges
             .get(usize::try_from(*index).unwrap_or(usize::MAX))
             .ok_or_else(|| invariant(format!("the plan names range {index}, which is not here")))?;
-        if spool.contains(&range.name) && ledger.is_queued(&range.name)? {
+        let gateways = owing(Some(*index), false);
+        if spool.contains(&range.name)
+            && gateways.iter().all(|gateway| {
+                state
+                    .outbox_row(gateway, &range.name)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|row| row.part_path.is_some())
+            })
+        {
             out.spooled.push(range.name);
             continue;
         }
@@ -840,16 +833,32 @@ pub fn spool(
             )));
         }
         let sealed = sealed::seal_part(keys, 0, &buffer, true)?;
-        held += put(range.name, PartKind::Range, &sealed, &mut out, &mut pending)?;
+        held += put(
+            range.name,
+            OutboxKind::Range,
+            &gateways,
+            &sealed,
+            &mut out,
+            &mut pending,
+        )?;
         if pending.len() >= PENDING_ROWS {
             flush(&mut pending)?;
         }
     }
     flush(&mut pending)?;
 
-    if plan.manifest_missing {
+    if union_plan.manifest_missing {
         let name = snapshot.manifest_name;
-        if spool.contains(&name) && ledger.is_queued(&name)? {
+        let gateways = owing(None, true);
+        if spool.contains(&name)
+            && gateways.iter().all(|gateway| {
+                state
+                    .outbox_row(gateway, &name)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|row| row.part_path.is_some())
+            })
+        {
             out.spooled.push(name);
         } else if !out.deferred.is_empty()
             || !super::spool::admits(held, snapshot.manifest_json.len() as u64, budget)
@@ -857,7 +866,14 @@ pub fn spool(
             out.deferred.push(name);
         } else {
             let sealed = sealed::seal_part(keys, 0, &snapshot.manifest_json, true)?;
-            put(name, PartKind::Manifest, &sealed, &mut out, &mut pending)?;
+            put(
+                name,
+                OutboxKind::Manifest,
+                &gateways,
+                &sealed,
+                &mut out,
+                &mut pending,
+            )?;
             flush(&mut pending)?;
         }
     }
@@ -869,69 +885,77 @@ pub fn spool(
 pub enum Settled {
     /// The head now names this snapshot.
     HeadSet(Head),
-    /// These names are not yet confirmed at the destination.
+    /// The gateway has no snapshot to move its head to, or its head already names it.
+    Nothing,
+    /// These names of the snapshot are still owed to the gateway.
     Waiting { unconfirmed: Vec<Name> },
     /// The head is somewhere this device did not leave it, and is not a
     /// snapshot this device took. Nothing moved.
     Conflict { current: Option<Head> },
 }
 
-/// Move the destination's head to the manifest `manifest_name` once every
-/// range it names and the manifest itself are confirmed there.
+/// Move the gateway's head to the newest snapshot spooled for it
+/// ([`DeviceState::set_snapshot`]) once none of its records is still owed to it (every range,
+/// leaf and the manifest). A name that is not owed is held: the plan found it so, or the mover let
+/// go of it on the gateway's own answer.
 ///
-/// The head's `prev` is the head this device last set at the destination. A
-/// head that moved to a snapshot this device took but never recorded the ack
-/// of (a crash between the two) is adopted and tried once more; any other
-/// head is a [`Settled::Conflict`].
+/// The head's `prev` is the head this device last set at the gateway. A head that stands
+/// somewhere this device did not leave it, but at or before this snapshot's own
+/// writes and time (a crash between setting and recording, or a gateway put back as it was a
+/// backup ago), or none at all, is the vault's own past and is tried once more; any other head is
+/// a [`Settled::Conflict`].
 ///
 /// # Errors
-/// The ledger's refusal, or a store error other than the conflict.
-pub fn settle(
-    ledger: &Ledger,
-    store: &dyn Store,
-    manifest_name: &Name,
-    manifest: &Manifest,
-    clock: &dyn Clock,
-) -> Result<Settled> {
+/// The state's refusal, or a store error other than the conflict.
+pub fn settle(state: &DeviceState, store: &dyn Store, clock: &dyn Clock) -> Result<Settled> {
     let gateway = store.gateway_id().to_owned();
-    let mut needed = manifest.range_names();
-    needed.insert(*manifest_name);
-    let unconfirmed = ledger.unconfirmed_among(needed, &gateway)?;
-    if !unconfirmed.is_empty() {
-        return Ok(Settled::Waiting { unconfirmed });
+    let Some(row) = state.gateway(&gateway)? else {
+        return Ok(Settled::Nothing);
+    };
+    let (Some(manifest_name), Some(taken_at_ms)) = (row.snapshot, row.snapshot_ms) else {
+        return Ok(Settled::Nothing);
+    };
+    if row.head == Some(manifest_name) {
+        return Ok(Settled::Nothing);
+    }
+    let owed: Vec<Name> = state
+        .outbox(&gateway)?
+        .into_iter()
+        .filter(|row| {
+            matches!(
+                row.kind,
+                OutboxKind::Range
+                    | OutboxKind::Leaf
+                    | OutboxKind::Manifest
+                    | OutboxKind::Directory
+            )
+        })
+        .map(|row| row.name)
+        .collect();
+    if !owed.is_empty() {
+        return Ok(Settled::Waiting { unconfirmed: owed });
     }
 
-    let mut prev = ledger.head(&gateway)?;
+    let mut prev = row.head;
     for attempt in 0..2 {
-        match store.set_head(
-            manifest_name,
-            prev.as_ref(),
-            manifest.taken_at_ms,
-            manifest.writes,
-        ) {
+        match store.set_head(&manifest_name, prev.as_ref(), taken_at_ms, row.snapshot_writes) {
             Ok(head) => {
-                let now = u64::try_from(clock.now_ms()).unwrap_or(0);
-                // ONE TRANSACTION: the head, when it was taken, the high-water mark (which rises
-                // with every head this device sets), the rolled-back mark a current head mends
-                // (#1188, B4) and the snapshot's acknowledgement.
-                ledger.record_head_set(&gateway, manifest_name, manifest.taken_at_ms, now)?;
+                // ONE STATEMENT: the head, and the generation and writes it was signed at, which
+                // the next signed record continues from (E3).
+                state.record_head(
+                    &gateway,
+                    &manifest_name,
+                    head.generation,
+                    head.writes,
+                    taken_at_ms,
+                )?;
+                state.touch_ack(&gateway, u64::try_from(clock.now_ms()).unwrap_or(0))?;
                 return Ok(Settled::HeadSet(head));
             }
             Err(StoreError::HeadConflict { current }) => {
-                // A HEAD OLDER THAN THE NEWEST THIS DEVICE EVER SET THERE (the high-water mark,
-                // #1188 B4) is this device's own past: a gateway put back as it was a backup
-                // ago names a snapshot retention has since dropped from the ledger.
-                let behind = ledger.rolled_back(&gateway)? && {
-                    let high = ledger.highwater(&gateway)?;
-                    current
-                        .as_ref()
-                        .is_some_and(|head| high.is_some_and(|high| head.taken_at_ms < high))
-                };
-                let ours = behind
-                    || match current.as_ref() {
-                        Some(head) => ledger.has_snapshot(&head.name)?,
-                        None => false,
-                    };
+                let ours = current.as_ref().is_none_or(|head| {
+                    head.writes <= row.snapshot_writes && head.taken_at_ms <= taken_at_ms
+                });
                 if attempt == 0 && ours {
                     prev = current.map(|head| head.name);
                     continue;
@@ -939,7 +963,8 @@ pub fn settle(
                 return Ok(Settled::Conflict { current });
             }
             Err(StoreError::Missing(name)) => {
-                ledger.unconfirm(&name, &gateway)?;
+                // The gateway does not hold a name believed held: the next pass's plan finds it
+                // missing and seals it again.
                 return Ok(Settled::Waiting {
                     unconfirmed: vec![name],
                 });
@@ -950,9 +975,20 @@ pub fn settle(
     Err(invariant("settle tried the head twice"))
 }
 
+/// Whether the vault has committed nothing since a snapshot whose `writes` counter was
+/// `writes`: the counter rises with every commit, so equal is unchanged. A vault that shows
+/// this is not copied again.
+///
+/// # Errors
+/// SQLite's refusal.
+pub fn unchanged_since(vault: &Vault, writes: u64) -> Result<bool> {
+    Ok(history(vault)?.writes == writes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backup::state::Gateway;
     use crate::error::VaultError;
 
     fn founded(dir: &Path) -> Vault {
@@ -1291,7 +1327,10 @@ mod tests {
         assert!(snapshot.ranges.len() > 3, "a founded vault is a few ranges");
         let store = super::super::store::MemoryStore::new("gw");
         let planned = plan(&snapshot, &store).expect("plans");
-        let ledger = Ledger::open(dir.path().join("vault.backup.db")).expect("a ledger");
+        let state = DeviceState::open(dir.path().join("vault.state.db")).expect("a device state");
+        state
+            .put_gateway(&Gateway::paired("gw".to_owned(), Vec::new(), Vec::new(), "laptop".to_owned(), 1, 0))
+            .expect("pairs");
         let spool_dir = Spool::open(dir.path().join("vault.spool")).expect("a spool");
         // THE BUDGET IS ONE RANGE'S WORST CASE, not a number of bytes. A part is admitted into
         // an empty spool whatever the budget, and into a held one only when its sealed bound
@@ -1302,7 +1341,16 @@ mod tests {
         // ~85 KB now, which a budget of 150 KiB admits whole).
         let budget = super::super::spool::sealed_bound(snapshot.ranges[0].len);
         let spooled =
-            spool(&snapshot, &planned, &spool_dir, &ledger, &keys, budget, 1).expect("spools");
+            spool(
+                &snapshot,
+                &[("gw".to_owned(), planned)],
+                &spool_dir,
+                &state,
+                &keys,
+                budget,
+                1,
+            )
+            .expect("spools");
         assert!(
             spool_dir.bytes().expect("sums") <= budget,
             "{} bytes under a budget of {budget}",
@@ -1337,9 +1385,20 @@ mod tests {
         let mut bytes = fs::read(&snapshot.path).expect("reads");
         bytes[5_000] ^= 0xff;
         fs::write(&snapshot.path, &bytes).expect("tampers");
-        let ledger = Ledger::open(dir.path().join("vault.backup.db")).expect("a ledger");
+        let state = DeviceState::open(dir.path().join("vault.state.db")).expect("a device state");
+        state
+            .put_gateway(&Gateway::paired("gw".to_owned(), Vec::new(), Vec::new(), "laptop".to_owned(), 1, 0))
+            .expect("pairs");
         let spool_dir = Spool::open(dir.path().join("vault.spool")).expect("a spool");
-        let outcome = spool(&snapshot, &plan, &spool_dir, &ledger, &keys, u64::MAX, 1);
+        let outcome = spool(
+            &snapshot,
+            &[("gw".to_owned(), plan)],
+            &spool_dir,
+            &state,
+            &keys,
+            u64::MAX,
+            1,
+        );
         assert!(
             outcome
                 .as_ref()
@@ -1352,13 +1411,11 @@ mod tests {
         );
     }
 
-    /// **A held range is confirmed from the destination's answer.** A ledger
-    /// that never sent a snapshot — a restored phone's, or one that was lost —
-    /// finds every range already held; without `confirm_held` the head would
-    /// wait on names nothing will ever send again.
+    /// **A name the gateway holds is no row.** A phone with a fresh device state — a restored
+    /// phone's, or one that was lost — finds every range already held: it owes only the manifest,
+    /// and the head moves once that is sent.
     #[test]
-    fn ranges_a_destination_already_holds_are_confirmed_and_the_head_moves() {
-        use super::super::ledger::Destination;
+    fn ranges_a_gateway_already_holds_are_not_owed_and_the_head_moves() {
         use super::super::mover::{Stop, move_queue};
         use super::super::store::MemoryStore;
 
@@ -1377,34 +1434,31 @@ mod tests {
         add_party(&vault, "Grace");
         let keys = BackupKeys::from_root(&[3; 32]);
         let store = MemoryStore::new("gw");
-        let destination = |ledger: &Ledger| {
-            ledger
-                .put_destination(&Destination {
-                    gateway_id: "gw".to_owned(),
-                    addrs: Vec::new(),
-                    cert_der: Vec::new(),
-                    token: "t".to_owned(),
-                    epoch: 1,
-                    label: "laptop".to_owned(),
-                    paired_at_ms: 0,
-                    last_seen_ms: None,
-                    last_ack_ms: None,
-                })
+        let paired = |state: &DeviceState| {
+            state
+                .put_gateway(&Gateway::paired(
+                    "gw".to_owned(),
+                    Vec::new(),
+                    Vec::new(),
+                    "laptop".to_owned(),
+                    1,
+                    0,
+                ))
                 .expect("pairs");
         };
         let vault_id = "ab".repeat(32);
 
         // One device sends a snapshot whole.
-        let first_ledger = Ledger::open(dir.path().join("one.backup.db")).expect("a ledger");
-        destination(&first_ledger);
+        let first_state = DeviceState::open(dir.path().join("one.state.db")).expect("a state");
+        paired(&first_state);
         let first_spool = Spool::open(dir.path().join("one.spool")).expect("a spool");
         let taken = take(&vault, &keys, &dir.path().join("a"), &vault_id, APP).expect("takes");
         let planned = plan(&taken, &store).expect("plans");
         spool(
             &taken,
-            &planned,
+            &[("gw".to_owned(), planned)],
             &first_spool,
-            &first_ledger,
+            &first_state,
             &keys,
             u64::MAX,
             1,
@@ -1412,44 +1466,42 @@ mod tests {
         .expect("spools");
         let far = std::time::Instant::now() + std::time::Duration::from_secs(60);
         let clock = crate::clock::FixedClock::frozen();
-        let moved = move_queue(&first_ledger, &first_spool, &store, far, &clock).expect("moves");
+        let moved = move_queue(&first_state, &first_spool, &store, far, &clock).expect("moves");
         assert_eq!(moved.stopped, Stop::Empty);
 
-        // A second ledger, knowing nothing, snapshots the same vault — a millisecond later,
-        // so its manifest is a new name.
+        // A second device state, knowing nothing, snapshots the same vault — a millisecond
+        // later, so its manifest is a new name.
         tick.advance_ms(1);
-        let ledger = Ledger::open(dir.path().join("two.backup.db")).expect("a ledger");
-        destination(&ledger);
+        let state = DeviceState::open(dir.path().join("two.state.db")).expect("a state");
+        paired(&state);
         let again = take(&vault, &keys, &dir.path().join("b"), &vault_id, APP).expect("takes");
         let replanned = plan(&again, &store).expect("plans");
         assert!(replanned.missing_ranges.is_empty(), "every range is held");
-        let waiting = settle(
-            &ledger,
-            &store,
-            &again.manifest_name,
-            &again.manifest,
-            &clock,
-        )
-        .expect("settles");
-        assert!(
-            matches!(waiting, Settled::Waiting { .. }),
-            "with nothing confirmed the head cannot move: {waiting:?}"
-        );
-        let confirmed = confirm_held(&again, &replanned, &ledger, "gw", 2).expect("confirms");
-        assert_eq!(confirmed, again.manifest.range_names().len());
         let fresh = Spool::open(dir.path().join("two.spool")).expect("a spool");
-        let spooled =
-            spool(&again, &replanned, &fresh, &ledger, &keys, u64::MAX, 2).expect("spools");
+        let spooled = spool(
+            &again,
+            &[("gw".to_owned(), replanned)],
+            &fresh,
+            &state,
+            &keys,
+            u64::MAX,
+            2,
+        )
+        .expect("spools");
         assert_eq!(
             spooled.spooled,
             vec![again.manifest_name],
             "only the manifest is new"
         );
-        let moved = move_queue(&ledger, &fresh, &store, far, &clock).expect("moves");
+        let waiting = settle(&state, &store, &clock).expect("settles");
+        assert!(
+            matches!(waiting, Settled::Waiting { .. }),
+            "with the manifest still owed the head cannot move: {waiting:?}"
+        );
+        let moved = move_queue(&state, &fresh, &store, far, &clock).expect("moves");
         assert_eq!(moved.stopped, Stop::Empty);
         assert!(matches!(
-            settle(&ledger, &store, &again.manifest_name, &again.manifest, &clock)
-                .expect("settles"),
+            settle(&state, &store, &clock).expect("settles"),
             Settled::HeadSet(head) if head.name == again.manifest_name
         ));
     }

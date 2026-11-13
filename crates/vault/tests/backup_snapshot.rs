@@ -12,12 +12,12 @@ use std::time::{Duration, Instant};
 
 use centraid_media::sealed;
 use centraid_vault::Vault;
-use centraid_vault::backup::ledger::{Destination, Ledger};
 use centraid_vault::backup::mover::{Stop, move_queue};
 use centraid_vault::backup::naming::{BackupKeys, Digest, Name, PlaintextHash, keys_from_root};
 use centraid_vault::backup::restore::{RestoreError, fetch_and_assemble, restore_head};
 use centraid_vault::backup::snapshot::{self, APP, Manifest, Settled, Snapshot};
 use centraid_vault::backup::spool::{SPOOL_CEILING_BYTES, Spool};
+use centraid_vault::backup::state::{DeviceState, Gateway};
 use centraid_vault::backup::store::{
     Deleted, Head, MemoryStore, ObjectEntry, Put, SnapshotEntry, Store, StoreError,
     TOMBSTONE_GRACE_MS,
@@ -30,43 +30,40 @@ fn keys() -> BackupKeys {
     keys_from_root(&[0x42; 32])
 }
 
-fn pair(ledger: &Ledger, store: &MemoryStore) {
-    ledger
-        .put_destination(&Destination {
-            gateway_id: store.gateway_id().to_owned(),
-            addrs: vec!["192.168.1.20:7443".to_owned()],
-            cert_der: vec![0x30],
-            token: "0".repeat(64),
-            epoch: store.epoch(),
-            label: "The laptop".to_owned(),
-            paired_at_ms: 1,
-            last_seen_ms: None,
-            last_ack_ms: None,
-        })
+fn pair(state: &DeviceState, store: &MemoryStore) {
+    state
+        .put_gateway(&Gateway::paired(
+            store.gateway_id().to_owned(),
+            vec!["192.168.1.20:7443".to_owned()],
+            vec![0x30],
+            "The laptop".to_owned(),
+            store.epoch(),
+            1,
+        ))
         .expect("pairs");
 }
 
 /// Take, plan, spool, move and settle one snapshot; return it.
 fn back_up(vault: &Vault, dir: &Path, store: &MemoryStore) -> Snapshot {
     let keys = keys();
-    let ledger = Ledger::open(Ledger::path_for(vault.path())).expect("a ledger");
-    pair(&ledger, store);
+    let state = DeviceState::open_beside(vault.path()).expect("a device state");
+    pair(&state, store);
     let spool = Spool::open(Spool::dir_for(vault.path())).expect("a spool");
     let snapshot =
         snapshot::take(vault, &keys, &dir.join("scratch"), VAULT_ID, APP).expect("takes");
     let plan = snapshot::plan(&snapshot, store).expect("plans");
     snapshot::spool(
         &snapshot,
-        &plan,
+        &[(store.gateway_id().to_owned(), plan)],
         &spool,
-        &ledger,
+        &state,
         &keys,
         SPOOL_CEILING_BYTES,
         1,
     )
     .expect("spools");
     let moved = move_queue(
-        &ledger,
+        &state,
         &spool,
         store,
         Instant::now() + Duration::from_secs(120),
@@ -74,13 +71,7 @@ fn back_up(vault: &Vault, dir: &Path, store: &MemoryStore) -> Snapshot {
     )
     .expect("moves");
     assert_eq!(moved.stopped, Stop::Empty);
-    match snapshot::settle(
-        &ledger,
-        store,
-        &snapshot.manifest_name,
-        &snapshot.manifest,
-        &SystemClock,
-    )
+    match snapshot::settle(&state, store, &SystemClock)
     .expect("settles")
     {
         Settled::HeadSet(head) => assert_eq!(head.name, snapshot.manifest_name),

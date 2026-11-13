@@ -355,6 +355,10 @@ message RestoreRequest {
   // claimed. Set, the same restore uses the newest older backup that passes for each such vault.
   // Never set by a shell before the member said yes to the offer.
   bool use_older = 7;
+  // GO AHEAD WITHOUT PROOF OF THE NEWEST (#1191, E8). Unset, a restore that cannot prove it holds
+  // the newest backup claims nothing and answers `unproven_newest`. Set, the same restore goes
+  // ahead with the greatest head it could verify. Never set before the member said yes.
+  bool confirm_unproven = 8;
 }
 
 // One vault a restore brought back.
@@ -431,6 +435,23 @@ message RestoreResponse {
   // claimed at, for the shell to keep (#1191, E12). A read grant is spent
   // inside the restore and never returned.
   repeated GatewayToken tokens = 6;
+  // A RESTORE THAT CANNOT PROVE IT HOLDS THE NEWEST CLAIMS NOTHING (#1191, E8): when the
+  // gateways reachable show a backup but fewer than the vault's last known writes say may exist,
+  // each such vault is offered here and `vaults` is empty. A second restore with
+  // `RestoreRequest.confirm_unproven` goes ahead.
+  repeated UnprovenNewest unproven_newest = 7;
+}
+
+// The newest backup this restore could read for a vault it cannot prove is the newest.
+message UnprovenNewest {
+  // The derivation index, as `RestoredVault.index`.
+  uint32 index = 1;
+  // The vault's identity public key, hex.
+  string vault_id = 2;
+  // When that backup was taken (ms since the epoch, the backup device's record).
+  int64 taken_at_ms = 3;
+  // A short label for the backup (its snapshot's name as the member sees it).
+  string label = 4;
 }
 
 // The newest older backup that passes, for one vault whose newest does not (`RestoreResponse.older_offers`).

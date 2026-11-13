@@ -52,7 +52,7 @@ fn a_gateway_row_round_trips_and_a_pairing_again_starts_clean() {
     let (_dir, state) = open();
     state.put_gateway(&paired(GATEWAY, 10)).expect("paired");
     state
-        .record_head(GATEWAY, &name(7), 3, 41)
+        .record_head(GATEWAY, &name(7), 3, 41, 1_000)
         .expect("a head set");
     state.set_cursor(GATEWAY, 99).expect("cursor");
     state.set_moved(GATEWAY, 4, 50).expect("moved");
@@ -152,6 +152,7 @@ fn an_unsealed_row_waits_and_a_check_refuses_a_row_that_lies() {
         handed_ms: None,
         attempts: 0,
         last_error: None,
+        derivative: false,
     };
     state.put_outbox(&waiting).expect("owed, not yet sealed");
     assert_eq!(state.outbox_waiting(GATEWAY).expect("waits").len(), 1);
@@ -213,7 +214,7 @@ fn forgetting_a_gateway_drops_its_outbox_and_nothing_else() {
 fn restore_in_place_resets_each_gateway_and_empties_the_outbox_and_keeps_local_bytes() {
     let (_dir, state) = open();
     state.put_gateway(&paired(GATEWAY, 10)).expect("one");
-    state.record_head(GATEWAY, &name(1), 9, 90).expect("head");
+    state.record_head(GATEWAY, &name(1), 9, 90, 2_000).expect("head");
     state.set_cursor(GATEWAY, 500).expect("cursor");
     state.next_sample_counter(GATEWAY).expect("a draw");
     state.set_reach(GATEWAY, Reach::Busy, 20).expect("busy");
