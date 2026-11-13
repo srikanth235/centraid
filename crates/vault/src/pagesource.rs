@@ -283,6 +283,31 @@ impl PinnedPages {
         crate::backup::snapshot::census_of(&self.connection)
     }
 
+    /// Every blob the vault claims at the pin, by hash: the content a snapshot's rows name.
+    ///
+    /// # Errors
+    /// SQLite's refusal, or a row whose hash cannot be named.
+    pub fn blobs(&self) -> Result<Vec<(PlaintextHash, u64)>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT hash, size FROM blob ORDER BY hash")?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        rows.into_iter()
+            .map(|(hash, size)| {
+                let h = PlaintextHash::from_hex(&hash).map_err(|_| {
+                    invariant(format!("a content row's hash `{hash}` cannot be named"))
+                })?;
+                let len = u64::try_from(size)
+                    .map_err(|_| invariant(format!("content `{hash}` has a negative size")))?;
+                Ok((h, len))
+            })
+            .collect()
+    }
+
     /// The page where `table`'s b-tree begins (1-based), for a test that must damage one page and
     /// know which; `None` for a table the vault does not have.
     ///
@@ -371,6 +396,8 @@ pub struct Walked {
     pub census: BTreeMap<String, i64>,
     /// Every range, in order: the manifest's ranges.
     pub ranges: Vec<RangeRead>,
+    /// Every blob the vault claims at the pin, by hash.
+    pub blobs: Vec<(PlaintextHash, u64)>,
 }
 
 /// **The whole read of a snapshot, under one pin.** Walks the vault's ranges in order; names each
@@ -415,6 +442,7 @@ pub fn walk(
         Ok(())
     })?;
     let census = pinned.census()?;
+    let blobs = pinned.blobs()?;
     let user_version = pinned.user_version()?;
     let (writes, written_at_ms) = pinned.history()?;
     pinned.quick_check()?;
@@ -429,5 +457,6 @@ pub fn walk(
         written_at_ms,
         census,
         ranges,
+        blobs,
     })
 }

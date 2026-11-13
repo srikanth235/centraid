@@ -108,6 +108,27 @@ pub struct RangeRef {
     pub d: Vec<ChunkDigest>,
 }
 
+/// One part of a blob, as a blobs leaf names it. `d` is the part's chunk digests, or `None` when
+/// this phone had not sealed the part (or learned its digests) when the snapshot was taken: a
+/// part with no digests is never sampled, and a later snapshot fills them in.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BlobPart {
+    pub i: u32,
+    pub name: Name,
+    pub d: Option<Vec<ChunkDigest>>,
+}
+
+/// One blob the vault claimed at the pin, as a blobs leaf names it: its plaintext hash, its
+/// length, and the parts it is stored as.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BlobRef {
+    pub h: PlaintextHash,
+    pub len: u64,
+    pub parts: Vec<BlobPart>,
+}
+
 /// One leaf, as the root lists it: the entries `first .. first + count`, and the name the leaf's
 /// own bytes derive (so a leaf that is not the one the root names is refused by name).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -199,6 +220,8 @@ pub struct Manifest {
     pub written_at_ms: Option<u64>,
     pub app: String,
     pub ranges: Vec<RangeRef>,
+    /// The blobs the vault claimed at the pin, by hash: the content its rows name.
+    pub blobs: Vec<BlobRef>,
     pub census: BTreeMap<String, i64>,
     pub directory: Option<Name>,
     /// The leaves of `ranges`, as the root lists them (filled by [`Manifest::to_parts`] and
@@ -218,25 +241,11 @@ impl Manifest {
     /// Cut the ranges into leaves and write the root that lists them.
     ///
     /// # Errors
-    /// More ranges than the tree holds ([`LEAF_ENTRIES`] × [`ROOT_LEAVES`]).
+    /// More ranges or blobs than a tree holds ([`LEAF_ENTRIES`] × [`ROOT_LEAVES`]).
     pub fn to_parts(&self, keys: &BackupKeys) -> Result<Parts> {
-        if self.ranges.len() > LEAF_ENTRIES * ROOT_LEAVES {
-            return Err(invariant("the vault is too large to back up"));
-        }
         let mut leaves = Vec::new();
-        let mut tree = Vec::new();
-        for (index, chunk) in self.ranges.chunks(LEAF_ENTRIES).enumerate() {
-            let json =
-                serde_json::to_vec(chunk).map_err(|error| invariant(format!("a leaf: {error}")))?;
-            let named = name(keys, &PlaintextHash::of(&json), 0);
-            tree.push(LeafRef {
-                first: u32::try_from(index * LEAF_ENTRIES)
-                    .map_err(|_| invariant("too many ranges"))?,
-                count: u32::try_from(chunk.len()).map_err(|_| invariant("too many ranges"))?,
-                name: named,
-            });
-            leaves.push(Leaf { name: named, json });
-        }
+        let ranges_tree = cut(keys, &self.ranges, &mut leaves)?;
+        let blobs_tree = cut(keys, &self.blobs, &mut leaves)?;
         let root = Root {
             v: self.v,
             vault_id: self.vault_id.clone(),
@@ -250,8 +259,8 @@ impl Manifest {
             app: self.app.clone(),
             census: self.census.clone(),
             directory: self.directory,
-            ranges_tree: tree,
-            blobs_tree: self.blobs_tree.clone(),
+            ranges_tree,
+            blobs_tree,
         };
         let root_json = serde_json::to_vec(&root)
             .map_err(|error| invariant(format!("the manifest: {error}")))?;
@@ -269,27 +278,23 @@ impl Manifest {
         keys: &BackupKeys,
         leaf: &mut dyn FnMut(&Name) -> Result<Vec<u8>>,
     ) -> Result<Self> {
-        let mut ranges: Vec<RangeRef> = Vec::new();
-        for entry in &root.ranges_tree {
-            let json = leaf(&entry.name)?;
-            if name(keys, &PlaintextHash::of(&json), 0) != entry.name {
+        let ranges: Vec<RangeRef> = unite(keys, &root.ranges_tree, leaf)?;
+        let blobs: Vec<BlobRef> = unite(keys, &root.blobs_tree, leaf)?;
+        // ONE ENTRY PER BLOB, IN ORDER: a blobs leaf repeated or reordered is refused.
+        if blobs.windows(2).any(|pair| pair[0].h >= pair[1].h) {
+            return Err(invariant("the blobs are not one entry each, by hash"));
+        }
+        for blob in &blobs {
+            let expected = sealed::names_of(keys, &blob.h, blob.len);
+            let named: Vec<(u32, Name)> =
+                blob.parts.iter().map(|part| (part.i, part.name)).collect();
+            let wanted: Vec<(u32, Name)> = (0_u32..).zip(expected).collect();
+            if named != wanted {
                 return Err(invariant(format!(
-                    "leaf {} is not the bytes its name derives from",
-                    entry.name
+                    "blob {} does not name the parts its hash and length derive",
+                    blob.h
                 )));
             }
-            let entries: Vec<RangeRef> = serde_json::from_slice(&json)
-                .map_err(|error| invariant(format!("a leaf: {error}")))?;
-            if entries.len() != entry.count as usize
-                || ranges.len() != entry.first as usize
-                || entries.len() > LEAF_ENTRIES
-            {
-                return Err(invariant(format!(
-                    "leaf {} does not hold the entries the root says",
-                    entry.name
-                )));
-            }
-            ranges.extend(entries);
         }
         let manifest = Self {
             v: root.v,
@@ -303,6 +308,7 @@ impl Manifest {
             written_at_ms: root.written_at_ms,
             app: root.app,
             ranges,
+            blobs,
             census: root.census,
             directory: root.directory,
             ranges_tree: root.ranges_tree,
@@ -381,13 +387,82 @@ impl Manifest {
             .collect()
     }
 
-    /// Everything the snapshot is made of besides the root: its leaves and its ranges.
+    /// Every part name of every blob the snapshot's rows name.
+    #[must_use]
+    pub fn blob_part_names(&self) -> BTreeSet<Name> {
+        self.blobs
+            .iter()
+            .flat_map(|blob| blob.parts.iter().map(|part| part.name))
+            .collect()
+    }
+
+    /// Everything the snapshot is made of besides the root: its leaves, its ranges and the parts
+    /// of the blobs its rows name.
     #[must_use]
     pub fn part_names(&self) -> BTreeSet<Name> {
         let mut out = self.range_names();
         out.extend(self.leaf_names());
+        out.extend(self.blob_part_names());
         out
     }
+}
+
+/// Cut `entries` into leaves of [`LEAF_ENTRIES`], appending each to `leaves`; answers the tree
+/// the root lists.
+fn cut<T: Serialize>(
+    keys: &BackupKeys,
+    entries: &[T],
+    leaves: &mut Vec<Leaf>,
+) -> Result<Vec<LeafRef>> {
+    if entries.len() > LEAF_ENTRIES * ROOT_LEAVES {
+        return Err(invariant("the vault is too large to back up"));
+    }
+    let mut tree = Vec::new();
+    for (index, chunk) in entries.chunks(LEAF_ENTRIES).enumerate() {
+        let json =
+            serde_json::to_vec(chunk).map_err(|error| invariant(format!("a leaf: {error}")))?;
+        let named = name(keys, &PlaintextHash::of(&json), 0);
+        tree.push(LeafRef {
+            first: u32::try_from(index * LEAF_ENTRIES)
+                .map_err(|_| invariant("too many entries"))?,
+            count: u32::try_from(chunk.len()).map_err(|_| invariant("too many entries"))?,
+            name: named,
+        });
+        leaves.push(Leaf { name: named, json });
+    }
+    Ok(tree)
+}
+
+/// The entries a tree's leaves hold, in order, each leaf checked against the name and counts the
+/// root gives it (so a leaf dropped, repeated, reordered or swapped is refused).
+fn unite<T: serde::de::DeserializeOwned>(
+    keys: &BackupKeys,
+    tree: &[LeafRef],
+    leaf: &mut dyn FnMut(&Name) -> Result<Vec<u8>>,
+) -> Result<Vec<T>> {
+    let mut out: Vec<T> = Vec::new();
+    for entry in tree {
+        let json = leaf(&entry.name)?;
+        if name(keys, &PlaintextHash::of(&json), 0) != entry.name {
+            return Err(invariant(format!(
+                "leaf {} is not the bytes its name derives from",
+                entry.name
+            )));
+        }
+        let entries: Vec<T> =
+            serde_json::from_slice(&json).map_err(|error| invariant(format!("a leaf: {error}")))?;
+        if entries.len() != entry.count as usize
+            || out.len() != entry.first as usize
+            || entries.len() > LEAF_ENTRIES
+        {
+            return Err(invariant(format!(
+                "leaf {} does not hold the entries the root says",
+                entry.name
+            )));
+        }
+        out.extend(entries);
+    }
+    Ok(out)
 }
 
 /// Fetch and assemble the manifest whose root is `root_name` from `store`.
@@ -568,6 +643,9 @@ pub struct Sealed {
     pub digests: BTreeMap<Name, Vec<ChunkDigest>>,
     /// Sealed bytes this walk added to the spool.
     pub bytes: u64,
+    /// The chunk digests this phone holds for the parts of blobs it has sealed, by name: what a
+    /// blobs leaf carries as `d`.
+    pub part_digests: BTreeMap<Name, Vec<ChunkDigest>>,
 }
 
 impl<'a> RangeSealer<'a> {
@@ -615,6 +693,14 @@ impl<'a> RangeSealer<'a> {
         Ok(())
     }
 
+    /// Hand the sealer the chunk digests the device state holds for sealed blob parts, so the
+    /// manifest's blobs tree can carry them.
+    #[must_use]
+    pub fn with_part_digests(mut self, digests: BTreeMap<Name, Vec<ChunkDigest>>) -> Self {
+        self.out.part_digests = digests;
+        self
+    }
+
     /// What was sealed.
     #[must_use]
     pub fn finish(self) -> Sealed {
@@ -626,7 +712,10 @@ impl<'a> RangeSealer<'a> {
         for name in self.wrote.drain(..) {
             let _ = self.spool.remove(&name);
         }
-        self.out = Sealed::default();
+        self.out = Sealed {
+            part_digests: std::mem::take(&mut self.out.part_digests),
+            ..Sealed::default()
+        };
     }
 }
 
@@ -714,6 +803,22 @@ pub fn describe(
                 d: digests_of(read),
             })
             .collect(),
+        blobs: walked
+            .blobs
+            .iter()
+            .map(|(h, len)| BlobRef {
+                h: *h,
+                len: *len,
+                parts: (0_u32..)
+                    .zip(sealed::names_of(keys, h, *len))
+                    .map(|(i, name)| BlobPart {
+                        d: sealed.part_digests.get(&name).cloned(),
+                        i,
+                        name,
+                    })
+                    .collect(),
+            })
+            .collect(),
         census: walked.census.clone(),
         directory: None,
         ranges_tree: Vec::new(),
@@ -721,8 +826,10 @@ pub fn describe(
     };
     manifest.validate()?;
     let parts = manifest.to_parts(keys)?;
+    let tree = Root::from_json(&parts.root_json)?;
     let manifest = Manifest {
-        ranges_tree: Root::from_json(&parts.root_json)?.ranges_tree,
+        ranges_tree: tree.ranges_tree,
+        blobs_tree: tree.blobs_tree,
         ..manifest
     };
     let manifest_name = name(keys, &PlaintextHash::of(&parts.root_json), 0);
@@ -1420,6 +1527,7 @@ mod tests {
             written_at_ms: Some(1),
             app: APP.to_owned(),
             ranges: list,
+            blobs: Vec::new(),
             census: BTreeMap::new(),
             directory: None,
             ranges_tree: Vec::new(),
@@ -1498,6 +1606,76 @@ mod tests {
             ..manifest
         };
         assert!(too_many.to_parts(&keys).is_err());
+    }
+
+    /// The root fixes the leaves' names, order and count: a range leaf dropped or repeated leaves
+    /// ranges that do not tile the file, a blobs leaf repeated is refused, and a blob that names
+    /// parts its hash and length do not derive is refused (decision 36).
+    #[test]
+    fn the_root_fixes_its_leaves_and_a_blob_names_what_its_hash_derives() {
+        let keys = BackupKeys::from_root(&[3; 32]);
+        let mut manifest = small_manifest(LEAF_ENTRIES * 2 + 5);
+        manifest.blobs = (0..LEAF_ENTRIES + 3)
+            .map(|n| {
+                let h = PlaintextHash::of(&n.to_be_bytes());
+                let len = 10_u64;
+                BlobRef {
+                    h,
+                    len,
+                    parts: (0_u32..)
+                        .zip(sealed::names_of(&keys, &h, len))
+                        .map(|(i, name)| BlobPart { i, name, d: None })
+                        .collect(),
+                }
+            })
+            .collect();
+        manifest.blobs.sort_by_key(|blob| blob.h);
+        let parts = manifest.to_parts(&keys).expect("serialises");
+        assert_eq!(parts.leaves.len(), 3 + 2);
+        let again = reassemble(&parts, &keys).expect("reads back");
+        assert_eq!(again.blobs, manifest.blobs);
+        assert_eq!(again.blob_part_names().len(), manifest.blobs.len());
+
+        let root = Root::from_json(&parts.root_json).expect("a root");
+        let reread = |root: &Root| {
+            Manifest::assemble(root.clone(), &keys, &mut |wanted| {
+                parts
+                    .leaves
+                    .iter()
+                    .find(|leaf| &leaf.name == wanted)
+                    .map(|leaf| leaf.json.clone())
+                    .ok_or_else(|| invariant("no such leaf"))
+            })
+        };
+        let mut dropped = root.clone();
+        dropped.ranges_tree.pop();
+        assert!(reread(&dropped).is_err(), "a range leaf dropped");
+        let mut repeated = root.clone();
+        let again_first = repeated.ranges_tree[0];
+        repeated.ranges_tree.insert(
+            1,
+            LeafRef {
+                first: LEAF_ENTRIES as u32,
+                ..again_first
+            },
+        );
+        assert!(reread(&repeated).is_err(), "a range leaf repeated");
+        let mut twice = root.clone();
+        let first = twice.blobs_tree[0];
+        twice.blobs_tree[1] = LeafRef {
+            first: LEAF_ENTRIES as u32,
+            count: first.count,
+            name: first.name,
+        };
+        assert!(reread(&twice).is_err(), "a blobs leaf repeated");
+
+        let mut lying = manifest.clone();
+        lying.blobs[0].parts[0].name = Name::from_bytes([9; 32]);
+        let bad = lying.to_parts(&keys).expect("serialises");
+        assert!(
+            reassemble(&bad, &keys).is_err(),
+            "a blob naming other parts"
+        );
     }
 
     #[test]

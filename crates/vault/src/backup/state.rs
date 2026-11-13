@@ -1,7 +1,7 @@
 //! The device state of a phone's backup, in `<stem>.state.db` beside the vault
 //! (#1191, E11, B14). It replaces the ledger.
 //!
-//! Three tables, every one a cache of somebody else's truth and none a
+//! Four tables, every one a cache of somebody else's truth and none a
 //! key-value store:
 //!
 //! | Table | Whose truth |
@@ -9,6 +9,7 @@
 //! | `gateway` | the pairing (addresses, pinned certificate, label, the epoch this phone holds) and what this phone knows of that gateway: the head it set, its generation and writes, the blob cursor, how the last pass fared, the sample counter |
 //! | `outbox` | per gateway, each name owed and how its last attempt went |
 //! | `local_bytes` | where each hash's bytes are on this device |
+//! | `part_digests` | the chunk digests of each blob part this phone sealed (rung 2), for the manifest's blobs tree and the read-back |
 //!
 //! **The token is not here** (E12): the shell keeps it in the device secret
 //! store, and the core holds it in memory only. **Nothing is recorded as
@@ -27,6 +28,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use rusqlite::{Connection, OptionalExtension, params};
 
+use centraid_media::sealed::ChunkDigest;
+
 use super::naming::{Digest, Name, PlaintextHash};
 use super::{Result, invariant};
 
@@ -34,7 +37,10 @@ use super::{Result, invariant};
 pub const STATE_APPLICATION_ID: i64 = 0x4342_5331;
 
 /// The rungs of the ladder, in order. `user_version` is how many are applied.
-const LADDER: &[&str] = &[include_str!("state_ladder/001_founding.sql")];
+const LADDER: &[&str] = &[
+    include_str!("state_ladder/001_founding.sql"),
+    include_str!("state_ladder/002_part_digests.sql"),
+];
 
 /// How a gateway's last pass fared, which decides what the status line says
 /// and whether the next pass tries it (E4, E6, E13).
@@ -1314,6 +1320,75 @@ impl DeviceState {
             Name::from_hex(&text).map_err(|error| bad_text(0, error))
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Remember the chunk digests of a blob part this phone sealed (E9): what the manifest's blobs
+    /// tree carries as `d`, and what a read-back of the part checks a chunk against. A part is
+    /// sealed once, so a second record of a name keeps the first.
+    ///
+    /// # Errors
+    ///
+    /// SQLite's refusal.
+    pub fn record_digests(&self, name: &Name, digests: &[ChunkDigest]) -> Result<()> {
+        let mut bytes = Vec::with_capacity(digests.len() * 32);
+        for digest in digests {
+            bytes.extend_from_slice(digest.as_bytes());
+        }
+        self.connection.execute(
+            "INSERT OR IGNORE INTO part_digests (name, d) VALUES (?1, ?2)",
+            params![name.to_hex(), bytes],
+        )?;
+        Ok(())
+    }
+
+    /// Every part digest the state holds, by name.
+    ///
+    /// # Errors
+    ///
+    /// SQLite's refusal, or a row whose digests are not whole.
+    pub fn part_digests(&self) -> Result<std::collections::BTreeMap<Name, Vec<ChunkDigest>>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT name, d FROM part_digests ORDER BY name")?;
+        let rows = statement.query_map([], |row| {
+            let text: String = row.get(0)?;
+            let bytes: Vec<u8> = row.get(1)?;
+            Ok((text, bytes))
+        })?;
+        let mut out = std::collections::BTreeMap::new();
+        for row in rows {
+            let (text, bytes) = row?;
+            let name = Name::from_hex(&text)
+                .map_err(|_| invariant(format!("a digest row named `{text}`")))?;
+            let digests = bytes
+                .chunks_exact(32)
+                .map(|chunk| {
+                    let mut one = [0_u8; 32];
+                    one.copy_from_slice(chunk);
+                    ChunkDigest::from_bytes(one)
+                })
+                .collect();
+            out.insert(name, digests);
+        }
+        Ok(out)
+    }
+
+    /// Forget the digests of every part not in `keep`: the vault no longer claims the blob and no
+    /// kept snapshot names it.
+    ///
+    /// # Errors
+    ///
+    /// SQLite's refusal.
+    pub fn forget_digests_except(&self, keep: &std::collections::BTreeSet<Name>) -> Result<usize> {
+        let held: Vec<Name> = self.part_digests()?.into_keys().collect();
+        let mut forgotten = 0;
+        for name in held.into_iter().filter(|name| !keep.contains(name)) {
+            forgotten += self.connection.execute(
+                "DELETE FROM part_digests WHERE name = ?1",
+                params![name.to_hex()],
+            )?;
+        }
+        Ok(forgotten)
     }
 
     /// Every spool file an outbox row names, so a sweep removes the rest.

@@ -928,7 +928,6 @@ fn pass_over(
 
     let budget = plane.budget();
     pass.free = plane.free_bytes();
-    let files = handle.with_vault(|vault| content_files(vault).map_err(plane_error))?;
 
     // 1. THE RECORDS, when the link may carry them: one snapshot, planned against every
     // gateway that is due or behind.
@@ -953,7 +952,7 @@ fn pass_over(
                 )?;
             }
         }
-        if round.records(take, &files, &mut live, budget, pass)? {
+        if round.records(take, &mut live, budget, pass)? {
             return Ok(());
         }
     }
@@ -1022,7 +1021,7 @@ fn pass_over(
         }
         if uncovered {
             if all_finished {
-                round.records(true, &now_files, &mut live, budget, pass)?;
+                round.records(true, &mut live, budget, pass)?;
             } else {
                 plane.set_snapshot_owed(true);
             }
@@ -1150,7 +1149,6 @@ impl Round<'_> {
     fn records(
         &self,
         take: bool,
-        files: &[ContentFile],
         live: &mut Vec<&Reached>,
         budget: u64,
         pass: &mut Pass,
@@ -1214,11 +1212,11 @@ impl Round<'_> {
             // RETENTION IS JUDGED ON THE VAULT'S OWN CLOCK, the one every snapshot's
             // `taken_at_ms` is dated by.
             settle_newest(
+                self.handle,
                 self.plane,
                 self.state,
                 store,
                 self.keyring,
-                files,
                 now,
                 pass,
             )?;
@@ -1381,7 +1379,9 @@ fn take_snapshot(
             u64::try_from(vault.clock().now_ms()).unwrap_or(0),
         ))
     })?;
-    let mut sealer = RangeSealer::new(spool, &keyring.backup, budget).map_err(plane_error)?;
+    let mut sealer = RangeSealer::new(spool, &keyring.backup, budget)
+        .map_err(plane_error)?
+        .with_part_digests(state.part_digests().map_err(plane_error)?);
     debug_assert_eq!(pagesource::live_pins(), 0);
     let taken = snapshot::capture_at(
         &path,
@@ -1518,11 +1518,11 @@ fn store_error_of(error: centraid_vault::backup::PlaneError) -> CoreError {
 /// Move the head to the newest snapshot spooled for `store` once nothing of it is owed there;
 /// and when it moves, let retention drop what it no longer keeps.
 fn settle_newest(
+    handle: &Handle,
     plane: &Plane,
     state: &DeviceState,
     store: &GatewayStore,
     keyring: &Keyring,
-    files: &[ContentFile],
     now: u64,
     pass: &mut Pass,
 ) -> Result<()> {
@@ -1530,8 +1530,9 @@ fn settle_newest(
         Settled::HeadSet(head) => {
             plane.set_rolled(store.gateway_id(), false);
             pass.acked_at_ms = i64::try_from(head.set_at_ms).ok();
-            let abandoned = pass.abandoned.remove(store.gateway_id());
-            retain(state, store, &keyring.backup, files, now, abandoned)?;
+            // AN ABANDONED SNAPSHOT'S PARTS ARE GARBAGE LIKE ANY OTHER: the union names no more.
+            pass.abandoned.remove(store.gateway_id());
+            retain(handle, state, store, &keyring.backup, now)?;
         }
         Settled::Nothing => {}
         Settled::Waiting { unconfirmed } => {
@@ -1560,24 +1561,32 @@ fn manifest_of(store: &GatewayStore, keys: &BackupKeys, name: &Name) -> Result<M
     })
 }
 
-/// **Retention, then the dropped snapshots' own parts** (#1080, "Retention"): keep 7 daily, 4
-/// weekly and 6 monthly snapshots; when that drops one, delete its manifest and every range only
-/// it named.
+/// **Retention and the exact collection** (#1080 "Retention", #1191 B10): keep 7 daily, 4 weekly
+/// and 6 monthly snapshots, then delete from the gateway everything it holds that nothing needs.
 ///
-/// **NOTHING ELSE IS COLLECTED HERE, until the exact collection lands (B10)**: a name the vault
-/// once implied and no longer does is held by no record this phone keeps (there is no per-name
-/// grave any more, #1191), and a kept snapshot's v3 manifest does not list the files its rows
-/// name, so deleting on the strength of "nothing names it" could delete what a kept snapshot
-/// needs. The gateway keeps such files until then. What this deletes is exactly what a dropped
-/// snapshot's manifest lists and no kept manifest, and nothing owed in the outbox, lists.
+/// **What something needs** is the union of: every kept snapshot's root, its leaves, its ranges
+/// and the parts of every blob its rows name (its blobs tree); the parts of every blob the vault
+/// claims now (`content_names`); what any outbox row owes; what a member's Undo lifted; and what
+/// a snapshot spooled and not yet set names. The gateway is **listed first**, then the union is
+/// worked out, so a part that lands after the listing is never judged. Anything listed and not
+/// in the union is deleted by signed delete: the gateway holds a live name for its week (E6) and
+/// frees a damaged one at once (decision 30).
+///
+/// **DOUBT NEVER DELETES.** A kept snapshot whose manifest will not open, or a snapshot in
+/// flight that names a part this gateway holds and cannot be read, stops the collection for the
+/// round: nothing is deleted on a guess.
 fn retain(
+    handle: &Handle,
     state: &DeviceState,
     store: &GatewayStore,
     keys: &BackupKeys,
-    _files: &[ContentFile],
     now: u64,
-    abandoned: Option<Name>,
 ) -> Result<()> {
+    let listed: Vec<Name> = plane_store::list_all(store)
+        .map_err(store_error)?
+        .into_iter()
+        .map(|entry| entry.name)
+        .collect();
     let registered = store.snapshots().map_err(store_error)?;
     let mut decided = retention::keep(&registered, now);
     // WHAT A MEMBER'S UNDO LIFTED IS NOT DELETED AGAIN AT ONCE (E6): such a snapshot is kept
@@ -1592,19 +1601,15 @@ fn retain(
         .partition(|name| undone.contains(name));
     decided.drop = dropped;
     decided.keep.extend(restored);
-    if decided.drop.is_empty() && abandoned.is_none() {
-        return Ok(());
-    }
-    // WHAT A DROPPED SNAPSHOT IS MADE OF — its manifest and its ranges — is garbage the moment
-    // it goes, unless a kept snapshot or an owed part names it too. Read before the manifest is
-    // deleted; one that will not open leaves its ranges where they are (never collected on a
-    // guess), and a KEPT manifest that will not open stops the collection altogether.
     let mut live: BTreeSet<Name> = state.owed_names().map_err(plane_error)?;
     live.extend(undone.iter().copied());
     for name in &decided.keep {
         live.insert(*name);
         match manifest_of(store, keys, name) {
-            Ok(manifest) => live.extend(manifest.part_names()),
+            Ok(manifest) => {
+                live.extend(manifest.part_names());
+                live.extend(manifest.directory);
+            }
             Err(error @ CoreError::Unavailable { .. }) => return Err(error),
             Err(error) => {
                 tracing::warn!(
@@ -1617,38 +1622,32 @@ fn retain(
     }
     // A SNAPSHOT SPOOLED FOR ANY GATEWAY AND NOT YET SET IS ON ITS WAY: its names are not garbage.
     for gateway in state.gateways().map_err(plane_error)? {
-        if let Some(name) = gateway.snapshot {
-            live.insert(name);
+        let Some(name) = gateway.snapshot else {
+            continue;
+        };
+        if live.contains(&name) {
+            continue;
         }
-    }
-    let mut promptly: BTreeSet<Name> = BTreeSet::new();
-    // A SNAPSHOT THIS PHONE SPOOLED AND NEVER MADE A HEAD, superseded by the one just set, is
-    // garbage with the ranges only it named (nothing registered keeps it).
-    if let Some(name) = abandoned {
-        promptly.insert(name);
+        live.insert(name);
         match manifest_of(store, keys, &name) {
-            Ok(manifest) => promptly.extend(manifest.part_names()),
+            Ok(manifest) => live.extend(manifest.part_names()),
             Err(error @ CoreError::Unavailable { .. }) => return Err(error),
+            // NOT HERE (never put on this gateway) or not a manifest: its parts that are here
+            // are owed by an outbox row or are an abandoned attempt's.
             Err(_) => {}
         }
     }
-    for name in &decided.drop {
-        promptly.insert(*name);
-        match manifest_of(store, keys, name) {
-            Ok(manifest) => promptly.extend(manifest.part_names()),
-            Err(error @ CoreError::Unavailable { .. }) => return Err(error),
-            Err(error) => tracing::warn!(
-                %error,
-                "a dropped snapshot's manifest would not open; its ranges stay"
-            ),
-        }
-    }
-    let doomed: Vec<Name> = promptly.difference(&live).copied().collect();
+    let claimed = handle.with_vault(|vault| {
+        centraid_vault::backup::naming::content_names(keys, vault).map_err(plane_error)
+    })?;
+    live.extend(claimed);
+    let doomed = retention::garbage(listed, &live);
     let deleted = plane_store::delete_all(store, &doomed).map_err(store_error)?;
+    state.forget_digests_except(&live).map_err(plane_error)?;
     tracing::info!(
         dropped = decided.drop.len(),
         collected = deleted.deleted.len(),
-        "retention dropped snapshots and collected what only they named"
+        "retention dropped snapshots and collected what nothing needs"
     );
     Ok(())
 }
@@ -1913,7 +1912,9 @@ fn adopt_sealed(
     path: &Path,
     size: u64,
     digest: &centraid_vault::backup::naming::Digest,
+    chunks: &[ChunkDigest],
 ) -> Result<()> {
+    state.record_digests(name, chunks).map_err(plane_error)?;
     let filled = state
         .seal_everywhere(name, path, size, digest)
         .map_err(plane_error)?;
@@ -2300,7 +2301,14 @@ fn seal_store_file(
             .finish()
             .map_err(|error| invariant("finish", &error))?;
         let part_path = writer.finish().map_err(plane_error)?;
-        adopt_sealed(state, &name, &part_path, seal.len, &seal.digest)?;
+        adopt_sealed(
+            state,
+            &name,
+            &part_path,
+            seal.len,
+            &seal.digest,
+            &seal.chunk_digests,
+        )?;
         *held_bytes = held_bytes.saturating_add(seal.len);
         sealed += 1;
     }
@@ -2330,6 +2338,9 @@ pub fn queue_sealed(
             continue;
         }
         let part_path = spool.adopt(&part.path, &part.name).map_err(plane_error)?;
+        state
+            .record_digests(&part.name, &part.chunk_digests)
+            .map_err(plane_error)?;
         state
             .seal_everywhere(&part.name, &part_path, part.len, &part.digest)
             .map_err(plane_error)?;

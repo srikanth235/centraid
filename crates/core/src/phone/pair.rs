@@ -51,7 +51,7 @@
 //! is a restore. A head taken after the copy's last write that holds no more of
 //! them is this phone's own, with nothing written since. The files the
 //! newer phone backed up are kept regardless, as long as a kept snapshot names
-//! them (`retention::collectable`).
+//! them (the exact collection in `drain::retain`).
 //!
 //! # THE NUMBER THE MEMBER READS ALOUD (#1029 W15-D5, the root's ruling A17)
 //!

@@ -38,7 +38,7 @@ What the phone does to back its vault up and to get it back. Wording and rules a
 ## Retention
 
 - Keep 7 daily, 4 weekly and 6 monthly snapshots, UTC. A period counts only if it holds a snapshot. The newest is always kept. A snapshot dated after now is judged as taken now.
-- It runs after a head is set, and only when retention drops at least one snapshot. A snapshot the member's Undo restored (`undone`) is kept rather than dropped again, until its week is up (or a snapshot spooled and never made a head was superseded). It deletes a dropped snapshot's root, its leaves and the ranges only it named, minus every kept manifest's ranges, everything in the outbox and any snapshot in flight. **Nothing else is collected until the exact collection (B10) lands**: there is no per-name grave, and a v4 manifest does not yet list the blob parts (the blobs tree comes with B10). A kept manifest that will not open stops collection.
+- It runs after a head is set. The gateway is listed first; then the live set is worked out: every kept snapshot's root, leaves, ranges and the parts of every blob its blobs tree names, the parts of every blob the vault claims now (`content_names`), everything in the outbox, what an Undo lifted and what a snapshot in flight names. Anything listed and not live is deleted by signed delete (the gateway holds a live name for its week and frees a damaged one at once). A kept manifest that will not open stops collection for the round: doubt never deletes. The blobs tree's `d` for a part comes from the device state's `part_digests` table, recorded when the part is sealed (null for a part not yet sealed); retention forgets rows no longer live.
 
 ## The pass
 

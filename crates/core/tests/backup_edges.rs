@@ -1409,22 +1409,56 @@ fn an_item_deleted_after_backup_is_collected_once_purged() {
         );
         assert!(next.acked_at_ms.is_some(), "{next:?}");
     }
-    // UNTIL THE EXACT COLLECTION (#1191, B10) NOTHING IS COLLECTED ON A GUESS: a kept snapshot's
-    // v3 manifest does not name the files its rows do, and no per-name grave is kept any more, so
-    // the purged photograph stays on the gateway. What retention did drop is the manifest and the
-    // ranges only a dropped snapshot named. B10's tree manifests turn this into "collected, held
-    // for the gateway's week".
-    assert!(
-        gateway.held(&vault_id()).contains(&object),
-        "the purged photograph's object is kept until the exact collection lands"
-    );
+    // THE EXACT COLLECTION (#1191, B10): no kept snapshot's blobs tree and no claim of the vault
+    // names the photograph's object any more, so it is deleted, and the gateway holds it for its
+    // week.
     assert!(
         gateway
             .objects(&vault_id())
             .iter()
-            .all(|record| Name::from_bytes(*record.name.as_bytes()) != object
-                || record.hold.is_none()),
-        "and it is not held for deletion"
+            .any(|record| Name::from_bytes(*record.name.as_bytes()) == object
+                && record.hold.is_some()),
+        "the purged photograph's object is held for the gateway's week"
+    );
+}
+
+/// **THE BLOBS TREE NAMES AN ORIGINAL'S PARTS WITH THEIR DIGESTS** (#1191, B10): the head's blobs
+/// tree names every part of every blob the vault claimed, with the chunk digests this phone sealed
+/// each with. (That a kept snapshot's blobs are not collected is
+/// `a_deleted_file_stays_while_a_kept_snapshot_may_name_it`.)
+#[test]
+fn the_blobs_tree_names_an_originals_parts_with_their_digests() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    let photo = bytes_of("a photograph a kept snapshot names", 70_000);
+    let staged = stage(&phone, owned("image/heic", &photo), &photo);
+    add_asset(&phone, &staged, "photo");
+    drain(&phone, at_home());
+    let object = Name::from_bytes(*gateway_name(&staged.content_hash, 0).as_bytes());
+    assert!(gateway.held(&vault_id()).contains(&object));
+    // A SNAPSHOT THAT NAMES THE PHOTOGRAPH, with the digests its sealed part carried.
+    note(&phone, "Before", "so a snapshot is owed");
+    drain(
+        &phone,
+        wire::DrainRequest {
+            asked: true,
+            ..at_home()
+        },
+    );
+    let manifest = manifest_at(&gateway, &first_head(&dir.path().join("vault.db")));
+    let entry = manifest
+        .blobs
+        .iter()
+        .find(|blob| blob.parts.iter().any(|part| part.name == object))
+        .expect("the blobs tree names the photograph");
+    assert!(
+        entry
+            .parts
+            .iter()
+            .all(|part| part.d.as_ref().is_some_and(|d| !d.is_empty())),
+        "the parts this phone sealed carry their chunk digests"
     );
 }
 

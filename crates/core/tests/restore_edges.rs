@@ -864,7 +864,10 @@ fn after_a_restore_only_what_is_new_is_sent() {
             &path,
             &state(&path).gateways().expect("reads")[0].gateway_id,
         );
-        let mut names = manifest_at(&gateway, &newest).part_names();
+        // THE SNAPSHOT'S OWN PARTS: its ranges and leaves, not the blobs its rows name.
+        let manifest = manifest_at(&gateway, &newest);
+        let mut names = manifest.range_names();
+        names.extend(manifest.leaf_names());
         names.insert(newest);
         names
     };
