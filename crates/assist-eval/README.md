@@ -28,7 +28,7 @@ It prints the summary and writes `runs/val-base.json` (the report), `runs/val-ba
 | `--grammar off\|handles\|full` | how much of the think the decoder holds to. **Default: the phone's** (`full`; `handles` under `--tools s2`, which the step decides). Written into the report's label and `config` |
 | `--stub` | no weights: a model that declines everything. The floor, and a way to check the rig |
 | `--set FILE` | the JSONL set: a data version's split, decompressed. **Required**, no default |
-| `--worlds DIR` | where the sessions' world JSON lives (a data version's `worlds/`); repeatable, searched in order. **Required**, no default |
+| `--worlds DIR` | where the sessions' world JSON lives (a data version's `worlds/val/`); repeatable, searched in order. **Required**, no default |
 | `--out PREFIX` | write `PREFIX.json` and `PREFIX.sessions.jsonl` |
 | `--threads N` / `ASSIST_EVAL_THREADS` | CPU threads (default: up to four cores, as the phone) |
 | `--limit N`, `--only ID,ID`, `--shard K/N` | a subset; `--shard` lets several processes share a set (each loads ~0.6 GB at Q4_0) |
@@ -94,7 +94,7 @@ Kept: the matching rules (`match_value`, `diff_match`, `value_match`; the same p
 
 **No model has been scored, here or on Kaggle: the owner launches the first run.** The first intended run is the baseline: the **stock** Qwen3.5-0.8B GGUF pinned in `crates/assist/model.json` (url, sha256, tools mode), no adapter, on the val split of a data version, decoded as the phone decodes. An adapter is scored the same way (`--adapter`), and `assist-eval compare` says whether it won.
 
-_What can be scored._ A data version's val (`datagen build`, tag `vX.Y` of the private dataset `srikanth235/centraid-native-data`): its records are read as they are (`JsonlSource` reads a plain JSONL set, so decompress `data/val.jsonl.zst` first; `source::seed_document_of` puts a presence-only world's sealed placeholders back as `datagen` does). A set must pass the reference replay first. A set written before the vault rebuild (#1135, Tally's removal #1099) cannot pass: its gold predates the runtime, and `tally::WithoutTally` and `WithoutInProgress` only read the removed sections out of an older set and count the sessions they leave out (`excluded`). A run over such a set is refused by the replay.
+_What can be scored._ A data version's val (`datagen build`, tag `vX.Y` of the private dataset `srikanth235/centraid-assist-data`): its records are read as they are (`JsonlSource` reads a plain JSONL set, so decompress `data/val.jsonl.zst` first; `source::seed_document_of` puts a presence-only world's sealed placeholders back as `datagen` does). A set must pass the reference replay first. A set written before the vault rebuild (#1135, Tally's removal #1099) cannot pass: its gold predates the runtime, and `tally::WithoutTally` and `WithoutInProgress` only read the removed sections out of an older set and count the sessions they leave out (`excluded`). A run over such a set is refused by the replay.
 
 The issue's fail rates by constraint count to compare with are 13% / 22% / 37% / 67% at 1 / 2 / 3 / 4 (the retired Python scorer on S2).
 
