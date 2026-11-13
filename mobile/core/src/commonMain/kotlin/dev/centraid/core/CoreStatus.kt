@@ -22,6 +22,7 @@ public enum class CoreStatus(public val code: Int) {
     CLOSED(-3),
     PANICKED(-4),
     TIMEOUT(-5),
+    VAULT_DAMAGED(-6),
     ;
 
     public companion object {

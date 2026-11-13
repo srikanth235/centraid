@@ -444,6 +444,9 @@ public class CentraidCore private constructor(
             CoreStatus.TIMEOUT -> CoreOutcome.Failed(
                 CoreFailure.BadArgument("centraid_call cannot time out; only next_event can"),
             )
+            CoreStatus.VAULT_DAMAGED -> CoreOutcome.Failed(
+                CoreFailure.BadArgument("centraid_call cannot report a damaged vault; only open can"),
+            )
         }
     }
 

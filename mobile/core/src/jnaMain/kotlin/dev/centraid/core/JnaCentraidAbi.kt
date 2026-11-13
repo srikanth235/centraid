@@ -196,6 +196,7 @@ internal class JnaCentraidAbi(
                             "centraid_open could not read the configuration JSON",
                         )
                         CoreStatus.PANICKED -> CoreFailure.Poisoned("open")
+                        CoreStatus.VAULT_DAMAGED -> CoreFailure.VaultDamaged
                         else -> CoreFailure.UnknownStatus(code)
                     },
                 )
