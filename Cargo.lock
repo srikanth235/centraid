@@ -752,6 +752,7 @@ dependencies = [
  "axum",
  "blake3",
  "bytes",
+ "centraid-gateway",
  "centraid-identity",
  "clap",
  "ed25519-dalek",
