@@ -1437,6 +1437,7 @@ mod cancellation_tests {
                 &old,
                 wire::request::Kind::Drain(wire::DrainRequest {
                     wants_snapshot: true,
+                    rule: wire::TransferRule::WifiOnly as i32,
                     ..wire::DrainRequest::default()
                 }),
             );

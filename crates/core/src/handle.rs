@@ -3061,9 +3061,13 @@ mod tests {
             panic!("a forget answers");
         };
         assert!(!forgot.forgotten);
+        // A DRAIN CARRIES THE MEMBER'S RULE; a request without one is refused (#1191).
         let Ok(wire::response::Kind::Drain(drained)) = ask(
             &scratch,
-            wire::request::Kind::Drain(wire::DrainRequest::default()),
+            wire::request::Kind::Drain(wire::DrainRequest {
+                rule: wire::TransferRule::WifiOnly as i32,
+                ..wire::DrainRequest::default()
+            }),
         ) else {
             panic!("a drain answers");
         };
