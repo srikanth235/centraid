@@ -81,6 +81,9 @@ pub enum Search {
     Clock,
     /// `when` with an end left open: since or until a day.
     Open,
+    /// `order` and `limit`: the top few rows by a number field ("my three highest priorities"). A read of them, or
+    /// (`compute`) the total or average over them.
+    Top,
 }
 
 /// Kinds with a field whose values are a fixed list the world's rows hold, for `in`.
@@ -90,7 +93,7 @@ const ENUM_KINDS: [&str; 5] = ["task", "transaction", "account", "locker item", 
 const PRESENCE_KINDS: [&str; 5] = ["person", "task", "locker item", "workout", "event"];
 
 impl Search {
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::Text,
         Self::Trashed,
         Self::Not,
@@ -104,6 +107,7 @@ impl Search {
         Self::MonthName,
         Self::Clock,
         Self::Open,
+        Self::Top,
     ];
 
     /// Can the option be drawn for `kind` at all? A draw that no world of the kind can serve is not scheduled.
@@ -119,6 +123,7 @@ impl Search {
             Self::Empty | Self::Set => PRESENCE_KINDS.contains(&kind),
             Self::Kinds | Self::Weekday | Self::MonthName | Self::Open => dated,
             Self::Clock => kind == "event",
+            Self::Top => !measurable(kind).is_empty() && kind != "budget",
         }
     }
 }
@@ -134,13 +139,22 @@ pub struct Aim {
     pub nickname: bool,
     /// The read goes through an option of `find` a plain draw never uses.
     pub search: Option<Search>,
+    /// The cell is a rare outcome (an ask, a decline, a read that finds nothing) drawn as the last turn of a session
+    /// that starts with an ordinary turn of the same kind, not alone.
+    pub tail: bool,
+    /// A restore is drawn as a session of its own: the row is deleted, then restored by its name.
+    pub trash: bool,
 }
 
 /// What the run still has room for: a share the run has filled stops being drawn (pronoun and handle references of the
 /// turns that point at rows, undo turns).
 #[derive(Debug, Clone, Copy)]
 pub struct Room {
+    /// Room for the pronoun references that are not a recall (acting on "it", the rows behind a count).
     pub pronoun: bool,
+    /// Room for a recall: an earlier answer shown again. It has the whole pronoun ceiling, the other pronoun turns only
+    /// part of it, so the recall share can reach its target under the one ceiling.
+    pub recall: bool,
     pub undo: bool,
 }
 
@@ -148,6 +162,7 @@ impl Default for Room {
     fn default() -> Self {
         Self {
             pronoun: true,
+            recall: true,
             undo: true,
         }
     }
@@ -697,6 +712,23 @@ impl<'a> Sampler<'a> {
                     None,
                 ))
             }
+            ("compute", "count") if aim.search == Some(Search::Trashed) => {
+                // how many are in the trash
+                self.facts
+                    .rows
+                    .iter()
+                    .any(|r| r.kind == kind && r.trashed)
+                    .then(|| {
+                        let mut sel = Selector::of(kind);
+                        sel.trashed = true;
+                        self.turn(
+                            Intent::Count { sel },
+                            Reference::Select,
+                            Outcome::Done,
+                            None,
+                        )
+                    })
+            }
             ("compute", "count") => {
                 let (mut sel, _) = self.target_selector(kind, c.saturating_sub(1), rng, 10_000)?;
                 let mut empty = aim.empty || outcome_roll < EMPTY_COUNT;
@@ -734,6 +766,35 @@ impl<'a> Sampler<'a> {
                     op
                 };
                 let (mut sel, _) = self.target_selector(kind, c.saturating_sub(1), rng, 10_000)?;
+                if aim.search == Some(Search::Top) && !grouped && kind != "budget" {
+                    // a total or an average over the few rows that rank highest or lowest on the field itself
+                    let desc = rng.chance(0.6);
+                    let n = rng.range(2, 4) as usize;
+                    let mut probe = sel.clone();
+                    probe.order = Some((field.to_owned(), desc));
+                    let all = self.facts.select(&probe, None);
+                    if all.len() <= n
+                        || all.iter().any(|r| r.num(field).is_none())
+                        || (all[n - 1].num(field)? - all[n].num(field)?).abs() < 1e-9
+                    {
+                        return None;
+                    }
+                    sel.order = Some((field.to_owned(), desc));
+                    sel.limit = Some(n);
+                    return Some(self.turn(
+                        Intent::Measure {
+                            measure: Measure {
+                                sel,
+                                op: op.to_owned(),
+                                field: field.to_owned(),
+                                group: None,
+                            },
+                        },
+                        Reference::Select,
+                        Outcome::Done,
+                        None,
+                    ));
+                }
                 let group = if grouped {
                     Some(self.group_for(&sel, rng)?)
                 } else {
@@ -981,6 +1042,13 @@ impl<'a> Sampler<'a> {
                 reference = Reference::Name;
                 sel
             }
+            Search::Top => {
+                // a few of the many: the selector is broad (up to one constraint) so there is a field to rank
+                let base = self
+                    .target_selector(kind, rng.below(2), rng, 10_000)
+                    .map_or_else(|| Selector::of(kind), |(sel, _)| sel);
+                self.with_top(base, rng)?
+            }
             Search::Exclude => return None,
             Search::Kinds => {
                 let dated: Vec<&str> = self
@@ -1112,7 +1180,7 @@ impl<'a> Sampler<'a> {
     /// "What else": a read of the rows the turn before did not show, as two turns. The first reads rows by a few
     /// constraints and the second asks again with one constraint fewer and `exclude=@k`, so it holds what the first
     /// left out. `None` when the world holds no such pair of reads.
-    fn exclusion(&self, kind: &str, rng: &mut Rng) -> Option<Vec<TurnIntent>> {
+    fn exclusion(&self, kind: &str, count: bool, rng: &mut Rng) -> Option<Vec<TurnIntent>> {
         for _ in 0..8 {
             let c = 1 + rng.below(3);
             let (first, keys) = self.target_selector(kind, c, rng, ROW_CAP)?;
@@ -1141,7 +1209,7 @@ impl<'a> Sampler<'a> {
             broad.name = None;
             broad.exclude = Some(0);
             let rest = self.facts.select_but(&broad, None, Some(&shown)).len();
-            if (1..=ROW_CAP).contains(&rest) {
+            if (1..=if count { 10_000 } else { ROW_CAP }).contains(&rest) {
                 return Some(vec![
                     self.turn(
                         Intent::Read { sel: first },
@@ -1150,7 +1218,11 @@ impl<'a> Sampler<'a> {
                         None,
                     ),
                     self.turn(
-                        Intent::Read { sel: broad },
+                        if count {
+                            Intent::Count { sel: broad }
+                        } else {
+                            Intent::Read { sel: broad }
+                        },
                         Reference::Select,
                         Outcome::Done,
                         Some((0, Dep::Else)),
@@ -2404,11 +2476,14 @@ impl<'a> Sampler<'a> {
         extra: usize,
         rng: &mut Rng,
     ) -> Option<Scenario> {
+        if aim.tail {
+            return self.tailed(id, cell, aim, room, extra, rng);
+        }
         let mut turns: Vec<TurnIntent> = Vec::new();
         let mut extra = extra;
         match (cell.tool.as_str(), cell.verb.as_str()) {
             ("answer", _) => {
-                if !room.pronoun {
+                if !room.recall {
                     return None;
                 }
                 // a result shown again: two questions, then the first one's answer once more
@@ -2457,8 +2532,7 @@ impl<'a> Sampler<'a> {
             }
             ("edit", _) if cell.kind == "workout" && aim.field.is_some() => {
                 // the only workouts a member can edit are ones they logged: a followed store states the rest
-                // aimed at a pair the field floor needs, so it is drawn whatever room the pronoun references have:
-                // the mix's ceiling holds their share
+                // aimed at a pair the field floor needs
                 let field = aim.field.clone()?;
                 let first = self.create("workout", None, rng, 0)?;
                 let Intent::Create { fields: made, .. } = &first.intent else {
@@ -2472,18 +2546,38 @@ impl<'a> Sampler<'a> {
                     let v = self.edit_value("workout", &field, None, None, &made_name, rng)?;
                     (!made.iter().any(|c| c.field == field && c.value == v)).then_some(v)
                 })?;
-                let edit = self.turn(
-                    Intent::Edit {
-                        target: Target::Turn {
-                            turn: 0,
-                            kind: "workout".into(),
+                // most are said by the name the member logged it under ("change my Morning run to 6 km"), which is no
+                // pronoun and takes none of the ceiling; the rest lean on the turn before
+                let by_name = !room.pronoun || rng.chance(0.7);
+                let edit = if by_name {
+                    self.turn(
+                        Intent::Edit {
+                            target: Target::Name {
+                                kind: "workout".into(),
+                                name: made_name.clone(),
+                                key: "+1".into(),
+                                trashed: false,
+                            },
+                            changes: vec![Change { field, value }],
                         },
-                        changes: vec![Change { field, value }],
-                    },
-                    Reference::Pronoun,
-                    Outcome::Done,
-                    Some((0, Dep::Pronoun)),
-                );
+                        Reference::Name,
+                        Outcome::Done,
+                        None,
+                    )
+                } else {
+                    self.turn(
+                        Intent::Edit {
+                            target: Target::Turn {
+                                turn: 0,
+                                kind: "workout".into(),
+                            },
+                            changes: vec![Change { field, value }],
+                        },
+                        Reference::Pronoun,
+                        Outcome::Done,
+                        Some((0, Dep::Pronoun)),
+                    )
+                };
                 turns.push(first);
                 turns.push(edit);
                 extra = 0;
@@ -2491,8 +2585,19 @@ impl<'a> Sampler<'a> {
             ("find", "read")
                 if aim.search == Some(Search::Exclude) && !self.world.settings.is_empty() =>
             {
-                turns = self.exclusion(&cell.kind, rng)?;
+                turns = self.exclusion(&cell.kind, false, rng)?;
                 extra = extra.min(1);
+            }
+            ("compute", "count")
+                if aim.search == Some(Search::Exclude) && !self.world.settings.is_empty() =>
+            {
+                // "how many others are there?": a count that leaves out the rows the turn before showed
+                turns = self.exclusion(&cell.kind, true, rng)?;
+                extra = extra.min(1);
+            }
+            ("do", "restore") if aim.trash => {
+                turns = self.deleted_then_restored(&cell.kind, rng)?;
+                extra = 0;
             }
             ("do", "undo") => {
                 if !room.undo {
@@ -2573,6 +2678,115 @@ impl<'a> Sampler<'a> {
         })
     }
 
+    /// A rare turn (an ask, a decline, a read that finds nothing) as the last turn of a session that starts with an
+    /// ordinary one of the same kind: "show my open tasks", then a name two tasks answer to. The rare turn leans on
+    /// nothing, so it is a fresh request in a session that already has turns. `None` when the world cannot draw the rare
+    /// turn or no ordinary session can lead to it.
+    fn tailed(
+        &self,
+        id: &str,
+        cell: &Cell,
+        aim: &Aim,
+        room: &Room,
+        extra: usize,
+        rng: &mut Rng,
+    ) -> Option<Scenario> {
+        let mut inner = aim.clone();
+        inner.tail = false;
+        let tail = self.opener_aim(cell, &inner, rng)?;
+        let heads: Vec<Cell> = self
+            .grid
+            .live()
+            .into_iter()
+            .filter(|c| {
+                matches!(
+                    c.tool.as_str(),
+                    "find" | "compute" | "do" | "edit" | "create"
+                ) && !matches!(
+                    (c.tool.as_str(), c.verb.as_str()),
+                    ("do", "undo" | "restore") | ("compute", "compare" | "group")
+                ) && (cell.kind == "-" || c.kind == cell.kind)
+            })
+            .cloned()
+            .collect();
+        if heads.is_empty() {
+            return None;
+        }
+        for _ in 0..12 {
+            let head = &heads[rng.below(heads.len())];
+            let Some(mut scenario) =
+                self.session_aim(id, head, &Aim::default(), room, extra.min(2), rng)
+            else {
+                continue;
+            };
+            if scenario
+                .turns
+                .iter()
+                .any(|t| matches!(t.intent, Intent::Ask { .. } | Intent::Decline { .. }))
+            {
+                continue;
+            }
+            scenario.turns.push(tail);
+            return Some(scenario);
+        }
+        None
+    }
+
+    /// A row deleted and then restored by its name, which is how a trash is emptied of a mistake: the supply of the
+    /// restores a world's own trash cannot give (few worlds trash a document or a Locker item).
+    fn deleted_then_restored(&self, kind: &str, rng: &mut Rng) -> Option<Vec<TurnIntent>> {
+        if !draws(kind, "delete") || !draws(kind, "restore") {
+            return None;
+        }
+        let rows: Vec<&Row> = self
+            .live_rows(kind)
+            .into_iter()
+            .filter(|r| self.verb_fits(kind, "delete", r))
+            .filter(|r| {
+                !r.name.is_empty()
+                    && self
+                        .facts
+                        .rows
+                        .iter()
+                        .filter(|x| x.kind == kind && fold(&x.name) == fold(&r.name))
+                        .count()
+                        == 1
+            })
+            .collect();
+        if rows.is_empty() {
+            return None;
+        }
+        let row = rows[rng.below(rows.len())];
+        let (target, reference) = self.target_for(row, rng, false)?;
+        Some(vec![
+            self.turn(
+                Intent::Write {
+                    target,
+                    verb: "delete".into(),
+                    arg: VerbArg::None,
+                },
+                reference,
+                Outcome::Done,
+                None,
+            ),
+            self.turn(
+                Intent::Write {
+                    target: Target::Name {
+                        kind: kind.to_owned(),
+                        name: row.name.clone(),
+                        key: row.key.clone(),
+                        trashed: true,
+                    },
+                    verb: "restore".into(),
+                    arg: VerbArg::None,
+                },
+                Reference::Name,
+                Outcome::Done,
+                None,
+            ),
+        ])
+    }
+
     fn follow_undo(&self, last: usize) -> TurnIntent {
         self.turn(
             Intent::Write {
@@ -2597,9 +2811,11 @@ impl<'a> Sampler<'a> {
         let sets = self.sets(turns);
         let mut branches: Vec<u8> = match &prev.intent {
             Intent::Read { .. } | Intent::Count { .. } if prev.outcome != Outcome::Empty => {
-                vec![0, 1, 2, 3, 4, 4, 5]
+                vec![0, 1, 2, 3, 3, 4, 4, 5]
             }
-            Intent::Measure { measure } if measure.group.is_none() => vec![10, 11, 11, 12, 13],
+            Intent::Measure { measure } if measure.group.is_none() => {
+                vec![10, 11, 11, 12, 12, 13]
+            }
             Intent::Measure { .. } | Intent::Compare { .. } => vec![12],
             Intent::Write { .. } | Intent::Edit { .. } if prev.outcome == Outcome::Done => {
                 if matches!(verb_of(&prev.intent), "undo" | "log") {
@@ -2613,7 +2829,10 @@ impl<'a> Sampler<'a> {
         };
         // a share the run has filled is not drawn again: the pronoun and handle branches, the undo
         branches.retain(|b| {
-            (room.pronoun || !matches!(b, 1 | 3 | 5 | 12 | 21 | 30)) && (room.undo || *b != 20)
+            (room.pronoun || !matches!(b, 1 | 5 | 21 | 30))
+                && (room.recall || *b != 3)
+                && (room.pronoun || room.recall || *b != 12)
+                && (room.undo || *b != 20)
         });
         // a seeded shuffle
         for i in (1..branches.len()).rev() {
@@ -2820,7 +3039,8 @@ impl<'a> Sampler<'a> {
                     )
                 }
                 // the rows behind a value
-                12 if matches!(prev.intent, Intent::Measure { .. })
+                12 if room.pronoun
+                    && matches!(prev.intent, Intent::Measure { .. })
                     && !set.is_empty()
                     && set.len() <= ROW_CAP
                     && !matches!(kind.as_str(), "budget" | "daily figure") =>
@@ -2834,7 +3054,7 @@ impl<'a> Sampler<'a> {
                         Some((last, Dep::Pronoun)),
                     ))
                 }
-                12 => Some(self.turn(
+                12 if room.recall => Some(self.turn(
                     Intent::Recall {
                         turn: last,
                         value: true,

@@ -2026,6 +2026,13 @@ mod tests {
     }
 
     fn rich_turn(rng: &mut Rng) -> Turn {
+        // what kind of turn it is: mostly ordinary, a few ask, decline and recall
+        let class = *rng.weighted(&[("plain", 84), ("ask", 6), ("decline", 6), ("recall", 4)]);
+        turn_of(class, rng)
+    }
+
+    /// A turn of the class `plain`, `ask`, `decline`, `recall`, `empty` (a read that finds nothing) or `repair`.
+    fn turn_of(class: &str, rng: &mut Rng) -> Turn {
         let reference = *rng.weighted(&[
             ("name", 35),
             ("filters", 30),
@@ -2033,8 +2040,7 @@ mod tests {
             ("nickname", 13),
         ]);
         let kind = rng.below(8);
-        // what kind of turn it is: mostly ordinary, a few ask, decline and recall
-        match *rng.weighted(&[("plain", 84), ("ask", 6), ("decline", 6), ("recall", 4)]) {
+        match class {
             "ask" => Turn {
                 cell: format!("ask/k{}/ask", kind % 2),
                 outcome: "ask",
@@ -2079,8 +2085,12 @@ mod tests {
                     }
                 }
             }
-            _ => {
-                let outcome = *rng.weighted(&[("done", 90), ("empty", 5), ("repair", 5)]);
+            other => {
+                let outcome = match other {
+                    "empty" => "empty",
+                    "repair" => "repair",
+                    _ => *rng.weighted(&[("done", 90), ("empty", 5), ("repair", 5)]),
+                };
                 match rng.below(3) {
                     0 => Turn {
                         cell: format!("find/k{kind}/read"),
@@ -2113,11 +2123,46 @@ mod tests {
 
     /// `sessions` sessions of `split` in `worlds` worlds of the rich pool, and the cells and pairs it holds.
     fn rich_pool(split: &str, sessions: usize, worlds: usize, seed: u64) -> Vec<Features> {
+        shaped_pool(split, sessions, worlds, seed, |rng, _, _| rich_turn(rng))
+    }
+
+    /// The pool of the sampler that draws a rare outcome (ask, nothing found, decline) either alone or as the last turn of a
+    /// longer session, and a recall now and then, but never as the first of several turns: only done and repair turns
+    /// are drawn in the middle. `weights` of the rare slot are those of the supply, which holds more of each than the
+    /// targets ask (the sampler draws them target-first and the mix chooses).
+    fn tail_pool(split: &str, sessions: usize, worlds: usize, seed: u64) -> Vec<Features> {
+        shaped_pool(split, sessions, worlds, seed, |rng, turns, at| {
+            let last = at + 1 == turns;
+            let class = if turns == 1 || last {
+                // the slot a rare turn can take: alone, or after the others
+                *rng.weighted(&[
+                    ("plain", 38),
+                    ("repair", 4),
+                    ("ask", 18),
+                    ("empty", 14),
+                    ("decline", 14),
+                    ("recall", 12),
+                ])
+            } else {
+                *rng.weighted(&[("plain", 80), ("repair", 8), ("recall", 12)])
+            };
+            turn_of(class, rng)
+        })
+    }
+
+    /// `sessions` sessions whose turns `make(rng, turns in the session, index)` draws.
+    fn shaped_pool(
+        split: &str,
+        sessions: usize,
+        worlds: usize,
+        seed: u64,
+        make: impl Fn(&mut Rng, usize, usize) -> Turn,
+    ) -> Vec<Features> {
         let mut rng = Rng::new(seed).fork(split);
         (0..sessions)
             .map(|n| {
                 let turns = *rng.weighted(&[(1_usize, 45), (2, 30), (3, 20), (4, 5)]);
-                let list: Vec<Turn> = (0..turns).map(|_| rich_turn(&mut rng)).collect();
+                let list: Vec<Turn> = (0..turns).map(|at| make(&mut rng, turns, at)).collect();
                 let two_kinds = rng.chance(0.3);
                 Features {
                     id: format!("{split}-{n}"),
@@ -2177,8 +2222,14 @@ mod tests {
             .count();
         assert!(done as f64 > 0.75 * turns as f64, "{done} of {turns}");
         let selection = mix(&all, &cfg).unwrap();
+        within_everything(&selection, &cfg, 12);
+    }
+
+    /// Every share within a point and a half of its target, the length of a session too, every cap held, every floor of `floor`
+    /// turns met in train and nothing under its floor.
+    fn within_everything(selection: &Selection, cfg: &Config, floor: usize) {
         for split in SPLITS {
-            let r = report(&selection, split);
+            let r = report(selection, split);
             assert_eq!(
                 r.sessions,
                 cfg.targets[SPLITS.iter().position(|s| *s == split).unwrap()]
@@ -2211,12 +2262,12 @@ mod tests {
             }
         }
         // the floors are met in train, and with them the counts: every live cell and pair has its turns
-        let train = report(&selection, "train");
+        let train = report(selection, "train");
         assert!(
             train
                 .cells
                 .iter()
-                .all(|c| c.realised >= 12 && c.status == "hit"),
+                .all(|c| c.realised >= floor && c.status == "hit"),
             "{:?}",
             train.cells
         );
@@ -2224,11 +2275,43 @@ mod tests {
             train
                 .fields
                 .iter()
-                .all(|c| c.realised >= 12 && c.status == "hit"),
+                .all(|c| c.realised >= floor && c.status == "hit"),
             "{:?}",
             train.fields
         );
-        assert!(under_floor(&selection, &cfg).is_empty());
+        assert!(under_floor(selection, cfg).is_empty());
+    }
+
+    #[test]
+    fn every_share_lands_within_a_point_and_a_half_when_the_rare_outcomes_come_after_other_turns() {
+        // ask, nothing found and decline are drawn alone or as the last turn of a longer session, never as the first of
+        // several: sessions of one turn are 40% of the sessions, so the three could not fill 25% of the turns if they
+        // were drawn only alone
+        let mut all = tail_pool("train", 4000, 4, 1);
+        all.extend(tail_pool("val", 3000, 2, 2));
+        all.extend(tail_pool("test", 3000, 2, 3));
+        let cells: BTreeSet<String> = all.iter().flat_map(|f| f.cells.clone()).collect();
+        let fields: BTreeSet<String> = all.iter().flat_map(|f| f.fields.clone()).collect();
+        let cfg = Config {
+            targets: [500, 300, 300],
+            live: cells.iter().cloned().collect(),
+            floor: [12, 0, 0],
+            live_fields: fields.iter().cloned().collect(),
+            field_floor: [12, 0, 0],
+            subsets: Vec::new(),
+            reserve: 0,
+            ..Config::default()
+        };
+        // the rare turns of the pool are in sessions of two turns or more as well as alone
+        let later = all
+            .iter()
+            .filter(|f| f.split == "train" && f.turns > 1)
+            .flat_map(|f| f.outcomes.iter().skip(1))
+            .filter(|o| matches!(o.as_str(), "ask" | "empty" | "decline"))
+            .count();
+        assert!(later > 100, "{later} rare turns after the first");
+        let selection = mix(&all, &cfg).unwrap();
+        within_everything(&selection, &cfg, 12);
     }
 
     #[test]

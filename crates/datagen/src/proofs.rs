@@ -543,6 +543,17 @@ fn prove(
     check: impl Fn(&Said<'_>, &[(String, Value)]) -> bool,
     what: &str,
 ) {
+    prove_in(("find", "read"), search, kinds, check, what);
+}
+
+/// [`prove`] for the cell `(tool, verb)` of each of `kinds`: a count or a total through an option of `compute`.
+fn prove_in(
+    (tool, verb): (&str, &str),
+    search: Search,
+    kinds: &[&str],
+    check: impl Fn(&Said<'_>, &[(String, Value)]) -> bool,
+    what: &str,
+) {
     let catalog = catalog();
     let grid = Grid::build(&catalog);
     let aim = Aim {
@@ -553,7 +564,7 @@ fn prove(
         let scratch = tempfile::tempdir().expect("scratch");
         let mut run = WorldRun::seed(&world, &catalog, scratch.path()).expect("seeds");
         for kind in kinds {
-            let cell = Cell::new("find", kind, "read");
+            let cell = Cell::new(tool, kind, verb);
             for i in 0..16 {
                 let Some(scenario) = drawn(
                     &catalog,
@@ -582,7 +593,7 @@ fn prove(
         }
     }
     panic!(
-        "no {search:?} read was drawn, solved through the runtime and carried by the call ({what})"
+        "no {search:?} turn of {tool}/{verb} was drawn, solved through the runtime and carried by the call ({what})"
     );
 }
 
@@ -956,18 +967,13 @@ fn a_run_with_no_room_for_a_share_draws_none_of_it() {
     let worlds = worlds(Split::Train, 2);
     let none = Room {
         pronoun: false,
+        recall: false,
         undo: false,
     };
     let turns = sweep(&catalog, &grid, &worlds, &none);
     assert!(!turns.is_empty());
-    // the one pronoun turn left is the edit of a workout the session logged, which a member can only do that way and which
-    // the field floor needs; the mix's ceiling holds the share
-    for t in turns.iter().filter(|t| labels::reference(t) == "pronoun") {
-        assert!(
-            matches!(&t.intent, Intent::Edit { target: crate::intent::Target::Turn { kind, .. }, .. } if kind == "workout"),
-            "{t:?}"
-        );
-    }
+    // a workout the session logged is then edited by its name, which points at a row by no pronoun
+    assert_eq!(count_labels(&turns, "pronoun"), 0);
     assert_eq!(
         turns
             .iter()
@@ -1147,5 +1153,319 @@ fn the_think_of_a_call_with_each_new_option_compiles_back_to_the_call() {
         // and with no line to read it from
         traced("find", &[("kind", kind), ("when", when)], said, "", &[])
             .unwrap_or_else(|why| panic!("{when} (compact): {why:?}"));
+    }
+}
+
+// ------------------------------------------------------------------ the options of `compute`
+
+#[test]
+fn the_top_few_of_a_read_are_drawn_solved_and_carried_by_the_call() {
+    prove(
+        Search::Top,
+        &["task", "workout", "event", "person", "transaction"],
+        |said, made| {
+            find_with(made, "order").any(|a| {
+                a["limit"]
+                    .as_str()
+                    .is_some_and(|n| n.parse::<usize>().is_ok())
+            }) && said.brief(0).ask.contains("sorted by")
+                && said.brief(0).ask.contains("only the first")
+                && !said.want(0).numbers.is_empty()
+        },
+        "order and limit",
+    );
+}
+
+#[test]
+fn a_total_over_the_top_few_is_drawn_solved_and_carried_by_the_call() {
+    prove_in(
+        ("compute", "sum"),
+        Search::Top,
+        &["task", "workout", "event", "person"],
+        |said, made| {
+            made.iter().any(|(tool, a)| {
+                tool == "compute"
+                    && a["op"] == "sum"
+                    && a["order"]
+                        .as_str()
+                        .is_some_and(|o| o.ends_with(" desc") || o.ends_with(" asc"))
+                    && a["limit"]
+                        .as_str()
+                        .is_some_and(|n| n.parse::<usize>().is_ok())
+            }) && said.brief(0).ask.contains("sorted by")
+                && said.brief(0).ask.contains("only the first")
+        },
+        "compute order and limit",
+    );
+}
+
+#[test]
+fn a_count_of_the_trash_is_drawn_solved_and_carried_by_the_call() {
+    prove_in(
+        ("compute", "count"),
+        Search::Trashed,
+        &["task", "note", "person", "event", "document", "photo"],
+        |said, made| {
+            made.iter()
+                .any(|(tool, a)| tool == "compute" && a["trashed"] == "true")
+                && said.brief(0).ask.contains("in the trash")
+        },
+        "compute trashed",
+    );
+}
+
+#[test]
+fn a_count_of_the_others_is_drawn_solved_and_carried_by_the_call() {
+    prove_in(
+        ("compute", "count"),
+        Search::Exclude,
+        &["task", "person", "event", "note", "document", "photo"],
+        |said, made| {
+            made.iter().any(|(tool, a)| {
+                tool == "compute" && a["exclude"].as_str().is_some_and(|r| r.starts_with('@'))
+            }) && said.scenario.turns.len() >= 2
+                && said.scenario.turns[1].dep == Some((0, crate::intent::Dep::Else))
+                && said.want(1).leaves_out_rows
+        },
+        "compute exclude",
+    );
+}
+
+// ------------------------------------------------------------------ the rows a member logged are edited by name
+
+#[test]
+fn a_workout_the_member_logged_is_edited_by_its_name_with_every_figure() {
+    let catalog = catalog();
+    let grid = Grid::build(&catalog);
+    let world = worlds(Split::Train, 1).remove(0);
+    let scratch = tempfile::tempdir().expect("scratch");
+    let mut run = WorldRun::seed(&world, &catalog, scratch.path()).expect("seeds");
+    for field in ["moving", "distance", "energy", "heart_rate", "climb"] {
+        let cell = Cell::new("edit", "workout", "edit");
+        // with no room for a pronoun the edit can only name the workout
+        let facts = Facts::of(&world, &catalog);
+        let sampler = Sampler::new(&world, &facts, &catalog, &grid);
+        let none = Room {
+            pronoun: false,
+            recall: false,
+            undo: false,
+        };
+        let scenario = (0..20)
+            .find_map(|i| {
+                let mut rng = Rng::new(9).fork(&format!("{field}:{i}"));
+                sampler.session_aim("proof", &cell, &aim_field(field), &none, 0, &mut rng)
+            })
+            .unwrap_or_else(|| panic!("{field}: no session"));
+        assert_eq!(scenario.turns.len(), 2);
+        let edit = &scenario.turns[1];
+        assert_eq!(edit.reference, crate::intent::Reference::Name);
+        assert!(edit.dep.is_none());
+        assert!(matches!(
+            &edit.intent,
+            Intent::Edit { target: crate::intent::Target::Name { kind, .. }, .. } if kind == "workout"
+        ));
+        let solution = solve(&mut run, &scenario);
+        assert!(
+            solution.dropped.is_empty() && solution.kept == 2,
+            "{field}: {:?}",
+            solution.dropped
+        );
+        let made = calls(&solution);
+        assert!(
+            made.iter().any(|(t, a)| t == "edit"
+                && arg_lines(&serde_json::json!({"args": a["args"]}))
+                    .starts_with(&format!("{field}: "))),
+            "{field}: {made:?}"
+        );
+        assert!(
+            made.iter()
+                .any(|(t, a)| t == "find" && a["name"].is_string())
+        );
+        assert_eq!(labels::reference(edit), "name");
+    }
+}
+
+// ------------------------------------------------------------------ rare outcomes after another turn
+
+/// A session of `cell` aimed as `tail` (a rare turn after an ordinary one), solved through the runtime in the first of four
+/// worlds that gives one, with the tags of its turns.
+fn tailed(cell: &Cell, aim: &Aim) -> Option<(Scenario, Solution, Vec<Vec<String>>)> {
+    let catalog = catalog();
+    let grid = Grid::build(&catalog);
+    for world in worlds(Split::Train, 4) {
+        let scratch = tempfile::tempdir().expect("scratch");
+        let mut run = WorldRun::seed(&world, &catalog, scratch.path()).expect("seeds");
+        let facts = Facts::of(&world, &catalog);
+        let sampler =
+            Sampler::new(&world, &facts, &catalog, &grid).with_empty_reads(run.empty_reads);
+        for i in 0..24 {
+            let mut rng = Rng::new(11).fork(&format!("{cell}:{i}"));
+            let Some(scenario) =
+                sampler.session_aim("proof", cell, aim, &Room::default(), 1, &mut rng)
+            else {
+                continue;
+            };
+            let solution = solve(&mut run, &scenario);
+            if !solution.dropped.is_empty() || solution.kept != scenario.turns.len() {
+                continue;
+            }
+            let tags = solution.record.as_ref()?["turns"]
+                .as_array()?
+                .iter()
+                .map(|t| {
+                    t["tags"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|v| v.as_str().map(str::to_owned))
+                        .collect()
+                })
+                .collect();
+            return Some((scenario, solution, tags));
+        }
+    }
+    None
+}
+
+#[test]
+fn ask_nothing_found_decline_and_impossible_occur_after_another_turn_solved_and_labelled() {
+    let tail = Aim {
+        tail: true,
+        ..Aim::default()
+    };
+    let empty = Aim {
+        tail: true,
+        empty: true,
+        ..Aim::default()
+    };
+    for (cell, aim, outcome, last_tool) in [
+        (Cell::new("ask", "task", "ask"), &tail, "ask", "ask"),
+        (Cell::new("ask", "person", "ask"), &tail, "ask", "ask"),
+        (Cell::new("find", "task", "read"), &empty, "empty", "answer"),
+        (
+            Cell::new("compute", "task", "count"),
+            &empty,
+            "empty",
+            "answer",
+        ),
+        (
+            Cell::new("decline", "-", "not_found"),
+            &tail,
+            "decline",
+            "decline",
+        ),
+        (
+            Cell::new("decline", "-", "out_of_scope"),
+            &tail,
+            "decline",
+            "decline",
+        ),
+        (
+            Cell::new("decline", "-", "unbounded_destruction"),
+            &tail,
+            "decline",
+            "decline",
+        ),
+        (
+            Cell::new("decline", "-", "fabricated_secret"),
+            &tail,
+            "decline",
+            "decline",
+        ),
+    ] {
+        let (scenario, solution, tags) =
+            tailed(&cell, aim).unwrap_or_else(|| panic!("{cell}: no session was drawn and solved"));
+        let last = scenario.turns.len() - 1;
+        assert!(last >= 1, "{cell}: a rare turn alone is not a later turn");
+        // the rare turn is the second or later turn, leans on nothing and is labelled as it is
+        let rare = &scenario.turns[last];
+        assert!(rare.dep.is_none(), "{cell}");
+        assert_eq!(rare.outcome.word(), outcome, "{cell}");
+        assert!(
+            tags[last].contains(&format!("outcome:{outcome}")),
+            "{cell}: {tags:?}"
+        );
+        assert_eq!(cell_of(rare).to_string(), cell.to_string());
+        // no earlier turn is a rare one
+        assert!(
+            scenario.turns[..last]
+                .iter()
+                .all(|t| !matches!(t.intent, Intent::Ask { .. } | Intent::Decline { .. }))
+        );
+        let ref_tools: Vec<String> =
+            solution.record.as_ref().expect("a record")["turns"][last]["ref"]
+                .as_array()
+                .expect("calls")
+                .iter()
+                .filter_map(|c| c["tool"].as_str().map(str::to_owned))
+                .collect();
+        assert_eq!(
+            ref_tools.last().map(String::as_str),
+            Some(last_tool),
+            "{cell}: {ref_tools:?}"
+        );
+        if cell.verb == "out_of_scope"
+            || cell.verb == "unbounded_destruction"
+            || cell.verb == "fabricated_secret"
+        {
+            assert!(labels::impossible(rare), "{cell}");
+        }
+        // an ask is of the kind of the cell, so no second kind comes in with it (a read that finds nothing may keep a link)
+        if cell.tool == "ask" {
+            assert!(
+                labels::kinds(rare).iter().all(|k| *k == cell.kind),
+                "{cell}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_row_is_deleted_and_restored_so_every_restore_cell_has_supply() {
+    let catalog = catalog();
+    let grid = Grid::build(&catalog);
+    let world = worlds(Split::Train, 1).remove(0);
+    let scratch = tempfile::tempdir().expect("scratch");
+    let mut run = WorldRun::seed(&world, &catalog, scratch.path()).expect("seeds");
+    let facts = Facts::of(&world, &catalog);
+    let sampler = Sampler::new(&world, &facts, &catalog, &grid);
+    for kind in ["document", "locker item"] {
+        let cell = Cell::new("do", kind, "restore");
+        assert!(grid.is_live(&cell), "{cell}");
+        let aim = Aim {
+            trash: true,
+            ..Aim::default()
+        };
+        let scenario = (0..40)
+            .find_map(|i| {
+                let mut rng = Rng::new(5).fork(&format!("{kind}:{i}"));
+                let scenario =
+                    sampler.session_aim("proof", &cell, &aim, &Room::default(), 2, &mut rng)?;
+                let solution = run.solve(&scenario).ok()?;
+                (solution.dropped.is_empty() && solution.kept == 2).then_some((scenario, solution))
+            })
+            .unwrap_or_else(|| panic!("{kind}: no delete and restore was solved"));
+        let (scenario, solution) = scenario;
+        assert_eq!(scenario.turns.len(), 2);
+        assert_eq!(
+            cell_of(&scenario.turns[0]).to_string(),
+            format!("do/{kind}/delete")
+        );
+        assert_eq!(cell_of(&scenario.turns[1]).to_string(), cell.to_string());
+        let made = calls(&solution);
+        assert!(
+            made.iter().any(|(t, a)| t == "do" && a["verb"] == "delete"),
+            "{made:?}"
+        );
+        assert!(
+            made.iter()
+                .any(|(t, a)| t == "do" && a["verb"] == "restore"),
+            "{made:?}"
+        );
+        assert!(
+            made.iter()
+                .any(|(t, a)| t == "find" && a["trashed"] == "true"),
+            "{made:?}"
+        );
     }
 }

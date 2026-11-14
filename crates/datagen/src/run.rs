@@ -47,13 +47,31 @@ fn weight(cell: &Cell) -> usize {
 /// the mix target-first.
 const FIELD_DRAWS: usize = 2;
 
+/// The same for a figure of a workout the member logged: the only way to edit one is a session that logs it first, so
+/// each is drawn more often.
+const WORKOUT_DRAWS: usize = 6;
+
+/// Draws of each ask cell as the last turn of a longer session, of each decline cell, and of each read or count that
+/// finds nothing. Ask, nothing found and decline are 25% of the turns, and sessions of two turns or more are 60% of the
+/// sessions, so most of them have to come after another turn.
+const TAIL_ASK_DRAWS: usize = 36;
+const TAIL_DECLINE_DRAWS: usize = 26;
+const TAIL_EMPTY_DRAWS: usize = 6;
+
+/// Draws of each restore cell as a delete followed by its restore, for the kinds whose worlds hold few rows in the trash.
+const RESTORE_DRAWS: usize = 4;
+
+/// Draws of each count and each total or average through an option of `compute` a plain draw never uses (the trash, the
+/// rows the turn before left out, the top few).
+const COMPUTE_DRAWS: usize = 2;
+
 /// Draws of each read and count cell aimed at finding nothing: the nothing-found share is 8% of the turns and a
 /// world seldom holds a request that finds nothing by chance.
 const EMPTY_DRAWS: usize = 9;
 
 /// Draws of each write and edit cell aimed at a row said by a nickname or a misspelling (15% of the turns that point at a
 /// row; a person has a nickname or a long name only now and then).
-const NICKNAME_DRAWS: usize = 5;
+const NICKNAME_DRAWS: usize = 8;
 
 /// Draws of each read cell through each option of `find` a plain draw never uses.
 const SEARCH_DRAWS: usize = 1;
@@ -92,7 +110,12 @@ pub fn draws(catalog: &Catalog, grid: &Grid) -> Vec<Draw> {
         let Some((verb, kind, field)) = crate::fields::split(&label) else {
             continue;
         };
-        for _ in 0..FIELD_DRAWS {
+        let draws = if verb == "edit" && kind == "workout" {
+            WORKOUT_DRAWS
+        } else {
+            FIELD_DRAWS
+        };
+        for _ in 0..draws {
             out.push(Draw {
                 cell: Cell::new(verb, kind, verb),
                 aim: Aim {
@@ -114,6 +137,59 @@ pub fn draws(catalog: &Catalog, grid: &Grid) -> Vec<Draw> {
                         ..Aim::default()
                     },
                 });
+            }
+            for _ in 0..TAIL_EMPTY_DRAWS {
+                out.push(Draw {
+                    cell: cell.clone(),
+                    aim: Aim {
+                        empty: true,
+                        tail: true,
+                        ..Aim::default()
+                    },
+                });
+            }
+        }
+        let tails = match cell.tool.as_str() {
+            "ask" => TAIL_ASK_DRAWS,
+            "decline" => TAIL_DECLINE_DRAWS,
+            _ => 0,
+        };
+        for _ in 0..tails {
+            out.push(Draw {
+                cell: cell.clone(),
+                aim: Aim {
+                    tail: true,
+                    ..Aim::default()
+                },
+            });
+        }
+        if cell.tool == "do" && cell.verb == "restore" {
+            for _ in 0..RESTORE_DRAWS {
+                out.push(Draw {
+                    cell: cell.clone(),
+                    aim: Aim {
+                        trash: true,
+                        ..Aim::default()
+                    },
+                });
+            }
+        }
+        if cell.tool == "compute" {
+            let options: &[Search] = match cell.verb.as_str() {
+                "count" => &[Search::Trashed, Search::Exclude],
+                "sum" | "avg" | "min" | "max" => &[Search::Top],
+                _ => &[],
+            };
+            for search in options.iter().filter(|s| s.serves(catalog, &cell.kind)) {
+                for _ in 0..COMPUTE_DRAWS {
+                    out.push(Draw {
+                        cell: cell.clone(),
+                        aim: Aim {
+                            search: Some(*search),
+                            ..Aim::default()
+                        },
+                    });
+                }
             }
         }
         let writes = (cell.tool == "do" && !matches!(cell.verb.as_str(), "undo" | "restore"))
@@ -156,8 +232,14 @@ struct Filled {
     /// Turns that point at a row, and those that do it by a pronoun or an earlier answer.
     refs: usize,
     pronoun: usize,
+    /// Of the pronoun turns, the recalls of an earlier answer.
+    recall: usize,
     undo: usize,
 }
+
+/// The part of the pronoun ceiling the turns that are not a recall may fill: the rest is kept for recalls, which are a
+/// share of their own (10% of the turns, with the undo) under the same ceiling.
+const OTHER_PRONOUN: f64 = 0.45;
 
 impl Filled {
     fn add(&mut self, turns: &[crate::intent::TurnIntent]) {
@@ -166,6 +248,7 @@ impl Filled {
             let reference = labels::reference(turn);
             self.refs += usize::from(!reference.is_empty());
             self.pronoun += usize::from(reference == "pronoun");
+            self.recall += usize::from(matches!(turn.intent, crate::intent::Intent::Recall { .. }));
             self.undo += usize::from(crate::grid::cell_of(turn).to_string() == "do/-/undo");
         }
     }
@@ -173,9 +256,11 @@ impl Filled {
     /// Room for the shares that have a ceiling: pronoun references at their share of the references, undo at
     /// [`UNDO_CAP`] of the turns.
     fn room(&self) -> Room {
+        let ceiling = crate::mix::Shares::default().reference[2] * self.refs as f64;
+        let others = (self.pronoun - self.recall) as f64;
         Room {
-            pronoun: self.pronoun as f64
-                <= crate::mix::Shares::default().reference[2] * self.refs as f64,
+            pronoun: self.pronoun as f64 <= ceiling && others <= OTHER_PRONOUN * ceiling,
+            recall: self.pronoun as f64 <= ceiling,
             undo: self.undo as f64 <= UNDO_CAP * self.turns as f64,
         }
     }
