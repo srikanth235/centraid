@@ -197,12 +197,10 @@ struct AgendaEventView: View {
                 }
                 let sentence = writeSentence(state)
                 if !sentence.isEmpty, state.sheet != .cancelScope {
-                    Text(sentence)
-                        .centraidType("small")
-                        .foregroundStyle(Theme.color("net", scheme))
-                        .padding(.horizontal, CentraidGeometry.pageMargin)
-                        .padding(.top, 12)
-                        .accessibilityIdentifier("agenda-event-status")
+                    StatusLineView(status: state.status, identifier: "agenda-status-action") {
+                        send(event { $0.statusActed = .init() })
+                    }
+                    .padding(.top, 12)
                 }
                 // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the actions.
                 EarlierEntryRow(entry: state.hasEarlier ? state.earlier : nil, open: open)

@@ -15,6 +15,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentDataType
@@ -24,6 +26,8 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDataType
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -35,11 +39,11 @@ import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitSpinner
 import dev.centraid.android.kit.NoAutofill
 import dev.centraid.android.kit.OutlineButton
+import dev.centraid.android.kit.TypedText
 import dev.centraid.android.screens.words.WordsControls
 import dev.centraid.android.screens.words.WordsHead
 import dev.centraid.android.screens.words.WordsNotice
 import dev.centraid.android.screens.words.WordsPage
-import dev.centraid.android.screens.words.rememberSentText
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -165,7 +169,14 @@ internal fun PairLaptopPage(
  */
 @Composable
 private fun PayloadField(label: String, value: String, onEdit: (String) -> Unit) {
-    val text = rememberSentText(value)
+    val text = remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
+    val echoes = remember { TypedText(value) }
+    // A pairing payload is opaque, including its whitespace. Keep the entire local
+    // TextFieldValue (caret/composition too) for every echo, unlike recovery-phrase cells
+    // whose spaces deliberately spread words. Only a genuinely new machine value replaces it.
+    echoes.answer(value, shown = text.value.text)?.let { adopted ->
+        text.value = TextFieldValue(adopted, TextRange(adopted.length))
+    }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(label, style = centraidType("small"), color = centraidColor("textSoft"), modifier = Modifier.clearAndSetSemantics { })
         Box(
@@ -177,14 +188,10 @@ private fun PayloadField(label: String, value: String, onEdit: (String) -> Unit)
             contentAlignment = Alignment.CenterStart,
         ) {
             BasicTextField(
-                value = text.first.value,
+                value = text.value,
                 onValueChange = { next ->
-                    val changed = next.text != text.first.value.text
-                    text.first.value = next
-                    if (changed) {
-                        text.second(next.text)
-                        onEdit(next.text)
-                    }
+                    text.value = next
+                    if (echoes.edited(next.text)) onEdit(next.text)
                 },
                 minLines = 2,
                 maxLines = 5,

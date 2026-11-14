@@ -117,6 +117,30 @@ fn add_file_files_it_in_docs_and_attaches_it_to_the_note_and_remove_detaches_onl
     open_sheet(&mut d, i);
     on_sheet(&mut d, i, A::AddFile(Default::default()));
     assert!(section(&d, i).busy, "the pick is under way");
+    d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
+        foreground: false,
+    }));
+    d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
+        foreground: true,
+    }));
+    let effect_id = d
+        .effects
+        .iter()
+        .find(|request| request.instance == i)
+        .unwrap()
+        .effect_id;
+    d.send(
+        i,
+        wire::screen_event::Kind::EffectResult(wire::EffectResult {
+            effect_id,
+            outcome: Some(O::FileProgress(wire::FileProgress {
+                staged_bytes: 85,
+                total_bytes: 85,
+                name: "Itinerary.pdf".to_owned(),
+            })),
+        }),
+    );
+    assert!(section(&d, i).busy, "progress keeps the picker pending");
     answer_for(&mut d, i, picked('b', 2_400_000, "Itinerary.pdf"));
     let tile = {
         let section = section(&d, i);
@@ -152,4 +176,88 @@ fn add_file_files_it_in_docs_and_attaches_it_to_the_note_and_remove_detaches_onl
     on_sheet(&mut d, i, A::RemoveConfirmed(Default::default()));
     assert!(section(&d, i).items.is_empty());
     assert_eq!(held(&d, &id), 0);
+}
+
+fn retained_share_message_then_attachment(unprotected: bool) {
+    let mut d = driver();
+    let id = note(&d, "Lisbon trip", "Flights are booked");
+    let i = opened(&mut d, &id);
+    d.effects.clear();
+    send_editor(
+        &mut d,
+        i,
+        N::ShareRequested(wire::notes_editor_event::ShareRequested {}),
+    );
+    answer_for(
+        &mut d,
+        i,
+        O::OwnerChecked(wire::OwnerChecked {
+            outcome: if unprotected {
+                wire::owner_checked::Outcome::Unavailable
+            } else {
+                wire::owner_checked::Outcome::Succeeded
+            } as i32,
+            ..Default::default()
+        }),
+    );
+    assert!(d.effects.iter().any(|request| matches!(
+        request.effect.as_ref().and_then(|effect| effect.kind.as_ref()),
+        Some(wire::effect::Kind::ShareBytes(_))
+    )));
+    answer_for(
+        &mut d,
+        i,
+        if unprotected {
+            O::Done(wire::EffectDone {})
+        } else {
+            O::Failed(wire::EffectFailed {
+                reason: "unavailable".to_owned(),
+                ..Default::default()
+            })
+        },
+    );
+    assert!(
+        !editor_state(d.view(i))
+            .chrome
+            .as_ref()
+            .unwrap()
+            .status
+            .is_empty(),
+        "the previous share's warning or failure remains visible"
+    );
+
+    open_sheet(&mut d, i);
+    on_sheet(&mut d, i, A::AddFile(Default::default()));
+    let request = d
+        .effects
+        .iter()
+        .find(|request| request.instance == i)
+        .unwrap();
+    d.send(
+        i,
+        wire::screen_event::Kind::EffectResult(wire::EffectResult {
+            effect_id: request.effect_id,
+            outcome: Some(O::FileProgress(wire::FileProgress {
+                staged_bytes: 85,
+                total_bytes: 85,
+                name: "Itinerary.pdf".to_owned(),
+            })),
+        }),
+    );
+    assert!(section(&d, i).busy);
+    assert!(section(&d, i).busy_label.contains("Itinerary.pdf"));
+    answer_for(&mut d, i, picked('c', 85, "Itinerary.pdf"));
+    assert!(!section(&d, i).busy, "the pick has completed");
+    assert_eq!(section(&d, i).items.len(), 1);
+    assert_eq!(held(&d, &id), 1, "the file is attached in the vault");
+}
+
+#[test]
+fn retained_share_warning_does_not_swallow_attachment_progress_or_completion() {
+    retained_share_message_then_attachment(true);
+}
+
+#[test]
+fn retained_share_failure_does_not_swallow_attachment_progress_or_completion() {
+    retained_share_message_then_attachment(false);
 }

@@ -3,8 +3,8 @@
 //! A pure function of [`Reading`], so a test proves every sentence without a
 //! core. Its one rule is the umbrella's UI invariant: **the line never says more
 //! than a gateway acknowledged.** "Backed up" with no qualifier needs the
-//! records acknowledged AND every item confirmed; records acknowledged with
-//! items still waiting say so, and say how many. Home draws the same value in
+//! current records acknowledged AND every item confirmed; newer records lead
+//! with the changes still waiting. Home draws the same value in
 //! its lockup, so both read one set of words.
 
 use centraid_api_proto::core_v1 as wire;
@@ -91,7 +91,8 @@ pub fn warns(reading: &Reading, now_ms: i64, running: bool) -> bool {
     let from_the_future = acked - now_ms > CLOCK_TOLERANCE_MS;
     // A MACHINE THAT IS NOT THE GATEWAY answered at its address (#1080): the member is owed a
     // look, however recent the ack.
-    now_ms - acked > STALE_MS
+    reading.edits_waiting() > 0
+        || now_ms - acked > STALE_MS
         || from_the_future
         || unreached(reading, now_ms)
         || reading.waiting_for(wire::WaitReason::Untrusted) > 0
@@ -174,11 +175,20 @@ pub fn line(
             ..Default::default()
         });
     };
-    let whole = reading.unconfirmed() == 0;
+    let edits = reading.edits_waiting();
+    let whole = reading.unconfirmed() == 0 && edits == 0;
     let when = ago(locale, acked, now_ms);
     let count = grouped(reading.unconfirmed());
     let stood = backlog_old(reading, now_ms, running);
-    let sentence = if whole {
+    let changes = || {
+        fill(
+            &words::backup_line_changes(locale, edits),
+            &[("count", &grouped(edits)), ("when", &when)],
+        )
+    };
+    let sentence = if edits > 0 {
+        changes()
+    } else if whole {
         fill(&words::backup_line_done(locale), &[("when", &when)])
     } else if let Some(oldest) = reading
         .oldest_waiting_ms
@@ -192,20 +202,24 @@ pub fn line(
     } else {
         fill(&words::backup_line_records(locale), &[("when", &when)])
     };
-    // "BACKING UP" IS SAID ONLY WHILE A PASS RUNS; otherwise the status says what a gateway
-    // acknowledged and how many wait, which stays true when nothing is moving.
-    let status = if whole {
-        words::backup_status_done(locale)
-    } else if running {
-        words::backup_status_catching_up(locale)
+    // A pass is busy only while it runs; later edits must never look fully acknowledged.
+    let status = if edits > 0 {
+        changes()
     } else {
-        words::backup_status_waiting(locale)
+        let template = if whole {
+            words::backup_status_done(locale)
+        } else if running {
+            words::backup_status_catching_up(locale)
+        } else {
+            words::backup_status_waiting(locale)
+        };
+        fill(&template, &[("when", &when), ("count", &count)])
     };
     let built = wire::BackupLine {
         confirmed: reading.content_confirmed,
         waiting,
         sentence,
-        status: fill(&status, &[("when", &when), ("count", &count)]),
+        status,
         detail,
         tone: if warns(reading, now_ms, running) {
             Tone::Attention
@@ -348,6 +362,8 @@ fn since(locale: Locale, zone: &str, at_ms: i64, now_ms: i64) -> String {
 /// THE LINE'S SECOND CLAUSE, IN BYTES (#1144): "All 5.0 GB from 8 apps is
 /// backed up.", "4.6 of 5.0 GB from 8 apps is backed up.", and when the
 /// member left videos out, what that left out: "8.4 GB of videos is left out."
+/// Newer record edits take precedence: the shared byte pool cannot say how
+/// many current bytes the previous snapshot covered, so name the edits waiting.
 /// A reading with no per-app rows (a core that could not name its files) says
 /// the counts instead ([`counts`]).
 #[must_use]
@@ -361,7 +377,15 @@ pub fn detail(locale: Locale, reading: &Reading) -> String {
         &[("count", &grouped(count))],
     );
     let total = bytes(reading.total_bytes);
-    let backed = if reading.confirmed_bytes == 0 {
+    // The shared vault-file byte pool has no per-edit precision. Name the known
+    // record backlog instead of claiming all current records were acknowledged.
+    let edits = reading.edits_waiting();
+    let backed = if edits > 0 {
+        fill(
+            &words::backup_app_edits(locale, edits),
+            &[("count", &grouped(edits))],
+        )
+    } else if reading.confirmed_bytes == 0 {
         fill(
             &words::backup_bytes_none(locale),
             &[("total", &total), ("apps", &apps)],
@@ -540,7 +564,8 @@ pub fn backlog_stood(reading: Option<&Reading>, frozen: bool, now_ms: i64) -> bo
     let Some(acked) = reading.last_ack_ms else {
         return false;
     };
-    let behind = reading.unconfirmed() > 0 || reading.pending_bytes > 0;
+    let behind =
+        reading.unconfirmed() > 0 || reading.edits_waiting() > 0 || reading.pending_bytes > 0;
     behind && now_ms - acked >= BACKLOG_STOOD_MS
 }
 

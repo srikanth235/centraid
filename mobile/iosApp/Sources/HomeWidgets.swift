@@ -346,8 +346,8 @@ private struct WidgetBody: View {
 }
 
 /// PHOTOS (large, or a tall medium with something to show): the newest four as
-/// one big photograph and three beside it, bled to the card's edge, with the
-/// app's name over the foot. A cell with no bytes on this phone is drawn grey.
+/// a strip of the photographs present, with the app's name over the foot.
+/// A real cell with no bytes on this phone is drawn grey; absent cells take no space.
 private struct PhotoWidget: View {
     let tile: Centraid_Core_V1_HomeTile
     @Environment(\.colorScheme) private var scheme
@@ -370,25 +370,35 @@ private struct PhotoWidget: View {
         // The photograph strip takes the card's height; the label rides its foot.
         HStack(spacing: 2) {
             cell(0).frame(maxWidth: .infinity)
-            VStack(spacing: 2) {
-                cell(1)
-                cell(2)
+            if photos.cells.count == 2 {
+                cell(1).frame(maxWidth: .infinity)
+            } else if photos.cells.count >= 3 {
+                VStack(spacing: 2) {
+                    cell(1)
+                    cell(2)
+                }
+                .frame(maxWidth: .infinity)
+                if photos.cells.count >= 4 {
+                    cell(3).frame(maxWidth: .infinity)
+                }
             }
-            .frame(maxWidth: .infinity)
-            cell(3).frame(maxWidth: .infinity)
         }
         .frame(minHeight: WidgetGeometry.floor(rows: 2))
         .overlay(alignment: .bottomLeading) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(tile.name)
                     .centraidType("annotLabelOn")
+                    .foregroundStyle(Surface.ink)
                 if !photos.absentLine.isEmpty {
                     Text(photos.absentLine)
                         .centraidType("annotLabel")
+                        .foregroundStyle(Surface.meta)
                 }
             }
-            .foregroundStyle(Color.white)
-            .shadow(color: .black.opacity(0.4), radius: 4, y: 1)
+            // An opaque caption plate keeps ordinary card contrast over any photograph.
+            .padding(.horizontal, Theme.spacing("2", scheme))
+            .padding(.vertical, Theme.spacing("1", scheme))
+            .background(Surface.card, in: RoundedRectangle(cornerRadius: Theme.radius("sm", scheme), style: .continuous))
             .padding(WidgetGeometry.pad)
         }
     }

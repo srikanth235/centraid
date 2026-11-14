@@ -55,10 +55,14 @@
 	<string>Centraid reads the daily totals and workouts you choose from Apple Health into Health, in your own vault on this phone, and never writes anything back.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Centraid finds and reaches your laptop on this network to back up your vault and to bring it back.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Centraid listens while you dictate a question to Chat, and the words are made on this phone and never leave it.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Centraid backs up your camera roll into your own vault.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>Centraid copies your open reminders into Reminders, in your own vault on this phone.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Centraid turns your dictated question into words with the speech recognition built into this phone, which works without a connection.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>InstrumentSans_470Book.ttf</string>

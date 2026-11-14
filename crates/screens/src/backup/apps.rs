@@ -62,6 +62,13 @@ fn row(locale: Locale, app: &wire::AppHolding, acked: bool) -> wire::BackupAppRo
     let detail = detail(locale, app);
     let note = if app.left_out_items == 0 {
         String::new()
+    } else if app.left_out_bytes == 0 {
+        // A shared original's bytes can be attributed to another app. Do not
+        // describe that attribution as an actual zero-byte excluded video.
+        fill(
+            &words::backup_app_left_out_count(locale, app.left_out_items),
+            &[("count", &grouped(app.left_out_items))],
+        )
     } else {
         fill(
             &words::backup_app_left_out(locale, app.left_out_items),
@@ -136,9 +143,6 @@ fn what(locale: Locale, app: &wire::AppHolding) -> String {
         "money" => counted(words::backup_app_money(locale, n), n),
         "notes" => counted(words::backup_app_notes(locale, n), n),
         "people" => counted(words::backup_app_people(locale, n), n),
-        // WITH VIDEOS LEFT OUT the count is of photographs alone: the videos
-        // are the row's note.
-        "photos" if app.left_out_items > 0 => counted(words::backup_app_photos_only(locale, n), n),
         "photos" => counted(words::backup_app_photos(locale, n), n),
         // AN APP THIS SCREEN HAS NO UNIT FOR says its count bare.
         _ => grouped(n),

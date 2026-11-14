@@ -21,7 +21,7 @@ final class ChatDictation: ObservableObject {
     var available: Bool { recognizer?.supportsOnDeviceRecognition == true }
 
     /// Start listening; `onWords` gets everything heard so far each time it grows.
-    func start(onWords: @escaping (String) -> Void) {
+    func start(onWords: @escaping @MainActor @Sendable (String) -> Void) {
         guard available, phase != .listening else { return }
         SFSpeechRecognizer.requestAuthorization { [weak self] status in
             Task { @MainActor in
@@ -48,7 +48,7 @@ final class ChatDictation: ObservableObject {
         if phase == .listening { phase = .idle }
     }
 
-    private func listen(_ onWords: @escaping (String) -> Void) {
+    private func listen(_ onWords: @escaping @MainActor @Sendable (String) -> Void) {
         guard let recognizer, recognizer.isAvailable else { phase = .refused; return }
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.requiresOnDeviceRecognition = true
@@ -71,9 +71,12 @@ final class ChatDictation: ObservableObject {
         }
         phase = .listening
         task = recognizer.recognitionTask(with: request) { [weak self] result, error in
+            // Only immutable values cross from the recognizer callback to the UI actor.
+            let words = result?.bestTranscription.formattedString
+            let finished = error != nil || result?.isFinal == true
             Task { @MainActor in
-                if let result { onWords(result.bestTranscription.formattedString) }
-                if error != nil || result?.isFinal == true { self?.stop() }
+                if let words { onWords(words) }
+                if finished { self?.stop() }
             }
         }
     }

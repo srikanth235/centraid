@@ -225,14 +225,113 @@ fn held_at(answer: &RestoreAnswer) -> Vec<HeldAt> {
         .collect()
 }
 
-/// Hold what a restore brought back, then ask for the stores again: the shelf
-/// recorded each vault's index.
-fn adopt(env: &Env, answer: &RestoreAnswer, added: &mut usize) -> Ask {
-    let adopted = env.keeper.adopt_restored(&held_at(answer));
-    *added += adopted.value;
-    let mut ops = adopted.writes;
-    ops.extend(VaultSecrets::load_ops());
-    Ask::Secrets(ops)
+/// Persist and read back every restored key mapping before adoption can change
+/// the foreground and close the initiating words screen.
+#[derive(Default)]
+struct Adoption {
+    at: usize,
+    stage: AdoptionStage,
+    writes: Vec<wire::SecretOp>,
+}
+
+#[derive(Default)]
+enum AdoptionStage {
+    #[default]
+    Prepare,
+    Written,
+    ReadBack,
+    Commit,
+}
+
+impl Adoption {
+    fn step(
+        &mut self,
+        env: &Env,
+        answer: &RestoreAnswer,
+        reply: Option<Reply>,
+    ) -> Step<Result<usize, Refusal>> {
+        let mut reply = reply;
+        loop {
+            match self.stage {
+                AdoptionStage::Prepare => {
+                    let Some(vault) = answer.vaults.get(self.at) else {
+                        self.stage = AdoptionStage::Commit;
+                        continue;
+                    };
+                    let restored = HeldAt {
+                        path: vault.path.clone(),
+                        index: vault.index,
+                        own: vault.own.clone(),
+                    };
+                    let Some(writes) = env.keeper.prepare_restored(&restored) else {
+                        return Step::Done(Err(Refusal::StoreRefused));
+                    };
+                    self.writes = writes;
+                    if self.writes.is_empty() {
+                        self.at += 1;
+                        continue;
+                    }
+                    self.stage = AdoptionStage::Written;
+                    return Step::Ask(Ask::Secrets(self.writes.clone()));
+                }
+                AdoptionStage::Written => {
+                    let answers = secrets_of(reply.take());
+                    if answers.len() != self.writes.len() || answers.iter().any(|answer| !answer.ok)
+                    {
+                        return Step::Done(Err(Refusal::StoreRefused));
+                    }
+                    self.stage = AdoptionStage::ReadBack;
+                    return Step::Ask(Ask::Secrets(
+                        self.writes
+                            .iter()
+                            .map(|op| wire::SecretOp {
+                                store: op.store,
+                                op: wire::secret_op::Op::Get as i32,
+                                key: op.key.clone(),
+                                ..Default::default()
+                            })
+                            .collect(),
+                    ));
+                }
+                AdoptionStage::ReadBack => {
+                    let answers = secrets_of(reply.take());
+                    let confirmed = answers.len() == self.writes.len()
+                        && self.writes.iter().zip(&answers).all(|(written, read)| {
+                            read.ok
+                                && if written.value.is_empty() {
+                                    !read.found
+                                } else {
+                                    read.found && read.value == written.value
+                                }
+                        });
+                    if !confirmed {
+                        return Step::Done(Err(Refusal::StoreRefused));
+                    }
+                    self.at += 1;
+                    self.stage = AdoptionStage::Prepare;
+                }
+                AdoptionStage::Commit => {
+                    if answer.vaults.iter().any(|vault| {
+                        env.secrets
+                            .seed_for(&super::secrets::VaultKey {
+                                index: vault.index,
+                                own: vault.own.clone(),
+                            })
+                            .is_none()
+                    }) {
+                        return Step::Done(Err(Refusal::StoreRefused));
+                    }
+                    let adopted = env.keeper.adopt_restored(&held_at(answer));
+                    // Preparation and readback must cover the complete commit. A
+                    // foreground change cannot carry another unacknowledged batch.
+                    if !adopted.writes.is_empty() {
+                        return Step::Done(Err(Refusal::StoreRefused));
+                    }
+                    return Step::Done(Ok(adopted.value));
+                }
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -515,7 +614,7 @@ impl Job {
             answer: RestoreAnswer::default(),
             store: None,
             own: None,
-            added: 0,
+            adoption: Adoption::default(),
         })))
     }
 
@@ -532,6 +631,7 @@ impl Job {
             missing: Vec::new(),
             refusal: None,
             added: 0,
+            adoption: Adoption::default(),
         }))
     }
 
@@ -715,7 +815,7 @@ struct RestoreJob {
     answer: RestoreAnswer,
     store: Option<Store>,
     own: Option<KeepOwn>,
-    added: usize,
+    adoption: Adoption,
 }
 
 impl RestoreJob {
@@ -807,18 +907,22 @@ impl RestoreJob {
                         Step::Ask(ask) => return Step::Ask(ask),
                         Step::Done(Err(why)) => return done(Restored::Refused(why)),
                         Step::Done(Ok(())) => {
-                            let ask = adopt(env, &self.answer, &mut self.added);
                             self.stage = RestoreStage::Adopted;
-                            return Step::Ask(ask);
                         }
                     }
                 }
                 RestoreStage::Adopted => {
-                    return done(Restored::Done {
-                        answer: self.answer.clone(),
-                        added: self.added,
-                        missing: Vec::new(),
-                    });
+                    match self.adoption.step(env, &self.answer, reply.take()) {
+                        Step::Ask(ask) => return Step::Ask(ask),
+                        Step::Done(Err(why)) => return done(Restored::Refused(why)),
+                        Step::Done(Ok(added)) => {
+                            return done(Restored::Done {
+                                answer: self.answer.clone(),
+                                added,
+                                missing: Vec::new(),
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -827,9 +931,8 @@ impl RestoreJob {
     /// The vaults came back on entry `id`'s seed: tag and hold them.
     fn adopted_as(&mut self, env: &Env, id: &str) -> Step<Out> {
         self.answer = self.answer.tagged_own(id);
-        let ask = adopt(env, &self.answer, &mut self.added);
         self.stage = RestoreStage::Adopted;
-        Step::Ask(ask)
+        self.step(env, None)
     }
 }
 
@@ -850,6 +953,7 @@ enum HeldStage {
     Asked,
     Settled,
     Adopted,
+    Installing,
 }
 
 struct Held {
@@ -861,6 +965,7 @@ struct Held {
     missing: Vec<String>,
     refusal: Option<Restored>,
     added: usize,
+    adoption: Adoption,
 }
 
 impl Held {
@@ -894,7 +999,11 @@ impl Held {
                 // Between targets: ask the next, or finish.
                 HeldStage::Adopted => {
                     let Some(target) = self.targets.get(self.at) else {
-                        return self.finish();
+                        if self.answers.is_empty() {
+                            return self.finish();
+                        }
+                        self.stage = HeldStage::Installing;
+                        continue;
                     };
                     let request =
                         door::restore_request(&Source::Seed(target.seed.clone()), &self.payload);
@@ -927,11 +1036,10 @@ impl Held {
                                 }
                                 Some((id, _)) => {
                                     let tagged = answer.tagged_own(&id);
-                                    let ask = adopt(env, &tagged, &mut self.added);
                                     self.answers.push(tagged);
                                     self.at += 1;
                                     self.stage = HeldStage::Adopted;
-                                    return Step::Ask(ask);
+                                    continue;
                                 }
                             }
                         }
@@ -946,11 +1054,26 @@ impl Held {
                     self.stage = HeldStage::Adopted;
                 }
                 HeldStage::Settled => {
-                    let answer = self.answers.last().cloned().unwrap_or_default();
-                    let ask = adopt(env, &answer, &mut self.added);
+                    if !secrets_of(reply.take())
+                        .first()
+                        .is_some_and(|answer| answer.ok)
+                    {
+                        self.answers.pop();
+                        self.refuse_target(Restored::Refused(Refusal::StoreRefused));
+                    }
                     self.at += 1;
                     self.stage = HeldStage::Adopted;
-                    return Step::Ask(ask);
+                }
+                HeldStage::Installing => {
+                    let answer = RestoreAnswer::merged(self.answers.clone());
+                    match self.adoption.step(env, &answer, reply.take()) {
+                        Step::Ask(ask) => return Step::Ask(ask),
+                        Step::Done(Err(why)) => return done(Restored::Refused(why)),
+                        Step::Done(Ok(added)) => {
+                            self.added = added;
+                            return self.finish();
+                        }
+                    }
                 }
             }
         }
@@ -1167,3 +1290,7 @@ impl Runner {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "enrollment/adoption_tests.rs"]
+mod adoption_tests;

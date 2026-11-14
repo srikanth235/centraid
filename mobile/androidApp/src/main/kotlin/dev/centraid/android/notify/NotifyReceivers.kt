@@ -3,7 +3,6 @@ package dev.centraid.android.notify
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import androidx.core.app.NotificationManagerCompat
 import centraid.core.v1.NotificationAnswered
 import centraid.core.v1.NotificationVerb
 import dev.centraid.core.Screens
@@ -31,7 +30,6 @@ public class NotifyActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val id = intent.getStringExtra(Notify.EXTRA_ID) ?: return
         val verb = intent.getIntExtra(Notify.EXTRA_VERB, 0)
-        NotificationManagerCompat.from(context).cancel(id, 0)
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {

@@ -63,6 +63,49 @@ class NotifyPlanTest {
     }
 
     @Test
+    fun anImmediateOneIsPostedOnceAndNotSetAsAnAlarm() {
+        val receipt = item("r", immediate = true)
+        val first = NotifyPlan.reconcile(listOf(receipt), emptyList(), emptyList(), emptyList(), 1_000L)
+        assertEquals(listOf("r"), first.post.map { it.notification_id })
+        assertTrue(first.schedule.isEmpty())
+        val seen = NotifyPlan.rememberedImmediates(setOf("r"), emptySet(), setOf("r"))
+        val dismissed = NotifyPlan.reconcile(listOf(receipt.copy(title = "other")), emptyList(), emptyList(), emptyList(), 2_000L, seenImmediateIds = seen)
+        assertTrue("a dismissed receipt must not reappear when its words change", dismissed.post.isEmpty())
+        assertTrue(NotifyPlan.rememberedImmediates(emptySet(), seen, emptySet()).isEmpty())
+    }
+
+    @Test
+    fun anEmptySetCancelsEverythingHeld() {
+        val plan = NotifyPlan.reconcile(emptyList(), emptyList(), listOf("a", "b"), emptyList(), 1_000L)
+        assertEquals(listOf("a", "b"), plan.removePending)
+    }
+
+    @Test
+    fun aFiredCardSurvivesTheFutureSetBecomingEmptyInRetentionMode() {
+        val plan = NotifyPlan.reconcile(emptyList(), emptyList(), listOf("fired"), listOf("fired"), 1_000L, retainDelivered = true)
+        assertTrue(plan.removeShowing.isEmpty())
+        assertEquals(listOf("fired"), plan.removePending)
+    }
+
+    @Test
+    fun explicitWithdrawalDoesNotCancelTheEditedRecordsNextAlarm() {
+        val plan = NotifyPlan.reconcile(
+            listOf(item("edited", at = 2_000L)), emptyList(), listOf("edited"), listOf("edited", "other"),
+            1_000L, retainDelivered = true, explicitIds = listOf("edited"),
+        )
+        assertEquals(listOf("edited"), plan.schedule.map { it.notification_id })
+        assertEquals(listOf("edited"), plan.removeShowing)
+        assertTrue(plan.removePending.isEmpty())
+    }
+
+    @Test
+    fun legacyOrVaultSwitchWithdrawalIncludesCardsNoLongerInThePendingRecord() {
+        val plan = NotifyPlan.reconcile(listOf(item("new-vault")), emptyList(), listOf("old-pending"), listOf("old-delivered"), 1_000L)
+        assertEquals(listOf("old-pending"), plan.removePending)
+        assertEquals(listOf("old-delivered"), plan.removeShowing)
+    }
+
+    @Test
     fun exactWhileTheGrantIsHeldOrBelowApi31() {
         assertTrue(NotifyPlan.exact(sdk = 30, canScheduleExact = false))
         assertTrue(NotifyPlan.exact(sdk = 34, canScheduleExact = true))

@@ -82,7 +82,6 @@ catalog! {
     plain photos_deselect_day = ("Deselect {title}", "Deselect {title}");
     plain photos_done = ("Done", "Done");
     plain photos_download = ("Download", "Download");
-    plain photos_download_original = ("Download original", "Download original");
     plain photos_edit = ("Edit", "Edit");
     plain photos_editor_title = ("Crop and rotate", "Crop and rotate");
     plain photos_export_all = ("All photos and videos", "All photos and videos");
@@ -188,7 +187,6 @@ catalog! {
     plain photos_open_item = ("Open {label}", "Open {label}");
     plain photos_open_item_sub = ("Open {label}, {sub}", "Open {label}, {sub}");
     plain photos_open_settings = ("Open Settings", "Open Settings");
-    plain photos_original_downloading = ("Downloading the original…", "Downloading the original…");
     plain photos_original_downloading_now = ("Downloading the original now.", "Downloading the original now.");
     plain photos_original_downloading_percent = ("Downloading the original — {percent}%", "Downloading the original — {percent}%");
     plain photos_original_held_back = ("Original not downloaded — your download setting is holding it back.", "Original not downloaded — your download setting is holding it back.");

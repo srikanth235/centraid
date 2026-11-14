@@ -313,7 +313,7 @@ struct DocsPhotoPicker: UIViewControllerRepresentable {
                 return
             }
             // THE FILE IS LENT for the length of this callback: copy it before it returns.
-            provider.loadFileRepresentation(forTypeIdentifier: UTType.image.identifier) { url, _ in
+            provider.loadFileRepresentation(forTypeIdentifier: UTType.image.identifier) { [weak self] url, _ in
                 let copied = url.flatMap { DocsFileCopies.copy($0) }
                 Task { @MainActor [weak self] in self?.parent.onDone(copied, false) }
             }

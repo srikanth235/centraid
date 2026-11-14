@@ -2,7 +2,9 @@
 //! the rows behind the Backup screen's "In this backup", and the byte totals
 //! its line says.
 //!
-//! **Counts come from each app's own tables** (`centraid_vault::backup::holdings`);
+//! **Counts come from each app's visible rows** (`centraid_vault::backup::holdings`),
+//! even when several rows or apps refer to the same original. Byte ownership is
+//! separate: the original and its derivatives contribute bytes only once;
 //! which kinds are an app's is said here, once, against the catalogue's roster,
 //! so a tenth app with no kinds named reads as holding nothing rather than as
 //! a gap ([`kinds_of`]).
@@ -110,11 +112,6 @@ pub(crate) fn read(
 /// One app's files, as they stand.
 #[derive(Debug, Default, Clone, Copy)]
 struct Files {
-    /// Originals counted toward the backup, and of those the confirmed and
-    /// the waiting.
-    originals: u64,
-    originals_confirmed: u64,
-    waiting: u64,
     /// Bytes counted toward the backup, and of those the confirmed.
     bytes: u64,
     bytes_confirmed: u64,
@@ -135,21 +132,20 @@ impl Files {
             }
             Outcome::Confirmed => {
                 self.bytes_confirmed = self.bytes_confirmed.saturating_add(file.len);
-                if original {
-                    self.originals_confirmed += 1;
-                }
             }
-            Outcome::Waiting => {
-                if original {
-                    self.waiting += 1;
-                }
-            }
+            Outcome::Waiting => {}
         }
         self.bytes = self.bytes.saturating_add(file.len);
-        if original {
-            self.originals += 1;
-        }
     }
+}
+
+/// Visible item rows follow the actual original's coverage, not its byte owner.
+#[derive(Debug, Default, Clone, Copy)]
+struct Items {
+    total: u64,
+    confirmed: u64,
+    waiting: u64,
+    left_out: u64,
 }
 
 /// The pure fold: every app in the catalogue's order, its files and its share.
@@ -169,6 +165,23 @@ pub(crate) fn fold(
                 .or_default()
                 .add(file, *outcome),
             None => unowned.add(file, *outcome),
+        }
+    }
+    let coverage: BTreeMap<_, _> = files
+        .iter()
+        .zip(outcomes)
+        .map(|(file, outcome)| (file.h, *outcome))
+        .collect();
+    let mut visible: BTreeMap<&str, Items> = BTreeMap::new();
+    for (owner, originals) in &holdings.original_items {
+        let items = visible.entry(owner_app(*owner)).or_default();
+        for (hash, count) in originals {
+            items.total = items.total.saturating_add(*count);
+            match coverage.get(hash).copied().unwrap_or(Outcome::Waiting) {
+                Outcome::Confirmed => items.confirmed = items.confirmed.saturating_add(*count),
+                Outcome::Waiting => items.waiting = items.waiting.saturating_add(*count),
+                Outcome::LeftOut => items.left_out = items.left_out.saturating_add(*count),
+            }
         }
     }
     let rows = |kinds: &[&str], map: &BTreeMap<String, u64>| -> u64 {
@@ -209,10 +222,13 @@ pub(crate) fn fold(
         let mine = owned.get(app.id).copied().unwrap_or_default();
         let bytes = mine.bytes.saturating_add(shares[at]);
         let bytes_confirmed = mine.bytes_confirmed.saturating_add(shares_confirmed[at]);
-        // A FILE-OWNING APP COUNTS ITS FILES: what the backup holds of it,
-        // trashed items included until their purge, the videos left out not.
+        // Every visible row counts, including an excluded video. Byte attribution
+        // still keeps shared originals, derivatives and retained trash only once.
+        let visible = visible.get(app.id).copied().unwrap_or_default();
         let (items, items_confirmed) = if matches!(app.id, "photos" | "docs") {
-            (mine.originals, mine.originals_confirmed)
+            (visible.total, visible.confirmed)
+        } else if app.id == "people" {
+            (holdings.visible_people, 0)
         } else if app.id == "health" {
             (holdings.reading_days, 0)
         } else {
@@ -233,9 +249,9 @@ pub(crate) fn fold(
             items_confirmed,
             bytes,
             bytes_confirmed,
-            waiting: mine.waiting,
+            waiting: visible.waiting,
             edits_waiting: rows(kinds, &holdings.edited),
-            left_out_items: mine.left_out_items,
+            left_out_items: visible.left_out,
             left_out_bytes: mine.left_out_bytes,
         });
     }
@@ -345,6 +361,7 @@ mod tests {
                 ("document".to_owned(), 1),
             ]),
             edited: BTreeMap::from([("note".to_owned(), 2)]),
+            visible_people: 0,
             workouts: 4,
             reading_days: 9,
             readings: 0,
@@ -354,15 +371,22 @@ mod tests {
                 (video.h, FileOwner::Photo),
                 (document.h, FileOwner::Document),
             ]),
+            original_items: BTreeMap::from([
+                (
+                    FileOwner::Photo,
+                    BTreeMap::from([(photo.h, 1), (video.h, 1)]),
+                ),
+                (FileOwner::Document, BTreeMap::from([(document.h, 1)])),
+            ]),
             file_bytes: 550,
         };
         let held = fold(&holdings, &files, &outcomes, true);
-        // THE VIDEO IS LEFT OUT, of the totals and of Photos' count.
+        // The excluded video remains a visible item, but adds no backed-up bytes.
         assert_eq!((held.left_out_items, held.left_out_bytes), (1, 5_000));
         let photos = app(&held, "photos");
         assert_eq!(
             (photos.items, photos.items_confirmed, photos.waiting),
-            (1, 1, 0)
+            (2, 1, 0)
         );
         assert_eq!((photos.left_out_items, photos.left_out_bytes), (1, 5_000));
         // The pool is the vault file and the avatar, 600 bytes over 6 rows.
@@ -379,6 +403,117 @@ mod tests {
         assert_eq!(held.total_bytes, sum);
         assert_eq!(held.total_bytes, 1_100 + 400 + 600);
         assert_eq!(held.confirmed_bytes, 1_100 + 600);
+    }
+
+    #[test]
+    fn shared_original_coverage_counts_every_visible_reference_but_bytes_stay_unique() {
+        let video = file(7, 300_000, None, true);
+        let holdings = Holdings {
+            live: BTreeMap::from([("photo".to_owned(), 1), ("document".to_owned(), 2)]),
+            owners: BTreeMap::from([(video.h, FileOwner::Document)]),
+            original_items: BTreeMap::from([
+                (FileOwner::Photo, BTreeMap::from([(video.h, 1)])),
+                (FileOwner::Document, BTreeMap::from([(video.h, 2)])),
+            ]),
+            file_bytes: 900,
+            ..Holdings::default()
+        };
+        for outcome in [Outcome::Waiting, Outcome::Confirmed, Outcome::LeftOut] {
+            let held = fold(&holdings, std::slice::from_ref(&video), &[outcome], true);
+            let photos = app(&held, "photos");
+            let docs = app(&held, "docs");
+            assert_eq!((photos.items, docs.items), (1, 2));
+            assert_eq!(
+                photos.items_confirmed,
+                u64::from(outcome == Outcome::Confirmed)
+            );
+            assert_eq!(
+                docs.items_confirmed,
+                2 * u64::from(outcome == Outcome::Confirmed)
+            );
+            assert_eq!(photos.waiting, u64::from(outcome == Outcome::Waiting));
+            assert_eq!(docs.waiting, 2 * u64::from(outcome == Outcome::Waiting));
+            assert_eq!(
+                photos.left_out_items,
+                u64::from(outcome == Outcome::LeftOut)
+            );
+            assert_eq!(
+                docs.left_out_items,
+                2 * u64::from(outcome == Outcome::LeftOut)
+            );
+            assert_eq!(photos.left_out_bytes, 0, "byte attribution stays with Docs");
+            assert_eq!(held.left_out_items, u64::from(outcome == Outcome::LeftOut));
+            assert_eq!(
+                held.left_out_bytes,
+                300_000 * u64::from(outcome == Outcome::LeftOut)
+            );
+            assert_eq!(
+                held.total_bytes,
+                if outcome == Outcome::LeftOut {
+                    900
+                } else {
+                    300_900
+                }
+            );
+            assert_eq!(
+                held.apps.iter().map(|row| row.bytes).sum::<u64>(),
+                held.total_bytes
+            );
+
+            // Changing visible multiplicity does not move or duplicate any byte allocation.
+            let mut one_each = holdings.clone();
+            one_each
+                .original_items
+                .get_mut(&FileOwner::Document)
+                .expect("Docs refs")
+                .insert(video.h, 1);
+            let same_bytes = fold(&one_each, std::slice::from_ref(&video), &[outcome], true);
+            assert_eq!(same_bytes.total_bytes, held.total_bytes);
+            assert_eq!(same_bytes.confirmed_bytes, held.confirmed_bytes);
+            assert_eq!(
+                same_bytes
+                    .apps
+                    .iter()
+                    .map(|row| (row.bytes, row.bytes_confirmed, row.left_out_bytes))
+                    .collect::<Vec<_>>(),
+                held.apps
+                    .iter()
+                    .map(|row| (row.bytes, row.bytes_confirmed, row.left_out_bytes))
+                    .collect::<Vec<_>>()
+            );
+        }
+    }
+
+    #[test]
+    fn visible_people_changes_only_item_counts_not_raw_record_byte_attribution() {
+        let mut holdings = Holdings {
+            live: BTreeMap::from([("person".to_owned(), 4), ("note".to_owned(), 2)]),
+            edited: BTreeMap::from([("person".to_owned(), 2)]),
+            file_bytes: 600,
+            ..Default::default()
+        };
+        let before = fold(&holdings, &[], &[], true);
+        for visible in [0, 1, 2] {
+            holdings.visible_people = visible;
+            let after = fold(&holdings, &[], &[], true);
+            assert_eq!(app(&after, "people").items, visible);
+            assert_eq!(app(&after, "people").edits_waiting, 2);
+            assert_eq!(after.total_bytes, before.total_bytes);
+            assert_eq!(after.confirmed_bytes, before.confirmed_bytes);
+            assert_eq!(after.left_out_bytes, before.left_out_bytes);
+            assert_eq!(
+                after
+                    .apps
+                    .iter()
+                    .map(|a| (a.bytes, a.bytes_confirmed, a.left_out_bytes))
+                    .collect::<Vec<_>>(),
+                before
+                    .apps
+                    .iter()
+                    .map(|a| (a.bytes, a.bytes_confirmed, a.left_out_bytes))
+                    .collect::<Vec<_>>()
+            );
+        }
     }
 
     #[test]

@@ -132,10 +132,7 @@ pub fn kind_of(media_type: Option<&str>, title: Option<&str>) -> Kind {
 }
 
 fn is_text(media_type: Option<&str>) -> bool {
-    media_type
-        .unwrap_or_default()
-        .to_ascii_lowercase()
-        .starts_with("text/")
+    crate::bytes::base_media_type(media_type.unwrap_or_default()).starts_with("text/")
 }
 
 /// Which screen opens it. ANY `text/*` document reads — a `text/csv` too, as

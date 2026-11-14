@@ -50,6 +50,9 @@
 //! what the index is recorded under — only exists afterwards. The record that
 //! closes the window is [`files::Marker`], written into the new vault's own
 //! directory before the core touches it; see there.
+//! A restore writes the same marker while preparing each recovered file's index.
+//! Custody acknowledges and reads back that metadata before adoption can mount
+//! a vault or change foreground, so closing its words screen cannot discard it.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, Weak};
@@ -123,6 +126,14 @@ struct Surveyed {
     vault_id: String,
     name: String,
     marker: Option<Marker>,
+}
+
+/// A recovered file's identity and key metadata; never a seed or a mounted core.
+struct RestoredFile {
+    path: PathBuf,
+    vault_id: String,
+    name: String,
+    key: VaultKey,
 }
 
 #[derive(Default)]
@@ -736,11 +747,72 @@ impl Shelf {
 
     // ---- restore and re-key ----------------------------------------------
 
+    /// Prepare exactly one recovered vault without bringing it forward. A marker
+    /// preserves its index if the process stops before the secret batch completes.
+    /// Each item is acknowledged before the next so shared metadata stays current.
+    #[must_use]
+    pub fn prepare_restored(&self, restored: &Restored) -> Option<Vec<wire::SecretOp>> {
+        self.front.get()?;
+        let inner = self.lock();
+        let file = self.restored_file(&inner, restored)?;
+        self.secrets.seed_for(&file.key)?;
+        Marker {
+            index: file.key.index,
+            own: file.key.own.clone(),
+        }
+        .write(file.path.parent()?)
+        .ok()?;
+        Some(self.restored_writes(&file))
+    }
+
+    fn restored_file(&self, inner: &Inner, restored: &Restored) -> Option<RestoredFile> {
+        let path = PathBuf::from(&restored.path);
+        // A retry may name the already-open file: never open a second writer to it.
+        let named = inner
+            .holdings
+            .iter()
+            .find(|held| held.path == path)
+            .map(|held| (held.vault_id.clone(), held.name.clone()))
+            .or_else(|| {
+                self.open(&path, false, None, false).and_then(|(probe, _)| {
+                    let named = identify(&probe);
+                    shut(&probe);
+                    named
+                })
+            })?;
+        if named.0.is_empty() {
+            return None;
+        }
+        Some(RestoredFile {
+            path,
+            vault_id: named.0,
+            name: named.1,
+            key: VaultKey {
+                index: restored.index,
+                own: restored.own.clone(),
+            },
+        })
+    }
+
+    fn restored_writes(&self, file: &RestoredFile) -> Vec<wire::SecretOp> {
+        match &file.key.own {
+            Some(own) => {
+                let mut writes = VaultSecrets::bind_own_vault(&file.vault_id, own, file.key.index);
+                writes.extend(self.secrets.label_own_seed(own, &file.name));
+                writes
+            }
+            None => self
+                .secrets
+                .remember_vault_index(&file.vault_id, file.key.index),
+        }
+    }
+
     /// HOLD WHAT A RESTORE BROUGHT BACK, KEYED (#1047 E1, R-1047-E3).
     ///
     /// Each file is asked which vault it is — the id the shelf keys on is the one
     /// the file names — and that id is given the index the restore found it at.
-    /// The SEED must already be stored. A vault restored from its own words
+    /// The seed and prepared index metadata must already be acknowledged and
+    /// read back; unconfirmed writes return without mounting or switching. A vault restored from its own words
     /// opens with them (R-1047-E18), and its entry takes the vault's name for a
     /// later restore's list. Answers how many vaults were added.
     pub fn adopt_restored(&self, restored: &[Restored]) -> Effected<usize> {
@@ -748,34 +820,59 @@ impl Shelf {
             return Effected::new(0);
         }
         let mut inner = self.lock();
-        let mut writes = Vec::new();
+        let Some(files) = restored
+            .iter()
+            .map(|vault| self.restored_file(&inner, vault))
+            .collect::<Option<Vec<_>>>()
+        else {
+            return Effected::new(0);
+        };
+        if files
+            .iter()
+            .any(|file| self.secrets.seed_for(&file.key).is_none())
+        {
+            return Effected::new(0);
+        }
+        // Never switch foreground while an initiating screen still owes writes:
+        // Runtime closes that screen and discards its pending effects on a switch.
+        let writes: Vec<_> = files
+            .iter()
+            .flat_map(|file| self.restored_writes(file))
+            .filter(|op| !self.secrets.confirms_op(op))
+            .collect();
+        if !writes.is_empty() {
+            return Effected { value: 0, writes };
+        }
         let mut added = 0;
-        for vault in restored {
-            let path = PathBuf::from(&vault.path);
-            let Some(named) = self.open(&path, false, None, false).and_then(|(probe, _)| {
-                let named = identify(&probe);
-                shut(&probe);
-                named
-            }) else {
-                continue;
-            };
-            let (vault_id, name) = named;
-            if vault_id.is_empty() || inner.holdings.iter().any(|held| held.vault_id == vault_id) {
+        let mut rekey = false;
+        for file in files {
+            let RestoredFile {
+                path,
+                vault_id,
+                name,
+                key,
+            } = file;
+            if let Some(home) = path.parent() {
+                Marker::remove(home);
+            }
+            if let Some(holding) = inner
+                .holdings
+                .iter_mut()
+                .find(|held| held.vault_id == vault_id)
+            {
+                holding.marker = None;
+                if !holding.keyed {
+                    holding.key = Some(key);
+                    rekey = true;
+                }
                 continue;
             }
-            let key = VaultKey {
-                index: vault.index,
-                own: vault.own.clone(),
-            };
-            let Some((core, keyed)) = self.open_keyed_or_not(&path, Some(&key)) else {
+            let Some((core, keyed)) = self.open(&path, false, Some(&key), true) else {
                 continue;
             };
-            match &vault.own {
-                Some(own) => {
-                    writes.extend(VaultSecrets::bind_own_vault(&vault_id, own, vault.index));
-                    writes.extend(self.secrets.label_own_seed(own, &name));
-                }
-                None => writes.extend(self.secrets.remember_vault_index(&vault_id, vault.index)),
+            if !keyed {
+                shut(&core);
+                continue;
             }
             self.pump(&vault_id, &core);
             inner.holdings.push(Holding {
@@ -795,6 +892,9 @@ impl Shelf {
         }
         inner.restored |= added > 0;
         drop(inner);
+        if rekey {
+            self.rekey();
+        }
         if added > 0 {
             self.announce();
         }
@@ -1081,6 +1181,10 @@ impl Shelf {
 impl Keeper for Shelf {
     fn found(&self, own: Option<&str>, name: &str) -> Effected<Found> {
         Self::found(self, own, name)
+    }
+
+    fn prepare_restored(&self, restored: &Restored) -> Option<Vec<wire::SecretOp>> {
+        Self::prepare_restored(self, restored)
     }
 
     fn adopt_restored(&self, restored: &[Restored]) -> Effected<usize> {

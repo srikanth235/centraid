@@ -544,3 +544,36 @@ fn install(data_dir: &Path, bind: &str, dry_run: bool, label: String) -> anyhow:
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod cli_tests {
+    use super::{Cli, Command, PairingsAction};
+    use clap::{CommandFactory, Parser};
+
+    #[test]
+    fn the_cli_definition_is_consistent() {
+        Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn revoke_accepts_the_documented_data_directory_before_the_action() {
+        let cli = Cli::try_parse_from([
+            "centraid-gateway",
+            "pairings",
+            "--data-dir",
+            "test-gateway",
+            "revoke",
+            "abcdef12",
+        ])
+        .expect("the documented revoke invocation parses");
+        let Command::Pairings {
+            data_dir,
+            action: Some(PairingsAction::Revoke { id }),
+        } = cli.command
+        else {
+            panic!("the revoke action is selected");
+        };
+        assert_eq!(data_dir, std::path::PathBuf::from("test-gateway"));
+        assert_eq!(id, "abcdef12");
+    }
+}

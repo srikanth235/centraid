@@ -1,13 +1,17 @@
 //! THE NOTIFICATION SERVICE: reads the reminders the core holds, works out the
 //! set the phone should hold ([`super::desired`]), and speaks only when it
 //! changed. It also answers the buttons ([`super::answer`]) and holds the one
-//! receipt of the last button for ten minutes.
+//! receipt of the last button for ten minutes. Its identity, guarded history
+//! inverse and absolute deadline use the existing device secret store. A cold
+//! receiver waits for the store and foreground vault before reconciling; an
+//! accepted Undo is acknowledged there before its stable invocation runs.
 //!
 //! **Failure is not emptiness**: a read that failed keeps what the OS holds.
 //! The one exception is a vault switch, which always speaks: the old vault's
 //! notifications must not outlive it, so the new vault's set goes out, or an
 //! empty one when its reads failed.
 
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
@@ -17,25 +21,22 @@ use wire::screen_event::Kind as E;
 
 use super::answer::{self, Facts, Handled, Receipt};
 use super::desired::{self, Inputs};
+use super::receipt::{self, Metadata};
+use super::retention::Sources;
 use crate::catalog::load;
 use crate::kit::civil;
 use crate::kit::permission::AlertFacts;
 use crate::kit::read::{self, Reading};
 use crate::screen::{Ctx, Screen};
-use crate::strings::agenda_notify as words;
-use crate::strings::home;
+use crate::strings::{agenda_notify as words, home};
 
 /// The route name of the service.
 pub const NAME: &str = "reminders.notify";
 
 /// How many reminders one read looks at (the query's own ceiling).
 const TASK_LIMIT: u32 = 500;
-/// How many of the vault's next firings a read looks at: the index names the items, so the cost
-/// follows this and never the size of the vault (#1188, A5).
-/// One more than the cap, so the service can tell that more remain than it can hold.
+/// Indexed next firings include one overflow row for the paused notice.
 const ALERTS: i64 = desired::CAP as i64 + 1;
-/// How long a receipt is held.
-const RECEIPT_FOR: Duration = Duration::from_secs(10 * 60);
 /// How long before a set that could not be read is tried again.
 const RETRY: Duration = Duration::from_secs(10 * 60);
 
@@ -124,10 +125,23 @@ struct Loaded {
 struct Service {
     sync: Sync,
     receipt: Option<Receipt>,
-    /// What the phone last said about alerts (permission, exact timing, the channel): the one
-    /// state every editor's row and the Backup screen's line read (#1188, NA1).
     alerts: AlertFacts,
     facts: Facts,
+    store_loaded: bool,
+    stored: Option<Metadata>,
+    store_work: Option<StoreWork>,
+    clear_required: bool,
+    queued: VecDeque<wire::NotificationAnswered>,
+    delivered: BTreeMap<String, String>,
+    cancelled: BTreeSet<String>,
+    answer_inflight: Option<wire::NotificationAnswered>,
+    completed_answers: Vec<wire::NotificationAnswered>,
+}
+
+enum StoreWork {
+    Read,
+    Save(Box<Receipt>),
+    Clear,
 }
 
 fn midnight(day: &str) -> Option<String> {
@@ -181,23 +195,23 @@ impl Service {
     }
 
     /// Read, work out the set, and speak it when it changed.
-    fn recompute(&mut self, ctx: &Ctx, out: &mut Vec<wire::Effect>) {
-        let vault = ctx
-            .vaults()
-            .and_then(|vaults| vaults.foreground_id())
-            .unwrap_or_default();
-        if self.sync.is_new_vault(&vault) {
-            self.receipt = None;
-        }
-        let loaded = Self::read(ctx);
+    fn speak(
+        &mut self,
+        vault: &str,
+        loaded: Option<&Loaded>,
+        ctx: &Ctx,
+        out: &mut Vec<wire::Effect>,
+        sources: &mut Sources,
+    ) {
         let extra = ctx.alerts().notices();
         let extra_wanted = ctx.alerts().wanted();
         let mut wait = RETRY;
-        let reading = loaded.as_ref().map(|loaded| {
+        let reading = loaded.map(|loaded| {
             let inputs = Inputs {
-                vault_id: &vault,
+                vault_id: vault,
                 zone: ctx.zone(),
                 locale: ctx.locale(),
+                hour_cycle: ctx.hour_cycle(),
                 now_local: &loaded.now_local,
                 tasks: &loaded.tasks,
                 projects: &loaded.projects,
@@ -221,22 +235,44 @@ impl Service {
                 live: desired::live(&inputs),
             }
         });
-        if let Some(loaded) = &loaded {
-            self.facts = Facts::of(
-                &loaded.today,
-                &loaded.now_local,
-                &loaded.tasks,
-                &loaded.events,
-            );
-        }
-        if let Some(Spoken { mut all, live }) = self.sync.next(&vault, reading) {
-            // Only the member's own reminders and events ask by themselves; another producer's
-            // notices wait for its screen to call `ask`.
+        let clear_departed_vault = self.sync.vault.is_some() && self.sync.is_new_vault(vault);
+        let next = self.sync.next(vault, reading);
+        let cancellations = if clear_departed_vault {
+            self.delivered.clear();
+            self.cancelled.clear();
+            BTreeSet::new()
+        } else {
+            ctx.now_ms().map_or_else(BTreeSet::new, |now| {
+                // Extra producers own their continued eligibility; the paused card remains
+                // until acted on/dismissed in this vault, not until the future window moves.
+                let paused = format!("paused|{vault}");
+                let delivered = self
+                    .delivered
+                    .iter()
+                    .filter(|(id, _)| {
+                        !extra_wanted.contains(id)
+                            && !extra.iter().any(|notice| notice.id == id.as_str())
+                            && id.as_str() != paused
+                    })
+                    .map(|(id, fingerprint)| (id.clone(), fingerprint.clone()))
+                    .collect();
+                sources.cancellations(ctx, vault, &delivered, self.receipt.as_ref(), now)
+            })
+        };
+        let fresh_cancellations: Vec<String> =
+            cancellations.difference(&self.cancelled).cloned().collect();
+        let next = next.or_else(|| {
+            (!fresh_cancellations.is_empty() || !self.completed_answers.is_empty())
+                .then(|| self.sync.last.clone())
+                .flatten()
+        });
+        if let Some(Spoken { mut all, live }) = next {
             let own = all
                 .iter()
                 .any(|held| !extra.iter().any(|notice| notice.id == held.notification_id));
             let ask_permission = ctx.alerts().take_ask() || own;
             all.extend(self.receipt.iter().map(|held| held.notification.clone()));
+            self.cancelled.extend(fresh_cancellations.iter().cloned());
             out.push(wire::Effect {
                 kind: Some(wire::effect::Kind::ScheduleNotifications(
                     wire::ScheduleNotifications {
@@ -246,6 +282,9 @@ impl Service {
                         channel_name: words::channel_reminders(ctx.locale()),
                         live_ids: live,
                         backup_channel_name: home::band_backup(ctx.locale()),
+                        retain_delivered: !clear_departed_vault,
+                        cancel_delivered_ids: fresh_cancellations,
+                        completed_answers: std::mem::take(&mut self.completed_answers),
                     },
                 )),
             });
@@ -253,62 +292,275 @@ impl Service {
         ctx.start_timer(REFRESH, wait);
     }
 
-    fn answered(
+    fn store(&mut self, work: StoreWork, out: &mut Vec<wire::Effect>) {
+        let (work, op, value) = match work {
+            StoreWork::Read => (StoreWork::Read, wire::secret_op::Op::Get, Vec::new()),
+            StoreWork::Save(receipt) => match receipt.meta.encode() {
+                Some(bytes) => (StoreWork::Save(receipt), wire::secret_op::Op::Set, bytes),
+                None => {
+                    self.receipt = None;
+                    (StoreWork::Clear, wire::secret_op::Op::Delete, Vec::new())
+                }
+            },
+            StoreWork::Clear => (StoreWork::Clear, wire::secret_op::Op::Delete, Vec::new()),
+        };
+        if matches!(work, StoreWork::Clear) {
+            self.clear_required = true;
+        }
+        self.store_work = Some(work);
+        out.push(receipt::effect(op, value));
+    }
+
+    fn complete_answer(&mut self) {
+        if let Some(answered) = self.answer_inflight.take() {
+            self.completed_answers.push(answered);
+        }
+    }
+
+    fn stored_answer(
         &mut self,
-        answered: &wire::NotificationAnswered,
+        answer: wire::SecretBatched,
         ctx: &Ctx,
         out: &mut Vec<wire::Effect>,
     ) {
-        let vault = ctx
-            .vaults()
-            .and_then(|vaults| vaults.foreground_id())
-            .unwrap_or_default();
-        // THE FACTS A BUTTON NEEDS ARE READ NOW: the app may have been launched for it.
-        if let Some(loaded) = Self::read(ctx) {
-            self.facts = Facts::of(
-                &loaded.today,
-                &loaded.now_local,
-                &loaded.tasks,
-                &loaded.events,
-            );
+        let Some(work) = self.store_work.take() else {
+            return;
+        };
+        let result = (answer.answers.len() == 1)
+            .then(|| &answer.answers[0])
+            .filter(|a| a.ok);
+        match work {
+            StoreWork::Read => {
+                let Some(result) = result else {
+                    ctx.start_timer(REFRESH, RETRY);
+                    return;
+                };
+                self.store_loaded = true;
+                self.stored = result
+                    .found
+                    .then(|| Metadata::decode(&result.value))
+                    .flatten();
+                if result.found && self.stored.is_none() {
+                    self.store(StoreWork::Clear, out);
+                    return;
+                }
+            }
+            StoreWork::Save(receipt) => {
+                if result.is_none() {
+                    // A commit without an acknowledged durable receipt must never offer Undo.
+                    // Delete a possibly partial write before any scheduling can advertise it.
+                    self.receipt = None;
+                    self.store(StoreWork::Clear, out);
+                    return;
+                }
+                let undo_intent = receipt.meta.undo_requested_at.is_some();
+                self.stored = Some(receipt.meta.clone());
+                self.receipt = Some(*receipt);
+                self.sync.invalidate();
+                if !undo_intent {
+                    self.complete_answer();
+                }
+            }
+            StoreWork::Clear => {
+                if result.is_none() {
+                    ctx.start_timer(REFRESH, RETRY);
+                    return;
+                }
+                self.clear_required = false;
+                self.stored = None;
+                self.receipt = None;
+                self.sync.invalidate();
+                ctx.cancel_timer(RECEIPT_TIMER);
+                self.complete_answer();
+            }
         }
-        // ANOTHER PRODUCER'S NOTICE opens where it says; it has no buttons to run.
-        if let Some(notice) = ctx
-            .alerts()
-            .notices()
-            .into_iter()
-            .find(|notice| notice.id == answered.notification_id)
-        {
-            out.push(wire::Effect {
-                kind: Some(wire::effect::Kind::OpenRoute(wire::OpenRoute {
-                    route: Some(notice.opens),
-                })),
-            });
+        self.advance(ctx, out);
+    }
+
+    fn advance(&mut self, ctx: &Ctx, out: &mut Vec<wire::Effect>) {
+        let foreground = match ctx.vaults() {
+            Some(vaults) => vaults.foreground_id(),
+            None => Some(String::new()),
+        };
+        // A KNOWN VAULT SWITCH OR REMOVAL CLEARS THE OLD SET even while storage is blocked.
+        // Bootstrap has no previous vault: its first set still waits for the queued cold action.
+        // Hosts without a shelf retain their existing empty-string namespace.
+        let namespace = foreground.as_deref().unwrap_or_default();
+        if self.sync.vault.as_ref().is_some_and(|old| old != namespace) {
+            self.clear_required |= self.stored.is_some()
+                || self.receipt.is_some()
+                || matches!(self.store_work, Some(StoreWork::Save(_)));
+            self.receipt = None;
+            self.sync.invalidate();
+            self.speak(namespace, None, ctx, out, &mut Sources::default());
+        }
+        if self.store_work.is_some() {
             return;
         }
-        match answer::handle(ctx, &vault, &self.facts, self.receipt.as_ref(), answered) {
-            Handled::Ignored => return,
-            Handled::Open(route) => {
-                out.push(wire::Effect {
-                    kind: Some(wire::effect::Kind::OpenRoute(wire::OpenRoute {
-                        route: Some(*route),
-                    })),
-                });
+        if !self.store_loaded {
+            self.store(StoreWork::Read, out);
+            return;
+        }
+        if self.clear_required {
+            self.store(StoreWork::Clear, out);
+            return;
+        }
+        // A cold receiver can arrive before the shelf has mounted its foreground vault.
+        let Some(vault) = foreground else {
+            return;
+        };
+        let Some(now) = ctx.now_ms() else {
+            return;
+        };
+        if self
+            .stored
+            .as_ref()
+            .is_some_and(|meta| !meta.live(&vault, now))
+        {
+            self.store(StoreWork::Clear, out);
+            return;
+        }
+        let Some(loaded) = Self::read(ctx) else {
+            ctx.start_timer(REFRESH, RETRY);
+            return;
+        };
+        self.facts = Facts::of(
+            &loaded.today,
+            &loaded.now_local,
+            &loaded.tasks,
+            &loaded.events,
+        );
+        let mut sources = Sources::of(&loaded.tasks, &loaded.events);
+        if self.receipt.is_none()
+            && let Some(meta) = self.stored.clone()
+        {
+            match Receipt::restored(ctx, meta) {
+                Ok(Some(receipt)) => self.receipt = Some(receipt),
+                Ok(None) => {
+                    self.store(StoreWork::Clear, out);
+                    return;
+                }
+                Err(receipt::ReadFailed) => {
+                    ctx.start_timer(REFRESH, RETRY);
+                    return;
+                }
+            }
+        }
+        if self
+            .receipt
+            .as_ref()
+            .is_some_and(|receipt| !receipt.meta.live(&vault, now))
+        {
+            self.receipt = None;
+            self.sync.invalidate();
+        }
+        if let Some(receipt) = &self.receipt {
+            if receipt.meta.undo_requested_at.is_some() {
+                // This acknowledged gesture may have committed before the last process closed.
+                // Its persisted invoke key makes retry a replay rather than a second inverse.
+                if receipt.undo(ctx).is_err() {
+                    // A failed history read is not permission to discard an accepted gesture.
+                    ctx.start_timer(REFRESH, RETRY);
+                    return;
+                }
+                self.store(StoreWork::Clear, out);
                 return;
             }
-            Handled::Committed(held) => {
-                ctx.start_timer(RECEIPT_TIMER, RECEIPT_FOR);
-                self.receipt = Some(*held);
-            }
-            Handled::Undone => {
-                ctx.cancel_timer(RECEIPT_TIMER);
-                self.receipt = None;
-            }
-            Handled::Refused => {}
+            let remaining = u64::try_from(receipt.meta.expires - now).unwrap_or(0);
+            ctx.start_timer(RECEIPT_TIMER, Duration::from_millis(remaining));
         }
-        // THE RECEIPT (or its absence) RIDES IN THE NEXT SET, even when the set did not change.
-        self.sync.invalidate();
-        self.recompute(ctx, out);
+        if let Some(answered) = self.queued.front() {
+            let already_stored = self.receipt.as_ref().is_some_and(|held| {
+                !answered.press_id.is_empty() && held.meta.press_id == answered.press_id
+                    && held.meta.verb == answered.verb
+                    && matches!(answer::parse(&answered.notification_id), Some(answer::Target::Task { vault: target_vault, task_id })
+                        if target_vault == held.meta.vault && task_id == held.task_id)
+            });
+            if already_stored {
+                self.answer_inflight = self.queued.pop_front();
+                self.complete_answer();
+                self.sync.invalidate();
+                self.advance(ctx, out);
+                return;
+            }
+            if let Some(notice) = ctx
+                .alerts()
+                .notices()
+                .into_iter()
+                .find(|notice| notice.id == answered.notification_id)
+            {
+                let answered = self.queued.pop_front().expect("queued producer answer");
+                self.answer_inflight = Some(answered);
+                out.push(wire::Effect {
+                    kind: Some(wire::effect::Kind::OpenRoute(wire::OpenRoute {
+                        route: Some(notice.opens),
+                    })),
+                });
+                self.complete_answer();
+                self.sync.invalidate();
+                self.advance(ctx, out);
+                return;
+            }
+            if sources
+                .augment_facts(ctx, &vault, &mut self.facts, answered)
+                .is_err()
+            {
+                ctx.start_timer(REFRESH, RETRY);
+                return;
+            }
+            if answer::replaces(&vault, &self.facts, answered) && self.stored.is_some() {
+                self.store(StoreWork::Clear, out);
+                return;
+            }
+            let answered = self
+                .queued
+                .pop_front()
+                .expect("the queued answer is present");
+            self.answer_inflight = Some(answered.clone());
+            match answer::handle(ctx, &vault, &self.facts, self.receipt.as_ref(), &answered) {
+                Handled::Committed(receipt) => {
+                    self.receipt = None;
+                    self.store(StoreWork::Save(receipt), out);
+                    return;
+                }
+                Handled::Undo(receipt) => {
+                    self.store(StoreWork::Save(receipt), out);
+                    return;
+                }
+                Handled::Open(route) => {
+                    out.push(wire::Effect {
+                        kind: Some(wire::effect::Kind::OpenRoute(wire::OpenRoute {
+                            route: Some(*route),
+                        })),
+                    });
+                    self.complete_answer();
+                }
+                Handled::Ignored | Handled::Refused => self.complete_answer(),
+            }
+            self.sync.invalidate();
+            if !self.queued.is_empty() {
+                self.advance(ctx, out);
+                return;
+            }
+        }
+        self.speak(&vault, Some(&loaded), ctx, out, &mut sources);
+    }
+
+    fn enqueue(
+        &mut self,
+        answered: wire::NotificationAnswered,
+        ctx: &Ctx,
+        out: &mut Vec<wire::Effect>,
+    ) {
+        // The upstream native outbox identifies presses independently, even on one card.
+        // Deduplicate only the same full press; distinct verbs/press_ids retain FIFO order.
+        if self.queued.len() < desired::CAP + desired::RECEIPTS
+            && self.answer_inflight.as_ref() != Some(&answered)
+            && !self.queued.iter().any(|queued| queued == &answered)
+        {
+            self.queued.push_back(answered);
+        }
+        self.advance(ctx, out);
     }
 }
 
@@ -317,47 +569,68 @@ impl Screen for Service {
         let mut out = Vec::new();
         match event.kind {
             Some(
-                E::Appeared(_)
-                | E::DataChanged(_)
-                | E::EnvironmentChanged(_)
-                | E::ScreenOpened(_)
-                | E::Lifecycle(wire::AppLifecycle { foreground: true }),
-            ) => self.recompute(ctx, &mut out),
-            Some(E::Signalled(_)) => {
-                // A producer's offer changed: the set is spoken again.
+                E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_) | E::ScreenOpened(_),
+            ) => {
+                self.cancelled.clear();
+                self.advance(ctx, &mut out);
+            }
+            Some(E::Lifecycle(wire::AppLifecycle { foreground: true })) => {
+                // Settings can change a grant without changing a task. Reconcile the platform
+                // again on return, including a first prompt that could not run in the background.
                 self.sync.invalidate();
-                self.recompute(ctx, &mut out);
+                self.cancelled.clear();
+                self.advance(ctx, &mut out);
+            }
+            Some(E::Signalled(_)) => {
+                self.sync.invalidate();
+                self.advance(ctx, &mut out);
             }
             Some(E::ShellFact(fact)) => match fact.fact {
                 Some(wire::shell_fact::Fact::NotificationAnswered(answered)) => {
-                    self.answered(&answered, ctx, &mut out);
+                    self.enqueue(answered, ctx, &mut out);
                 }
                 Some(wire::shell_fact::Fact::Window(_) | wire::shell_fact::Fact::Held(_)) => {
-                    self.recompute(ctx, &mut out);
+                    self.advance(ctx, &mut out);
                 }
                 _ => {}
             },
             Some(E::TimerFired(fired)) => match fired.timer.as_str() {
-                REFRESH => self.recompute(ctx, &mut out),
+                REFRESH => {
+                    self.cancelled.clear();
+                    self.advance(ctx, &mut out);
+                }
                 RECEIPT_TIMER => {
-                    if self.receipt.take().is_some() {
-                        self.sync.invalidate();
-                        self.recompute(ctx, &mut out);
-                    }
+                    self.advance(ctx, &mut out);
                 }
                 _ => {}
             },
-            Some(E::EffectResult(result)) => {
-                if let Some(wire::effect_result::Outcome::NotificationsScheduled(scheduled)) =
-                    result.outcome
-                {
-                    // DENIED IS QUIET: nothing is scheduled; the state is kept for the rows that say it.
+            Some(E::EffectResult(result)) => match result.outcome {
+                Some(wire::effect_result::Outcome::NotificationsScheduled(scheduled)) => {
                     self.alerts = AlertFacts::of(&scheduled);
                     if ctx.alerts().set(self.alerts.clone()) {
                         ctx.redraw_all();
                     }
+                    let delivered: BTreeMap<String, String> = scheduled
+                        .delivered
+                        .into_iter()
+                        .map(|held| (held.notification_id, held.source_fingerprint))
+                        .collect();
+                    if delivered != self.delivered {
+                        self.delivered = delivered;
+                        self.cancelled.retain(|id| self.delivered.contains_key(id));
+                        // One changed actual inventory can require one explicit cancellation.
+                        // Identical replies never drive another reconcile loop.
+                        self.advance(ctx, &mut out);
+                    }
                 }
-            }
+                Some(wire::effect_result::Outcome::Secrets(answer)) => {
+                    self.stored_answer(answer, ctx, &mut out);
+                }
+                Some(wire::effect_result::Outcome::Failed(_)) if self.store_work.is_some() => {
+                    self.stored_answer(wire::SecretBatched::default(), ctx, &mut out);
+                }
+                _ => {}
+            },
             _ => {}
         }
         out

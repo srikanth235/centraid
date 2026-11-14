@@ -876,7 +876,8 @@ impl Lightbox {
             Pending::Export { save, precision } => {
                 let sentence = export_sentence(locale, result, save, precision);
                 match sentence {
-                    Ok(receipt) => self.receipt(receipt),
+                    Ok(Some(receipt)) => self.receipt(receipt),
+                    Ok(None) => {}
                     Err(sentence) => self.refuse(sentence),
                 }
             }
@@ -914,7 +915,7 @@ impl Lightbox {
         let offers_fetch = !cell.original_held && !cell.content_id.is_empty() && !self.fetching;
         let video = tile.kind == wire::photo_tile::Kind::Video as i32;
         let status_line = |playing: bool| match held {
-            Held::Fetching => words::photos_original_downloading(locale),
+            Held::Fetching => crate::strings::shared::original_downloading(locale),
             Held::WithheldByRule => words::photos_original_held_back(locale),
             Held::Absent => words::photos_nothing_on_phone(locale),
             _ if video && !playing && !cell.original_held => words::photos_video_still_only(locale),
@@ -1124,23 +1125,24 @@ impl Lightbox {
     }
 }
 
-/// The sentence a finished export is owed: a receipt stated every time, `none`
-/// included (silence reads as safety), or why nothing went.
+/// A completed handoff says what left; a chooser cancellation stays quiet.
+/// A refused export still says why nothing went.
 fn export_sentence(
     locale: Locale,
     result: &wire::EffectResult,
     save: bool,
     precision: Precision,
-) -> Result<String, String> {
+) -> Result<Option<String>, String> {
     use wire::effect_result::Outcome as O;
     use wire::originals_exported::Status;
     let Some(O::OriginalsExported(exported)) = &result.outcome else {
         return Err(words::photos_error_export_failed_retry(locale));
     };
     match Status::try_from(exported.status).unwrap_or(Status::Unspecified) {
-        Status::Done if save => Ok(words::photos_export_saved(locale)),
-        Status::Done if precision == Precision::Exact => Ok(words::photos_sent_exact(locale)),
-        Status::Done => Ok(words::photos_sent_none(locale)),
+        Status::Done if exported.handed == 0 => Ok(None),
+        Status::Done if save => Ok(Some(words::photos_export_saved(locale))),
+        Status::Done if precision == Precision::Exact => Ok(Some(words::photos_sent_exact(locale))),
+        Status::Done => Ok(Some(words::photos_sent_none(locale))),
         Status::NoneHere => Err(words::photos_send_original_not_here(locale)),
         Status::LocationNotRemovable => Err(words::photos_send_not_removable(locale)),
         Status::Failed | Status::Unspecified => {
@@ -1309,10 +1311,11 @@ impl Screen for Lightbox {
         }
         let locale = ctx.locale();
         match event.kind {
-            Some(E::Appeared(_) | E::EnvironmentChanged(_)) => {
+            Some(E::Appeared(_)) => {
                 let id = self.photo_id.clone();
                 return self.open(ctx, &id);
             }
+            Some(E::EnvironmentChanged(_)) => return self.reload(ctx),
             Some(E::DataChanged(_)) => {
                 self.albums.reload(ctx);
                 // THE EDITOR ABOVE CLOSED: its line and Undo are drawn here.

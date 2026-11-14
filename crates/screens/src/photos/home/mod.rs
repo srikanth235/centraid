@@ -851,6 +851,22 @@ impl Home {
                 route: None,
             });
         }
+        let export = crate::kit::export::entry(locale, crate::photos::EXPORT);
+        rows.push(wire::PhotosMoreRow {
+            key: export.key.to_owned(),
+            label: export.label,
+            meta: String::new(),
+            icon_key: export.icon_key.to_owned(),
+            route: Some(export.route),
+        });
+        let trash = crate::strings::shared::trash_entry(locale);
+        rows.push(wire::PhotosMoreRow {
+            key: "trash".to_owned(),
+            label: trash.clone(),
+            meta: crate::strings::shared::trash_entry_meta(locale),
+            icon_key: "Trash".to_owned(),
+            route: Some(routes::shelf(wire::PhotosShelfKind::Trash, "", &trash)),
+        });
         wire::PhotosMoreSheet {
             title: words::photos_more_title(locale),
             foot: words::photos_more_foot(locale),

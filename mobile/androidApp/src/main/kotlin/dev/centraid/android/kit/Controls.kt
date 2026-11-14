@@ -322,15 +322,15 @@ public fun KitSpinner(label: String = "", modifier: Modifier = Modifier) {
 /**
  * THE SPINNER ON THE PHOTO STAGE: [KitSpinner]'s ring and label in the stage's
  * own inks, `onStage` for the ring and `onStageSoft` for the label, so a
- * download under a photograph reads on its dark ground.
+ * download under a photograph reads on its dark ground. The light viewer uses page inks.
  */
 @Composable
-public fun StageSpinner(label: String = "", modifier: Modifier = Modifier) {
-    SpinnerRow(label, modifier, ring = "onStage", words = "onStageSoft")
+public fun StageSpinner(label: String = "", modifier: Modifier = Modifier, light: Boolean = false) {
+    SpinnerRow(label, modifier, ring = "onStage", words = "onStageSoft", light = light)
 }
 
 @Composable
-private fun SpinnerRow(label: String, modifier: Modifier, ring: String, words: String) {
+private fun SpinnerRow(label: String, modifier: Modifier, ring: String, words: String, light: Boolean = false) {
     Row(
         modifier.clearAndSetSemantics { if (label.isNotEmpty()) contentDescription = label },
         verticalAlignment = Alignment.CenterVertically,
@@ -339,11 +339,11 @@ private fun SpinnerRow(label: String, modifier: Modifier, ring: String, words: S
         CircularProgressIndicator(
             modifier = Modifier.size(20.dp),
             strokeWidth = 2.dp,
-            color = centraidColor(ring),
+            color = if (light) Surface.ink else centraidColor(ring),
             trackColor = androidx.compose.ui.graphics.Color.Transparent,
         )
         if (label.isNotEmpty()) {
-            Text(label, style = centraidType("small"), color = centraidColor(words))
+            Text(label, style = centraidType("small"), color = if (light) Surface.meta else centraidColor(words))
         }
     }
 }
@@ -440,9 +440,10 @@ public fun StageKey(
  * stage's ground, no plate, a 44dp target. [KitLink] is `link` ink, which is
  * paper's and does not read over a photograph; this is its stage twin, as
  * [StageKey] is [IconKey]'s.
+ * The light viewer passes [light] to use the page's ink.
  */
 @Composable
-public fun StageVerb(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+public fun StageVerb(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, light: Boolean = false) {
     Box(
         modifier
             .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
@@ -452,6 +453,6 @@ public fun StageVerb(label: String, onClick: () -> Unit, modifier: Modifier = Mo
             .semantics { role = Role.Button },
         contentAlignment = Alignment.Center,
     ) {
-        Text(text = label, color = centraidColor("onStage"), style = centraidType("smallStrong"))
+        Text(text = label, color = if (light) Surface.ink else centraidColor("onStage"), style = centraidType("smallStrong"))
     }
 }

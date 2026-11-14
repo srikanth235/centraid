@@ -1755,6 +1755,56 @@ fn with_apps(apps: Vec<wire::AppHolding>) -> wire::BackupStatusResponse {
 }
 
 #[test]
+fn a_new_record_after_the_acknowledged_snapshot_never_reads_all_backed_up() {
+    // A newly committed Note changes the records, not the already-confirmed file inventory.
+    let mut apps = eight_apps();
+    apps[5].items += 1;
+    apps[5].edits_waiting = 1;
+    let waiting = with_apps(apps);
+    assert_eq!(waiting.content_total, waiting.content_confirmed);
+    assert_eq!(waiting.total_bytes, waiting.confirmed_bytes);
+    let mut page = Page::open(waiting.clone());
+    let data = page.data();
+    let line = data.line.expect("the same backup line used by Home");
+    assert_eq!(
+        line.sentence,
+        "1 change not backed up. Last backup 2 minutes ago."
+    );
+    assert_eq!(line.detail, "1 edit waiting");
+    assert_eq!(line.status, line.sentence);
+    assert!(!line.accessibility_label.contains("All 5.0 GB"));
+    assert_eq!(line.tone, Tone::Attention as i32);
+    assert_eq!(
+        data.apps
+            .iter()
+            .find(|app| app.app_id == "notes")
+            .expect("Notes")
+            .status,
+        "1 edit waiting"
+    );
+
+    let mut several = waiting.clone();
+    several.apps[0].edits_waiting = 2;
+    let line = line::line(EN, Some(&reading(&several)), false, false, NOW);
+    assert_eq!(
+        line.sentence,
+        "3 changes not backed up. Last backup 2 minutes ago."
+    );
+    assert_eq!(line.detail, "3 edits waiting");
+
+    // Only an actual later acknowledgement clears the already-wired record backlog.
+    let mut acknowledged = waiting;
+    acknowledged.apps[5].edits_waiting = 0;
+    acknowledged.acked_at_ms = Some(NOW);
+    acknowledged.last_snapshot_ms = Some(NOW);
+    page.set_status(acknowledged);
+    page.send(E::DataChanged(Default::default()));
+    let line = page.data().line.expect("the refreshed backup line");
+    assert_eq!(line.sentence, "Backed up just now.");
+    assert_eq!(line.detail, "All 5.0 GB from 8 apps is backed up.");
+}
+
+#[test]
 fn the_line_totals_every_app_in_bytes() {
     let backed = Page::open(with_apps(eight_apps())).data();
     let line = backed.line.expect("a line");
@@ -1918,17 +1968,47 @@ fn videos_left_out_are_the_photos_rows_note() {
     apps[7] = wire::AppHolding {
         left_out_items: 37,
         left_out_bytes: 8_400 * MB,
-        ..holding("photos", 1_203, 4 * GB)
+        ..holding("photos", 1_240, 4 * GB)
     };
     let data = Page::open(with_apps(apps)).data();
     let photos = &data.apps[0];
-    assert_eq!(photos.detail, "1,203 photos · 4.0 GB");
+    assert_eq!(photos.detail, "1,240 photos and videos · 4.0 GB");
     assert_eq!(photos.note, "37 videos, 8.4 GB, left out");
     assert_eq!(photos.status, "Backed up");
     assert_eq!(
         photos.accessibility_label,
-        "Photos. 1,203 photos · 4.0 GB. 37 videos, 8.4 GB, left out. Backed up"
+        "Photos. 1,240 photos and videos · 4.0 GB. 37 videos, 8.4 GB, left out. Backed up"
     );
+}
+
+#[test]
+fn visible_excluded_references_without_attributed_bytes_say_only_the_count() {
+    let mut apps = eight_apps();
+    apps[7] = wire::AppHolding {
+        left_out_items: 1,
+        left_out_bytes: 0,
+        ..holding("photos", 3, 81_000)
+    };
+    apps[1] = wire::AppHolding {
+        left_out_items: 2,
+        left_out_bytes: 100_000,
+        ..holding("docs", 2, 2_100_000)
+    };
+    let data = Page::open(with_apps(apps)).data();
+    let photos = data
+        .apps
+        .iter()
+        .find(|row| row.app_id == "photos")
+        .expect("Photos row");
+    let docs = data
+        .apps
+        .iter()
+        .find(|row| row.app_id == "docs")
+        .expect("Docs row");
+    assert_eq!(photos.detail, "3 photos and videos · 81 KB");
+    assert_eq!(photos.note, "1 video left out");
+    assert!(!photos.accessibility_label.contains("0 B"));
+    assert_eq!(docs.note, "2 videos, 100 KB, left out");
 }
 
 // ---- THE SETTINGS-STYLE PAGE (#1173) ----

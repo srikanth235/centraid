@@ -20,10 +20,9 @@
 appId: dev.centraid.Centraid
 name: onboarding
 ---
-# EVERY GRANT DENIED. Maestro grants all by default, and a made vault asks for
-# what the phone holds — the camera roll, contacts, the calendar (R-ONBOARD-8)
-# — and imports what it is given: People would not be empty and the flow
-# would test a returning phone. Denied, nothing is asked and nothing comes in.
+# EVERY GRANT DENIED. Maestro grants all by default; the automatic import pass
+# uses existing grants without prompting. With no grants, Home remains uninterrupted
+# and People offers its explicit import at the point of use (R-ONBOARD-8).
 - launchApp:
     clearState: true
     permissions:

@@ -144,8 +144,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Centraid"
         android:usesCleartextTraffic="false">
+        <!-- Compose handles appearance changes in place so the open route and draft survive. -->
         <activity
             android:name="dev.centraid.android.MainActivity"
+            android:configChanges="uiMode"
             android:exported="true"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>

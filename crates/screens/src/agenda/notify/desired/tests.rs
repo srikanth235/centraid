@@ -35,10 +35,20 @@ fn run(
     tasks: &[wire::AgendaTask],
     events: &[wire::AgendaEvent],
 ) -> Vec<wire::PendingNotification> {
+    run_with_cycle(zone, tasks, events, civil::HourCycle::H24)
+}
+
+fn run_with_cycle(
+    zone: &str,
+    tasks: &[wire::AgendaTask],
+    events: &[wire::AgendaEvent],
+    hour_cycle: civil::HourCycle,
+) -> Vec<wire::PendingNotification> {
     desired(&Inputs {
         vault_id: "v1",
         zone,
         locale: Locale::En,
+        hour_cycle,
         now_local: NOW,
         tasks,
         projects: &[wire::AgendaTaskProject {
@@ -56,6 +66,34 @@ fn run(
         extra: &[],
         extra_wanted: &[],
     })
+}
+
+#[test]
+fn notification_times_follow_the_phone_without_changing_the_schedule() {
+    let tasks = [
+        task("midnight", "2026-11-11", "00:15", "2026-11-11T00:15"),
+        task("noon", "2026-11-10", "12:00", "2026-11-10T12:00"),
+    ];
+    let events = [event("evening", "2026-11-10T21:05", &[0])];
+    let twenty_four = run_with_cycle(NY, &tasks, &events, civil::HourCycle::H24);
+    let mut twelve = run_with_cycle(NY, &tasks, &events, civil::HourCycle::H12);
+    assert_eq!(twelve.len(), 3);
+    let body = |set: &[wire::PendingNotification], title: &str| {
+        set.iter().find(|n| n.title == title).unwrap().body.clone()
+    };
+    assert_eq!(body(&twelve, "Task midnight"), "Today at 12:15 AM · Inbox");
+    assert_eq!(body(&twelve, "Task noon"), "Today at 12:00 PM · Inbox");
+    assert_eq!(body(&twelve, "Lunch"), "Today at 9:05 PM");
+    assert_eq!(
+        body(&twenty_four, "Task midnight"),
+        "Today at 00:15 · Inbox"
+    );
+    assert_eq!(body(&twenty_four, "Task noon"), "Today at 12:00 · Inbox");
+    assert_eq!(body(&twenty_four, "Lunch"), "Today at 21:05");
+    for (formatted, original) in twelve.iter_mut().zip(&twenty_four) {
+        formatted.body.clone_from(&original.body);
+    }
+    assert_eq!(twelve, twenty_four, "only member-facing words may change");
 }
 
 #[test]
@@ -315,6 +353,7 @@ fn a_fire_time_in_the_spring_gap_reads_forward_and_one_in_the_autumn_overlap_fir
             vault_id: "v1",
             zone: NY,
             locale: Locale::En,
+            hour_cycle: civil::HourCycle::H24,
             now_local,
             tasks: &[t],
             projects: &[],
@@ -366,6 +405,7 @@ fn a_second_producers_notices_keep_their_slots_when_agenda_fills_the_cap() {
         vault_id: "v1",
         zone: NY,
         locale: Locale::En,
+        hour_cycle: civil::HourCycle::H24,
         now_local: NOW,
         tasks: &tasks,
         projects: &[],
@@ -393,6 +433,7 @@ fn a_notice_in_the_past_is_not_held() {
         vault_id: "v1",
         zone: NY,
         locale: Locale::En,
+        hour_cycle: civil::HourCycle::H24,
         now_local: NOW,
         tasks: &[],
         projects: &[],

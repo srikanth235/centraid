@@ -1,6 +1,6 @@
 //! The phone imports reach the screens they serve by name (#1135), in the runtime a shell
 //! attaches: the camera roll tells Photos' home what it says and takes its asks, the made vault
-//! asks the photo prompt itself, the Docs drive hands a followed folder to the follower, and the
+//! reads the existing photo grant, the Docs drive hands a followed folder to the follower, and the
 //! follower follows again when the app comes forward. No shell relays any of it.
 
 use std::time::Duration;
@@ -141,7 +141,7 @@ fn photos_home_hears_the_grant_from_the_camera_roll_and_asks_it_for_the_prompt_b
 }
 
 #[test]
-fn a_made_vault_asks_the_photo_prompt_itself_and_a_grant_starts_the_rolls_walk() {
+fn a_made_vault_reads_existing_photo_access_and_a_grant_starts_the_rolls_walk() {
     let mut d = standard();
     let roll = root(&d, "imports-camera-roll");
     let made = root(&d, "imports-made");
@@ -166,7 +166,7 @@ fn a_made_vault_asks_the_photo_prompt_itself_and_a_grant_starts_the_rolls_walk()
     );
     assert!(asked(&d, made).iter().any(|kind| matches!(
         kind,
-        wire::effect::Kind::LibraryPermission(wire::LibraryPermission { ask: true })
+        wire::effect::Kind::LibraryPermission(wire::LibraryPermission { ask: false })
     )));
     answer(
         &mut d,

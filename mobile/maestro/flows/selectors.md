@@ -42,6 +42,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `docs-filter-<type\|modified\|label>-<option>`, `docs-filter-sort-<order>`, `docs-filter-view-<list\|grid>` | Docs | a submenu's options (`any` first), the six orders, the layout |
 | `docs-label-chip-<label>` | Docs | a label chip over Recents, Browse and Starred (a dot in the label's colour and its word): a tap filters the shelf to it, again clears it; selected while it filters |
 | `docs-bar-<share\|star\|unstar\|labels\|move\|trash\|restore\|purge>` | Docs | a key of a document's Quick Look bar |
+| `people-status-action`, `people-person-status-action`, `docs-status-action` | People Home/detail; Docs shelf, folder and document | the core-provided status verb (Undo when an inverse exists); sends the kit StatusActed on both platforms |
 | `docs-document-subtitle`, `docs-document-labels` | Docs | the page's second line ("Docs › Taxes 2025"), and the info card's Labels row |
 | `money-filter-<account\|category>-<all\|id>` | Money | the account and category options (`all`, then ids; `uncategorised` for no category) |
 | `money-hero`, `money-needs-category` | Money | Activity's overview card (and Spending's spent figure), and the review banner / Spending's "No category" row: a tap lists the rows with no category in Activity |

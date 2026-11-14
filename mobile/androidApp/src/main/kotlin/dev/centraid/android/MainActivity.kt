@@ -134,8 +134,8 @@ public class MainActivity : FragmentActivity() {
                         AppSession.release()
                     }
                 }
-                // A PHOTOGRAPH'S SCREENS STAND ON `stage` edge to edge, so the ground under the system
-                // bars follows and the bars' icons turn light to be read on it.
+                // SLIDESHOW AND PHOTO EDITING use stage ground and light system-bar icons.
+                // The ordinary photo viewer follows its page ground and the selected appearance.
                 val onStage = rust.onStage()
                 val view = LocalView.current
                 val darkScheme = centraidDark()

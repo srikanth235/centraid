@@ -574,10 +574,7 @@ fn a_held_restore_asks_for_the_members_seed_and_every_vault_on_its_own_words() {
     );
     assert_eq!(
         phone.keeper.log(),
-        vec![
-            "adopt [0] seed=true".to_owned(),
-            format!("adopt [0@{id}] seed=true")
-        ]
+        vec![format!("adopt [0, 0@{id}] seed=true")]
     );
     assert_eq!(phone.standing(), Standing::Settled);
 }

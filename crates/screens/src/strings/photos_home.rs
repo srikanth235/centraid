@@ -1,16 +1,8 @@
 //! Sentences of `photos.home` and of the pieces Photos' screens share that no
-//! `strings::photos` key covers: how a fetched original ended, a copy handed to
-//! the platform, "Keep originals" and "Free up space", and the library's own
+//! `strings::photos` key covers: a copy handed to the platform, "Keep originals" and "Free up space", and the library's own
 //! small words.
 
 catalog! {
-    // How fetching one original back ended (`SharedCopy.FETCH_*`).
-    plain fetch_unreachable = ("Can't reach your backup device. Try again later.", "Can't reach your backup device. Try again later.");
-    plain fetch_not_in_backup = ("Your backup device doesn't hold this original.", "Your backup device doesn't hold this original.");
-    plain fetch_untrusted = ("That isn't your backup device.", "That isn't your backup device.");
-    plain fetch_damaged = ("Couldn't open the backup copy of this original.", "Couldn't open the backup copy of this original.");
-    plain fetch_no_answer = ("Couldn't get the original back. Try again.", "Couldn't get the original back. Try again.");
-
     // A copy of a pick handed to the platform (`ShelfCopies`).
     plain copy_none_here = ("The originals are not on this phone, so nothing was sent.", "The originals are not on this phone, so nothing was sent.");
     plain copy_missing_one = ("1 original is not on this phone, so it was left out.", "1 original is not on this phone, so it was left out.");

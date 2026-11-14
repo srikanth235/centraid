@@ -15,6 +15,10 @@ Docs is 3 queries and 18 actions. This crate is the read plane and the action ta
 
 A document is an `entity` of kind `document` over a `document` row (the blob's hash, its media type, the folder it is filed in); a folder is an `entity` of kind `folder` over a `container` (its `parent_id` is the tree); a star or a label is a `tagged` edge; a past version is a `revision`; the words extracted from the bytes are the blob's `text` derivative. The vault's decisions are.
 
+On the phone, the core's document query prefers that text derivative, including an intentionally blank body. If it is absent, a safe `text/*` file held on this device can supply a complete literal UTF-8 preview up to the existing 64 KiB quick-look limit. The fallback verifies the content hash, rejects invalid UTF-8 and binary controls, and never truncates a larger file or serves HTML, XHTML or SVG inline. It writes no derivative or index row, so older uploads work without a migration; editing uses the existing document command and keeps the old bytes as a version.
+
+A restored document can name an original that is still on its backup device. On the phone, **Download original** appears in More and in the first toolbar slot until the original is held locally. It explicitly calls the shared off-thread fetch door, shows progress and a retryable reason if retrieval fails, and reloads the local document after success. It does not change the document or its revision. The reader offers Edit only when a text body is available; a valid extracted body, including an intentionally blank one, remains editable even before the original is downloaded. Downloading an original does not relax the never-inline rule.
+
 ## The rulings this crate is shaped by
 
 Every one is an answer to a way this crate could be wrong.

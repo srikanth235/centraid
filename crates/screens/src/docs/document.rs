@@ -22,7 +22,7 @@ use wire::screen_event::Kind as E;
 
 use super::denied;
 use super::fold::{self, KEY_LABELS, KEY_MORE, KEY_MOVE, KEY_PURGE, KEY_RENAME, KEY_RESTORE};
-use super::fold::{KEY_SHARE, KEY_STAR, KEY_TRASH, KEY_UNSTAR};
+use super::fold::{KEY_DOWNLOAD, KEY_SHARE, KEY_STAR, KEY_TRASH, KEY_UNSTAR};
 use super::folders::{self, TOP_LEVEL};
 use super::rename::Rename;
 use crate::catalog::{act, load};
@@ -31,6 +31,7 @@ use crate::kit::attachments::Attachments;
 use crate::kit::earlier;
 use crate::kit::follow::{self, Source};
 use crate::kit::links::{self, Kind, Links, Outcome};
+use crate::kit::original;
 use crate::kit::owner::{Answer as Owner, Leaving, NoPasscode, OwnerGate};
 use crate::kit::read::{self, Note, Page, Reading};
 use crate::kit::trash;
@@ -87,7 +88,17 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         attachments: Attachments::of("docs", &args.document_id),
         differences: follow::Phone::default(),
         earlier: earlier::Foot::default(),
+        fetching: None,
+        fetch_failure: None,
     }))
+}
+
+/// One explicit download, bound to the record head and vault that were asked for.
+// Runtime Left is terminal: close removes this instance and all its job IDs.
+// A reopened document cannot receive an older instance's hash-tagged completion.
+struct Original {
+    hash: String,
+    vault: Option<String>,
 }
 
 struct Document {
@@ -126,6 +137,8 @@ struct Document {
     differences: follow::Phone,
     /// The entry to the document's earlier versions (#1185), read with the page.
     earlier: earlier::Foot,
+    fetching: Option<Original>,
+    fetch_failure: Option<(Original, String)>,
 }
 
 impl Document {
@@ -350,6 +363,95 @@ impl Document {
         self.reload(ctx);
     }
 
+    fn names_current(&self, original: &Original, ctx: &Ctx) -> bool {
+        original.vault == ctx.vaults().and_then(|vaults| vaults.foreground_id())
+            && self
+                .row()
+                .is_some_and(|row| !row.trashed && row.content_id == original.hash)
+    }
+
+    fn fetch(&mut self, ctx: &Ctx) {
+        if self.fetching.is_some() {
+            return;
+        }
+        let Some(document) = self
+            .page
+            .data()
+            .map(|answered| &answered.document)
+            .filter(|document| fold::offers_download(document))
+        else {
+            return;
+        };
+        let Some(row) = document.document.as_ref() else {
+            return;
+        };
+        let hash = row.content_id.clone();
+        if original::start(ctx, &hash) {
+            self.fetching = Some(Original {
+                hash,
+                vault: ctx.vaults().and_then(|vaults| vaults.foreground_id()),
+            });
+            self.fetch_failure = None;
+            self.undo.clear();
+        }
+    }
+
+    fn fetched(&mut self, done: &wire::OffThreadDone, ctx: &Ctx) {
+        let Some(fetched) = original::answered(done) else {
+            return;
+        };
+        if self
+            .fetching
+            .as_ref()
+            .is_none_or(|pending| pending.hash != fetched.content_hash)
+        {
+            return;
+        }
+        let pending = self.fetching.take().expect("the matching fetch is pending");
+        self.fetch_failure = None;
+        if !self.names_current(&pending, ctx) {
+            self.reload(ctx);
+            return;
+        }
+        match original::settle(ctx.locale(), &fetched) {
+            Ok(()) => {
+                // Docs-only hashes need this explicit read: the fetch's asset changefeed may be empty.
+                self.reload(ctx);
+                if matches!(self.page, Page::Ready { note: None, .. })
+                    && self.names_current(&pending, ctx)
+                    && self
+                        .page
+                        .data()
+                        .is_some_and(|answered| !answered.document.bytes_held)
+                {
+                    self.fetch_failure = Some((pending, original::no_answer(ctx.locale())));
+                }
+            }
+            Err(sentence) => self.fetch_failure = Some((pending, sentence)),
+        }
+    }
+
+    fn fetch_status(&self, ctx: &Ctx) -> Option<wire::StatusLine> {
+        let (sentence, refused) = if let Some(pending) = &self.fetching {
+            if !self.names_current(pending, ctx) {
+                return None;
+            }
+            (shared::original_downloading(ctx.locale()), false)
+        } else if let Some((pending, sentence)) = &self.fetch_failure {
+            if !self.names_current(pending, ctx) {
+                return None;
+            }
+            (sentence.clone(), true)
+        } else {
+            return None;
+        };
+        Some(wire::StatusLine {
+            sentence,
+            refused,
+            action_label: String::new(),
+        })
+    }
+
     /// Share the document's file: the owner check first, since the bytes leave
     /// the phone in the clear. A document whose bytes are not on this phone
     /// says so on the status line and asks nothing.
@@ -411,15 +513,26 @@ impl Document {
         };
         // Only what the head offers is done: a key for a verb this document
         // does not have (restore on a live one, trash on a trashed one) is nothing.
-        let offered = fold::head_actions(ctx.locale(), &row)
+        let Some(document) = self.page.data().map(|answered| &answered.document) else {
+            return Vec::new();
+        };
+        let offered = fold::head_actions(ctx.locale(), document, self.fetching.is_some())
             .into_iter()
-            .chain(fold::bar_actions(ctx.locale(), &row))
+            .chain(fold::bar_actions(
+                ctx.locale(),
+                document,
+                self.fetching.is_some(),
+            ))
             .any(|action| action.key == key && action.enabled);
         if !offered {
             return Vec::new();
         }
         let id = row.document_id.clone();
         match key {
+            KEY_DOWNLOAD => {
+                self.fetch(ctx);
+                return Vec::new();
+            }
             KEY_SHARE => return self.share(ctx),
             KEY_STAR => {
                 self.write(
@@ -674,7 +787,11 @@ impl Document {
                 Kind::More,
                 row.title.clone(),
                 Body::Actions(wire::DocsActionList {
-                    actions: fold::head_actions(locale, row),
+                    actions: fold::head_actions(
+                        locale,
+                        &answered.document,
+                        self.fetching.is_some(),
+                    ),
                     footer: String::new(),
                 }),
             ),
@@ -737,6 +854,8 @@ impl Screen for Document {
                 }
             }
             Some(E::Left(_)) => {
+                self.fetching = None;
+                self.fetch_failure = None;
                 self.undo.clear();
                 if let Some(rename) = self.rename.as_mut() {
                     let _ = rename.close(ctx);
@@ -763,6 +882,7 @@ impl Screen for Document {
                     return self.attachments.result(ctx, outcome).unwrap_or_default();
                 }
             }
+            Some(E::OffThreadDone(done)) => self.fetched(&done, ctx),
             Some(E::DocsDocument(event)) => return self.event(event, ctx),
             Some(E::PhoneSaysTaken(taken)) => self.take_folder(ctx, &taken),
             _ => {}
@@ -788,6 +908,7 @@ impl Screen for Document {
                     ctx.hour_cycle(),
                     &answered.document,
                     answered.drive.as_ref(),
+                    self.fetching.is_some(),
                 );
                 // THE ABOUT SECTION (#1173): who the document is about, on a live document.
                 if let (Some(people), Some(row)) = (answered.about.as_ref(), data.row.as_ref())
@@ -863,6 +984,7 @@ impl Screen for Document {
                     status: self
                         .undo
                         .status()
+                        .or_else(|| self.fetch_status(ctx))
                         .or_else(|| self.earlier.status(locale))
                         .or_else(|| {
                             self.linked_unread.then(|| wire::StatusLine {
@@ -925,6 +1047,8 @@ mod tests {
             attachments: Attachments::of("docs", "d1"),
             differences: follow::Phone::default(),
             earlier: earlier::Foot::default(),
+            fetching: None,
+            fetch_failure: None,
         }
     }
 
@@ -979,3 +1103,7 @@ mod tests {
 #[cfg(test)]
 #[path = "document_link_tests.rs"]
 mod link_tests;
+
+#[cfg(test)]
+#[path = "document_original_tests.rs"]
+mod original_tests;
