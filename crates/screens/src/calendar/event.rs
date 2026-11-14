@@ -452,16 +452,16 @@ impl Screen for EventPage {
             }
             // THE SHELL'S ANSWER TO A PICK: the attachments' (an add under way).
             Some(E::EffectResult(result)) => {
+                // A pending pick owns its replies, even while an earlier share's sentence remains.
+                if let Some(outcome) = &result.outcome
+                    && let Some(effects) = self.attachments.result(ctx, outcome)
+                {
+                    return effects;
+                }
                 let id = self.route.event_id.clone();
-                let shared = self.share.result(ctx, &result, |ctx| {
+                return self.share.result(ctx, &result, |ctx| {
                     super::export::file(ctx, None, Some(&id))
                 });
-                if !shared.is_empty() || self.share.status().is_some() {
-                    return shared;
-                }
-                if let Some(outcome) = &result.outcome {
-                    return self.attachments.result(ctx, outcome).unwrap_or_default();
-                }
             }
             Some(E::StatusActed(_)) => {
                 if self.undo.acted(ctx) {

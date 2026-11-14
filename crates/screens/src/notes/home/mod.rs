@@ -62,7 +62,6 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
 /// What a confirm on screen will do once the member says so.
 enum Asking {
     Nothing,
-    TrashNote(String),
     DeleteNotebook(String),
 }
 
@@ -204,31 +203,23 @@ impl Home {
         );
     }
 
-    fn ask_trash(&mut self, ctx: &Ctx, note_id: &str) {
-        if self.library.find(ctx.locale(), note_id).is_none() {
+    fn trash(&mut self, ctx: &Ctx, note_id: &str) {
+        let Some(found) = self.library.find(ctx.locale(), note_id) else {
             return;
-        }
+        };
         self.close_sheet();
-        self.asking = Asking::TrashNote(note_id.to_owned());
+        self.write(
+            ctx,
+            act::notes::DeleteNote {
+                note_id: note_id.to_owned(),
+            },
+            note_id,
+            |locale| crate::kit::trash::moved_to_trash(locale, &found.title),
+        );
     }
 
     fn confirmed(&mut self, ctx: &Ctx) {
         match std::mem::replace(&mut self.asking, Asking::Nothing) {
-            Asking::TrashNote(id) => {
-                let title = self
-                    .library
-                    .find(ctx.locale(), &id)
-                    .map(|found| found.title)
-                    .unwrap_or_default();
-                self.write(
-                    ctx,
-                    act::notes::DeleteNote {
-                        note_id: id.clone(),
-                    },
-                    &id,
-                    |locale| crate::kit::trash::moved_to_trash(locale, &title),
-                );
-            }
             Asking::DeleteNotebook(id) => {
                 self.write(
                     ctx,
@@ -246,12 +237,6 @@ impl Home {
     fn confirm(&self, locale: Locale) -> Option<wire::Confirm> {
         match self.asking {
             Asking::Nothing => None,
-            Asking::TrashNote(_) => Some(wire::Confirm {
-                title: words::delete_note_title(locale),
-                body: words::delete_note_body(locale),
-                confirm_label: words::delete_note_verb(locale),
-                destructive: true,
-            }),
             Asking::DeleteNotebook(_) => Some(wire::Confirm {
                 title: words::delete_notebook_title(locale),
                 body: words::delete_notebook_body(locale),
@@ -435,8 +420,8 @@ impl Home {
             H::Pin(toggled) => self.pin(ctx, &toggled.note_id),
             H::FileInto(opened) => self.open_file_into(ctx, &opened.note_id),
             H::NotebookChosen(chosen) => self.file_into(ctx, &chosen.notebook_id),
-            // TRASH IS ASKED FIRST, in full sentences.
-            H::Trash(asked) => self.ask_trash(ctx, &asked.note_id),
+            // Reversible trash moves now; the shared line offers the real inverse.
+            H::Trash(asked) => self.trash(ctx, &asked.note_id),
             H::Confirmed(_) => self.confirmed(ctx),
             H::Dismissed(_) => self.asking = Asking::Nothing,
             H::NotebookPicked(picked) => self.pick_notebook(ctx, &picked.id),
@@ -560,7 +545,7 @@ impl Home {
                         words::pin(locale)
                     },
                     file_label: words::file_verb(locale),
-                    trash_label: words::delete_note_verb(locale),
+                    trash_label: shared::trash_move(locale),
                     rename_label: String::new(),
                 };
                 let choices = if self.sheet == wire::NotesSheet::FileInto {

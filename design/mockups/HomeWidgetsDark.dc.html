@@ -6,6 +6,8 @@
 <script src="./support.js"></script>
 </head>
 <body>
+<!-- Vault-picker interaction contract: the header opens Vaults. Each visible vault row is one full-width primary hit region, including empty space between its label and current check; a center tap switches using the supplied vault ID and closes the picker, or closes it when already current. Existing trailing swipe/context-menu actions remain separate and unchanged. -->
+<!-- Home Reminders counts only overdue and due-today work. With none due, say the shared “Nothing due today” even when undated/future tasks already wait in Inbox; never claim this is the member's first reminder. The tile keeps its existing route and count scope. -->
 <!-- Audit fixes, 2026-11-10: When today has ended events but none remaining, Calendar says No more events today. The spoken tile summary names its upcoming scope. -->
 <x-dc>
 <helmet>
@@ -46,7 +48,8 @@ button{font:inherit;color:inherit}
         <div style="background: linear-gradient(160deg, #D9C7A7, #8F7A57);"></div>
         <div style="background: linear-gradient(160deg, #B9B2D8, #5E4A8E);"></div>
       </div>
-      <div style="position: absolute; left: 12px; bottom: 10px; color: #FFFFFF; font-size: 13px; font-weight: 600; text-shadow: 0 1px 4px rgba(0,0,0,0.5);">Photos · On this day, 2018</div>
+      <!-- Caption uses an opaque Surface.card plate with Surface.ink (and Surface.meta for any second line), native spacing 2/1 and radius sm. It stays readable over white, black or coloured thumbnails in either appearance; the photo-cell layout is unchanged. -->
+      <div style="position: absolute; left: 12px; bottom: 12px; max-width: calc(100% - 24px); box-sizing: border-box; padding: 4px 8px; border-radius: 4px; background: #1F1E1C; color: #F2EFEA; font-size: 13px; font-weight: 600;">Photos · On this day, 2018</div>
     </div>
 
     <div style="border-radius: 18px; background: #1F1E1C; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">

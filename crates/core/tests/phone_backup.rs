@@ -12,6 +12,7 @@
 //! | [`the_operating_system_moves_a_handed_off_part_and_settle_records_it`] | a metered pass that seals and holds back, a handoff whose `allows_cellular` follows the rule, an upload the test performs as the OS would, `settle` for success and failure, and `reconcile` |
 //! | [`an_original_comes_back_by_name_and_a_safe_library_item_is_offered_whole`] | `fetch_original` landing, already held and not backed up; `releasable` offering only a whole, unedited, acknowledged library item; `released` forgetting it and announcing the change |
 //! | [`a_restore_brings_every_vault_back_and_the_old_phone_freezes`] | the words and the payload alone bring the vault back, checked before the claim, with its derivatives; the old phone's next pass is refused `MOVED` and it reads frozen; the restored phone backs up again |
+//! | [`a_restored_docs_original_is_fetched_with_its_bom_and_line_endings_intact`] | a Docs file without extracted text remains absent after fresh restore, then the existing keyed fetch restores its exact original bytes and literal preview |
 //! | [`a_head_set_between_the_check_and_the_claim_is_checked_before_it_is_claimed`] | #1047 L1 on the new plane: the claim names the head it checked, and a head the old phone set in that window is laid down and checked first |
 //! | [`pairing_a_gateway_that_holds_the_vault_takes_it_over`] | `VAULT_KNOWN` at pairing is a takeover by claim, and the phone it supersedes freezes |
 //! | [`a_machine_that_is_not_the_pinned_gateway_is_untrusted_and_a_damaged_copy_is_damaged`] | a flipped bit in the gateway's copy is `FETCH_OUTCOME_DAMAGED` and lands nothing; another machine at the gateway's address is `FETCH_OUTCOME_UNTRUSTED`, a pass that stops `DRAIN_STOP_UNTRUSTED`, and a status that waits `WAIT_REASON_UNTRUSTED` |
@@ -685,6 +686,125 @@ fn a_library_item_larger_than_the_spool_backs_up_a_window_at_a_time() {
         "{offered:?}"
     );
     assert_eq!(spooled(), 0, "the spool is empty once both moved");
+}
+
+#[test]
+fn a_restored_docs_original_is_fetched_with_its_bom_and_line_endings_intact() {
+    const ORIGINAL: &str = "\u{feff}Backup audit original 2026-11-12\r\nMarker: native-source-to-native-restore\r\nCafé · 東京 · final bytes stay exact.\r\n";
+    assert_eq!(ORIGINAL.len(), 122);
+    let gateway = gateway();
+    let old_dir = tempfile::tempdir().expect("the original phone directory");
+    let old = phone(old_dir.path());
+    pair(&old, &gateway);
+    let staged = stage(
+        &old,
+        owned("text/plain", ORIGINAL.as_bytes()),
+        ORIGINAL.as_bytes(),
+    );
+    let added = command(
+        &old,
+        "document.add",
+        &serde_json::json!({
+            "title": "backup-audit-original.txt",
+            "blob": staged.content_hash,
+            "size": staged.byte_size,
+            "media_type": "text/plain",
+        }),
+        "add-backup-audit-document",
+    );
+    let id = added["id"].as_str().expect("the filed document id");
+    let document = |handle: &centraid_core::Handle| {
+        let wire::response::Kind::AppQuery(answer) = ask(
+            handle,
+            wire::request::Kind::AppQuery(wire::AppQueryRequest {
+                query: Some(wire::app_query_request::Query::DocsDocument(
+                    wire::DocsDocumentRequest {
+                        document_id: id.to_owned(),
+                        tz: "UTC".to_owned(),
+                    },
+                )),
+            }),
+        ) else {
+            panic!("the document query answers");
+        };
+        let Some(wire::app_query_response::Answer::DocsDocument(document)) = answer.answer else {
+            panic!("the document query has its typed answer");
+        };
+        document
+    };
+    let preview = ORIGINAL
+        .strip_prefix('\u{feff}')
+        .expect("a display-only BOM");
+    assert_eq!(document(&old).body.as_deref(), Some(preview));
+    let backed = drain(&old, at_home());
+    assert!(
+        backed.acked_at_ms.is_some(),
+        "the gateway acknowledged the snapshot"
+    );
+    assert_eq!(status(&old).content_confirmed, status(&old).content_total);
+
+    let new_dir = tempfile::tempdir().expect("a fresh recovery directory");
+    let restored = restore(new_dir.path(), &gateway);
+    assert_eq!(restored.vaults.len(), 1);
+    assert_eq!(gateway.writer(&vault_id()).0, 2);
+    let path = PathBuf::from(&restored.vaults[0].path);
+    let recovered = reopen(&path);
+    let missing = document(&recovered);
+    assert_eq!(
+        missing
+            .document
+            .as_ref()
+            .expect("the recovered row")
+            .document_id,
+        id
+    );
+    assert!(
+        !missing.bytes_held,
+        "restore deliberately leaves originals lazy"
+    );
+    assert!(
+        missing.body.is_none(),
+        "this upload had no text derivative to restore"
+    );
+    let hash =
+        centraid_blobs::ContentHash::parse_hex(&staged.content_hash).expect("the staged hash");
+    let bytes = recovered.bytes().expect("the fresh phone's byte store");
+    assert!(
+        !bytes
+            .store()
+            .is_complete(hash)
+            .expect("the local inventory reads")
+    );
+
+    let fetch = || {
+        let wire::response::Kind::FetchOriginal(answer) = ask(
+            &recovered,
+            wire::request::Kind::FetchOriginal(wire::FetchOriginalRequest {
+                content_hash: hex::decode(&staged.content_hash).expect("the original hash"),
+            }),
+        ) else {
+            panic!("the existing original-fetch door answers");
+        };
+        answer
+    };
+    let fetched = fetch();
+    assert_eq!(fetched.outcome, wire::FetchOutcome::Landed as i32);
+    assert_eq!(
+        std::fs::read(&fetched.path).expect("the fetched file"),
+        ORIGINAL.as_bytes()
+    );
+    assert_eq!(
+        bytes.store().read(hash).expect("the owned original"),
+        ORIGINAL.as_bytes()
+    );
+    let held = document(&recovered);
+    assert!(held.bytes_held);
+    assert_eq!(held.body.as_deref(), Some(preview));
+    assert_eq!(
+        held.rev, missing.rev,
+        "fetching bytes does not revise the document"
+    );
+    assert_eq!(fetch().outcome, wire::FetchOutcome::AlreadyHeld as i32);
 }
 
 #[test]

@@ -37,8 +37,8 @@
 //!   original's asset as `edited_from`; an item edited in place is compared with the version the
 //!   vault holds (`prior_*`), and the same bytes are no edit at all. A Live Photo is a `photo` and
 //!   a `video` in one capture group.
-//! * **A re-walk renders nothing** and a restored phone's re-walk renders only the tiers the vault
-//!   lacks (`derivatives_held`).
+//! * **A walk renders only the tiers the vault lacks** (`derivatives_held`), even when Docs already
+//!   holds the original. A complete re-walk renders nothing.
 //! * **The invoke key is fresh per add**: the core remembers a key for good, and
 //!   `add-photo` itself adopts the photograph that already holds the same bytes.
 //!
@@ -770,27 +770,24 @@ impl Roll {
             offer.camera_bytes += staged.byte_size;
         } else if original {
             offer.queued = Some((staged.already_held, staged.byte_size + offer.camera_bytes));
-            // A RE-WALK RENDERS NOTHING: the core already holds this original, and its derivatives
-            // went in with it the first time. A RESTORED PHONE'S RE-WALK RENDERS ONLY WHAT THE
-            // VAULT LACKS: the core says which tiers it holds.
-            if !staged.already_held {
-                let tiers: Vec<String> = ["thumb", "preview"]
-                    .into_iter()
-                    .filter(|tier| !staged.derivatives_held.iter().any(|held| held == tier))
-                    .map(str::to_owned)
-                    .collect();
-                if !tiers.is_empty() {
-                    let reference = resource_ref(offer);
-                    offer.staged = Some(staged.clone());
-                    self.wait = Wait::Derivatives;
-                    return vec![effect(wire::effect::Kind::LibraryDerivatives(
-                        wire::LibraryDerivatives {
-                            r#ref: reference,
-                            for_hash: staged.content_hash,
-                            tiers,
-                        },
-                    ))];
-                }
+            // Docs may already hold these original bytes without any photo tiers. The core's
+            // actual tier inventory is authoritative; a complete re-walk still renders nothing.
+            let tiers: Vec<String> = ["thumb", "preview"]
+                .into_iter()
+                .filter(|tier| !staged.derivatives_held.iter().any(|held| held == tier))
+                .map(str::to_owned)
+                .collect();
+            if !tiers.is_empty() {
+                let reference = resource_ref(offer);
+                offer.staged = Some(staged.clone());
+                self.wait = Wait::Derivatives;
+                return vec![effect(wire::effect::Kind::LibraryDerivatives(
+                    wire::LibraryDerivatives {
+                        r#ref: reference,
+                        for_hash: staged.content_hash,
+                        tiers,
+                    },
+                ))];
             }
         } else if let Some((held, bytes)) = offer.queued {
             offer.queued = Some((held, bytes + staged.byte_size));

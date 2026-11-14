@@ -405,7 +405,8 @@ private struct VaultSheet: View {
                             .accessibilityLabel(sheet.currentLabel)
                         }
                     }
-                    .frame(minHeight: 44)
+                    .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("vault-row-\(vault.vaultID)")

@@ -30,6 +30,7 @@ pub const KEY_RESTORE: &str = "restore";
 pub const KEY_PURGE: &str = "purge";
 pub const KEY_MORE: &str = "more";
 pub const KEY_SHARE: &str = "share";
+pub const KEY_DOWNLOAD: &str = "download-original";
 
 /// A document's size in words (`2.4 MB`), or empty when its bytes have no row.
 #[must_use]
@@ -259,7 +260,7 @@ pub fn icon_of(kind: wire::DocsKind) -> &'static str {
 /// The reader's format off a media type.
 #[must_use]
 pub fn format_of(media_type: &str) -> wire::docs_reader::Format {
-    if media_type.split(';').next().map(str::trim) == Some("text/markdown") {
+    if centraid_apps_docs::bytes::base_media_type(media_type) == "text/markdown" {
         wire::docs_reader::Format::Markdown
     } else {
         wire::docs_reader::Format::Plain
@@ -303,10 +304,18 @@ pub fn menu(locale: Locale, starred: bool) -> Vec<wire::DocsAction> {
     ]
 }
 
-/// The head's actions: edit (text), star, rename, move, labels, then trash — or
+/// The head's actions: edit when text is available, download an absent original,
+/// star, rename, move, labels, then trash — or
 /// restore and delete forever on a trashed document.
 #[must_use]
-pub fn head_actions(locale: Locale, row: &wire::DocsDocumentRow) -> Vec<wire::DocsAction> {
+pub fn head_actions(
+    locale: Locale,
+    document: &wire::DocsDocument,
+    fetching: bool,
+) -> Vec<wire::DocsAction> {
+    let Some(row) = document.document.as_ref() else {
+        return Vec::new();
+    };
     if row.trashed {
         return vec![
             // RESTORE IS ALWAYS OFFERED: a window that has run out is when the
@@ -321,26 +330,40 @@ pub fn head_actions(locale: Locale, row: &wire::DocsDocumentRow) -> Vec<wire::Do
         ];
     }
     let mut actions = Vec::new();
-    if row.surface() == wire::DocsSurface::Reading {
+    if row.surface() == wire::DocsSurface::Reading && document.body.is_some() {
         actions.push(wire::DocsAction {
             route: Some(routes::editor(&row.document_id, &row.title)),
             ..action(KEY_EDIT, words::action_edit(locale), "Pencil")
         });
     }
+    if offers_download(document) {
+        actions.push(download_action(locale, fetching));
+    }
     actions.extend(menu(locale, row.starred));
     actions
 }
 
-/// THE QUICK LOOK BAR: Share, Star, Labels, Move and Trash on a live document
+/// THE QUICK LOOK BAR: Share (Download original when absent), Star, Labels, Move and Trash on a live document
 /// (the five a viewer needs under its thumb); Restore and Delete forever on a
 /// trashed one. Everything else is behind More.
 #[must_use]
-pub fn bar_actions(locale: Locale, row: &wire::DocsDocumentRow) -> Vec<wire::DocsAction> {
+pub fn bar_actions(
+    locale: Locale,
+    document: &wire::DocsDocument,
+    fetching: bool,
+) -> Vec<wire::DocsAction> {
+    let Some(row) = document.document.as_ref() else {
+        return Vec::new();
+    };
     if row.trashed {
-        return head_actions(locale, row);
+        return head_actions(locale, document, fetching);
     }
     vec![
-        action(KEY_SHARE, words::action_share(locale), "Share"),
+        if offers_download(document) {
+            download_action(locale, fetching)
+        } else {
+            action(KEY_SHARE, words::action_share(locale), "Share")
+        },
         if row.starred {
             action(KEY_UNSTAR, words::action_unstar(locale), "Star")
         } else {
@@ -353,6 +376,23 @@ pub fn bar_actions(locale: Locale, row: &wire::DocsDocumentRow) -> Vec<wire::Doc
             ..action(KEY_TRASH, words::action_trash(locale), TRASH_ICON)
         },
     ]
+}
+
+/// Only a named live original that is not local needs the explicit download door.
+#[must_use]
+pub fn offers_download(document: &wire::DocsDocument) -> bool {
+    !document.bytes_held
+        && document
+            .document
+            .as_ref()
+            .is_some_and(|row| !row.trashed && crate::kit::original::valid_hash(&row.content_id))
+}
+
+fn download_action(locale: Locale, fetching: bool) -> wire::DocsAction {
+    wire::DocsAction {
+        enabled: !fetching,
+        ..action(KEY_DOWNLOAD, shared::download_original(locale), "Download")
+    }
 }
 
 /// The labels sheet for a row, shared with the document page.
@@ -413,6 +453,7 @@ pub fn document(
     cycle: HourCycle,
     answer: &wire::DocsDocument,
     drive: Option<&wire::DocsDrive>,
+    fetching: bool,
 ) -> wire::DocsDocumentData {
     use wire::docs_document_data::Surface;
     // A document that is gone never reaches here: the page is empty (its sentence is the screen's).
@@ -444,8 +485,8 @@ pub fn document(
         path: folders::path_crumbs(locale, &answer.path, &view.title),
         earlier: None,
         origin: None,
-        actions: head_actions(locale, found),
-        bar: bar_actions(locale, found),
+        actions: head_actions(locale, answer, fetching),
+        bar: bar_actions(locale, answer, fetching),
         kind_size: [
             view.kind_label.clone(),
             size(locale, units, found.byte_size),
@@ -500,7 +541,9 @@ fn reader(
     wire::DocsReader {
         body: body.unwrap_or_default().to_owned(),
         has_text: body.is_some(),
-        no_text: if body.is_none() {
+        no_text: if body.is_none() && !answer.bytes_held {
+            words::share_missing(locale)
+        } else if body.is_none() {
             words::no_text(locale)
         } else {
             String::new()
@@ -667,4 +710,23 @@ pub fn editor(locale: Locale, answer: &wire::DocsDocument) -> Result<EditorDraft
             .unwrap_or_default(),
         format: format_of(&row.media_type),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn markdown_format_uses_the_same_mime_normalization_as_the_reader() {
+        for media_type in [
+            "text/markdown",
+            "TEXT/MARKDOWN; charset=UTF-8",
+            " text/markdown ; charset=utf-8",
+        ] {
+            assert_eq!(format_of(media_type), wire::docs_reader::Format::Markdown);
+        }
+        for media_type in ["text/plain", "text/csv", "application/octet-stream"] {
+            assert_eq!(format_of(media_type), wire::docs_reader::Format::Plain);
+        }
+    }
 }

@@ -59,7 +59,7 @@ struct PhotosHomeView: View {
             band: { foot },
             content: { pageBody }
         )
-        .modifier(PhotosHomeSheets(state: state, send: send))
+        .modifier(PhotosHomeSheets(state: state, send: send, open: open))
     }
 
     /// THE HEADER'S FILTER BUTTON (R-CHROME-3): All photos · Favorites, Rust's menu. A pick or the
@@ -270,6 +270,7 @@ private struct PhotosHomeSheets: ViewModifier {
     @Environment(\.colorScheme) private var scheme
     let state: Centraid_Core_V1_PhotosHomeState
     let send: (Centraid_Core_V1_PhotosHomeEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
 
     private func binding(_ sheet: Centraid_Core_V1_PhotosHomeState.Sheet) -> Binding<Bool> {
         Binding(
@@ -284,7 +285,7 @@ private struct PhotosHomeSheets: ViewModifier {
     func body(content: Content) -> some View {
         content
             .sheet(isPresented: binding(.more)) {
-                if state.hasMore { PhotosMoreSheetView(state: state, more: state.more, send: send) }
+                if state.hasMore { PhotosMoreSheetView(state: state, more: state.more, send: send, open: open) }
             }
             // THE SIZES, XS TO L, the current one checked; picking one closes the choice.
             .sheet(isPresented: binding(.tileSize)) {
@@ -417,6 +418,7 @@ private struct PhotosMoreSheetView: View {
     let state: Centraid_Core_V1_PhotosHomeState
     let more: Centraid_Core_V1_PhotosMoreSheet
     let send: (Centraid_Core_V1_PhotosHomeEvent) -> Void
+    let open: (Centraid_Core_V1_Route) -> Void
 
     var body: some View {
         OptionSheet(title: more.title, status: more.foot) {
@@ -427,8 +429,12 @@ private struct PhotosMoreSheetView: View {
                     chevron: true,
                     identifier: "photos.more.\(row.key)"
                 ) {
-                    // `tile_size` is the one row, and it opens its choice.
-                    send(PhotosHomeEvents.sheet(.tileSize))
+                    if row.hasRoute {
+                        send(PhotosHomeEvents.sheet(.none))
+                        open(row.route)
+                    } else {
+                        send(PhotosHomeEvents.sheet(.tileSize))
+                    }
                 }
             }
             if more.hasFreeUp {

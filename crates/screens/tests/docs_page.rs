@@ -530,10 +530,14 @@ fn an_editor_that_cannot_read_is_failed_refused_or_says_why_it_cannot_edit() {
     let i = shell.push(routes::editor(&id, "Letter"));
     assert!(failed(&shell.editor(i).page));
     assert!(shell.editor(i).content.is_none());
+    assert!(shell.editor(i).autosave.is_none());
+    assert!(shell.editor(i).status_label.is_empty());
 
     shell.reads(Mode::Refuses);
     shell.retry_editor(i);
     gate_words(&shell.editor(i).page);
+    assert!(shell.editor(i).autosave.is_none());
+    assert!(shell.editor(i).status_label.is_empty());
 
     shell.reads(Mode::Answers);
     shell.retry_editor(i);
@@ -547,6 +551,8 @@ fn an_editor_that_cannot_read_is_failed_refused_or_says_why_it_cannot_edit() {
     };
     assert_eq!(failure.sentence, "This document has no text to edit.");
     assert!(shell.editor(none).content.is_none());
+    assert!(shell.editor(none).autosave.is_none());
+    assert!(shell.editor(none).status_label.is_empty());
 }
 
 #[test]

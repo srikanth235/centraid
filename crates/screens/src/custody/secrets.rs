@@ -449,6 +449,26 @@ impl VaultSecrets {
             .and_then(|raw| raw.parse().ok())
     }
 
+    /// Whether the acknowledged cache already contains this metadata write.
+    /// Restore uses this after explicit readback, before changing foreground.
+    pub(crate) fn confirms_op(&self, op: &wire::SecretOp) -> bool {
+        let cache = self.cache();
+        let entries = if op.store == wire::SecretStore::Synced as i32 {
+            &cache.synced
+        } else {
+            &cache.device
+        };
+        match wire::secret_op::Op::try_from(op.op) {
+            Ok(wire::secret_op::Op::Set) if !op.value.is_empty() => entries
+                .get(&op.key)
+                .is_some_and(|held| held.as_bytes() == op.value.as_slice()),
+            Ok(wire::secret_op::Op::Set | wire::secret_op::Op::Delete) => {
+                !entries.contains_key(&op.key)
+            }
+            _ => false,
+        }
+    }
+
     /// Record `vault_id`'s index and raise the high-water mark past it. The
     /// mark is never lowered, so [`Self::next_vault_index`] never hands out an
     /// index a vault this phone once held was sealed under.

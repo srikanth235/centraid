@@ -1,4 +1,6 @@
 <!doctype html>
+<!-- Making a vault never asks for phone-store permissions. Imports use existing grants;
+     each app asks for new access only after its import action is chosen. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -6,6 +8,7 @@
 <script src="./support.js"></script>
 </head>
 <body>
+<!-- Home Reminders counts only overdue and due-today work. With none due, say the shared “Nothing due today” even when undated/future tasks already wait in Inbox; never claim this is the member's first reminder. The tile keeps its existing route and count scope. -->
 <x-dc>
 <helmet>
 <link rel="preconnect" href="https://fonts.googleapis.com">

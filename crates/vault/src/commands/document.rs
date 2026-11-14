@@ -135,7 +135,9 @@ fn pre_edit(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         return Ok(Some(sentence));
     }
     let media_type = media_type_of(ctx, ctx.required_str("id")?)?.unwrap_or_default();
-    if ctx.optional_str("body_text").is_some() && !media_type.starts_with("text/") {
+    if ctx.optional_str("body_text").is_some()
+        && !crate::blob::base_media_type(&media_type).starts_with("text/")
+    {
         return Ok(Some(format!(
             "this document is {media_type}; its words can only be written in place when it is \
              text — replace its bytes instead"

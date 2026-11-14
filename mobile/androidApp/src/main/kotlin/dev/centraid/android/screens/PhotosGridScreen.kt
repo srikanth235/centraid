@@ -388,12 +388,8 @@ private fun BackupBanner(banner: PhotosHomeImportBanner, onEvent: (PhotosHomeEve
                 PhotosHomeImportBanner.Remedy.REMEDY_ASK ->
                     KitLink(banner.allow_label, onClick = { remedy(PhotosHomeImportBanner.Remedy.REMEDY_ASK) })
 
-                // On Android "denied" is also what a grant nobody has asked for reads
-                // as, so the prompt is offered beside Settings.
-                PhotosHomeImportBanner.Remedy.REMEDY_SETTINGS -> {
+                PhotosHomeImportBanner.Remedy.REMEDY_SETTINGS ->
                     KitLink(banner.settings_label, onClick = { remedy(PhotosHomeImportBanner.Remedy.REMEDY_SETTINGS) })
-                    KitLink(banner.allow_label, onClick = { remedy(PhotosHomeImportBanner.Remedy.REMEDY_ASK) })
-                }
 
                 PhotosHomeImportBanner.Remedy.REMEDY_MANAGE_SELECTION ->
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -419,7 +415,7 @@ private fun BackupBanner(banner: PhotosHomeImportBanner, onEvent: (PhotosHomeEve
  * free-up row are Rust's; the SwiftUI twin is `PhotosMoreSheet.swift`.
  */
 @Composable
-internal fun PhotosSheets(state: PhotosHomeState, onEvent: (PhotosHomeEvent) -> Unit) {
+internal fun PhotosSheets(state: PhotosHomeState, onEvent: (PhotosHomeEvent) -> Unit, onOpen: (centraid.core.v1.Route) -> Unit) {
     // A SWIPE-TO-DISMISS HAS TO REACH RUST TOO, or the state still says MORE with
     // nothing on screen and the next press on `⋮` is a no-op.
     val sheet = { which: PhotosHomeState.Sheet ->
@@ -435,14 +431,21 @@ internal fun PhotosSheets(state: PhotosHomeState, onEvent: (PhotosHomeEvent) -> 
                 more.rows.forEach { row ->
                     SheetRow(
                         label = row.label,
-                        iconKey = "Grid",
+                        iconKey = row.icon_key,
                         detail = row.meta,
                         testTag = "sheet-option-" + row.key.replace('_', '-'),
-                        // `tile_size` is the one row, and it opens its choice.
-                        onTap = { sheet(PhotosHomeState.Sheet.SHEET_TILE_SIZE) },
+                        onTap = {
+                            val route = row.route
+                            if (route != null) {
+                                close()
+                                onOpen(route)
+                            } else {
+                                sheet(PhotosHomeState.Sheet.SHEET_TILE_SIZE)
+                            }
+                        },
                     )
                 }
-                // ONE CLAUSE ONLY: every other surface is reached from Collections.
+                // Rust's one explanatory clause follows the navigation rows.
                 Text(
                     text = more.foot,
                     style = centraidType("small"),

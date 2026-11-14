@@ -56,6 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -241,7 +242,7 @@ private fun LightViewer(
                             // NEVER A BROKEN IMAGE. Each of these is a truthful state.
                             Text(
                                 text = photo.stage_label,
-                                color = centraidColor("onStage"),
+                                color = Surface.ink,
                                 textAlign = TextAlign.Center,
                                 style = centraidType("body"),
                                 modifier = Modifier.align(Alignment.Center).padding(KitGeometry.GUTTER),
@@ -249,7 +250,7 @@ private fun LightViewer(
                         } else if (photo == null && state.film.none { it.photo_id == state.photo_id && it.tile != null }) {
                             Text(
                                 text = words.opening,
-                                color = centraidColor("onStageSoft"),
+                                color = Surface.meta,
                                 style = centraidType("small"),
                                 modifier = Modifier.align(Alignment.Center),
                             )
@@ -264,17 +265,18 @@ private fun LightViewer(
                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
-                                        if (photo.fetching) StageSpinner()
-                                        if (line.isNotEmpty()) Text(text = line, color = centraidColor("onStageSoft"), style = centraidType("small"))
+                                        if (photo.fetching) StageSpinner(light = true)
+                                        if (line.isNotEmpty()) Text(text = line, color = Surface.meta, style = centraidType("small"), modifier = Modifier.weight(1f))
                                         if (photo.offers_fetch) {
                                             StageVerb(
                                                 label = words.load_original,
                                                 onClick = { onEvent(PhotosLightboxEvent(fetch_original = PhotosLightboxEvent.FetchTapped())) },
+                                                light = true,
                                             )
                                         }
                                     }
                                 }
-                                if (player != null) LightboxTransport(player, words)
+                                if (player != null) LightboxTransport(player, words, light = true)
                             }
                         }
                                     }
@@ -299,9 +301,9 @@ private fun LightViewer(
                     .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp)
                     .padding(bottom = 8.dp),
             ) {
-                state.status?.takeIf { it.sentence.isNotEmpty() && !it.refused }?.let {
+                state.status?.takeIf { it.sentence.isNotEmpty() }?.let {
                     Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        KitText(it.sentence, KitType.Meta, Surface.meta, Modifier.weight(1f).testTag("photos.lightbox.status"))
+                        KitText(it.sentence, KitType.Meta, if (it.refused) StateColor.Red.text else Surface.meta, Modifier.weight(1f).testTag("photos.lightbox.status"))
                         if (it.action_label.isNotEmpty()) {
                             KitText(
                                 it.action_label,
@@ -366,7 +368,7 @@ private fun DetailsSheetHost(
             }
         },
         containerColor = Surface.page,
-        modifier = modifier.onSizeChanged { container = it.height },
+        modifier = modifier.clipToBounds().onSizeChanged { container = it.height },
     ) {
         // THE PHOTOGRAPH SHRINKS UP: it keeps the room above the sheet's top edge.
         val covered = if (container > 0) {
@@ -441,7 +443,7 @@ private fun Chrome(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (!state.slideshow && photo.fetching) StageSpinner()
-                if (line.isNotEmpty()) Text(text = line, color = soft, style = centraidType("small"))
+                if (line.isNotEmpty()) Text(text = line, color = soft, style = centraidType("small"), modifier = Modifier.weight(1f))
                 if (!state.slideshow && photo.offers_fetch) {
                     StageVerb(
                         label = words.load_original,
@@ -755,11 +757,6 @@ private fun InfoCards(
             .semantics { contentDescription = words.info_title },
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // A REFUSED EDIT IS SAID HERE, where the member made it.
-        state.status?.takeIf { it.refused && it.sentence.isNotEmpty() }?.let {
-            KitText(it.sentence, KitType.Meta, StateColor.Red.text)
-        }
-
         // THE CAPTION, ITS OWN CARD.
         Column(Modifier.fillMaxWidth().kitCard().padding(14.dp)) {
             KitText(words.caption_label, KitType.Meta, Surface.meta)
@@ -907,9 +904,6 @@ private fun InfoCards(
         KitText(photo.whereabouts, KitType.Meta, Surface.meta)
         if (photo.trash_line.isNotEmpty()) {
             KitText(photo.trash_line, KitType.Meta, Surface.meta)
-        }
-        state.status?.takeIf { !it.refused && it.sentence.isNotEmpty() }?.let {
-            KitText(it.sentence, KitType.Meta, Surface.meta)
         }
     }
 }

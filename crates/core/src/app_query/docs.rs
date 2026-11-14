@@ -3,13 +3,18 @@
 //!
 //! The shelves, the filters, the order, the kinds and every civil date are the
 //! crate's (`centraid_apps_docs::{phone, kind}`); this module resolves the zone
-//! and the vault clock, runs the loader, and converts. One fact only the core
-//! can add, and adds here:
+//! and the vault clock, runs the loader, and converts. Byte-store facts only
+//! the core can add are supplied here:
 //!
 //! - **whether the head's bytes are on this device, and the file**, through
 //!   [`Vault::content_location`], which asks the byte store — a question no
 //!   page read can answer. The path is handed out only for a type that may be
 //!   drawn inline, the rule Photos' held thumbnails use (#1047).
+//! - **a bounded literal UTF-8 preview** when a safe text file has no extracted-text derivative;
+//!   the read never caches or writes that preview into the vault.
+
+use std::fs::File;
+use std::io::Read;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_apps_docs as docs;
@@ -304,7 +309,7 @@ pub(crate) fn document(
     let loaded = docs::load_document(door, &asked.document_id);
     // The history is a second loader over the same door; a denial or failure
     // in either answers for the whole screen.
-    let loaded = loaded.and_then(|(data, denial)| {
+    let mut loaded = loaded.and_then(|(data, denial)| {
         if denial.is_some() || data.row.is_none() {
             return Ok(((data, docs::HistoryData::default()), denial));
         }
@@ -320,6 +325,14 @@ pub(crate) fn document(
         },
         _ => None,
     };
+    // Existing files and new picker uploads may have no extracted-text derivative. Read a
+    // bounded literal preview from their owned bytes, without writing during a query.
+    if let (Ok(((data, _), None)), Some(location)) = (&mut loaded, &held)
+        && data.body.is_none()
+        && let Some(row) = &data.row
+    {
+        data.body = text_preview(row, location)?;
+    }
     settle(door, loaded, |(data, history)| {
         Answer::DocsDocument(wire::DocsDocument {
             rev: data.rev,
@@ -353,6 +366,56 @@ pub(crate) fn document(
             now_local: clock.now_local,
         })
     })
+}
+
+/// A complete, safe UTF-8 preview, never a truncated prefix or a lossy binary decode.
+/// Derivatives remain authoritative; this is only the read-only compatibility fallback.
+fn text_preview(
+    row: &DocumentRow,
+    location: &centraid_vault::blob::BlobLocation,
+) -> Result<Option<String>> {
+    use docs::bytes::{ByteRequest, base_media_type};
+    let media_type = base_media_type(row.media_type.as_deref().unwrap_or_default());
+    let size = usize::try_from(location.byte_size).unwrap_or(usize::MAX);
+    if kind::surface_of(Some(&media_type), None) != Surface::Reading
+        || ByteRequest::read_text(&row.content_id, &media_type, size).is_err()
+    {
+        return Ok(None);
+    }
+    let Some(path) = &location.path else {
+        return Ok(None);
+    };
+    let file = File::open(path).map_err(centraid_vault::VaultError::Io)?;
+    read_text_preview(file, &row.content_id)
+}
+
+fn read_text_preview(reader: impl Read, content_id: &str) -> Result<Option<String>> {
+    use docs::bytes::MAX_QUICK_LOOK_BYTES;
+    let mut bytes = Vec::with_capacity(MAX_QUICK_LOOK_BYTES + 1);
+    reader
+        .take((MAX_QUICK_LOOK_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(centraid_vault::VaultError::Io)?;
+    if bytes.len() > MAX_QUICK_LOOK_BYTES {
+        return Ok(None);
+    }
+    if centraid_vault::blob::content_digest(&bytes) != content_id {
+        return Err(CoreError::Invariant {
+            context: "document bytes do not match their content hash".to_owned(),
+        });
+    }
+    let Ok(text) = String::from_utf8(bytes) else {
+        return Ok(None);
+    };
+    if text
+        .chars()
+        .any(|c| c.is_control() && !matches!(c, '\n' | '\r' | '\t'))
+    {
+        return Ok(None);
+    }
+    Ok(Some(
+        text.strip_prefix('\u{feff}').unwrap_or(&text).to_owned(),
+    ))
 }
 
 // ---------------------------------------------------------------------------

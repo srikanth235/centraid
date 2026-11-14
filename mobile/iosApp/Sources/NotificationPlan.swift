@@ -8,8 +8,9 @@ import Foundation
 /// `contracts/notify/reconcile-cases.json`.
 ///
 /// PENDING AND DELIVERED ARE SEPARATE. A pending request leaves when it is not scheduled again. A
-/// delivered notification leaves only when its id is in neither the wanted set nor `live`, so time
-/// passing never removes a reminder the member has not dealt with; resolving the item does.
+/// delivered notification follows the older wanted/`live` contract unless Rust explicitly opts
+/// into retention. Then only its named withdrawals remove cards; the actual OS inventory lets
+/// Rust validate changed sources without a capped live-ID query dropping an older alert.
 enum NotificationPlan {
     struct Plan: Equatable {
         var removePending: [String]
@@ -31,7 +32,9 @@ enum NotificationPlan {
         live: [String],
         pending: [String],
         delivered: [String],
-        nowMs: Int64
+        nowMs: Int64,
+        retainDelivered: Bool = false,
+        cancelDeliveredIDs: [String] = []
     ) -> Plan {
         // THE LAST OF A REPEATED ID WINS, as a replace by id would.
         var order: [String] = []
@@ -46,9 +49,21 @@ enum NotificationPlan {
         let keep = Set(order).union(live)
         return Plan(
             removePending: Array(Set(pending.filter { !scheduled.contains($0) })).sorted(),
-            removeDelivered: Array(Set(delivered.filter { !keep.contains($0) })).sorted(),
+            removeDelivered: retainDelivered
+                ? Array(Set(cancelDeliveredIDs)).sorted()
+                : Array(Set(delivered.filter { !keep.contains($0) })).sorted(),
             schedule: schedule,
             post: items.filter { $0.immediate && !delivered.contains($0.notificationID) }
         )
+    }
+
+    /// Remember only receipt IDs still in the current set, including already delivered ones.
+    /// Their absence from the OS after a dismissal is not permission to post them again.
+    static func rememberedImmediates(
+        current: Set<String>,
+        previous: Set<String>,
+        delivered: Set<String>
+    ) -> Set<String> {
+        previous.union(delivered).intersection(current)
     }
 }

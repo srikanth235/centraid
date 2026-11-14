@@ -16,6 +16,8 @@
 
 pub mod answer;
 pub mod desired;
+mod receipt;
+mod retention;
 pub mod service;
 
 pub use desired::{CAP, HORIZON_DAYS, Inputs, OS_PENDING_LIMIT, RECEIPTS, categories, desired};

@@ -5,6 +5,16 @@
 //! sentence adds it here in its own block.
 
 catalog! {
+    // How fetching one original back ended (`SharedCopy.FETCH_*`).
+    plain fetch_unreachable = ("Can't reach your backup device. Try again later.", "Can't reach your backup device. Try again later.");
+    plain fetch_not_in_backup = ("Your backup device doesn't hold this original.", "Your backup device doesn't hold this original.");
+    plain fetch_untrusted = ("That isn't your backup device.", "That isn't your backup device.");
+    plain fetch_damaged = ("Couldn't open the backup copy of this original.", "Couldn't open the backup copy of this original.");
+    plain fetch_no_answer = ("Couldn't get the original back. Try again.", "Couldn't get the original back. Try again.");
+
+    plain download_original = ("Download original", "Download original");
+    plain original_downloading = ("Downloading the original…", "Downloading the original…");
+
     plain all_day = ("All day", "All day");
     plain autosave_changed_elsewhere = ("Changed on another device", "Changed on another device");
     plain stale_changed_note = ("This {noun} changed somewhere else.", "This {noun} changed somewhere else.");

@@ -6,6 +6,7 @@
 <script src="./support.js"></script>
 </head>
 <body>
+<!-- Save state exists only when a real editable draft exists. A loading, failed or refused editor with no draft never says Saved and never invents a blank body. See DocEditorUnavailable for the absent-original refusal. Actual save refusal/conflict over a real draft keeps its existing state and remedies. -->
 <x-dc>
 <helmet>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@500&amp;display=swap" rel="stylesheet">

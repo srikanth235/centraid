@@ -2,7 +2,7 @@ import SwiftUI
 
 /// THE ATTACHMENTS SECTION of an event page and a task page (#1173), drawn from the core's
 /// `AgendaAttachmentsSection`: what is attached a page at a time, Add photo and Add file, the
-/// remove confirm and the sentence for an add that was refused.
+/// remove confirm and the shared status sentence with its refusal flag and Undo.
 ///
 /// **THE VIEW DECIDES NOTHING.** Every word, icon key, count and flag is Rust's; a tile's tap is
 /// the `route` it carries (a photo's viewer, a document's page), pushed by the shell. Adding asks
@@ -87,7 +87,7 @@ struct AgendaAttachmentsView: View {
                 HStack(spacing: 8) {
                     Text(section.status.sentence)
                         .centraidType("small")
-                        .foregroundStyle(Theme.color("net", scheme))
+                        .foregroundStyle(section.status.refused ? StateColor.red.text : Surface.ink)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("\(idPrefix)-status")
                     if !section.status.actionLabel.isEmpty {

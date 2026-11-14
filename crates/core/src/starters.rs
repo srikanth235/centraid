@@ -19,8 +19,8 @@
 //! **THE TASKS ARE UNDATED, so they wait in the Inbox**: a starter due on the
 //! day the vault was made read as overdue from the next morning on, "Overdue 2"
 //! and a Reschedule prompt over work the member never chose. Today, empty,
-//! offers "Open Inbox" while undated work waits there, and Home's tile lists
-//! open work whatever its date.
+//! offers "Open Inbox" while undated work waits there. Home's tile counts only
+//! overdue and due-today work, so it says "Nothing due today" for these undated tasks.
 //!
 //! **THE ROWS ARE DATA**, declared once in [`NOTES`] and [`TASKS`], so a test
 //! reads the same consts [`write`] writes and changing the content never has to

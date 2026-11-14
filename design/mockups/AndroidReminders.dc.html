@@ -1,3 +1,6 @@
+<!-- After notification permission or channel settings change outside Centraid, returning to the app reconciles the whole desired notification set even when reminder data is unchanged. A denied permission remains quiet; a newly granted permission arms eligible timed reminders without editing them. -->
+<!-- A notification action's receipt keeps its task and Undo across a process/session restart for the remainder of its original ten-minute lifetime. Restart never extends that lifetime; expired, replaced or other-vault receipts cannot act. Undo retains the existing per-field conflict checks. -->
+<!-- An unreadable device-store receipt is a failed read, not an absent receipt. A failed durable write never advertises an Undo that cannot be recovered. -->
 <!doctype html>
 <html lang="en">
 <head>

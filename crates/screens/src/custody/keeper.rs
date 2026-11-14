@@ -72,8 +72,15 @@ pub trait Keeper: Send + Sync {
     /// (R-1047-E18), named `name`.
     fn found(&self, own: Option<&str>, name: &str) -> Effected<Found>;
 
+    /// Prepare one restored vault's durable index and own-key metadata without
+    /// mounting it or changing foreground. The caller acknowledges and reads
+    /// back these writes before preparing the next vault or committing adoption.
+    fn prepare_restored(&self, _restored: &Restored) -> Option<Vec<wire::SecretOp>> {
+        Some(Vec::new())
+    }
+
     /// Hold what a restore laid down, keyed; answers how many were added. The
-    /// seed is already stored.
+    /// seed and prepared metadata are already stored and read back.
     fn adopt_restored(&self, restored: &[Restored]) -> Effected<usize>;
 
     /// Reopen this phone's vaults with the words handed back; answers how many
@@ -134,6 +141,9 @@ pub(crate) struct Absent;
 impl Keeper for Absent {
     fn found(&self, _own: Option<&str>, _name: &str) -> Effected<Found> {
         Effected::new(Found::NoSession)
+    }
+    fn prepare_restored(&self, _restored: &Restored) -> Option<Vec<wire::SecretOp>> {
+        None
     }
     fn adopt_restored(&self, _restored: &[Restored]) -> Effected<usize> {
         Effected::new(0)

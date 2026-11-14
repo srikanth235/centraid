@@ -419,7 +419,7 @@ fn unfiled_is_the_unfiled_filter_and_not_a_notebook() {
 }
 
 #[test]
-fn a_row_menu_pins_at_once_files_and_trashes_only_after_a_confirm() {
+fn a_row_menu_pins_files_and_moves_to_trash_at_once_with_undo() {
     let mut d = clean();
     let id = note(&d, "A", "body");
     let book = notebook(&d, "Recipes");
@@ -516,7 +516,14 @@ fn a_row_menu_pins_at_once_files_and_trashes_only_after_a_confirm() {
     );
     assert_eq!(library_rows(d.view(i))[0].notebook_id, "");
 
-    // TRASH IS ASKED FIRST, in full sentences.
+    // A reversible trash moves immediately; the same status line carries its inverse.
+    send_home(
+        &mut d,
+        i,
+        H::RowMenu(ev::RowMenuOpened {
+            note_id: id.clone(),
+        }),
+    );
     send_home(
         &mut d,
         i,
@@ -524,29 +531,26 @@ fn a_row_menu_pins_at_once_files_and_trashes_only_after_a_confirm() {
             note_id: id.clone(),
         }),
     );
-    let confirm = home_state(d.view(i)).confirm.clone().expect("a confirm");
-    assert_eq!(confirm.title, "Move this note to trash?");
-    assert_eq!(
-        confirm.body,
-        "It stays restorable for 30 days, with its links, tags and files."
+    let state = home_state(d.view(i));
+    assert!(
+        state.confirm.is_none(),
+        "reversible trash must not ask first"
     );
-    assert_eq!(confirm.confirm_label, "Move to trash");
-    assert!(confirm.destructive);
-    assert_eq!(titles(d.view(i)), ["A"], "nothing moved yet");
-    send_home(&mut d, i, H::Dismissed(ev::Dismissed {}));
-    assert!(home_state(d.view(i)).confirm.is_none());
-    assert_eq!(titles(d.view(i)), ["A"]);
-    send_home(
-        &mut d,
-        i,
-        H::Trash(ev::TrashAsked {
-            note_id: id.clone(),
-        }),
-    );
-    send_home(&mut d, i, H::Confirmed(ev::Confirmed {}));
-    assert!(home_state(d.view(i)).confirm.is_none());
+    assert_eq!(state.sheet, wire::NotesSheet::Unspecified as i32);
     assert!(titles(d.view(i)).is_empty());
     assert!(note_of(&d, &id).deleted_at.is_some());
+    let status = state.status.as_ref().expect("moved-to-trash status");
+    assert!(!status.refused);
+    assert!(
+        !status.action_label.is_empty(),
+        "the real write offers Undo"
+    );
+    d.send(i, wire::screen_event::Kind::StatusActed(Default::default()));
+    assert_eq!(titles(d.view(i)), ["A"]);
+    let restored = note_of(&d, &id);
+    assert!(restored.deleted_at.is_none());
+    assert_eq!(restored.body, "body");
+    assert_eq!(library_rows(d.view(i))[0].note_id, id);
 }
 
 #[test]

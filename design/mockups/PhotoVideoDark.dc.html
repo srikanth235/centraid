@@ -1,0 +1,76 @@
+<!doctype html>
+<!-- Local Docs and Photos media playback: the byte door supplies both the held file path and its MIME type. Native audio/video decoders consume that type even when the content-addressed file has no extension; play, pause and seek operate on the original file without renaming or copying it. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Photos video viewer (dark)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<!-- Send copy keeps the existing location-removal filter. Its decoder uses the supplied media type for extensionless vault files; only a completed copy opens the native share sheet. The original-save path and its byte fidelity stay separate. -->
+<!-- Paused video readiness: resolve the real finite duration from asset metadata before first Play, so a valid one-minute clip never stays labelled 0:00 / 0:00 while paused. Loading does not autoplay; playback and end/replay keep the same controls. -->
+<!-- A refreshed device environment reloads the same photograph without discarding its refusal, receipt, Undo or in-flight copy. Cancelling the native copy chooser hands over zero files and remains quiet: no Sent or Saved claim. A completed one-file handoff keeps its existing receipt. -->
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #0E0D0C; font-family: Geist, system-ui, sans-serif; color: #F2EFEA;">
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 56px 20px 8px;">
+    <a href="PhotosLibraryDark.dc.html" aria-label="Close" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid #3A3733; background: rgba(44,42,39,0.85); display: flex; align-items: center; justify-content: center;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </a>
+    <div style="text-align: center;">
+      <div style="font-size: 16px; font-weight: 600;">4 November 2026</div>
+      <div style="font-size: 13px; color: #A39E95;">07:48 · Cubbon Park</div>
+    </div>
+    <button aria-label="More" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid #3A3733; background: rgba(44,42,39,0.85); display: flex; align-items: center; justify-content: center;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="#F2EFEA" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+    </button>
+  </div>
+
+  <div role="img" aria-label="Public motion video preview" style="position: absolute; left: 0; right: 0; top: 120px; bottom: 104px; background: linear-gradient(145deg, #3A3733 0%, #3A3733 50%, #3A3733 100%);"></div>
+
+  <!-- Android system status/navigation bars follow the ordinary viewer page and its appearance-aware icon contrast. Only slideshow and the photo editor use stage chrome; leaving either restores page chrome. -->
+  <!-- The ordinary viewer uses page ink for transport, loading/refusal text and original retrieval. Slideshow and Docs stage transport retain stage ink. No player state is indicated through faded contrast. -->
+  <div aria-label="Video playback controls" style="position: absolute; left: 0; right: 0; bottom: 104px; height: 52px; padding: 4px 20px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; background: #0E0D0C; color: #F2EFEA;">
+    <button aria-label="Pause" style="width: 44px; height: 44px; flex-shrink: 0; border: none; background: none; display: flex; align-items: center; justify-content: center;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+    </button>
+    <div role="slider" aria-label="Playback position" aria-valuemin="0" aria-valuemax="60" aria-valuenow="25" style="position: relative; flex: 1; height: 28px; display: flex; align-items: center;"><div style="width: 100%; height: 2px; background: #3A3733;"></div><div style="position: absolute; width: 42%; height: 2px; background: #3A3733;"></div></div>
+    <span style="font-size: 12px; color: #A39E95; white-space: nowrap;">0:25 / 1:00</span>
+  </div>
+
+  <div style="position: absolute; left: 16px; right: 16px; bottom: 24px; height: 56px; border-radius: 28px; border: 1px solid rgba(44,42,39,0.72); background: rgba(44,42,39,0.72); box-shadow: 0 6px 20px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: space-around;">
+    <button aria-label="Send a copy" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 12v8h14v-8"/></svg>
+    </button>
+    <button aria-label="Favorite" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.6-7 10-7 10z"/></svg>
+    </button>
+    <button aria-label="Info" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#E573C3" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>
+    </button>
+    <button aria-label="Edit" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/></svg>
+    </button>
+    <button aria-label="Archive" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v11h14V9M10 13h4"/></svg>
+    </button>
+    <button aria-label="Trash" style="width: 44px; height: 44px; border: none; background: none; display: flex; align-items: center; justify-content: center;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
+    </button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

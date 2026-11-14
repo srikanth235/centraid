@@ -368,6 +368,7 @@ final class LightboxPlayer: ObservableObject {
     private let once: Bool
     private var playbackLifetime: PlayerPlaybackLifetime?
     private var ended: NotificationObservation?
+    private var metadataLoad: Task<Void, Never>?
 
     @Published var playing = false
     @Published var position: Double = 0
@@ -389,7 +390,7 @@ final class LightboxPlayer: ObservableObject {
                 guard let self else { return }
                 self.position = time.seconds.isFinite ? time.seconds : 0
                 let length = self.player.currentItem?.duration.seconds ?? 0
-                self.duration = length.isFinite ? length : 0
+                if length.isFinite, length > 0 { self.duration = length }
                 self.playing = self.player.timeControlStatus == .playing
             }
         }
@@ -405,7 +406,16 @@ final class LightboxPlayer: ObservableObject {
                 if self.once { self.showing = false }
             }
         })
+        // A paused player need not tick after its metadata becomes ready. Read the length
+        // independently of playback, so the transport does not keep calling a real clip 0:00.
+        metadataLoad = Task { @MainActor [weak self] in
+            guard let time = try? await asset.load(.duration), !Task.isCancelled else { return }
+            let length = time.seconds
+            if length.isFinite, length > 0 { self?.duration = length }
+        }
     }
+
+    deinit { metadataLoad?.cancel() }
 
     func toggle() {
         if player.timeControlStatus == .playing {
@@ -520,13 +530,14 @@ struct LightboxTransport: View {
     @Environment(\.colorScheme) private var scheme
     @ObservedObject var player: LightboxPlayer
     let words: Centraid_Core_V1_PhotosLightboxWords
+    var light: Bool = false
 
     var body: some View {
         HStack(spacing: 8) {
             Button { player.toggle() } label: {
                 CentraidIconView(
                     iconKey: player.playing ? "Pause" : "Play",
-                    tint: Theme.color("onStage", scheme),
+                    tint: light ? Surface.ink : Theme.color("onStage", scheme),
                     size: 20
                 )
                 .frame(width: 44, height: 44)
@@ -538,10 +549,10 @@ struct LightboxTransport: View {
                 let fraction = player.duration > 0 ? player.position / player.duration : 0
                 ZStack(alignment: .leading) {
                     Rectangle()
-                        .fill(Theme.color("stageLine", scheme))
+                        .fill(light ? Surface.line : Theme.color("stageLine", scheme))
                         .frame(height: 2)
                     Rectangle()
-                        .fill(Theme.color("onStage", scheme))
+                        .fill(light ? Surface.ink : Theme.color("onStage", scheme))
                         .frame(width: geometry.size.width * min(1, max(0, fraction)), height: 2)
                 }
                 .frame(maxHeight: .infinity)
@@ -570,7 +581,7 @@ struct LightboxTransport: View {
             }
             Text("\(MediaClock.of(seconds: player.position)) / \(MediaClock.of(seconds: player.duration))")
                 .centraidType("mono")
-                .foregroundStyle(Theme.color("onStageSoft", scheme))
+                .foregroundStyle(light ? Surface.meta : Theme.color("onStageSoft", scheme))
         }
     }
 }

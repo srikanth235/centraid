@@ -1,4 +1,8 @@
 <!doctype html>
+<!-- Cold notification actions wait for the existing screen runtime to finish its first snapshot before receiving the background store. Startup scheduling is not an action receipt: the OS callback stays live until the action has been handled and its receipt or explicit refusal has settled, without dropping the early fact or opening a second core. -->
+<!-- Delivered task/event notifications stay until acted on or dismissed. Sliding the future scheduling window, ordinary refresh, display-zone/clock-format changes and read failures do not age them out. The core validates actual delivered IDs against their exact current source; an explicit source change/removal, foreign selected vault or expired receipt cancels that card. Dismissal never recreates a past card; receipts retain their original ten-minute deadline. -->
+<!-- Native notification response lifetime: body Open and background actions finish their existing async answer before the OS callback completes, exactly once on the main actor. Foreground banner/list/sound completion follows the same main-actor rule; notification routing and receipt policy are unchanged. -->
+<!-- Notification task/event times use the phone's 12/24-hour setting, just like their detail pages. Formatting changes never alter a notification's identity or scheduled instant. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -22,7 +26,7 @@ button{font:inherit;color:inherit}
       <span style="font-size: 13px; color: #75716A;">now</span>
     </div>
     <div style="font-size: 15px; font-weight: 600; margin-top: 8px;">Call the bank about the card</div>
-    <div style="font-size: 14px; color: #C9C4BA; margin-top: 2px;">Today at 9:30 · Work</div>
+    <div style="font-size: 14px; color: #C9C4BA; margin-top: 2px;">Today at 9:30 AM · Work</div>
     <div style="display: flex; gap: 8px; margin-top: 10px;">
       <button style="flex-grow: 1; height: 40px; border-radius: 12px; border: none; background: #2C2A27; font-size: 14px; font-weight: 600;">Mark as done</button>
       <button style="flex-grow: 1; height: 40px; border-radius: 12px; border: none; background: #2C2A27; font-size: 14px; font-weight: 600;">Snooze 1 hour</button>

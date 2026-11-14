@@ -14,6 +14,7 @@ use std::time::Duration;
 use centraid_api_proto::core_v1 as wire;
 use centraid_vault::time::{FireZone, parse_civil_ms};
 
+use super::retention;
 use crate::kit::civil;
 use crate::kit::permission::ExtraNotice;
 use crate::strings::agenda_reminders as reminders_words;
@@ -60,6 +61,8 @@ pub struct Inputs<'a> {
     pub vault_id: &'a str,
     pub zone: &'a str,
     pub locale: Locale,
+    /// The phone clock format changes words, never the desired instant.
+    pub hour_cycle: civil::HourCycle,
     /// The core's now, `YYYY-MM-DDTHH:MM`, in `zone`.
     pub now_local: &'a str,
     /// Every task of the reminders answer, each once ([`flatten`]).
@@ -305,6 +308,7 @@ fn pending(
         thread_id: thread.to_owned(),
         immediate: false,
         channel_id: String::new(),
+        source_fingerprint: String::new(),
     }
 }
 
@@ -334,15 +338,24 @@ fn tasks(inputs: &Inputs, zone: &FireZone, window: &Window) -> Vec<wire::Pending
             .as_deref()
             .and_then(|id| inputs.projects.iter().find(|p| p.project_id == id))
             .map_or_else(|| task_words::inbox(locale), |p| p.name.clone());
-        out.push(pending(
+        let mut notice = pending(
             zone,
             THREAD,
             format!("task|{}|{}|{fire_local}", inputs.vault_id, task.task_id),
             fire_ms,
             titled(task_words::untitled, locale, &task.title),
-            body(&when(locale, &day, &task.due_time), &list),
+            body(
+                &when(
+                    locale,
+                    &day,
+                    &civil::time_for(locale, &task.due_time, inputs.hour_cycle),
+                ),
+                &list,
+            ),
             if task.repeats { TASK_REPEATING } else { TASK },
-        ));
+        );
+        notice.source_fingerprint = retention::task_fingerprint(task);
+        out.push(notice);
     }
     out
 }
@@ -413,7 +426,7 @@ fn events(inputs: &Inputs, zone: &FireZone, window: &Window) -> Vec<wire::Pendin
             let fire_day = fire_local.get(..10).unwrap_or_default();
             let start_day = event.local_start.get(..10).unwrap_or_default();
             let day = civil::relative_day(locale, start_day, fire_day);
-            out.push(pending(
+            let mut notice = pending(
                 zone,
                 EVENT_THREAD,
                 format!("event|{}|{}|{minutes}", inputs.vault_id, event.instance_key),
@@ -430,13 +443,15 @@ fn events(inputs: &Inputs, zone: &FireZone, window: &Window) -> Vec<wire::Pendin
                         &if day_alert {
                             String::new()
                         } else {
-                            civil::clock(&event.local_start)
+                            civil::clock_for(locale, &event.local_start, inputs.hour_cycle)
                         },
                     ),
                     &place,
                 ),
                 "",
-            ));
+            );
+            notice.source_fingerprint = retention::event_fingerprint(event, minutes);
+            out.push(notice);
         }
     }
     out

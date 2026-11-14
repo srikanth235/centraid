@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Home with one photo (dark)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<!-- Home Reminders counts only overdue and due-today work. With none due, say the shared “Nothing due today” even when undated/future tasks already wait in Inbox; never claim this is the member's first reminder. The tile keeps its existing route and count scope. -->
+<!-- Audit fixes, 2026-11-10: When today has ended events but none remaining, Calendar says No more events today. The spoken tile summary names its upcoming scope. -->
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #0E0D0C; font-family: Geist, system-ui, sans-serif; color: #F2EFEA;">
+  <div style="display: flex; align-items: center; gap: 10px; padding: 56px 20px 12px;">
+    <span style="width: 36px; height: 36px; border-radius: 10px; background: #1F1E1C; display: flex; align-items: center; justify-content: center; font-weight: 600;">M</span>
+    <div style="flex-grow: 1;"><div style="font-size: 17px; font-weight: 600;">My vault</div><div style="font-size: 13px; color: #A39E95; display: flex; align-items: center; gap: 6px;"><span style="width: 7px; height: 7px; border-radius: 4px; background: #2F8556;"></span>Backed up 10 min ago</div></div>
+    <button aria-label="Search everything" style="width: 40px; height: 40px; border-radius: 20px; border: 1px solid rgba(44,42,39,0.9); background: rgba(44,42,39,0.72); display: flex; align-items: center; justify-content: center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></button>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 74px; gap: 14px; padding: 4px 20px 0;">
+    <div style="grid-column: span 2; grid-row: span 2; border-radius: 22px; background: #1F1E1C; padding: 12px; box-sizing: border-box; display: flex; flex-direction: column;">
+      <div style="font-size: 11px; font-weight: 700; color: #569EF7; letter-spacing: 0.4px;">WEDNESDAY</div>
+      <div style="font-size: 30px; font-weight: 600; line-height: 1;">4</div>
+      <div style="margin-top: 8px; border-left: 3px solid #569EF7; padding-left: 6px;"><div style="font-size: 12px; font-weight: 600;">Lunch with Ana</div><div style="font-size: 11px; color: #A39E95;">11:15 – 12:30</div></div>
+      <div style="margin-top: 6px; border-left: 3px solid #AA71E3; padding-left: 6px;"><div style="font-size: 12px; font-weight: 600;">Lease call</div><div style="font-size: 11px; color: #A39E95;">11:45</div></div>
+      <div style="margin-top: auto; font-size: 11px; color: #A39E95;">Calendar · 2 more</div>
+    </div>
+    <div style="grid-column: span 2; grid-row: span 2; border-radius: 22px; background: #1F1E1C; padding: 12px; box-sizing: border-box; display: flex; flex-direction: column; gap: 6px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;"><span style="font-size: 13px; font-weight: 700; color: #569EF7;">Reminders</span><span style="font-size: 18px; font-weight: 700; color: #569EF7;">5</span></div>
+      <div style="display: flex; gap: 6px; align-items: center; font-size: 12px;"><span style="width: 12px; height: 12px; border-radius: 6px; border: 1.4px solid #5C5852;"></span>Pay electricity bill</div>
+      <div style="display: flex; gap: 6px; align-items: center; font-size: 12px;"><span style="width: 12px; height: 12px; border-radius: 6px; border: 1.4px solid #5C5852;"></span>Call the bank</div>
+      <div style="display: flex; gap: 6px; align-items: center; font-size: 12px;"><span style="width: 12px; height: 12px; border-radius: 6px; border: 1.4px solid #5C5852;"></span>Send lease to Ana</div>
+      <div style="margin-top: auto; font-size: 11px; color: #A39E95;">Today</div>
+    </div>
+
+    <div style="grid-column: span 4; grid-row: span 2; border-radius: 22px; overflow: hidden; position: relative; background: #1F1E1C;">
+      <!-- Render only the actual photos: one fills the card; two split it; three use a main frame with two beside it. Four retain the existing mosaic. Grey means an actual photo lacks a local preview, never an invented empty slot. -->
+      <div style="height: 100%; background: linear-gradient(150deg, #E8A3C0, #C2366B 60%, #F0B23E);"></div>
+      <!-- Caption uses an opaque Surface.card plate with Surface.ink (and Surface.meta for any second line), native spacing 2/1 and radius sm. It stays readable over white, black or coloured thumbnails in either appearance; the photo-cell layout is unchanged. -->
+      <div style="position: absolute; left: 12px; bottom: 12px; max-width: calc(100% - 24px); box-sizing: border-box; padding: 4px 8px; border-radius: 4px; background: #1F1E1C; color: #F2EFEA; font-size: 13px; font-weight: 600;">Photos</div>
+    </div>
+
+    <div style="border-radius: 18px; background: #1F1E1C; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7C97F4" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c0-1 1-1.5 2.5-1.5s2.5.6 2.5 1.7c0 2.5-5 1.3-5 3.8 0 1.1 1 1.5 2.5 1.5s2.5-.5 2.5-1.5"/></svg>
+      <span style="font-size: 12px; font-weight: 600;">₹21.6k</span><span style="font-size: 10px; color: #A39E95;">left</span>
+    </div>
+    <div style="border-radius: 18px; background: #1F1E1C; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F76E8E" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M8 20c-2 0-3-2-3-4s2-3 3-3 2 2 2 4-1 3-2 3zM16 13c-2 0-3-2-3-4s2-3 3-3 2 2 2 4-1 3-2 3z"/></svg>
+      <span style="font-size: 12px; font-weight: 600;">9,108</span><span style="font-size: 10px; color: #A39E95;">steps</span>
+    </div>
+    <div style="border-radius: 18px; background: #1F1E1C; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#BA82F5" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5"/></svg>
+      <span style="font-size: 12px; font-weight: 600;">3</span><span style="font-size: 10px; color: #A39E95;">reconnect</span>
+    </div>
+    <div style="border-radius: 18px; background: #1F1E1C; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#939DA8" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>
+      <span style="font-size: 12px; font-weight: 600;">Locked</span><span style="font-size: 10px; color: #A39E95;">Locker</span>
+    </div>
+
+    <div style="grid-column: span 2; border-radius: 18px; background: #1F1E1C; padding: 10px 12px; box-sizing: border-box;">
+      <div style="font-size: 12px; font-weight: 700; color: #BF9738;">Notes</div>
+      <div style="font-size: 12px; margin-top: 4px;">Link with [[</div>
+      <div style="font-size: 11px; color: #A39E95;">Edited yesterday</div>
+    </div>
+    <div style="grid-column: span 2; border-radius: 18px; background: #1F1E1C; padding: 10px 12px; box-sizing: border-box;">
+      <div style="font-size: 12px; font-weight: 700; color: #30A9C6;">Docs</div>
+      <div style="font-size: 12px; margin-top: 4px;">Rent receipt Oct</div>
+      <div style="font-size: 11px; color: #A39E95;">Added 1 Nov</div>
+    </div>
+  </div>
+  <p style="margin: 14px 20px 0; font-size: 12px; color: #A39E95; text-align: center;">Long-press to resize or rearrange · small, medium and large, like iPhone widgets</p>
+
+  <div style="position: absolute; left: 16px; right: 16px; bottom: 24px; height: 56px; border-radius: 28px; border: 1px solid rgba(44,42,39,0.72); background: rgba(44,42,39,0.72); box-shadow: 0 6px 20px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: space-around; font-size: 11px;">
+    <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: #F2EFEA; font-weight: 600;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"/></svg>Home</span>
+    <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: #A39E95;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></svg>Chat</span>
+    <a href="Backup.dc.html" style="text-decoration: none; display: flex; flex-direction: column; align-items: center; gap: 2px; color: #A39E95;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M20 12a8 8 0 10-3 6.2M20 6v6h-6"/></svg>Backup</a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

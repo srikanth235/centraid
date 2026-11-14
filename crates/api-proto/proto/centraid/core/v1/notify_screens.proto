@@ -8,7 +8,8 @@
 // wants pending, not a change to apply: a shell diffs it against what it put in
 // the OS (iOS `getPendingNotificationRequests`, Android its own record of the
 // alarms it set), removes pending ones not in the set, removes DELIVERED ones
-// only when they are in neither `all` nor `live_ids`, and adds or replaces what
+// only when they are in neither `all` nor `live_ids` in legacy mode. With
+// retain_delivered, only explicit cancel_delivered_ids remove delivered cards. It adds or replaces what
 // is in `all`. Sent again whenever the set changes: an edit,
 // a completion, a delete, a vault switch (the new vault's set, or none), the
 // locale or the zone.
@@ -73,12 +74,14 @@ message PendingNotification {
   // WHICH CHANNEL (#1188, NB2). Empty is the reminders-and-events channel; "backup" is the
   // backup warnings' own, so switching one off does not silence the other. Android only.
   string channel_id = 10;
+  // Opaque raw alert configuration digest; display locale/zone and unrelated edits do not change it.
+  string source_fingerprint = 11;
 }
 
 // Effect 120: make the operating system hold exactly `all`.
 message ScheduleNotifications {
   // Soonest first, and bounded by construction (Rust sends at most the next 48
-  // inside two weeks; iOS keeps at most 64 pending).
+  // inside ninety days; iOS keeps at most 64 pending).
   repeated PendingNotification all = 1;
   repeated NotificationCategory categories = 2;
   // PERMISSION IS ASKED ONLY WHEN IT IS FIRST NEEDED: true when `all` holds a
@@ -98,6 +101,19 @@ message ScheduleNotifications {
   repeated string live_ids = 5;
   // The backup channel's name, as the member sees it in system settings (Android).
   string backup_channel_name = 6;
+  // Exact OS presses whose handling is terminal, including their press_id. Durable receipt
+  // writes/Undo cleanup must be acknowledged before inclusion; a refresh is never an ACK.
+  repeated NotificationAnswered completed_answers = 7;
+  // Actual delivered cards are kept unless explicitly cancelled. False retains the legacy
+  // all/live_ids rule and clears the departed vault during a known vault switch.
+  bool retain_delivered = 8;
+  repeated string cancel_delivered_ids = 9;
+}
+
+// Actual delivered OS inventory, not the desired future set.
+message DeliveredNotification {
+  string notification_id = 1;
+  string source_fingerprint = 2;
 }
 
 // What the OS said about notifications.
@@ -133,6 +149,7 @@ message NotificationsScheduled {
   // The same for the backup channel.
   bool backup_channel_off = 6;
   string backup_channel_shown = 7;
+  repeated DeliveredNotification delivered = 8;
 }
 
 // ShellFact 8: the member pressed a button on a notification, or tapped it.

@@ -1,8 +1,9 @@
 //! `imports.made`: WHAT A MADE VAULT BRINGS IN (R-ONBOARD-8; the imports lane C3 dropped, #1135).
 //!
-//! Making a vault asks the OS for photo access once, and a grant starts the camera-roll walk.
-//! Once that prompt is answered, so two system prompts never stack, the importers run in turn, each
-//! asking its own permission: Contacts, Calendar, then Reminders (iOS only). One line says what
+//! Making a vault reads the OS photo grant, and an existing grant starts the camera-roll walk.
+//! The importers then read in turn using existing grants: Contacts, Calendar, then Reminders
+//! (iOS only). Creating a vault is not consent to a permission prompt; each app's explicit import
+//! action asks at the moment of need. One line says what
 //! came in ("6 people, 12 events imported"); a store the member refused, or one with nothing to
 //! bring, says nothing, and no line shows when nothing came in.
 //!
@@ -10,8 +11,8 @@
 //! (so a calendar imported here is followed from now on, exactly as one imported from Calendar's
 //! home: the follow coordinator takes it from the import), and [`super::reminders`]. This screen only sequences them and says the result.
 //!
-//! The shell tells it when the vault is made (`Made`), answers the photo prompt
-//! (`LibraryPermission{ask}`) and the importers' reads as it always does, and stops drawing its
+//! The shell tells it when the vault is made (`Made`), reads the photo grant
+//! (`LibraryPermission{ask:false}`) and the importers' reads as it always does, and stops drawing its
 //! line when the view says `finished`. A grant asks the camera roll to walk, by name.
 
 use centraid_api_proto::core_v1 as wire;
@@ -136,13 +137,9 @@ pub fn open_label(locale: Locale, app: &str) -> String {
 }
 
 impl Made {
-    fn effects(effects: Vec<wire::Effect>) -> Vec<wire::Effect> {
-        effects
-    }
-
     /// Move to the next importer and start it.
     fn next(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        match self.step {
+        let mut effects = match self.step {
             Step::Idle => {
                 self.step = Step::Photos;
                 vec![effect(wire::effect::Kind::LibraryPermission(
@@ -191,7 +188,19 @@ impl Made {
                 self.step = Step::Done;
                 Vec::new()
             }
+        };
+        // The same importers also serve explicit Import taps, which may ask. This automatic
+        // sequence only uses access the phone already granted, on both native shells.
+        for effect in &mut effects {
+            match effect.kind.as_mut() {
+                Some(wire::effect::Kind::LibraryPermission(read)) => read.ask = false,
+                Some(wire::effect::Kind::ContactsRead(read)) => read.ask_permission = false,
+                Some(wire::effect::Kind::CalendarRead(read)) => read.ask_permission = false,
+                Some(wire::effect::Kind::RemindersRead(read)) => read.ask_permission = false,
+                _ => {}
+            }
         }
+        effects
     }
 
     /// The member's Import reminders tap: ask the OS and import, with their option.
@@ -257,13 +266,13 @@ impl Screen for Made {
                 if let Some(M::Made(made)) = &made.kind {
                     self.reminders = made.reminders;
                     self.include_completed = made.include_completed;
-                    return Self::effects(self.next(ctx));
+                    return self.next(ctx);
                 }
                 self.reminders_requested(made, ctx)
             }
             // The member's own Import reminders tap, once nothing else is running.
             (E::ImportsMade(made), Step::Done) => self.reminders_requested(made, ctx),
-            // The OS photo prompt was answered (or the shell could not raise it): a grant starts
+            // The OS photo grant was read (or the shell could not read it): a grant starts
             // the camera roll's walk, by name, and the importers go.
             (E::EffectResult(result), Step::Photos) => match &result.outcome {
                 Some(O::LibraryPermissionRead(read)) => {

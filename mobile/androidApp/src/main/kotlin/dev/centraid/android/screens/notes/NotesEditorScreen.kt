@@ -115,7 +115,8 @@ public fun NotesEditorScreen(
     CompositionLocalProvider(LocalAppAccentId provides "notes") {
     EditorRoom(
         title = chrome?.title.orEmpty(),
-        status = state.autosave,
+        // Notes owns refusal/conflict and Reload on chrome.status below, over the kept draft.
+        status = state.autosave?.takeUnless { it.refused },
         closeLabel = chrome?.close.orEmpty().ifEmpty { dev.centraid.android.kit.KitWords.DONE },
         onClose = onClose,
         // The page's pop is the flush: Rust sends itself `Left`.
@@ -131,11 +132,11 @@ public fun NotesEditorScreen(
         // THE ONE STATUS LINE: the core's sentence, with its one verb (Undo) while it has one.
         if (chrome != null && chrome.status_action.isNotEmpty()) {
             StatusLine(
-                line = StatusLineMessage(sentence = chrome.status, action_label = chrome.status_action),
+                line = StatusLineMessage(sentence = chrome.status, action_label = chrome.status_action, refused = state.autosave?.refused == true),
                 actTag = "notes-editor-status-action",
             ) { send(NotesEditorEvent(status_acted = NotesEditorEvent.StatusActed())) }
         } else {
-            StatusLine(chrome?.status.orEmpty())
+            StatusLine(line = StatusLineMessage(sentence = chrome?.status.orEmpty(), refused = state.autosave?.refused == true))
         }
         ReadStateView(
             page = state.page!!,

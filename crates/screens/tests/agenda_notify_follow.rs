@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::agenda;
-use centraid_screens::testing::Driver;
+use centraid_screens::testing::{Driver, FakeShell};
 use reminders_support::day;
 use wire::screen_event::Kind as E;
 
@@ -82,6 +82,7 @@ fn a_background_follow_pass_that_brings_in_an_alerted_event_leaves_the_phones_ow
     );
     let mut d = Driver::with_runtime(runtime);
     d.start();
+    d.serve(&mut FakeShell::default());
     // This device imported before, so Calendar's home follows the phone's store.
     answer(
         &mut d,

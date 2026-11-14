@@ -109,6 +109,5 @@ catalog! {
     plain tile_empty_money = ("Import your first statement", "Import your first statement");
     plain tile_empty_notes = ("Write your first note", "Write your first note");
     plain tile_empty_people = ("Add someone you know", "Add someone you know");
-    plain tile_empty_reminders = ("Add your first reminder", "Add your first reminder");
     plain tile_empty_photos = ("Import your first photo", "Import your first photo");
 }

@@ -77,6 +77,16 @@ internal interface UiHost {
 
 }
 
+/** A present host may answer asynchronously; only an absent host is a cancelled window. */
+internal suspend fun performUiEffect(
+    host: UiHost?,
+    request: EffectRequest,
+    answer: (EffectResult) -> Unit,
+): EffectResult? {
+    if (host == null) return EffectResult(failed = EffectFailed(reason = EffectReason.NO_WINDOW, cancelled = true))
+    return host.perform(request, answer)
+}
+
 /**
  * THE PLATFORM WORK THE SCREEN RUNTIME ASKS FOR, PERFORMED ONCE (#1135).
  *
@@ -187,7 +197,12 @@ internal class ShellEffects(
             // ---- the phone imports (`crates/screens/src/imports`) ------------------------------
             effect.camera_roll != null -> cameraRoll(effect.camera_roll!!)
             effect.library_permission != null -> {
-                if (effect.library_permission!!.ask) ui?.askMedia()
+                if (effect.library_permission!!.ask) {
+                    ui?.let { host ->
+                        LibraryRoll.notePermissionRequest(context)
+                        host.askMedia()
+                    }
+                }
                 EffectResult(library_permission_read = LibraryPermissionRead(permission = LibraryRoll.permission(context), device_id = InstallId.of(context)))
             }
             effect.roll_page != null -> withContext(Dispatchers.IO) {
@@ -328,7 +343,7 @@ internal class ShellEffects(
             // `denied` and Health follows at the next foreground. A pass never shows the sheet.
             effect.health_read != null && ui == null && !effect.health_read!!.ask_permission ->
                 AndroidHealth(context).snapshot(effect.health_read!!) { error("a pass never asks") }
-            else -> ui?.perform(request, answer) ?: EffectResult(failed = EffectFailed(reason = EffectReason.NO_WINDOW, cancelled = true))
+            else -> performUiEffect(ui, request, answer)
         }
     }
 

@@ -811,15 +811,14 @@ impl Screen for Person {
             // The owner check's answer, or the share sheet's: the vCard is made only after the
             // check passed.
             Some(E::EffectResult(result)) => {
+                // A pending pick owns its replies, even while an earlier share's sentence remains.
+                if let Some(outcome) = &result.outcome
+                    && let Some(effects) = self.attachments.result(ctx, outcome)
+                {
+                    return effects;
+                }
                 let id = self.party_id.clone();
-                let shared = self.share.result(ctx, &result, |ctx| vcard(ctx, &id));
-                if !shared.is_empty() || self.share.status().is_some() {
-                    return shared;
-                }
-                // The shell's answer to a pick: the attachments' (an add under way).
-                if let Some(outcome) = &result.outcome {
-                    return self.attachments.result(ctx, outcome).unwrap_or_default();
-                }
+                return self.share.result(ctx, &result, |ctx| vcard(ctx, &id));
             }
             Some(E::StatusActed(_)) => {
                 if self.undo.acted(ctx) {

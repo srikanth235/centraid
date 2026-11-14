@@ -40,7 +40,8 @@ internal object NotifyPlan {
      *   REMINDER; RESOLVING THE ITEM DOES.
      * - [schedule]: every timed one still to come, set again whether or not it changed (the same request
      *   code replaces it).
-     * - [post]: every immediate one not already showing.
+     * - [post]: immediate offers not showing and not previously delivered during this offer.
+     * Explicit retention leaves delivered cards alone except the ids Rust withdraws.
      *
      * Pure, and tested against the one fixture the iOS shell reads too (`contracts/notify/reconcile-cases.json`).
      */
@@ -61,6 +62,9 @@ internal object NotifyPlan {
         pending: Collection<String>,
         showing: Collection<String>,
         nowMs: Long,
+        retainDelivered: Boolean = false,
+        explicitIds: Collection<String> = emptyList(),
+        seenImmediateIds: Set<String> = emptySet(),
     ): Plan {
         // THE LAST OF A REPEATED ID WINS, as a replace by id would.
         val next = LinkedHashMap<String, PendingNotification>()
@@ -70,13 +74,17 @@ internal object NotifyPlan {
         val keep = next.keys + live
         return Plan(
             removePending = pending.filter { it !in scheduled }.distinct().sorted(),
-            removeShowing = showing.filter { it !in keep }.distinct().sorted(),
+            removeShowing = showing.filter { it in explicitIds || (!retainDelivered && it !in keep) }.distinct().sorted(),
             schedule = schedule,
-            post = next.values.filter { it.immediate && it.notification_id !in showing },
+            post = next.values.filter { it.immediate && it.notification_id !in showing && it.notification_id !in seenImmediateIds },
         )
     }
 
-    /** What the record keeps after [reconcile]: everything wanted that is still to come, and the immediates. */
+    /** Keep dismissal memory only for the currently offered immediate ids, never an unbounded log. */
+    fun rememberedImmediates(current: Set<String>, previous: Set<String>, showing: Set<String>): Set<String> =
+        (previous + showing).intersect(current)
+
+    /** What the record keeps after [reconcile]: future alarms and the immediate offers. */
     fun kept(wanted: List<PendingNotification>, nowMs: Long): List<PendingNotification> {
         val next = LinkedHashMap<String, PendingNotification>()
         wanted.forEach { next[it.notification_id] = it }

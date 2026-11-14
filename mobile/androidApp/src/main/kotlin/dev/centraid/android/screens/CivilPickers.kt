@@ -1,5 +1,6 @@
 package dev.centraid.android.screens
 
+import android.text.format.DateFormat
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.background
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.KitWords
@@ -60,7 +62,7 @@ internal fun CivilTimeDialog(
     val picker = rememberTimePickerState(
         initialHour = parts.getOrNull(0)?.toIntOrNull()?.coerceIn(0, 23) ?: 9,
         initialMinute = parts.getOrNull(1)?.toIntOrNull()?.coerceIn(0, 59) ?: 0,
-        is24Hour = true,
+        is24Hour = DateFormat.is24HourFormat(LocalContext.current),
     )
     Dialog(onDismissRequest = onDismiss) {
         Column(Modifier.background(centraidColor("bg")).padding(16.dp)) {

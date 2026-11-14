@@ -42,6 +42,7 @@ struct TodoRowView: View {
     var gutterContent: AnyView? = nil
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// A GROUP, NOT A STACK: in a `List` the task and each subtask are rows of their own, so a swipe
     /// lands on the one the finger is on; in a stack they sit one under the other as before.
@@ -92,13 +93,19 @@ struct TodoRowView: View {
 
     private var settled: Bool { row.check == .done || row.check == .wontDo }
 
+    /// A shape has no text baseline; center its dot on the title's first-line capitals.
+    private var titleDotBaseline: CGFloat {
+        3 + Theme.resolve(row.subtask ? "small" : "body", scheme, dynamicTypeSize).font.capHeight / 2
+    }
+
     /// The box's 44 target overhangs its 20pt mark by this much on every
     /// side, so the mark sits on the page margin and on the title's first
     /// line rather than mid-row; the gap to the title is the overhang.
     private static let boxOverhang: CGFloat = (CentraidGeometry.targetMinCoarse - 20) / 2
 
     private var line: some View {
-        HStack(alignment: .top, spacing: Self.boxOverhang) {
+        let dotBaseline = titleDotBaseline
+        return HStack(alignment: .top, spacing: Self.boxOverhang) {
             // A TASK IS A CIRCLE, a subtask a box: the shape the starter row
             // ("Tap the circle to finish me") and every task list teach.
             KitCheckBox(
@@ -115,10 +122,12 @@ struct TodoRowView: View {
                         // THE LIST'S COLOUR (#1173): one of the eight, a dot before the title.
                         if let color = AgendaPalette.list(row.listColorKey) {
                             Circle().fill(color).frame(width: 6, height: 6)
+                                .alignmentGuide(.firstTextBaseline) { _ in dotBaseline }
                         } else if !row.projectHueKey.isEmpty {
                             Circle()
                                 .fill(Theme.color(KitHue.role(row.projectHueKey) ?? "cSlate", scheme))
                                 .frame(width: 6, height: 6)
+                                .alignmentGuide(.firstTextBaseline) { _ in dotBaseline }
                         }
                         Text(row.title)
                             .centraidType(row.subtask ? "small" : "body")

@@ -119,6 +119,12 @@ pub struct Ctx<'a> {
 }
 
 impl<'a> Ctx<'a> {
+    /// The mounted vault's injected UTC clock. Absence keeps time-dependent work unready.
+    #[must_use]
+    pub fn now_ms(&self) -> Option<i64> {
+        self.core.now_ms()
+    }
+
     pub(crate) fn new(core: &'a dyn ScreenCtx, env: &'a Environment) -> Self {
         Self {
             core,

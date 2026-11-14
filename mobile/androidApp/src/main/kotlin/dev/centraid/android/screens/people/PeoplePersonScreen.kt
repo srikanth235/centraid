@@ -65,6 +65,7 @@ import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StatusChipView
+import dev.centraid.android.kit.StatusLine
 import dev.centraid.android.screens.agenda.AgendaAttachmentsView
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
@@ -96,7 +97,7 @@ public fun PeoplePersonScreen(
         trailing = state.edit?.takeIf { data != null && !chrome?.edit.isNullOrEmpty() }?.let { route ->
             RoomAction("Pencil", chrome?.edit.orEmpty(), "people-person-edit") { onOpen(route) }
         },
-        status = state.status?.sentence.orEmpty(),
+        statusLine = { StatusLine(state.status, actTag = "people-person-status-action") },
     ) {
         ReadStateView(
             page = state.page!!,

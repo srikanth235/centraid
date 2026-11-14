@@ -70,10 +70,9 @@ struct NotesEditorView: View {
         let chrome = state.chrome
         NotesEditorRoom(
             title: chrome.title,
-            // THE ONE STATUS LINE: its sentence is the core's (the save, or an editing sentence);
-            // while a verb rides it (Undo) the sentence sits in the pill over the keys and the
-            // header keeps the save.
-            status: chrome.statusAction.isEmpty ? chrome.status : state.autosave.label,
+            // Notes owns refusal/conflict and Reload on the inline row over the kept draft.
+            // Ordinary save feedback stays in the header while editing actions have their row.
+            status: state.autosave.refused ? "" : (chrome.statusAction.isEmpty ? chrome.status : state.autosave.label),
             refused: state.autosave.refused,
             closeLabel: chrome.close,
             onClose: onClose
@@ -177,7 +176,8 @@ struct NotesEditorView: View {
                     VStack(spacing: 0) {
                         // THE EDITING SENTENCE with its one verb ("Item checked", Undo).
                         ProgressStatusLine(
-                            sentence: chrome.statusAction.isEmpty ? "" : chrome.status,
+                            sentence: state.autosave.refused || !chrome.statusAction.isEmpty ? chrome.status : "",
+                            refused: state.autosave.refused,
                             actionLabel: chrome.statusAction,
                             onAct: { dispatch(event { $0.statusActed = .init() }) },
                             identifier: "notes-editor-status"

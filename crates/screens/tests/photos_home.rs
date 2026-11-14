@@ -1610,11 +1610,24 @@ fn more_has_no_camera_roll_row_and_the_retired_sheet_opens_nothing() {
     let mut r = rig();
     r.send(H::Band("more".to_owned()));
     let more = r.state().more.clone().expect("the sheet is up");
-    assert!(
-        more.rows.iter().all(|row| row.key == "tile_size"),
-        "More offers the tile size and nothing about the roll: {:?}",
-        more.rows.iter().map(|row| &row.key).collect::<Vec<_>>()
+    assert_eq!(
+        more.rows
+            .iter()
+            .map(|row| row.key.as_str())
+            .collect::<Vec<_>>(),
+        ["tile_size", "export", "trash"],
+        "More keeps the shared export and trash doors beside its display choice"
     );
+    assert!(more.rows[0].route.is_none());
+    assert_eq!(
+        more.rows[1].route.as_ref().expect("export route").screen,
+        photos::EXPORT
+    );
+    assert!(matches!(
+        more.rows[2].route.as_ref().expect("trash route").args,
+        Some(wire::route::Args::PhotosShelf(ref shelf))
+            if shelf.kind == wire::PhotosShelfKind::Trash as i32
+    ));
     // 6 was `SHEET_BACKUP_DETAIL`, reserved: an old shell asking for it reads as no sheet.
     r.send(H::Sheet(wire::photos_home_event::SheetEvent { sheet: 6 }));
     assert_eq!(r.state().sheet, Sheet::More as i32);

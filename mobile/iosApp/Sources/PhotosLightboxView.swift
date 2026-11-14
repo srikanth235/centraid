@@ -199,9 +199,9 @@ struct PhotosLightboxView: View {
                     if let live = media.live {
                         LiveChip(live: live, words: state.words)
                     }
-                    statusLine(photo)
+                    statusLine(photo, light: true)
                     if let video = media.video {
-                        LightboxTransport(player: video, words: state.words)
+                        LightboxTransport(player: video, words: state.words, light: true)
                             .padding(.horizontal, CentraidGeometry.pageMargin)
                     }
                 }
@@ -216,12 +216,12 @@ struct PhotosLightboxView: View {
     /// THE BAR OF VERBS, floating at the foot: the same verbs as ever, in the page's ink.
     private func lightToolbar(_ photo: Centraid_Core_V1_PhotosLightboxPhoto) -> some View {
         VStack(spacing: 4) {
-            if state.hasStatus, !state.status.sentence.isEmpty, !state.status.refused {
+            if state.hasStatus, !state.status.sentence.isEmpty {
                 HStack(spacing: 8) {
                     Text(state.status.sentence)
                         .kitType(.meta)
                         .multilineTextAlignment(.center)
-                        .foregroundStyle(Surface.meta)
+                        .foregroundStyle(state.status.refused ? StateColor.red.text : Surface.meta)
                         .accessibilityIdentifier("photos.lightbox.status")
                     statusAction(Surface.ink, "photos-lightbox-status-action")
                 }
@@ -344,17 +344,18 @@ struct PhotosLightboxView: View {
 
     /// THE ONE STATUS LINE, drawn only when it has something to say.
     @ViewBuilder
-    private func statusLine(_ photo: Centraid_Core_V1_PhotosLightboxPhoto) -> some View {
+    private func statusLine(_ photo: Centraid_Core_V1_PhotosLightboxPhoto, light: Bool = false) -> some View {
         let line = state.slideshow
             ? state.slideshowLine
             : (media.video != nil ? photo.statusLinePlaying : photo.statusLine)
         if !line.isEmpty || (photo.offersFetch && !state.slideshow) || photo.fetching {
             HStack(spacing: 8) {
-                if !state.slideshow, photo.fetching { StageSpinner() }
+                if !state.slideshow, photo.fetching { StageSpinner(light: light) }
                 if !line.isEmpty {
                     Text(line)
                         .centraidType("small")
-                        .foregroundStyle(Theme.color("onStageSoft", scheme))
+                        .foregroundStyle(light ? Surface.meta : Theme.color("onStageSoft", scheme))
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("photos.lightbox.status.line")
                 }
                 if !state.slideshow, photo.offersFetch {
@@ -363,11 +364,12 @@ struct PhotosLightboxView: View {
                     } label: {
                         Text(state.words.loadOriginal)
                             .centraidType("control")
-                            .foregroundStyle(Theme.color("onStage", scheme))
+                            .foregroundStyle(light ? Surface.ink : Theme.color("onStage", scheme))
                             .frame(minHeight: CentraidGeometry.targetMinCoarse)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .fixedSize(horizontal: true, vertical: false)
                     .accessibilityIdentifier("photos.lightbox.fetch")
                 }
             }
@@ -681,11 +683,6 @@ private struct PhotosLightboxInfo: View {
         let words = state.words
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
-                // A REFUSED EDIT IS SAID HERE, where the member made it.
-                if state.hasStatus, state.status.refused, !state.status.sentence.isEmpty {
-                    Text(state.status.sentence).kitType(.meta).foregroundStyle(StateColor.red.text)
-                }
-
                 // THE CAPTION, ITS OWN CARD.
                 VStack(alignment: .leading, spacing: 2) {
                     Text(words.captionLabel).kitType(.meta).foregroundStyle(Surface.meta)

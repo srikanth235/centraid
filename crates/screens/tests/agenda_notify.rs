@@ -12,12 +12,12 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_screens::agenda;
 use centraid_screens::catalog::act;
 use centraid_screens::field::Field;
-use centraid_screens::testing::Driver;
+use centraid_screens::testing::{Driver, FakeShell};
 use reminders_support::*;
 use wire::NotificationVerb as Verb;
 use wire::screen_event::Kind as E;
 
-fn rig() -> (Driver, u64) {
+fn rig() -> (Driver, u64, FakeShell) {
     let runtime = centraid_screens::Runtime::new(
         agenda::registry(),
         vec![(
@@ -26,8 +26,13 @@ fn rig() -> (Driver, u64) {
         )],
     )
     .with_services(agenda::notify::services());
-    let mut d = Driver::with_runtime(runtime);
+    let mut d = Driver::with_runtime_clocked(
+        runtime,
+        std::sync::Arc::new(centraid_vault::clock::FixedClock::frozen()),
+    );
     d.start();
+    let mut shell = FakeShell::default();
+    d.serve(&mut shell);
     let service = d
         .effects
         .iter()
@@ -39,7 +44,7 @@ fn rig() -> (Driver, u64) {
         })
         .map(|request| request.instance)
         .expect("the service spoke when it appeared");
-    (d, service)
+    (d, service, shell)
 }
 
 /// The latest set the service asked the shell to hold, after `d.effects` was
@@ -63,12 +68,18 @@ fn changed(d: &mut Driver, service: u64) {
     );
 }
 
-fn pressed(d: &mut Driver, service: u64, id: &str, verb: Verb) {
-    pressed_as(d, service, id, verb, "");
+fn pressed(d: &mut Driver, service: u64, shell: &mut FakeShell, id: &str, verb: Verb) {
+    pressed_as(d, service, shell, id, verb, "");
 }
 
-/// A press that carries the id the shell's outbox gave it (#1188, A6).
-fn pressed_as(d: &mut Driver, service: u64, id: &str, verb: Verb, press_id: &str) {
+fn pressed_as(
+    d: &mut Driver,
+    service: u64,
+    shell: &mut FakeShell,
+    id: &str,
+    verb: Verb,
+    press_id: &str,
+) {
     d.effects.clear();
     d.send(
         service,
@@ -82,6 +93,7 @@ fn pressed_as(d: &mut Driver, service: u64, id: &str, verb: Verb, press_id: &str
             )),
         }),
     );
+    d.serve(shell);
 }
 
 fn has(set: &wire::ScheduleNotifications, id: &str) -> bool {
@@ -90,7 +102,7 @@ fn has(set: &wire::ScheduleNotifications, id: &str) -> bool {
 
 #[test]
 fn a_reminder_is_held_done_from_its_button_undone_and_deleted() {
-    let (mut d, service) = rig();
+    let (mut d, service, mut shell) = rig();
     clear_tasks(&d);
     let tomorrow = day(&d, 1);
     let id = add(
@@ -113,7 +125,7 @@ fn a_reminder_is_held_done_from_its_button_undone_and_deleted() {
     assert_eq!(set.all[0].category_id, "task");
 
     // The button: the task is done, and the receipt carries Undo.
-    pressed(&mut d, service, &reminder, Verb::Done);
+    pressed(&mut d, service, &mut shell, &reminder, Verb::Done);
     assert_eq!(task_of_status(&d, &id), "done");
     let set = latest(&d);
     assert!(!has(&set, &reminder));
@@ -126,8 +138,32 @@ fn a_reminder_is_held_done_from_its_button_undone_and_deleted() {
     assert!(!set.ask_permission);
     let receipt_id = receipt.notification_id.clone();
 
+    // Returning rechecks platform permission without discarding the action's receipt or Undo.
+    d.effects.clear();
+    d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
+        foreground: false,
+    }));
+    d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
+        foreground: true,
+    }));
+    assert_eq!(
+        set.completed_answers,
+        vec![wire::NotificationAnswered {
+            notification_id: reminder.clone(),
+            verb: Verb::Done as i32,
+            press_id: String::new(),
+        }]
+    );
+    let mut refreshed = latest(&d);
+    assert!(
+        refreshed.completed_answers.is_empty(),
+        "an action completion is emitted once"
+    );
+    refreshed.completed_answers = set.completed_answers.clone();
+    assert_eq!(refreshed, set);
+
     // Undo: the task is open again and the reminder is back, the receipt gone.
-    pressed(&mut d, service, &receipt_id, Verb::Undo);
+    pressed(&mut d, service, &mut shell, &receipt_id, Verb::Undo);
     assert_eq!(task_of_status(&d, &id), "open");
     let set = latest(&d);
     assert!(has(&set, &reminder));
@@ -146,7 +182,7 @@ fn a_reminder_is_held_done_from_its_button_undone_and_deleted() {
 
 #[test]
 fn tomorrow_and_snooze_move_a_task_and_undo_puts_it_back() {
-    let (mut d, service) = rig();
+    let (mut d, service, mut shell) = rig();
     clear_tasks(&d);
     let (soon, later) = (day(&d, 1), day(&d, 4));
     let id = add(
@@ -162,6 +198,7 @@ fn tomorrow_and_snooze_move_a_task_and_undo_puts_it_back() {
     pressed(
         &mut d,
         service,
+        &mut shell,
         &format!("task||{id}|{later}T09:00"),
         Verb::Tomorrow,
     );
@@ -176,11 +213,232 @@ fn tomorrow_and_snooze_move_a_task_and_undo_puts_it_back() {
     );
 }
 
-/// NA5: A SNOOZE MOVES THE ALERT, NOT THE DUE DATE. The task keeps its due and its lead, the
-/// reminder row says the new moment, and Undo gives the original reminder back.
+fn task_of_status(d: &Driver, id: &str) -> String {
+    task_of(d, id).status
+}
+
+#[test]
+fn foreground_reconciles_unchanged_reminders_after_each_permission_outcome() {
+    use wire::NotificationPermission as Permission;
+    for permission in [
+        Permission::Denied,
+        Permission::Granted,
+        Permission::NotAsked,
+    ] {
+        let (mut d, service, _shell) = rig();
+        clear_tasks(&d);
+        let tomorrow = day(&d, 1);
+        add(
+            &d,
+            act::reminders::AddTask {
+                title: "Permission changed in Settings".to_owned(),
+                due: Field::Is(format!("{tomorrow}T09:00")),
+                remind_before_min: Field::Is(0),
+                ..Default::default()
+            },
+        );
+        changed(&mut d, service);
+        let wanted = latest(&d);
+        assert_eq!(
+            wanted.all.len(),
+            1,
+            "the unchanged set holds a timed reminder"
+        );
+        assert!(wanted.ask_permission);
+        let request = d
+            .effects
+            .iter()
+            .rev()
+            .find(|request| {
+                matches!(
+                    request
+                        .effect
+                        .as_ref()
+                        .and_then(|effect| effect.kind.as_ref()),
+                    Some(wire::effect::Kind::ScheduleNotifications(_))
+                )
+            })
+            .expect("the timed reminder asked the platform")
+            .clone();
+        d.effects.clear();
+        d.send(
+            service,
+            E::EffectResult(wire::EffectResult {
+                effect_id: request.effect_id,
+                outcome: Some(wire::effect_result::Outcome::NotificationsScheduled(
+                    wire::NotificationsScheduled {
+                        permission: permission as i32,
+                        held: u32::from(permission == Permission::Granted),
+                        ..Default::default()
+                    },
+                )),
+            }),
+        );
+        assert!(d.effects.is_empty(), "a permission answer is quiet");
+        changed(&mut d, service);
+        assert!(d.effects.is_empty(), "unchanged data still emits nothing");
+        d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
+            foreground: false,
+        }));
+        d.effects.clear();
+        d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
+            foreground: true,
+        }));
+        let sets: Vec<_> = d
+            .effects
+            .iter()
+            .filter_map(|request| match request.effect.as_ref()?.kind.as_ref()? {
+                wire::effect::Kind::ScheduleNotifications(set) => Some(set),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            sets.len(),
+            1,
+            "foreground must recheck the platform after {permission:?}"
+        );
+        assert_eq!(
+            *sets[0], wanted,
+            "grant, revocation or promptability can change without a task edit"
+        );
+        changed(&mut d, service);
+        assert!(
+            d.effects.is_empty(),
+            "reconciliation does not disable set deduplication"
+        );
+    }
+}
+
+#[test]
+fn a_receipt_undo_survives_a_notification_service_restart() {
+    let runtime = centraid_screens::Runtime::new(
+        agenda::registry(),
+        vec![(
+            agenda::TAB.to_owned(),
+            routes::home(wire::AgendaDestination::Day, ""),
+        )],
+    );
+    let d = Driver::with_runtime(runtime);
+    clear_tasks(&d);
+    let tomorrow = day(&d, 1);
+    let id = add(
+        &d,
+        act::reminders::AddTask {
+            title: "Cold notification action".to_owned(),
+            due: Field::Is(format!("{tomorrow}T09:00")),
+            remind_before_min: Field::Is(0),
+            ..Default::default()
+        },
+    );
+    let mut shell = FakeShell::default();
+    let mut update =
+        |service: &mut dyn centraid_screens::Screen, kind: E| driven(&d, service, &mut shell, kind);
+    let mut first = agenda::notify::build(&agenda::notify::route()).expect("the service builds");
+    let appeared = update(&mut *first, E::Appeared(Default::default()));
+    let reminder = appeared
+        .iter()
+        .find_map(|effect| match effect.kind.as_ref()? {
+            wire::effect::Kind::ScheduleNotifications(set) => {
+                set.all.iter().find(|n| n.notification_id.contains(&id))
+            }
+            _ => None,
+        })
+        .expect("the timed task is offered to the platform")
+        .notification_id
+        .clone();
+    let completed = update(
+        &mut *first,
+        E::ShellFact(wire::ShellFact {
+            fact: Some(wire::shell_fact::Fact::NotificationAnswered(
+                wire::NotificationAnswered {
+                    notification_id: reminder,
+                    verb: Verb::Done as i32,
+                    press_id: String::new(),
+                },
+            )),
+        }),
+    );
+    assert_eq!(task_of_status(&d, &id), "done");
+    let receipt = completed
+        .iter()
+        .find_map(|effect| match effect.kind.as_ref()? {
+            wire::effect::Kind::ScheduleNotifications(set) => set
+                .all
+                .iter()
+                .find(|n| n.immediate && n.body == "Cold notification action"),
+            _ => None,
+        })
+        .expect("the cold action posts a receipt")
+        .clone();
+    assert_eq!(
+        receipt.category_id, "receipt",
+        "the posted receipt offers Undo"
+    );
+    // The Android receiver releases its last AppSession holder after posting. The OS still
+    // holds the receipt, but its next button opens a new service over the unchanged vault.
+    drop(first);
+    let mut reopened =
+        agenda::notify::build(&agenda::notify::route()).expect("the service rebuilds");
+    update(&mut *reopened, E::Appeared(Default::default()));
+    update(
+        &mut *reopened,
+        E::ShellFact(wire::ShellFact {
+            fact: Some(wire::shell_fact::Fact::NotificationAnswered(
+                wire::NotificationAnswered {
+                    notification_id: receipt.notification_id,
+                    verb: Verb::Undo as i32,
+                    press_id: String::new(),
+                },
+            )),
+        }),
+    );
+    assert_eq!(
+        task_of_status(&d, &id),
+        "open",
+        "a posted Undo must retain its inverse after the receiver's session closes"
+    );
+}
+
+/// A shell acknowledges each secret operation before the service can post a set.
+fn driven(
+    d: &Driver,
+    service: &mut dyn centraid_screens::Screen,
+    shell: &mut FakeShell,
+    kind: E,
+) -> Vec<wire::Effect> {
+    let mut pending = d.with_ctx(|ctx| service.update(wire::ScreenEvent { kind: Some(kind) }, ctx));
+    let mut output = Vec::new();
+    for _ in 0..16 {
+        if pending.is_empty() {
+            return output;
+        }
+        let mut next = Vec::new();
+        for effect in pending {
+            if let Some(wire::effect::Kind::Secrets(batch)) = effect.kind.as_ref() {
+                let answer = shell.batch(batch);
+                next.extend(d.with_ctx(|ctx| {
+                    service.update(
+                        wire::ScreenEvent {
+                            kind: Some(E::EffectResult(wire::EffectResult {
+                                effect_id: 0,
+                                outcome: Some(wire::effect_result::Outcome::Secrets(answer)),
+                            })),
+                        },
+                        ctx,
+                    )
+                }));
+            } else {
+                output.push(effect);
+            }
+        }
+        pending = next;
+    }
+    panic!("secret operation count exceeded the receipt protocol bound");
+}
+
 #[test]
 fn a_snooze_moves_the_alert_and_leaves_the_due() {
-    let (mut d, service) = rig();
+    let (mut d, service, mut shell) = rig();
     clear_tasks(&d);
     let later = day(&d, 4);
     let id = add(
@@ -195,8 +453,19 @@ fn a_snooze_moves_the_alert_and_leaves_the_due() {
     changed(&mut d, service);
     let original = format!("task||{id}|{later}T08:45");
     assert!(has(&latest(&d), &original), "{:?}", latest(&d).all);
-    pressed(&mut d, service, &original, Verb::SnoozeHour);
+    pressed(&mut d, service, &mut shell, &original, Verb::SnoozeHour);
     let task = task_of(&d, &id);
+    let now = d.with_ctx(|ctx| ctx.now_ms().expect("injected vault clock"));
+    let alert = latest(&d)
+        .all
+        .into_iter()
+        .find(|n| !n.immediate && n.notification_id.starts_with(&format!("task||{id}|")))
+        .expect("snoozed alert");
+    assert_eq!(
+        alert.fire_at_ms,
+        now + 3_600_000,
+        "snooze is one elapsed hour"
+    );
     assert_eq!(task.due_local, format!("{later}T09:00"), "the due stays");
     assert_eq!(task.remind_before_min, Some(15), "the lead stays");
     let set = latest(&d);
@@ -210,22 +479,15 @@ fn a_snooze_moves_the_alert_and_leaves_the_due() {
     );
     let receipt = set.all.iter().find(|n| n.immediate).expect("a receipt");
     let receipt_id = receipt.notification_id.clone();
-    pressed(&mut d, service, &receipt_id, Verb::Undo);
+    pressed(&mut d, service, &mut shell, &receipt_id, Verb::Undo);
     assert!(has(&latest(&d), &original), "{:?}", latest(&d).all);
     assert_eq!(task_of(&d, &id).due_local, format!("{later}T09:00"));
 }
 
-fn task_of_status(d: &Driver, id: &str) -> String {
-    task_of(d, id).status
-}
-
-/// A5: THE SET DOES NOT DEPEND ON THE VAULT'S SIZE. Past the old read's ceiling (2,000 events in
-/// the window) the service was refused and kept a stale set; now the alert index names the few
-/// items that fire next and the set comes, soonest first, capped.
 #[test]
 fn a_vault_of_thousands_of_events_still_gets_its_next_forty_eight() {
     use centraid_screens::catalog::act::calendar::{Propose, ProposeTiming};
-    let (mut d, service) = rig();
+    let (mut d, service, _shell) = rig();
     clear_tasks(&d);
     let first = day(&d, 1);
     for n in 0..2_100_i64 {
@@ -255,10 +517,11 @@ fn a_vault_of_thousands_of_events_still_gets_its_next_forty_eight() {
 }
 
 /// A6: A PRESS THE SHELL SENDS TWICE (its outbox could not tell the core had it) IS APPLIED ONCE,
-/// and an Undo needs nothing the core held in memory.
+/// and its already persisted live receipt keeps its original Undo/deadline.
+
 #[test]
-fn a_press_sent_twice_is_applied_once_and_undo_works_after_the_receipt_was_forgotten() {
-    let (mut d, service) = rig();
+fn a_press_sent_twice_keeps_the_same_live_receipt_and_undo() {
+    let (mut d, service, mut shell) = rig();
     clear_tasks(&d);
     let tomorrow = day(&d, 1);
     let id = add(
@@ -272,7 +535,14 @@ fn a_press_sent_twice_is_applied_once_and_undo_works_after_the_receipt_was_forgo
     );
     changed(&mut d, service);
     let reminder = format!("task||{id}|{tomorrow}T09:00");
-    pressed_as(&mut d, service, &reminder, Verb::Done, "press-1");
+    pressed_as(
+        &mut d,
+        service,
+        &mut shell,
+        &reminder,
+        Verb::Done,
+        "press-1",
+    );
     assert_eq!(task_of_status(&d, &id), "done");
     let receipt = latest(&d)
         .all
@@ -282,11 +552,28 @@ fn a_press_sent_twice_is_applied_once_and_undo_works_after_the_receipt_was_forgo
         .clone();
 
     // The same press again, as the outbox does at the next start: nothing new, no second receipt.
-    pressed_as(&mut d, service, &reminder, Verb::Done, "press-1");
+    pressed_as(
+        &mut d,
+        service,
+        &mut shell,
+        &reminder,
+        Verb::Done,
+        "press-1",
+    );
     assert_eq!(task_of_status(&d, &id), "done");
 
-    // The core forgets the receipt (the app was killed, or the ten minutes passed), and the member
-    // presses Undo on the banner still on the screen.
+    assert_eq!(
+        latest(&d)
+            .all
+            .iter()
+            .find(|n| n.immediate)
+            .expect("same receipt")
+            .notification_id,
+        receipt.notification_id
+    );
+    assert_eq!(latest(&d).completed_answers[0].press_id, "press-1");
+    // A timer callback does not advance the injected clock. The original live receipt survives;
+    // actual process/store restart and strict absolute expiry are covered separately.
     d.effects.clear();
     d.send(
         service,
@@ -297,6 +584,7 @@ fn a_press_sent_twice_is_applied_once_and_undo_works_after_the_receipt_was_forgo
     pressed_as(
         &mut d,
         service,
+        &mut shell,
         &receipt.notification_id,
         Verb::Undo,
         "press-2",
@@ -304,15 +592,16 @@ fn a_press_sent_twice_is_applied_once_and_undo_works_after_the_receipt_was_forgo
     assert_eq!(
         task_of_status(&d, &id),
         "open",
-        "Undo needs no memory of the receipt"
+        "the same live receipt remains undoable"
     );
 }
 
 /// A2: TIME PASSING NEVER REMOVES A DELIVERED REMINDER; ONLY RESOLVING THE ITEM DOES. A reminder that
 /// fired yesterday and was not dealt with is not pending, but it is named live until the task is done.
+
 #[test]
 fn a_fired_reminder_stays_live_until_its_task_is_resolved() {
-    let (mut d, service) = rig();
+    let (mut d, service, _shell) = rig();
     clear_tasks(&d);
     let yesterday = day(&d, -1);
     let id = add(
@@ -342,12 +631,13 @@ fn a_fired_reminder_stays_live_until_its_task_is_resolved() {
 }
 
 /// A8: AN EVENT'S ALERT LEAVES THE SET WITH ITS TRASH AND COMES BACK WITH ITS RESTORE.
+
 #[test]
 fn an_events_alert_leaves_with_its_trash_and_returns_with_its_restore() {
     use centraid_screens::catalog::act::calendar::{
         Propose, ProposeTiming, RestoreEvent, TrashEvent,
     };
-    let (mut d, service) = rig();
+    let (mut d, service, _shell) = rig();
     clear_tasks(&d);
     let first = day(&d, 2);
     let id = id_of(&arrange(
@@ -382,10 +672,11 @@ fn an_events_alert_leaves_with_its_trash_and_returns_with_its_restore() {
 
 /// A DELIVERED EVENT ALERT STAYS UNTIL THE EVENT ENDS, however long it runs: a week-long event that
 /// began five days ago is still live, and one that ended yesterday is not.
+
 #[test]
 fn a_long_events_alert_stays_live_until_it_ends() {
     use centraid_screens::catalog::act::calendar::{Propose, ProposeTiming};
-    let (mut d, service) = rig();
+    let (mut d, service, _shell) = rig();
     clear_tasks(&d);
     let (began, over, ended) = (day(&d, -5), day(&d, 3), day(&d, -1));
     arrange(
@@ -423,9 +714,10 @@ fn a_long_events_alert_stays_live_until_it_ends() {
 /// NA1: WHAT THE PHONE SAID ABOUT ALERTS REACHES THE EDITOR. A refusal answered to the service is
 /// the sentence under a reminder that would sound, in the kit's one words; an allowed phone says
 /// nothing of its own.
+
 #[test]
 fn a_refused_grant_is_said_under_the_reminder_that_would_sound() {
-    let (mut d, service) = rig();
+    let (mut d, service, _shell) = rig();
     clear_tasks(&d);
     let id = add(
         &d,
@@ -523,6 +815,7 @@ fn answered(d: &mut Driver, service: u64, scheduled: wire::NotificationsSchedule
 
 /// ANOTHER PRODUCER'S NOTICE (#1188, NB2): held through the one service, it never starts the
 /// system prompt by itself, only its screen's own `ask` does, and a tap on it opens where it says.
+
 #[test]
 fn another_producers_notice_never_asks_by_itself_and_a_tap_opens_its_route() {
     use centraid_screens::kit::permission::{Channel, ExtraNotice, Offer};
@@ -537,6 +830,8 @@ fn another_producers_notice_never_asks_by_itself_and_a_tap_opens_its_route() {
     let board = runtime.alerts();
     let mut d = Driver::with_runtime(runtime);
     d.start();
+    let mut shell = FakeShell::default();
+    d.serve(&mut shell);
     let service = d
         .effects
         .iter()
@@ -579,6 +874,36 @@ fn another_producers_notice_never_asks_by_itself_and_a_tap_opens_its_route() {
     assert!(latest(&d).ask_permission, "its screen's own ask does");
     signalled(&mut d);
     assert!(!latest(&d).ask_permission, "an ask is spent once");
+    // Actual OS inventory remains valid while the producer still offers this id,
+    // even when it has not separately named it in wanted (the upstream all/live rule).
+    d.effects.clear();
+    answered(
+        &mut d,
+        service,
+        wire::NotificationsScheduled {
+            delivered: vec![wire::DeliveredNotification {
+                notification_id: "backup|stale".to_owned(),
+                source_fingerprint: String::new(),
+            }],
+            ..Default::default()
+        },
+    );
+    assert!(
+        d.effects.iter().all(|request| {
+            match request
+                .effect
+                .as_ref()
+                .and_then(|effect| effect.kind.as_ref())
+            {
+                Some(wire::effect::Kind::ScheduleNotifications(set)) => !set
+                    .cancel_delivered_ids
+                    .iter()
+                    .any(|id| id == "backup|stale"),
+                _ => true,
+            }
+        }),
+        "an offered delivered notice must not be withdrawn as an unknown record"
+    );
     d.effects.clear();
     d.send(
         service,
@@ -600,4 +925,13 @@ fn another_producers_notice_never_asks_by_itself_and_a_tap_opens_its_route() {
                 _ => None,
             });
     assert_eq!(opened, Some(opens), "a tap opens the producer's route");
+    assert!(board.hold("backup", Offer::default()));
+    signalled(&mut d);
+    assert!(
+        latest(&d)
+            .cancel_delivered_ids
+            .iter()
+            .any(|id| id == "backup|stale"),
+        "withdrawal of the offer and wanted id removes that delivered notice"
+    );
 }

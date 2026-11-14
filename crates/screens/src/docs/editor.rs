@@ -343,9 +343,15 @@ impl Screen for Editor {
                 body: draft.body.clone(),
             })
         });
-        let status_label = match autosave.phase() {
-            Save::Dirty | Save::Saving | Save::Saved | Save::Refused | Save::Conflict => {
-                autosave.label.clone()
+        // A failed/gated page has no editable draft and cannot claim a save.
+        let autosave = content.as_ref().map(|_| autosave);
+        let status_label = match autosave.as_ref().map(wire::Autosave::phase) {
+            Some(Save::Dirty | Save::Saving | Save::Saved | Save::Refused | Save::Conflict) => {
+                autosave
+                    .as_ref()
+                    .expect("a save phase has a status")
+                    .label
+                    .clone()
             }
             _ => String::new(),
         };
@@ -359,7 +365,7 @@ impl Screen for Editor {
                 status_label,
                 remote_note: if !self.kept.is_empty() {
                     self.kept.clone()
-                } else if autosave.remote_changed {
+                } else if autosave.as_ref().is_some_and(|save| save.remote_changed) {
                     words::remote_changed(locale)
                 } else {
                     String::new()
@@ -372,7 +378,7 @@ impl Screen for Editor {
                     loading: words::loading(locale),
                     retry: words::retry(locale),
                 }),
-                autosave: Some(autosave),
+                autosave,
             })),
             ..wire::ViewState::default()
         }

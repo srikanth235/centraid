@@ -1516,18 +1516,16 @@ impl Screen for Editor {
             // The owner check's answer, or the share sheet's: the note as Markdown goes out only
             // after the check passed.
             Some(E::EffectResult(result)) => {
+                // A pending pick owns its replies, even while an earlier share's sentence remains.
+                if let (Some(attachments), Some(outcome)) = (&mut self.attachments, &result.outcome)
+                    && let Some(effects) = attachments.result(ctx, outcome)
+                {
+                    return effects;
+                }
                 let file = self.markdown();
-                let shared = self
+                return self
                     .share
                     .result(ctx, &result, |_| file.ok_or_else(String::new));
-                if !shared.is_empty() || self.share.status().is_some() {
-                    return shared;
-                }
-                // The shell's answer to a pick: the attachments' (an add under way).
-                if let (Some(attachments), Some(outcome)) = (&mut self.attachments, &result.outcome)
-                {
-                    return attachments.result(ctx, outcome).unwrap_or_default();
-                }
             }
             Some(E::NotesEditor(event)) => return self.event(event, ctx),
             _ => {}

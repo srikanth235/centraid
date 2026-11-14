@@ -419,7 +419,7 @@ message PhotosMoreSheet {
 }
 
 message PhotosMoreRow {
-  // `tile_size`.
+  // `tile_size`, `export` or `trash`.
   string key = 1;
   string label = 2;
   string meta = 3;

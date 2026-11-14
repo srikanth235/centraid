@@ -37,7 +37,16 @@ import java.time.Instant
  * through the stage door (`LibraryStage`) and the tiers the platform draws (`LibraryDerivatives`).
  */
 internal object LibraryRoll {
+    private const val PERMISSION_PREFERENCES = "centraid-phone-permissions"
+    private const val PHOTOS_ASKED = "photos-asked"
+
     // ---- the grant ---------------------------------------------------------------
+
+    /** Android's denied grant does not distinguish a fresh install from a refused request. */
+    fun notePermissionRequest(context: Context) {
+        context.getSharedPreferences(PERMISSION_PREFERENCES, Context.MODE_PRIVATE)
+            .edit().putBoolean(PHOTOS_ASKED, true).apply()
+    }
 
     /** The grant as it stands. Android 14's partial access is iOS's limited selection, the same fact. */
     fun permission(context: Context): PhotosMediaPermission {
@@ -52,7 +61,9 @@ internal object LibraryRoll {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
                 context.checkSelfPermission(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) ==
                 PackageManager.PERMISSION_GRANTED -> PhotosMediaPermission.PHOTOS_MEDIA_PERMISSION_LIMITED
-            else -> PhotosMediaPermission.PHOTOS_MEDIA_PERMISSION_DENIED
+            context.getSharedPreferences(PERMISSION_PREFERENCES, Context.MODE_PRIVATE)
+                .getBoolean(PHOTOS_ASKED, false) -> PhotosMediaPermission.PHOTOS_MEDIA_PERMISSION_DENIED
+            else -> PhotosMediaPermission.PHOTOS_MEDIA_PERMISSION_NOT_ASKED
         }
     }
 

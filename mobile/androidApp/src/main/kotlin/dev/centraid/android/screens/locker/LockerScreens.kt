@@ -384,7 +384,8 @@ internal fun LockerHomeScreen(
                 onPick = { key ->
                     val row = chrome?.more_rows?.firstOrNull { it.key == key }
                     val route = row?.route
-                    if (route != null) onOpen(route) else onEvent(LockerHomeEvent(more = LockerHomeEvent.MorePicked(key = key)))
+                    onEvent(LockerHomeEvent(more = LockerHomeEvent.MorePicked(key = key)))
+                    if (route != null) onOpen(route)
                 },
                 onDismiss = close,
             )

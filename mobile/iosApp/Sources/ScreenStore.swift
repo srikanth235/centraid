@@ -41,6 +41,9 @@ final class ScreenStore: ObservableObject {
     var onAnnounce: ((String) -> Void)?
 
     private let core: any ScreenCore
+    typealias NotificationScheduler = @MainActor (Centraid_Core_V1_ScheduleNotifications) async -> Centraid_Core_V1_NotificationsScheduled
+    private let scheduleNotifications: NotificationScheduler
+    private var startup: Task<Bool, Never>?
     private var closed: Set<UInt64> = []
     /// Instances this shell opened with `open`, so two opens never claim one entry.
     private var claimed: Set<UInt64> = []
@@ -66,9 +69,14 @@ final class ScreenStore: ObservableObject {
     /// THE PASS SCHEDULER'S WINDOWS (`passes` in Rust): a granted background window waits
     /// here, by name, for `PassWindowDone`, which carries the answer `setTaskCompleted` takes.
     private var windowWaiters: [String: CheckedContinuation<Bool, Never>] = [:]
-    /// A NOTIFICATION BUTTON waits here for Rust's answer to be performed (the next
-    /// `ScheduleNotifications`, with its receipt), so iOS does not suspend the app before it is.
-    private var notifyWaiter: (token: UInt64, continuation: CheckedContinuation<Void, Never>)?
+    /// Each OS callback waits for its exact answer's terminal schedule to be performed.
+    /// Startup/refresh schedules and another button never release it.
+    private struct NotificationAnswerKey: Hashable {
+        let id: String
+        let verb: Centraid_Core_V1_NotificationVerb
+        let pressID: String
+    }
+    private var notifyWaiters: [NotificationAnswerKey: [UInt64: CheckedContinuation<Bool, Never>]] = [:]
     private var notifyTokens: UInt64 = 0
     /// The UIKit grace held while the app leaves the screen and Rust runs its pass; released
     /// on `PassWindowDone` for the background entry (or by iOS taking it back).
@@ -88,8 +96,9 @@ final class ScreenStore: ObservableObject {
     /// instead was closed by the vault it made coming to the front.
     private var shellPopped: Set<UInt64> = []
 
-    init(core: any ScreenCore) {
+    init(core: any ScreenCore, scheduleNotifications: @escaping NotificationScheduler = ScreenStore.scheduleNotifications) {
         self.core = core
+        self.scheduleNotifications = scheduleNotifications
         #if os(iOS)
         // THE PHOTO LIBRARY CHANGED while the app is in view: a nudge to the camera roll.
         LibraryWatcher.shared.onChange = { [weak self] in
@@ -101,13 +110,22 @@ final class ScreenStore: ObservableObject {
         #endif
     }
 
-    /// Apply the core's pushed updates for as long as it lives, then open the
-    /// tabs' roots. Call once.
-    func start() async {
-        Task { [core] in
-            for await update in core.updates { self.apply(update) }
+    /// One event reader and first snapshot, shared by every startup caller. A cold
+    /// callback may use the store only after this snapshot actually succeeded.
+    @discardableResult
+    func start() async -> Bool {
+        if let startup { return await startup.value }
+        let work = Task {
+            Task { [core] in
+                for await update in core.updates { self.apply(update) }
+            }
+            NotificationStartupTrace.mark(.snapshotStarted)
+            let ready = await request(.snapshot(Centraid_Core_V1_SnapshotRequest()))
+            NotificationStartupTrace.mark(.snapshotCompleted, succeeded: ready)
+            return ready
         }
-        await request(.snapshot(Centraid_Core_V1_SnapshotRequest()))
+        startup = work
+        return await work.value
     }
 
     /// Send an event to one screen instance.
@@ -149,36 +167,54 @@ final class ScreenStore: ObservableObject {
         Task { await request(.shellFact(shell)) }
     }
 
-    /// A NOTIFICATION'S BUTTON OR TAP (#1173): tell Rust, and return once the core has it, so a
-    /// background action's completion handler is not called before the answer is in.
-    func answerNotification(id: String, verb: Centraid_Core_V1_NotificationVerb, pressID: String = "") async {
+    /// A notification button or tap stays alive until Rust marks this exact answer
+    /// terminal and its resulting OS schedule has actually been performed. True
+    /// means that matching performance finished; false is the existing expiry,
+    /// never a claim that the task write committed.
+    @discardableResult
+    func answerNotification(id: String, verb: Centraid_Core_V1_NotificationVerb, pressID: String = "") async -> Bool {
         var answered = Centraid_Core_V1_NotificationAnswered()
         answered.notificationID = id
         answered.verb = verb
         answered.pressID = pressID
         var shell = Centraid_Core_V1_ShellFact()
         shell.fact = .notificationAnswered(answered)
-        // HELD UNTIL RUST'S ANSWER IS PERFORMED: the write answers with a new set (the receipt and
-        // its Undo, the reminder gone), and the delegate's return lets iOS suspend the app. Rust
-        // answers within the same call; the bound only covers a performer that never runs.
+        let key = NotificationAnswerKey(id: id, verb: verb, pressID: pressID)
         notifyTokens += 1
         let token = notifyTokens
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            notifyWaiter?.continuation.resume()
-            notifyWaiter = (token, continuation)
-            Task { await request(.shellFact(shell)) }
+        return await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            notifyWaiters[key, default: [:]][token] = continuation
+            NotificationStartupTrace.mark(.answerWaitRegistered, count: notifyWaiters.count)
+            Task {
+                NotificationStartupTrace.mark(.notificationFactStarted)
+                let answered = await request(.shellFact(shell))
+                NotificationStartupTrace.mark(.notificationFactCompleted, succeeded: answered)
+            }
+            // Existing OS callback grace: only this callback is released if its
+            // performer never arrives. No unrelated refresh can acknowledge it.
             Task { @MainActor [weak self] in
                 try? await Task.sleep(nanoseconds: 8_000_000_000)
-                self?.notifyPerformed(token: token)
+                self?.notifyPerformed(key: key, token: token)
             }
         }
     }
 
-    /// Release the button that waits (only `token`'s, when one is named).
-    private func notifyPerformed(token: UInt64? = nil) {
-        guard let waiter = notifyWaiter, token == nil || waiter.token == token else { return }
-        notifyWaiter = nil
-        waiter.continuation.resume()
+    private func notifyPerformed(key: NotificationAnswerKey, token: UInt64) {
+        guard let continuation = notifyWaiters[key]?.removeValue(forKey: token) else { return }
+        if notifyWaiters[key]?.isEmpty == true { notifyWaiters.removeValue(forKey: key) }
+        NotificationStartupTrace.mark(.callbackExpired)
+        continuation.resume(returning: false)
+    }
+
+    private func notifyPerformed(_ answers: [Centraid_Core_V1_NotificationAnswered]) {
+        for answer in answers {
+            let key = NotificationAnswerKey(id: answer.notificationID, verb: answer.verb, pressID: answer.pressID)
+            let waiting = notifyWaiters.removeValue(forKey: key)
+            if let waiting {
+                NotificationStartupTrace.mark(.matchingAnswerPerformed, count: waiting.count)
+            }
+            waiting?.values.forEach { $0.resume(returning: true) }
+        }
     }
 
     /// A BACKGROUND WINDOW THE OS GRANTED: tell Rust, then wait for the pass it runs to end.
@@ -310,15 +346,17 @@ final class ScreenStore: ObservableObject {
         navigation?.tabs.first { $0.tab == tab }?.entries ?? []
     }
 
-    private func request(_ kind: Centraid_Core_V1_ScreenRequest.OneOf_Kind) async {
+    @discardableResult
+    private func request(_ kind: Centraid_Core_V1_ScreenRequest.OneOf_Kind) async -> Bool {
         var screen = Centraid_Core_V1_ScreenRequest()
         screen.kind = kind
         var request = Centraid_Core_V1_Request()
         request.kind = .screen(screen)
         guard let response = try? await core.call(request),
             case .screen(let answer)? = response.kind
-        else { return }
+        else { return false }
         apply(answer.update)
+        return true
     }
 
     private func apply(_ update: Centraid_Core_V1_ScreenUpdate) {
@@ -353,8 +391,8 @@ final class ScreenStore: ObservableObject {
                     onHomeAppeared?()
                 }
             }
-            // A VAULT WAS JUST MADE: the made-vault imports hear it (the photo prompt, then
-            // the contacts, the calendar and the reminders, each its own ask).
+            // A VAULT WAS JUST MADE: the made-vault imports read Photos, then Contacts, Calendar
+            // and Reminders using existing grants. Only an explicit import may ask for access.
             if case let .wordsMake(make)? = view.kind, make.finished, !make.madeLine.isEmpty,
                 madeTold.insert(view.instance).inserted
             {
@@ -398,6 +436,14 @@ final class ScreenStore: ObservableObject {
     }
 
     // MARK: - effects
+
+    private static func scheduleNotifications(_ schedule: Centraid_Core_V1_ScheduleNotifications) async -> Centraid_Core_V1_NotificationsScheduled {
+        #if os(iOS)
+        return await Notifications.schedule(schedule)
+        #else
+        return .init()
+        #endif
+    }
 
     /// Perform what Rust asked and answer it by `effect_id`. Returns once the one answer is
     /// given; an effect that answers later, or more than once, answers through its own callback
@@ -522,8 +568,10 @@ final class ScreenStore: ObservableObject {
         // OS hold it and answers the permission and the count.
         case .scheduleNotifications(let schedule)?:
             #if os(iOS)
-            answer(request, .notificationsScheduled(await Notifications.schedule(schedule)))
-            notifyPerformed()
+            NotificationStartupTrace.mark(.notificationScheduleStarted, count: schedule.completedAnswers.count)
+            answer(request, .notificationsScheduled(await scheduleNotifications(schedule)))
+            NotificationStartupTrace.mark(.notificationScheduleCompleted, count: schedule.completedAnswers.count)
+            notifyPerformed(schedule.completedAnswers)
             #else
             answer(request, .failed(Self.failure(EffectReason.unavailable)))
             #endif
@@ -621,7 +669,7 @@ final class ScreenStore: ObservableObject {
         // DOCS' FILES (#1135): the file picker and scanner (answered more than once under
         // one effect: progress, then the file), and the folder picker.
         case .pickFile(let pick)?:
-            DocsFiles.shared.pick(pick.kind, core: core) { outcome in
+            DocsFiles.shared.pick(pick.kind, core: core) { [weak self] outcome in
                 Task { @MainActor [weak self] in self?.answer(request, outcome) }
             }
         case .shareFile(let share)?:
@@ -637,7 +685,7 @@ final class ScreenStore: ObservableObject {
                 answer(request, .failed(Self.failure(EffectReason.unwritable)))
             }
         case .followFolder?:
-            DocsFollow.shared.request { outcome in
+            DocsFollow.shared.request { [weak self] outcome in
                 Task { @MainActor [weak self] in self?.answer(request, outcome) }
             }
         case .stopFollowing(let stop)?:

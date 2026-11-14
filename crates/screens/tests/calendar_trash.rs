@@ -76,6 +76,7 @@ fn alerts(world: &World, title: &str) -> usize {
         vault_id: "vault",
         zone: "Europe/London",
         locale: Locale::En,
+        hour_cycle: Default::default(),
         now_local: TODAY_LOCAL,
         tasks: &[],
         projects: &[],

@@ -1,9 +1,50 @@
+import os
+
+/// DEBUG-only mechanical startup phases. No notification IDs, words, keys or
+/// payload/error descriptions are accepted by this diagnostic boundary.
+enum NotificationStartupTrace {
+    enum Phase: String, Sendable {
+        case callbackEntered
+        case callbackCompleted
+        case shellModelTouchStarted
+        case shellModelTouched
+        case shellModelInitStarted
+        case coreOpenStarted
+        case coreOpenCompleted
+        case coreAttachStarted
+        case coreAttachCompleted
+        case snapshotStarted
+        case snapshotCompleted
+        case storeWaitStarted
+        case storeWaitCompleted
+        case storePublished
+        case answerWaitRegistered
+        case notificationFactStarted
+        case notificationFactCompleted
+        case notificationScheduleStarted
+        case notificationScheduleCompleted
+        case matchingAnswerPerformed
+        case answerReturned
+        case callbackExpired
+    }
+
+    #if DEBUG
+    private static let logger = Logger(subsystem: "dev.centraid.Centraid", category: "NotificationStartup")
+    #endif
+
+    nonisolated static func mark(_ phase: Phase, count: Int = 0, succeeded: Bool = true) {
+        #if DEBUG
+        logger.notice("phase=\(phase.rawValue, privacy: .public) count=\(count, privacy: .public) success=\(succeeded, privacy: .public)")
+        #endif
+    }
+}
+
 #if os(iOS)
 import Foundation
 import UserNotifications
 
-/// THE NOTIFICATION PERFORMER (#1173, Agenda wave 1c): make the operating system hold exactly the
-/// set Rust sent, and hand back what the member pressed.
+/// THE NOTIFICATION PERFORMER (#1173, Agenda wave 1c): hold Rust's future alarms, apply its explicit
+/// delivered-card withdrawals, and hand back what the member pressed.
 ///
 /// Rust decides WHICH notifications exist, WHEN each fires and WHAT each says (`agenda.notify`);
 /// this file only performs `ScheduleNotifications` and answers it under its `effect_id`
@@ -11,14 +52,15 @@ import UserNotifications
 /// `ShellFact.notificationAnswered`. It decides nothing and holds no word: the titles, bodies and
 /// button labels all arrive from Rust.
 ///
-/// THE SET IS DECLARATIVE: `all` is everything wanted pending. A pending request that is not in it
-/// is removed; each item in it is added, and adding an identifier that is already pending replaces
-/// it. PENDING AND DELIVERED ARE SEPARATE (#1188): a delivered notification is removed only when its
-/// id is in neither `all` nor `liveIds`, so time passing never takes a reminder off the screen;
-/// resolving the item does. The rule is `NotificationPlan.reconcile`.
+/// THE SET IS DECLARATIVE: `all` is wanted pending work. `liveIds` supports the older
+/// whole-set contract; explicit retention uses Rust's delivered-card withdrawals instead.
+/// Actual delivered IDs and source fingerprints go back to Rust, so passing a moment
+/// alone never removes an unresolved reminder and a changed source can withdraw it.
 enum Notifications {
     /// The key the notification's id travels under in `userInfo`, besides the request identifier.
     private static let idKey = "notification_id"
+    private static let fingerprintKey = "notification_source_fingerprint"
+    private static let immediatesKey = "centraid.notification.immediates"
 
     /// Perform `ScheduleNotifications` and say what the OS said.
     @MainActor static func schedule(_ schedule: Centraid_Core_V1_ScheduleNotifications) async -> Centraid_Core_V1_NotificationsScheduled {
@@ -50,14 +92,18 @@ enum Notifications {
 
         center.setNotificationCategories(Set(schedule.categories.map(category)))
 
-        // THE DIFF, from what the OS holds now (not from a memory of what was sent).
+        // Diff against the actual OS inventory, preserving the upstream pending/live plan.
         let now = Date()
+        let delivered = await center.deliveredNotifications()
+        let deliveredIDs = Set(delivered.map { $0.request.identifier })
         let plan = NotificationPlan.reconcile(
             wanted: schedule.all,
             live: schedule.liveIds,
             pending: await center.pendingNotificationRequests().map(\.identifier),
-            delivered: await center.deliveredNotifications().map { $0.request.identifier },
-            nowMs: Int64(now.timeIntervalSince1970 * 1000)
+            delivered: Array(deliveredIDs),
+            nowMs: Int64(now.timeIntervalSince1970 * 1000),
+            retainDelivered: schedule.retainDelivered,
+            cancelDeliveredIDs: schedule.cancelDeliveredIds
         )
         if !plan.removePending.isEmpty {
             center.removePendingNotificationRequests(withIdentifiers: plan.removePending)
@@ -65,11 +111,32 @@ enum Notifications {
         if !plan.removeDelivered.isEmpty {
             center.removeDeliveredNotifications(withIdentifiers: plan.removeDelivered)
         }
+
+        // Only IDs are remembered: dismissing an Undo receipt must not resurrect it on
+        // refresh or restart. A failed post remains eligible for a later reconciliation.
+        let previousImmediates = Set(UserDefaults.standard.stringArray(forKey: immediatesKey) ?? [])
+        let currentImmediates = Set(schedule.all.filter(\.immediate).map(\.notificationID))
+        var heldImmediates = NotificationPlan.rememberedImmediates(
+            current: currentImmediates, previous: previousImmediates, delivered: deliveredIDs
+        )
         for item in plan.schedule + plan.post {
+            if item.immediate, heldImmediates.contains(item.notificationID) { continue }
             guard let request = request(item, now: now) else { continue }
-            try? await center.add(request)
+            do {
+                try await center.add(request)
+                if item.immediate { heldImmediates.insert(item.notificationID) }
+            } catch {
+                // A failed post was never delivered: allow a subsequent reconciliation to retry.
+            }
         }
+        UserDefaults.standard.set(heldImmediates.sorted(), forKey: immediatesKey)
         answer.held = UInt32(await center.pendingNotificationRequests().count)
+        answer.delivered = await center.deliveredNotifications().map { notification in
+            .with {
+                $0.notificationID = notification.request.identifier
+                $0.sourceFingerprint = notification.request.content.userInfo[fingerprintKey] as? String ?? ""
+            }
+        }
         return answer
     }
 
@@ -92,7 +159,7 @@ enum Notifications {
         content.categoryIdentifier = item.categoryID
         content.threadIdentifier = item.threadID
         content.sound = .default
-        content.userInfo = [idKey: item.notificationID]
+        content.userInfo = [idKey: item.notificationID, fingerprintKey: item.sourceFingerprint]
 
         var trigger: UNNotificationTrigger?
         if !item.immediate {
@@ -134,24 +201,33 @@ enum Notifications {
             verb = Int(action).flatMap { Centraid_Core_V1_NotificationVerb(rawValue: $0) }
         }
         guard let verb else { return }
-        // WRITTEN DOWN FIRST (#1188, A6): a press the core could not take in the seconds iOS gives
-        // is still in the outbox, and `drain` sends it at the next start.
+        // Persist the upstream idempotent press before cold startup can suspend this callback.
         let press = NotificationOutbox.add(notificationID: id, verb: verb.rawValue)
+        NotificationStartupTrace.mark(.shellModelTouchStarted)
         _ = ShellModel.shared
-        guard let store = await BackgroundPasses.installed(within: BackgroundPasses.installWaitSeconds) else { return }
-        await store.answerNotification(id: id, verb: verb, pressID: press.pressID)
-        NotificationOutbox.remove(press.pressID)
+        NotificationStartupTrace.mark(.shellModelTouched)
+        NotificationStartupTrace.mark(.storeWaitStarted)
+        guard let store = await BackgroundPasses.installed(within: BackgroundPasses.installWaitSeconds) else {
+            NotificationStartupTrace.mark(.storeWaitCompleted, succeeded: false)
+            return
+        }
+        NotificationStartupTrace.mark(.storeWaitCompleted)
+        let matched = await store.answerNotification(id: id, verb: verb, pressID: press.pressID)
+        NotificationStartupTrace.mark(.answerReturned, succeeded: matched)
+        if matched { NotificationOutbox.remove(press.pressID) }
     }
 
-    /// Send every press still in the outbox, once each; called wherever the store is first up.
+    /// Replay every persisted press through its original idempotency key. A startup failure
+    /// or callback expiry leaves it in the outbox; only its exact terminal schedule removes it.
     @MainActor static func drain(_ store: ScreenStore) async {
         for press in NotificationOutbox.pending() {
             guard let verb = Centraid_Core_V1_NotificationVerb(rawValue: press.verb) else {
                 NotificationOutbox.remove(press.pressID)
                 continue
             }
-            await store.answerNotification(id: press.notificationID, verb: verb, pressID: press.pressID)
-            NotificationOutbox.remove(press.pressID)
+            if await store.answerNotification(id: press.notificationID, verb: verb, pressID: press.pressID) {
+                NotificationOutbox.remove(press.pressID)
+            }
         }
     }
 }
@@ -164,19 +240,45 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Se
     /// A notification that fires while the app is in front still shows, with its sound.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification
-    ) async -> UNNotificationPresentationOptions {
-        [.banner, .list, .sound]
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping @Sendable (UNNotificationPresentationOptions) -> Void
+    ) {
+        NotificationHandoff.perform(answer: {}) {
+            completionHandler([.banner, .list, .sound])
+        }
     }
 
-    /// A button or a tap. The response is not Sendable: its two strings are what crosses.
+    /// A button or a tap. The response is not Sendable: only its two strings cross.
+    /// Use the explicit callback: the async delegate bridge can complete on a cooperative
+    /// executor after an await, while UIKit's foreground response completion requires main.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse
-    ) async {
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping @Sendable () -> Void
+    ) {
+        NotificationStartupTrace.mark(.callbackEntered)
         let id = response.notification.request.identifier
         let action = response.actionIdentifier
-        await Notifications.answered(id: id, action: action)
+        NotificationHandoff.perform(answer: {
+            await Notifications.answered(id: id, action: action)
+        }, completion: {
+            NotificationStartupTrace.mark(.callbackCompleted)
+            completionHandler()
+        })
+    }
+}
+/// Keep the OS callback alive through the answer and complete on main even after suspension.
+/// The delegate can be called from a background queue; no notification object crosses it.
+enum NotificationHandoff {
+    @discardableResult
+    static func perform(
+        answer: @escaping @MainActor @Sendable () async -> Void,
+        completion: @escaping @Sendable () -> Void
+    ) -> Task<Void, Never> {
+        Task { @MainActor in
+            await answer()
+            completion()
+        }
     }
 }
 #endif

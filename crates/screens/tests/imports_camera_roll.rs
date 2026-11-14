@@ -5,7 +5,7 @@
 mod imports_support;
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_screens::catalog::load;
+use centraid_screens::catalog::{act, load};
 use centraid_screens::field::Keyed;
 use centraid_screens::imports::camera_roll::{
     ORIGIN_LABEL, add_request, can_enumerate, may_fetch, permission_sentence,
@@ -14,8 +14,8 @@ use centraid_screens::kit::read;
 use centraid_screens::passes::TransferRule as Rule;
 use centraid_screens::strings::Locale;
 use imports_support::{
-    Library, Shell, choose, live, photo, resource, rule, serve_library, shell, shell_over,
-    shell_with, wifi,
+    Library, Shell, choose, live, owned, photo, resource, rule, serve_library, shell, shell_over,
+    shell_with, stage, wifi,
 };
 use wire::PhotosMediaPermission as Permission;
 use wire::app_query_response::Answer;
@@ -614,6 +614,69 @@ fn a_rewalk_renders_nothing_an_original_the_core_already_holds_kept_its_derivati
     assert_eq!(library.rendered.len(), 2, "a re-walk renders nothing");
     assert_eq!(state(&shell).imported_total, 1, "and imports nothing new");
     assert_eq!(photographs(&shell), seeded + 1);
+}
+
+#[test]
+fn an_original_already_uploaded_to_docs_still_renders_only_its_missing_library_tiers() {
+    for (held, wanted) in [
+        (vec![], vec!["thumb", "preview"]),
+        (vec!["thumb"], vec!["preview"]),
+        (vec!["thumb", "preview"], vec![]),
+    ] {
+        let mut library = Library::new().with(photo("A"), &[("A", STILL)]);
+        let mut shell = started(&mut library);
+        let original = stage(&shell.d, owned("image/jpeg", STILL), STILL);
+        let request: wire::ActRequest = (act::docs::Upload {
+            blob: original.content_hash.clone(),
+            media_type: "image/jpeg".to_owned(),
+            title: "Already uploaded.jpg".to_owned(),
+            size: i64::try_from(original.byte_size).ok(),
+            ..Default::default()
+        })
+        .into();
+        let uploaded = shell.d.act(request.keyed("docs-before-library".to_owned()));
+        assert_eq!(uploaded.status, wire::ActStatus::Executed as i32);
+        for tier in &held {
+            let content = format!("existing {tier}").into_bytes();
+            stage(
+                &shell.d,
+                wire::StageBegin {
+                    for_hash: centraid_vault::backup::naming::PlaintextHash::of(STILL)
+                        .as_bytes()
+                        .to_vec(),
+                    tier: (*tier).to_owned(),
+                    ..owned("image/jpeg", &content)
+                },
+                &content,
+            );
+        }
+        walk(&mut shell, &mut library);
+        let staged = &library.staged[0].1;
+        assert!(
+            staged.already_held,
+            "Docs already holds these original bytes"
+        );
+        assert_eq!(staged.derivatives_held.len(), held.len());
+        assert!(
+            held.iter()
+                .all(|tier| staged.derivatives_held.iter().any(|h| h == tier))
+        );
+        assert_eq!(
+            library.rendered,
+            wanted
+                .iter()
+                .map(|tier| ("A".to_owned(), (*tier).to_owned()))
+                .collect::<Vec<_>>(),
+            "held original with tiers {held:?} still needs {wanted:?}"
+        );
+        let rendered = library.rendered.clone();
+        library.device = "device-2".to_owned();
+        walk(&mut shell, &mut library);
+        assert_eq!(
+            library.rendered, rendered,
+            "a complete re-walk renders nothing"
+        );
+    }
 }
 
 #[test]

@@ -157,6 +157,7 @@ final class ShellModel: ObservableObject {
     private var environmentChanges: [NotificationObservation] = []
 
     init() {
+        NotificationStartupTrace.mark(.shellModelInitStarted)
         // **NOTHING UNDER THIS DIRECTORY GOES INTO iCLOUD BACKUP** (#1029, F5).
         // Once before the core opens, so the directory itself carries the
         // attribute, once after, so what the core just made carries it too, and
@@ -168,13 +169,16 @@ final class ShellModel: ObservableObject {
         let configuration = Core.Configuration(shelf: directory, devSeed: Self.devSeedHex)
         Task.detached(priority: .userInitiated) {
             do {
+                NotificationStartupTrace.mark(.coreOpenStarted)
                 let core = try Core.open(configuration)
+                NotificationStartupTrace.mark(.coreOpenCompleted)
                 VaultFileProtection.secure(directory: directory)
                 await MainActor.run { ShellModel.shared.attach(core) }
             } catch Core.Failure.vaultDamaged {
                 NSLog("centraid: the vault is damaged")
                 await MainActor.run { ShellModel.shared.vaultDamaged = true }
             } catch {
+                NotificationStartupTrace.mark(.coreOpenCompleted, succeeded: false)
                 // The screen stays on its ground; nothing here can word it.
                 NSLog("centraid: the core did not open: %@", String(describing: error))
             }
@@ -242,6 +246,7 @@ final class ShellModel: ObservableObject {
     /// THE CORE IS OPEN: one store over it, and every road from the platform to
     /// Rust attached to it.
     private func attach(_ core: Core) {
+        NotificationStartupTrace.mark(.coreAttachStarted)
         let store = ScreenStore(core: core)
         store.onOpenRoute = { [weak self] route in self?.open(route) }
         store.onHomeScheme = { [weak self] scheme in
@@ -268,16 +273,19 @@ final class ShellModel: ObservableObject {
             if topic == "backup.destinations" { self?.refreshUploadPins() }
         }
         screens = store
-        // THE PASS SCHEDULER'S ROADS (`passes`): a granted window and what the OS
-        // uploaded reach Rust as facts through the store, and the link is reported
-        // from the first reading.
-        BackgroundPasses.store = store
+        // Attach performers directly so startup effects can settle. Cold platform
+        // callbacks receive this store only after its first snapshot succeeds.
         UploadSettlement.shared.attach(ScreenUploadSink(store))
         links.start(store)
         chat.attach(store: store)
+        NotificationStartupTrace.mark(.coreAttachCompleted)
         Task {
             store.reportEnvironment()
-            await store.start()
+            guard await BackgroundPasses.start(store: store) else {
+                NotificationStartupTrace.mark(.storePublished, succeeded: false)
+                return
+            }
+            NotificationStartupTrace.mark(.storePublished)
             storeStarted = true
             let queued = queuedFacts
             queuedFacts = []

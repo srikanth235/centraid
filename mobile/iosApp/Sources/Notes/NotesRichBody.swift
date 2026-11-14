@@ -82,7 +82,7 @@ struct NotesRichBody: UIViewRepresentable {
             view.selectedRange = NSRange(location: min(Int(selection.caret), length), length: 0)
         }
         if focused, !view.isFirstResponder {
-            DispatchQueue.main.async { view.becomeFirstResponder() }
+            DispatchQueue.main.async { _ = view.becomeFirstResponder() }
         } else if !focused, view.isFirstResponder {
             DispatchQueue.main.async { view.resignFirstResponder() }
         }

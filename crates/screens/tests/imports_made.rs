@@ -46,9 +46,9 @@ fn asked(shell: &Shell) -> Vec<String> {
         .iter()
         .filter_map(|request| {
             Some(match request.effect.as_ref()?.kind.as_ref()? {
-                // The made vault's own photo prompt; the camera roll's reads are its own.
+                // The made vault's photo-grant read; the camera roll's reads are its own.
                 K::LibraryPermission(read) if request.instance == shell.made => {
-                    format!("photo_prompt:ask={}", read.ask)
+                    format!("photo_access:ask={}", read.ask)
                 }
                 K::ContactsRead(read) => format!("contacts:ask={}", read.ask_permission),
                 K::CalendarRead(read) => format!("calendar:ask={}", read.ask_permission),
@@ -167,7 +167,7 @@ fn open_tasks(shell: &Shell) -> u32 {
     })
 }
 
-/// The member answered the photo prompt (no to it, so the camera roll stays still).
+/// The phone reports no photo access, so the camera roll stays still.
 fn photos_answered(shell: &mut Shell) {
     let at = shell
         .d
@@ -180,7 +180,7 @@ fn photos_answered(shell: &mut Shell) {
                     Some(K::LibraryPermission(_))
                 )
         })
-        .expect("the photo prompt was asked");
+        .expect("the photo grant was read");
     let request = shell.d.effects.remove(at);
     shell.d.send(
         shell.made,
@@ -195,18 +195,18 @@ fn photos_answered(shell: &mut Shell) {
 }
 
 #[test]
-fn photo_access_is_asked_once_and_only_after_it_is_answered_the_importers_run_in_turn() {
+fn making_a_vault_only_reads_existing_grants_for_every_phone_store() {
     let mut shell = shell_for_made();
     made(&mut shell, true);
-    // TWO SYSTEM PROMPTS NEVER STACK: the photo prompt first, and nothing else until it is answered.
-    assert_eq!(asked(&shell), vec!["photo_prompt:ask=true"]);
+    // No permission may be requested merely by creating a vault, on either platform.
+    assert_eq!(asked(&shell), vec!["photo_access:ask=false"]);
     assert!(view(&shell).running);
     photos_answered(&mut shell);
-    assert_eq!(asked(&shell), vec!["contacts:ask=true"]);
+    assert_eq!(asked(&shell), vec!["contacts:ask=false"]);
     answer_read(&mut shell, contacts(&["Ada", "Grace"]));
-    assert!(asked(&shell).contains(&"calendar:ask=true".to_owned()));
+    assert!(asked(&shell).contains(&"calendar:ask=false".to_owned()));
     answer_read(&mut shell, calendar(&["Standup"]));
-    assert!(asked(&shell).contains(&"reminders:ask=true".to_owned()));
+    assert!(asked(&shell).contains(&"reminders:ask=false".to_owned()));
 }
 
 #[test]
@@ -308,7 +308,7 @@ fn a_made_event_is_heard_once() {
     made(&mut shell, false);
     assert_eq!(
         asked(&shell),
-        vec!["photo_prompt:ask=true"],
-        "one prompt, however many times it is told"
+        vec!["photo_access:ask=false"],
+        "one grant read, however many times it is told"
     );
 }

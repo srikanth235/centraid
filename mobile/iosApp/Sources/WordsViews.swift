@@ -528,11 +528,18 @@ struct WordsShowView: View {
     /// THE OWNER CHECK IS UP: nothing is drawn, only the page's own colour, until it answers
     /// (every label is empty while `check_now` is set).
     var body: some View {
-        if state.checkNow {
-            BarePaper()
-        } else {
-            shown
+        Group {
+            if state.checkNow {
+                BarePaper()
+            } else {
+                shown
+            }
         }
+        // Cancellation can finish while the owner-check branch still draws BarePaper.
+        .onAppear { if state.finished { onDone() } }
+        .onChange(of: state.finished) { _, finished in if finished { onDone() } }
+        // A SWIPE AWAY drops the words (leaving the foreground does too, in Rust).
+        .onDisappear { if !state.finished { send(Self.event { $0.dismissed = .init() }) } }
     }
 
     private var shown: some View {
@@ -572,10 +579,6 @@ struct WordsShowView: View {
             .accessibilityElement(children: .contain)
             .accessibilityLabel(state.accessibilityLabel)
         }
-        .onAppear { if state.finished { onDone() } }
-        .onChange(of: state.finished) { _, finished in if finished { onDone() } }
-        // A SWIPE AWAY drops the words (leaving the foreground does too, in Rust).
-        .onDisappear { if !state.finished { send(Self.event { $0.dismissed = .init() }) } }
     }
 
     static func event(_ build: (inout Centraid_Core_V1_WordsShowEvent) -> Void) -> Centraid_Core_V1_WordsShowEvent {

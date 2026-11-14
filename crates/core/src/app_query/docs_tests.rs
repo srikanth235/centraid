@@ -817,3 +817,6 @@ fn a_folder_is_found_by_name_and_the_root_is_not() {
     scratch.run("entity.trash", serde_json::json!({ "id": folder }));
     assert!(search("leases").containers.is_empty());
 }
+
+#[path = "docs_text_preview_tests.rs"]
+mod text_previews;
