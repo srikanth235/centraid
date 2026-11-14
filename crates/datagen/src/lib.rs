@@ -46,6 +46,7 @@ pub mod mix;
 pub mod persona;
 pub mod plan;
 pub mod pools;
+pub mod preselect;
 #[cfg(test)]
 mod proofs;
 pub mod publish;

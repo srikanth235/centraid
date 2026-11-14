@@ -29,6 +29,7 @@ use crate::catalog::Catalog;
 use crate::drift::{self, Catalogue};
 use crate::grid::Grid;
 use crate::mix::{self, Selection};
+use crate::preselect;
 use crate::render::Features;
 
 /// Tokens a turn comes to, as the first data version measured it: 10.8 million tokens over 8,585 turns.
@@ -46,6 +47,8 @@ pub struct Settings {
     pub tokens_per_turn: usize,
     /// Sessions per writer or reader call.
     pub batch: usize,
+    /// How many times the targets and floors the writer is given ([`crate::preselect`]); 0 or less writes every session.
+    pub headroom: f64,
     /// Worlds drawn and solved at once; the plan is the same for any number.
     pub workers: usize,
     /// Say every dropped turn on stderr.
@@ -97,12 +100,15 @@ pub struct Plan {
     pub worlds: [usize; 3],
     pub tokens_per_turn: usize,
     pub batch: usize,
+    pub headroom: f64,
     /// The draws one world sweeps (`run::draws`): a world keeps at least this many sessions whatever `--sessions` says, so
     /// the sessions drawn per split are the worlds times this, not the sessions asked for.
     pub sweep: usize,
     /// What was drawn and solved, before the mix chose.
     pub planned: Vec<Held>,
-    /// What the mix chose.
+    /// What pre-selection chose to write, by split: the sessions the writer and the reader see.
+    pub preselected: Vec<Held>,
+    /// What the mix chose from those.
     pub chosen: Vec<Held>,
     pub selection: Selection,
     /// The live cells and pairs of train under their floor, by name.
@@ -132,27 +138,45 @@ fn held(features: &[Features], split: &str, chosen: Option<&[usize]>) -> Held {
 ///
 /// If the mix fails (a world in two splits).
 pub fn tally(
-    features: &[Features],
+    drawn: &[Features],
     sessions: &[Session],
     settings: &Settings,
     catalogue: &Catalogue,
     kinds: &[&str],
 ) -> Result<Plan> {
-    let selection = mix::mix(features, &settings.mix)?;
-    let mut planned = Vec::new();
+    // what a build writes: the sessions pre-selection keeps, and the mix after the render chooses from those
+    let planned_of: Vec<Held> = mix::SPLITS
+        .iter()
+        .map(|split| held(drawn, split, None))
+        .collect();
+    let pre = preselect::choose(drawn, &settings.mix, settings.headroom)?;
+    let (features, sessions): (Vec<Features>, Vec<Session>) = pre
+        .keep
+        .iter()
+        .map(|i| (drawn[*i].clone(), sessions[*i].clone()))
+        .unzip();
+    let (features, sessions) = (features.as_slice(), sessions.as_slice());
+    // the combinations pre-selection reserved for test are the ones the mix after the render holds out
+    let mut after = settings.mix.clone();
+    if after.reserved.is_empty() && settings.headroom > 0.0 {
+        after.reserved.clone_from(&pre.reserved);
+    }
+    let selection = mix::mix(features, &after)?;
+    let planned = planned_of;
+    let mut preselected = Vec::new();
     let mut chosen = Vec::new();
     let mut tokens = BTreeMap::new();
     let mut prompts = Vec::new();
     for split in mix::SPLITS {
-        planned.push(held(features, split, None));
+        preselected.push(held(features, split, None));
         let got = held(
             features,
             split,
             selection.chosen.get(split).map(Vec::as_slice),
         );
         tokens.insert(split.to_owned(), got.turns * settings.tokens_per_turn);
-        // the first round: every session drawn is written, in batches
-        let n = planned.last().map_or(0, |p| p.sessions);
+        // the first round: every session pre-selected is written, in batches
+        let n = preselected.last().map_or(0, |p| p.sessions);
         prompts.push(Prompts {
             split: split.to_owned(),
             sessions: n,
@@ -192,8 +216,10 @@ pub fn tally(
         worlds: settings.counts,
         tokens_per_turn: settings.tokens_per_turn,
         batch: settings.batch,
+        headroom: settings.headroom,
         sweep: 0,
         planned,
+        preselected,
         chosen,
         under: mix::under_floor(&selection, &settings.mix),
         selection,
@@ -225,7 +251,35 @@ impl Plan {
                 self.sweep
             );
         }
-        for (planned, chosen) in self.planned.iter().zip(&self.chosen) {
+        if self.headroom > 0.0 {
+            let wanted: Vec<String> = self
+                .selection
+                .reports
+                .iter()
+                .map(|r| {
+                    format!(
+                        "{}",
+                        (r.target_sessions as f64 * self.headroom).ceil() as usize
+                    )
+                })
+                .collect();
+            let _ = writeln!(
+                out,
+                "pre-selection at headroom {}: before any message the mix chooses {} sessions in train, {} in val and {} in test ({} wanted); only those go to the writer and the reader, and the mix after the render chooses from what survives",
+                self.headroom,
+                self.preselected.first().map_or(0, |p| p.sessions),
+                self.preselected.get(1).map_or(0, |p| p.sessions),
+                self.preselected.get(2).map_or(0, |p| p.sessions),
+                wanted.join("/"),
+            );
+        } else {
+            let _ = writeln!(
+                out,
+                "no pre-selection (headroom 0): every session drawn goes to the writer and the reader"
+            );
+        }
+        for ((planned, pre), chosen) in self.planned.iter().zip(&self.preselected).zip(&self.chosen)
+        {
             let report = self
                 .selection
                 .reports
@@ -233,10 +287,11 @@ impl Plan {
                 .find(|r| r.split == planned.split);
             let _ = writeln!(
                 out,
-                "\n== {}: {} sessions and {} turns planned; the mix chooses {} sessions and {} turns{}",
+                "\n== {}: {} sessions and {} turns planned, {} sessions pre-selected; the mix chooses {} sessions and {} turns{}",
                 planned.split,
                 planned.sessions,
                 planned.turns,
+                pre.sessions,
                 chosen.sessions,
                 chosen.turns,
                 report.map_or(String::new(), |r| format!(
@@ -351,7 +406,7 @@ impl Plan {
         }
         let _ = writeln!(
             out,
-            "\nfirst round of prompts (sessions drawn over the batch of {}, rounded up; the reader's come after the writer's answers):",
+            "\nfirst round of prompts (sessions pre-selected over the batch of {}, rounded up; the reader's come after the writer's answers):",
             self.batch
         );
         for p in &self.prompts {
@@ -572,6 +627,7 @@ mod tests {
             },
             tokens_per_turn: 100,
             batch: 5,
+            headroom: 0.0,
             workers: 1,
             verbose: false,
             checkpoints: None,
@@ -645,5 +701,63 @@ mod tests {
         // the json holds the same and is what `plan.json` is
         let json = serde_json::to_value(&plan).expect("json");
         assert_eq!(json["tokens"]["all"], 2000);
+    }
+
+    #[test]
+    fn the_prompts_are_counted_on_the_preselected_sessions_not_on_all_that_were_drawn() {
+        let mut features = Vec::new();
+        let mut sessions = Vec::new();
+        for (split, world, n) in [
+            ("train", "train-0", 60),
+            ("val", "val-0", 20),
+            ("test", "test-0", 20),
+        ] {
+            for i in 0..n {
+                let (f, s) = session(
+                    &format!("{split}-{i}"),
+                    split,
+                    world,
+                    "find/task/read",
+                    &[("find", json!({"kind": "task"}))],
+                );
+                features.push(f);
+                sessions.push(s);
+            }
+        }
+        let settings = Settings {
+            seed: 1,
+            counts: [1, 1, 1],
+            drawn: [60, 20, 20],
+            mix: mix::Config {
+                targets: [10, 4, 4],
+                live: vec!["find/task/read".to_owned()],
+                floor: [0; 3],
+                field_floor: [0; 3],
+                subsets: Vec::new(),
+                reserve: 0,
+                ..mix::Config::default()
+            },
+            tokens_per_turn: 100,
+            batch: 5,
+            headroom: 1.5,
+            workers: 1,
+            verbose: false,
+            checkpoints: None,
+        };
+        let plan =
+            tally(&features, &sessions, &settings, &catalogue(), &["task"]).expect("tallies");
+        let of = |list: &[Held]| list.iter().map(|h| h.sessions).collect::<Vec<_>>();
+        // 60, 20 and 20 drawn; 1.5 times the targets pre-selected; the mix chooses its targets from those
+        assert_eq!(of(&plan.planned), [60, 20, 20]);
+        assert_eq!(of(&plan.preselected), [15, 6, 6]);
+        assert_eq!(of(&plan.chosen), [10, 4, 4]);
+        // the prompts are the pre-selected sessions over the batch, rounded up
+        let writers: Vec<usize> = plan.prompts.iter().map(|p| p.writer).collect();
+        assert_eq!(writers, [3, 2, 2]);
+        let sessions: Vec<usize> = plan.prompts.iter().map(|p| p.sessions).collect();
+        assert_eq!(sessions, [15, 6, 6]);
+        let text = plan.text();
+        assert!(text.contains("pre-selection at headroom 1.5"), "{text}");
+        assert!(text.contains("train: 15 sessions: 3 writer prompts, 3 reader prompts"));
     }
 }

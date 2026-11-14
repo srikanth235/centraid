@@ -669,6 +669,12 @@ pub fn render_and_mix(
     let mut mcfg = mcfg.clone();
     mcfg.live = grid.live().iter().map(|c| c.to_string()).collect();
     mcfg.live_fields = crate::fields::live_labels(&catalog, &grid);
+    // the combinations a pre-selection reserved for test are the ones held out here too
+    if mcfg.reserved.is_empty()
+        && let Some(reserved) = crate::preselect::reserved_of(input)?
+    {
+        mcfg.reserved = reserved;
+    }
     std::fs::create_dir_all(out)?;
     let spool_path = out.join(".render.spool");
     let rendered = render_all(input, rcfg, &catalog, &spool_path)?;

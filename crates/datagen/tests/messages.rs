@@ -101,6 +101,7 @@ fn config(offline: bool) -> Config {
         limit: None,
         seed: 1,
         style_shares: centraid_datagen::style::DEFAULT_SHARES,
+        preselect: None,
     }
 }
 

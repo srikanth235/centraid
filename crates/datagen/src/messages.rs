@@ -61,6 +61,16 @@ pub struct Config {
     pub seed: u64,
     /// The share of sessions in each style ([`style::ALL`] order).
     pub style_shares: [f64; 5],
+    /// Choose which sessions are written at all, before any message ([`crate::preselect`]); `None` writes every
+    /// session of the input.
+    pub preselect: Option<Preselect>,
+}
+
+/// What pre-selection is asked: the mix, and how many times its targets and floors the writer is given.
+#[derive(Debug, Clone)]
+pub struct Preselect {
+    pub mix: crate::mix::Config,
+    pub headroom: f64,
 }
 
 impl Default for Config {
@@ -73,6 +83,7 @@ impl Default for Config {
             limit: None,
             seed: 1,
             style_shares: style::DEFAULT_SHARES,
+            preselect: None,
         }
     }
 }
@@ -522,6 +533,34 @@ fn load(dir: &Path, limit: Option<usize>) -> Result<Vec<(String, Value)>> {
     Ok(out)
 }
 
+/// Pre-selection over the sessions an intents run holds: the mix on their typed intents, with the targets and floors
+/// raised by the headroom. Returns what it chose and how many sessions that is.
+fn preselect_records(
+    catalog: &Catalog,
+    loaded: &[(String, Value)],
+    p: &Preselect,
+) -> Result<(crate::preselect::Preselected, usize)> {
+    let grid = crate::grid::Grid::build(catalog);
+    let mut mix = p.mix.clone();
+    mix.live = grid.live().iter().map(ToString::to_string).collect();
+    mix.live_fields = crate::fields::live_labels(catalog, &grid);
+    let mut features = Vec::with_capacity(loaded.len());
+    for (split, record) in loaded {
+        let scenario: Scenario = serde_json::from_value(record["scenario"].clone())
+            .with_context(|| format!("scenario of {}", record["id"]))?;
+        features.push(crate::render::features_of(
+            record,
+            &scenario,
+            scenario.turns.len(),
+            split,
+            0,
+        ));
+    }
+    let chosen = crate::preselect::choose(&features, &mix, p.headroom)?;
+    let kept = chosen.keep.len();
+    Ok((chosen, kept))
+}
+
 fn worlds_of(dir: &Path, items: &[Item]) -> Result<BTreeMap<String, Value>> {
     let mut worlds = BTreeMap::new();
     for item in items {
@@ -556,7 +595,22 @@ pub fn run(
     let writers = open_caches("writer", &models.writer, &cache_dir, cfg)?;
     let readers = open_caches("reader", &models.reader, &cache_dir, cfg)?;
     let mut items: Vec<Item> = Vec::new();
-    for (split, record) in load(input, cfg.limit)? {
+    let mut loaded = load(input, cfg.limit)?;
+    let preselected = match &cfg.preselect {
+        Some(p) => {
+            let (chosen, kept) = preselect_records(catalog, &loaded, p)?;
+            let keep: std::collections::BTreeSet<usize> = chosen.keep.iter().copied().collect();
+            let mut at = 0;
+            loaded.retain(|_| {
+                at += 1;
+                keep.contains(&(at - 1))
+            });
+            debug_assert_eq!(loaded.len(), kept);
+            Some(chosen)
+        }
+        None => None,
+    };
+    for (split, record) in loaded {
         let scenario: Scenario = serde_json::from_value(record["scenario"].clone())
             .with_context(|| format!("scenario of {}", record["id"]))?;
         let today: Date = record["today"]
@@ -916,7 +970,14 @@ pub fn run(
         calls += c;
         hits += h;
     }
-    let text = report_text(&stats, &items);
+    let mut text = report_text(&stats, &items);
+    if let Some(chosen) = &preselected {
+        text = format!("{}\n{text}", chosen.text());
+        std::fs::write(
+            out.join(crate::preselect::FILE),
+            serde_json::to_string_pretty(chosen)?,
+        )?;
+    }
     std::fs::write(out.join("report.txt"), &text)?;
     let names = |l: &[&dyn Llm; 3]| -> Value {
         Split::ALL

@@ -15,7 +15,7 @@ use centraid_datagen::mix::{self, Shares};
 use centraid_datagen::render::DECISION_WEIGHT;
 use centraid_datagen::version::{self, Provenance, RenderConfig};
 use centraid_datagen::world::{World, WorldSpec, plan, plan_sized};
-use centraid_datagen::{Catalog, Split, dryrun, handoff, messages, publish, run};
+use centraid_datagen::{Catalog, Split, dryrun, handoff, messages, preselect, publish, run};
 use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
 
@@ -103,8 +103,15 @@ enum Command {
         /// The typo stream's seed.
         #[arg(long, default_value_t = 1)]
         seed: u64,
+        /// Choose which sessions are written before any message is: the mix runs on the planned sessions with its targets
+        /// and floors raised by this factor (the mix's flags set them), and only those go to the writer and the reader.
+        /// Without it every session of the input is written.
+        #[arg(long)]
+        headroom: Option<f64>,
         #[command(flatten)]
         models: ModelArgs,
+        #[command(flatten)]
+        mix: MixArgs,
     },
     /// Render a messages run (stage 6) and mix it (stage 7) into a data version: `data/{train,val,test,noise}.jsonl.zst`,
     /// `worlds/`, `build/` and a manifest. The sessions are rendered as the phone renders them, tokenized, with per-token loss weights.
@@ -162,6 +169,11 @@ enum Command {
         /// The typo stream's seed.
         #[arg(long, default_value_t = 1)]
         typo_seed: u64,
+        /// Before any message is written the mix chooses from the planned sessions with its targets and floors raised by
+        /// this factor, and only those go to the writer and the reader (a session lost later is replaced from the rest);
+        /// the mix after the render chooses from what survived. 0 writes every session drawn.
+        #[arg(long, default_value_t = preselect::HEADROOM)]
+        headroom: f64,
         #[command(flatten)]
         models: ModelArgs,
         /// Reuse the output of a stage that already has a manifest under `<out>/stages/`.
@@ -196,6 +208,10 @@ enum Command {
         /// Tokens a turn comes to, for the projection: the first version's 10.8 million tokens over 8,585 turns. An estimate.
         #[arg(long, default_value_t = dryrun::TOKENS_PER_TURN)]
         tokens_per_turn: usize,
+        /// The headroom of the pre-selection a build makes before it writes any message (see `build --headroom`); the
+        /// prompts counted are those of the sessions it chooses. 0 counts every session drawn.
+        #[arg(long, default_value_t = preselect::HEADROOM)]
+        headroom: f64,
         /// Refused calls from a model's rollouts (`*.rollouts.jsonl`) for the repair turns that read.
         #[arg(long)]
         mistakes: Option<PathBuf>,
@@ -757,7 +773,9 @@ fn main() -> Result<()> {
             collect,
             limit,
             seed,
+            headroom,
             models,
+            mix: mix_args,
         } => {
             let catalog = Catalog::build()?;
             let built = models.build(&catalog, &input)?;
@@ -769,6 +787,13 @@ fn main() -> Result<()> {
                 limit,
                 seed,
                 style_shares: models.style_shares()?,
+                preselect: match headroom {
+                    Some(headroom) => Some(messages::Preselect {
+                        mix: mix_args.mix()?,
+                        headroom,
+                    }),
+                    None => None,
+                },
             };
             let report = messages::run(&config, &catalog, &built.models(), &input, &out)?;
             print!("{}", report.text);
@@ -812,6 +837,7 @@ fn main() -> Result<()> {
             collect,
             limit,
             typo_seed,
+            headroom,
             models,
             reuse,
             mix: mix_args,
@@ -870,6 +896,10 @@ fn main() -> Result<()> {
                     limit,
                     seed: typo_seed,
                     style_shares: models.style_shares()?,
+                    preselect: (headroom > 0.0).then(|| messages::Preselect {
+                        mix: mix_config.clone(),
+                        headroom,
+                    }),
                 };
                 let report = messages::run(
                     &config,
@@ -997,6 +1027,7 @@ fn main() -> Result<()> {
             sessions,
             batch,
             tokens_per_turn,
+            headroom,
             mistakes,
             verbose,
             mix: mix_args,
@@ -1016,6 +1047,7 @@ fn main() -> Result<()> {
                 mix: mix_config,
                 tokens_per_turn,
                 batch,
+                headroom,
                 workers: worlds.world_concurrency,
                 verbose,
                 checkpoints: Some(out.join("worlds-done")),
