@@ -1035,6 +1035,18 @@ fn traced(
     block: &str,
     shown: &[&str],
 ) -> Result<crate::trace::Traced, crate::trace::Failure> {
+    traced_as("read", tool, args, message, block, shown)
+}
+
+/// [`traced`] for a turn whose act is `intent` (`write` for a create, an edit or a verb).
+fn traced_as(
+    intent: &'static str,
+    tool: &str,
+    args: &[(&str, &str)],
+    message: &str,
+    block: &str,
+    shown: &[&str],
+) -> Result<crate::trace::Traced, crate::trace::Failure> {
     use crate::trace::{RefCall, Setting, show_rows, trace};
     let mut rows = BTreeMap::new();
     for line in shown {
@@ -1054,7 +1066,7 @@ fn traced(
         &Setting {
             message,
             today: "2026-10-12".parse().expect("a date"),
-            intent: "read",
+            intent,
             block,
             rows: &rows,
             earlier_dates: &[],
@@ -1500,6 +1512,22 @@ fn every_option_the_lane_draws_has_supply_in_an_ordinary_world() {
     let restored = |kind: &'static str| {
         move |t: &TurnIntent| cell_of(t).to_string() == format!("do/{kind}/restore")
     };
+    let both = |tool: &'static str| {
+        move |t: &TurnIntent| match &t.intent {
+            Intent::Both { first, .. } => {
+                matches!(
+                    (&**first, tool),
+                    (Intent::Create { .. }, "create")
+                        | (Intent::Edit { .. }, "edit")
+                        | (Intent::Write { .. }, "do")
+                )
+            }
+            _ => false,
+        }
+    };
+    let more_create = both("create");
+    let more_edit = both("edit");
+    let more_do = both("do");
     let restore_document = restored("document");
     let restore_locker = restored("locker item");
     for world in worlds(Split::Train, 2) {
@@ -1511,6 +1539,9 @@ fn every_option_the_lane_draws_has_supply_in_an_ordinary_world() {
                 ("compute trashed", &trash_count),
                 ("compute exclude", &others_count),
                 ("workout edit by name", &named_workout_edit),
+                ("create more", &more_create),
+                ("edit more", &more_edit),
+                ("do more", &more_do),
                 ("restore document", &restore_document),
                 ("restore locker item", &restore_locker),
             ],
@@ -1522,4 +1553,93 @@ fn every_option_the_lane_draws_has_supply_in_an_ordinary_world() {
             assert!(n >= least, "{}: {name} {n}", world.id());
         }
     }
+}
+
+// ------------------------------------------------------------------ two writes in one message: `more`
+
+#[test]
+fn two_writes_in_one_message_are_drawn_solved_and_the_first_call_says_more() {
+    let catalog = catalog();
+    let grid = Grid::build(&catalog);
+    let world = worlds(Split::Train, 1).remove(0);
+    let scratch = tempfile::tempdir().expect("scratch");
+    let mut run = WorldRun::seed(&world, &catalog, scratch.path()).expect("seeds");
+    let facts = Facts::of(&world, &catalog);
+    let sampler = Sampler::new(&world, &facts, &catalog, &grid);
+    let aim = Aim {
+        more: true,
+        ..Aim::default()
+    };
+    for (cell, first_tool) in [
+        (Cell::new("create", "note", "create"), "create"),
+        (Cell::new("edit", "task", "edit"), "edit"),
+        (Cell::new("do", "task", "complete"), "do"),
+    ] {
+        let (scenario, solution) = (0..40)
+            .find_map(|i| {
+                let mut rng = Rng::new(21).fork(&format!("{cell}:{i}"));
+                let scenario =
+                    sampler.session_aim("proof", &cell, &aim, &Room::default(), 2, &mut rng)?;
+                let solution = run.solve(&scenario).ok()?;
+                (solution.dropped.is_empty() && solution.kept == 1).then_some((scenario, solution))
+            })
+            .unwrap_or_else(|| panic!("{cell}: no two writes were solved"));
+        assert_eq!(scenario.turns.len(), 1);
+        let turn = &scenario.turns[0];
+        assert!(matches!(&turn.intent, Intent::Both { .. }), "{cell}");
+        assert_eq!(cell_of(turn).to_string(), cell.to_string());
+        assert_eq!(labels::action(turn), "write");
+        let made = calls(&solution);
+        let writes: Vec<&(String, Value)> = made
+            .iter()
+            .filter(|(t, _)| matches!(t.as_str(), "create" | "edit" | "do"))
+            .collect();
+        assert_eq!(writes.len(), 2, "{cell}: {made:?}");
+        assert_eq!(writes[0].0, first_tool, "{cell}");
+        assert_eq!(writes[0].1["more"], "true", "{cell}: {made:?}");
+        assert_eq!(writes[1].0, "create", "{cell}");
+        assert!(
+            writes[1].1.get("more").is_none(),
+            "{cell}: only the last call ends the turn"
+        );
+        // the brief says both, and the reader is asked for the first one's act or the other
+        let said = Said {
+            scenario: &scenario,
+            catalog: &catalog,
+            today: world.today.parse().expect("a date"),
+        };
+        assert!(said.brief(0).ask.contains("TWO requests"), "{cell}");
+        assert!(said.want(0).both);
+        // drift would count the argument in the reference calls
+        let shown = serde_json::json!({ "tool": writes[0].0, "args": writes[0].1 });
+        assert!(shown["args"]["more"] == "true");
+    }
+}
+
+#[test]
+fn the_think_of_a_call_that_says_more_compiles_back_to_the_call() {
+    let made = traced_as(
+        "write",
+        "create",
+        &[
+            ("kind", "note"),
+            ("args", "name: Gift ideas"),
+            ("more", "true"),
+        ],
+        "new note called Gift ideas and a task called Call Esme",
+        "",
+        &[],
+    )
+    .unwrap_or_else(|why| panic!("create: {why:?}"));
+    assert_eq!(made.call.tool, "create");
+    let made = traced_as(
+        "write",
+        "do",
+        &[("verb", "complete"), ("rows", "#1"), ("more", "true")],
+        "complete Call Esme and add a note called Gift ideas",
+        "",
+        &["#1 task \"Call Esme\""],
+    )
+    .unwrap_or_else(|why| panic!("do: {why:?}"));
+    assert_eq!(made.call.tool, "do");
 }

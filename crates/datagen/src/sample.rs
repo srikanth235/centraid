@@ -144,6 +144,8 @@ pub struct Aim {
     pub tail: bool,
     /// A restore is drawn as a session of its own: the row is deleted, then restored by its name.
     pub trash: bool,
+    /// The write of the cell is said together with a create in one message: two calls, the first saying `more`.
+    pub more: bool,
 }
 
 /// What the run still has room for: a share the run has filled stops being drawn (pronoun and handle references of the
@@ -675,6 +677,13 @@ impl<'a> Sampler<'a> {
             Intent::Edit { target, .. } => self.apps(&[target_kind(target)]),
             Intent::Create { kind, .. } | Intent::Ask { kind, .. } => self.apps(&[kind]),
             Intent::Recall { .. } | Intent::Decline { .. } => Vec::new(),
+            Intent::Both { first, second } => {
+                let mut v = self.turn((**first).clone(), reference, outcome, None).apps;
+                v.extend(self.turn((**second).clone(), reference, outcome, None).apps);
+                v.sort();
+                v.dedup();
+                v
+            }
         };
         TurnIntent {
             intent,
@@ -2509,6 +2518,9 @@ impl<'a> Sampler<'a> {
         if aim.tail {
             return self.tailed(id, cell, aim, room, extra, rng);
         }
+        if aim.more {
+            return self.both(id, cell, rng);
+        }
         let mut turns: Vec<TurnIntent> = Vec::new();
         let mut extra = extra;
         match (cell.tool.as_str(), cell.verb.as_str()) {
@@ -2760,6 +2772,61 @@ impl<'a> Sampler<'a> {
             return Some(scenario);
         }
         None
+    }
+
+    /// Two writes in one message: a create, an edit or a verb on a named or selected row of `cell`, and a create. The call
+    /// of the first says `more` (another call follows) and the call of the create ends the turn. `None` when the world
+    /// cannot draw the first.
+    fn both(&self, id: &str, cell: &Cell, rng: &mut Rng) -> Option<Scenario> {
+        let first = self.opener_aim(cell, &Aim::default(), rng)?;
+        if first.outcome != Outcome::Done {
+            return None;
+        }
+        let creates = matches!(first.intent, Intent::Create { .. });
+        let fits = match &first.intent {
+            Intent::Create { .. } => true,
+            Intent::Edit { target, .. } => !matches!(target, Target::Turn { .. }),
+            Intent::Write { target, verb, .. } => {
+                !matches!(target, Target::Turn { .. })
+                    && !matches!(verb.as_str(), "undo" | "restore")
+            }
+            _ => false,
+        };
+        if !fits {
+            return None;
+        }
+        // two creates of one kind could be given one name, so a create is followed by another kind
+        let kinds: Vec<Cell> = self
+            .grid
+            .live()
+            .into_iter()
+            .filter(|c| c.tool == "create" && (!creates || c.kind != cell.kind))
+            .cloned()
+            .collect();
+        if kinds.is_empty() {
+            return None;
+        }
+        let second = self.create(&kinds[rng.below(kinds.len())].kind, None, rng, 0)?;
+        if second.outcome != Outcome::Done {
+            return None;
+        }
+        let reference = first.reference;
+        let turn = self.turn(
+            Intent::Both {
+                first: Box::new(first.intent),
+                second: Box::new(second.intent),
+            },
+            reference,
+            Outcome::Done,
+            None,
+        );
+        Some(Scenario {
+            id: id.to_owned(),
+            world: self.world.id(),
+            span: Span::Single,
+            turns: vec![turn],
+            tags: Vec::new(),
+        })
     }
 
     /// A row deleted and then restored by its name, which is how a trash is emptied of a mistake: the supply of the

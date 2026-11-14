@@ -615,6 +615,13 @@ pub enum Intent {
     Create { kind: String, fields: Vec<Change> },
     /// `answer rows=@k` or `answer value=@k` of an earlier turn's result.
     Recall { turn: usize, value: bool },
+    /// Two writes in one message ("complete the dentist task and add a note called Gift ideas"): the first call says
+    /// `more`, the second finishes the turn. `first` is a create, an edit or a verb on a named or selected row; `second`
+    /// is a create.
+    Both {
+        first: Box<Intent>,
+        second: Box<Intent>,
+    },
     /// A name that more than one row answers to: `find`, then `ask`.
     Ask {
         kind: String,

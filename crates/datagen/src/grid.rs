@@ -91,6 +91,11 @@ pub fn cell_of(turn: &TurnIntent) -> Cell {
         }
         Intent::Ask { kind, .. } => Cell::new("ask", kind, "ask"),
         Intent::Decline { reason } => Cell::new("decline", "-", reason),
+        // the first of the two writes is the cell: the second is a create of its own kind
+        Intent::Both { first, .. } => cell_of(&TurnIntent {
+            intent: (**first).clone(),
+            ..turn.clone()
+        }),
     }
 }
 

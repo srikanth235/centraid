@@ -160,6 +160,8 @@ enum Check {
     Undo,
     /// The earlier turn's result, shown again.
     Same,
+    /// Two writes in one message: each is checked against the one effect of the turn.
+    Both(Box<Check>, Box<Check>),
 }
 
 struct Plan {
@@ -755,6 +757,33 @@ impl<'a> WorldRun<'a> {
                     kind: kind.clone(),
                 })
             }
+            Intent::Both { first, second } => {
+                let part = |intent: &Intent| {
+                    self.plan_inner(
+                        &TurnIntent {
+                            intent: intent.clone(),
+                            reference: turn.reference,
+                            outcome: Outcome::Done,
+                            dep: None,
+                            apps: Vec::new(),
+                        },
+                        left,
+                    )
+                };
+                let mut a = part(first)?;
+                let b = part(second)?;
+                // the call that does the first write says another follows
+                if let Some(last) = a.steps.last_mut() {
+                    last.args.push(("more", "true".to_owned()));
+                }
+                a.steps.extend(b.steps);
+                Ok(Plan {
+                    steps: a.steps,
+                    check: Check::Both(Box::new(a.check), Box::new(b.check)),
+                    keys: a.keys,
+                    kind: a.kind,
+                })
+            }
             Intent::Decline { reason } => {
                 let mut steps = Vec::new();
                 if reason == "not_found" {
@@ -949,163 +978,176 @@ impl<'a> WorldRun<'a> {
         };
         // ---- verify against the plan
         let mut made = None;
-        match &plan.check {
-            Check::Rows { want, ordered, at } => {
-                if effect.ending != Ending::Rows {
-                    return Err((Drop::Ending, format!("ended in {}", effect.ending.word())));
-                }
-                let got: BTreeSet<String> = rows_of_step(*at).into_iter().collect();
-                compare_sets(want, &got)?;
-                let shown: Vec<String> = ids_of(&effect.rows);
-                if let Some(order) = ordered
-                    && &shown != order
-                {
-                    return Err((Drop::Value, format!("order {shown:?} want {order:?}")));
-                }
-            }
-            Check::Count(want) => {
-                let got = scalar(&effect).ok_or_else(|| (Drop::Ending, "no value".to_owned()))?;
-                if (got - *want as f64).abs() > 0.5 {
-                    return Err((Drop::Value, format!("count {got} want {want}")));
-                }
-            }
-            Check::Value { want, grouped } => {
-                if effect.ending != Ending::Value {
-                    return Err((Drop::Ending, format!("ended in {}", effect.ending.word())));
-                }
-                if !grouped && !want.is_empty() {
-                    let got = units(&effect);
-                    // the runtime rounds whole-unit figures; money keeps cents
-                    let slack: f64 = if is_money(&plan.steps) { 0.02 } else { 0.51 };
-                    let same = got.len() == want.len()
-                        && want.iter().all(|(u, w)| {
-                            got.get(u)
-                                .is_some_and(|g| (g - w).abs() <= slack.max(w.abs() * 0.001))
-                        });
-                    if !same {
-                        return Err((Drop::Value, format!("value {got:?} want {want:?}")));
+        // the rows this turn creates, put with the session's own once every check has read the closures above
+        let mut made_rows: Vec<String> = Vec::new();
+        let checks: Vec<&Check> = match &plan.check {
+            Check::Both(a, b) => vec![&**a, &**b],
+            check => vec![check],
+        };
+        for check in checks {
+            match check {
+                Check::Rows { want, ordered, at } => {
+                    if effect.ending != Ending::Rows {
+                        return Err((Drop::Ending, format!("ended in {}", effect.ending.word())));
+                    }
+                    let got: BTreeSet<String> = rows_of_step(*at).into_iter().collect();
+                    compare_sets(want, &got)?;
+                    let shown: Vec<String> = ids_of(&effect.rows);
+                    if let Some(order) = ordered
+                        && &shown != order
+                    {
+                        return Err((Drop::Value, format!("order {shown:?} want {order:?}")));
                     }
                 }
-            }
-            Check::Compare { sides } => {
-                if effect.ending != Ending::Value {
-                    return Err((Drop::Ending, format!("ended in {}", effect.ending.word())));
-                }
-                // each side is a figure the world's index also computes; the difference between
-                // them is the runtime's, and gold records it
-                for (at, want) in sides {
-                    let got = value_units(&responses[*at]["effect"]["value"]);
-                    let slack: f64 = if is_money(&plan.steps) { 0.02 } else { 0.51 };
-                    let same = got.len() == want.len()
-                        && want.iter().all(|(u, w)| {
-                            got.get(u)
-                                .is_some_and(|g| (g - w).abs() <= slack.max(w.abs() * 0.001))
-                        });
-                    if !same {
-                        return Err((Drop::Value, format!("side {got:?} want {want:?}")));
+                Check::Count(want) => {
+                    let got =
+                        scalar(&effect).ok_or_else(|| (Drop::Ending, "no value".to_owned()))?;
+                    if (got - *want as f64).abs() > 0.5 {
+                        return Err((Drop::Value, format!("count {got} want {want}")));
                     }
                 }
-            }
-            Check::Ask(want) => {
-                if effect.ending != Ending::Ask {
-                    return Err((Drop::Ending, format!("ended in {}", effect.ending.word())));
+                Check::Value { want, grouped } => {
+                    if effect.ending != Ending::Value {
+                        return Err((Drop::Ending, format!("ended in {}", effect.ending.word())));
+                    }
+                    if !grouped && !want.is_empty() {
+                        let got = units(&effect);
+                        // the runtime rounds whole-unit figures; money keeps cents
+                        let slack: f64 = if is_money(&plan.steps) { 0.02 } else { 0.51 };
+                        let same = got.len() == want.len()
+                            && want.iter().all(|(u, w)| {
+                                got.get(u)
+                                    .is_some_and(|g| (g - w).abs() <= slack.max(w.abs() * 0.001))
+                            });
+                        if !same {
+                            return Err((Drop::Value, format!("value {got:?} want {want:?}")));
+                        }
+                    }
                 }
-                let got: BTreeSet<String> = ids_of(&effect.options).into_iter().collect();
-                if !want.is_subset(&got) && !got.is_subset(want) {
-                    return Err((Drop::Value, "the ask lists other rows".to_owned()));
+                Check::Compare { sides } => {
+                    if effect.ending != Ending::Value {
+                        return Err((Drop::Ending, format!("ended in {}", effect.ending.word())));
+                    }
+                    // each side is a figure the world's index also computes; the difference between
+                    // them is the runtime's, and gold records it
+                    for (at, want) in sides {
+                        let got = value_units(&responses[*at]["effect"]["value"]);
+                        let slack: f64 = if is_money(&plan.steps) { 0.02 } else { 0.51 };
+                        let same = got.len() == want.len()
+                            && want.iter().all(|(u, w)| {
+                                got.get(u)
+                                    .is_some_and(|g| (g - w).abs() <= slack.max(w.abs() * 0.001))
+                            });
+                        if !same {
+                            return Err((Drop::Value, format!("side {got:?} want {want:?}")));
+                        }
+                    }
                 }
-            }
-            Check::Decline(reason) => {
-                if effect.ending != Ending::Decline || effect.reason.as_deref() != Some(reason) {
-                    return Err((Drop::Ending, format!("ended in {}", effect.ending.word())));
+                Check::Ask(want) => {
+                    if effect.ending != Ending::Ask {
+                        return Err((Drop::Ending, format!("ended in {}", effect.ending.word())));
+                    }
+                    let got: BTreeSet<String> = ids_of(&effect.options).into_iter().collect();
+                    if !want.is_subset(&got) && !got.is_subset(want) {
+                        return Err((Drop::Value, "the ask lists other rows".to_owned()));
+                    }
                 }
-            }
-            Check::Refused => {
-                // the runtime ends the turn on the refusal (reason `out_of_scope`) and records the
-                // vault's sentence, which names the store
-                let said = responses
-                    .last()
-                    .and_then(|r| r["effect"]["refusal"]["reason"].as_str())
-                    .unwrap_or_default();
-                if effect.ending != Ending::Decline
-                    || !said.contains(" from ")
-                    || !effect.diff.rows.is_empty()
-                {
-                    return Err((
-                        Drop::Ending,
-                        format!("ended in {} {said:?}", effect.ending.word()),
-                    ));
+                Check::Decline(reason) => {
+                    if effect.ending != Ending::Decline || effect.reason.as_deref() != Some(reason)
+                    {
+                        return Err((Drop::Ending, format!("ended in {}", effect.ending.word())));
+                    }
                 }
-            }
-            Check::Write(want) => {
-                if !effect.already.is_empty() {
-                    return Err((Drop::Noop, "already so".to_owned()));
-                }
-                let changed: BTreeSet<String> = effect
-                    .diff
-                    .rows
-                    .iter()
-                    .map(|r| self.key_of(&r.id, created))
-                    .chain(
-                        link_rows(&effect.diff)
-                            .iter()
-                            .map(|id| self.key_of(id, created)),
-                    )
-                    .collect();
-                if effect.diff.rows.is_empty() && effect.diff.links.is_empty() {
-                    return Err((Drop::Noop, "nothing changed".to_owned()));
-                }
-                if !changed.is_subset(want) && !want.iter().any(|w| changed.contains(w)) {
-                    return Err((Drop::Value, format!("changed {changed:?} want {want:?}")));
-                }
-                // a by-name write found exactly the row it meant
-                if let Some(find) = plan
-                    .steps
-                    .iter()
-                    .position(|s| s.primary && s.tool == "find")
-                {
-                    let found: BTreeSet<String> = rows_of_step(find).into_iter().collect();
-                    if found.len() > 1 && plan.steps[find].args.iter().any(|(k, _)| *k == "name") {
+                Check::Refused => {
+                    // the runtime ends the turn on the refusal (reason `out_of_scope`) and records the
+                    // vault's sentence, which names the store
+                    let said = responses
+                        .last()
+                        .and_then(|r| r["effect"]["refusal"]["reason"].as_str())
+                        .unwrap_or_default();
+                    if effect.ending != Ending::Decline
+                        || !said.contains(" from ")
+                        || !effect.diff.rows.is_empty()
+                    {
                         return Err((
-                            Drop::Ambiguous,
-                            format!("{} rows answer to the name", found.len()),
+                            Drop::Ending,
+                            format!("ended in {} {said:?}", effect.ending.word()),
                         ));
                     }
-                    if !want.is_subset(&found) {
-                        return Err((Drop::NotFound, "the name found another row".to_owned()));
+                }
+                Check::Write(want) => {
+                    if !effect.already.is_empty() {
+                        return Err((Drop::Noop, "already so".to_owned()));
+                    }
+                    let changed: BTreeSet<String> = effect
+                        .diff
+                        .rows
+                        .iter()
+                        .map(|r| self.key_of(&r.id, created))
+                        .chain(
+                            link_rows(&effect.diff)
+                                .iter()
+                                .map(|id| self.key_of(id, created)),
+                        )
+                        .collect();
+                    if effect.diff.rows.is_empty() && effect.diff.links.is_empty() {
+                        return Err((Drop::Noop, "nothing changed".to_owned()));
+                    }
+                    if !changed.is_subset(want) && !want.iter().any(|w| changed.contains(w)) {
+                        return Err((Drop::Value, format!("changed {changed:?} want {want:?}")));
+                    }
+                    // a by-name write found exactly the row it meant
+                    if let Some(find) = plan
+                        .steps
+                        .iter()
+                        .position(|s| s.primary && s.tool == "find")
+                    {
+                        let found: BTreeSet<String> = rows_of_step(find).into_iter().collect();
+                        if found.len() > 1
+                            && plan.steps[find].args.iter().any(|(k, _)| *k == "name")
+                        {
+                            return Err((
+                                Drop::Ambiguous,
+                                format!("{} rows answer to the name", found.len()),
+                            ));
+                        }
+                        if !want.is_subset(&found) {
+                            return Err((Drop::NotFound, "the name found another row".to_owned()));
+                        }
                     }
                 }
-            }
-            Check::Created(kind) => {
-                let new: Vec<_> = effect
-                    .diff
-                    .rows
-                    .iter()
-                    .filter(|r| r.change == "created" && &r.kind == kind)
-                    .collect();
-                if new.len() != 1 {
-                    return Err((Drop::Noop, format!("{} rows created", new.len())));
+                Check::Created(kind) => {
+                    let new: Vec<_> = effect
+                        .diff
+                        .rows
+                        .iter()
+                        .filter(|r| r.change == "created" && &r.kind == kind)
+                        .collect();
+                    if new.len() != 1 {
+                        return Err((Drop::Noop, format!("{} rows created", new.len())));
+                    }
+                    made_rows.push(new[0].id.clone());
+                    let n = responses
+                        .iter()
+                        .rev()
+                        .find_map(|r| {
+                            r["effect"]["created"]
+                                .as_array()
+                                .and_then(|a| a.first())
+                                .and_then(|c| c["n"].as_u64())
+                        })
+                        .map(|n| format!("#{n}"));
+                    made = n;
                 }
-                created.push(new[0].id.clone());
-                let n = responses
-                    .iter()
-                    .rev()
-                    .find_map(|r| {
-                        r["effect"]["created"]
-                            .as_array()
-                            .and_then(|a| a.first())
-                            .and_then(|c| c["n"].as_u64())
-                    })
-                    .map(|n| format!("#{n}"));
-                made = n;
-            }
-            Check::Undo => {
-                if effect.diff.rows.is_empty() && effect.diff.links.is_empty() {
-                    return Err((Drop::Noop, "nothing undone".to_owned()));
+                Check::Undo => {
+                    if effect.diff.rows.is_empty() && effect.diff.links.is_empty() {
+                        return Err((Drop::Noop, "nothing undone".to_owned()));
+                    }
                 }
+                Check::Same | Check::Both(..) => {}
             }
-            Check::Same => {}
         }
+        created.extend(made_rows);
         // ---- what the next turn can lean on
         let primary = plan
             .steps

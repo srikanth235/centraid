@@ -56,7 +56,19 @@ const WORKOUT_DRAWS: usize = 6;
 /// sessions, so most of them have to come after another turn.
 const TAIL_ASK_DRAWS: usize = 56;
 const TAIL_DECLINE_DRAWS: usize = 50;
-const TAIL_EMPTY_DRAWS: usize = 11;
+const TAIL_EMPTY_DRAWS: usize = 13;
+
+/// Draws of each create, edit and verb cell said together with a create in one message, for the `more` argument of the
+/// three tools: drift counts an argument over the sessions the mix chooses, so each has to be drawn many times over.
+fn more_draws(cell: &Cell) -> usize {
+    match (cell.tool.as_str(), cell.verb.as_str()) {
+        ("create", _) => 3,
+        ("edit", _) => 4,
+        ("do", "undo" | "restore") => 0,
+        ("do", _) => 2,
+        _ => 0,
+    }
+}
 
 /// Draws of each restore cell as a delete followed by its restore, for the kinds whose worlds hold few rows in the trash.
 const RESTORE_DRAWS: usize = 4;
@@ -172,6 +184,15 @@ pub fn draws(catalog: &Catalog, grid: &Grid) -> Vec<Draw> {
                 cell: cell.clone(),
                 aim: Aim {
                     tail: true,
+                    ..Aim::default()
+                },
+            });
+        }
+        for _ in 0..more_draws(cell) {
+            out.push(Draw {
+                cell: cell.clone(),
+                aim: Aim {
+                    more: true,
                     ..Aim::default()
                 },
             });

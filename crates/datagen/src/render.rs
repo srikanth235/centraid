@@ -463,7 +463,10 @@ fn intent_word(turn: &TurnIntent, call: &RefCall) -> &'static str {
     match &turn.intent {
         Intent::Read { .. } => "read",
         Intent::Count { .. } | Intent::Measure { .. } | Intent::Compare { .. } => "count",
-        Intent::Write { .. } | Intent::Edit { .. } | Intent::Create { .. } => "write",
+        Intent::Write { .. }
+        | Intent::Edit { .. }
+        | Intent::Create { .. }
+        | Intent::Both { .. } => "write",
         Intent::Recall { value, .. } => {
             if *value {
                 "count"

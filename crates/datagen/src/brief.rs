@@ -465,6 +465,11 @@ impl Briefer<'_> {
                 )
             }
             Intent::Decline { reason } => decline_phrase(reason, spans, turn),
+            Intent::Both { first, second } => format!(
+                "TWO requests in ONE message, said together (\"... and ...\"): (1) {} AND (2) {}",
+                self.ask(first, turn, spans, typed),
+                self.ask(second, turn, spans, typed)
+            ),
         }
     }
 }

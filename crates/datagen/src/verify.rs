@@ -137,6 +137,8 @@ pub struct Expected {
     pub presence: Vec<(String, String)>,
     /// The turn asks for the others, the rows an earlier turn did not show: the reader may say it leaves them out.
     pub leaves_out_rows: bool,
+    /// Two writes in one message: the reader gives the act of either.
+    pub both: bool,
 }
 
 /// What a batch asks the reader for beyond what every batch does; a key a batch has no use for is not in its prompt.
@@ -245,6 +247,25 @@ fn open_of(sel: &Selector, today: Date) -> Option<(Option<Date>, Option<Date>)> 
 /// The slots of `turn`.
 #[must_use]
 pub fn expected(catalog: &Catalog, turn: &TurnIntent, today: Date) -> Expected {
+    if let Intent::Both { first, second } = &turn.intent {
+        // two writes in one message: what the first asks, with the second's figures and secrets too
+        let part = |intent: &Intent| {
+            expected(
+                catalog,
+                &TurnIntent {
+                    intent: intent.clone(),
+                    ..turn.clone()
+                },
+                today,
+            )
+        };
+        let mut e = part(first);
+        let more = part(second);
+        e.numbers.extend(more.numbers);
+        e.typed.extend(more.typed);
+        e.both = true;
+        return e;
+    }
     let named = matches!(
         turn.reference,
         Reference::Name | Reference::Nickname | Reference::Misspelling
@@ -272,6 +293,7 @@ pub fn expected(catalog: &Catalog, turn: &TurnIntent, today: Date) -> Expected {
         open: None,
         presence: Vec::new(),
         leaves_out_rows: false,
+        both: false,
     };
     let (mut filters, mut names, mut excluding) = (Vec::new(), Vec::new(), Vec::new());
     let (mut presence, mut also) = (Vec::new(), Vec::new());
@@ -369,6 +391,8 @@ pub fn expected(catalog: &Catalog, turn: &TurnIntent, today: Date) -> Expected {
             "decline".clone_into(&mut e.act);
             e.decline = Some(reason.clone());
         }
+        // read off the first and the second above
+        Intent::Both { .. } => {}
     }
     e.numbers = numbers;
     e.filters = filters;
@@ -607,6 +631,9 @@ pub fn slots(catalog: &Catalog, want: &Expected, got: &Read, index: usize) -> Ve
     let act_ok = got.act == want.act
         || (want.act == "recall" && got.act == "read")
         || (want.act == "read" && got.act == "recall")
+        // two writes in one message are read back as either write
+        || (want.both && matches!(got.act.as_str(), "create" | "edit"))
+        || (want.both && got.act == want.act)
         // a person who is not in the vault is asked about like any other: only the runtime knows
         || (want.decline.as_deref() == Some("not_found") && got.act == "read");
     out.push(slot("act", act_ok, || {

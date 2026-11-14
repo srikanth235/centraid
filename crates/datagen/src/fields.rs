@@ -179,9 +179,18 @@ fn changes_of(changes: &[Change], verb: &str, kind: &str) -> Vec<String> {
 /// followed store states the row) sets nothing and carries none.
 #[must_use]
 pub fn of_turn(turn: &TurnIntent) -> Vec<String> {
-    match &turn.intent {
+    of_intent(&turn.intent, turn.outcome)
+}
+
+fn of_intent(intent: &Intent, outcome: crate::intent::Outcome) -> Vec<String> {
+    match intent {
+        Intent::Both { first, second } => {
+            let mut out = of_intent(first, outcome);
+            out.extend(of_intent(second, outcome));
+            out
+        }
         Intent::Create { kind, fields } => changes_of(fields, "create", kind),
-        Intent::Edit { target, changes } if turn.outcome != crate::intent::Outcome::Decline => {
+        Intent::Edit { target, changes } if outcome != crate::intent::Outcome::Decline => {
             let kind = match target {
                 Target::Name { kind, .. } | Target::Turn { kind, .. } => kind.as_str(),
                 Target::Select { sel } => sel.kind.as_str(),

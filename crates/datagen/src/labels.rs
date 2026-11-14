@@ -38,6 +38,15 @@ pub fn action(turn: &TurnIntent) -> &'static str {
             }
         }
         Intent::Decline { .. } => "",
+        Intent::Both { first, .. } => action(&first_of(turn, first)),
+    }
+}
+
+/// The turn as its first write: what two writes in one message are labelled by.
+fn first_of(turn: &TurnIntent, first: &Intent) -> TurnIntent {
+    TurnIntent {
+        intent: first.clone(),
+        ..turn.clone()
     }
 }
 
@@ -54,6 +63,7 @@ pub fn reference(turn: &TurnIntent) -> &'static str {
         | Intent::Compare { .. }
         | Intent::Create { .. }
         | Intent::Decline { .. } => false,
+        Intent::Both { first, .. } => return reference(&first_of(turn, first)),
     };
     if !points {
         return "";
@@ -112,6 +122,10 @@ pub fn kinds(turn: &TurnIntent) -> BTreeSet<String> {
             out.insert(kind.clone());
         }
         Intent::Recall { .. } | Intent::Decline { .. } => {}
+        Intent::Both { first, second } => {
+            out.extend(kinds(&first_of(turn, first)));
+            out.extend(kinds(&first_of(turn, second)));
+        }
     }
     out.remove("-");
     out
@@ -162,6 +176,7 @@ pub fn combos(turn: &TurnIntent) -> BTreeSet<String> {
             target: Target::Select { sel },
             ..
         } => selector(sel, "edit"),
+        Intent::Both { first, .. } => out.extend(combos(&first_of(turn, first))),
         _ => {}
     }
     out
