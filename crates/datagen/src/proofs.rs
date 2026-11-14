@@ -1469,3 +1469,57 @@ fn a_row_is_deleted_and_restored_so_every_restore_cell_has_supply() {
         );
     }
 }
+
+/// How many turns of a sweep of one world match each of `what`.
+type Probe<'a> = (&'a str, &'a dyn Fn(&TurnIntent) -> bool);
+
+fn supply(world: &World, what: &[Probe<'_>]) -> Vec<(String, usize)> {
+    let catalog = catalog();
+    let grid = Grid::build(&catalog);
+    let turns = sweep(
+        &catalog,
+        &grid,
+        std::slice::from_ref(world),
+        &Room::default(),
+    );
+    what.iter()
+        .map(|(name, f)| ((*name).to_owned(), turns.iter().filter(|t| f(t)).count()))
+        .collect()
+}
+
+#[test]
+fn every_option_the_lane_draws_has_supply_in_an_ordinary_world() {
+    // drift counts an argument over the chosen sessions, a few in a hundred of those drawn: the sweep of a world holds
+    // each of these at least as often as the floor of 30 asks of the whole train split divided by its 48 worlds, many times over
+    let top_read = |t: &TurnIntent| matches!(&t.intent, Intent::Read { sel } if sel.order.is_some() && sel.limit.is_some());
+    let top_total = |t: &TurnIntent| matches!(&t.intent, Intent::Measure { measure } if measure.sel.order.is_some() && measure.sel.limit.is_some());
+    let trash_count = |t: &TurnIntent| matches!(&t.intent, Intent::Count { sel } if sel.trashed);
+    let others_count =
+        |t: &TurnIntent| matches!(&t.intent, Intent::Count { sel } if sel.exclude.is_some());
+    let named_workout_edit = |t: &TurnIntent| matches!(&t.intent, Intent::Edit { target: crate::intent::Target::Name { kind, .. }, .. } if kind == "workout");
+    let restored = |kind: &'static str| {
+        move |t: &TurnIntent| cell_of(t).to_string() == format!("do/{kind}/restore")
+    };
+    let restore_document = restored("document");
+    let restore_locker = restored("locker item");
+    for world in worlds(Split::Train, 2) {
+        let got = supply(
+            &world,
+            &[
+                ("find order and limit", &top_read),
+                ("compute order and limit", &top_total),
+                ("compute trashed", &trash_count),
+                ("compute exclude", &others_count),
+                ("workout edit by name", &named_workout_edit),
+                ("restore document", &restore_document),
+                ("restore locker item", &restore_locker),
+            ],
+        );
+        println!("{}: {got:?}", world.id());
+        for (name, n) in got {
+            // a restore is a cell, which the mix's own floor of 30 reaches from the 48 worlds; the rest are arguments
+            let least = if name.starts_with("restore") { 4 } else { 8 };
+            assert!(n >= least, "{}: {name} {n}", world.id());
+        }
+    }
+}

@@ -601,12 +601,34 @@ impl<'a> Sampler<'a> {
     }
 
     /// A top-n ordering over a number field, only where the nth and (n+1)th rows differ.
-    fn with_top(&self, mut sel: Selector, rng: &mut Rng) -> Option<Selector> {
+    fn with_top(&self, sel: Selector, rng: &mut Rng) -> Option<Selector> {
         let fields = measurable(&sel.kind);
         if fields.is_empty() || sel.kind == "budget" {
             return None;
         }
         let field = fields[rng.below(fields.len())];
+        self.top_by(sel, field, false, rng)
+    }
+
+    /// [`Self::with_top`] by `field`. A field some rows lack cannot rank them, so with `ranked` the rows that have it are
+    /// the ones ranked (`field is set`).
+    fn top_by(
+        &self,
+        mut sel: Selector,
+        field: &str,
+        ranked: bool,
+        rng: &mut Rng,
+    ) -> Option<Selector> {
+        if sel.kind == "budget" || (ranked && sel.filters.iter().any(|f| f.field == field)) {
+            return None;
+        }
+        if ranked {
+            sel.filters.push(Filter {
+                field: field.to_owned(),
+                cmp: Cmp::IsSet,
+                value: Lit::List(Vec::new()),
+            });
+        }
         let desc = rng.chance(0.6);
         let n = rng.range(1, 3) as usize;
         let mut probe = sel.clone();
@@ -1043,11 +1065,19 @@ impl<'a> Sampler<'a> {
                 sel
             }
             Search::Top => {
-                // a few of the many: the selector is broad (up to one constraint) so there is a field to rank
-                let base = self
-                    .target_selector(kind, rng.below(2), rng, 10_000)
-                    .map_or_else(|| Selector::of(kind), |(sel, _)| sel);
-                self.with_top(base, rng)?
+                // a few of the many: the selector is broad (up to one constraint) so there is a field to rank, and a field
+                // some rows lack ranks the ones that have it
+                let fields = measurable(kind);
+                (0..16).find_map(|attempt| {
+                    let field = fields[rng.below(fields.len())];
+                    let base = if attempt % 2 == 0 {
+                        self.target_selector(kind, rng.below(2), rng, 10_000)
+                            .map_or_else(|| Selector::of(kind), |(sel, _)| sel)
+                    } else {
+                        Selector::of(kind)
+                    };
+                    self.top_by(base, field, attempt >= 4, rng)
+                })?
             }
             Search::Exclude => return None,
             Search::Kinds => {
@@ -2715,7 +2745,7 @@ impl<'a> Sampler<'a> {
         for _ in 0..12 {
             let head = &heads[rng.below(heads.len())];
             let Some(mut scenario) =
-                self.session_aim(id, head, &Aim::default(), room, extra.min(2), rng)
+                self.session_aim(id, head, &Aim::default(), room, extra.min(1), rng)
             else {
                 continue;
             };

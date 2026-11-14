@@ -54,16 +54,12 @@ const WORKOUT_DRAWS: usize = 6;
 /// Draws of each ask cell as the last turn of a longer session, of each decline cell, and of each read or count that
 /// finds nothing. Ask, nothing found and decline are 25% of the turns, and sessions of two turns or more are 60% of the
 /// sessions, so most of them have to come after another turn.
-const TAIL_ASK_DRAWS: usize = 36;
-const TAIL_DECLINE_DRAWS: usize = 26;
-const TAIL_EMPTY_DRAWS: usize = 6;
+const TAIL_ASK_DRAWS: usize = 56;
+const TAIL_DECLINE_DRAWS: usize = 50;
+const TAIL_EMPTY_DRAWS: usize = 11;
 
 /// Draws of each restore cell as a delete followed by its restore, for the kinds whose worlds hold few rows in the trash.
 const RESTORE_DRAWS: usize = 4;
-
-/// Draws of each count and each total or average through an option of `compute` a plain draw never uses (the trash, the
-/// rows the turn before left out, the top few).
-const COMPUTE_DRAWS: usize = 2;
 
 /// Draws of each read and count cell aimed at finding nothing: the nothing-found share is 8% of the turns and a
 /// world seldom holds a request that finds nothing by chance.
@@ -71,10 +67,27 @@ const EMPTY_DRAWS: usize = 9;
 
 /// Draws of each write and edit cell aimed at a row said by a nickname or a misspelling (15% of the turns that point at a
 /// row; a person has a nickname or a long name only now and then).
-const NICKNAME_DRAWS: usize = 8;
+const NICKNAME_DRAWS: usize = 11;
 
-/// Draws of each read cell through each option of `find` a plain draw never uses.
-const SEARCH_DRAWS: usize = 1;
+/// Draws of each read cell through each option of `find` a plain draw never uses. Drift counts an argument over the sessions
+/// the mix chooses, a few in a hundred of those drawn, so an option that a world serves seldom (the top few of a kind
+/// whose rows lack the field, a row that nothing else is called) is drawn more often than the rest.
+fn search_draws(search: Search) -> usize {
+    match search {
+        Search::Top => 8,
+        Search::Exclude => 3,
+        _ => 1,
+    }
+}
+
+/// Draws of each count and each total or average through an option of `compute` a plain draw never uses (the trash, the
+/// rows the turn before left out, the top few).
+fn compute_draws(search: Search) -> usize {
+    match search {
+        Search::Trashed => 6,
+        _ => 4,
+    }
+}
 
 /// One draw: a cell and what it is aimed at.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -181,7 +194,7 @@ pub fn draws(catalog: &Catalog, grid: &Grid) -> Vec<Draw> {
                 _ => &[],
             };
             for search in options.iter().filter(|s| s.serves(catalog, &cell.kind)) {
-                for _ in 0..COMPUTE_DRAWS {
+                for _ in 0..compute_draws(*search) {
                     out.push(Draw {
                         cell: cell.clone(),
                         aim: Aim {
@@ -210,7 +223,7 @@ pub fn draws(catalog: &Catalog, grid: &Grid) -> Vec<Draw> {
                 .into_iter()
                 .filter(|search| search.serves(catalog, &cell.kind))
             {
-                for _ in 0..SEARCH_DRAWS {
+                for _ in 0..search_draws(search) {
                     out.push(Draw {
                         cell: cell.clone(),
                         aim: Aim {
