@@ -666,6 +666,7 @@ fn ambiguity_record(world: &World, ambiguity: &Ambiguity) -> Value {
 }
 
 fn main() -> Result<()> {
+    centraid_datagen::memstatus::off()?;
     match Cli::parse().command {
         Command::Catalog { out } => {
             let catalog = Catalog::build()?;

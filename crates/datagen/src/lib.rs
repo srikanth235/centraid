@@ -22,7 +22,8 @@
 //! M7 adds [`rollout`]: the RFT records `assist-eval` cuts from a model's rollouts, rendered by the M4
 //! renderer (`datagen rollout-records`).
 
-#![forbid(unsafe_code)]
+// `deny`, not `forbid`: `memstatus` makes the one FFI call of the crate and says why.
+#![deny(unsafe_code)]
 
 pub mod ambiguity;
 mod balance;
@@ -40,6 +41,7 @@ pub mod handoff;
 pub mod intent;
 pub mod labels;
 pub mod llm;
+pub mod memstatus;
 pub mod messages;
 pub mod mistakes;
 pub mod mix;

@@ -170,6 +170,7 @@ impl World {
     ///
     /// If the vault refuses a command; the message names it.
     pub fn seed_into(&self, path: &Path) -> Result<Value> {
+        crate::memstatus::off()?;
         centraid_nativetools::seed::seed(&self.seed_document(), path)
             .map_err(anyhow::Error::msg)
             .with_context(|| format!("seeding world {}", self.id()))

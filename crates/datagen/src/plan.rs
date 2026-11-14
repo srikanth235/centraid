@@ -253,6 +253,7 @@ impl<'a> WorldRun<'a> {
     ///
     /// If the vault refuses a command.
     pub fn seed(world: &'a World, catalog: &'a Catalog, scratch: &Path) -> Result<Self> {
+        crate::memstatus::off()?;
         std::fs::create_dir_all(scratch)?;
         let base = scratch.join(format!("{}.vault", world.id()));
         let report = world.seed_into(&base)?;
