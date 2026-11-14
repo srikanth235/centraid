@@ -25,6 +25,7 @@
 #![forbid(unsafe_code)]
 
 pub mod ambiguity;
+mod balance;
 pub mod bpe;
 pub mod brief;
 pub mod catalog;

@@ -11,8 +11,9 @@
 //! 3. **Pairs together.** The two sessions tagged `pair:<id>` (a minimal pair, or an ask-or-act pair) are one unit: both or
 //!    neither. A pair whose twin is gone is not kept alone.
 //! 4. **Targets.** Balance is by what the model decides, not by app. A session's app is a tag and a line of the report
-//!    and is never a target. Units are chosen greedily by how much of each still-open target they fill, which is exact
-//!    lazily (a deficit only shrinks as sessions are added):
+//!    and is never a target. The selection is one objective over every label ([`crate::balance`]): the squared distance
+//!    between each share held and the share aimed at, a greedy in rounds, then a swap search, with the floors as a heavy
+//!    penalty a swap never breaks:
 //!    * **cells**: the grid's live cells (tool, kind, verb) share the split's turns equally (water-filled: a cell the
 //!      input cannot fill gives its share to the others), and **a floor**: every live cell has at least `floor` turns in
 //!      train (as many as the input holds), chosen first, rarest cell first;
@@ -29,7 +30,8 @@
 //!      the turns that point at a row, and the undo turns at most [`UNDO_CAP`] of the turns. A unit that would take a cap
 //!      over is left out, so the realised share never exceeds it.
 //!
-//!    **A floor**, not a share: at least half the sessions have two turns or more, as many as the input holds.
+//!    **A floor**, not a share: at least half the sessions have two turns or more, as many as the input holds (a heavy
+//!    penalty on the shortfall, which a swap never takes lower).
 //! 5. **Subsets.** Nested train subsets (1,000 within 2,500 within the chosen train) are chosen by the same procedure from
 //!    the larger one, so each keeps the balance as far as its supply allows. They are lists of session ids.
 //! 6. **Noise** is the heavy-typo copy of val: the noise sessions whose val session was chosen.
@@ -37,11 +39,12 @@
 //! Mixing downsamples. What the input cannot give is reported, per cell and per share, with the target, the realised
 //! count and the supply: nothing is faked to hit a number.
 
-use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use anyhow::{Result, bail};
 use serde::Serialize;
 
+use crate::balance::{self, Ceilings, Space, State, Vector};
 use crate::render::Features;
 use crate::rng::Rng;
 
@@ -249,7 +252,7 @@ struct Unit {
 
 /// A score as an integer, so the heap has a total order.
 fn scaled(score: f64) -> i64 {
-    (score * 1e9).round() as i64
+    (score * 1e15).round() as i64
 }
 
 /// Water-fill: `total` shared equally among the cells, a cell never receiving more than its supply, the rest going to the
@@ -323,84 +326,75 @@ fn weighted_fill(
     out
 }
 
-/// The dimensions a session is judged on, as `(weight, labels)`. A label is `dim:name`; a turn-level dimension has a label
-/// per turn that has one, a session-level dimension one.
-fn labelled(f: &Features) -> Vec<(f64, Vec<String>)> {
-    let per_turn = |dim: &str, labels: &[String]| -> (f64, Vec<String>) {
-        (
-            1.0,
-            labels
-                .iter()
-                .filter(|l| !l.is_empty())
-                .map(|l| format!("{dim}:{l}"))
-                .collect(),
-        )
+/// The labels of a session by dimension, in the order of [`DIMS`]. A label is `dim:name`; a turn-level dimension has a
+/// label per turn that has one, a session-level dimension one.
+fn labelled(f: &Features) -> Vec<Vec<String>> {
+    let per_turn = |dim: &str, labels: &[String]| -> Vec<String> {
+        labels
+            .iter()
+            .filter(|l| !l.is_empty())
+            .map(|l| format!("{dim}:{l}"))
+            .collect()
     };
     vec![
-        (1.0, f.cells.iter().map(|c| format!("cell:{c}")).collect()),
-        (1.0, f.fields.iter().map(|x| format!("field:{x}")).collect()),
+        f.cells.iter().map(|c| format!("cell:{c}")).collect(),
+        f.fields.iter().map(|x| format!("field:{x}")).collect(),
         per_turn("outcome", &f.outcomes),
         per_turn("action", &f.actions),
         per_turn("reference", &f.refs),
-        (
-            1.0,
-            (0..f.turns)
-                .map(|t| {
-                    format!(
-                        "impossible:{}",
-                        if f.impossible.get(t).copied().unwrap_or(false) {
-                            "impossible"
-                        } else {
-                            "possible"
-                        }
-                    )
-                })
-                .collect(),
-        ),
-        (1.5, vec![format!("turns:{}", bucket(f.turns))]),
-        (
-            1.0,
-            vec![format!(
-                "kinds:{}",
-                if f.kinds.len() >= 2 {
-                    "two_kinds"
-                } else {
-                    "one_kind"
-                }
-            )],
-        ),
-        (
-            1.0,
-            vec![format!(
-                "reserved:{}",
-                if f.reserved.is_empty() {
-                    "plain"
-                } else {
-                    "reserved"
-                }
-            )],
-        ),
+        (0..f.turns)
+            .map(|t| {
+                format!(
+                    "impossible:{}",
+                    if f.impossible.get(t).copied().unwrap_or(false) {
+                        "impossible"
+                    } else {
+                        "possible"
+                    }
+                )
+            })
+            .collect(),
+        vec![format!("turns:{}", bucket(f.turns))],
+        vec![format!(
+            "kinds:{}",
+            if f.kinds.len() >= 2 {
+                "two_kinds"
+            } else {
+                "one_kind"
+            }
+        )],
+        vec![format!(
+            "reserved:{}",
+            if f.reserved.is_empty() {
+                "plain"
+            } else {
+                "reserved"
+            }
+        )],
     ]
 }
 
-/// The state of one selection: what each label has, against what it is aimed at.
+/// The dimensions, in the order [`labelled`] gives them and the objective weighs them ([`crate::balance`]).
+/// Rounds of the greedy: each takes a share of the sessions wanted, the best by what they would change.
+const GREEDY_ROUNDS: usize = 400;
+
+const DIMS: [&str; balance::NDIMS] = [
+    "cell",
+    "field",
+    "outcome",
+    "action",
+    "reference",
+    "impossible",
+    "turns",
+    "kinds",
+    "reserved",
+];
+
+/// The targets of a selection and what it holds, as the report reads them.
 struct Tally {
     target: BTreeMap<String, f64>,
     got: BTreeMap<String, usize>,
-    sessions: usize,
     want: usize,
-    /// Turns of the sessions taken, and those that point at a row: the bases of the ceilings.
-    turns: usize,
-    refs: usize,
-}
-
-/// The ceilings of a selection.
-#[derive(Debug, Clone, Copy)]
-struct Caps {
-    /// Pronoun references, of the turns that point at a row.
-    pronoun: f64,
-    /// Undo turns, of the turns.
-    undo: f64,
 }
 
 /// What a unit adds to the counts a ceiling reads: `(pronoun, referencing turns, undo, turns)`.
@@ -416,66 +410,6 @@ fn cap_counts(features: &[Features], unit: &Unit) -> (usize, usize, usize, usize
     n
 }
 
-fn deficit(target: f64, got: usize) -> f64 {
-    if target <= 0.0 {
-        -0.5
-    } else {
-        ((target - got as f64) / target).clamp(-0.5, 1.0)
-    }
-}
-
-impl Tally {
-    fn score(&self, features: &[Features], unit: &Unit) -> f64 {
-        let mut total = 0.0;
-        for m in &unit.members {
-            for (weight, labels) in labelled(&features[*m]) {
-                if labels.is_empty() {
-                    continue;
-                }
-                let sum: f64 = labels
-                    .iter()
-                    .map(|l| {
-                        deficit(
-                            self.target.get(l).copied().unwrap_or(0.0),
-                            self.got.get(l).copied().unwrap_or(0),
-                        )
-                    })
-                    .sum();
-                total += weight * sum / labels.len() as f64;
-            }
-        }
-        total / unit.members.len() as f64
-    }
-
-    /// May `unit` be taken without a ceiling going over? A ceiling is checked on the counts after the unit, so the share
-    /// at the end of the selection is under it whatever the order the units were taken in.
-    fn allows(&self, features: &[Features], unit: &Unit, caps: &Caps) -> bool {
-        let (pronoun, refs, undo, turns) = cap_counts(features, unit);
-        let got = |k: &str| self.got.get(k).copied().unwrap_or(0);
-        let ok_pronoun = pronoun == 0
-            || (got("reference:pronoun") + pronoun) as f64
-                <= caps.pronoun * (self.refs + refs) as f64 + 1e-9;
-        let ok_undo = undo == 0
-            || (got(&format!("cell:{UNDO_CELL}")) + undo) as f64
-                <= caps.undo * (self.turns + turns) as f64 + 1e-9;
-        ok_pronoun && ok_undo
-    }
-
-    fn add(&mut self, features: &[Features], unit: &Unit) {
-        let (_, refs, _, turns) = cap_counts(features, unit);
-        self.refs += refs;
-        self.turns += turns;
-        for m in &unit.members {
-            for (_, labels) in labelled(&features[*m]) {
-                for l in labels {
-                    *self.got.entry(l).or_default() += 1;
-                }
-            }
-            self.sessions += 1;
-        }
-    }
-}
-
 /// What a selection from `units` came to, with the targets it aimed at.
 struct Chosen {
     picked: Vec<usize>,
@@ -489,61 +423,9 @@ struct Chosen {
     supply_turns: (usize, usize, usize),
 }
 
-/// The labels of `dim` (`cells` or `fields`) a feature carries.
-fn dim_labels<'f>(f: &'f Features, dim: &str) -> &'f [String] {
-    if dim == "field" { &f.fields } else { &f.cells }
-}
-
-/// The floor of one dimension: every eligible label has at least `floor` turns (as many as the input holds), the rarest
-/// label first, a unit that would take a ceiling over left out.
-#[allow(clippy::too_many_arguments)]
-fn fill_floor(
-    features: &[Features],
-    units: &[Unit],
-    dim: &str,
-    eligible: &BTreeMap<String, usize>,
-    floor: usize,
-    caps: &Caps,
-    tally: &mut Tally,
-    taken: &mut [bool],
-    picked: &mut Vec<usize>,
-) {
-    if floor == 0 {
-        return;
-    }
-    let mut by_label: BTreeMap<String, Vec<usize>> = BTreeMap::new();
-    for (i, u) in units.iter().enumerate() {
-        let labels: BTreeSet<&String> = u
-            .members
-            .iter()
-            .flat_map(|m| dim_labels(&features[*m], dim).iter())
-            .collect();
-        for l in labels {
-            if eligible.contains_key(l) {
-                by_label.entry(l.clone()).or_default().push(i);
-            }
-        }
-    }
-    let mut order: Vec<(usize, String)> = eligible.iter().map(|(c, n)| (*n, c.clone())).collect();
-    order.sort();
-    for (n, label) in order {
-        let need = floor.min(n);
-        let key = format!("{dim}:{label}");
-        while tally.got.get(&key).copied().unwrap_or(0) < need && tally.sessions < tally.want {
-            let best = by_label[&label]
-                .iter()
-                .filter(|i| !taken[**i] && tally.allows(features, &units[**i], caps))
-                .map(|i| (scaled(tally.score(features, &units[*i])), units[*i].tie, *i))
-                .max();
-            let Some((_, _, i)) = best else { break };
-            tally.add(features, &units[i]);
-            taken[i] = true;
-            picked.extend(units[i].members.iter().copied());
-        }
-    }
-}
-
-/// Choose `want` sessions from `units`: the floor of every live cell first, then the greedy over every target.
+/// Choose `want` sessions from `units`: the floor of every live cell and pair first, then the units that lower the
+/// objective most, then swaps while a swap lowers it ([`crate::balance`]).
+#[allow(clippy::too_many_lines)]
 fn select(
     features: &[Features],
     units: &[Unit],
@@ -554,22 +436,63 @@ fn select(
 ) -> Chosen {
     let supply_sessions: usize = units.iter().map(|u| u.members.len()).sum();
     let want = want.min(supply_sessions);
-    let mut supply: BTreeMap<String, usize> = BTreeMap::new();
+    // every label the input carries, and the vector of each unit
+    let mut index: HashMap<String, u32> = HashMap::new();
+    let mut names: Vec<String> = Vec::new();
+    let mut dim_of: Vec<usize> = Vec::new();
+    let mut supply_of: Vec<usize> = Vec::new();
     let mut turns_supply = 0_usize;
     let mut supply_counts = (0_usize, 0_usize, 0_usize);
+    let mut vectors: Vec<Vector> = Vec::with_capacity(units.len());
     for u in units {
-        let (_, refs, undo, _) = cap_counts(features, u);
+        let (pronoun, refs, undo, turns) = cap_counts(features, u);
         supply_counts.1 += refs;
         supply_counts.2 += undo;
+        turns_supply += turns;
+        let mut counts: BTreeMap<u32, u32> = BTreeMap::new();
+        let mut dims = [0_u32; balance::NDIMS];
         for m in &u.members {
-            for (_, labels) in labelled(&features[*m]) {
+            for (d, labels) in labelled(&features[*m]).into_iter().enumerate() {
                 for l in labels {
-                    *supply.entry(l).or_default() += 1;
+                    let id = if let Some(id) = index.get(&l) {
+                        *id
+                    } else {
+                        let id = u32::try_from(names.len()).expect("fewer labels than u32");
+                        index.insert(l.clone(), id);
+                        names.push(l);
+                        dim_of.push(d);
+                        supply_of.push(0);
+                        id
+                    };
+                    *counts.entry(id).or_default() += 1;
+                    supply_of[id as usize] += 1;
+                    dims[d] += 1;
                 }
             }
-            turns_supply += features[*m].turns;
         }
+        vectors.push(Vector {
+            labels: counts.into_iter().collect(),
+            dims: dims
+                .iter()
+                .enumerate()
+                .filter(|(_, n)| **n > 0)
+                .map(|(d, n)| (u8::try_from(d).expect("a handful of dimensions"), *n))
+                .collect(),
+            sessions: u32::try_from(u.members.len()).expect("a unit is a session or two"),
+            multi: u32::try_from(
+                u.members
+                    .iter()
+                    .filter(|m| features[**m].turns >= 2)
+                    .count(),
+            )
+            .expect("a unit is a session or two"),
+            pronoun: u32::try_from(pronoun).expect("turns"),
+            refs: u32::try_from(refs).expect("turns"),
+            undo: u32::try_from(undo).expect("turns"),
+            turns: u32::try_from(turns).expect("turns"),
+        });
     }
+    let supply: BTreeMap<String, usize> = names.iter().cloned().zip(supply_of).collect();
     let per = |dim: &str| -> BTreeMap<String, usize> {
         supply
             .iter()
@@ -582,7 +505,10 @@ fn select(
     let scale = want as f64 / supply_sessions.max(1) as f64;
     let avg_turns = turns_supply as f64 / supply_sessions.max(1) as f64;
     supply_counts.0 = turns_supply;
+    // what each label is aimed at: counts first (water-filled, capped by supply), shares of its dimension after
     let mut target: BTreeMap<String, f64> = BTreeMap::new();
+    let mut aimed: BTreeMap<String, f64> = BTreeMap::new();
+    let mut need_of: BTreeMap<String, usize> = BTreeMap::new();
     // cells: equal shares of the turns, water-filled, and never under the floor (as far as the input holds it)
     let live: BTreeSet<&String> = cfg.live.iter().collect();
     let eligible: BTreeMap<String, usize> = per("cell")
@@ -590,8 +516,14 @@ fn select(
         .filter(|(c, _)| live.contains(c))
         .collect();
     for (cell, t) in water_fill(&eligible, want as f64 * avg_turns) {
-        let floored = t.max(floor.min(eligible[&cell]) as f64);
-        target.insert(format!("cell:{cell}"), floored);
+        target.insert(
+            format!("cell:{cell}"),
+            t.max(floor.min(eligible[&cell]) as f64),
+        );
+        aimed.insert(format!("cell:{cell}"), t);
+    }
+    for (cell, n) in &eligible {
+        need_of.insert(format!("cell:{cell}"), floor.min(*n));
     }
     // fields: the live pairs of create and edit share the turns that set one equally, with a floor of their own
     let live_fields: BTreeSet<&String> = cfg.live_fields.iter().collect();
@@ -601,14 +533,21 @@ fn select(
         .collect();
     let avg_fields = eligible_fields.values().sum::<usize>() as f64 / supply_sessions.max(1) as f64;
     for (field, t) in water_fill(&eligible_fields, want as f64 * avg_fields) {
-        let floored = t.max(field_floor.min(eligible_fields[&field]) as f64);
-        target.insert(format!("field:{field}"), floored);
+        target.insert(
+            format!("field:{field}"),
+            t.max(field_floor.min(eligible_fields[&field]) as f64),
+        );
+        aimed.insert(format!("field:{field}"), t);
+    }
+    for (field, n) in &eligible_fields {
+        need_of.insert(format!("field:{field}"), field_floor.min(*n));
     }
     let mut share_dim = |dim: &str, shares: &[(&str, f64)], total: f64| {
         let shares: Vec<(String, f64)> =
             shares.iter().map(|(n, s)| ((*n).to_owned(), *s)).collect();
         for (name, t) in weighted_fill(&shares, &per(dim), total) {
             target.insert(format!("{dim}:{name}"), t);
+            aimed.insert(format!("{dim}:{name}"), t);
         }
     };
     let s = &cfg.shares;
@@ -657,115 +596,96 @@ fn select(
             want as f64,
         );
     }
-    let mut tally = Tally {
-        target,
-        got: BTreeMap::new(),
-        sessions: 0,
-        want,
-        turns: 0,
-        refs: 0,
-    };
-    let caps = Caps {
+    // the shares the objective aims at: each label's aim over its dimension's
+    let mut dim_total = [0.0_f64; balance::NDIMS];
+    for (name, t) in &aimed {
+        if let Some(id) = index.get(name) {
+            dim_total[dim_of[*id as usize]] += t;
+        }
+    }
+    let share: Vec<Option<f64>> = names
+        .iter()
+        .enumerate()
+        .map(|(l, name)| {
+            let total = dim_total[dim_of[l]];
+            aimed.get(name).filter(|_| total > 0.0).map(|t| t / total)
+        })
+        .collect();
+    let need: Vec<u32> = names
+        .iter()
+        .map(|n| {
+            u32::try_from(need_of.get(n).copied().unwrap_or(0)).expect("a floor is a small count")
+        })
+        .collect();
+    let multi_supply: usize = vectors.iter().map(|v| v.multi as usize).sum();
+    let multi_floor = want.div_ceil(2).min(multi_supply);
+    let space = Space::new(dim_of.clone(), &share, need, multi_floor, want);
+    let caps = Ceilings {
         pronoun: s.reference[2],
         undo: cfg.undo_cap,
     };
+    let mut state = State::new(&space);
     let mut taken = vec![false; units.len()];
-    let mut picked: Vec<usize> = Vec::new();
-    let take = |i: usize, tally: &mut Tally, taken: &mut Vec<bool>, picked: &mut Vec<usize>| {
-        tally.add(features, &units[i]);
-        taken[i] = true;
-        picked.extend(units[i].members.iter().copied());
+    let ties: Vec<u64> = units.iter().map(|u| u.tie).collect();
+    // what a unit would change, per session it holds, as an integer so the heap has a total order
+    let gain = |state: &State<'_>, i: usize| -> i64 {
+        scaled(-state.delta(&vectors[i], 1) / f64::from(vectors[i].sessions.max(1)))
     };
 
-    // the floors: every live cell, then every live (kind, field) pair, has at least `floor` turns (as many as the input
-    // holds), the rarest first
-    fill_floor(
-        features,
-        units,
-        "cell",
-        &eligible,
-        floor,
-        &caps,
-        &mut tally,
-        &mut taken,
-        &mut picked,
-    );
-    fill_floor(
-        features,
-        units,
-        "field",
-        &eligible_fields,
-        field_floor,
-        &caps,
-        &mut tally,
-        &mut taken,
-        &mut picked,
-    );
-
-    // greedy, lazily
-    let multi_supply =
-        supply.get("turns:1").copied().unwrap_or(0) + supply.get("turns:2").copied().unwrap_or(0);
-    let multi_floor = want.div_ceil(2).min(multi_supply);
-    let mut heap: BinaryHeap<(i64, u64, usize)> = units
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| !taken[*i])
-        .map(|(i, u)| (scaled(tally.score(features, u)), u.tie, i))
-        .collect();
-    // a unit that would take a ceiling over waits: the share it needs room in may have room once more is taken
-    let mut deferred: Vec<usize> = Vec::new();
-    while tally.sessions < want {
-        let Some((_, tie, i)) = heap.pop() else {
-            break;
-        };
-        if taken[i] {
-            continue;
+    // greedy, in batches: what a unit would change depends on what is chosen, and not always for the worse (once the done
+    // turns are over their share an ask turn is worth more), so every unit is looked at again each round
+    let batch = (want / GREEDY_ROUNDS).max(1);
+    while state.sessions < want {
+        let mut scored: Vec<(i64, u64, usize)> = (0..units.len())
+            .filter(|i| !taken[*i] && state.allows(&vectors[*i], &caps))
+            .map(|i| (gain(&state, i), ties[i], i))
+            .collect();
+        let k = batch.min(want - state.sessions);
+        if scored.len() > k {
+            scored.select_nth_unstable_by(k, |x, y| y.cmp(x));
+            scored.truncate(k);
         }
-        if !tally.allows(features, &units[i], &caps) {
-            deferred.push(i);
-            continue;
-        }
-        let got_multi = tally.got.get("turns:1").copied().unwrap_or(0)
-            + tally.got.get("turns:2").copied().unwrap_or(0);
-        // once the sessions left to choose are all needed to reach the floor, a unit that does not help is out
-        let still_needed = multi_floor.saturating_sub(got_multi);
-        let len = units[i].members.len();
-        let multi_here = units[i]
-            .members
-            .iter()
-            .filter(|m| features[**m].turns >= 2)
-            .count();
-        if still_needed > 0 && want - tally.sessions < len + still_needed.saturating_sub(multi_here)
-        {
-            continue;
-        }
-        let now = scaled(tally.score(features, &units[i]));
-        if let Some((next, _, _)) = heap.peek()
-            && now < *next
-        {
-            heap.push((now, tie, i));
-            continue;
-        }
-        take(i, &mut tally, &mut taken, &mut picked);
-    }
-    loop {
+        scored.sort_unstable_by(|x, y| y.cmp(x));
         let mut progress = false;
-        for i in std::mem::take(&mut deferred) {
-            if tally.sessions >= want || taken[i] {
+        for (_, _, i) in scored {
+            let len = vectors[i].sessions as usize;
+            if taken[i] || state.sessions + len > want || !state.allows(&vectors[i], &caps) {
                 continue;
             }
-            if tally.allows(features, &units[i], &caps) {
-                take(i, &mut tally, &mut taken, &mut picked);
-                progress = true;
-            } else {
-                deferred.push(i);
+            // the batch was scored before its first unit was taken: one that no longer helps waits for the next round
+            if progress && gain(&state, i) < 0 {
+                continue;
             }
+            state.apply(&vectors[i], 1);
+            taken[i] = true;
+            progress = true;
         }
         if !progress {
             break;
         }
     }
+    balance::polish(&mut state, &vectors, &ties, &mut taken, &caps, multi_floor);
+
+    // the shares as realised: what each label is aimed at is its share of what was chosen, so a report reads a target
+    // against the total it is a share of
+    for (d, dim) in DIMS.iter().enumerate().skip(2) {
+        let total = state.total(d) as f64;
+        for (l, name) in names.iter().enumerate() {
+            if dim_of[l] == d && name.starts_with(&format!("{dim}:")) && space.targeted[l] {
+                target.insert(name.clone(), space.share[l] * total);
+            }
+        }
+    }
+    let mut picked: Vec<usize> = (0..units.len())
+        .filter(|i| taken[*i])
+        .flat_map(|i| units[i].members.iter().copied())
+        .collect();
     picked.sort_unstable();
+    let tally = Tally {
+        target,
+        got: balance::counts_by_name(&names, &state),
+        want,
+    };
     Chosen {
         picked,
         tally,
@@ -2092,6 +2012,223 @@ mod tests {
             train.caps
         );
         assert_eq!(selection.chosen["train"].len(), 600);
+    }
+
+    /// One turn of a pool that is rich in every outcome and dominated by `done`: its cell, outcome, action, how it points at
+    /// a row, whether it asks for what the vault cannot do, and the (kind, field) pair it sets.
+    struct Turn {
+        cell: String,
+        outcome: &'static str,
+        action: &'static str,
+        reference: &'static str,
+        impossible: bool,
+        field: Option<String>,
+    }
+
+    fn rich_turn(rng: &mut Rng) -> Turn {
+        let reference = *rng.weighted(&[
+            ("name", 35),
+            ("filters", 30),
+            ("pronoun", 22),
+            ("nickname", 13),
+        ]);
+        let kind = rng.below(8);
+        // what kind of turn it is: mostly ordinary, a few ask, decline and recall
+        match *rng.weighted(&[("plain", 84), ("ask", 6), ("decline", 6), ("recall", 4)]) {
+            "ask" => Turn {
+                cell: format!("ask/k{}/ask", kind % 2),
+                outcome: "ask",
+                action: "read",
+                reference,
+                impossible: false,
+                field: None,
+            },
+            "decline" => {
+                let impossible = rng.chance(0.5);
+                Turn {
+                    cell: if impossible {
+                        "decline/-/out_of_scope".to_owned()
+                    } else {
+                        "decline/-/not_found".to_owned()
+                    },
+                    outcome: "decline",
+                    action: "",
+                    reference: "",
+                    impossible,
+                    field: None,
+                }
+            }
+            "recall" => {
+                if rng.chance(0.5) {
+                    Turn {
+                        cell: UNDO_CELL.to_owned(),
+                        outcome: "done",
+                        action: "recall",
+                        reference: "",
+                        impossible: false,
+                        field: None,
+                    }
+                } else {
+                    Turn {
+                        cell: "answer/-/rows".to_owned(),
+                        outcome: "done",
+                        action: "recall",
+                        reference: "pronoun",
+                        impossible: false,
+                        field: None,
+                    }
+                }
+            }
+            _ => {
+                let outcome = *rng.weighted(&[("done", 90), ("empty", 5), ("repair", 5)]);
+                match rng.below(3) {
+                    0 => Turn {
+                        cell: format!("find/k{kind}/read"),
+                        outcome,
+                        action: "read",
+                        reference,
+                        impossible: false,
+                        field: None,
+                    },
+                    1 => Turn {
+                        cell: format!("create/k{}/-", kind % 6),
+                        outcome,
+                        action: "write",
+                        reference: "",
+                        impossible: false,
+                        field: Some(format!("create/k{}/f{}", kind % 6, rng.below(3))),
+                    },
+                    _ => Turn {
+                        cell: format!("edit/k{}/edit", kind % 4),
+                        outcome,
+                        action: "write",
+                        reference,
+                        impossible: false,
+                        field: Some(format!("edit/k{}/f{}", kind % 4, rng.below(3))),
+                    },
+                }
+            }
+        }
+    }
+
+    /// `sessions` sessions of `split` in `worlds` worlds of the rich pool, and the cells and pairs it holds.
+    fn rich_pool(split: &str, sessions: usize, worlds: usize, seed: u64) -> Vec<Features> {
+        let mut rng = Rng::new(seed).fork(split);
+        (0..sessions)
+            .map(|n| {
+                let turns = *rng.weighted(&[(1_usize, 45), (2, 30), (3, 20), (4, 5)]);
+                let list: Vec<Turn> = (0..turns).map(|_| rich_turn(&mut rng)).collect();
+                let two_kinds = rng.chance(0.3);
+                Features {
+                    id: format!("{split}-{n}"),
+                    split: split.to_owned(),
+                    world: format!("{split}-{}", n % worlds),
+                    app: "tasks".to_owned(),
+                    apps: vec!["tasks".to_owned()],
+                    cells: list.iter().map(|t| t.cell.clone()).collect(),
+                    fields: list.iter().filter_map(|t| t.field.clone()).collect(),
+                    turns,
+                    key: format!("{split}-key-{n}"),
+                    tokens: 100,
+                    outcomes: list.iter().map(|t| t.outcome.to_owned()).collect(),
+                    actions: list.iter().map(|t| t.action.to_owned()).collect(),
+                    refs: list.iter().map(|t| t.reference.to_owned()).collect(),
+                    impossible: list.iter().map(|t| t.impossible).collect(),
+                    kinds: if two_kinds {
+                        vec!["a".into(), "b".into()]
+                    } else {
+                        vec!["a".into()]
+                    },
+                    ..Features::default()
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn every_share_lands_within_a_point_and_a_half_with_every_floor_met_from_a_pool_that_is_mostly_done()
+     {
+        let mut all = rich_pool("train", 4000, 4, 1);
+        all.extend(rich_pool("val", 3000, 2, 2));
+        all.extend(rich_pool("test", 3000, 2, 3));
+        let cells: BTreeSet<String> = all.iter().flat_map(|f| f.cells.clone()).collect();
+        let fields: BTreeSet<String> = all.iter().flat_map(|f| f.fields.clone()).collect();
+        let cfg = Config {
+            targets: [500, 300, 300],
+            live: cells.iter().cloned().collect(),
+            floor: [12, 0, 0],
+            live_fields: fields.iter().cloned().collect(),
+            field_floor: [12, 0, 0],
+            subsets: Vec::new(),
+            reserve: 0,
+            ..Config::default()
+        };
+        // the pool is dominated by done, and holds every outcome in a share of its turns at least the target of the mix
+        let turns: usize = all
+            .iter()
+            .filter(|f| f.split == "train")
+            .map(|f| f.turns)
+            .sum();
+        let done = all
+            .iter()
+            .filter(|f| f.split == "train")
+            .flat_map(|f| f.outcomes.iter())
+            .filter(|o| *o == "done")
+            .count();
+        assert!(done as f64 > 0.75 * turns as f64, "{done} of {turns}");
+        let selection = mix(&all, &cfg).unwrap();
+        for split in SPLITS {
+            let r = report(&selection, split);
+            assert_eq!(
+                r.sessions,
+                cfg.targets[SPLITS.iter().position(|s| *s == split).unwrap()]
+            );
+            // every share of the issue is within a point and a half of what was asked for
+            for share in r.shares.iter().filter(|s| s.share != "reserved") {
+                let total: f64 = share.lines.iter().map(|l| l.realised).sum();
+                for l in &share.lines {
+                    let off = (l.realised - l.requested).abs() / total;
+                    assert!(
+                        off <= 0.015,
+                        "{split} {} {}: {:.1}% against {:.1}%",
+                        share.share,
+                        l.name,
+                        100.0 * l.realised / total,
+                        100.0 * l.requested / total
+                    );
+                }
+            }
+            // the length of a session is a share of the sessions
+            for l in &r.by_turns {
+                let off = (l.realised - l.requested).abs() / r.sessions as f64;
+                assert!(off <= 0.015, "{split} sessions of {} turns: {l:?}", l.name);
+            }
+            for cap in &r.caps {
+                assert!(
+                    cap.realised as f64 <= cap.cap * cap.base as f64 + 1e-9,
+                    "{cap:?}"
+                );
+            }
+        }
+        // the floors are met in train, and with them the counts: every live cell and pair has its turns
+        let train = report(&selection, "train");
+        assert!(
+            train
+                .cells
+                .iter()
+                .all(|c| c.realised >= 12 && c.status == "hit"),
+            "{:?}",
+            train.cells
+        );
+        assert!(
+            train
+                .fields
+                .iter()
+                .all(|c| c.realised >= 12 && c.status == "hit"),
+            "{:?}",
+            train.fields
+        );
+        assert!(under_floor(&selection, &cfg).is_empty());
     }
 
     #[test]

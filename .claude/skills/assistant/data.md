@@ -41,8 +41,9 @@ Rust, driving the `centraid-assist` runtime as a library. Python stays only for 
 ## Balance
 
 - The mix balances by what the model decides, not by app. App is a tag in the report and never a target.
+- The selection is one objective over every label (the squared distance of each share from its target, so shares are of what is chosen), a greedy in rounds and a swap search ([`balance.rs`](../../../crates/datagen/src/balance.rs)); a floor is a heavy penalty and a swap never breaks a floor, a ceiling or the two-turns-or-more floor. Ask, nothing found and decline turns exist only as one-turn sessions in the sampler, so with one-turn sessions at 40% the outcome shares and the session-length shares cannot both be met; the plan shows the trade.
 - Targets, per split: the live primary cells (tool, kind, verb or op) share the turns equally, with a floor of 30 turns per live cell in train. Outcome shares are done .65, nothing found .08, ask .10, decline .07, repair .10. Action is read .45, write .45, recall .10. Reference is name .40, filters .25, pronoun or earlier answer .20, nickname or misspelling .15. Impossible requests are .05. Sessions are one, two, and three-plus turns at 40, 30, 30, and 20% touch two kinds.
-- Defaults are 5000, 500 and 1000 sessions. `build` draws half again as many as the targets so the mix can choose.
+- Defaults are 5000, 500 and 1000 sessions. `build` draws half again as many as the targets so the mix can choose so the mix can choose.
 - A cell the runtime or the world cannot serve is not live and is never faked. The report says `hit`, `supply` or `short` per cell and lists what the input could not give.
 - Duplicates go out, test read first, then val, then train. A minimal pair stays whole or goes. Eight combinations are reserved for test and are out of train and val. Train subsets of 1,000 within 2,500 are files of their own (`data/<name>.jsonl.zst`). Noise is the heavy-typo copy of val.
 - The mix asserts that no world is in two splits.
