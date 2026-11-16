@@ -458,22 +458,98 @@ pub fn cashflow(
 /// The balance of an account on `day`: where it stood on its opening day plus every
 /// signed posted row after that day and on or before `day`. A line on or before the
 /// opening day is already in the opening balance, so it does not count twice; an
-/// account with no opening day counts every line.
+/// account with no opening day counts every line. `None` means the exact total
+/// is outside the representable minor-unit range.
 #[must_use]
-pub fn balance_on(account: &AccountRow, ledger: &[TxnRow], day: &str) -> i64 {
-    account.opening_minor
-        + ledger
+pub fn balance_on(account: &AccountRow, ledger: &[TxnRow], day: &str) -> Option<i64> {
+    let total = ledger
+        .iter()
+        .filter(|row| balance_row_included(account, row, day))
+        .fold(i128::from(account.opening_minor), |sum, row| {
+            sum + i128::from(row.signed_minor())
+        });
+    i64::try_from(total).ok()
+}
+
+fn balance_row_included(account: &AccountRow, row: &TxnRow, day: &str) -> bool {
+    row.status == "posted"
+        && row.posted_on.as_str() <= day
+        && account
+            .opening_on
+            .as_deref()
+            .is_none_or(|opening| row.posted_on.as_str() > opening)
+}
+
+/// A balance fold used by both the slice-based reference path and Accounts'
+/// bounded page reader. It retains sums only, never ledger rows.
+pub struct AccountBalanceFold<'a> {
+    account: &'a AccountRow,
+    today: &'a str,
+    checkpoint: Option<&'a CheckpointRow>,
+    balance_minor: i128,
+    checkpoint_minor: i128,
+}
+
+impl<'a> AccountBalanceFold<'a> {
+    #[must_use]
+    pub fn new(account: &'a AccountRow, checkpoints: &'a [CheckpointRow], today: &'a str) -> Self {
+        let checkpoint = checkpoints
             .iter()
-            .filter(|row| {
-                row.status == "posted"
-                    && row.posted_on.as_str() <= day
-                    && account
-                        .opening_on
-                        .as_deref()
-                        .is_none_or(|opening| row.posted_on.as_str() > opening)
+            .filter(|c| c.account_id == account.account_id && c.as_of.as_str() <= today)
+            .max_by(|a, b| a.as_of.cmp(&b.as_of));
+        Self {
+            account,
+            today,
+            checkpoint,
+            balance_minor: i128::from(account.opening_minor),
+            checkpoint_minor: i128::from(account.opening_minor),
+        }
+    }
+
+    pub fn push(&mut self, row: &TxnRow) {
+        if balance_row_included(self.account, row, self.today) {
+            self.balance_minor += i128::from(row.signed_minor());
+        }
+        if let Some(checkpoint) = self.checkpoint
+            && balance_row_included(self.account, row, &checkpoint.as_of)
+        {
+            self.checkpoint_minor += i128::from(row.signed_minor());
+        }
+    }
+
+    #[must_use]
+    pub fn finish(self, complete: bool) -> AccountBalance {
+        let balance_minor = complete
+            .then(|| i64::try_from(self.balance_minor).ok())
+            .flatten();
+        let checkpoint = self.checkpoint.and_then(|c| {
+            if !complete {
+                return None;
+            }
+            let derived = i64::try_from(self.checkpoint_minor).ok()?;
+            let delta = i64::try_from(self.checkpoint_minor - i128::from(c.balance_minor)).ok()?;
+            Some(CheckpointCompare {
+                as_of: c.as_of.clone(),
+                stated_minor: c.balance_minor,
+                delta_minor: delta,
+                agrees: derived == c.balance_minor,
             })
-            .map(TxnRow::signed_minor)
-            .sum::<i64>()
+        });
+        // If the derived amount or a selected checkpoint comparison cannot be
+        // represented in minor units, expose the existing unavailable state.
+        let unrepresentable_checkpoint =
+            complete && self.checkpoint.is_some() && checkpoint.is_none();
+        AccountBalance {
+            account_id: self.account.account_id.clone(),
+            currency: self.account.currency.clone(),
+            balance_minor: (!unrepresentable_checkpoint)
+                .then_some(balance_minor)
+                .flatten(),
+            checkpoint: (!unrepresentable_checkpoint)
+                .then_some(checkpoint)
+                .flatten(),
+        }
+    }
 }
 
 /// A stated balance against the derived one.
@@ -491,7 +567,7 @@ pub struct CheckpointCompare {
 pub struct AccountBalance {
     pub account_id: String,
     pub currency: String,
-    /// `None` when the ledger was longer than the read could hold.
+    /// `None` when the ledger was too long or the exact total cannot fit `i64`.
     pub balance_minor: Option<i64>,
     pub checkpoint: Option<CheckpointCompare>,
 }
@@ -505,25 +581,14 @@ pub fn account_balance(
     checkpoints: &[CheckpointRow],
     today: &str,
 ) -> AccountBalance {
-    let checkpoint = checkpoints
-        .iter()
-        .filter(|c| c.account_id == account.account_id && c.as_of.as_str() <= today)
-        .max_by(|a, b| a.as_of.cmp(&b.as_of))
-        .and_then(|c| {
-            let derived = balance_on(account, ledger?, &c.as_of);
-            Some(CheckpointCompare {
-                as_of: c.as_of.clone(),
-                stated_minor: c.balance_minor,
-                delta_minor: derived - c.balance_minor,
-                agrees: derived == c.balance_minor,
-            })
-        });
-    AccountBalance {
-        account_id: account.account_id.clone(),
-        currency: account.currency.clone(),
-        balance_minor: ledger.map(|rows| balance_on(account, rows, today)),
-        checkpoint,
+    let Some(rows) = ledger else {
+        return AccountBalanceFold::new(account, checkpoints, today).finish(false);
+    };
+    let mut fold = AccountBalanceFold::new(account, checkpoints, today);
+    for row in rows {
+        fold.push(row);
     }
+    fold.finish(true)
 }
 
 /// Net worth per currency over the accounts that are open and whose balance
@@ -534,7 +599,7 @@ pub fn net_worth(
     accounts: &[AccountRow],
     today: &str,
 ) -> BTreeMap<String, (i64, bool)> {
-    let mut out: BTreeMap<String, (i64, bool)> = BTreeMap::new();
+    let mut out: BTreeMap<String, (i128, bool)> = BTreeMap::new();
     for balance in balances {
         let open = accounts
             .iter()
@@ -545,11 +610,18 @@ pub fn net_worth(
         }
         let slot = out.entry(balance.currency.clone()).or_insert((0, true));
         match balance.balance_minor {
-            Some(value) => slot.0 += value,
+            Some(value) => slot.0 += i128::from(value),
             None => slot.1 = false,
         }
     }
-    out
+    out.into_iter()
+        .map(|(currency, (amount, complete))| {
+            let Some(amount) = i64::try_from(amount).ok() else {
+                return (currency, (0, false));
+            };
+            (currency, (amount, complete))
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------

@@ -442,6 +442,22 @@ pub fn checkpoints_statement() -> PageQuery {
     )
 }
 
+/// The newest checkpoint for one account on or before the member's day.
+pub fn latest_account_checkpoint_statement(account_id: &str, today: &str) -> PageQuery {
+    query(
+        "money.account.checkpoint.latest",
+        "account_id, day, balance_minor",
+        "checkpoint",
+        // `(day, account_id)` is unique within the account filter and walks
+        // the table's `(account_id, day)` primary key in reverse.
+        PageOrder::desc("day", "account_id"),
+    )
+    .filter(
+        "account_id = ? AND day <= ?",
+        vec![PageBindValue::from(account_id), PageBindValue::from(today)],
+    )
+}
+
 /// `money.categories` — the categories and the groups they sit under.
 pub fn categories_statement() -> PageQuery {
     query(
@@ -895,6 +911,45 @@ pub fn load_ledger(door: &dyn PageDoor, account_id: &str) -> KitResult<Bounded<V
     })
 }
 
+/// Fold one account's oldest rows without retaining the ledger. The transaction
+/// ceiling is counted before trash filtering, matching `load_ledger` exactly.
+pub fn fold_account_ledger(
+    door: &dyn PageDoor,
+    account_id: &str,
+    trashed_cache: &mut Option<BTreeSet<String>>,
+    mut visit: impl FnMut(&TxnRow),
+) -> KitResult<bool> {
+    let statement = ledger_statement(account_id);
+    let mut after = None;
+    let mut seen = 0;
+    loop {
+        let want = (ACCOUNT_ROWS - seen).min(PAGE_ROWS);
+        if want == 0 {
+            return Ok(true);
+        }
+        let page = door.page(&statement, &PageRequest { limit: want, after })?;
+        if !page.rows.is_empty() && trashed_cache.is_none() {
+            *trashed_cache = Some(trashed(door)?);
+        }
+        for row in &page.rows {
+            seen += 1;
+            let txn = txn_of(row);
+            if !trashed_cache
+                .as_ref()
+                .is_some_and(|gone| gone.contains(&txn.txn_id))
+            {
+                visit(&txn);
+            }
+        }
+        match page.next {
+            Some(_cursor) if seen == ACCOUNT_ROWS => return Ok(false),
+            Some(_cursor) if page.rows.len() < want => return Ok(false),
+            Some(cursor) => after = Some(cursor),
+            None => return Ok(true),
+        }
+    }
+}
+
 /// The plans of an inclusive month range.
 pub fn load_targets(
     door: &dyn PageDoor,
@@ -954,17 +1009,75 @@ pub fn load_rules(door: &dyn PageDoor) -> KitResult<Bounded<Vec<Rule>>> {
 
 /// Every checkpoint, newest first, at most [`CHECKPOINT_ROWS`] (one page).
 pub fn load_checkpoints(door: &dyn PageDoor) -> KitResult<Bounded<Vec<CheckpointRow>>> {
+    load_checkpoints_with_accounts(door, None)
+}
+
+/// The Accounts screen's small metadata: accounts and checkpoints only.
+#[derive(Debug, Clone)]
+pub struct AccountsData {
+    pub accounts: Vec<AccountRow>,
+    pub checkpoints: Vec<CheckpointRow>,
+}
+
+pub fn load_accounts_data(door: &dyn PageDoor, today: &str) -> KitResult<AccountsData> {
+    let accounts = load_accounts(door)?;
+    if accounts.is_empty() {
+        return Ok(AccountsData {
+            accounts,
+            checkpoints: Vec::new(),
+        });
+    }
+    let mut checkpoints = load_checkpoints_with_accounts(door, Some(&accounts))?;
+    if checkpoints.truncated {
+        for account in &accounts {
+            let known_for_day = checkpoints.value.iter().any(|checkpoint| {
+                checkpoint.account_id == account.account_id && checkpoint.as_of.as_str() <= today
+            });
+            if known_for_day {
+                continue;
+            }
+            let page = read_page(
+                door,
+                &latest_account_checkpoint_statement(&account.account_id, today),
+                &PageRequest::first(1),
+            )?;
+            if let Some(row) = page.rows.first() {
+                checkpoints.value.push(CheckpointRow {
+                    account_id: account.account_id.clone(),
+                    as_of: text_of(row, "day").unwrap_or_default(),
+                    balance_minor: integer_or_zero(row, "balance_minor"),
+                    currency: account.currency.clone(),
+                });
+            }
+        }
+    }
+    Ok(AccountsData {
+        accounts,
+        checkpoints: checkpoints.value,
+    })
+}
+
+fn load_checkpoints_with_accounts(
+    door: &dyn PageDoor,
+    known_accounts: Option<&[AccountRow]>,
+) -> KitResult<Bounded<Vec<CheckpointRow>>> {
     let page = read_page(
         door,
         &checkpoints_statement(),
         &PageRequest::first(CHECKPOINT_ROWS),
     )?;
-    let currencies: BTreeMap<String, String> =
+    let currencies: BTreeMap<String, String> = if let Some(accounts) = known_accounts {
+        accounts
+            .iter()
+            .map(|account| (account.account_id.clone(), account.currency.clone()))
+            .collect()
+    } else {
         read_window(door, &accounts_statement(), ACCOUNT_LIMIT)?
             .rows
             .iter()
             .filter_map(|row| Some((text_of(row, "id")?, text_of(row, "currency")?)))
-            .collect();
+            .collect()
+    };
     Ok(Bounded {
         truncated: page.next.is_some(),
         value: page

@@ -1017,17 +1017,16 @@ pub struct MoneyAccounts {
 
 /// The Accounts screen.
 pub fn accounts(door: &dyn PageDoor, today: &str) -> KitResult<MoneyAccounts> {
-    let data = MoneyData::load(door)?;
+    let data = queries::load_accounts_data(door, today)?;
     let mut balances: Vec<AccountBalance> = Vec::new();
+    let mut trashed_cache = None;
     for account in &data.accounts {
-        let ledger = queries::load_ledger(door, &account.account_id)?;
-        let rows = (!ledger.truncated).then_some(ledger.value.as_slice());
-        balances.push(engine::account_balance(
-            account,
-            rows,
-            &data.checkpoints,
-            today,
-        ));
+        let mut fold = engine::AccountBalanceFold::new(account, &data.checkpoints, today);
+        let complete =
+            queries::fold_account_ledger(door, &account.account_id, &mut trashed_cache, |row| {
+                fold.push(row)
+            })?;
+        balances.push(fold.finish(complete));
     }
     let line = |account: &AccountRow| -> AccountLine {
         let balance = balances.iter().find(|b| b.account_id == account.account_id);

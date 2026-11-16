@@ -691,6 +691,46 @@ fn every_read_plans_without_a_table_scan_or_a_sort_unless_the_ledger_says_why() 
                 big.iter().cloned().collect::<Vec<_>>().join(", ")
             );
 
+            // Accounts can fall outside the global 400-row checkpoint window.
+            // Plan the exact fallback PageQuery against the checkpoint primary
+            // key so this bounded truth check does not become a table scan.
+            let fallback = centraid_apps_money::queries::latest_account_checkpoint_statement(
+                "acct-plan",
+                "2025-06-01",
+            );
+            let fallback = centraid_apps_kit::statement::page_statement(
+                &fallback,
+                &centraid_apps_kit::page::PageRequest::first(1),
+                None,
+            )
+            .expect("the fallback page statement composes");
+            let binds: Vec<centraid_vault::Value> = fallback
+                .bind
+                .into_iter()
+                .map(|bind| match bind {
+                    centraid_apps_kit::statement::PageBindValue::Text(text) => {
+                        centraid_vault::Value::Text(text)
+                    }
+                    centraid_apps_kit::statement::PageBindValue::Integer(value) => {
+                        centraid_vault::Value::Integer(value)
+                    }
+                    centraid_apps_kit::statement::PageBindValue::Real(value) => {
+                        centraid_vault::Value::Real(value)
+                    }
+                    centraid_apps_kit::statement::PageBindValue::Null => centraid_vault::Value::Null,
+                })
+                .collect();
+            let fallback_plan = vault.explain_query_plan(&fallback.sql, &binds)?;
+            let fallback_plan = fallback_plan.join(" | ");
+            assert!(
+                fallback_plan.contains("SEARCH checkpoint USING PRIMARY KEY"),
+                "latest-account fallback must seek the checkpoint primary key: {fallback_plan}"
+            );
+            assert!(
+                !fallback_plan.contains("TEMP B-TREE"),
+                "latest-account fallback must not sort: {fallback_plan}"
+            );
+
             let mut findings: BTreeSet<Finding> = BTreeSet::new();
             // Every plan the sweep sees, for `every_index_has_a_reader`.
             let mut all_plans: Vec<String> = Vec::new();
