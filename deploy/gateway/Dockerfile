@@ -31,7 +31,7 @@
 # needs `docker exec` and a shell. Base images are digest-pinned, matching the
 # sibling Dockerfiles.
 
-FROM rust:1.94.1-slim-trixie@sha256:cf09adf8c3ebaba10779e5c23ff7fe4df4cccdab8a91f199b0c142c53fef3e1a AS build
+FROM rust:1.100.0-slim-trixie@sha256:e9d95b74296f7126a83ae3d041aeaba1ff4c478f13abc5cc034fcf7c131c3d4a AS build
 WORKDIR /src
 
 # `rusqlite` is built with `bundled`, so the SQLite amalgamation is compiled
