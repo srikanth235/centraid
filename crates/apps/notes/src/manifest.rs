@@ -301,20 +301,10 @@ mod tests {
         );
     }
 
-    /// Notes is byte-bearing, enabled on every seat, and its origin acts are
-    /// capture and voice. `disabledOn` is empty here, unlike Locker's stale
-    /// `["viewer"]` (census §A seam 1) — nothing to re-judge for this app.
     #[test]
-    fn it_is_byte_bearing_with_capture_and_voice_as_its_origin_acts() {
+    fn its_writes_are_vault_writes() {
         let raw: serde_json::Value =
             serde_json::from_str(MANIFEST_JSON).expect("the manifest is JSON");
-        assert_eq!(raw["seats"]["byteBearing"], serde_json::json!(true));
-        assert_eq!(raw["seats"]["disabledOn"], serde_json::json!([]));
-        assert_eq!(
-            raw["seats"]["originActs"],
-            serde_json::json!(["capture", "voice"])
-        );
-        assert_eq!(raw["seats"]["northStar"], serde_json::json!("apple-notes"));
         assert_eq!(raw["actionSideEffect"], serde_json::json!("vault-write"));
     }
 

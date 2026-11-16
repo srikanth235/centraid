@@ -1963,58 +1963,7 @@
       "container": true
     }
   ],
-  "knobs": [
-    {
-      "key": "appWidth",
-      "label": "Width",
-      "type": "segmented",
-      "default": "narrow",
-      "options": [
-        {
-          "value": "narrow",
-          "label": "Narrow"
-        },
-        {
-          "value": "wide",
-          "label": "Wide"
-        }
-      ]
-    },
-    {
-      "key": "appColor",
-      "label": "Color",
-      "type": "swatch",
-      "default": "#4E68DD",
-      "options": [
-        {
-          "value": "#4E68DD",
-          "label": "Indigo"
-        },
-        {
-          "value": "#2EA098",
-          "label": "Teal"
-        },
-        {
-          "value": "#7C5BD9",
-          "label": "Violet"
-        },
-        {
-          "value": "#E55772",
-          "label": "Rose"
-        },
-        {
-          "value": "#B47B3F",
-          "label": "Ochre"
-        }
-      ]
-    }
-  ],
-  "seats": {
-    "byteBearing": false,
-    "originActs": [],
-    "disabledOn": [],
-    "northStar": "apple-reminders"
-  },
+
   "states": {
     "designed": [
       "dayone",

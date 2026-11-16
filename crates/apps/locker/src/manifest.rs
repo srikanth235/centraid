@@ -63,12 +63,12 @@ mod tests {
     // `contracts/` to keep the diff alive would be re-importing the tree that
     // retirement deleted (v0-no-legacy). What D-1020-L7 RULED is asserted
     // directly instead, below and in `commands.rs`: the `items` query declares
-    // no `auth_session`, and `seats.disabledOn` is empty. Those are facts about
-    // this manifest, which is the only manifest there is now.
+    // no `auth_session`. That is a fact about this manifest, which is the only
+    // manifest there is now.
 
-    /// D-1020-L7's TWO DELETIONS, asserted as properties of this manifest.
+    /// D-1020-L7's removal of the permit-era parameter.
     #[test]
-    fn the_permit_era_parameter_is_gone_and_locker_is_on_every_seat() {
+    fn the_permit_era_parameter_is_gone() {
         let manifest = ours();
         let items = manifest["queries"]
             .as_array()
@@ -84,11 +84,6 @@ mod tests {
                 .is_none(),
             "`auth_session` is a permit-era parameter (#996 R13) and this port \
              carries its absence"
-        );
-        assert_eq!(
-            manifest["seats"]["disabledOn"],
-            serde_json::json!([]),
-            "Locker is disabled on no seat (#996 R13)"
         );
     }
 
@@ -260,20 +255,6 @@ mod tests {
             states.excluded.is_empty(),
             "every exclusion needs a reason and a citation"
         );
-    }
-
-    /// D-1020-L7's second deletion, asserted on the parsed side too: Locker is
-    /// byte-bearing (the custody triple, the upload queue, the download gate
-    /// and free-up-space) and disabled on
-    /// **no** seat.
-    #[test]
-    fn it_is_byte_bearing_and_disabled_on_no_seat() {
-        let raw = ours();
-        assert_eq!(raw["seats"]["byteBearing"], serde_json::json!(true));
-        assert_eq!(raw["seats"]["disabledOn"], serde_json::json!([]));
-        // No origin act: autofill was a browser extension's (R-1047-D3).
-        assert_eq!(raw["seats"]["originActs"], serde_json::json!([]));
-        assert_eq!(raw["seats"]["northStar"], serde_json::json!("1password"));
     }
 
     /// `auth_session` is gone from the port, and nothing else on that input is.

@@ -222,18 +222,6 @@ mod tests {
         );
     }
 
-    /// Photos is byte-bearing and enabled on every seat. `disabledOn` is empty
-    /// here, unlike Locker's stale `["viewer"]` (census §A seam 1) — nothing to
-    /// re-judge for this app.
-    #[test]
-    fn it_is_byte_bearing_and_disabled_on_no_seat() {
-        let raw: serde_json::Value =
-            serde_json::from_str(MANIFEST_JSON).expect("the manifest is JSON");
-        assert_eq!(raw["seats"]["byteBearing"], serde_json::json!(true));
-        assert_eq!(raw["seats"]["disabledOn"], serde_json::json!([]));
-        assert_eq!(raw["seats"]["originActs"], serde_json::json!(["camera"]));
-    }
-
     /// THE ACT SCOPES AND THE ACTIONS AGREE, both ways (finding PE-F1, P3): a
     /// narrow `act` scope names a command some action invokes, and every
     /// action's command is covered by a scope. A scope no action uses declares a

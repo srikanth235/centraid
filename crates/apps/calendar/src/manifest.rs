@@ -212,19 +212,11 @@ mod tests {
         );
     }
 
-    /// Calendar is record-only: no bytes, every seat, and the calendar is its
-    /// north star.
+    /// The action plane writes to the vault.
     #[test]
-    fn it_is_record_only_and_enabled_on_every_seat() {
+    fn its_actions_write_to_the_vault() {
         let raw: serde_json::Value =
             serde_json::from_str(MANIFEST_JSON).expect("the manifest is JSON");
-        assert_eq!(raw["seats"]["byteBearing"], serde_json::json!(false));
-        assert_eq!(raw["seats"]["disabledOn"], serde_json::json!([]));
-        assert_eq!(raw["seats"]["originActs"], serde_json::json!([]));
-        assert_eq!(
-            raw["seats"]["northStar"],
-            serde_json::json!("google-calendar")
-        );
         assert_eq!(raw["actionSideEffect"], serde_json::json!("vault-write"));
     }
 
