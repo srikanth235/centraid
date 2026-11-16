@@ -3,101 +3,28 @@ import DocsLayout from '../layouts/DocsLayout.astro';
 import content from '../content/data.html?raw';
 
 const rail = [
-  {
-    "href": "#vault",
-    "no": "§01",
-    "label": "The vault",
-    "current": true
-  },
-  {
-    "href": "#ontology",
-    "no": "§02",
-    "label": "The ontology",
-    "current": false
-  },
-  {
-    "href": "#consent",
-    "no": "§03",
-    "label": "Consent",
-    "current": false
-  },
-  {
-    "href": "#outbox",
-    "no": "§04",
-    "label": "The outbox",
-    "current": false
-  },
-  {
-    "href": "#sealed",
-    "no": "§05",
-    "label": "Sealed columns",
-    "current": false
-  },
-  {
-    "href": "#connections",
-    "no": "§06",
-    "label": "Connections & sync",
-    "current": false
-  },
-  {
-    "href": "#automations",
-    "no": "§07",
-    "label": "Automations",
-    "current": false
-  },
-  {
-    "href": "#assistant",
-    "no": "§08",
-    "label": "The assistant",
-    "current": false
-  },
-  {
-    "href": "#blobs",
-    "no": "§09",
-    "label": "Bytes & blobs",
-    "current": false
-  },
-  {
-    "href": "#search",
-    "no": "§10",
-    "label": "Search",
-    "current": false
-  }
+  { "href": '#vault', "no": '§01', "label": 'The vault', "current": true },
+  { "href": '#records', "no": '§02', "label": 'Records and protection', "current": false },
+  { "href": '#backup', "no": '§03', "label": 'Sealed backup', "current": false },
 ];
 const footer = {
-  "manifesto": "The apps are disposable. The devices are replaceable. <em>The vault is the asset.</em>",
+  "manifesto": 'The phone holds the live vault. <em>Backup devices hold sealed copies.</em>',
   "links": [
-    {
-      "href": "https://centraid.dev",
-      "label": "centraid.dev",
-      "external": false
-    },
-    {
-      "href": "../start/",
-      "label": "start",
-      "external": false
-    },
-    {
-      "href": "../apps/",
-      "label": "apps",
-      "external": false
-    },
-    {
-      "href": "../devices/",
-      "label": "devices",
-      "external": false
-    }
-  ]
+    { "href": 'https://centraid.dev', "label": 'centraid.dev', "external": false },
+    { "href": '../start/', "label": 'start', "external": false },
+    { "href": '../apps/', "label": 'apps', "external": false },
+    { "href": '../devices/', "label": 'devices', "external": false },
+  ],
 };
 ---
 
 <DocsLayout
-  title="Centraid Data Vault: Local-First Personal Data Model"
-  description="Explore Centraid's local-first data vault: SQLite files, consent grants, sealed secrets, automations, search, blob custody, and the personal ontology."
+  title="Centraid Data Vault: One Phone Vault and Its Shared Records"
+  description="Learn how the phone's SQLite vault stores shared records, links, history and search, protects Locker values, and makes sealed backups."
   current="data"
   canonicalPath="data/"
   searchLabel="Data"
-  searchKeywords="vault sqlite ontology consent grants outbox sealed secrets connections sync automations assistant blobs search"
+  searchKeywords="vault SQLite phone records entities links history search Locker sealed backup gateway recovery"
   bodyClass="has-rail"
   rail={rail}
   footer={footer}

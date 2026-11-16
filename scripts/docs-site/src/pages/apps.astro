@@ -3,83 +3,26 @@ import DocsLayout from '../layouts/DocsLayout.astro';
 import content from '../content/apps.html?raw';
 
 const rail = [
-  {
-    "href": "#model",
-    "no": "§01",
-    "label": "What an app is",
-    "current": true
-  },
-  {
-    "href": "#blueprints",
-    "no": "§02",
-    "label": "The blueprints",
-    "current": false
-  },
-  {
-    "href": "#anatomy",
-    "no": "§03",
-    "label": "Anatomy",
-    "current": false
-  },
-  {
-    "href": "#install",
-    "no": "§04",
-    "label": "Installing",
-    "current": false
-  },
-  {
-    "href": "#linking",
-    "no": "§05",
-    "label": "Attach & link",
-    "current": false
-  },
-  {
-    "href": "#agents",
-    "no": "§06",
-    "label": "Agents drive apps",
-    "current": false
-  },
-  {
-    "href": "#mobile",
-    "no": "§07",
-    "label": "On the phone",
-    "current": false
-  }
+  { "href": '#apps', "no": '§01', "label": 'The apps', "current": true },
 ];
 const footer = {
-  "manifesto": "When apps are cheap to generate, projections become disposable — <em>and the model becomes everything.</em>",
+  "manifesto": 'Nine apps, one phone vault. <em>Your records stay together.</em>',
   "links": [
-    {
-      "href": "https://centraid.dev",
-      "label": "centraid.dev",
-      "external": false
-    },
-    {
-      "href": "../start/",
-      "label": "start",
-      "external": false
-    },
-    {
-      "href": "../data/",
-      "label": "data",
-      "external": false
-    },
-    {
-      "href": "../devices/",
-      "label": "devices",
-      "external": false
-    }
-  ]
+    { "href": 'https://centraid.dev', "label": 'centraid.dev', "external": false },
+    { "href": '../start/', "label": 'start', "external": false },
+    { "href": '../data/', "label": 'data', "external": false },
+    { "href": '../devices/', "label": 'devices', "external": false },
+  ],
 };
 ---
 
 <DocsLayout
-  title="Centraid Apps: Seven System Apps Over One Vault"
-  description="Learn how Centraid apps work: the projection model, the seven system apps, install as a signed grant, attachments and links, and the mobile seats."
+  title="Centraid Apps: Nine First-Party Apps Over One Phone Vault"
+  description="Meet Centraid's nine apps and learn how they share records, links, history, search, trash and export over the phone vault."
   current="apps"
   canonicalPath="apps/"
   searchLabel="Apps"
-  searchKeywords="blueprint apps projections handlers app.json install grants consent attachments links agents mobile replica docs photos notes people locker agenda tasks"
+  searchKeywords="apps Docs Photos Notes People Locker Calendar Reminders Money Health vault records links history trash export search"
   bodyClass="has-rail"
   rail={rail}
   footer={footer}

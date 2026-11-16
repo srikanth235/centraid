@@ -1,510 +1,111 @@
 <section class="ch-hero wrap">
         <p class="eyebrow r">Chapter 1 · data</p>
-        <h1 class="r" style="--d: 0.1s">One vault. One model. <em>Zero silos.</em></h1>
+        <h1 class="r" style="--d: 0.1s">One phone vault. <em>One writer.</em></h1>
         <p class="lede r" style="--d: 0.22s">
-          Everything in Centraid stands on a single claim: the canonical record of your life lives
-          in <b>one place you own</b>, on <b>one shared model</b>, behind
-          <b>one consent-checked door</b>. This chapter walks that claim end to end — the files on
-          disk, the ontology that kills the silos, the consent machinery that makes borrowing
-          possible, and the systems that move data in (connections, automations) and make it useful
-          (the assistant, search).
+          Centraid keeps the live vault on your phone. The phone's Rust core is its only writer;
+          the nine apps read and change records through that core. A backup device stores sealed
+          backup data without being able to read the vault.
         </p>
       </section>
 
-      <!-- §01 THE VAULT -->
       <section class="sec wrap" id="vault">
         <p class="eyebrow r">§01 · the vault</p>
-        <h2 class="r" style="--d: 0.06s">A directory you can <em>copy out.</em></h2>
+        <h2 class="r" style="--d: 0.06s">One live SQLite <em>vault file.</em></h2>
         <div class="prose r" style="--d: 0.12s">
           <p>
-            A vault is not a service. It is a directory of SQLite files on a machine you control,
-            and the whole sovereignty story reduces to what's in it:
-          </p>
-        </div>
-        <div class="dt-scroll r" style="--d: 0.18s; margin-top: 24px">
-          <table class="dt">
-            <thead>
-              <tr>
-                <th>File</th>
-                <th>What it holds</th>
-                <th>Why it is shaped that way</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>vault.db</td>
-                <td>
-                  Everything the vault knows — canonical core, access plane, agent plane, sync
-                  spine and all life domains, plus two append-only bands beside them: the
-                  <b>audit band</b> (receipts, provenance, command invocations, checks, evidence)
-                  and the <b>ledger band</b> (chat, automation and workspace transcripts).
-                </td>
-                <td>
-                  One file, one ACID boundary: a transaction commits the command, the rows and the
-                  receipt together, and every reference stays engine-enforced. The two bands are
-                  excluded from exports and device replicas by band, and each declares its own
-                  retention window, so the record stays small without a second file.
-                </td>
-              </tr>
-              <tr>
-                <td>blobs/</td>
-                <td>
-                  Content-addressed bytes — originals, thumbnails, previews — keyed by sha256.
-                </td>
-                <td>
-                  Bytes are rented, meaning is owned: the rows can re-home the bytes to any disk or
-                  S3 bucket without touching a relationship.
-                </td>
-              </tr>
-              <tr>
-                <td>
-                  keys/
-                  <span style="font-family: var(--font-sans); color: var(--text-faint)"
-                    >(sibling, outside the vault dir)</span
-                  >
-                </td>
-                <td>The vault's sealing key (DEK) for encrypted columns.</td>
-                <td>
-                  Deliberately outside backup scope — a copied vault can't reveal its own secrets.
-                  Custody is yours: <code>centraid-gateway key export / restore / rotate</code>.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="prose r" style="--d: 0.24s">
-          <p>
-            A gateway can mount <b>many vaults</b> — each a subdirectory with its own database,
-            its own identity row, its own grants. Devices are enrolled per-vault, and
-            every request addresses a (gateway, vault) pair explicitly. Export is honest: copy the
-            directory, verify hashes, done.
+            The live vault is one SQLite file on the phone. Its shared model has one entity table
+            and typed records for each kind, such as a note, document, event, task, person or
+            transaction. Links, earlier versions and the search index are shared too. Totals,
+            counts and other summaries are derived from the real rows when read, rather than kept
+            as another value that can drift.
           </p>
           <p>
-            Only the two append-only bands grow without a natural ceiling, and they are kept
-            bounded without ever dropping history. Idle conversations are <b>digested</b>, their turn-ranges
-            serialized into sealed gzip segments and archived to the same content-addressed store
-            every blob uses — through the same vault blob door. The raw rows are pruned
-            <i>only</i> behind a <b>custody latch</b>: once the segment is provably replicated, or,
-            on a vault that's on this device only, provably present in the local store. Reopen an
-            archived thread and its turns <b>rehydrate lazily</b> from the segment, folded back in
-            sequence and marked <b>from-archive</b> — read-only, because the past doesn't get
-            rewritten. Insights never notice the difference: the digests stand in for whatever was
-            pruned.
+            A record gives a file its identity and history; the original bytes are separate.
+            Depending on the item, the bytes may be in the phone's local file store, still in the
+            phone's photo library, or available only from an acknowledged backup. A file being
+            staged for import is not yet a record. Previews and extracted text are derivatives,
+            not replacements for the original. Imported and followed records keep provenance;
+            records created by typing have no source row.
           </p>
-          <p class="aside">
-            Manual key custody commands are in <a href="../start/#backup">Start § back up the
-            keys</a>; the full offsite backup story — snapshots, the recovery kit, restore and
-            quarantine — has its own chapter: <a href="../backups/">Backups →</a>. How requests get
-            scoped to a vault: <a href="../devices/#addressing">Devices § addressing</a>.
+          <p>
+            Apps declare their available queries and actions in checked manifests. A normal app
+            read goes through <code>load(app, query, params)</code>, which checks the app and query
+            and decodes typed parameters before calling its reader. A confirmed change goes
+            through <code>act(app, action, input)</code>, which checks the action and input and
+            commits through the vault's write boundary. The app catalogue is code in the release:
+            apps do not receive member-managed grants, and the phone remains the sole writer.
+          </p>
+          <p>
+            Chat reads records through the paged vault door. Its confirmed writes use
+            <code>act</code>, like other confirmed app changes. Chat has no free SQL write path,
+            and the gateway cannot write the live vault.
           </p>
         </div>
       </section>
 
-      <!-- §02 THE ONTOLOGY -->
-      <section class="dark" id="ontology">
+      <section class="dark" id="records">
         <div class="wrap">
-          <p class="eyebrow r">§02 · the ontology</p>
-          <h2 class="r" style="--d: 0.06s">Declared once, <em>everywhere the same.</em></h2>
-          <p class="lede r" style="--d: 0.12s">
-            The reason Centraid has no silos is not an integration layer — it's that there is
-            nothing to integrate. "A person", "money moved", "something was measured" are declared
-            exactly once, in a canonical core; every app either <b>extends</b> a core row (is one,
-            plus columns) or <b>references</b> it (points at shared identity). No app ever
-            re-declares a concept.
-          </p>
-          <div class="grid cols-3" style="margin-top: 30px">
-            <div class="card r" style="--d: 0.1s">
-              <p class="c-no">the spine</p>
-              <h3>Nine load-bearing types</h3>
-              <p>
-                party · place · event · account · transaction · content_item · activity ·
-                observation · link — plus SKOS concepts for vocabulary. Identity and history live
-                here, and nowhere else.
-              </p>
-            </div>
-            <div class="card r" style="--d: 0.18s">
-              <p class="c-no">the domains</p>
-              <h3>Thin typed extensions</h3>
-              <p>
-                Health, finance, schedule, social, knowledge, media, home, business, people, locker
-                — each adds behavior (a workout's load, an invoice's dunning), never a second
-                identity.
-              </p>
-            </div>
-            <div class="card r" style="--d: 0.26s">
-              <p class="c-no">the planes</p>
-              <h3>Consent + agent</h3>
-              <p>
-                Scoped expiring grants, receipts and provenance on every access; agents act only
-                through typed, precondition-checked commands. Sovereignty is a plane, not a settings
-                page.
-              </p>
-            </div>
-          </div>
-          <div class="prose r" style="--d: 0.3s">
-            <p>
-              The model is versioned (currently <code>ontology 1.3</code>) and every new domain
-              passes a seven-point admission checklist in review — anchors, links, flags, memos,
-              search, registry, doc — so drift gets caught as process, not archaeology.
-            </p>
-            <p class="aside">
-              The full model is its own explorable chapter: every schema and column, the unified
-              entity map, the ownership matrix, the gateway contract, and the ten hard rules.
-              <a href="../ontology/">Read the ontology →</a>
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <!-- §03 CONSENT -->
-      <section class="sec wrap" id="consent">
-        <p class="eyebrow r">§03 · consent</p>
-        <h2 class="r" style="--d: 0.06s">
-          Apps <em>borrow.</em> You sign. Everything is receipted.
-        </h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            Nothing reads or writes the vault except through the gateway, and the gateway evaluates
-            a grant on <b>every</b> call. The machinery, in the order you'll meet it:
-          </p>
-        </div>
-        <div class="steps r" style="--d: 0.18s; max-width: 860px">
-          <div class="step">
-            <span class="dot">01</span>
-            <div>
-              <h3>Install-time grants</h3>
-              <p>
-                An app's manifest declares scopes — schema, table, verbs (<code>read</code>,
-                <code>act</code>, <code>reveal</code>) — and installing mints exactly that grant,
-                idempotently. Re-publishing an app tops up only <i>newly declared</i> scopes; it can
-                never silently widen what you already refused.
-              </p>
-            </div>
-          </div>
-          <div class="step">
-            <span class="dot">02</span>
-            <div>
-              <h3>Confirm-gated commands</h3>
-              <p>
-                A handful of commands are consequential enough to pause regardless of who asks —
-                sending a message, sending an invoice, publishing a sync batch, merging two people.
-                When a non-owner caller invokes one, the invocation <b>parks</b> and waits for your
-                decision in the blocking surface. Deny is a first-class, receipted outcome.
-              </p>
-            </div>
-          </div>
-          <div class="step">
-            <span class="dot">03</span>
-            <div>
-              <h3>Your "no" is durable</h3>
-              <p>
-                Revoking a scope writes a <b>tombstone</b>: an app that later asks for it again gets
-                blocked at the request stage, not re-granted by a sneaky update. Widening requests
-                queue for explicit review — one open request per app, replaced on re-publish.
-              </p>
-            </div>
-          </div>
-          <div class="step">
-            <span class="dot">04</span>
-            <div>
-              <h3>Every write is a command</h3>
-              <p>
-                Every write goes through one gate that checks who may do what, and a refusal writes
-                nothing. The vault keeps no log of what you asked for, so nothing you typed outlives
-                the delete.
-              </p>
-            </div>
-          </div>
-        </div>
-        <p class="aside r" style="--d: 0.24s">
-          Revoke a grant and the cascade is total: sessions killed, projections dark, the app's ext
-          band retained then purged. Your rows, history and receipts remain.
-          <a href="../ontology/#gateway">The gateway contract →</a>
-        </p>
-      </section>
-
-      <!-- §04 THE OUTBOX -->
-      <section class="dark" id="outbox">
-        <div class="wrap">
-          <p class="eyebrow r">§04 · the outbox</p>
-          <h2 class="r" style="--d: 0.06s">
-            The outside world gets written to <em>only through a drawer you open.</em>
-          </h2>
-          <p class="lede r" style="--d: 0.12s">
-            Reads come in through staging; writes go out through the outbox. Any agent or automation
-            that wants to touch the world — send an email, post to Slack — can only
-            <b>stage an artifact</b>: the rendered thing itself, inert, sitting in a drawer with the
-            request that would send it.
-          </p>
+          <p class="eyebrow r">§02 · records and protection</p>
+          <h2 class="r" style="--d: 0.06s">Connected records, <em>kept private.</em></h2>
           <div class="grid cols-2" style="margin-top: 28px">
-            <div class="card r" style="--d: 0.1s">
-              <p class="c-no">you decide</p>
-              <h3>Approve · edit · discard · always-allow</h3>
+            <div class="card r">
+              <p class="c-no">one shared model</p>
+              <h3>Links, history and search</h3>
               <p>
-                You read the actual email, not a description of it. Edit it and the edited version
-                is what's sent — atomically, in the same decision. "Always allow" mints a standing
-                grant for exactly that (actor, verb, target) triple — <i>this</i> automation,
-                sending <i>this kind</i> of thing, to <i>this place</i> — revocable any time, and
-                still receipted on every use.
+                Apps link records through the shared link model, with Locker links visible only
+                inside Locker. Edits keep earlier values for supported records. Search uses one
+                vault index and excludes sealed Locker values; a trashed record leaves search.
+                Imported and followed records keep their source details so the vault can explain
+                where they came from.
               </p>
             </div>
-            <div class="card r" style="--d: 0.18s">
-              <p class="c-no">the executor sends</p>
-              <h3>Credentials never touch the author</h3>
+            <div class="card r">
+              <p class="c-no">the sensitive boundary</p>
+              <h3>Locker stays behind its wall</h3>
               <p>
-                Approved items drain through a gateway-side executor that substitutes
-                <code>{{connection:…}}</code> placeholders with sealed tokens at the last moment,
-                pinned to the connection's allowed hosts over https. The automation that drafted the
-                email never held a secret. Transient failures retry; hard failures are scrubbed and
-                surfaced.
+                Locker's sealed values are encrypted in the vault and are not put in search, links,
+                logs or the assistant model's reach. Chat can show a protected Locker card with a
+                Reveal action; the phone checks the owner, and the revealed value never passes
+                through the model. Locker's own export is a separate confirmed action, requires a
+                fresh owner check and goes to the system save sheet. Export everything leaves
+                Locker out.
               </p>
             </div>
           </div>
-          <p class="note r" style="--d: 0.24s; margin-top: 22px">
-            Sent things become rows: an email that drains binds back to a canonical
-            <code>social.message</code> — your outbound acts are first-class history, not
-            fire-and-forget JSON.
-          </p>
-        </div>
-      </section>
-
-      <!-- §05 SEALED COLUMNS -->
-      <section class="sec wrap" id="sealed">
-        <p class="eyebrow r">§05 · sealed columns</p>
-        <h2 class="r" style="--d: 0.06s">Some cells are <em>ciphertext even to you.</em></h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            Passwords, TOTP seeds, card numbers, OAuth tokens: columns declared <b>sealed</b> are
-            AES-256-GCM ciphertext at rest, sealed inside the same write transaction that creates
-            them. Ordinary reads get a placeholder. Getting plaintext requires the explicit
-            <code>reveal</code> verb — a distinct scope apps must declare, and each item
-            remembers when it was last used.
-          </p>
-          <p>
-            The discipline is structural, not polite: sealed columns are barred from the search
-            index by construction, and error paths are scrubbed. The sealing key lives beside — not inside — the vault
-            directory, with export, restore and rotation as shell ceremonies.
-          </p>
-          <p class="aside">
-            Locker is the showcase: items seal their secrets, computes TOTP client-side, and its
-            Watchtower derives weak/reused flags without ever unsealing into the transcript.
-            <a href="../apps/#blueprints">Apps § blueprints →</a>
-          </p>
-        </div>
-      </section>
-
-      <!-- §06 CONNECTIONS & SYNC -->
-      <section class="dark" id="connections">
-        <div class="wrap">
-          <p class="eyebrow r">§06 · connections &amp; sync</p>
-          <h2 class="r" style="--d: 0.06s">The border has <em>a customs post.</em></h2>
-          <p class="lede r" style="--d: 0.12s">
-            External services connect through a broker the gateway owns, and external rows enter
-            through a staging band you review. Two mechanisms, one discipline: nothing crosses the
-            border unattributed. This <b>connector sync</b> — pulling the outside world in — is not
-            the offline <b>device replica</b> that keeps a phone or browser working without a
-            connection; that lives in the <a href="../devices/">Devices chapter</a>.
-          </p>
-          <div class="steps r" style="--d: 0.16s; max-width: 880px">
-            <div class="step">
-              <span class="dot">a</span>
-              <div>
-                <h3>Assist by default; bring your own when you need to</h3>
-                <p>
-                  <b>Centraid Assist</b> makes Google consent work even when a paired gateway has
-                  no public address: the browser couriers a short-lived code, while state, PKCE and
-                  every stored token stay on the gateway. Advanced keeps your own OAuth client (or
-                  API key) for air-gapped and operator-branded setups. The broker refreshes
-                  single-flight and injects tokens only into requests bound for the connection's
-                  pinned hosts — connector code sees <code>{{connection:access_token}}</code>,
-                  never the token.
-                </p>
-              </div>
-            </div>
-            <div class="step">
-              <span class="dot">b</span>
-              <div>
-                <h3>Everything stages</h3>
-                <p>
-                  Pulls land as <b>staged batches</b> — rows with dispositions (create / update /
-                  skip / merge-candidate) resolved against the universal external-id map, so the
-                  same Gmail thread never imports twice and upstream edits become reviewable
-                  updates. You publish a batch in one transaction; per-row provenance says exactly
-                  where each fact came from. Trusted connections can auto-publish; the vault wins
-                  conflicts either way.
-                </p>
-              </div>
-            </div>
-            <div class="step">
-              <span class="dot">c</span>
-              <div>
-                <h3>Enrichment rides the same rails</h3>
-                <p>
-                  Nine optional enrichers — photo captioning, document text extraction, face
-                  proposals, trip albums, renewal reminders and friends — derive new rows
-                  <i>into tables the ontology already has</i>, attributed and re-derivable, under
-                  per-class standing consent. Derived data is never a parallel store you can't
-                  audit.
-                </p>
-              </div>
-            </div>
-          </div>
-          <p class="note r" style="--d: 0.24s; margin-top: 18px">
-            Assist is ceremony-only: Google API traffic goes from your gateway to Google, and
-            tokens are never stored by Centraid cloud. <a href="../privacy/">Read the privacy
-            policy →</a>
-          </p>
-        </div>
-      </section>
-
-      <!-- §07 AUTOMATIONS -->
-      <section class="sec wrap" id="automations">
-        <p class="eyebrow r">§07 · automations</p>
-        <h2 class="r" style="--d: 0.06s">Agents on a clock, <em>with a paper trail.</em></h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            An automation is an agent with a manifest: a trigger, a grant of its own, and a durable
-            transcript for every run. It is how data moves while you sleep — the Gmail pull, the
-            morning briefing, the renewal nag — and it enjoys no special powers: same scopes, same
-            typed commands, same parking for consequential acts, same receipts.
-          </p>
-        </div>
-        <div class="grid cols-4" style="margin-top: 26px">
-          <div class="card r" style="--d: 0.1s">
-            <p class="c-no">trigger</p>
-            <h3>cron</h3>
-            <p>Five-field schedule. The briefing at 06:30, the weekly sweep on Sundays.</p>
-          </div>
-          <div class="card r" style="--d: 0.16s">
-            <p class="c-no">trigger</p>
-            <h3>webhook</h3>
-            <p>A slug route with a shared-secret hash — GitHub pings it, the automation fires.</p>
-          </div>
-          <div class="card r" style="--d: 0.22s">
-            <p class="c-no">trigger</p>
-            <h3>condition</h3>
+          <div class="prose r" style="--d: 0.2s; margin-top: 24px">
             <p>
-              A consented read on a gate: fire once per new row that matches. "A message was
-              released."
-            </p>
-          </div>
-          <div class="card r" style="--d: 0.28s">
-            <p class="c-no">trigger</p>
-            <h3>data</h3>
-            <p>The change feed itself: fire on new change entries, cursor strictly time-ordered.</p>
-          </div>
-        </div>
-        <div class="prose r" style="--d: 0.3s">
-          <p>
-            Every fire runs as an enrolled agent identity — its invocations and pre/post checks run through the same
-            gate, and the run reads back as a conversation, not a log file.
-            When you wonder why it did what it did, you read the transcript.
-          </p>
-        </div>
-      </section>
-
-      <!-- §08 THE ASSISTANT -->
-      <section class="dark" id="assistant">
-        <div class="wrap">
-          <p class="eyebrow r">§08 · the assistant</p>
-          <h2 class="r" style="--d: 0.06s">
-            The payoff: one brain over <em>the whole record.</em>
-          </h2>
-          <p class="lede r" style="--d: 0.12s">
-            Silo-free data is only worth the trouble if something can think across it. The assistant
-            is an owner-plane agent with exactly three tools — and the restraint is the design.
-          </p>
-          <div class="grid cols-3" style="margin-top: 28px">
-            <div class="card r" style="--d: 0.1s">
-              <p class="c-no">read</p>
-              <h3>vault_sql</h3>
-              <p>
-                One read-only SELECT over the entire ontology — joins, window functions, recursive
-                CTEs, FTS matches. Row-capped, receipted, no writes, no DDL. Your data becomes
-                answerable because it's one schema.
-              </p>
-            </div>
-            <div class="card r" style="--d: 0.18s">
-              <p class="c-no">act</p>
-              <h3>vault_invoke</h3>
-              <p>
-                One typed command per call — the same command palette apps use. Consequential
-                commands park for your confirmation exactly as they would for any other caller.
-              </p>
-            </div>
-            <div class="card r" style="--d: 0.26s">
-              <p class="c-no">open</p>
-              <h3>vault_content</h3>
-              <p>
-                The extracted text of one document by id — size-bounded and receipted — so
-                "summarize the lease" reads the actual lease, not a guess.
-              </p>
-            </div>
-          </div>
-          <div class="prose r" style="--d: 0.3s">
-            <p>
-              And it learns in rows, not vibes: when you correct it, the diff is stored as a
-              correction and distilled into a scoped <b>judgment</b> the agent consults before
-              acting again — auditable, expirable, revocable like everything else here.
+              Deleting moves eligible records to the shared trash first; they can be restored
+              before the purge date. Delete forever and empty trash permanently remove them.
+              Export and recovery details are in <a href="../devices/">Devices</a>, and the app
+              exports and Locker exception are in <a href="../apps/">Apps</a>.
             </p>
           </div>
         </div>
       </section>
 
-      <!-- §09 BLOBS -->
-      <section class="sec wrap" id="blobs">
-        <p class="eyebrow r">§09 · bytes &amp; blobs</p>
-        <h2 class="r" style="--d: 0.06s">Own the meaning, <em>rent the bytes.</em></h2>
+      <section class="sec wrap" id="backup">
+        <p class="eyebrow r">§03 · sealed backup</p>
+        <h2 class="r" style="--d: 0.06s">A backup device stores <em>sealed copies.</em></h2>
         <div class="prose r" style="--d: 0.12s">
           <p>
-            Originals — photos, PDFs, videos up to 512&nbsp;MB streamed — land in a local
-            content-addressed store keyed by sha256, so identical bytes exist once no matter how
-            many apps attach them. Uploading is not yet a fact: bytes stage under their hash, and
-            only the typed command that <b>claims</b> the hash (add a document, add an asset) mints
-            the canonical row and the receipt.
+            Backup state is separate from the live vault. The phone makes page-identical snapshots
+            and seals the vault data and content files before sending them to a member's backup
+            device. A gateway stores opaque sealed objects under keyed names; it cannot read their
+            content or schema. Only an acknowledged copy is reported as backed up. The gateway
+            does not query the live vault, receive app writes or act as another client.
           </p>
           <p>
-            Derivatives — thumbnails, previews, extracted text — hang off the canonical item as
-            attributed variants; extracted text feeds straight into search. An optional
-            S3-compatible tier replicates the local store for durability, encrypting each blob under
-            the vault key before it leaves — the address stays the plaintext hash, so dedup survives
-            re-keying and the meaning never moves: lose a blob store and you've lost re-fetchable
-            bytes, never a relationship.
-          </p>
-          <p>
-            With the vault <b>Hosted</b>, the local store becomes a <b>bounded cache</b>, not a
-            second full copy: a budget (yours to set, or derived from free disk) caps the spool,
-            tiny previews are pinned so the grid always renders, and everything else ages out
-            least-recently-used — but nothing is ever evicted unless the remote provably holds it,
-            and imports back-pressure rather than drop when the uplink can't keep up. Remote blobs
-            are sealed in ranged-readable encrypted frames, compressed when the bytes allow, so
-            scrubbing a video or opening one page fetches only the covering slices. A new device
-            restores the vault snapshot, warms every tiny preview first — a usable library in
-            minutes — and leaves originals to stream in on demand.
+            Restoring uses the recovery key and a backup copy to rebuild the vault on a phone.
+            The phone keeps seven daily, four weekly and six monthly snapshots when those periods
+            contain snapshots, and always keeps the newest. It computes which files no retained
+            backup needs and sends signed deletion requests. The gateway enforces a hold of at
+            least seven days after a request before purging those objects. See
+            <a href="../backups/#check">Backups: check and retention</a> for the retention rules,
+            and <a href="../devices/">Devices</a> for setup and recovery.
           </p>
         </div>
-      </section>
-
-      <!-- §10 SEARCH -->
-      <section class="sec wrap" id="search">
-        <p class="eyebrow r">§10 · search</p>
-        <h2 class="r" style="--d: 0.06s">One index over <em>everything the model knows.</em></h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            Full-text search (SQLite FTS5) indexes the text-bearing tables across every domain —
-            notes and their bodies, documents, messages, people, tasks, events, transactions,
-            annotations, expenses — kept in sync by triggers in the same transaction as the write.
-            Apps get bounded search through their scopes; the assistant gets it through SQL.
-          </p>
-          <p>
-            Two structural guarantees: <b>sealed columns can't be indexed</b> — the bar is in the
-            schema layer, not a code-review convention — and search walks the same consent pipeline
-            as reads, failing closed if a grant masks any indexed column.
-          </p>
-        </div>
-
         <div class="chapter-next r">
-          <a href="../ontology/">deep-dive: the ontology →</a>
+          <a href="../ontology/">deep dive: ontology →</a>
           <a href="../apps/">next chapter: apps →</a>
         </div>
       </section>
