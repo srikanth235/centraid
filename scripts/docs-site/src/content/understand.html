@@ -1,213 +1,108 @@
 <!-- HERO -->
-      <section class="ch-hero wrap">
-        <p class="eyebrow r">Understand it · how it works</p>
-        <h1 class="r" style="--d: 0.1s">The whole system, <em>from the top.</em></h1>
-        <p class="lede r" style="--d: 0.22s">
-          Everything in Centraid branches from three pieces — a <b>vault</b> of your data, the
-          <b>apps</b> that project it, and the <b>devices</b> that carry it. This page maps the shape
-          of the system so you can dive into any part with the context to make sense of it.
+<section class="ch-hero wrap">
+  <p class="eyebrow r">Understand it · how it works</p>
+  <h1 class="r" style="--d: 0.1s">One phone vault. <em>Apps that share its records.</em></h1>
+  <p class="lede r" style="--d: 0.22s">
+    Centraid has one live vault: it lives on your phone, and the Rust core on the phone is its only
+    writer. SwiftUI and Android's native shell draw the same built-in apps over that core. A
+    backup device runs <code>centraid-gateway</code> and stores sealed backup data; it cannot read
+    your records or answer app queries.
+  </p>
+  <p class="lede r" style="--d: 0.3s">
+    Begin with the <a href="../start/">phone setup</a>, or read
+    <a href="../learn/">the foundations</a> behind the vault and its recovery.
+  </p>
+</section>
+
+<section class="dark" id="pillars">
+  <div class="wrap">
+    <p class="eyebrow r">The shape of the system</p>
+    <h2 class="r" style="--d: 0.06s">Three parts, <em>one owner.</em></h2>
+    <div class="grid cols-3" style="margin-top: 34px">
+      <a class="card r" href="../data/" style="--d: 0.1s">
+        <p class="c-no">part 1</p>
+        <h3>The phone vault</h3>
+        <p>
+          The phone holds live SQLite records. Original files may be on the phone, in its OS
+          library, or only on a backup device. The shared model connects events, people, places,
+          documents, payments, photos, health entries, and Locker metadata. Only the phone's Rust
+          core writes durable data.
         </p>
-        <p class="lede r" style="--d: 0.3s">
-          New to the underlying ideas — ontologies, SKOS, certificate pinning, PKCE? Ten short
-          primers cover the prior art first: <a href="../learn/">learn the foundations →</a>
+        <div class="pill-row" style="margin-top: 14px">
+          <span class="pill">SQLite</span><span class="pill">shared records</span>
+          <span class="pill">one writer</span>
+        </div>
+      </a>
+      <a class="card r" href="../apps/" style="--d: 0.18s">
+        <p class="c-no">part 2</p>
+        <h3>Built-in apps</h3>
+        <p>
+          Home opens Calendar, Reminders, People, Notes, Docs, Photos, Money, Health, and Locker.
+          These are first-party screens in the release, not separately installed apps. Each app
+          reads and acts through typed operations in the phone core.
         </p>
-      </section>
-
-      <!-- THREE PILLARS -->
-      <section class="dark" id="pillars">
-        <div class="wrap">
-          <p class="eyebrow r">The shape of the system</p>
-          <h2 class="r" style="--d: 0.06s">
-            Three pillars, <em>every subsystem accounted for.</em>
-          </h2>
-          <p class="lede r" style="--d: 0.12s">
-            If you can name a piece of Centraid, it lives in one of these chapters. Nothing floats.
-          </p>
-          <div class="grid cols-3" style="margin-top: 34px">
-            <a class="card r" href="../data/" style="--d: 0.1s">
-              <p class="c-no">chapter 1</p>
-              <h3>Data</h3>
-              <p>
-                The vault and its files, the personal ontology, consent and the outbox, sealed
-                secrets, external connections and sync, automations that ferry data in, the
-                assistant that reads across all of it, blob custody, and search.
-              </p>
-              <div class="pill-row" style="margin-top: 14px">
-                <span class="pill">vault</span><span class="pill">ontology</span
-                ><span class="pill">consent</span><span class="pill">connections</span
-                ><span class="pill">automations</span><span class="pill">assistant</span>
-              </div>
-            </a>
-            <a class="card r" href="../apps/" style="--d: 0.18s">
-              <p class="c-no">chapter 2</p>
-              <h3>Apps</h3>
-              <p>
-                Seven blueprint apps — Docs, Photos, Notes, People, Locker, Agenda, Tasks —
-                what an app actually is (a projection, not a silo), how installing one is a grant
-                and not a copy, attachments and cross-references, and how agents drive the same
-                handlers your buttons do.
-              </p>
-              <div class="pill-row" style="margin-top: 14px">
-                <span class="pill">blueprints</span><span class="pill">install</span
-                ><span class="pill">manifest</span><span class="pill">attachments</span
-                ><span class="pill">linking</span>
-              </div>
-            </a>
-            <a class="card r" href="../devices/" style="--d: 0.26s">
-              <p class="c-no">chapter 3</p>
-              <h3>Devices</h3>
-              <p>
-                The phone is the vault, and gateways keep it safe: one writer, the native app over
-                the Rust core, gateways you control holding sealed copies, (gateway, vault)
-                addressing, pairing by QR, HTTPS pinned to the gateway's own certificate, the writer
-                epoch a restore claims — and what v0 does not have.
-              </p>
-              <div class="pill-row" style="margin-top: 14px">
-                <span class="pill">gateway</span><span class="pill">pairing</span
-                ><span class="pill">https</span><span class="pill">epochs</span
-                ><span class="pill">mobile</span>
-              </div>
-            </a>
-          </div>
+        <div class="pill-row" style="margin-top: 14px">
+          <span class="pill">Home</span><span class="pill">typed actions</span>
+          <span class="pill">shared history</span>
         </div>
-      </section>
-
-      <!-- THE ONTOLOGY CALLOUT -->
-      <section class="sec wrap" id="ontology">
-        <p class="eyebrow r">The deep end</p>
-        <h2 class="r" style="--d: 0.06s">The ontology has <em>its own chapter.</em></h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            The claim that Centraid has <b>no data silos</b> rests on one artifact: a single
-            person-owned data model where identity, time, money, content, activity, observation and
-            relationships are declared exactly once, and every app either extends or references them
-            — never re-declares them. It is rendered as a live, explorable document: the full
-            schema, the entity map, the ownership matrix, the gateway contract, and the ten rules
-            that keep it honest — and it's browsable inside the product too, on the
-            <b>Vault Atlas</b> screen (Kinds · Relations · Browse).
-          </p>
-          <p class="aside" style="--d: 0.2s">
-            Twelve ontology packs over six machinery bands · one spine · consent checked on every
-            read and write. <a href="../ontology/">Read the ontology →</a>
-          </p>
+      </a>
+      <a class="card r" href="../devices/" style="--d: 0.26s">
+        <p class="c-no">part 3</p>
+        <h3>Backup device</h3>
+        <p>
+          Pair the phone with a gateway you control using a fresh pairing code and compare the
+          safety number. Direct HTTPS carries sealed backup data. The gateway is a blind store,
+          not another Centraid client or a writer.
+        </p>
+        <div class="pill-row" style="margin-top: 14px">
+          <span class="pill">fresh pairing code</span><span class="pill">sealed backup</span>
+          <span class="pill">restore</span>
         </div>
-      </section>
+      </a>
+    </div>
+  </div>
+</section>
 
-      <!-- QUICK INDEX -->
-      <section class="sec wrap" id="index">
-        <p class="eyebrow r">Find a subsystem</p>
-        <h2 class="r" style="--d: 0.06s">Where things are documented</h2>
-        <div class="dt-scroll r" style="--d: 0.14s; margin-top: 20px">
-          <table class="dt">
-            <thead>
-              <tr>
-                <th>Subsystem</th>
-                <th>Chapter</th>
-                <th>What you'll find</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>vault files</td>
-                <td><a class="u" href="../data/#vault">Data § the vault</a></td>
-                <td>
-                  vault.db, blobs/, keys/ — what each file is and why keys live outside
-                  backups
-                </td>
-              </tr>
-              <tr>
-                <td>ontology</td>
-                <td><a class="u" href="../ontology/">Ontology</a></td>
-                <td>the full logical model, explorable — schemas, entity map, matrix, rules</td>
-              </tr>
-              <tr>
-                <td>vault atlas</td>
-                <td><a class="u" href="../ontology/">Ontology</a></td>
-                <td>the in-product Operations screen over the model — Kinds, Relations, Browse</td>
-              </tr>
-              <tr>
-                <td>consent &amp; outbox</td>
-                <td><a class="u" href="../data/#consent">Data § consent</a></td>
-                <td>
-                  install-time grants, confirm-gated commands, the outbox, standing grants, receipts
-                </td>
-              </tr>
-              <tr>
-                <td>sealed secrets</td>
-                <td><a class="u" href="../data/#sealed">Data § sealed columns</a></td>
-                <td>AES-GCM at rest, the reveal verb, key export and rotation</td>
-              </tr>
-              <tr>
-                <td>connections &amp; sync</td>
-                <td><a class="u" href="../data/#connections">Data § connections</a></td>
-                <td>the broker, sealed credentials, staging batches, the external-id map</td>
-              </tr>
-              <tr>
-                <td>automations</td>
-                <td><a class="u" href="../data/#automations">Data § automations</a></td>
-                <td>four trigger kinds, agent identity, durable transcripts</td>
-              </tr>
-              <tr>
-                <td>assistant</td>
-                <td><a class="u" href="../data/#assistant">Data § assistant</a></td>
-                <td>SQL-first reads, typed writes, the judgment loop</td>
-              </tr>
-              <tr>
-                <td>conversation ledger</td>
-                <td><a class="u" href="../data/#vault">Data § the vault</a></td>
-                <td>bounded history — idle conversations digest, archive to the blob store, prune behind a custody latch, rehydrate on reopen</td>
-              </tr>
-              <tr>
-                <td>blueprint apps</td>
-                <td><a class="u" href="../apps/#blueprints">Apps § blueprints</a></td>
-                <td>the seven shipped apps and what each proves</td>
-              </tr>
-              <tr>
-                <td>app anatomy</td>
-                <td><a class="u" href="../apps/#anatomy">Apps § anatomy</a></td>
-                <td>manifest, handlers, scopes, the ext band</td>
-              </tr>
-              <tr>
-                <td>installing</td>
-                <td><a class="u" href="../apps/#install">Apps § installing</a></td>
-                <td>the consent sheet, granted scopes, serve-in-place, uninstall keeps your data</td>
-              </tr>
-              <tr>
-                <td>gateway topology</td>
-                <td><a class="u" href="../devices/#topology">Devices § topology</a></td>
-                <td>the phone is the vault; gateways you control hold sealed copies</td>
-              </tr>
-              <tr>
-                <td>pairing</td>
-                <td><a class="u" href="../devices/#pairing">Devices § pairing</a></td>
-                <td>the pairing QR, the certificate pin, one-use secrets, the safety number</td>
-              </tr>
-              <tr>
-                <td>connectivity</td>
-                <td><a class="u" href="../devices/#iroh">Devices § connectivity</a></td>
-                <td>HTTPS pinned to the gateway's certificate, LAN first, no relay</td>
-              </tr>
-              <tr>
-                <td>harness runtimes</td>
-                <td><a class="u" href="../devices/#runtimes">Devices § runtimes</a></td>
-                <td>none in v0 — a gateway runs nothing but its blind store</td>
-              </tr>
-              <tr>
-                <td>the phone app</td>
-                <td><a class="u" href="../devices/#mobile">Devices § mobile</a></td>
-                <td>native SwiftUI and Compose over the Rust core, and the backup that runs while the app is closed</td>
-              </tr>
-              <tr>
-                <td>offsite backup</td>
-                <td><a class="u" href="../backups/">Backups</a></td>
-                <td>client-side encryption, the recovery kit, quarantined restores, the open provider protocol</td>
-              </tr>
-              <tr>
-                <td>recovery</td>
-                <td><a class="u" href="../backups/#restore">Backups § restore</a></td>
-                <td>the recover verb on a blank machine — lazy-by-default hydration, point-in-time restore, fencing the old machine</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+<section class="sec wrap" id="ontology">
+  <p class="eyebrow r">The shared record model</p>
+  <h2 class="r" style="--d: 0.06s">One set of <em>connected records.</em></h2>
+  <div class="prose r" style="--d: 0.12s">
+    <p>
+      The apps use one ontology: a shared description of the things the vault stores and how they
+      relate. A person can connect to an event, note, payment, or photo without copying that
+      record into another app. App screens and the assistant use typed reads and actions exposed by
+      the phone core; an action changes the vault only after the member chooses it.
+    </p>
+    <p>
+      Imported and followed records keep their source information. A record written directly in
+      Centraid has no imported-source row. Restore recovers records first; original files
+      acknowledged by a backup device can be fetched from it without the source phone. Originals
+      never backed up may need to be imported again from the OS library or may be unavailable if
+      that phone is lost. Records and file availability are reported separately.
+    </p>
+    <p class="aside">
+      Read the <a href="../data/#vault">phone vault</a>,
+      <a href="../apps/#apps">built-in apps</a>, or the
+      <a href="../ontology/">full ontology</a>.
+    </p>
+  </div>
+</section>
+
+<section class="sec wrap" id="index">
+  <p class="eyebrow r">Find a subsystem</p>
+  <h2 class="r" style="--d: 0.06s">Where to go next</h2>
+  <div class="dt-scroll r" style="--d: 0.14s; margin-top: 20px">
+    <table class="dt">
+      <thead><tr><th>Question</th><th>Read</th><th>What it covers</th></tr></thead>
+      <tbody>
+        <tr><td>Where does my data live?</td><td><a class="u" href="../data/#vault">Data · the vault</a></td><td>The phone's SQLite vault, shared records, history, search, and original files.</td></tr>
+        <tr><td>What can the apps do?</td><td><a class="u" href="../apps/#apps">Apps · the built-in apps</a></td><td>Calendar, Reminders, People, Notes, Docs, Photos, Money, Health, and Locker.</td></tr>
+        <tr><td>How does a backup work?</td><td><a class="u" href="../backups/#setup">Backups · setup</a></td><td>Pair the phone with a gateway using a fresh code and compare the safety number.</td></tr>
+        <tr><td>What can the gateway see?</td><td><a class="u" href="../devices/#topology">Devices · topology</a></td><td>The phone remains the vault and writer; the gateway stores sealed backup data.</td></tr>
+        <tr><td>How do I recover a phone?</td><td><a class="u" href="../backups/#recovery">Backups · recovery key</a></td><td>Keep the 24 words safe; use them to recover the vault on a new phone.</td></tr>
+        <tr><td>How does Locker protect secrets?</td><td><a class="u" href="../data/#records">Data · records and protection</a></td><td>Locker lists metadata separately from sealed values and requires an owner check to reveal a value.</td></tr>
+        <tr><td>What is the shared model?</td><td><a class="u" href="../ontology/">Ontology</a></td><td>Entity types, relations, and the rules that keep app data connected.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>

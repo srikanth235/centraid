@@ -9,10 +9,10 @@
          only when the visitor has actually chosen one, and the page never
          paints the wrong theme. Keep the storage key and the legacy migration
          in sync with docs.js. -->
-    <title>Centraid — one private home for your digital life</title>
+    <title>Centraid — your phone, your vault</title>
     <meta
       name="description"
-      content="Photos, documents, notes, plans, passwords, people and spending — kept together in one private collection on your own computer, with familiar apps on top. No account, no cloud, no subscription. Leaving is copying a folder."
+      content="Nine built-in phone apps share one personal vault. Your phone owns the live records; a backup device stores a sealed copy. No account or hosted vault."
     />
     <script>
       (() => {
@@ -599,13 +599,13 @@
         align-items: center;
         gap: var(--sp-2);
       }
-      /* 02's card is a manila folder: the tab is part of the sheet. */
-      .folder {
+      /* 02 card treatment */
+      .vault-card {
         border-start-start-radius: 0;
         margin-top: 21px;
       }
-      .folder::before {
-        content: "one folder";
+      .vault-card::before {
+        content: "phone vault";
         position: absolute;
         top: -22px;
         inset-inline-start: -1px;
@@ -1157,7 +1157,7 @@
     </style>
   </head>
   <body>
-    <!-- The eight app glyphs, once — the product's own icon paths
+    <!-- The app glyphs, once — the product's own icon paths
          (design/icons.toml), referenced by <use> below. -->
     <svg width="0" height="0" style="position: absolute" aria-hidden="true">
       <defs>
@@ -1210,8 +1210,7 @@
         <nav>
           <a href="#apps" class="hide-sm">the apps</a>
           <a href="#connects" class="hide-sm">why it's different</a>
-          <a href="#install" class="hide-sm">get it</a>
-          <a href="city/" class="city-link">city</a>
+          <a href="docs/start/" class="hide-sm">get started</a>
           <a
             href="https://github.com/srikanth235/centraid"
             target="_blank"
@@ -1245,14 +1244,15 @@
             All your stuff. One place. <em>Yours.</em>
           </h1>
           <p class="lede r" style="--d: 0.26s">
-            Your photos live with one company, your notes with another, your
-            passwords with a third. Centraid brings them home:
-            <b>one private collection on your own computer</b>, with familiar
-            apps on top — apps that finally work together, because everything
-            they hold is in one place.
+            Your records stay in a vault on your phone. Nine built-in apps work
+            with the same records, and a backup device keeps a sealed copy. Your
+            vault works offline; the backup updates when the devices can
+            connect.
           </p>
           <div class="cta-row r" style="--d: 0.38s">
-            <a href="#install" class="btn btn-primary">get started</a>
+            <a href="docs/start/" class="btn btn-primary"
+              >start on your phone</a
+            >
             <a href="#apps" class="btn btn-ghost">see the apps</a>
           </div>
           <p class="hero-notes r" style="--d: 0.48s">
@@ -1267,7 +1267,7 @@
             class="seal r"
             style="--d: 0.3s"
             role="img"
-            aria-label="An engraved seal in the line-work of a banknote: eight app marks set like stones around a medallion, the Centraid mark at its centre. The vault it stands for lives on your computer."
+            aria-label="The Centraid mark with a decorative ring representing its nine built-in phone apps."
           >
             <svg viewBox="0 0 500 500" fill="none" aria-hidden="true">
               <defs>
@@ -1699,8 +1699,7 @@
               </g>
             </svg>
             <figcaption class="house-caption">
-              Seven apps, set like stones around one seal — and the vault it
-              guards lives on your own computer.
+              Nine built-in apps, one vault held on your phone.
             </figcaption>
           </figure>
         </div>
@@ -1724,8 +1723,8 @@
           ></span>
           <h3>It lives with you</h3>
           <p>
-            Everything is stored on your own computer. Nothing is uploaded
-            anywhere unless you choose to share it.
+            Your phone holds the live vault. A backup device stores only a
+            sealed copy.
           </p>
         </div>
         <div class="value">
@@ -1749,8 +1748,8 @@
           ></span>
           <h3>It's all connected</h3>
           <p>
-            Your calendar knows your people. Your spending knows its receipts.
-            Star something once and every app sees it.
+            The apps use the same records. Link a reminder to a note or a
+            document to a person.
           </p>
         </div>
         <div class="value">
@@ -1771,8 +1770,8 @@
           ></span>
           <h3>You can always leave</h3>
           <p>
-            Your whole collection is an ordinary folder. Copy it and you have
-            everything. Delete an app and you lose nothing.
+            Export your records. Restore with your recovery key and a reachable
+            backup device.
           </p>
         </div>
       </div>
@@ -1782,7 +1781,7 @@
       <hr class="rule" />
       <div class="rule-label">
         <span>What ships in the box</span
-        ><span>seven apps · one collection</span>
+        ><span>nine built-in apps · one phone vault</span>
       </div>
     </div>
 
@@ -1794,9 +1793,8 @@
           <em>None of them keeps your stuff.</em>
         </h2>
         <p class="strip-note r" style="--d: 0.1s">
-          each one works like the app it replaces, so there's nothing new to
-          learn. The difference is underneath: they all share one collection,
-          and that collection is yours.
+          Open any of the nine apps from Home. They work with the same records
+          in your phone vault, with no catalogue or install step.
         </p>
       </div>
       <div class="app-grid">
@@ -1815,11 +1813,11 @@
             >
               <use href="#i-photos" /></svg
           ></span>
-          <p class="swap">in place of google photos</p>
+          <p class="swap">photos and albums</p>
           <h3>Photos</h3>
           <p>
-            Your camera roll, albums and memories. Faces and places are
-            recognized on your own computer — the photos never leave it.
+            Import photos, make albums, add places, and link a photo to a
+            person.
           </p>
         </div>
         <div
@@ -1837,11 +1835,11 @@
             >
               <use href="#i-docs" /></svg
           ></span>
-          <p class="swap">in place of google drive</p>
+          <p class="swap">files and documents</p>
           <h3>Docs</h3>
           <p>
-            The papers that matter — leases, IDs, bills, certificates — filed in
-            folders, previewed, versioned, never lost.
+            Keep files in folders, edit text documents, and review their version
+            history.
           </p>
         </div>
         <div
@@ -1859,7 +1857,7 @@
             >
               <use href="#i-notes" /></svg
           ></span>
-          <p class="swap">in place of apple notes</p>
+          <p class="swap">notes and notebooks</p>
           <h3>Notes</h3>
           <p>
             Notebooks, a journal, quick capture — and a note can link to any
@@ -1881,12 +1879,9 @@
             >
               <use href="#i-agenda" /></svg
           ></span>
-          <p class="swap">in place of google calendar</p>
-          <h3>Agenda</h3>
-          <p>
-            Events, plans and RSVPs. Birthdays and due tasks show up on the day
-            by themselves — no second calendar to keep.
-          </p>
+          <p class="swap">plans and dates</p>
+          <h3>Calendar</h3>
+          <p>See your events and due reminders together.</p>
         </div>
         <div
           class="app-card r"
@@ -1903,11 +1898,11 @@
             >
               <use href="#i-tasks" /></svg
           ></span>
-          <p class="swap">in place of todoist</p>
-          <h3>Tasks</h3>
+          <p class="swap">tasks and lists</p>
+          <h3>Reminders</h3>
           <p>
-            To-dos, projects and routines that forgive: miss a few days and it
-            says "next one is Friday", not a wall of shame.
+            Keep tasks and lists, and mark reminders done from their own
+            screens.
           </p>
         </div>
         <div
@@ -1925,11 +1920,11 @@
             >
               <use href="#i-people" /></svg
           ></span>
-          <p class="swap">in place of google contacts</p>
+          <p class="swap">people and relationships</p>
           <h3>People</h3>
           <p>
-            Everyone you know, in one place — birthdays, debts, gift ideas, and
-            when you last caught up.
+            Keep contact details and relationships, then link people to related
+            records.
           </p>
         </div>
         <div
@@ -1947,17 +1942,59 @@
             >
               <use href="#i-locker" /></svg
           ></span>
-          <p class="swap">in place of 1password</p>
+          <p class="swap">sensitive items</p>
           <h3>Locker</h3>
           <p>
-            Passwords, cards and Wi-Fi codes — locked at rest, revealed one at a
-            time, and every peek is written down.
+            Keep sensitive items behind the phone unlock check. Reveal a value
+            when you need it.
+          </p>
+        </div>
+        <div
+          class="app-card r"
+          style="--d: 0.33s; --app-mark-hue: var(--c-ochre)"
+        >
+          <span class="mark" aria-hidden="true"
+            ><svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path d="M3 6h18v12H3zM3 10h18M7 15h3" /></svg
+          ></span>
+          <p class="swap">imported statements</p>
+          <h3>Money</h3>
+          <p>
+            Import statement lines and review totals derived from those records.
+          </p>
+        </div>
+        <div
+          class="app-card r"
+          style="--d: 0.37s; --app-mark-hue: var(--c-rose)"
+        >
+          <span class="mark" aria-hidden="true"
+            ><svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path
+                d="M12 21s-8-4.5-8-11a4 4 0 0 1 8-1 4 4 0 0 1 8 1c0 6.5-8 11-8 11z"
+              />
+              <path d="M8 12h2l1-2 2 4 1-2h2" /></svg
+          ></span>
+          <p class="swap">phone health data</p>
+          <h3>Health</h3>
+          <p>
+            Read supported health-store data or add daily figures and workouts
+            by hand.
           </p>
         </div>
       </div>
       <p class="apps-foot r" style="--d: 0.2s">
-        Delete any of them whenever you like — your stuff stays. The apps are
-        windows onto your collection, not owners of it.
+        The apps ship together on the phone. Remove a record from its app with
+        the shared trash and restore it before it is purged.
       </p>
     </section>
 
@@ -1977,15 +2014,13 @@
           Apps that finally <em>know each other.</em>
         </h2>
         <p class="r" style="--d: 0.16s">
-          Behind the eight apps sits <b>one collection</b>. Your friend Meera is
-          one entry in it — and every app looks at that same entry. Her birthday
-          on your calendar, her face in your photos, what she owes you from the
-          trip: <b>one Meera</b>, never four copies drifting apart.
+          The nine apps work with the same records. A person can have contact
+          details and a birthday; a photo can be linked to that person. You can
+          also link a note, document or reminder to related records.
         </p>
         <p class="r" style="--d: 0.22s">
-          So the small things just work. Birthdays appear on your calendar by
-          themselves. A to-do scribbled in a note becomes a real task in one
-          tap. <b>Star something once and every app knows.</b>
+          Calendar can show reminders on their due days. Completing one there
+          uses the Reminders app's own action.
         </p>
       </div>
       <div class="artifact-col">
@@ -2006,25 +2041,25 @@
             <div class="consent-rows">
               <div class="consent-row">
                 <span class="scope" style="--app-mark-hue: var(--c-forest)"
-                  ><span class="dot-id"></span>Agenda</span
+                  ><span class="dot-id"></span>Calendar</span
                 >
-                <span class="verb">her birthday, Mar 14, on your calendar</span>
+                <span class="verb">a birthday saved on the person record</span>
               </div>
               <div class="consent-row">
                 <span class="scope" style="--app-mark-hue: var(--c-amber)"
                   ><span class="dot-id"></span>Photos</span
                 >
-                <span class="verb">214 photos — the face you confirmed</span>
+                <span class="verb">a photo you linked by hand</span>
               </div>
               <div class="consent-row">
                 <span class="scope" style="--app-mark-hue: var(--c-teal)"
                   ><span class="dot-id"></span>Docs</span
                 >
-                <span class="verb">Lease.pdf — shared with her</span>
+                <span class="verb">a document linked to the person</span>
               </div>
             </div>
             <div class="consent-fine">
-              one entry · four apps looking at it · zero copies to drift.
+              Related records stay linked in your phone vault.
             </div>
           </div>
         </div>
@@ -2037,24 +2072,23 @@
         <span class="ghost-no" aria-hidden="true">02</span>
         <p class="ch-no r"><span class="n">02</span> yours to keep</p>
         <h2 class="r" style="--d: 0.08s">
-          Your whole digital life <em>fits in a folder.</em>
+          Your live records stay <em>on your phone.</em>
         </h2>
         <p class="r" style="--d: 0.16s">
-          Everything Centraid keeps for you lives in
-          <b>one ordinary folder on your computer</b>. Not an account somewhere.
-          Not a mystery. A folder.
+          The phone holds the live vault and is its only writer. A backup device
+          keeps an encrypted, sealed copy; it cannot read your records.
         </p>
         <p class="r" style="--d: 0.22s">
-          That changes what you can do: <b>back it up</b> like any folder,
-          <b>move to a new computer</b> by copying it, and if you ever stop
-          using Centraid, <b>everything is still right there</b>. There's no
-          export button because you never handed anything over.
+          To restore, build the app on a replacement phone, fetch the sealed
+          backup from a reachable backup device, and use your 24-word recovery
+          key. Export files from individual apps when you need copies outside
+          Centraid.
         </p>
       </div>
       <div class="artifact-col">
-        <div class="artifact folder r" style="--d: 0.12s">
+        <div class="artifact vault-card r" style="--d: 0.12s">
           <div class="artifact-head">
-            <span>your vault</span><span class="tag">on your computer</span>
+            <span>your vault</span><span class="tag">on your phone</span>
           </div>
           <div class="artifact-body">
             <div class="t-msg" style="margin-bottom: 4px">
@@ -2062,46 +2096,32 @@
             </div>
             <div class="consent-rows">
               <div class="consent-row">
-                <span class="scope" style="--app-mark-hue: var(--c-amber)"
-                  ><span class="dot-id"></span>Photos &amp; videos</span
-                >
-                <span class="vault-count">12,408</span>
+                <span class="scope">Photos</span
+                ><span class="verb">imported or in phone library</span>
               </div>
               <div class="consent-row">
-                <span class="scope" style="--app-mark-hue: var(--c-teal)"
-                  ><span class="dot-id"></span>Documents</span
-                >
-                <span class="vault-count">1,231</span>
+                <span class="scope">Docs</span
+                ><span class="verb">files and text documents</span>
               </div>
               <div class="consent-row">
-                <span class="scope" style="--app-mark-hue: var(--c-slate)"
-                  ><span class="dot-id"></span>Notes</span
-                >
-                <span class="vault-count">842</span>
+                <span class="scope">Notes</span
+                ><span class="verb">writing and notebooks</span>
               </div>
               <div class="consent-row">
-                <span class="scope" style="--app-mark-hue: var(--c-forest)"
-                  ><span class="dot-id"></span>Events &amp; plans</span
-                >
-                <span class="vault-count">1,096</span>
+                <span class="scope">Calendar · Reminders</span
+                ><span class="verb">events and tasks</span>
               </div>
               <div class="consent-row">
-                <span class="scope" style="--app-mark-hue: var(--c-violet)"
-                  ><span class="dot-id"></span>People</span
-                >
-                <span class="vault-count">214</span>
+                <span class="scope">Money · Health</span
+                ><span class="verb">records you add or import</span>
               </div>
               <div class="consent-row">
-                <span class="scope" style="--app-mark-hue: var(--c-rose)"
-                  ><span class="dot-id"></span>Passwords</span
-                >
-                <span class="vault-count"
-                  >96 <span class="unit">· sealed</span></span
-                >
+                <span class="scope">People · Locker</span
+                ><span class="verb">contacts and protected items</span>
               </div>
             </div>
             <div class="consent-fine">
-              one folder — copy it, and you have everything.
+              The backup is sealed; only your phone opens the live vault.
             </div>
           </div>
         </div>
@@ -2117,14 +2137,12 @@
           Ask one place <em>about everything.</em>
         </h2>
         <p class="r" style="--d: 0.16s">
-          Because it's all together, you can finally ask questions
-          <b>no single app could answer</b> — the built-in assistant looks
-          across your photos, papers, plans and spending in one go, right on
-          your machine.
+          Ask about records in your vault using the built-in assistant. It can
+          look across the records available to the question.
         </p>
         <p class="r" style="--d: 0.22s">
-          It <b>asks before it changes anything</b>, and everything it does is
-          written down where you can read it back.
+          Every assistant write waits for you to review a confirm card and tap
+          to continue.
         </p>
       </div>
       <div class="artifact-col">
@@ -2135,21 +2153,14 @@
           <div class="artifact-body">
             <div class="t-line">
               <span class="t-who you">you</span>
-              <span class="t-msg"
-                >what did the car cost me this year — and do I have the
-                receipts?</span
-              >
+              <span class="t-msg">which statement lines have I imported?</span>
             </div>
             <div class="t-line">
               <span class="t-who agent">assistant</span>
               <span class="t-msg"
-                ><span class="tool-chip">looked across Docs · Agenda</span>
-                ₹86,400 across 14 payments — insurance, two services, fuel.
-                Eleven receipts are filed in Docs; December's service is
-                missing.
-                <span class="dim nl"
-                  >Want a task to chase that invoice?</span
-                ></span
+                ><span class="tool-chip">Money</span>
+                I can review the statement lines you imported.
+                <span class="dim nl">Create a reminder?</span></span
               >
             </div>
           </div>
@@ -2157,177 +2168,48 @@
       </div>
     </section>
 
-    <!-- 04 · SHARING -->
-    <section class="chapter flip wrap" id="sharing">
+    <!-- 04 · BACKUP AND RECOVERY -->
+    <section class="chapter flip wrap" id="backup">
       <div class="prose">
         <span class="ghost-no" aria-hidden="true">04</span>
-        <p class="ch-no r"><span class="n">04</span> your people</p>
+        <p class="ch-no r"><span class="n">04</span> backup and recovery</p>
         <h2 class="r" style="--d: 0.08s">
-          Share with your people, <em>not with a company.</em>
+          A sealed copy, <em>kept by you.</em>
         </h2>
         <p class="r" style="--d: 0.16s">
-          Share an album with your mom and it travels
-          <b>straight from your computer to hers</b>, encrypted the whole way.
-          No company in the middle, no account for her to create, no ads reading
-          your photos.
+          Pair a backup device with a fresh code from Backup on your phone, then
+          compare the safety number. Your phone seals the backup before sending
+          it; the gateway stores it without being able to read it.
         </p>
         <p class="r" style="--d: 0.22s">
-          New photos reach her on their own. Change your mind, and
-          <b>it leaves her device too</b>. You decide who sees what — and for
-          how long.
+          Keep your 24-word recovery key somewhere safe. Records restore first.
+          Originals acknowledged by backup can be fetched from a reachable
+          backup device without the old phone. Only originals never backed up
+          may need reimport from your source or be unavailable.
         </p>
       </div>
       <div class="artifact-col">
         <div class="artifact r" style="--d: 0.12s">
           <div class="artifact-head">
-            <span>photos · Goa 2025</span><span class="tag">album</span>
+            <span>backup</span><span class="tag">sealed on phone</span>
           </div>
-          <div class="pol-stack" aria-hidden="true">
-            <div class="pol">
-              <svg viewBox="0 0 100 100">
-                <g stroke-width="1">
-                  <circle cx="70" cy="24" r="9" />
-                  <path d="M82 24L86 24" />
-                  <path d="M80.4 30L83.9 32" />
-                  <path d="M76 34.4L78 37.9" />
-                  <path d="M70 36L70 40" />
-                  <path d="M64 34.4L62 37.9" />
-                  <path d="M59.6 30L56.1 32" />
-                  <path d="M58 24L54 24" />
-                  <path d="M59.6 18L56.1 16" />
-                  <path d="M64 13.6L62 10.1" />
-                  <path d="M70 12L70 8" />
-                  <path d="M76 13.6L78 10.1" />
-                  <path d="M80.4 18L83.9 16" />
-                </g>
-                <g stroke-width="0.9">
-                  <path
-                    d="M4 52.3L8 53.7L12 53.7L16 52.6L20 51.1L24 50.1L28 49.6L32 49.5L36 49.1L40 48.2L44 47.1L48 46.6L52 47.2L56 49L60 51.4L64 53.4L68 54.2L72 53.5L76 51.9L80 50.2L84 49.1L88 48.8L92 48.8L96 48.6"
-                  />
-                  <path
-                    d="M4 58.8L8 57.4L12 56L16 55.1L20 54.8L24 54.7L28 54.2L32 53.2L36 52.3L40 52.1L44 53.2L48 55.4L52 57.7L56 59.4L60 59.5L64 58.3L68 56.5L72 55L76 54.2L80 54L84 54.1L88 53.8L92 53.1L96 52.7"
-                  />
-                  <path
-                    d="M4 60.8L8 60.2L12 60L16 59.8L20 59.2L24 58.3L28 57.6L32 57.9L36 59.4L40 61.8L44 64L48 65L52 64.6L56 63L60 61.2L64 59.8L68 59.3L72 59.3L76 59.3L80 59L84 58.4L88 58.2L92 59L96 60.8"
-                  />
-                  <path
-                    d="M4 65.3L8 65L12 64.3L16 63.4L20 63.1L24 63.9L28 65.8L32 68.2L36 70L40 70.5L44 69.5L48 67.7L52 65.9L56 64.8L60 64.5L64 64.7L68 64.6L72 64.2L76 63.8L80 63.9L84 65.1L88 67.1L92 69.2L96 70.5"
-                  />
-                  <path
-                    d="M4 69.4L8 68.7L12 68.8L16 70L20 72.2L24 74.4L28 75.8L32 75.7L36 74.2L40 72.2L44 70.6L48 69.9L52 69.8L56 70L60 69.9L64 69.5L68 69.2L72 69.7L76 71.3L80 73.4L84 75.3L88 76L92 75.2L96 73.2"
-                  />
-                  <path
-                    d="M4 74.6L8 76.3L12 78.5L16 80.6L20 81.4L24 80.6L28 78.8L32 76.8L36 75.5L40 75L44 75.2L48 75.4L52 75.2L56 74.9L60 74.9L64 75.7L68 77.5L72 79.7L76 81.2L80 81.2L84 79.8L88 77.6L92 75.6L96 74.5"
-                  />
-                  <path
-                    d="M4 84.9L8 86.5L12 86.7L16 85.4L20 83.4L24 81.5L28 80.5L32 80.3L36 80.6L40 80.8L44 80.6L48 80.3L52 80.6L56 81.8L60 83.8L64 85.8L68 86.8L72 86.2L76 84.4L80 82.1L84 80.3L88 79.6L92 79.9L96 80.6"
-                  />
-                  <path
-                    d="M4 91.7L8 90L12 87.9L16 86.3L20 85.6L24 85.7L28 86.1L32 86.2L36 86L40 85.9L44 86.5L48 88L52 90.1L56 91.7L60 92.1L64 91L68 88.8L72 86.6L76 85.2L80 84.9L84 85.5L88 86.2L92 86.6L96 86.6"
-                  />
-                  <path
-                    d="M4 92.5L8 91.1L12 90.8L16 91.2L20 91.6L24 91.6L28 91.4L32 91.6L36 92.5L40 94.3L44 96.2L48 97.4L52 97.2L56 95.6L60 93.3L64 91.2L68 90.3L72 90.4L76 91.2L80 91.8L84 92.1L88 92.2L92 92.5L96 93.6"
-                  />
-                </g>
-              </svg>
-              <div class="pol-cap">the sea · day one</div>
-            </div>
-            <div class="pol">
-              <svg viewBox="0 0 100 100">
-                <g stroke-width="1.1">
-                  <path d="M32 66c8 6 28 6 36 0M32 66l4 8c9 5 19 5 28 0l4-8" />
-                  <path d="M50 64V22" />
-                  <path d="M50 26v36H30z" />
-                  <path d="M53 30v32h15z" />
-                  <path d="M50 22l8 3-8 3" />
-                </g>
-                <g stroke-width="0.9">
-                  <path
-                    d="M4 83.2L8 83.3L12 82L16 80L20 78.1L24 77.2L28 77.5L32 78.5L36 79.4L40 79.8L44 79.7L48 79.6L52 80L56 81.1L60 82.5L64 83.2L68 82.7L72 81L76 78.9L80 77.3L84 76.9L88 77.6L92 78.9L96 80"
-                  />
-                  <path
-                    d="M4 86.9L8 84.8L12 83.2L16 82.8L20 83.4L24 84.5L28 85.3L32 85.5L36 85.3L40 85.3L44 86L48 87.3L52 88.4L56 88.7L60 87.7L64 85.8L68 83.7L72 82.5L76 82.6L80 83.7L84 85L88 85.9L92 86.1L96 85.9"
-                  />
-                  <path
-                    d="M4 88.4L8 88.4L12 89.4L16 90.5L20 91.1L24 91.2L28 91L32 91.2L36 92.1L40 93.3L44 94.2L48 94L52 92.6L56 90.5L60 88.7L64 87.9L68 88.5L72 89.8L76 91.1L80 91.8L84 91.7L88 91.5L92 91.7L96 92.5"
-                  />
-                </g>
-                <g stroke-width="0.8">
-                  <path d="M14 30c2-3 6-3 8 0M24 22c2-3 6-3 8 0" />
-                </g>
-              </svg>
-              <div class="pol-cap">amma's boat</div>
-            </div>
-            <div class="pol">
-              <svg viewBox="0 0 100 100">
-                <g stroke-width="0.9">
-                  <path
-                    d="M4 65.9L8 65.7L12 65.5L16 65.1L20 64.5L24 63.6L28 62.6L32 61.4L36 60.2L40 59.1L44 58.4L48 58.1L52 58.2L56 58.7L60 59.4L64 60.2L68 60.7L72 61.1L76 61.2L80 61.2L84 61.3L88 61.6L92 62L96 62.7"
-                  />
-                  <path
-                    d="M4 70.1L8 69.9L12 69.4L16 68.7L20 67.7L24 66.4L28 64.9L32 63.2L36 61.6L40 60.3L44 59.5L48 59.4L52 59.9L56 60.8L60 61.8L64 62.7L68 63.3L72 63.6L76 63.7L80 63.8L84 64L88 64.5L92 65.3L96 66.3"
-                  />
-                  <path
-                    d="M4 74.3L8 73.8L12 73.1L16 72.1L20 70.6L24 68.7L28 66.6L32 64.5L36 62.6L40 61.3L44 60.7L48 61L52 61.9L56 63.1L60 64.4L64 65.4L68 66L72 66.2L76 66.3L80 66.5L84 66.9L88 67.7L92 68.9L96 70.2"
-                  />
-                  <path
-                    d="M4 78.3L8 77.6L12 76.6L16 75L20 73L24 70.5L28 67.9L32 65.4L36 63.4L40 62.3L44 62.1L48 62.8L52 64.2L56 65.8L60 67.2L64 68.2L68 68.7L72 68.8L76 68.9L80 69.2L84 70L88 71.2L92 72.8L96 74.4"
-                  />
-                  <path
-                    d="M4 82.2L8 81.2L12 79.7L16 77.5L20 74.9L24 71.8L28 68.8L32 66.1L36 64.2L40 63.4L44 63.7L48 65L52 66.8L56 68.7L60 70.1L64 71L68 71.3L72 71.4L76 71.6L80 72.2L84 73.4L88 75.1L92 76.9L96 78.8"
-                  />
-                  <path
-                    d="M4 85.9L8 84.4L12 82.3L16 79.5L20 76.2L24 72.7L28 69.3L32 66.6L36 65L40 64.7L44 65.7L48 67.6L52 69.8L56 71.7L60 73L64 73.7L68 73.9L72 74L76 74.5L80 75.5L84 77.2L88 79.2L92 81.4L96 83.4"
-                  />
-                  <path
-                    d="M4 89.3L8 87.3L12 84.5L16 81L20 77.1L24 73.1L28 69.5L32 67.1L36 66L40 66.5L44 68.1L48 70.5L52 72.9L56 74.8L60 75.9L64 76.4L68 76.5L72 76.8L76 77.6L80 79.1L84 81.3L88 83.7L92 86.1L96 88.2"
-                  />
-                </g>
-                <rect
-                  x="22"
-                  y="24"
-                  width="28"
-                  height="20"
-                  style="fill: var(--bg-sunken)"
-                  stroke="none"
-                />
-                <g stroke-width="1.1">
-                  <path d="M26 44V30M46 44V30" />
-                  <path d="M26 30h4v-4h4v4h4v-4h4v4h4" />
-                  <path d="M36 26V14l9 3.5-9 3.5" />
-                </g>
-                <g stroke-width="0.8">
-                  <path d="M62 26c2-3 6-3 8 0M72 20c2-3 6-3 8 0" />
-                </g>
-              </svg>
-              <div class="pol-cap">the fort</div>
-            </div>
-          </div>
-          <div class="artifact-body" style="padding-top: 0">
-            <div class="t-msg" style="margin-bottom: 4px">
-              who can see this album:
-            </div>
+          <div class="artifact-body">
             <div class="consent-rows">
               <div class="consent-row">
-                <span class="scope">Amma</span>
-                <span class="verb">can view · delivered</span>
+                <span class="scope">Phone</span
+                ><span class="verb">writes the vault</span>
               </div>
               <div class="consent-row">
-                <span class="scope">Ravi</span>
-                <span class="verb">can view · delivered</span>
+                <span class="scope">Backup device</span
+                ><span class="verb">stores sealed copy</span>
               </div>
               <div class="consent-row">
-                <span class="scope">trip circle · 4 people</span>
-                <span class="verb">everyone adds photos</span>
+                <span class="scope">Recovery key</span
+                ><span class="verb">24 words · keep privately</span>
               </div>
-            </div>
-            <div class="consent-actions" aria-hidden="true">
-              <span class="consent-btn">share…</span>
-              <span class="consent-btn ghost">revoke…</span>
             </div>
             <div class="consent-fine">
-              straight from your device to theirs — and back out again if you
-              say so.
+              The backup device cannot open the sealed records.
             </div>
           </div>
         </div>
@@ -2337,155 +2219,58 @@
     <div class="wrap">
       <hr class="rule" />
       <div class="rule-label">
-        <span>Where it runs</span><span>your machines · nowhere else</span>
+        <span>Where it runs</span><span>phone vault · blind backup</span>
       </div>
     </div>
 
     <!-- WHERE IT RUNS -->
     <section class="strip wrap" id="homes">
       <div class="strip-head">
-        <h2 class="r">It runs where <em>your life runs.</em></h2>
+        <h2 class="r">One phone vault. <em>A backup you control.</em></h2>
         <p class="strip-note r" style="--d: 0.1s">
-          your computer holds the collection; every other device connects
-          straight to it, encrypted. Your phone keeps working offline — changes
-          catch up when you're back.
+          The phone runs Centraid and owns the live data. Another device can run
+          centraid-gateway as blind storage for the phone's sealed backup.
         </p>
       </div>
       <div class="homes r" style="--d: 0.15s">
         <div class="home">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <rect x="3" y="5" width="18" height="12" rx="2" />
-            <path d="M8 21h8M12 17v4" />
-          </svg>
-          <h3>Your computer</h3>
-          <p>
-            The everyday home. Open Centraid like any other app on your Mac,
-            Windows or Linux machine.
-          </p>
-        </div>
-        <div class="home">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <rect x="4" y="4" width="16" height="7" rx="2" />
-            <rect x="4" y="13" width="16" height="7" rx="2" />
-            <path d="M8 7.5h.01M8 16.5h.01" />
-          </svg>
-          <h3>A box at home</h3>
-          <p>
-            Optional: a spare computer that stays on, so your apps and
-            automations keep working while the laptop is closed.
-          </p>
-        </div>
-        <div class="home">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <rect x="7" y="2.5" width="10" height="19" rx="2.5" />
-            <path d="M11 18.5h2" />
-          </svg>
           <h3>Your phone</h3>
           <p>
-            The same apps in your pocket. Pairing is scanning one code — and
-            even offline, your stuff is there.
+            Open the nine built-in apps. The vault works offline, and this phone
+            is its only writer.
+          </p>
+        </div>
+        <div class="home">
+          <h3>Backup device</h3>
+          <p>
+            Pair it with a fresh code and compare the safety number. It stores
+            the sealed backup.
+          </p>
+        </div>
+        <div class="home">
+          <h3>Recovery key</h3>
+          <p>
+            Keep the 24 words privately. Restore with a reachable backup device.
           </p>
         </div>
       </div>
     </section>
 
-    <!-- INSTALL -->
+    <!-- PHONE QUICK START -->
     <section class="install wrap" id="install">
       <p class="ch-no r"><span class="n">→</span> get started</p>
-      <h2 class="r" style="--d: 0.08s">
-        Ten minutes to <em>your own vault.</em>
-      </h2>
+      <h2 class="r" style="--d: 0.08s">Start with <em>your phone.</em></h2>
       <div class="install-grid">
-        <div class="term r" style="--d: 0.14s">
-          <div class="term-bar" role="tablist">
-            <button class="tab on" data-cmd="desktop" role="tab">
-              desktop
-            </button>
-            <button class="tab" data-cmd="server" role="tab">always-on</button>
-          </div>
-          <div class="term-body">
-            <div class="cmd on" id="cmd-desktop">
-              <div class="cm">
-                # macOS · Linux · Windows — needs Bun ≥ 1.3 and Node ≥ 24
-              </div>
-              <div class="ln">
-                <span class="p">$</span>
-                <code>git clone https://github.com/srikanth235/centraid</code>
-              </div>
-              <div class="ln">
-                <span class="p">$</span> <code>cd centraid && bun install</code>
-              </div>
-              <div class="ln">
-                <span class="p">$</span> <code>bun run dev:desktop</code>
-              </div>
-            </div>
-            <div class="cmd" id="cmd-server">
-              <div class="cm">
-                # a spare machine or home server — devices pair to this
-              </div>
-              <div class="ln">
-                <span class="p">$</span> <code>bun run build</code>
-              </div>
-              <div class="ln">
-                <span class="p">$</span>
-                <code>centraid-gateway serve --data-dir ~/centraid-data</code>
-              </div>
-              <div class="ln">
-                <span class="p">$</span>
-                <code
-                  >centraid-gateway pair --data-dir ~/centraid-data --vault
-                  Local</code
-                >
-              </div>
-            </div>
-            <button class="copy" id="copy" aria-label="Copy command">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-              >
-                <rect x="9" y="9" width="11" height="11" rx="2" />
-                <path d="M5 15V5a2 2 0 0 1 2-2h10" />
-              </svg>
-            </button>
-          </div>
-        </div>
-        <div class="install-notes r" style="--d: 0.2s">
+        <div class="install-notes r" style="--d: 0.14s">
           <p>
-            Centraid is in beta, and today it starts from the source code —
-            you'll want to be comfortable pasting a few commands into a
-            terminal. That's the whole install: there is no account to create.
+            Centraid is in beta and starts from its source code. The start guide
+            walks through building the phone app, opening your vault, and using
+            the apps already on Home.
           </p>
           <p>
-            First launch asks your name and creates your vault. From there,
-            install apps, pair your phone with a QR code, and ask your first
-            question. <a class="u" href="docs/start/">The start guide</a>
-            walks the whole first day.
+            When you are ready, pair a backup device from Backup with a fresh
+            one-use code and compare its safety number.
+            <a class="u" href="docs/start/">Read the phone start guide</a>.
           </p>
         </div>
       </div>
@@ -2594,8 +2379,8 @@
           </svg>
         </div>
         <p class="foot-manifesto r">
-          Apps come and go. Your photos, your notes, your people are forever.
-          <em>Keep them somewhere you own.</em>
+          Your phone holds the live vault. A backup device keeps a sealed copy.
+          <em>Your records stay in your hands.</em>
         </p>
         <div class="foot-row">
           <span>© 2026 Centraid — your data · your apps · your devices</span>
@@ -2661,44 +2446,6 @@
         { threshold: 0.12, rootMargin: "0px 0px -40px 0px" }
       );
       document.querySelectorAll(".r").forEach((el) => io.observe(el));
-
-      // install tabs
-      const commands = {
-        desktop:
-          "git clone https://github.com/srikanth235/centraid && cd centraid && bun install && bun run dev:desktop",
-        server:
-          "bun run build && centraid-gateway serve --data-dir ~/centraid-data",
-      };
-      let active = "desktop";
-      document.querySelectorAll(".tab").forEach((t) =>
-        t.addEventListener("click", () => {
-          document
-            .querySelectorAll(".tab")
-            .forEach((x) => x.classList.remove("on"));
-          document
-            .querySelectorAll(".cmd")
-            .forEach((x) => x.classList.remove("on"));
-          t.classList.add("on");
-          active = t.dataset.cmd;
-          document.getElementById("cmd-" + active).classList.add("on");
-        })
-      );
-
-      // copy
-      const copy = document.getElementById("copy");
-      const copyIcon = copy.innerHTML;
-      copy.addEventListener("click", async () => {
-        try {
-          await navigator.clipboard.writeText(commands[active]);
-        } catch (e) {}
-        copy.classList.add("done");
-        copy.innerHTML =
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 13l4 4L19 7"/></svg>';
-        setTimeout(() => {
-          copy.classList.remove("done");
-          copy.innerHTML = copyIcon;
-        }, 1600);
-      });
     </script>
   </body>
 </html>

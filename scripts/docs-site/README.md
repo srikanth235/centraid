@@ -4,7 +4,7 @@ Static site for `centraid.dev/docs/`. The docs are Astro-built static HTML with 
 
 ```
 scripts/docs-site/
-├── src/pages/      # Astro routes: /, /start/, /data/, /apps/, /devices/, /ontology/
+├── src/pages/      # Astro routes: /, /start/, /understand/, /data/, /apps/, /devices/, /backups/, /privacy/, /terms/, /ontology/
 ├── src/content/    # hand-authored HTML body fragments
 ├── src/components/ # shared header, footer, section rail
 ├── src/layouts/    # shared SEO/head/body shell
@@ -25,20 +25,18 @@ The ontology route keeps its bespoke CSS/JS inside `src/content` because it is a
 
 ```sh
 bun run docs:build   # Astro build → dist/docs-site
-bun run docs:smoke   # docs checks; also checks dist/site when it exists
+bun run docs:smoke   # docs checks; also checks the assembled dist/site when present
 bun run docs:serve   # http.server on 127.0.0.1:4173
 ```
 
 ## Deploy
 
-Deployment lives in **Cloudflare's Git integration** (Workers Builds), not in GitHub Actions. Connect the repo in the Cloudflare dashboard with:
+The repository config in [`wrangler.json`](../../wrangler.json) deploys the assembled static tree as Cloudflare Workers assets. Cloudflare Git integration can run the configured build and deploy commands:
 
-- **Build command:** `bun run docs:bundle` — builds with `DOCS_SITE_BASE_PATH=/docs`, builds the `@centraid/city` package for `/city/`, assembles one tree (home at root, docs under `/docs/`, City under `/city/`), and writes a root `_headers` into `./dist/site`.
+- **Build command:** `bun run docs:bundle` — builds docs with `DOCS_SITE_BASE_PATH=/docs`, assembles the home page at the root and docs under `/docs/`, and writes the root `_headers` into `./dist/site`.
 - **Deploy command:** `wrangler deploy` — reads the repo-root `wrangler.json` (assets-only: `assets.directory = ./dist/site`, no Worker script).
 
-`centraid.dev/` serves the home; `centraid.dev/docs/` the docs. The custom domain is bound to the Worker in the Cloudflare dashboard (or via a `routes` entry in `wrangler.json`). No GitHub secrets are needed — Cloudflare holds the credentials.
-
-`.github/workflows/docs.yml` is a **CI gate only**: it runs `docs:bundle` + `docs:smoke` on PRs and pushes so a broken tree never merges, and never deploys.
+The repository has no docs-specific GitHub Actions workflow. The workflows under [`.github/workflows`](../../.github/workflows/) do not currently run `docs:bundle` or `docs:smoke`; run the checks locally when changing the sites. Cloudflare holds deployment credentials.
 
 Workers static assets honors `_headers` natively (GitHub Pages did not), so the authoritative rules are authored at the assets root by `docs:bundle`. `docs.css`, `docs.js` and `centraid-tokens.css` ship with a `?v=<contenthash>` so they can be cached hard without going stale. The `.woff2` files under `assets/fonts/` are named by their upstream version and referenced only from the token sheet, so the `/docs/assets/*` rule covers them too.
 
@@ -49,4 +47,4 @@ Workers static assets honors `_headers` natively (GitHub Pages did not), so the 
 - Searchable pages opt in through `DocsLayout`'s `data-pagefind-body` marker. Keep `searchLabel` short (`Start`, `Data`, `Apps`, …) so results scan well.
 - New shared shell belongs in Astro components/layouts; visual primitives belong in `public/assets/docs.css`; browser behavior belongs in `public/assets/docs.js`. Never edit `public/assets/centraid-tokens.css`, `public/assets/centraid-mark.svg` or `public/assets/fonts/` — they are generated, and the gate's `design` step will say so.
 - A new rule names a token. If the value you want is not in the token sheet, the answer is a change to `design/tokens.toml`, not a literal here — that is exactly how the two sites grew a serif face and a teal accent the product had already retired.
-- `docs:smoke` fails on broken internal links, homepage links to the old docs subdomain or `.html` filenames, missing SEO/search metadata, and any resurrected "Duaility" branding.
+- `docs:smoke` checks required docs routes and assets, internal links and fragments in the docs and assembled site, homepage links to the old docs subdomain or `.html` filenames, missing SEO/search metadata, and any resurrected "Duaility" branding. It validates `dist/site` when a bundle is present; run `bun run docs:bundle` before smoke to check the deployable tree. The focused assembled-link resolver test runs in the Vitest lane as part of `bun run scripts:test`.

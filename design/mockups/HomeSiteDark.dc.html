@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <title>Centraid home · phone vault (dark)</title>
+    <link rel="stylesheet" href="../../scripts/home-site/public/assets/centraid-tokens.css" />
+    <style>
+      * { box-sizing: border-box }
+      html, body { margin: 0 }
+      body { font: var(--t-reading); background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased }
+      .site { width: 1440px; min-height: 5600px; overflow: hidden }
+      .wrap { max-width: 1120px; margin: 0 auto; padding: 0 44px }
+      .head { height: 72px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; padding: 0 64px }
+      .brand { display: flex; align-items: center; gap: 10px; color: var(--text); font: var(--t-title); text-decoration: none }
+      .brand img { width: 30px; height: 30px }
+      .nav { display: flex; align-items: center; gap: 28px; font: var(--t-control) }
+      .nav a { color: var(--text-soft); text-decoration: none }
+      .hero { display: grid; grid-template-columns: 1.1fr .9fr; gap: 64px; align-items: center; padding-top: 110px; padding-bottom: 96px }
+      .eyebrow { font: var(--t-eyebrow); letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint) }
+      h1 { font: 600 var(--t-hero-size)/1.06 var(--font-sans); letter-spacing: var(--t-display-tracking); max-width: 10ch; margin: 20px 0 0 }
+      .lede { font: var(--t-reading); color: var(--text-soft); max-width: 40ch; margin: 26px 0 }
+      .ctas { display: flex; gap: 12px; margin-top: 28px }
+      .button { display: inline-flex; align-items: center; min-height: 48px; padding: 0 18px; border-radius: var(--r-md); text-decoration: none; font: var(--t-control) }
+      .primary { background: var(--accent-fill); color: var(--on-accent) !important }
+      .secondary { background: var(--bg-elev); border: 1px solid var(--line-strong); color: var(--text) }
+      .seal { height: 400px; border: 1px solid var(--line-strong); border-radius: 50%; margin: auto; aspect-ratio: 1; position: relative; display: grid; place-items: center; background: var(--bg-elev) }
+      .seal:before, .seal:after { content: ""; position: absolute; border: 1px solid var(--line); border-radius: 50%; inset: 20px }
+      .seal:after { inset: 48px }
+      .seal img { width: 64px; height: 64px; z-index: 1 }
+      .app-dot { position: absolute; font: var(--t-body-strong); color: var(--text-soft); background: var(--bg); padding: 8px 11px; border: 1px solid var(--line); border-radius: var(--r-pill) }
+      .d1 { top: 12px; left: 50%; transform: translateX(-50%) }.d2 { top: 16%; right: 0 }.d3 { top: 40%; right: -22px }.d4 { bottom: 16%; right: 0 }.d5 { bottom: 12px; left: 50%; transform: translateX(-50%) }.d6 { bottom: 16%; left: 0 }.d7 { top: 40%; left: -22px }.d8 { top: 16%; left: 0 }.d9 { top: 0; right: 22% }
+      .promise { display: grid; grid-template-columns: repeat(3,1fr); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--bg-elev); margin-bottom: 100px }
+      .promise > div { padding: 28px; border-right: 1px solid var(--line) }.promise > div:last-child { border: 0 }
+      .promise h3 { font: var(--t-title); margin: 0 0 8px }.promise p { font: var(--t-body); color: var(--text-soft); margin: 0 }
+      .section { padding: 88px 0; border-top: 1px solid var(--line) }
+      .section-head { max-width: 760px; margin-bottom: 36px }
+      .section-head h2 { font: 600 var(--t-chapter-size)/1.1 var(--font-sans); letter-spacing: var(--t-display-tracking); margin: 12px 0 }
+      .section-head p { color: var(--text-soft); font: var(--t-reading) }
+      .apps { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px }
+      .app { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--bg-elev); padding: 22px; min-height: 150px }
+      .app b { display: block; font: var(--t-title); margin-bottom: 8px }.app p { font: var(--t-body); color: var(--text-soft); margin: 0 }
+      .feature { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: center; margin: 64px 0 }
+      .feature h3 { font: var(--t-title); margin: 0 0 16px }.feature p { color: var(--text-soft); max-width: 52ch }
+      .diagram { padding: 28px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--bg-elev) }
+      .row { display: flex; justify-content: space-between; gap: 20px; padding: 16px 8px; border-bottom: 1px solid var(--line); font: var(--t-body) }
+      .row:last-child { border: 0 }.row span:last-child { color: var(--text-faint) }
+      .install { padding: 76px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line) }
+      .install h2 { font: 600 var(--t-chapter-size)/1.1 var(--font-sans); letter-spacing: var(--t-display-tracking); max-width: 16ch; margin: 12px 0 18px }
+      .install p { color: var(--text-soft); max-width: 65ch }.install a { color: var(--link); text-decoration: underline; text-underline-offset: 3px }
+      .footer { padding: 52px 0; color: var(--text-faint); font: var(--t-body); display: flex; justify-content: space-between }.footer nav { display: flex; gap: 18px }.footer a { color: var(--text-soft) }
+    </style>
+  </head>
+  <body>
+    <x-dc>
+      <div class="site">
+        <header class="head">
+          <a class="brand" href="/"><img src="../../scripts/home-site/public/assets/centraid-mark.svg" alt="" />Centraid</a>
+          <nav class="nav" aria-label="Main">
+            <a href="#apps">the apps</a><a href="#connects">why it's different</a><a href="docs/start/">get started</a><a href="https://github.com/srikanth235/centraid">github</a><a href="docs/">docs →</a>
+          </nav>
+        </header>
+        <main>
+          <section class="hero wrap">
+            <div>
+              <p class="eyebrow">Centraid · one home for your digital life</p>
+              <h1>All your stuff. One place. <em>Yours.</em></h1>
+              <p class="lede">Your records stay in a vault on your phone. Nine built-in apps work with the same records, and a backup device keeps a sealed copy. Your vault works offline; the backup updates when the devices can connect.</p>
+              <div class="ctas"><a class="button primary" href="docs/start/">start on your phone</a><a class="button secondary" href="#apps">see the apps</a></div>
+            </div>
+            <div class="seal" role="img" aria-label="Nine built-in phone apps around the Centraid mark">
+              <img src="../../scripts/home-site/public/assets/centraid-mark.svg" alt="" />
+              <span class="app-dot d1">Calendar</span><span class="app-dot d2">Reminders</span><span class="app-dot d3">People</span><span class="app-dot d4">Notes</span><span class="app-dot d5">Docs</span><span class="app-dot d6">Photos</span><span class="app-dot d7">Money</span><span class="app-dot d8">Health</span><span class="app-dot d9">Locker</span>
+            </div>
+          </section>
+          <section class="wrap promise" aria-label="Centraid promises">
+            <div><h3>It lives with you</h3><p>Your phone holds the live vault. A backup device stores only a sealed copy.</p></div>
+            <div><h3>It's all connected</h3><p>The apps use the same records. Link a reminder to a note or a document to a person.</p></div>
+            <div><h3>You can always leave</h3><p>Export your records. Restore with your recovery key and a reachable backup device.</p></div>
+          </section>
+          <section class="section wrap" id="apps">
+            <div class="section-head"><p class="eyebrow">What ships in the box · nine apps · one phone vault</p><h2>Apps you already know how to use. <em>None of them keeps your stuff.</em></h2><p>Open any of the nine apps from Home. They work with the same records in your phone vault, with no catalogue or install step.</p></div>
+            <div class="apps">
+              <article class="app"><b>Photos</b><p>Import photos, make albums, add places, and link a photo to a person.</p></article>
+              <article class="app"><b>Docs</b><p>Keep files in folders, edit text documents, and review their version history.</p></article>
+              <article class="app"><b>Notes</b><p>Write notes and link them to people, plans or files.</p></article>
+              <article class="app"><b>Calendar</b><p>See events and due reminders together.</p></article>
+              <article class="app"><b>Reminders</b><p>Keep tasks and lists, and mark reminders done from their own screens.</p></article>
+              <article class="app"><b>People</b><p>Keep contact details and relationships, then link people to related records.</p></article>
+              <article class="app"><b>Locker</b><p>Keep sensitive items behind the phone unlock check. Reveal a value when needed.</p></article>
+              <article class="app"><b>Money</b><p>Import statement lines and review totals derived from those records.</p></article>
+              <article class="app"><b>Health</b><p>Read supported health-store data or add daily figures and workouts by hand.</p></article>
+            </div>
+          </section>
+          <section class="section wrap" id="connects">
+            <div class="feature">
+              <div><p class="eyebrow">01 · everything connects</p><h3>Apps that finally <em>know each other.</em></h3><p>The nine apps work with the same records. A person can have contact details and a birthday; a photo can be linked to that person. You can also link a note, document or reminder to related records. Calendar can show reminders on their due days; completing one there uses Reminders' own action.</p></div>
+              <div class="diagram"><div class="row"><span>People</span><span>birthday on record</span></div><div class="row"><span>Photos</span><span>photo linked by hand</span></div><div class="row"><span>Docs</span><span>document linked to person</span></div></div>
+            </div>
+          </section>
+          <section class="section wrap" id="yours">
+            <div class="feature">
+              <div class="diagram"><div class="row"><span>Records</span><span>restore first</span></div><div class="row"><span>Originals</span><span>fetch from reachable backup</span></div><div class="row"><span>Never backed up</span><span>reimport or unavailable</span></div></div>
+              <div><p class="eyebrow">02 · yours to keep</p><h3>Your live records stay <em>on your phone.</em></h3><p>The phone holds the live vault and is its only writer. A backup device keeps an encrypted, sealed copy; it cannot read your records. Keep your 24-word recovery key somewhere safe. Records restore first. Originals acknowledged by backup can be fetched from a reachable backup device without the old phone. Only originals never backed up may need reimport from your source or be unavailable. Export files from individual apps when you need copies outside Centraid.</p></div>
+            </div>
+          </section>
+          <section class="section wrap" id="assistant">
+            <div class="feature">
+              <div><p class="eyebrow">03 · ask about everything</p><h3>Ask one place <em>about everything.</em></h3><p>Ask about records in your vault using the built-in assistant. It can look across the records available to the question. Every assistant write waits for you to review a confirm card and tap to continue.</p></div>
+              <div class="diagram"><div class="row"><span>You</span><span>Ask about records</span></div><div class="row"><span>Assistant</span><span>Prepares a change</span></div><div class="row"><span>You</span><span>Review confirm card and tap</span></div></div>
+            </div>
+          </section>
+          <section class="section wrap" id="backup">
+            <div class="feature">
+              <div class="diagram"><div class="row"><span>Phone</span><span>seals backup</span></div><div class="row"><span>Gateway</span><span>stores sealed copy</span></div><div class="row"><span>Recovery key</span><span>24 words · keep privately</span></div></div>
+              <div><p class="eyebrow">04 · backup and recovery</p><h3>A sealed copy, <em>kept by you.</em></h3><p>Pair a backup device with a fresh code from Backup on your phone, then compare the safety number. Your phone seals the backup before sending it; the gateway stores it without being able to read it. Keep your 24-word recovery key somewhere safe.</p><p><a href="docs/backups/#setup">Set up a backup device →</a></p></div>
+            </div>
+          </section>
+          <section class="section wrap" id="homes">
+            <div class="section-head"><p class="eyebrow">Where it runs</p><h2>One phone vault. <em>A backup you control.</em></h2><p>The phone runs Centraid and owns the live data. Another device can run centraid-gateway as blind storage for the phone's sealed backup.</p></div>
+            <div class="apps"><article class="app"><b>Your phone</b><p>Open the nine built-in apps. The vault works offline, and this phone is its only writer.</p></article><article class="app"><b>Backup device</b><p>Pair it with a fresh code and compare the safety number. It stores the sealed backup.</p></article><article class="app"><b>Recovery key</b><p>Keep the 24 words privately. Restore with a reachable backup device.</p></article></div>
+          </section>
+          <section class="wrap install" id="install">
+            <p class="eyebrow">→ get started</p><h2>Start with <em>your phone.</em></h2>
+            <p>Centraid is in beta and starts from its source code. The start guide walks through building the phone app, opening your vault, and using the apps already on Home.</p>
+            <p>When you are ready, pair a backup device from Backup with a fresh one-use code and compare its safety number. <a href="docs/start/">Read the phone start guide</a>.</p>
+          </section>
+        </main>
+        <footer class="wrap footer"><span>© 2026 Centraid — your data · your apps · your devices</span><nav><a href="docs/">docs</a><a href="docs/start/">start</a><a href="docs/ontology/">ontology</a><a href="docs/privacy/">privacy</a><a href="docs/terms/">terms</a></nav></footer>
+      </div>
+    </x-dc>
+    <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":5600}}'>class Component extends DCLogic { renderVals(){return{};} }</script>
+  </body>
+</html>

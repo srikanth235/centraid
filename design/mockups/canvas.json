@@ -721,6 +721,14 @@
       "x": 5140,
       "y": 27200
     },
+    "DocsIndex.dc.html": {
+      "h": 1100,
+      "page": "light",
+      "title": "Docs home · two reading paths",
+      "w": 1440,
+      "x": 9950,
+      "y": 0
+    },
     "DocsStopFolder.dc.html": {
       "h": 844,
       "page": "light",
@@ -3264,6 +3272,14 @@
       "w": 390,
       "x": 2350,
       "y": 68680
+    },
+    "HomeSite.dc.html": {
+      "h": 5600,
+      "page": "light",
+      "title": "Centraid home · phone vault",
+      "w": 1440,
+      "x": 8450,
+      "y": 0
     },
     "MorePhotos.dc.html": {
       "h": 844,

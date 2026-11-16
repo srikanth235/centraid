@@ -14,6 +14,8 @@
 import { access, readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
+import { checkAssembledReference } from "./assembled-links.mjs";
+
 const { join, posix } = path;
 
 const repoRoot = join(import.meta.dirname, "..", "..");
@@ -71,6 +73,10 @@ async function siteExists(rel) {
   }
 }
 
+const docsBasePath =
+  process.env.DOCS_SITE_BASE_PATH ||
+  ((await siteExists("docs/index.html")) ? "/docs" : "");
+
 async function walk(dir, prefix = "") {
   const entries = await readdir(dir);
   return (
@@ -90,7 +96,7 @@ async function resolves(clean, fromPage) {
 
   let candidate = clean;
   if (candidate.startsWith("/")) {
-    const basePath = process.env.DOCS_SITE_BASE_PATH || "";
+    const basePath = docsBasePath;
     candidate = candidate.replace(
       new RegExp(`^${basePath.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}/?`, "u"),
       ""
@@ -236,21 +242,23 @@ if (
 
 const siteHomeIndex = "index.html";
 if (await siteExists(siteHomeIndex)) {
-  const siteHomeHtml = await readFile(join(siteDir, siteHomeIndex), "utf8");
-  if (!/<a\b[^>]*href="city\/"[^>]*>city<\/a>/u.test(siteHomeHtml)) {
-    fail("assembled site: homepage is missing the city navigation tab");
-  }
-  if (await siteExists("city/index.html")) {
-    const cityHtml = await readFile(
-      join(siteDir, "city", "index.html"),
-      "utf8"
-    );
-    if (!/<script\b[^>]*src="\/city\/assets\/[^" ]+\.js"/u.test(cityHtml)) {
-      fail("assembled site: city assets are not rooted under /city/");
-    }
-  } else {
-    fail("assembled site: missing /city/ index");
-  }
+  const assembledPages = (await walk(siteDir)).filter((file) =>
+    file.endsWith(".html")
+  );
+  const assembledRef = /(?:href|src)="(?<url>[^"]+)"/gu;
+  await Promise.all(
+    assembledPages.map(async (page) => {
+      const html = await readFile(join(siteDir, page), "utf8");
+      const errors = await Promise.all(
+        [...html.matchAll(assembledRef)].map(async (match) => {
+          const url = match.groups?.url ?? "";
+          const error = await checkAssembledReference(url, page, siteDir);
+          return error ? `assembled ${page}: ${error} -> ${url}` : null;
+        })
+      );
+      errors.filter(Boolean).forEach(fail);
+    })
+  );
 }
 
 if (failures) {
@@ -258,5 +266,5 @@ if (failures) {
   process.exit(1);
 }
 console.log(
-  `docs-site smoke: ${pages.length} pages OK, all internal links resolve`
+  `docs-site smoke: ${pages.length} docs pages OK; assembled internal routes and fragments resolve`
 );
