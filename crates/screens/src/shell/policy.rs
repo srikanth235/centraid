@@ -8,9 +8,10 @@
 //! which exists only while something is owed. An app's widgets wear that app's
 //! colour; the shells take it from `app_id`, and `widget` is the identity.
 //!
-//! A widget with something to show is its own size ([`size_of`]). One with
-//! nothing to show (an empty app, an unreadable one) is medium, because what it
-//! says ("Write your first note") needs the room. The order is the content
+//! A widget with something to show is its own size ([`size_of`]). An empty app
+//! is medium width and one row high, so its invitation stays concrete without
+//! leaving a tall blank area. An unreadable one keeps its existing medium size
+//! and height: failure must not be compacted into an empty invitation. The order is the content
 //! order, or on day one the first-run order, which leads with the apps a first
 //! move belongs to.
 //!
@@ -88,10 +89,14 @@ pub fn size_of(widget: &str, status: Status) -> Size {
     }
 }
 
-/// How many grid rows tall: the calendar, the reminders and the photographs hold
-/// a list or a strip, so they take two; the rest take one.
+/// How many grid rows tall. An empty tile's invitation takes one row. Otherwise,
+/// the calendar, reminders and photos hold a list or strip, so they take two;
+/// the rest take one.
 #[must_use]
-pub fn height_of(widget: &str) -> u32 {
+pub fn height_of(widget: &str, status: Status) -> u32 {
+    if status == Status::Empty {
+        return 1;
+    }
     match widget {
         "calendar" | REMINDERS | "photos" => 2,
         _ => 1,
@@ -134,7 +139,7 @@ pub fn fold(tiles: Vec<wire::HomeTile>) -> Folded {
             size_of(&tile.widget, tile.status())
         };
         tile.size = size as i32;
-        tile.height = height_of(&tile.widget);
+        tile.height = height_of(&tile.widget, tile.status());
     }
     let rows = rows(&tiles);
     Folded {
@@ -273,7 +278,7 @@ mod tests {
                 vec!["locker"],
             ]
         );
-        // The calendar and the photographs are tall mediums; the rest one row.
+        // Empty invitations stay medium width and use one row.
         for tile in &folded.tiles {
             assert_eq!(tile.size(), Size::Medium, "{}", tile.widget);
         }
@@ -287,8 +292,30 @@ mod tests {
         };
         assert_eq!(
             (height("calendar"), height("photos"), height("notes")),
-            (2, 2, 1)
+            (1, 1, 1)
         );
+    }
+
+    #[test]
+    fn only_empty_tiles_compact_the_calendar_reminders_and_photos() {
+        let folded = fold(vec![
+            tile("calendar", Status::Empty),
+            tile("reminders", Status::Unknown),
+            tile("photos", Status::Loading),
+            tile("docs", Status::Content),
+        ]);
+        let shape = |widget: &str| {
+            let tile = folded
+                .tiles
+                .iter()
+                .find(|tile| tile.widget == widget)
+                .unwrap();
+            (tile.size(), tile.height)
+        };
+        assert_eq!(shape("calendar"), (Size::Medium, 1));
+        assert_eq!(shape("reminders"), (Size::Medium, 2));
+        assert_eq!(shape("photos"), (Size::Large, 2));
+        assert_eq!(shape("docs"), (Size::Medium, 1));
     }
 
     #[test]
