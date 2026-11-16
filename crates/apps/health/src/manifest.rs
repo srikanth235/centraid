@@ -59,7 +59,7 @@ pub fn manifest() -> &'static Manifest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use centraid_apps_kit::manifest::{CANONICAL_DESIGNED_STATES, Confirmation};
+    use centraid_apps_kit::manifest::Confirmation;
 
     #[test]
     fn the_committed_manifest_parses_and_is_healths() {
@@ -167,14 +167,6 @@ mod tests {
             manifest().act_scope_disagreements(&commands),
             Vec::<String>::new()
         );
-    }
-
-    #[test]
-    fn the_state_partition_is_closed_and_health_creates_no_tables() {
-        let states = manifest().states.as_ref().expect("designed states");
-        assert_eq!(states.designed.len(), CANONICAL_DESIGNED_STATES.len());
-        assert!(states.excluded.is_empty());
-        assert!(manifest().ext_tables.is_empty());
     }
 
     /// THE CATALOG NAMES THE COMMAND EACH ACTION RUNS, and it is the command

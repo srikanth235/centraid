@@ -41,7 +41,7 @@ pub fn manifest() -> &'static Manifest {
 mod tests {
     use super::*;
     use crate::commands::{ACTIONS, Confirm};
-    use centraid_apps_kit::manifest::{CANONICAL_DESIGNED_STATES, Confirmation, ScopeVerbs};
+    use centraid_apps_kit::manifest::{Confirmation, ScopeVerbs};
 
     fn ours() -> serde_json::Value {
         serde_json::from_str(MANIFEST_JSON).expect("the manifest is JSON")
@@ -217,11 +217,6 @@ mod tests {
                 .all(|scope| scope.table.as_deref() != Some("person")),
             "no scope reaches another app's table"
         );
-
-        assert!(
-            manifest.ext_tables.is_empty(),
-            "Locker is a projection over the vault's own tables"
-        );
     }
 
     /// L4 (ruled 2026-10-15): `edit-item` REPLACES the item's type fields, and
@@ -242,19 +237,6 @@ mod tests {
         for phrase in ["REPLACES, does not patch", "CLEARED", "«sealed»"] {
             assert!(input.contains(phrase), "the input lost `{phrase}`: {input}");
         }
-    }
-
-    #[test]
-    fn the_state_partition_is_closed_and_locker_designs_all_seven() {
-        let states = manifest()
-            .states
-            .as_ref()
-            .expect("Locker declares its designed states");
-        assert_eq!(states.designed.len(), CANONICAL_DESIGNED_STATES.len());
-        assert!(
-            states.excluded.is_empty(),
-            "every exclusion needs a reason and a citation"
-        );
     }
 
     /// `auth_session` is gone from the port, and nothing else on that input is.

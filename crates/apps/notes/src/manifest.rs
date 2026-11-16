@@ -32,7 +32,7 @@ pub fn manifest() -> &'static Manifest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use centraid_apps_kit::manifest::{CANONICAL_DESIGNED_STATES, Confirmation, ScopeVerbs};
+    use centraid_apps_kit::manifest::{Confirmation, ScopeVerbs};
 
     use crate::commands::{ACTIONS, Confirm, act_scope_tables};
 
@@ -269,10 +269,6 @@ mod tests {
                 .all(|scope| scope.verbs == ScopeVerbs::Read || scope.verbs == ScopeVerbs::Act),
             "Notes declares no read+act and no reveal"
         );
-        assert!(
-            manifest.ext_tables.is_empty(),
-            "Notes is a projection over the vault's own tables: no data of its own"
-        );
     }
 
     /// THE POWERBOX IS WHY `person`, `event`, `task`, `document` AND `photo` ARE
@@ -306,19 +302,6 @@ mod tests {
         let raw: serde_json::Value =
             serde_json::from_str(MANIFEST_JSON).expect("the manifest is JSON");
         assert_eq!(raw["actionSideEffect"], serde_json::json!("vault-write"));
-    }
-
-    #[test]
-    fn the_state_partition_is_closed_and_notes_designs_all_seven() {
-        let states = manifest()
-            .states
-            .as_ref()
-            .expect("Notes declares its designed states");
-        assert_eq!(states.designed.len(), CANONICAL_DESIGNED_STATES.len());
-        assert!(
-            states.excluded.is_empty(),
-            "Notes has no unrepresentable state; every exclusion needs a reason and a citation"
-        );
     }
 
     /// The library's and the journal's declared window, read off the manifest

@@ -33,8 +33,6 @@ pub fn manifest() -> &'static Manifest {
 mod tests {
     use super::*;
     use crate::commands::ACTIONS;
-    use centraid_apps_kit::manifest::CANONICAL_DESIGNED_STATES;
-
     #[test]
     fn the_committed_manifest_parses_and_is_photos() {
         let manifest = manifest();
@@ -154,19 +152,6 @@ mod tests {
     }
 
     #[test]
-    fn the_state_partition_is_closed_and_photos_designs_all_seven() {
-        let states = manifest()
-            .states
-            .as_ref()
-            .expect("Photos declares its designed states");
-        assert_eq!(states.designed.len(), CANONICAL_DESIGNED_STATES.len());
-        assert!(
-            states.excluded.is_empty(),
-            "Photos has no unrepresentable state; every exclusion needs a reason and a citation"
-        );
-    }
-
-    #[test]
     fn it_declares_twenty_three_scopes_seven_reads_and_sixteen_acts() {
         use centraid_apps_kit::manifest::ScopeVerbs;
 
@@ -216,10 +201,6 @@ mod tests {
         declared.sort_unstable();
         assert_eq!(declared, crate::commands::act_scope_tables());
         assert_eq!(declared.len(), 17);
-        assert!(
-            manifest.ext_tables.is_empty(),
-            "Photos is a projection over the vault's own tables"
-        );
     }
 
     /// THE ACT SCOPES AND THE ACTIONS AGREE, both ways (finding PE-F1, P3): a

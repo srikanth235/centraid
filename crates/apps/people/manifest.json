@@ -2279,18 +2279,5 @@
       "trash": true,
       "container": false
     }
-  ],
-
-  "states": {
-    "designed": [
-      "dayone",
-      "pending",
-      "offline",
-      "stale",
-      "conflict",
-      "parked",
-      "denied"
-    ],
-    "excluded": []
-  }
+  ]
 }

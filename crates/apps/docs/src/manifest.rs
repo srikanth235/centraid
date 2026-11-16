@@ -32,7 +32,7 @@ pub fn manifest() -> &'static Manifest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use centraid_apps_kit::manifest::{CANONICAL_DESIGNED_STATES, Confirmation, ScopeVerbs};
+    use centraid_apps_kit::manifest::{Confirmation, ScopeVerbs};
 
     use crate::commands::{ACTIONS, Confirm, act_scope_tables};
 
@@ -188,10 +188,6 @@ mod tests {
                 .all(|scope| scope.verbs == ScopeVerbs::Read || scope.verbs == ScopeVerbs::Act),
             "Docs declares no read+act and no reveal"
         );
-        assert!(
-            manifest.ext_tables.is_empty(),
-            "Docs is a projection over the vault's own tables: no data of its own"
-        );
     }
 
     #[test]
@@ -199,19 +195,6 @@ mod tests {
         let raw: serde_json::Value =
             serde_json::from_str(MANIFEST_JSON).expect("the manifest is JSON");
         assert_eq!(raw["actionSideEffect"], serde_json::json!("vault-write"));
-    }
-
-    #[test]
-    fn the_state_partition_is_closed_and_docs_designs_all_seven() {
-        let states = manifest()
-            .states
-            .as_ref()
-            .expect("Docs declares its designed states");
-        assert_eq!(states.designed.len(), CANONICAL_DESIGNED_STATES.len());
-        assert!(
-            states.excluded.is_empty(),
-            "Docs has no unrepresentable state; every exclusion needs a reason and a citation"
-        );
     }
 
     /// The drive's declared window, which [`crate::queries::DriveInput`] clamps

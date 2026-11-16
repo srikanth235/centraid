@@ -1770,18 +1770,5 @@
       "trash": false,
       "container": true
     }
-  ],
-
-  "states": {
-    "designed": [
-      "dayone",
-      "pending",
-      "offline",
-      "stale",
-      "conflict",
-      "parked",
-      "denied"
-    ],
-    "excluded": []
-  }
+  ]
 }

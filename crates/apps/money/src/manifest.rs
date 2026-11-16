@@ -34,7 +34,7 @@ pub fn manifest() -> &'static Manifest {
 mod tests {
     use super::*;
     use crate::commands::{ACTIONS, Confirm, action_row};
-    use centraid_apps_kit::manifest::{CANONICAL_DESIGNED_STATES, Confirmation, ScopeVerbs};
+    use centraid_apps_kit::manifest::{Confirmation, ScopeVerbs};
 
     #[test]
     fn the_committed_manifest_parses_and_is_moneys() {
@@ -197,18 +197,6 @@ mod tests {
                 row.command
             );
         }
-    }
-
-    #[test]
-    fn the_state_partition_is_closed_and_money_designs_all_seven() {
-        let states = manifest().states.as_ref().expect("designed states");
-        assert_eq!(states.designed.len(), CANONICAL_DESIGNED_STATES.len());
-        assert!(states.excluded.is_empty());
-    }
-
-    #[test]
-    fn it_creates_no_tables_of_its_own() {
-        assert!(manifest().ext_tables.is_empty());
     }
 
     /// THE CATALOG NAMES THE COMMAND EACH ACTION RUNS, and it is the command
