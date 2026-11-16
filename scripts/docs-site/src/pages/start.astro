@@ -6,25 +6,25 @@ const rail = [
   {
     "href": "#install",
     "no": "§01",
-    "label": "Install",
+    "label": "Build the phone app",
     "current": true
   },
   {
     "href": "#first-open",
     "no": "§02",
-    "label": "First open",
+    "label": "Your vault",
     "current": false
   },
   {
     "href": "#first-app",
     "no": "§03",
-    "label": "Your first app",
+    "label": "Your first apps",
     "current": false
   },
   {
     "href": "#talk",
     "no": "§04",
-    "label": "Talk to it",
+    "label": "Assistant",
     "current": false
   },
   {
@@ -36,24 +36,24 @@ const rail = [
   {
     "href": "#phone",
     "no": "§06",
-    "label": "Pair your phone",
+    "label": "Add a gateway",
     "current": false
   },
   {
     "href": "#always-on",
     "no": "§07",
-    "label": "Go always-on",
+    "label": "Reachability",
     "current": false
   },
   {
     "href": "#backup",
     "no": "§08",
-    "label": "Back up the keys",
+    "label": "Recovery key",
     "current": false
   }
 ];
 const footer = {
-  "manifesto": "Sixty minutes in, the vault is yours. <em>The rest of the manual explains why that matters.</em>",
+  "manifesto": "Your phone holds the vault. <em>A gateway keeps its sealed backup.</em>",
   "links": [
     {
       "href": "https://centraid.dev",
@@ -80,12 +80,12 @@ const footer = {
 ---
 
 <DocsLayout
-  title="Get Started with Centraid: Install Your Personal Vault"
-  description="Install Centraid from source, open the desktop shell, create a private vault, install your first app, import data, pair your phone, and back up keys."
+  title="Get started with Centraid on your phone"
+  description="Build the pre-release iOS or Android app, use the nine first-party apps on Home, and pair a gateway for sealed backups."
   current="start"
   canonicalPath="start/"
   searchLabel="Start"
-  searchKeywords="install bun node desktop shell first app grant import data pair phone daemon always-on backup keys"
+  searchKeywords="phone iOS Android build source native Home Docs Photos Notes People Calendar Reminders Money Health Locker document note reminder gateway backup recovery key"
   bodyClass="has-rail"
   rail={rail}
   footer={footer}

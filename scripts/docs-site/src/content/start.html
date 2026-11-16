@@ -1,313 +1,145 @@
 <section class="ch-hero wrap">
-        <p class="eyebrow r">Path 1 · use it</p>
-        <h1 class="r" style="--d: 0.1s">From clone to a <em>living vault.</em></h1>
-        <p class="lede r" style="--d: 0.22s">
-          Centraid is pre-release and installs <b>from source</b> — one clone, one
-          <code>bun install</code>, one command to open the shell. This page is the whole first day:
-          get it running, put an app on it, bring some of your real data in, and put it in your
-          pocket. When something here makes you ask <i>why</i>, the
-          <a class="u" href="../data/">understand track</a> has the answer.
-        </p>
-      </section>
+  <p class="eyebrow r">Path 1 · use it</p>
+  <h1 class="r" style="--d: 0.1s">Your phone. <em>Your vault.</em></h1>
+  <p class="lede r" style="--d: 0.22s">
+    Centraid is a pre-release personal vault for iOS and Android. The phone is the only place
+    that writes your vault. Its native shell works offline, with nine first-party apps already
+    on Home. There is no desktop client or hosted account. This guide covers building the phone
+    app, using its apps, and arranging a backup.
+  </p>
+</section>
 
-      <!-- 01 INSTALL -->
-      <section class="sec wrap" id="install">
-        <p class="eyebrow r">§01 · install</p>
-        <h2 class="r" style="--d: 0.06s">Clone, install, open.</h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            You need two runtimes: <b>Bun ≥ 1.3</b> (the package manager and dev runner) and
-            <b>Node ≥ 24</b>, since it ships <code>node:sqlite</code> built in. macOS, Linux, and
-            Windows all work.
-          </p>
-        </div>
-        <div class="term r" style="--d: 0.18s; margin-top: 26px; max-width: 720px">
-          <div class="term-bar"><span>terminal</span></div>
-          <div class="term-body">
-            <div class="cm"># everything — shell, gateway, apps — comes from one repo</div>
-            <div class="ln">
-              <span class="p">$</span>
-              <code>git clone https://github.com/srikanth235/centraid</code>
-            </div>
-            <div class="ln">
-              <span class="p">$</span> <code>cd centraid &amp;&amp; bun install</code>
-            </div>
-            <div class="ln"><span class="p">$</span> <code>bun run dev:desktop</code></div>
-            <button
-              class="copy-btn"
-              data-copy="git clone https://github.com/srikanth235/centraid && cd centraid && bun install && bun run dev:desktop"
-              aria-label="Copy commands"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                <rect x="9" y="9" width="11" height="11" rx="2" />
-                <path d="M5 15V5a2 2 0 0 1 2-2h10" />
-              </svg>
-            </button>
-          </div>
-        </div>
-        <p class="aside r" style="--d: 0.24s">
-          <code>dev:desktop</code> opens the Electron shell with a gateway embedded in it — no
-          separate server to run, no account to create. A per-launch bearer token guards the local
-          HTTP surface; it lives in your OS keychain.
-        </p>
-      </section>
+<section class="sec wrap" id="install">
+  <p class="eyebrow r">§01 · install</p>
+  <h2 class="r">Build the phone app.</h2>
+  <div class="prose r">
+    <p>
+      Source-build instructions for this pre-release are maintained in
+      <a href="https://github.com/srikanth235/centraid/blob/main/mobile/README.md">mobile/README.md</a>.
+      Android builds need a JDK 21 and Android SDK. iOS builds need macOS, Xcode and XcodeGen.
+      The Rust core runs on the phone; SwiftUI draws iOS and Jetpack Compose draws Android.
+    </p>
+    <p>
+      For Android, build the core with <code>mobile/scripts/android-core.sh</code>, then run
+      <code>cd mobile &amp;&amp; ./gradlew -Pcentraid.android=true :androidApp:assembleDebug</code>.
+      The README has the current iOS steps. These are build instructions, not a claim that a
+      simulator build proves physical-device behavior.
+    </p>
+  </div>
+</section>
 
-      <!-- 02 FIRST OPEN -->
-      <section class="sec wrap" id="first-open">
-        <p class="eyebrow r">§02 · first open</p>
-        <h2 class="r" style="--d: 0.06s">A name, a color, <em>a vault.</em></h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            First launch asks exactly two things — what to call you, and an accent color. Behind
-            that one screen the gateway mints your first <b>vault</b>: a directory on your disk
-            holding <code>vault.db</code> — the canonical record of your life on one shared
-            ontology, with the append-only audit trail as a band inside the same file. Every app you
-            install, every automation you run, every agent you talk to works against it.
-          </p>
-          <p>
-            The shell lands on <b>Home</b>: your apps as a grid, and a sidebar with your profile and
-            a vault switcher. The sidebar groups everything into <b>Pages</b> — Home, Assistant,
-            Insights, Discover, Starred, Automations, Approvals — and <b>Operations</b> — Gateway,
-            Backups, Vault Atlas — with <b>Settings</b> pinned at the bottom. You can create more
-            vaults later (one per household member, one for an estate, one for testing) — each is a
-            fully separate world.
-          </p>
-          <p class="aside">
-            What exactly is in that directory, and why the sealing keys live <i>outside</i> it:
-            <a href="../data/#vault">Data § the vault →</a>
-          </p>
-        </div>
-      </section>
+<section class="sec wrap" id="first-open">
+  <p class="eyebrow r">§02 · first open</p>
+  <h2 class="r">Your phone holds the vault.</h2>
+  <div class="prose r">
+    <p>
+      The phone creates and holds your vault. Its Rust core is the only writer. The apps are
+      reviewed parts of the Centraid shell; you do not install them separately or grant them
+      access. There is no account to create.
+    </p>
+    <p>
+      Centraid creates a recovery key for the vault. Keep its 24 words somewhere safe away from
+      the phone. Depending on the platform, an encrypted seed may also be kept in the operating
+      system's secure key store.
+    </p>
+  </div>
+</section>
 
-      <!-- 03 FIRST APP -->
-      <section class="sec wrap" id="first-app">
-        <p class="eyebrow r">§03 · your first app</p>
-        <h2 class="r" style="--d: 0.06s">Install a blueprint, <em>sign its grant.</em></h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            Open <b>Discover</b>. Seven blueprint apps ship in the box — <b>Docs</b>, <b>Photos</b>,
-            <b>Notes</b>, <b>People</b>, <b>Locker</b>, <b>Agenda</b>, <b>Tasks</b> —
-            plus a shelf of automation templates. Installing one is a single click: a sheet titled
-            <b>Install Notes</b> lists <i>what Notes can access</i>, grouped into <b>Read</b> and
-            <b>Add &amp; change</b>, with a footer that reads <i>nothing is copied — the app runs
-            from the shipped release and updates with it</i>. Press <b>Install</b> and it lands
-            pinned on <b>Home</b>, opening straight away.
-          </p>
-          <p>
-            The part worth noticing: an app doesn't get your data by existing, and installing it
-            copies nothing. Its manifest declares exactly which vault tables it wants to read and
-            which typed commands it wants to call, and that declaration becomes a <b>grant</b> you
-            can inspect and revoke. Install is not consent — the grant is. Uninstall whenever you
-            like; the access is revoked but your data stays in the vault.
-          </p>
-          <p class="aside">
-            Try Notes first: type <code>@</code> in a note and link a person, a document, a task —
-            cross-references are one mechanism everywhere.
-            <a href="../apps/#blueprints">Apps § the blueprints →</a>
-          </p>
-        </div>
-      </section>
+<section class="sec wrap" id="first-app">
+  <p class="eyebrow r">§03 · your first apps</p>
+  <h2 class="r">Open an app from Home.</h2>
+  <div class="prose r">
+    <p>
+      All nine first-party apps are already on Home: <b>Docs</b>, <b>Photos</b>, <b>Notes</b>,
+      <b>People</b>, <b>Calendar</b>, <b>Reminders</b>, <b>Money</b>, <b>Health</b> and
+      <b>Locker</b>. Tap a tile to open it. The phone asks for operating-system permission when
+      you use a feature that needs it, such as camera access for scanning.
+    </p>
+    <p>
+      Try a real journey: in <b>Docs</b>, tap <b>Upload a file</b> and choose a document. In
+      <b>Notes</b>, make a new note, tap <b>Add link</b>, then use the <b>Link to</b> picker to
+      choose that document. In <b>Reminders</b>, add a reminder, then use <b>Add link</b> to
+      connect it to the note. These are your records; Centraid does not seed sample data into
+      your vault.
+    </p>
+  </div>
+</section>
 
-      <!-- 04 TALK TO IT -->
-      <section class="sec wrap" id="talk">
-        <p class="eyebrow r">§04 · talk to it</p>
-        <h2 class="r" style="--d: 0.06s">Ask across everything <em>at once.</em></h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            The <b>Assistant</b> tab is a chat over your whole vault — not one app's data, all of
-            it. It reads with plain SQL over the ontology (receipted, row-capped) and writes only
-            through the same typed commands your apps use. Ask it "what did I spend on the car this
-            year, and where are the receipts?" and it joins finance rows to attached documents
-            because they live in one model.
-          </p>
-          <p>
-            Inside every app there's a smaller version of the same idea — an <b>Ask</b> box wired to
-            that app's declared queries and actions. Saying it and tapping it run the same handler.
-          </p>
-        </div>
-        <div class="artifact r" style="--d: 0.2s; margin-top: 28px; max-width: 640px">
-          <div class="artifact-head"><span>assistant</span><span class="tag">your vault</span></div>
-          <div class="artifact-body">
-            <div class="t-line">
-              <span class="t-who you">you</span>
-              <span class="t-msg">when did I last see Priya?</span>
-            </div>
-            <div class="t-line">
-              <span class="t-who agent">assistant</span>
-              <span class="t-msg"
-                ><span class="tool-chip">⚙ vault_sql → people ⋈ interactions</span> Dinner
-                on June 14th — three weeks ago.
-                <span class="dim nl">Want me to put a catch-up on your calendar?</span></span
-              >
-            </div>
-          </div>
-        </div>
-      </section>
+<section class="sec wrap" id="talk">
+  <p class="eyebrow r">§04 · assistant</p>
+  <h2 class="r">Ask on your phone.</h2>
+  <div class="prose r">
+    <p>
+      The assistant runs on the phone with a model pinned by the release. If the pinned model is
+      not on the phone, Chat offers its download when you ask. Any write waits for your review
+      and confirmation; it runs only after you tap confirm.
+    </p>
+  </div>
+</section>
 
-      <!-- 05 IMPORT -->
-      <section class="sec wrap" id="import">
-        <p class="eyebrow r">§05 · bring your data</p>
-        <h2 class="r" style="--d: 0.06s">Drop a file, review, <em>publish.</em></h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            <b>Settings → Import</b> takes the files other platforms let you leave with:
-            <code>.ics</code> calendars, <code>.vcf</code> contacts, <code>.mbox</code> mail
-            archives, CSVs, and zips of all of the above. Nothing lands silently — every import
-            becomes a <b>staged batch</b> you review as a diff (create / update / skip, duplicates
-            already resolved against what the vault knows) before you publish it in one transaction,
-            with per-row provenance.
-          </p>
-          <p>
-            For live sources, open <b>Connectors</b> for Gmail, Google Calendar, Google Contacts,
-            and GitHub. Verified Google scopes offer <b>Connect with Centraid</b>: the browser
-            carries only a short-lived code and your gateway keeps every token sealed. Restricted
-            Gmail and Drive scopes remain unavailable through Assist until Google verification is
-            complete; Advanced keeps the bring-your-own OAuth client path. Handler code never sees
-            a secret, and each sync stages rows through the same review door.
-          </p>
-          <p class="aside">
-            How staging, the external-id map, and the broker actually work:
-            <a href="../data/#connections">Data § connections &amp; sync →</a>
-          </p>
-        </div>
-      </section>
+<section class="sec wrap" id="import">
+  <p class="eyebrow r">§05 · bring your data</p>
+  <h2 class="r">Import contacts in People.</h2>
+  <div class="prose r">
+    <p>
+      In <b>People</b>, open <b>Phone contacts</b> and choose <b>Import contacts</b> to bring
+      in contacts available on this phone. To import a vCard file, open <b>More</b>, choose
+      <b>Import</b>, then <b>Choose files</b>. Review the proposed matches before choosing
+      <b>Import {n} people</b> or <b>Add new only</b>.
+    </p>
+  </div>
+</section>
 
-      <!-- 06 PHONE -->
-      <section class="sec wrap" id="phone">
-        <p class="eyebrow r">§06 · pair your phone</p>
-        <h2 class="r" style="--d: 0.06s">One QR code, <em>no sync service.</em></h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            Your phone is the vault; what you pair it with is a <b>gateway</b> — the machine that
-            keeps its sealed backup. On the laptop at home, a spare box or a VPS, run
-            <code>centraid-gateway serve</code>: while nothing has paired, it prints a QR code
-            holding the gateway's addresses, the fingerprint of its certificate, and a secret that
-            admits one vault, once, within a day. On the phone, open <b>Pair with your laptop</b> on
-            the More sheet — or <b>Add a gateway</b> on the Backup screen — and scan it. The phone
-            dials the gateway directly over HTTPS, refuses any certificate whose fingerprint is not
-            the one in the QR, and backs up to it from then on: no relay account, no cloud copy.
-          </p>
-          <p>
-            Then compare the <b>safety number</b>: 60 digits on the phone, and the same 60 in the
-            <code>safety</code> line <code>serve</code> prints once the pairing lands. Every group
-            must match. A second gateway pairs the same way, with its own QR, and the phone backs up
-            to whichever it can reach.
-          </p>
-          <p>
-            Being pre-release, the phone app builds from source, from the repository's
-            <code>mobile/</code> directory — SwiftUI on iOS, Jetpack Compose on Android, over one
-            Rust core that holds the vault, so everything works in airplane mode.
-          </p>
-          <p class="aside">
-            What's inside the QR, what the pin protects against, and what a gateway can never see:
-            <a href="../devices/#pairing">Devices § pairing →</a>
-          </p>
-        </div>
-      </section>
+<section class="sec wrap" id="phone">
+  <p class="eyebrow r">§06 · add a backup device</p>
+  <h2 class="r">Pair a gateway directly.</h2>
+  <div class="prose r">
+    <p>
+      A gateway is a machine you control that runs <code>centraid-gateway</code>. It stores
+      sealed backup data and cannot open it. The phone connects directly over pinned HTTPS; the
+      gateway is not another app client.
+    </p>
+    <p>
+      On the gateway, run <code>centraid-gateway serve --data-dir ~/centraid-gateway</code>.
+      Scan its pairing QR in the phone's <b>Backup</b> screen, then compare the safety number
+      on the phone with the one printed by the gateway. See
+      <a href="../devices/#pairing">Devices · pairing</a>.
+    </p>
+  </div>
+</section>
 
-      <!-- 07 ALWAYS-ON -->
-      <section class="sec wrap" id="always-on">
-        <p class="eyebrow r">§07 · go always-on</p>
-        <h2 class="r" style="--d: 0.06s">A gateway that <em>outlives the laptop lid.</em></h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            A laptop that sleeps is a gateway the phone waits for. The long-term shape is a gateway
-            on something that stays up — a spare machine, a NAS, a small VPS — or two of them: a
-            second gateway somewhere else is your off-site copy. The gateway is one binary, and it
-            needs no account, no domain and no certificate authority:
-          </p>
-        </div>
-        <div class="term r" style="--d: 0.18s; margin-top: 26px; max-width: 760px">
-          <div class="term-bar"><span>on the always-on machine</span></div>
-          <div class="term-body">
-            <div class="cm"># built from source: cargo build --release -p centraid-gateway</div>
-            <div class="ln">
-              <span class="p">$</span>
-              <code>centraid-gateway serve --data-dir ~/centraid-gateway</code>
-            </div>
-            <div class="cm" style="margin-top: 10px">
-              # beside a running serve — another QR, and what has paired
-            </div>
-            <div class="ln">
-              <span class="p">$</span>
-              <code>centraid-gateway pair --data-dir ~/centraid-gateway</code>
-            </div>
-            <div class="ln">
-              <span class="p">$</span>
-              <code>centraid-gateway pairings --data-dir ~/centraid-gateway</code>
-            </div>
-          </div>
-        </div>
-        <p class="aside r" style="--d: 0.24s">
-          The data directory is the whole gateway — its identity, its index and the sealed objects
-          — so copying it copies the gateway. <a href="../devices/#topology">Devices § topology →</a>
-        </p>
-        <div class="prose r" style="--d: 0.3s; margin-top: 18px">
-          <p>
-            "Always-on" only holds if something brings the gateway back after a reboot.
-            <code>centraid-gateway install</code> writes a <b>systemd user unit</b> on Linux or a
-            <b>LaunchAgent</b> on macOS and prints the command that starts it — it never enables
-            what it writes, because a service that starts because a file was unpacked is one nobody
-            chose to run. <code>health</code> asks a running gateway whether it is up and is the one
-            your phone pinned.
-          </p>
-        </div>
-        <div class="term r" style="--d: 0.36s; margin-top: 18px; max-width: 760px">
-          <div class="term-bar"><span>on the always-on machine</span></div>
-          <div class="term-body">
-            <div class="cm"># preview first — writes and runs nothing</div>
-            <div class="ln">
-              <span class="p">$</span>
-              <code>centraid-gateway install --data-dir ~/centraid-gateway --dry-run</code>
-            </div>
-            <div class="ln">
-              <span class="p">$</span>
-              <code>centraid-gateway install --data-dir ~/centraid-gateway</code>
-            </div>
-            <div class="ln">
-              <span class="p">$</span>
-              <code>centraid-gateway health --data-dir ~/centraid-gateway</code>
-            </div>
-          </div>
-        </div>
-        <p class="aside r" style="--d: 0.4s">
-          A container works too — the repository's <code>deploy/gateway/Dockerfile</code>, run on
-          the host's network with a volume at the data directory. Put a port forward in front of a
-          gateway if you like, never a proxy that terminates TLS: the phone pins the gateway's own
-          certificate.
-        </p>
-      </section>
+<section class="sec wrap" id="always-on">
+  <p class="eyebrow r">§07 · keep the gateway reachable</p>
+  <h2 class="r">Run it where the phone can reach it.</h2>
+  <div class="prose r">
+    <p>
+      Build the gateway from the repository and keep its machine running and reachable at the
+      address in its pairing payload. See <a href="../devices/#operator">Devices · operator
+      setup</a>. If the gateway cannot be reached, the phone still works locally. Backup can
+      continue in a later foreground or operating-system background window.
+    </p>
+  </div>
+</section>
 
-      <!-- 08 BACKUP -->
-      <section class="sec wrap" id="backup">
-        <p class="eyebrow r">§08 · back up the keys</p>
-        <h2 class="r" style="--d: 0.06s">Twenty-four words <em>are the key.</em></h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            Every key your vault has derives from the <b>24 words</b> the phone showed you once, when
-            it founded the vault — there is no key file to export and no password to reset. The
-            phone keeps the seed in your platform's synced keychain (iCloud Keychain, Android Block
-            Store), so a new phone on the same account can restore without your typing anything; the
-            words you wrote down are the way back when neither the phone nor the keychain survives.
-            Write them on paper, and keep them somewhere that is not the phone.
-          </p>
-          <p>
-            The backup itself runs on its own. The phone takes a <b>snapshot</b> of the vault —
-            hourly on an unmetered link while a gateway is in reach, and whenever you tap <b>Back up
-            now</b> — and seals it, with your photos, documents and, if you include them, videos,
-            before anything leaves the phone; on an iPhone the system keeps uploading while the app
-            is closed. Locker's secrets are sealed once more inside the vault, under a key derived
-            from the words when the vault opens and never written to a file.
-          </p>
-        </div>
-        <p class="aside r" style="--d: 0.24s">
-          Lose the phone, keep the words → restore onto a new phone from any gateway you paired.
-          Lose the words and the keychain → nothing on a gateway opens, by design. What a restore
-          does to the old phone: <a href="../devices/#replica">Devices § one writer →</a>
-        </p>
-
-        <div class="chapter-next r">
-          <a href="../">← docs home</a>
-          <a href="../data/">next: understand the data pillar →</a>
-        </div>
-      </section>
+<section class="sec wrap" id="backup">
+  <p class="eyebrow r">§08 · recovery</p>
+  <h2 class="r">Keep your recovery key safe.</h2>
+  <div class="prose r">
+    <p>
+      Your recovery key is its 24 words. They derive the keys needed to restore your vault. An
+      encrypted seed may also be held in the operating system's secure key store, which can help
+      on a replacement phone when available. Keep a safe offline copy of the words.
+    </p>
+    <p>
+      The phone says a backup is complete only when a gateway has acknowledged the records and
+      their content hashes. It reports records acknowledged while originals still wait
+      separately. Background work depends on windows the operating system grants; force-quitting
+      stops it until the next launch. Learn about restore in
+      <a href="../backups/#restore">Backups · restore</a>.
+    </p>
+  </div>
+  <div class="chapter-next r">
+    <a href="../">← docs home</a>
+    <a href="../devices/">next: devices →</a>
+  </div>
+</section>
