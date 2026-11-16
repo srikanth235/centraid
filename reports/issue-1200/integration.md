@@ -5,7 +5,8 @@ The sole implementation branch is `codex/1200-v0-refinement` in `/private/tmp/ce
 ## Owner scope decisions
 
 - Assistant evaluation, frozen-data retrieval, reference replay and quality scoring are excluded. No quality score or target attainment is claimed.
-- Docs will not gain **Write a note**. No production code for that proposal was applied. The connected journey uses Docs’ existing Add link picker to reuse a note, then carries that note into Reminders. Only the new reminder and its chosen note relation need an atomic creation path.
+- The recommendation to narrow v0's definition of success is excluded. All nine apps and their existing depth remain in scope.
+- Docs will not gain **Write a note**. Its proposed production code was never applied. Other uncommitted connected-workflow additions and favorite badges were removed after the owner clarified that this work should fix bugs and clean up existing behavior. Existing links, actions and routes remain the verification surface; this PR adds no new workflow.
 - All work remains in the same PR; the issue stays open while required integration and native evidence are missing.
 
 ## Disk cleanup and build guard
