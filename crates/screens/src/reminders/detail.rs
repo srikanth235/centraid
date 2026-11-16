@@ -5,7 +5,7 @@
 //! one key per edit, only what changed, a vault change never overwrites
 //! typing). Every other field is a decision, so it is one write when it is
 //! made: When, Time, Reminder, Repeats, Anchor, Priority, Effort, Project,
-//! Tags, a subtask added, Release, Delete. There is no Save.
+//! Tags, a subtask added, Release, Move to trash. There is no Save.
 //!
 //! Repeats is the core's sentence ("Every 2 weeks on Monday"), "Never" for a
 //! one-off — never v0's "—". The stored rule (`AgendaTask.rrule`) rides as the
@@ -763,36 +763,16 @@ impl Detail {
         let Some(task) = self.task() else {
             return;
         };
-        match asking {
-            Asking::Delete => {
-                let request = act::reminders::DeleteTask {
-                    task_id: task.task_id.clone(),
-                };
-                if self.write(
-                    ctx,
-                    request,
-                    &[act::reminders::DeleteTask::NAME, &task.task_id],
-                    |locale| crate::kit::trash::moved_to_trash(locale, &task.title),
-                ) {
-                    // THE PAGE CLOSES: "moved to trash" and its Undo go to the page beneath.
-                    self.ops.line.hand_down(ctx);
-                    self.finished = true;
-                    // The words are gone with the task: leaving saves nothing.
-                    self.autosave = Autosave::new();
-                }
-            }
-            Asking::Release => {
-                let request = act::reminders::CancelTask {
-                    task_id: task.task_id.clone(),
-                };
-                self.write(
-                    ctx,
-                    request,
-                    &[act::reminders::CancelTask::NAME, &task.task_id],
-                    words::task_released,
-                );
-            }
-            _ => {}
+        if let Asking::Release = asking {
+            let request = act::reminders::CancelTask {
+                task_id: task.task_id.clone(),
+            };
+            self.write(
+                ctx,
+                request,
+                &[act::reminders::CancelTask::NAME, &task.task_id],
+                words::task_released,
+            );
         }
     }
 
@@ -938,7 +918,23 @@ impl Detail {
                     words::subtask_added,
                 );
             }
-            Some(D::Delete(_)) => self.asking = Asking::Delete,
+            Some(D::Delete(_)) => {
+                let Some(task) = self.task() else {
+                    return;
+                };
+                let request = act::reminders::DeleteTask {
+                    task_id: task.task_id.clone(),
+                };
+                if self.write(
+                    ctx,
+                    request,
+                    &[act::reminders::DeleteTask::NAME, &task.task_id],
+                    |locale| crate::kit::trash::moved_to_trash(locale, &task.title),
+                ) {
+                    // Stay on the gone state so Undo restores this same detail route.
+                    self.autosave = Autosave::new();
+                }
+            }
             // RELEASING DESTROYS NOTHING: the outlined secondary, not `net`.
             Some(D::Release(_)) => self.asking = Asking::Release,
             Some(D::Confirmed(_)) => self.confirmed(ctx),
@@ -992,12 +988,6 @@ impl Detail {
 
     fn confirm(&self, locale: Locale) -> Option<wire::Confirm> {
         match self.asking {
-            Asking::Delete => Some(wire::Confirm {
-                title: words::delete_title(locale),
-                body: words::delete_body(locale),
-                confirm_label: words::delete(locale),
-                destructive: true,
-            }),
             Asking::Release => Some(wire::Confirm {
                 title: words::release_title(locale),
                 body: words::release_body(locale),

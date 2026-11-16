@@ -1063,35 +1063,36 @@ fn subtasks_count_what_is_done_are_added_as_a_write_and_stay_one_level() {
 // -----------------------------------------------------------------------------
 
 #[test]
-fn delete_asks_in_full_sentences_then_trashes_and_ends_the_screen() {
+fn trash_moves_task_immediately_and_undo_restores_same_detail() {
     let mut d = driver();
     let id = rent(&d);
     let i = open(&mut d, &id);
     send_detail(&mut d, i, de::Kind::Delete(de::DeleteRequested {}));
     let state = detail(d.view(i));
-    let confirm = state.confirm.as_ref().expect("a confirm");
-    assert_eq!(confirm.title, "Move this task to trash?");
-    assert!(confirm.destructive);
-    // Dismissed, nothing is written.
-    send_detail(&mut d, i, de::Kind::Dismissed(de::Dismissed {}));
-    assert!(detail(d.view(i)).confirm.is_none());
-    assert_eq!(task_of(&d, &id).status, "open");
-    send_detail(&mut d, i, de::Kind::Delete(de::DeleteRequested {}));
-    send_detail(&mut d, i, de::Kind::Confirmed(de::Confirmed {}));
+    assert!(state.confirm.is_none(), "reversible trash asks nothing");
     let state = detail(d.view(i));
-    assert!(state.finished);
+    assert!(!state.finished, "keep the detail route for Undo");
     assert_eq!(
         state.status.as_ref().unwrap().sentence,
         "Rent moved to trash"
     );
+    assert_eq!(state.status.as_ref().unwrap().action_label, "Undo");
     assert!(state.confirm.is_none());
-    // It is in the trash.
+    assert_eq!(failed_with(detail(d.view(i))), Some("This task is gone."));
+    send_detail(&mut d, i, de::Kind::StatusActed(de::StatusActed {}));
+    assert_eq!(
+        detail(d.view(i)).status.as_ref().unwrap().sentence,
+        "Undone"
+    );
+    assert_eq!(failed_with(detail(d.view(i))), None);
+    assert_eq!(task_of(&d, &id).status, "open");
     let trash_page = d.push(agenda::TAB, routes::trash());
     assert!(
         trash_data(d.view(trash_page))
             .rows
             .iter()
-            .any(|row| row.id == id)
+            .all(|row| row.id != id),
+        "Undo removes the same ID from trash"
     );
 }
 
@@ -1102,7 +1103,6 @@ fn closing_a_deleted_task_does_not_save_its_unsaved_words() {
     let i = open(&mut d, &id);
     typed_title(&mut d, i, "Rent, never saved");
     send_detail(&mut d, i, de::Kind::Delete(de::DeleteRequested {}));
-    send_detail(&mut d, i, de::Kind::Confirmed(de::Confirmed {}));
     d.pop(agenda::TAB, i);
     d.pump(DEBOUNCED);
     let trash_page = d.push(agenda::TAB, routes::trash());

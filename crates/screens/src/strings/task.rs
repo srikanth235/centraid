@@ -31,8 +31,6 @@ catalog! {
     plain days_away = ("days away", "days away");
     plain day_one = ("Add the first thing you must not forget.", "Add the first thing you must not forget.");
     plain delete = ("Move to trash", "Move to trash");
-    plain delete_body = ("It goes to trash with its subtasks, and Restore brings it back for 30 days.", "It goes to trash with its subtasks, and Restore brings it back for 30 days.");
-    plain delete_title = ("Move this task to trash?", "Move this task to trash?");
     plain export_all = ("All lists", "All lists");
     plain export_lede = (
         "Reminders as to-dos in one .ics file, for other task apps.",

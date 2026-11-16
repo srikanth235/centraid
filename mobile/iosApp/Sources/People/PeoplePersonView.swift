@@ -8,15 +8,13 @@ import SwiftUI
 /// `.status`); this file draws whichever one the state holds and hands each
 /// keystroke back as the sheet's own event. Edit is a `Route` the state carries;
 /// a channel's tap is an event and Rust asks this shell to call, mail, map or
-/// copy it; `done` (a person moved to the trash) pops.
+/// copy it; the screen's `done` state controls when its route pops.
 struct PeoplePersonView: View {
     let state: Centraid_Core_V1_PeoplePersonState
     let send: (Centraid_Core_V1_PeoplePersonEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
     let onBack: () -> Void
     let onPhoneSays: (Centraid_Core_V1_PhoneSaysTaken) -> Void
-
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let chrome = state.chrome
@@ -43,12 +41,15 @@ struct PeoplePersonView: View {
                 }
             }
         } content: {
-            PageReadStateView(
-                page: state.page,
-                loadingLabel: chrome.loading,
-                onRetry: { send(PeopleEvents.person { $0.refreshed = .init() }) }
-            ) {
-                PeoplePersonBody(person: state.data, state: state, send: send, open: open, onPhoneSays: onPhoneSays)
+            VStack(spacing: 0) {
+                PageReadStateView(
+                    page: state.page,
+                    loadingLabel: chrome.loading,
+                    onRetry: { send(PeopleEvents.person { $0.refreshed = .init() }) }
+                ) {
+                    PeoplePersonBody(person: state.data, state: state, send: send, open: open, onPhoneSays: onPhoneSays)
+                }
+                StatusLineView(status: state.status, identifier: "people-person-status-action")
             }
         }
         .sheet(isPresented: Binding(
@@ -138,10 +139,6 @@ private struct PeoplePersonBody: View {
             LazyVStack(alignment: .leading, spacing: 0) {
                 hero
                 heroActions
-                if state.hasStatus, !state.status.sentence.isEmpty {
-                    StatusLineView(status: state.status, identifier: "people-person-status-action")
-                }
-
                 SectionHeader(
                     title: person.channelsHead.title,
                     count: person.channelsHead.count,

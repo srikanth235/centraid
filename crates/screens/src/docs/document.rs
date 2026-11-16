@@ -564,7 +564,13 @@ impl Document {
             }
             KEY_MOVE => self.sheet = Sheet::Move,
             KEY_LABELS => self.sheet = Sheet::Labels(String::new()),
-            KEY_TRASH => self.asking = Asking::Trash,
+            KEY_TRASH => {
+                if let Some(row) = self.row().filter(|row| !row.trashed).cloned() {
+                    self.write(ctx, act::docs::Trash { document_id: id }, |locale| {
+                        trash::moved_to_trash(locale, &row.title)
+                    });
+                }
+            }
             KEY_PURGE => self.asking = Asking::Purge,
             // `edit` is a route the shell pushes (the action carries it).
             _ => {}
@@ -642,27 +648,18 @@ impl Document {
     fn confirmed(&mut self, ctx: &Ctx) {
         let asking = std::mem::replace(&mut self.asking, Asking::None);
         let id = self.document_id.clone();
-        match asking {
-            Asking::Trash => {
-                let title = self.row().map(|row| row.title.clone()).unwrap_or_default();
-                self.write(ctx, act::docs::Trash { document_id: id }, |locale| {
-                    trash::moved_to_trash(locale, &title)
-                });
+        if let Asking::Purge = asking {
+            // DELETED FOREVER: nothing is left to show, so the page leaves.
+            let key = kit_act::key(&["purge", &id], kit_act::fresh());
+            let purged = self
+                .undo
+                .act_quietly(ctx, act::docs::Purge { document_id: id }, &key)
+                .committed;
+            self.reload(ctx);
+            if purged {
+                self.dismissed = true;
+                self.rename = None;
             }
-            Asking::Purge => {
-                // DELETED FOREVER: nothing is left to show, so the page leaves.
-                let key = kit_act::key(&["purge", &id], kit_act::fresh());
-                let purged = self
-                    .undo
-                    .act_quietly(ctx, act::docs::Purge { document_id: id }, &key)
-                    .committed;
-                self.reload(ctx);
-                if purged {
-                    self.dismissed = true;
-                    self.rename = None;
-                }
-            }
-            _ => {}
         }
     }
 
@@ -722,12 +719,6 @@ impl Document {
 
     fn confirm(&self, locale: Locale) -> Option<wire::Confirm> {
         match self.asking {
-            Asking::Trash => Some(wire::Confirm {
-                title: words::trash_confirm_title(locale),
-                body: words::trash_confirm_body(locale),
-                confirm_label: words::trash_confirm(locale),
-                destructive: true,
-            }),
             // The trash shelf's own sentences (the kit's), for one document.
             Asking::Purge => Some(wire::Confirm {
                 title: crate::kit::trash::purge_title(locale, shared::trash_noun_document),
