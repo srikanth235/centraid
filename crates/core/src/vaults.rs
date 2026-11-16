@@ -71,9 +71,10 @@ pub trait Vaults: Send + Sync {
     /// stays where it was.
     fn bring_to_front(&self, vault_id: &str) -> bool;
 
-    /// The vault moved to another phone: writes are refused and the date and
-    /// the count of what no gateway acknowledged are shown. Deletes nothing,
-    /// closes nothing, and there is no way back.
+    /// Set the shelf's legacy moved marker and retain its date and count for
+    /// shelf consumers. This is separate from the phone backup ledger: the
+    /// action door checks device gateway state, not this marker. No production
+    /// caller currently sets this marker. Deletes nothing and closes nothing.
     fn freeze(&self, vault_id: &str, at: &str, unacked: u64);
 
     /// Close every core: the front is closing.

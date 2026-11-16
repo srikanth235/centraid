@@ -42,7 +42,7 @@ What the phone does to back its vault up and to get it back. Wording and rules a
 
 ## The pass
 
-- `drain` reaches every paired gateway, refuses with `VaultMoved` if one holds a later writer epoch, then takes a snapshot if one is due and moves the records. The head is set before media move.
+- `drain` reaches every paired gateway. A verified `MOVED` claim stops work at that gateway only; the pass continues to other gateways that have not superseded this phone. The whole backup door refuses only when every paired gateway has a verified moved mark. It then takes a snapshot if one is due and moves the records. The head is set before media move.
 - Media then go in interleaved rounds, one gateway at a time: prepare what it lacks (derivatives, then originals, newest first), then move it.
 - A snapshot is due an hour after the newest snapshot a head named was taken, and not while a newer one is still on its way whole. It is due at once when asked, when a gateway has no head set by this phone, when its head went backwards, or when a read-back found it no longer holds its head whole. A snapshot dated more than a few minutes ahead of now does not count as recent.
 - If a pass confirmed files whose rows no snapshot covers, it takes another snapshot (or owes one to the next pass).
@@ -57,7 +57,7 @@ What the phone does to back its vault up and to get it back. Wording and rules a
 - Fetch the manifest by the head's name, then the ranges 1000 names a fetch. Each part must open and its name must derive from its bytes. Write at `i x 64 KiB`, truncate to `db_len`.
 - Then check `db_hash`, `integrity_check`, page size, `user_version` and the census table by table. The file is built as `.partial` and renamed only when all pass.
 - The phone core derives vault ids by index and asks a gateway for a read grant for each. It stops after 20 misses. Every vault is checked before any writer epoch moves. Then each is claimed at epoch plus one, naming the head it checked.
-- A claim that fails is reported unclaimed. A claimed vault is never dropped. The old phone's next write is `MOVED` and it freezes.
+- A claim that fails is reported unclaimed. A claimed vault is never dropped. A superseded phone's next backup write to that gateway is `MOVED`; the signed claim fences backup work to that gateway only, and the pass continues to its other gateways. As soon as the phone verifies that claim, the action door refuses ordinary member write actions on the superseded phone and the takeover warning is shown. Only when every paired gateway has superseded it does the whole backup door refuse writes.
 - A vault already on this phone is replaced, unless its copy is newer. Then it is left and reported unclaimed.
 - If the newest snapshot will not open and an older one does, the older one is offered and nothing is claimed until the member agrees.
 - Derivatives return in `fetch` bundles. Originals stay on the gateway until `fetch_original`.
