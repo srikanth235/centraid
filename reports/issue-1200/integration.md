@@ -29,6 +29,10 @@ Reviewed guard SHA-256: `f86fea9cebc22051108fe468c499b9bebb9675fdd9efb1212b1f29f
 
 Root reviewed the guard and independently ran its real environment-check no-op. The delegate also verified preflight refusal for low space and oversized artifacts, forced monitor termination of a disposable process group (including a child that handles TERM by exiting successfully), final-snapshot refusal, and filesystem-measurement failure. Guard refusal returns 125 and interruption returns 130; a child reporting success cannot turn a disk-limit stop into a pass.
 
-## Integration evidence still owed
+## Integration verification checkpoint
 
-Focused slice results are in the issue and individual reports. A completed local/PR gate on the final head, the mobile JVM gate, matching native builds and required native transition/recovery observations remain pending. Earlier CI results or isolated file-store tests do not establish those later layers.
+The focused Docs Drive suite passes 31/31 after replacing the obsolete confirmation oracle with the existing direct Trash/Undo contract. The real mobile JVM gate passes 45/45 after replacing an obsolete unknown-status fixture with genuinely unassigned codes. Full `bun run check`, workspace formatting, scoped xtask Clippy and all 27 structural rules passed for the docs/test batch.
+
+Matching native cores and shells were built from runtime source `7d22a64fe2241cc84b59c3a283630f1a96d462dd`; the later docs/test changes do not alter runtime source. Root reviewed iOS simulator and Android emulator onboarding, Home, task Trash/Undo and person Trash/Undo results. The exact counts, tool versions, artifact hashes and limits are in `native-verification.md`. The visual docs rebuild and root's browser review are recorded in `docs-rebuild.md`.
+
+The first CI run on that revision failed one obsolete Docs Drive test; its native iOS, Android and engine jobs passed. `ci-native-review.md` preserves that failure and the local corrective evidence. The PR's checks and the umbrella issue are the authoritative record of subsequent CI on the published head. Full-app OS notification callbacks, isolation and independent recovery require their own native observations; file-store and screen-flow passes do not establish them.

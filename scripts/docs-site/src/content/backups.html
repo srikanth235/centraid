@@ -1,133 +1,62 @@
-<section class="ch-hero wrap">
-  <p class="eyebrow r">Chapter 4 · backups</p>
-  <h1 class="r">A backup is real <em>when the gateway acknowledges it.</em></h1>
-  <p class="lede r">
-    Your phone is the vault and the only writer. It seals backup data before sending it directly
-    to a gateway you control. Recovery uses your recovery key and a reachable gateway.
-  </p>
+<section class="ref-hero wrap">
+  <div>
+    <p class="eyebrow">Backups · recovery</p>
+    <h1>A backup is real <em>when it is acknowledged.</em></h1>
+  </div>
+  <p class="lede">Your phone is the vault and its only writer. It seals the backup before sending it to a gateway you control. Recovery needs both your 24-word recovery key and a reachable gateway with a sealed copy.</p>
 </section>
 
-<section class="sec wrap" id="why">
-  <p class="eyebrow r">§01 · what is backed up</p>
-  <h2 class="r">Records first. Original bytes may wait.</h2>
-  <div class="prose r">
-    <p>
-      The phone reports what each gateway acknowledged. Records acknowledged with all their
-      content hashes confirmed can be reported as backed up. If records were acknowledged while
-      files still wait, the Backup screen says so with the count and reason; that is not a
-      complete backup.
-    </p>
-    <p>
-      Original photos and videos are separate from vault records. Their transfer follows your
-      backup rule: Wi-Fi by default, optional cellular transfer for photos, and video originals
-      never cross a metered link. A manual backup sends records over a metered link, not heavy
-      originals.
-    </p>
+<section class="ref-board wrap" aria-labelledby="backup-flow-title">
+  <h2 id="backup-flow-title">From this phone to your backup</h2>
+  <figure>
+    <div class="record-map">
+      <div class="record"><span class="kind">PHONE</span><strong>Live vault</strong><span>reads and writes</span></div>
+      <div class="relation"><b aria-hidden="true">→</b>seals · direct HTTPS</div>
+      <div class="record"><span class="kind">GATEWAY</span><strong>Sealed copy</strong><span>stores · cannot open</span></div>
+    </div>
+    <figcaption class="ref-note">The phone sends each backup directly to the address in the pairing code. A gateway has no vault key and cannot read the copy.</figcaption>
+  </figure>
+  <div class="ref-foot">
+    <div class="ref-note"><h3>Records</h3><p>The Backup screen reports what each gateway acknowledged.</p></div>
+    <div class="ref-note"><h3>Original files</h3><p>Photos and videos move separately. Items still waiting keep the backup marked incomplete.</p></div>
   </div>
 </section>
 
-<section class="sec wrap" id="setup">
-  <p class="eyebrow r">§02 · connect a gateway</p>
-  <h2 class="r">Pair directly from Backup.</h2>
-  <div class="prose r">
-    <p>
-      Run <code>centraid-gateway serve --data-dir DIR</code> on a machine you control, then
-      scan its fresh QR in the phone's <b>Backup</b> screen and compare the safety number. The
-      gateway stores sealed data and cannot read it. You can pair more than one gateway.
-    </p>
-    <p>
-      The phone works offline. Backup runs in the foreground and in background windows the
-      operating system grants. Force-quitting stops background work until the next launch. A
-      gateway outage does not stop local use.
-    </p>
-  </div>
+<section class="ref-details wrap" aria-label="Backup details">
+  <details open>
+      <summary><h3 id="why">What a complete backup means</h3></summary>
+      <p>Records count as backed up only when a gateway acknowledges them and confirms their content. If a file still waits, the Backup screen shows how many and why. A manual backup sends records on mobile data, but not heavy originals. Photos follow your Wi-Fi or cellular rule; video originals never cross a metered link.</p>
+  </details>
+  <details>
+      <summary><h3 id="setup">Pair a backup device</h3></summary>
+      <p>On a machine you control, run <code>centraid-gateway serve --data-dir DIR</code>. In the phone's Backup screen, scan its fresh QR code and compare every group of the safety number with the number shown by the gateway. Stop if they differ. Pair each gateway separately; each keeps its own sealed copy.</p>
+      <p>The phone makes direct HTTPS connections and checks the certificate fingerprint carried in the QR. It works offline; backup waits when the gateway is unreachable. Background work runs only in the windows the operating system grants, and force-quitting stops it until the next launch.</p>
+  </details>
+  <details>
+      <summary><h3 id="recovery">Keep the recovery key and a reachable backup</h3></summary>
+      <p>Your recovery key is 24 words. Those words derive the keys that open your backup. The phone may also keep a protected copy with iCloud Keychain on iPhone or Google on Android when that platform can restore it. The Backup screen says where the key is saved; keep the 24 words even when it is saved elsewhere.</p>
+      <p>The words alone cannot restore a lost vault: you also need a reachable gateway that holds its sealed backup. Centraid cannot replace a missing key or a missing backup.</p>
+  </details>
+  <details>
+      <summary><h3 id="restore">Restore to a new phone</h3></summary>
+      <p>Choose <b>Restore my vaults</b>, provide the 24 words if the phone cannot use a key restored by its operating system, and connect to a reachable gateway. If you need a new QR, run <code>centraid-gateway pair --data-dir DIR</code> beside the running gateway. Pairing codes are single-use and expire after a day.</p>
+      <p>The phone checks the records before it claims a new writer position. If it cannot establish that the copy is newest, it asks before claiming. Originals that reached the gateway can be fetched later; an original that never arrived may be unavailable after the source phone is lost.</p>
+      <p>A verified takeover stops backup work to that gateway and invalidates the old phone's token there. The old phone learns only when it contacts a gateway. Once it has learned of any verified move, ordinary member write actions are refused. Its backup pass may continue to other gateways that have not moved; the whole backup door stops only after every paired gateway has moved.</p>
+  </details>
+  <details>
+      <summary><h3 id="check">Check a backup and understand retention</h3></summary>
+      <p><b>Check my backup</b> restores records from each reachable gateway into a scratch copy, verifies files by name and opens a bounded sample. The result says whether the copy opened, had a problem, or could not be checked. The check needs free space equal to the vault size, plus one tenth and 64 MiB.</p>
+      <p>The phone keeps up to seven daily, four weekly and six monthly snapshots, counting only periods with a snapshot; the newest is always kept. A deleted file stays while a kept snapshot needs it. After the phone requests deletion, the gateway holds the copy for at least seven days; if it is paused or offline, it may keep it longer. There is no exact deletion date to promise.</p>
+      <p>Technical detail: <a href="https://github.com/srikanth235/centraid/blob/main/.claude/skills/backup/phone.md">phone backup rules</a> · <a href="https://github.com/srikanth235/centraid/blob/main/crates/gateway/README.md">gateway README</a>.</p>
+  </details>
+  <details>
+      <summary><h3 id="limits">What a backup cannot promise</h3></summary>
+      <p>Only a reachable gateway can acknowledge a backup. A backup device stores sealed records and objects, not the keys that open them. Keep its data directory and identity safe. A second gateway somewhere else can protect against losing both your phone and a nearby backup device.</p>
+  </details>
 </section>
 
-<section class="sec wrap" id="recovery">
-  <p class="eyebrow r">§03 · recovery key</p>
-  <h2 class="r">Keep the 24 words safe.</h2>
-  <div class="prose r">
-    <p>
-      Your recovery key is its 24 words. They derive the keys needed to open your vault
-      backups. Depending on the platform and settings, the operating system may also keep an
-      encrypted seed in its secure key store. That can help a replacement phone on the same OS
-      account; it is optional custody, not a substitute for keeping the words safe.
-    </p>
-    <p>There is no recovery-kit JSON, provider API key, or hosted recovery service.</p>
-  </div>
-</section>
-
-<section class="sec wrap" id="restore">
-  <p class="eyebrow r">§04 · restore</p>
-  <h2 class="r">Restore checked records to a new phone.</h2>
-  <div class="prose r">
-    <p>
-      Install a compatible Centraid phone build and choose <b>Restore my vaults</b> and enter your recovery
-      key's 24 words unless the phone can use a seed already held in its secure key store.
-      Choose a reachable gateway. If the original pairing QR has expired or been used, ask the
-      gateway operator to print a <b>fresh pairing code</b> with
-      <code>centraid-gateway pair --data-dir DIR</code>.
-    </p>
-    <p>
-      The phone checks backup records before it claims the next writer position. A successful
-      restore recovers the checked vault and previews. An original file acknowledged by the
-      gateway can be fetched from that gateway later; an original that never reached a gateway
-      may be unavailable after the source phone is lost. If the restore cannot establish that
-      it has the newest backup, it asks before claiming anything.
-    </p>
-    <p>
-      A takeover invalidates the old phone's gateway tokens. An offline old phone learns about
-      takeover only when it next contacts a gateway, so remote revocation is not immediate while
-      it is offline.
-    </p>
-  </div>
-</section>
-
-<section class="sec wrap" id="check">
-  <p class="eyebrow r">§05 · check and retention</p>
-  <h2 class="r">A check reports what it read.</h2>
-  <div class="prose r">
-    <p>
-      <b>Check my backup</b> restores records from each reachable gateway into a scratch copy,
-      verifies files by name and opens a bounded sample. The screen distinguishes a backup that
-      opens, one with a problem, and one that was not checked. It needs free space for the vault
-      size plus one tenth and 64 MiB.
-    </p>
-    <p>
-      The phone keeps seven daily, four weekly and six monthly snapshots, where those periods
-      contain snapshots; the newest is always retained. Deletion starts only after no kept
-      backup needs the file. Once the phone asks the gateway to delete it, the gateway holds
-      that copy for at least seven days before purging it. If the gateway is paused or offline,
-      it may keep the copy longer. Copies on backup devices go when old backups age out; there
-      is no exact deletion deadline to promise.
-    </p>
-    <p>
-      For implementation details, see the repository's
-      <a href="https://github.com/srikanth235/centraid/blob/main/.claude/skills/backup/phone.md">backup phone rules</a>
-      and <a href="https://github.com/srikanth235/centraid/blob/main/crates/gateway/README.md">gateway README</a>.
-    </p>
-  </div>
-</section>
-
-<section class="sec wrap" id="limits">
-  <p class="eyebrow r">§06 · limits</p>
-  <h2 class="r">Connectivity changes backup, not your vault.</h2>
-  <div class="prose r">
-    <p>
-      Only a reachable gateway can acknowledge a backup. Phone background work depends on the
-      operating system; a stopped or force-quit app cannot promise continuous transfer. If a
-      phone is replaced, the restored phone becomes the writer after checks and a successful
-      claim. A former phone may still have local data, but its next gateway contact reports
-      that it was superseded.
-    </p>
-    <p>
-      Keep the gateway's data directory backed up as an operator would any important machine
-      data. The directory contains the gateway identity and sealed objects; it does not contain
-      the keys that open the vault.
-    </p>
-  </div>
-  <div class="chapter-next r">
-    <a href="../devices/">← previous: devices</a>
-    <a href="../start/">back to start →</a>
-  </div>
-</section>
+<nav class="ref-links wrap" aria-label="Related pages">
+  <a href="../devices/#topology">How devices connect</a>
+  <a href="../learn/">Learn the basics</a>
+  <a href="../start/">Back to start</a>
+</nav>

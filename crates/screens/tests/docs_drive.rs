@@ -536,29 +536,45 @@ fn labels_add_tags_a_label_it_has_is_nothing_and_remove_untags() {
 }
 
 #[test]
-fn trash_asks_first_says_it_can_be_restored_and_dismissing_writes_nothing() {
+fn trash_moves_immediately_and_undo_restores_the_same_document() {
     let mut d = driver();
     let i = root(&d);
-    let id = text(&d, "Scratch", "x");
+    let id = text(&d, "Scratch", "original body");
     drive_send(&mut d, i, D::Refreshed(de::Refreshed {}));
     row_menu(&mut d, i, &id);
     pick(&mut d, i, "trash");
-    let confirm_now = state(&d, i).confirm.as_ref().expect("a confirm");
-    assert_eq!(confirm_now.title, "Move to trash?");
-    assert_eq!(
-        confirm_now.body,
-        "It can be restored from trash for 30 days."
-    );
-    assert_eq!(confirm_now.confirm_label, "Move to trash");
-    assert!(confirm_now.destructive);
-    drive_send(&mut d, i, D::Dismissed(de::Dismissed {}));
-    assert!(state(&d, i).confirm.is_none());
-    assert!(titles(d.view(i)).contains(&"Scratch".to_owned()));
-    row_menu(&mut d, i, &id);
-    pick(&mut d, i, "trash");
-    confirm(&mut d, i);
+
     assert!(state(&d, i).confirm.is_none());
     assert!(!titles(d.view(i)).contains(&"Scratch".to_owned()));
+    let line = state(&d, i).status.as_ref().expect("the trash status");
+    assert_eq!(
+        (line.sentence.as_str(), line.action_label.as_str()),
+        ("Scratch moved to trash", "Undo")
+    );
+    let trashed = document(&d, &id)
+        .document
+        .expect("history retains the trashed document");
+    assert_eq!(trashed.document_id, id);
+    assert!(trashed.trashed);
+
+    // A dismissal has nothing to dismiss and must not reverse the committed move.
+    drive_send(&mut d, i, D::Dismissed(de::Dismissed {}));
+    assert!(state(&d, i).confirm.is_none());
+    assert!(!titles(d.view(i)).contains(&"Scratch".to_owned()));
+    assert!(document(&d, &id).document.unwrap().trashed);
+
+    d.send(
+        i,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    assert!(state(&d, i).confirm.is_none());
+    assert!(titles(d.view(i)).contains(&"Scratch".to_owned()));
+    let restored = document(&d, &id);
+    let restored_row = restored.document.expect("the same document is restored");
+    assert_eq!(restored_row.document_id, id);
+    assert!(!restored_row.trashed);
+    assert_eq!(restored_row.title, "Scratch");
+    assert_eq!(restored.body.as_deref(), Some("original body"));
 }
 
 #[test]

@@ -73,18 +73,9 @@ name: onboarding
       id: "kit-empty"
     timeout: 10000
 - assertNotVisible: "See an example"
-# Back: the navigation bar's on iOS (`back` is Android's system key only).
-- runFlow:
-    when:
-      platform: iOS
-    commands:
-      - tapOn:
-          id: "BackButton"
-- runFlow:
-    when:
-      platform: Android
-    commands:
-      - back
+# Home: the Docs band's capsule returns to the shell root on both platforms.
+- tapOn:
+    id: "docs-band-home"
 
 # PEOPLE OFFERS THE PHONE'S CONTACTS in place of its add, at the point of use.
 - scrollUntilVisible:

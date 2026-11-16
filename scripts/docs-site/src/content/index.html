@@ -1,34 +1,64 @@
-<!-- HERO -->
-<section class="ch-hero wrap">
-  <p class="eyebrow r">Centraid · the manual</p>
-  <h1 class="r" style="--d: 0.1s">Your phone. <em>Your vault.</em></h1>
-  <p class="lede r" style="--d: 0.22s">
-    Centraid is personal software for your phone. The phone holds your vault and is its only
-    writer. Nine built-in apps work with the same records, while a backup device keeps a sealed
-    copy. Your data works offline; a connection only changes when that backup can be made.
-  </p>
+<section class="doc-home-hero wrap">
+  <div>
+    <p class="eyebrow">Centraid · documentation</p>
+    <h1 class="hero-title">Your phone.<br /><em>Your vault.</em></h1>
+    <p class="lede">
+      Nine built-in apps use one phone vault. A backup device stores a sealed copy.
+    </p>
+    <div class="doc-actions">
+      <a class="doc-action primary" href="start/">Get started <span aria-hidden="true">→</span></a>
+      <a class="doc-action" href="understand/">How it works</a>
+    </div>
+  </div>
+  <div>
+    <div class="doc-diagram" role="img" aria-label="The phone is the only writer. Nine built-in apps use one vault. The phone sends sealed backup data to a reachable backup device, which cannot read it.">
+      <div class="doc-diagram-flow">
+        <div class="doc-node">
+          <div class="doc-phone-head">
+            <img src="assets/centraid-mark.svg" alt="" />
+            <div><h2>Your phone</h2><p>one vault · only writer</p></div>
+          </div>
+          <div class="doc-app-grid" aria-hidden="true">
+            <span class="doc-app-chip">Calendar</span><span class="doc-app-chip">Reminders</span><span class="doc-app-chip">People</span>
+            <span class="doc-app-chip">Notes</span><span class="doc-app-chip">Docs</span><span class="doc-app-chip">Photos</span>
+            <span class="doc-app-chip">Money</span><span class="doc-app-chip">Health</span><span class="doc-app-chip">Locker</span>
+          </div>
+          <div class="doc-vault-label">Shared records · works offline</div>
+        </div>
+        <div class="doc-transfer" aria-hidden="true">
+          <svg viewBox="0 0 40 40" fill="none" stroke-width="1.8"><rect x="7" y="17" width="26" height="18" rx="3"></rect><path d="M13 17v-5a7 7 0 0 1 14 0v5M20 23v6"></path></svg>
+          <span>sealed copy →</span>
+        </div>
+        <div class="doc-node doc-backup-node">
+          <h3>Backup device</h3>
+          <p>reachable for backup</p>
+          <p><strong>Cannot read the vault</strong></p>
+        </div>
+      </div>
+    </div>
+    <p class="doc-diagram-caption">A connection changes backup, not what you can do on your phone.</p>
+  </div>
 </section>
 
-<!-- READING PATHS -->
-<section class="sec wrap" style="border: 0; padding-top: 0">
-  <div class="split">
-    <a class="path r" href="start/">
-      <p class="c-no">path 1 · use it</p>
-      <h2>Start on <em>your phone.</em></h2>
-      <p>
-        Build the iOS or Android app, open your vault, use the apps on Home, and follow the steps
-        for importing your own data and keeping a backup.
-      </p>
-      <p class="go">get started →</p>
+<section class="sec wrap" aria-label="Choose a path">
+  <div class="doc-choice-grid">
+    <a class="doc-choice" href="start/">
+      <p class="c-no">01 · set up</p>
+      <h2>Start with your phone.</h2>
+      <p>Build the app, bring in your data, and keep a way to restore.</p>
+      <p class="go">Setup and recovery <span aria-hidden="true">→</span></p>
     </a>
-    <a class="path r" href="understand/" style="--d: 0.1s">
-      <p class="c-no">path 2 · understand it</p>
-      <h2>See how the <em>parts fit.</em></h2>
-      <p>
-        Follow the phone vault, built-in apps, and blind backup device, then read short foundations
-        on the shared data model, SQLite, sealed values, and recovery.
-      </p>
-      <p class="go">understand Centraid →</p>
+    <a class="doc-choice" href="understand/">
+      <p class="c-no">02 · explore</p>
+      <h2>See how the parts fit.</h2>
+      <p>Follow the vault, built-in apps, and sealed backup.</p>
+      <p class="go">How Centraid works <span aria-hidden="true">→</span></p>
     </a>
   </div>
 </section>
+
+<nav class="doc-pill-links wrap" aria-label="More documentation">
+  <a href="apps/">Apps</a><a href="data/">Data</a><a href="devices/">Devices</a>
+  <a href="backups/">Backups</a><a href="privacy/">Privacy</a><a href="terms/">Terms</a>
+  <a href="ontology/">Full reference</a>
+</nav>

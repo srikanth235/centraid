@@ -6,19 +6,19 @@ const rail = [
   {
     "href": "#install",
     "no": "§01",
-    "label": "Build the phone app",
+    "label": "Open your vault",
     "current": true
   },
   {
     "href": "#first-open",
     "no": "§02",
-    "label": "Your vault",
+    "label": "Recovery words",
     "current": false
   },
   {
     "href": "#first-app",
     "no": "§03",
-    "label": "Your first apps",
+    "label": "Bring in records",
     "current": false
   },
   {
@@ -30,30 +30,30 @@ const rail = [
   {
     "href": "#import",
     "no": "§05",
-    "label": "Bring your data",
+    "label": "Imports",
     "current": false
   },
   {
     "href": "#phone",
     "no": "§06",
-    "label": "Add a gateway",
+    "label": "Set up a backup",
     "current": false
   },
   {
     "href": "#always-on",
     "no": "§07",
-    "label": "Reachability",
+    "label": "Pairing and reachability",
     "current": false
   },
   {
     "href": "#backup",
     "no": "§08",
-    "label": "Recovery key",
+    "label": "Keep your recovery key",
     "current": false
   }
 ];
 const footer = {
-  "manifesto": "Your phone holds the vault. <em>A gateway keeps its sealed backup.</em>",
+  "manifesto": "The phone holds the live vault. Backup devices store sealed copies.",
   "links": [
     {
       "href": "https://centraid.dev",
@@ -80,12 +80,12 @@ const footer = {
 ---
 
 <DocsLayout
-  title="Get started with Centraid on your phone"
-  description="Build the pre-release iOS or Android app, use the nine first-party apps on Home, and pair a gateway for sealed backups."
+  title="Get started with Centraid"
+  description="Open your phone vault, bring in records, pair a backup device, and keep the recovery key needed to restore."
   current="start"
   canonicalPath="start/"
   searchLabel="Start"
-  searchKeywords="phone iOS Android build source native Home Docs Photos Notes People Calendar Reminders Money Health Locker document note reminder gateway backup recovery key"
+  searchKeywords="phone vault create restore recovery words key imports People Docs Notes backup device centraid-gateway pairing sealed copy assistant"
   bodyClass="has-rail"
   rail={rail}
   footer={footer}

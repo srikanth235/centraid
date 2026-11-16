@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>Start · a visual guide (dark)</title>
+<link rel="stylesheet" href="../../scripts/docs-site/public/assets/centraid-tokens.css">
+<link rel="stylesheet" href="../../scripts/docs-site/public/assets/docs.css">
+<style>
+body{margin:0}.board{width:1200px;min-height:1160px;overflow:hidden}.board main{padding-bottom:var(--sp-band)}
+.board .head-row{gap:var(--sp-4)}.board .head-nav{gap:var(--sp-2)}.board .head-nav a{white-space:nowrap}
+.search-sample{display:flex;align-items:center;gap:var(--sp-2);min-height:var(--target-min);padding:0 var(--sp-3);border:1px solid var(--line);border-radius:var(--r-md);color:var(--text-faint);font:var(--t-control);white-space:nowrap}
+.search-sample svg{width:18px;height:18px;stroke:currentColor;flex:none}
+.guide-intro{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,.65fr);gap:var(--sp-6);align-items:end;padding-top:var(--sp-band)}
+.guide-intro h1{max-width:14ch}.guide-intro .lede{max-width:60ch}
+.guide-need{display:grid;gap:var(--sp-2);padding:var(--sp-4);border-left:3px solid var(--text);background:var(--bg-elev);border-radius:var(--r-sm)}
+.guide-need h2{font:var(--t-control)}.guide-need p{font:var(--t-annot-label);color:var(--text-soft)}
+.guide-flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--sp-3);margin-top:var(--sp-6)}
+.guide-step{display:flex;flex-direction:column;align-items:stretch;grid-template-columns:none;min-width:0;min-height:250px;padding:var(--sp-4);border:1px solid var(--line);border-radius:var(--r-lg);background:var(--bg-elev)}
+.guide-number{display:grid;place-items:center;flex:none;width:34px;height:34px;border:1px solid var(--line-strong);border-radius:var(--r-pill);font:var(--t-control)}
+.guide-step h2{margin-top:var(--sp-4);font:var(--t-title)}.guide-step p{margin-top:var(--sp-2);color:var(--text-soft);font:var(--t-annot-label)}
+.guide-step a{display:inline-flex;gap:var(--sp-1);margin-top:auto;padding-top:var(--sp-4);font:var(--t-control);text-decoration-thickness:1px;text-underline-offset:3px}
+.guide-visual{min-height:82px;display:flex;align-items:center;justify-content:center;gap:var(--sp-3);margin-top:var(--sp-4);padding:var(--sp-3);border-radius:var(--r-md);background:var(--bg-sunken)}
+.guide-arrow{color:var(--text-faint);font:var(--t-title)}
+.guide-phone{position:relative;display:grid;place-items:center;width:34px;height:52px;border:2px solid var(--text-soft);border-radius:8px}
+.guide-phone::before{content:"";position:absolute;top:4px;width:8px;height:2px;border-radius:var(--r-pill);background:var(--text-faint)}
+.guide-apps{display:grid;grid-template-columns:repeat(3,4px);gap:3px}.guide-apps i{width:4px;height:4px;border-radius:1px;background:var(--text)}
+.guide-paper{position:relative;width:52px;height:46px;padding:var(--sp-2);border:1px solid var(--line-strong);border-radius:var(--r-sm);background:var(--bg-elev);font:var(--t-control);text-align:center}
+.guide-paper::after{content:"";display:block;height:2px;margin-top:var(--sp-2);background:var(--line-strong);box-shadow:0 6px 0 var(--line-strong),0 12px 0 var(--line-strong)}
+.guide-contact{display:flex;align-items:center;gap:var(--sp-1);width:48px;height:38px;padding:var(--sp-1);border:1px solid var(--line-strong);border-radius:var(--r-sm);background:var(--bg-elev)}
+.guide-avatar{width:12px;height:12px;border-radius:var(--r-pill);background:var(--text-faint)}.guide-lines{height:3px;flex:1;border-top:1px solid var(--line-strong);border-bottom:1px solid var(--line-strong)}
+.guide-file{position:relative;width:30px;height:40px;border:1px solid var(--line-strong);border-radius:var(--r-sm);background:var(--bg-elev)}.guide-file::after{content:"";position:absolute;left:5px;right:5px;top:15px;height:2px;background:var(--line-strong);box-shadow:0 6px 0 var(--line-strong),0 12px 0 var(--line-strong)}
+.guide-lock{position:relative;width:30px;height:25px;margin-top:10px;border:2px solid var(--text-soft);border-radius:5px;background:var(--bg-elev)}.guide-lock::before{content:"";position:absolute;left:6px;right:6px;top:-13px;height:14px;border:2px solid var(--text-soft);border-bottom:0;border-radius:9px 9px 0 0}
+.guide-machine{position:relative;width:42px;height:30px;border:2px solid var(--text-soft);border-radius:4px}.guide-machine::after{content:"";position:absolute;left:12px;right:12px;bottom:-7px;height:3px;border-radius:var(--r-pill);background:var(--text-soft)}
+.guide-continuity{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:var(--sp-4);margin-top:var(--sp-6);padding:var(--sp-5);border:1px solid var(--line);border-radius:var(--r-lg)}
+.guide-endpoint{text-align:center}.guide-endpoint strong{display:block;font:var(--t-control)}.guide-endpoint span{display:block;margin-top:var(--sp-1);color:var(--text-faint);font:var(--t-annot-label)}
+.guide-continuity .guide-arrow{font:var(--t-title);color:var(--text-soft)}.guide-fine{margin-top:var(--sp-2);color:var(--text-faint);font:var(--t-annot-label);text-align:center}
+.guide-more{display:flex;flex-wrap:wrap;gap:var(--sp-2);margin-top:var(--sp-5)}.guide-more a{border:1px solid var(--line);border-radius:var(--r-pill);padding:var(--sp-1) var(--sp-3);font:var(--t-annot-label);text-decoration:none}
+.guide-timing{margin-top:var(--sp-5);padding:var(--sp-3) 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.guide-timing summary{cursor:pointer;font:var(--t-control);list-style:none}.guide-timing summary::-webkit-details-marker{display:none}
+.guide-timing summary::after{content:"+";float:right;color:var(--text-faint);font:var(--t-title)}.guide-timing[open] summary::after{content:"−"}
+.guide-timing p{max-width:78ch;margin-top:var(--sp-2);font:var(--t-annot-label);color:var(--text-soft)}
+@media(max-width:850px){.board{width:100%;min-height:100vh}.board .head-row{flex-wrap:wrap}.board .head-nav{order:3;overflow:auto;max-width:100%;padding-bottom:var(--sp-1)}.guide-intro{grid-template-columns:1fr;gap:var(--sp-4)}.guide-flow{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){.guide-flow{grid-template-columns:1fr}.guide-step{min-height:0}.guide-continuity{grid-template-columns:1fr}.guide-continuity .guide-arrow{transform:rotate(90deg);justify-self:center}}
+</style>
+</head>
+<body>
+<x-dc>
+<div class="board">
+  <header class="site-head"><div class="head-row">
+    <a class="brand" href="/docs/"><span class="mark" aria-hidden="true"><img src="../icon/centraid-mark.svg" alt=""></span>Centraid <span class="docs-tag">docs</span></a>
+    <nav class="head-nav" aria-label="Chapters"><a href="/docs/start/" aria-current="page">start</a><a href="/docs/learn/">learn</a><a href="/docs/understand/">understand</a><a href="/docs/data/">data</a><a href="/docs/apps/">apps</a><a href="/docs/devices/">devices</a><a href="/docs/backups/">backups</a></nav>
+    <button class="search-sample" type="button" aria-label="Search the docs"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><span>Search</span></button>
+  </div></header>
+  <main class="wrap">
+    <section class="guide-intro">
+      <div><p class="eyebrow">Start · four steps</p><h1 class="hero-title">Set up. Bring data. <em>Keep a way back.</em></h1><p class="lede">Your phone holds the live vault. Use it offline. Backup and restore need a reachable backup device.</p></div>
+      <aside class="guide-need" aria-label="What you need to restore"><h2>To restore, keep both:</h2><p>your 24-word recovery key</p><p>a reachable backup device with your sealed backup</p></aside>
+    </section>
+    <section class="guide-flow" aria-label="Setup and recovery steps">
+      <article class="guide-step"><span class="guide-number">1</span><h2>Open your vault</h2><p>Build the app, then create a vault or restore a backup.</p><div class="guide-visual" role="img" aria-label="Centraid on a phone."><span class="guide-phone" aria-hidden="true"><img width="16" height="16" src="../icon/centraid-mark.svg" alt=""></span></div><a href="https://github.com/srikanth235/centraid/blob/main/mobile/README.md">Build instructions <span aria-hidden="true">↗</span></a></article>
+      <article class="guide-step"><span class="guide-number">2</span><h2>Bring your data</h2><p>Choose contacts for People or files for Docs. Allow access when asked.</p><div class="guide-visual" role="img" aria-label="A contact and a file, chosen for import into the phone vault."><span class="guide-contact" aria-hidden="true"><i class="guide-avatar"></i><i class="guide-lines"></i></span><span class="guide-file" aria-hidden="true"></span></div><a href="/docs/start/#import">Import steps <span aria-hidden="true">→</span></a></article>
+      <article class="guide-step"><span class="guide-number">3</span><h2>Pair a backup device</h2><p>Run centraid-gateway, scan its QR in Backup, and compare the safety number.</p><div class="guide-visual" role="img" aria-label="The phone sends sealed backup data to a reachable backup device, which cannot read it."><span class="guide-phone" aria-hidden="true"></span><span class="guide-arrow" aria-hidden="true">→</span><span class="guide-lock" aria-hidden="true"></span><span class="guide-arrow" aria-hidden="true">→</span><span class="guide-machine" aria-hidden="true"></span></div><a href="/docs/devices/#pairing">Pair and keep it reachable <span aria-hidden="true">→</span></a></article>
+      <article class="guide-step"><span class="guide-number">4</span><h2>Keep your recovery key</h2><p>Store all 24 words offline and away from your phone.</p><div class="guide-visual" role="img" aria-label="A paper recovery key with twenty-four words, stored apart from the phone."><span class="guide-paper" aria-hidden="true">24 words</span></div><a href="/docs/backups/#recovery">Recovery key details <span aria-hidden="true">→</span></a></article>
+    </section>
+    <section aria-label="Restore flow">
+      <p class="guide-fine">Restore checks records before the new phone takes over. Originals never backed up may be unavailable.</p>
+    </section>
+    <details class="guide-timing"><summary>When Centraid shows the recovery key</summary><p>The create flow shows the words if the phone has no secure place to keep the key. Otherwise, Backup prompts after the first confirmed backup when the key has not been saved or synced.</p></details>
+    <nav class="guide-more" aria-label="Continue reading"><a href="/docs/backups/#restore">Restore details</a><a href="/docs/backups/#check">Backup checks</a><a href="/docs/privacy/">Privacy</a><a href="/docs/ontology/">Full reference</a></nav>
+  </main>
+  <footer class="site-foot"><div class="wrap"><div class="foot-row"><span>© 2026 Centraid</span><span class="foot-links"><a href="/docs/">docs home</a><a href="/docs/backups/#restore">restore</a></span></div></div></footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":1160}}'>class Component extends DCLogic { renderVals(){return{};} }</script>
+</body>
+</html>

@@ -4,6 +4,37 @@
 (() => {
   const root = document.documentElement;
 
+  // Deep links can point into a closed disclosure. Open ancestor disclosures
+  // before the browser performs its fragment scroll, including on history nav.
+  const revealHashTarget = () => {
+    if (!location.hash) return;
+    let id;
+    try {
+      id = decodeURIComponent(location.hash.slice(1));
+    } catch {
+      return;
+    }
+    const target = document.querySelector(`#${CSS.escape(id)}`);
+    if (!target) return;
+    for (
+      let disclosure = target.closest("details");
+      disclosure;
+      disclosure = disclosure.parentElement?.closest("details")
+    ) {
+      disclosure.setAttribute("open", "");
+    }
+    requestAnimationFrame(() => target.scrollIntoView({ block: "start" }));
+  };
+  window.addEventListener("hashchange", revealHashTarget);
+  window.addEventListener("popstate", revealHashTarget);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", revealHashTarget, {
+      once: true,
+    });
+  } else {
+    revealHashTarget();
+  }
+
   // ---------- theme ----------
   // The product's own two names, `light` and `dark`. DocsLayout's <head>
   // script already pinned a stored choice before first paint; until the

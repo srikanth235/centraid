@@ -2,47 +2,68 @@
 <html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
-<title>Docs home · two reading paths</title>
+<title>Docs · choose a path</title>
 <link rel="stylesheet" href="../../scripts/docs-site/public/assets/centraid-tokens.css">
 <link rel="stylesheet" href="../../scripts/docs-site/public/assets/docs.css">
 <style>
-body{margin:0}.board{width:1440px;min-height:1100px;overflow:hidden}.board main{min-height:900px}.board .head-nav a[aria-current="page"]{color:var(--text)}.board .home-copy{max-width:920px}.board .hero-title{max-width:18ch}.board .paths{padding-top:0}.board .path{min-height:260px}.board .path .go{display:flex;justify-content:space-between;align-items:center}.board footer{margin-top:100px}
+body{margin:0}.board{width:1440px;min-height:1100px;overflow:hidden}.board main{padding-bottom:var(--sp-band)}
+.board .head-row{gap:var(--sp-4)}.board .head-nav{gap:var(--sp-2)}.board .head-nav a{white-space:nowrap}
+.search-sample{display:flex;align-items:center;gap:var(--sp-2);min-height:var(--target-min);padding:0 var(--sp-3);border:1px solid var(--line);border-radius:var(--r-md);color:var(--text-faint);font:var(--t-control);white-space:nowrap}
+.search-sample svg{width:18px;height:18px;stroke:currentColor;flex:none}
+.hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(420px,.95fr);gap:clamp(var(--sp-6),7vw,var(--sp-band-lg));align-items:center;padding-top:var(--sp-band)}
+.hero h1{max-width:12ch}.hero .lede{max-width:54ch}.actions{display:flex;gap:var(--sp-3);margin-top:var(--sp-5)}
+.action{display:inline-flex;align-items:center;gap:var(--sp-2);min-height:var(--target-min);padding:0 var(--sp-4);border:1px solid var(--line-strong);border-radius:var(--r-md);font:var(--t-control);text-decoration:none}
+.action.primary{background:var(--text);border-color:var(--text);color:var(--bg)}
+.diagram{display:grid;grid-template-columns:minmax(230px,1fr) 48px minmax(190px,.8fr);gap:var(--sp-3);align-items:center;padding:var(--sp-4);border:1px solid var(--line);border-radius:var(--r-lg);background:var(--bg-elev)}
+.node{padding:var(--sp-4);border:1px solid var(--line);border-radius:var(--r-md);background:var(--bg)}
+.node h2,.node h3{font:var(--t-title)}.node p{margin-top:var(--sp-1);color:var(--text-soft);font:var(--t-annot-label)}
+.phone{min-height:270px}.phone-head{display:flex;align-items:center;gap:var(--sp-2);padding-bottom:var(--sp-3);border-bottom:1px solid var(--line)}
+.phone-head img{width:24px;height:24px}.apps{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--sp-2);margin-top:var(--sp-3)}
+.app{min-height:48px;display:grid;place-items:center;border:1px solid var(--line);border-radius:var(--r-sm);font:var(--t-annot-label);text-align:center}
+.vault{margin-top:var(--sp-3);padding:var(--sp-3);border-radius:var(--r-sm);background:var(--bg-sunken);font:var(--t-control);text-align:center}
+.sealed{display:grid;gap:var(--sp-2);justify-items:center;color:var(--text-faint);font:var(--t-annot-label);text-align:center}
+.sealed svg{width:38px;height:38px;stroke:var(--text-soft)}.machine{min-height:168px;display:flex;flex-direction:column;justify-content:center;text-align:center}
+.machine .lock{font:var(--t-title);color:var(--text-soft)}.caption{margin-top:var(--sp-3);color:var(--text-faint);font:var(--t-annot-label);text-align:center}
+.paths{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);margin-top:var(--sp-band)}
+.path{min-height:168px}.path h2{font:var(--t-title);margin-top:var(--sp-2)}.path p{max-width:48ch}.path .go{margin-top:var(--sp-3)}
+.topics{display:flex;flex-wrap:wrap;gap:var(--sp-2);margin-top:var(--sp-5)}.topic{border:1px solid var(--line);border-radius:var(--r-pill);padding:var(--sp-1) var(--sp-3);font:var(--t-annot-label);text-decoration:none}
+.board footer{margin-top:var(--sp-band)}
+@media(max-width:900px){.board{width:100%;min-height:100vh}.board .head-row{flex-wrap:wrap}.board .head-nav{order:3;overflow:auto;max-width:100%;padding-bottom:var(--sp-1)}.hero{grid-template-columns:1fr;gap:var(--sp-5)}.diagram{max-width:700px}.paths{grid-template-columns:1fr}}
+@media(max-width:560px){.diagram{grid-template-columns:1fr}.sealed{grid-template-columns:40px 1fr;text-align:left}.sealed svg{justify-self:center}.node.machine{min-height:0}.hero h1{max-width:10ch}.actions{flex-wrap:wrap}}
 </style>
 </head>
 <body>
 <x-dc>
 <div class="board">
-  <header class="site-head">
-    <div class="head-row">
-      <a class="brand" href="/docs/"><span class="mark" aria-hidden="true"><img src="../../scripts/docs-site/public/assets/centraid-mark.svg" alt=""></span>Centraid <span class="docs-tag">docs</span></a>
-      <nav class="head-nav" aria-label="Chapters"><a href="/docs/start/">start</a><a href="/docs/learn/">learn</a><a href="/docs/understand/" aria-current="page">understand</a><a href="/docs/data/">data</a><a href="/docs/apps/">apps</a><a href="/docs/devices/">devices</a><a href="/docs/backups/">backups</a></nav>
-      <button class="toggle" type="button" aria-label="Toggle theme"></button>
-    </div>
-  </header>
-  <main>
-    <section class="ch-hero wrap home-copy">
-      <p class="eyebrow">Centraid · the manual</p>
-      <h1 class="hero-title">Your phone. <em>Your vault.</em></h1>
-      <p class="lede">Centraid is personal software for your phone. The phone holds your vault and is its only writer. Nine built-in apps work with the same records, while a backup device keeps a sealed copy. Your data works offline; a connection only changes when that backup can be made.</p>
-    </section>
-    <section class="sec wrap paths">
-      <div class="split">
-        <a class="path" href="/docs/start/">
-          <p class="c-no">path 1 · use it</p>
-          <h2>Start on <em>your phone.</em></h2>
-          <p>Build the iOS or Android app, open your vault, use the apps on Home, and follow the steps for importing your own data and keeping a backup.</p>
-          <p class="go"><span>get started</span><span aria-hidden="true">→</span></p>
-        </a>
-        <a class="path" href="/docs/understand/">
-          <p class="c-no">path 2 · understand it</p>
-          <h2>See how the <em>parts fit.</em></h2>
-          <p>Follow the phone vault, built-in apps, and blind backup device, then read short foundations on the shared data model, SQLite, sealed values, and recovery.</p>
-          <p class="go"><span>understand Centraid</span><span aria-hidden="true">→</span></p>
-        </a>
+  <header class="site-head"><div class="head-row">
+    <a class="brand" href="/docs/"><span class="mark" aria-hidden="true"><img src="../icon/centraid-mark.svg" alt=""></span>Centraid <span class="docs-tag">docs</span></a>
+    <nav class="head-nav" aria-label="Chapters"><a href="/docs/start/">start</a><a href="/docs/learn/">learn</a><a href="/docs/understand/">understand</a><a href="/docs/data/">data</a><a href="/docs/apps/">apps</a><a href="/docs/devices/">devices</a><a href="/docs/backups/">backups</a></nav>
+    <button class="search-sample" type="button" aria-label="Search the docs"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg><span>Search the docs</span></button>
+  </div></header>
+  <main class="wrap">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Centraid · the guide</p>
+        <h1 class="hero-title">Your phone.<br><em>Your vault.</em></h1>
+        <p class="lede">One phone holds your live vault. Nine built-in apps work with its records. A backup device keeps a sealed copy.</p>
+        <div class="actions"><a class="action primary" href="/docs/start/">Get started <span aria-hidden="true">→</span></a><a class="action" href="/docs/understand/">How it works</a></div>
+      </div>
+      <div>
+        <div class="diagram" role="img" aria-label="The phone is the only writer. Its nine apps use one vault. It sends sealed backup data to a backup device it can reach; that device cannot read the vault.">
+          <div class="node phone"><div class="phone-head"><img src="../icon/centraid-mark.svg" alt=""><div><h2>Your phone</h2><p>one vault · only writer</p></div></div><div class="apps"><span class="app">Calendar</span><span class="app">Reminders</span><span class="app">People</span><span class="app">Notes</span><span class="app">Docs</span><span class="app">Photos</span><span class="app">Money</span><span class="app">Health</span><span class="app">Locker</span></div><div class="vault">Shared records · work offline</div></div>
+          <div class="sealed" aria-hidden="true"><svg viewBox="0 0 40 40" fill="none" stroke-width="1.8"><rect x="7" y="17" width="26" height="18" rx="3"></rect><path d="M13 17v-5a7 7 0 0 1 14 0v5M20 23v6"></path></svg><span>sealed copy →</span></div>
+          <div class="node machine"><h3>Backup device</h3><p>reachable when backing up</p><p class="lock">Cannot read the vault</p></div>
+        </div>
+        <p class="caption">The phone stays useful offline. The connection changes backup, not your data.</p>
       </div>
     </section>
+    <section class="paths" aria-label="Choose what to do">
+      <a class="path" href="/docs/start/"><p class="c-no">01 · set up</p><h2>Start with your phone.</h2><p>Build the app, keep the 24-word recovery key, bring in your own records, then pair a reachable backup device.</p><p class="go">Setup and recovery <span aria-hidden="true">→</span></p></a>
+      <a class="path" href="/docs/understand/"><p class="c-no">02 · explore</p><h2>See how the parts fit.</h2><p>Understand the phone vault, the nine apps, sealed backups, and the shared records underneath.</p><p class="go">How Centraid works <span aria-hidden="true">→</span></p></a>
+    </section>
+    <nav class="topics" aria-label="More documentation"><a class="topic" href="/docs/apps/">Apps</a><a class="topic" href="/docs/data/">Data</a><a class="topic" href="/docs/devices/">Devices</a><a class="topic" href="/docs/backups/">Backups</a><a class="topic" href="/docs/privacy/">Privacy</a><a class="topic" href="/docs/terms/">Terms</a><a class="topic" href="/docs/ontology/">Full reference</a></nav>
   </main>
-      <footer class="site-foot"><div class="wrap"><p class="foot-manifesto">Most software is built for everyone, so none of it fits anyone. <em>Yours can just fit you.</em></p><div class="foot-row"><span>© 2026 Centraid</span><span class="foot-links"><a href="https://centraid.dev">centraid.dev</a><a href="/docs/start/">start</a><a href="/docs/ontology/">ontology</a><a href="/docs/privacy/">privacy</a><a href="/docs/terms/">terms</a></span></div></div></footer>
+  <footer class="site-foot"><div class="wrap"><div class="foot-row"><span>© 2026 Centraid</span><span class="foot-links"><a href="https://centraid.dev">centraid.dev</a><a href="/docs/start/">start</a><a href="/docs/ontology/">reference</a></span></div></div></footer>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1100}}'>class Component extends DCLogic { renderVals(){return{};} }</script>

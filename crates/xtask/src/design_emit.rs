@@ -1311,7 +1311,7 @@ pub fn emit(root: &Path) -> Result<Emitted> {
     owned.extend(SITE_ASSETS.iter().map(|dir| format!("{dir}/fonts")));
 
     // The app icon: master SVGs, the iOS AppIcon set, the Android adaptive icon.
-    files.extend(crate::design_icon::files(&tokens)?);
+    files.extend(crate::design_icon::files(&tokens, root)?);
     owned.extend(
         crate::design_icon::OWNED
             .iter()

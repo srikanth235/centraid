@@ -1,145 +1,32 @@
-<section class="ch-hero wrap">
-  <p class="eyebrow r">Path 1 · use it</p>
-  <h1 class="r" style="--d: 0.1s">Your phone. <em>Your vault.</em></h1>
-  <p class="lede r" style="--d: 0.22s">
-    Centraid is a pre-release personal vault for iOS and Android. The phone is the only place
-    that writes your vault. Its native shell works offline, with nine first-party apps already
-    on Home. There is no desktop client or hosted account. This guide covers building the phone
-    app, using its apps, and arranging a backup.
-  </p>
+<section class="doc-guide-intro wrap">
+  <div><p class="eyebrow r">Start here</p>
+  <h1 class="hero-title r">Your phone holds <em>the vault.</em></h1>
+  <p class="lede r">Build the app, bring in records, then set up a sealed backup you control.</p></div>
+  <aside class="doc-recovery-need" aria-label="What you need to restore"><strong>To restore, keep both</strong><span>your 24-word recovery key</span><span>a reachable backup device with your sealed copy</span></aside>
 </section>
 
-<section class="sec wrap" id="install">
-  <p class="eyebrow r">§01 · install</p>
-  <h2 class="r">Build the phone app.</h2>
-  <div class="prose r">
-    <p>
-      Source-build instructions for this pre-release are maintained in
-      <a href="https://github.com/srikanth235/centraid/blob/main/mobile/README.md">mobile/README.md</a>.
-      Android builds need a JDK 21 and Android SDK. iOS builds need macOS, Xcode and XcodeGen.
-      The Rust core runs on the phone; SwiftUI draws iOS and Jetpack Compose draws Android.
-    </p>
-    <p>
-      For Android, build the core with <code>mobile/scripts/android-core.sh</code>, then run
-      <code>cd mobile &amp;&amp; ./gradlew -Pcentraid.android=true :androidApp:assembleDebug</code>.
-      The README has the current iOS steps. These are build instructions, not a claim that a
-      simulator build proves physical-device behavior.
-    </p>
-  </div>
+<section class="doc-step-grid wrap" aria-label="Getting started">
+  <article class="doc-step-card" id="install">
+    <span class="doc-step-number">01</span><div class="doc-illustration" role="img" aria-label="Centraid on a phone."><span class="phone-shape"><img src="../assets/centraid-mark.svg" alt="" /></span><span>Centraid<br>on your phone</span></div>
+    <h2>Open your vault</h2><p>Build Centraid for your phone, then create a vault or restore one.</p><a href="https://github.com/srikanth235/centraid/blob/main/mobile/README.md">Build instructions</a>
+    <details class="doc-details"><summary><h3 id="first-open">When recovery words appear</h3></summary><p>Centraid shows the words before Home when the phone’s secure store has not synchronized the key. When it has synchronized, setup can continue to Home without showing them then. Keep the words safe whenever they are shown.</p></details>
+  </article>
+  <article class="doc-step-card" id="first-app">
+    <span class="doc-step-number">02</span><div class="doc-illustration" role="img" aria-label="A contact and a document in Centraid."><span class="file-shape"></span><span class="arrow-shape" aria-hidden="true">→</span><span class="file-shape"></span></div>
+    <h2>Bring in records</h2><p>Choose contacts in People or files in Docs.</p>
+    <p><a href="../apps/">See the nine apps</a> · <a href="../data/#imports">Import details</a></p>
+  </article>
+  <article class="doc-step-card" id="phone">
+    <span class="doc-step-number">03</span><div class="doc-illustration" role="img" aria-label="A sealed copy on a backup device."><span class="file-shape"></span><span class="arrow-shape" aria-hidden="true">→</span><span>Backup device</span></div>
+    <h2>Set up a backup</h2><p>Pair a backup device you control from the Backup screen in Centraid.</p>
+    <details class="doc-details"><summary><h3 id="always-on">Pairing and reachability</h3></summary><p>Run <code>centraid-gateway</code> on a computer you control. Create a fresh pairing code there, enter it on the phone, and compare the safety number on both screens. The gateway must be reachable when a backup or restore needs it.</p><a href="../backups/#setup">Pairing instructions</a></details>
+  </article>
+  <article class="doc-step-card" id="backup">
+    <span class="doc-step-number">04</span><div class="doc-illustration" role="img" aria-label="A paper with 24 recovery words."><span class="file-shape"></span><span>24 words</span></div>
+    <h2>Keep your recovery key</h2><p>Write down the 24 words and store them somewhere safe, away from your phone.</p>
+    <details class="doc-details"><summary><h3 id="recovery">What you need to restore</h3></summary><p>Restore needs the recovery words and access to your backup device. The gateway stores sealed backup data; it does not hold the recovery key.</p><a href="../backups/#restore">Restore instructions</a></details>
+  </article>
 </section>
 
-<section class="sec wrap" id="first-open">
-  <p class="eyebrow r">§02 · first open</p>
-  <h2 class="r">Your phone holds the vault.</h2>
-  <div class="prose r">
-    <p>
-      The phone creates and holds your vault. Its Rust core is the only writer. The apps are
-      reviewed parts of the Centraid shell; you do not install them separately or grant them
-      access. There is no account to create.
-    </p>
-    <p>
-      Centraid creates a recovery key for the vault. Keep its 24 words somewhere safe away from
-      the phone. Depending on the platform, an encrypted seed may also be kept in the operating
-      system's secure key store.
-    </p>
-  </div>
-</section>
-
-<section class="sec wrap" id="first-app">
-  <p class="eyebrow r">§03 · your first apps</p>
-  <h2 class="r">Open an app from Home.</h2>
-  <div class="prose r">
-    <p>
-      All nine first-party apps are already on Home: <b>Docs</b>, <b>Photos</b>, <b>Notes</b>,
-      <b>People</b>, <b>Calendar</b>, <b>Reminders</b>, <b>Money</b>, <b>Health</b> and
-      <b>Locker</b>. Tap a tile to open it. The phone asks for operating-system permission when
-      you use a feature that needs it, such as camera access for scanning.
-    </p>
-    <p>
-      Try a real journey: in <b>Docs</b>, tap <b>Upload a file</b> and choose a document. In
-      <b>Notes</b>, make a new note, tap <b>Add link</b>, then use the <b>Link to</b> picker to
-      choose that document. In <b>Reminders</b>, add a reminder, then use <b>Add link</b> to
-      connect it to the note. These are your records; Centraid does not seed sample data into
-      your vault.
-    </p>
-  </div>
-</section>
-
-<section class="sec wrap" id="talk">
-  <p class="eyebrow r">§04 · assistant</p>
-  <h2 class="r">Ask on your phone.</h2>
-  <div class="prose r">
-    <p>
-      The assistant runs on the phone with a model pinned by the release. If the pinned model is
-      not on the phone, Chat offers its download when you ask. Any write waits for your review
-      and confirmation; it runs only after you tap confirm.
-    </p>
-  </div>
-</section>
-
-<section class="sec wrap" id="import">
-  <p class="eyebrow r">§05 · bring your data</p>
-  <h2 class="r">Import contacts in People.</h2>
-  <div class="prose r">
-    <p>
-      In <b>People</b>, open <b>Phone contacts</b> and choose <b>Import contacts</b> to bring
-      in contacts available on this phone. To import a vCard file, open <b>More</b>, choose
-      <b>Import</b>, then <b>Choose files</b>. Review the proposed matches before choosing
-      <b>Import</b> or <b>Add new only</b>.
-    </p>
-  </div>
-</section>
-
-<section class="sec wrap" id="phone">
-  <p class="eyebrow r">§06 · add a backup device</p>
-  <h2 class="r">Pair a gateway directly.</h2>
-  <div class="prose r">
-    <p>
-      A gateway is a machine you control that runs <code>centraid-gateway</code>. It stores
-      sealed backup data and cannot open it. The phone connects directly over pinned HTTPS; the
-      gateway is not another app client.
-    </p>
-    <p>
-      On the gateway, run <code>centraid-gateway serve --data-dir ~/centraid-gateway</code>.
-      Scan its pairing QR in the phone's <b>Backup</b> screen, then compare the safety number
-      on the phone with the one printed by the gateway. See
-      <a href="../devices/#pairing">Devices · pairing</a>.
-    </p>
-  </div>
-</section>
-
-<section class="sec wrap" id="always-on">
-  <p class="eyebrow r">§07 · keep the gateway reachable</p>
-  <h2 class="r">Run it where the phone can reach it.</h2>
-  <div class="prose r">
-    <p>
-      Build the gateway from the repository and keep its machine running and reachable at the
-      address in its pairing payload. See <a href="../devices/#operator">Devices · operator
-      setup</a>. If the gateway cannot be reached, the phone still works locally. Backup can
-      continue in a later foreground or operating-system background window.
-    </p>
-  </div>
-</section>
-
-<section class="sec wrap" id="backup">
-  <p class="eyebrow r">§08 · recovery</p>
-  <h2 class="r">Keep your recovery key safe.</h2>
-  <div class="prose r">
-    <p>
-      Your recovery key is its 24 words. They derive the keys needed to restore your vault. An
-      encrypted seed may also be held in the operating system's secure key store, which can help
-      on a replacement phone when available. Keep a safe offline copy of the words.
-    </p>
-    <p>
-      The phone says a backup is complete only when a gateway has acknowledged the records and
-      their content hashes. It reports records acknowledged while originals still wait
-      separately. Background work depends on windows the operating system grants; force-quitting
-      stops it until the next launch. Learn about restore in
-      <a href="../backups/#restore">Backups · restore</a>.
-    </p>
-  </div>
-  <div class="chapter-next r">
-    <a href="../">← docs home</a>
-    <a href="../devices/">next: devices →</a>
-  </div>
-</section>
+<section class="sec wrap" id="talk"><p class="eyebrow">Assistant</p><h2>Ask about your records</h2><p>The assistant can find records and prepare actions for your review. Changes wait for your confirmation.</p></section>
+<section class="sec wrap" id="import"><p class="eyebrow">Imports</p><h2>Choose what comes in</h2><p>Import is started from the app that owns the records. Review the available items before adding them to your vault.</p></section>
