@@ -15,8 +15,12 @@ mod common;
 use std::collections::BTreeMap;
 use std::time::Instant;
 
+use centraid_apps_kit::page::Page;
 use centraid_apps_kit::page::PageRequest;
+use centraid_apps_kit::row::Row;
+use centraid_apps_kit::statement::PageQuery;
 use centraid_apps_kit::testdoor::TestDoor;
+use centraid_apps_kit::{error::KitResult, reads::PageDoor};
 use centraid_apps_money::engine;
 use centraid_apps_money::import::{CsvOptions, Direction, IMPORT_ROWS, ImportRow, plan, read_csv};
 use centraid_apps_money::phone;
@@ -29,6 +33,61 @@ use serde_json::{Value, json};
 
 const TODAY: &str = "2025-01-15";
 const KINDS: [&str; 4] = ["checking", "credit_card", "savings", "cash"];
+
+/// Test-local observation of the existing app boundary. Each `page` call is
+/// one declared paginated statement execution. Rows are those returned to the
+/// app after TestDoor has discarded any page-probe row; continued-page schema
+/// probes performed internally by TestDoor are deliberately not called SQL
+/// statement counts.
+#[derive(Default)]
+struct ReadCounts {
+    calls: usize,
+    delivered_rows: usize,
+    by_query: BTreeMap<String, (usize, usize)>,
+}
+
+struct CountingDoor<'a> {
+    inner: TestDoor<'a>,
+    counts: std::cell::RefCell<ReadCounts>,
+}
+
+impl<'a> CountingDoor<'a> {
+    fn new(connection: &'a rusqlite::Connection) -> Self {
+        Self {
+            inner: TestDoor::new(connection),
+            counts: std::cell::RefCell::default(),
+        }
+    }
+
+    fn summary(&self) -> String {
+        let counts = self.counts.borrow();
+        format!(
+            "page_statement_calls={} delivered_rows={} by_query={:?}",
+            counts.calls, counts.delivered_rows, counts.by_query
+        )
+    }
+}
+
+impl PageDoor for CountingDoor<'_> {
+    fn page(&self, query: &PageQuery, request: &PageRequest) -> KitResult<Page<Row>> {
+        let page = self.inner.page(query, request)?;
+        let rows = page.rows.len();
+        let mut counts = self.counts.borrow_mut();
+        counts.calls += 1;
+        counts.delivered_rows += rows;
+        let entry = counts.by_query.entry(query.name.clone()).or_default();
+        entry.0 += 1;
+        entry.1 += rows;
+        Ok(page)
+    }
+}
+
+fn measured<T>(door: &CountingDoor<'_>, screen: &str, read: impl FnOnce() -> T) -> T {
+    *door.counts.borrow_mut() = ReadCounts::default();
+    let answer = read();
+    println!("money {screen} read work: {}", door.summary());
+    answer
+}
 
 fn records(rows: &[ImportRow]) -> Vec<Value> {
     rows.iter()
@@ -61,6 +120,61 @@ fn follow(world: &World, account: &str, rows: &[ImportRow]) -> Value {
             "records": records(rows),
         }),
     )
+}
+
+#[test]
+fn empty_money_reads_reconcile_to_no_accounts_or_activity() {
+    let world = World::founded("year3-empty-money");
+    world.vault.read(|connection| {
+        let door = CountingDoor::new(connection);
+        let index = centraid_search::SqliteDoor::open(connection, world.vault.words())
+            .expect("the index opens");
+        let spending = measured(&door, "spending", || {
+            phone::spending(&door, "2024-06", TODAY).expect("spending")
+        });
+        let cashflow = measured(&door, "cashflow", || {
+            phone::cashflow(&door, "2024-12", TODAY).expect("cashflow")
+        });
+        let accounts = measured(&door, "accounts", || {
+            phone::accounts(&door, TODAY).expect("accounts")
+        });
+        let recurring = measured(&door, "recurring", || {
+            phone::recurring_screen(&door, TODAY).expect("recurring")
+        });
+        let activity = measured(&door, "activity", || {
+            phone::activity(
+                &door,
+                "2024-06",
+                &ActivityFilter::default(),
+                &PageRequest::first(50),
+                TODAY,
+            )
+            .expect("activity")
+        });
+        let (search, denial) = measured(&door, "search", || {
+            phone::search(&door, &index, "netflix", 20, TODAY).expect("search")
+        });
+
+        assert!(spending.empty);
+        assert!(spending.in_out_net.is_empty());
+        assert!(activity.rows.is_empty());
+        assert!(accounts.on_budget.is_empty());
+        assert!(accounts.off_budget.is_empty());
+        assert!(accounts.net_worth.is_empty());
+        assert!(recurring.series.is_empty());
+        assert!(search.rows.is_empty());
+        assert!(denial.is_none());
+        println!(
+            "empty money response rows: activity={} search={} accounts={} recurring={} cashflow_series={}",
+            activity.rows.len(),
+            search.rows.len(),
+            accounts.on_budget.len() + accounts.off_budget.len(),
+            recurring.series.len(),
+            cashflow.series.len()
+        );
+        Ok::<(), centraid_vault::VaultError>(())
+    })
+    .expect("empty reads");
 }
 
 /// Import `accounts` accounts of the profile and read every screen back.
@@ -98,24 +212,36 @@ fn run(accounts: usize) {
     let screens = world
         .vault
         .read(|connection| {
-            let door = TestDoor::new(connection);
+            let door = CountingDoor::new(connection);
             let index = centraid_search::SqliteDoor::open(connection, world.vault.words())
                 .expect("the index opens");
             let started = Instant::now();
             let answers = (
-                phone::spending(&door, "2024-06", TODAY).expect("spending"),
-                phone::cashflow(&door, "2024-12", TODAY).expect("cashflow"),
-                phone::accounts(&door, TODAY).expect("accounts"),
-                phone::recurring_screen(&door, TODAY).expect("recurring"),
-                phone::activity(
-                    &door,
-                    "2024-06",
-                    &ActivityFilter::default(),
-                    &PageRequest::first(50),
-                    TODAY,
-                )
-                .expect("activity"),
-                phone::search(&door, &index, "netflix", 20, TODAY).expect("search"),
+                measured(&door, "spending", || {
+                    phone::spending(&door, "2024-06", TODAY).expect("spending")
+                }),
+                measured(&door, "cashflow", || {
+                    phone::cashflow(&door, "2024-12", TODAY).expect("cashflow")
+                }),
+                measured(&door, "accounts", || {
+                    phone::accounts(&door, TODAY).expect("accounts")
+                }),
+                measured(&door, "recurring", || {
+                    phone::recurring_screen(&door, TODAY).expect("recurring")
+                }),
+                measured(&door, "activity", || {
+                    phone::activity(
+                        &door,
+                        "2024-06",
+                        &ActivityFilter::default(),
+                        &PageRequest::first(50),
+                        TODAY,
+                    )
+                    .expect("activity")
+                }),
+                measured(&door, "search", || {
+                    phone::search(&door, &index, "netflix", 20, TODAY).expect("search")
+                }),
             );
             println!("six screens in {:?}", started.elapsed());
             // THE CEILINGS HOLD.

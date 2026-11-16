@@ -45,3 +45,6 @@ centraid-ontology = { path = "../ontology" }
 # `RepeatSpec` (`time::repeat`), so a rule the editor writes is one the engine
 # expands and one it reads is the rule that was stored.
 centraid-vault = { path = "../vault" }
+
+[dev-dependencies]
+centraid-apps-kit = { path = "../apps/kit" }
