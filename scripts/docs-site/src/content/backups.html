@@ -95,10 +95,11 @@
     </p>
     <p>
       The phone keeps seven daily, four weekly and six monthly snapshots, where those periods
-      contain snapshots; the newest is always retained. Collection deletes an object only after
-      no retained snapshot refers to it. Once the phone asks the gateway to delete an object,
-      the gateway holds that copy for at least seven days of watched time before purging it. Copies on backup
-      devices go when old backups age out; there is no exact deletion deadline to promise.
+      contain snapshots; the newest is always retained. Deletion starts only after no kept
+      backup needs the file. Once the phone asks the gateway to delete it, the gateway holds
+      that copy for at least seven days before purging it. If the gateway is paused or offline,
+      it may keep the copy longer. Copies on backup devices go when old backups age out; there
+      is no exact deletion deadline to promise.
     </p>
     <p>
       For implementation details, see the repository's
