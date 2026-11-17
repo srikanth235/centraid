@@ -1,6 +1,14 @@
 # Native CI evidence — PR #1201
 
-Revision reviewed: `7d22a64fe2241cc84b59c3a283630f1a96d462dd` (workflow run `43927000790`). All claims below are bound to that revision.
+## Latest published checkpoint
+
+Revision `d12fedf55fb8e7f49704aeb3087184933002ef12`, [workflow run 43950960662](https://github.com/srikanth235/centraid/actions/runs/43950960662): the workspace nextest/doctest lane and every other gate lane passed except `doc-links`. iOS passed with 121 XCTest tests and zero failures, including the real simulator Rust core and app build. Android's Kotlin compilation and selected `BackupCheckControlsTest` invocation passed from cache; these do not establish packaging or emulator behavior. Engine, dependency review and PR title passed.
+
+The sole gate finding was the report's relative Markdown link to an ignored local JNI binary. Root downloaded artifact `14275993136`, verified SHA-256 `21ad31dfaa0979235f10388f7faf0df671cdbce02a376e29d3766ce396b21006`, and reviewed the one-line correction: retain the artifact path, size and hash as code rather than a repository link. Root independently reran guarded `xtask doc-links`: zero findings across 160 Markdown files, 613 relative links and 63 anchors. That correction and the owner-requested app/docs visual redesign are currently local; this is not a final-head CI pass.
+
+## Earlier published checkpoint
+
+Revision reviewed: `7d22a64fe2241cc84b59c3a283630f1a96d462dd` (workflow run `43927000790`). The following historical evidence is bound to that revision.
 
 - **Workspace gate summary:** 6,843 tests run, 6,842 passed, 1 failed, 13 skipped. The single failure was the stale Docs Drive expectation described below; the other gate lanes (`iOS`, `Android`, `engine`, `dependency-review`, `pr-title`) passed. The CI artifact used for this summary was SHA-256 verified by root (`a0dbee49c5da7bcd9dcf66a3734155fb0d7b568627ba84a69e72bc6768b57351`).
 

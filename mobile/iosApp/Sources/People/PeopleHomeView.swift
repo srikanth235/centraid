@@ -38,6 +38,7 @@ struct PeopleHomeView: View {
             ),
             search: denied ? nil : searchSlot,
             filter: filter,
+            pageSurface: Surface.plainPage,
             showsBand: !denied && !state.band.isEmpty
         ) {
             AppBand(
@@ -747,25 +748,26 @@ private struct PeopleHomeSheet: View {
 
 // MARK: - Shared pieces
 
-/// THE AVATAR: initials on the person's hue. The hue is a colour role Rust
-/// chose; an empty one is the soft ground.
+/// THE AVATAR: initials on the People app tint. Person-specific identity remains in the record;
+/// the directory uses one consistent app colour.
 struct PeopleAvatarView: View {
     let avatar: Centraid_Core_V1_PeopleAvatar
     var size: CGFloat = 32
 
     @Environment(\.colorScheme) private var scheme
+    private var accent: AppAccent { AppAccent("people") }
 
     var body: some View {
         Text(avatar.initials)
             .centraidType(size > 40 ? "title" : "annotLabelOn")
-            .foregroundStyle(Theme.color("text", scheme))
+            .foregroundStyle(accent.text)
             .frame(width: size, height: size)
             .background(
-                Circle().fill(Theme.color(peopleHue(avatar.hueKey, else: "bgSunken"), scheme).opacity(0.28))
+                Circle().fill(accent.wash(dark: scheme == .dark))
             )
             .overlay(
                 Circle().strokeBorder(
-                    Theme.color(peopleHue(avatar.hueKey, else: "line"), scheme),
+                    Surface.border,
                     lineWidth: CentraidGeometry.hairline
                 )
             )

@@ -59,6 +59,20 @@ struct AppAccent: Equatable {
     static let shell = AppAccent("")
 }
 
+/// THE APP IDENTITY IN A ROOT HEADER: a catalogue glyph in its solid app fill. It is decoration;
+/// at the largest text size the complete title takes its space instead.
+struct AppIdentityGlyph: View {
+    let appID: String
+
+    @Environment(\.isLargestText) private var largestText
+
+    var body: some View {
+        if !largestText, let app = CentraidCatalog.byID[appID] {
+            KitTile(iconKey: app.iconKey, fill: AppAccent(appID).fill)
+        }
+    }
+}
+
 private struct AppAccentKey: EnvironmentKey {
     static let defaultValue = AppAccent.shell
 }

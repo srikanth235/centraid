@@ -1,6 +1,7 @@
 package dev.centraid.android.screens.agenda
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -67,7 +68,7 @@ internal fun agendaTokenColor(key: String): Color? {
 @Composable
 internal fun agendaListColor(key: String): Color? = if (key.isEmpty()) null else agendaTokenColor("list" + key.replaceFirstChar { it.uppercase() })
 
-/** The Reminders home's smart-list cards: two columns of rounded cards, glyph, count and label. */
+/** The Reminders home's smart-list cards: paper, list-colored glyph and the existing count/label. */
 @Composable
 internal fun AgendaSmartLists(lists: List<AgendaSmartList>, onOpen: (Route) -> Unit) {
     Column(
@@ -83,7 +84,8 @@ internal fun AgendaSmartLists(lists: List<AgendaSmartList>, onOpen: (Route) -> U
                             .weight(1f)
                             .heightIn(min = 92.dp)
                             .clip(shape)
-                            .background(agendaTokenColor(list.color_key) ?: centraidColor("text"))
+                            .background(Surface.card)
+                            .border(1.dp, Surface.border, shape)
                             .clickable { list.route?.let(onOpen) }
                             .padding(14.dp)
                             .testTag("agenda-smart-${list.key}")
@@ -91,12 +93,12 @@ internal fun AgendaSmartLists(lists: List<AgendaSmartList>, onOpen: (Route) -> U
                         verticalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            CentraidIcon(list.icon_key, tint = Color.White, size = 26.dp)
+                            CentraidIcon(list.icon_key, tint = agendaTokenColor(list.color_key) ?: appAccent("reminders").text, size = 26.dp)
                             if (list.count.isNotEmpty()) {
-                                Text(list.count, style = centraidType("title"), color = Color.White)
+                                Text(list.count, style = centraidType("title"), color = Surface.ink)
                             }
                         }
-                        Text(list.label, style = centraidType("bodyStrong"), color = Color.White)
+                        Text(list.label, style = centraidType("bodyStrong"), color = Surface.ink)
                     }
                 }
                 if (pair.size == 1) Box(Modifier.weight(1f))

@@ -243,6 +243,29 @@ fn script_bodies_and_comments_are_copied_untouched() {
 }
 
 #[test]
+fn an_explicit_light_document_theme_selects_dark_without_rewriting_assets_or_code() {
+    let html = concat!(
+        r#"<html lang="en" data-theme="light"><head>"#,
+        r#"<link rel="stylesheet" href="centraid-tokens.css">"#,
+        r#"<style>:root[data-theme='light'] { --page: #F3EDE2; }</style>"#,
+        "</head><body>",
+        r##"<script>const mode = "light"; const color = "#1C1B19";</script>"##,
+        "</body></html>",
+    );
+    assert_eq!(
+        dark(html),
+        concat!(
+            r#"<html lang="en" data-theme="dark"><head>"#,
+            r#"<link rel="stylesheet" href="centraid-tokens.css">"#,
+            r#"<style>:root[data-theme='light'] { --page: #F3EDE2; }</style>"#,
+            "</head><body>",
+            r##"<script>const mode = "light"; const color = "#1C1B19";</script>"##,
+            "</body></html>",
+        )
+    );
+}
+
+#[test]
 fn a_greater_than_inside_a_quoted_attribute_does_not_end_the_tag() {
     let html = r##"<div title="a > b" style="color: #1C1B19;"></div>"##;
     assert_eq!(

@@ -242,9 +242,9 @@ message HomeData {
   // 4 was `every_tile_unreadable`: nothing read it (#1152).
   reserved 4;
   reserved "every_tile_unreadable";
-  // The day-one page's words, set when `springboard` is `FIRST_RUN`.
-  string day_one_title = 5;
-  string day_one_body = 6;
+  // The first-run catalogue no longer has an aggregate title/body.
+  reserved 5, 6;
+  reserved "day_one_title", "day_one_body";
 }
 
 enum HomeVaultState {

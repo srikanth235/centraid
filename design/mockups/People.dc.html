@@ -10,15 +10,21 @@
 <!-- Audit fixes, 2026-11-10: A birthday is shown on its day (Calendar, Agenda, Upcoming) and does not notify: it has no reminder and no switch. An empty channel disables Save using the shared submit-enabled state. -->
 <x-dc>
 <helmet>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
-<style>
-body{margin:0}
+
+<style>body{margin:0}
 button{font:inherit;color:inherit}
+@font-face{font-family:Instrument Sans;src:url('../fonts/InstrumentSans_470Book.ttf') format('truetype');font-style:normal;font-weight:400}
+@font-face{font-family:Instrument Sans;src:url('../fonts/InstrumentSans-SemiBold.ttf') format('truetype');font-style:normal;font-weight:600 700}
+#people-root .people-scroll{position:absolute;left:0;right:0;top:132px;bottom:96px;overflow-y:auto;overscroll-behavior:contain;padding-bottom:16px;box-sizing:border-box}
+#people-root .my-card{margin:0 18px 8px;padding:12px 0!important;border-radius:0}
+#people-root .reconnect-card{border-radius:16px!important}
+#people-root .person-row{border-radius:0;margin:0 18px;padding:10px 0!important;border:0!important}
+#people-root .people-list{padding-right:22px}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #FBFAF8; font-family: Geist, system-ui, sans-serif; color: #1C1B19;">
-  <div style="display: flex; align-items: flex-start; justify-content: space-between; padding: 56px 20px 4px;">
-    <h1 style="margin: 4px 0 0; flex: 1; min-width: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">People</h1>
+<div id="people-root" style="width:390px;height:844px;box-sizing:border-box;position:relative;overflow:hidden;background:#FBFAF8;font-family:Instrument Sans,system-ui,sans-serif;color:#1C1B19">
+  <div class="people-head" style="display:flex;align-items:flex-start;justify-content:space-between;padding:56px 18px 4px">
+    <div class="root-title-line" style="display:flex;align-items:center;gap:8px;flex:1;min-width:0"><span class="root-app-mark" aria-hidden="true" style="width:32px;height:32px;flex:0 0 32px;display:flex;align-items:center;justify-content:center;border-radius:8.32px;background:#7638AD"><svg data-catalog-icon="AddressBook" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M8 10h.01M8 14h.01M11 10h6M11 14h6"/></svg></span><h1 style="margin:0; flex: 1; min-width: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">People</h1></div>
     <div style="display: flex; gap: 8px;">
       <button aria-label="Filter and sort" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid #E4E0D8; background: rgba(255,255,255,0.85); display: flex; align-items: center; justify-content: center;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1C1B19" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 5h16l-6.5 7.5V19l-3 1.5v-8z" stroke-linejoin="round"></path></svg>
@@ -28,56 +34,57 @@ button{font:inherit;color:inherit}
       </button>
     </div>
   </div>
-  
+  <p style="margin:0 18px;font-size:13px;color:#6F6B64">12 people · 3 to reconnect · 2 starred</p>
+  <main class="people-scroll">
 
-
-  <div style="display: flex; align-items: center; gap: 12px; padding: 4px 20px 12px; border-bottom: 1px solid #EEEBE5;">
-    <span style="width: 52px; height: 52px; border-radius: 26px; background: #D9E6DF; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 600; color: #087990;">SR</span>
+  <div class="my-card" style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:none;border:0;border-radius:20px">
+    <span style="width: 52px; height: 52px; border-radius: 26px; background: #F4EFF8; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 600; color: #7638AD;">SR</span>
     <div><div style="font-size: 17px; font-weight: 600;">Srikanth R</div><div style="font-size: 13px; color: #6F6B64;">My card</div></div>
   </div>
 
-  <a href="Person.dc.html" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 12px; margin: 12px 16px 4px; padding: 12px 14px; background: #F3EFF8; border-radius: 14px;">
+  <a class="reconnect-card" href="Person.dc.html" style="text-decoration:none;color:inherit;display:flex;align-items:center;gap:12px;margin:4px 18px 16px;padding:12px 14px;background:#F4EFF8;border:0;border-radius:20px">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7638AD" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 12h3l2-6 4 12 2-6h5"></path></svg>
     <span style="flex-grow: 1; font-size: 15px;"><b>3 to reconnect</b> · Dana is 26 days over</span>
     <span style="font-size: 14px; color: #7638AD; font-weight: 600;">Touch</span>
   </a>
 
-  <div style="position: relative; padding-right: 22px;">
+  <div class="people-list" style="position:relative;padding-right:22px">
     <div style="font-size: 13px; font-weight: 600; color: #6F6B64; padding: 10px 20px 4px;">A</div>
-    <a href="Person.dc.html" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 12px; padding: 8px 20px;">
-      <span style="width: 40px; height: 40px; border-radius: 20px; background: #E9E1F3; display: flex; align-items: center; justify-content: center; font-weight: 600; color: #7638AD;">AL</span>
+    <a class="person-row" href="Person.dc.html" style="text-decoration:none;color:inherit;display:flex;align-items:center;gap:12px;padding:8px 12px;margin:2px 8px;background:none;border:0;border-radius:0">
+      <span style="width: 40px; height: 40px; border-radius: 20px; background: #F4EFF8; display: flex; align-items: center; justify-content: center; font-weight: 600; color: #7638AD;">AS</span>
       <div style="flex-grow: 1; border-bottom: 1px solid #EEEBE5; padding-bottom: 8px;">
-        <div style="font-size: 16px; display: flex; align-items: center; gap: 6px;">Ada Lovelace <svg width="13" height="13" viewBox="0 0 24 24" fill="#7638AD" aria-label="Starred" role="img"><path d="M12 3l2.8 5.8 6.2.9-4.5 4.4 1 6.2L12 17.4 6.5 20.3l1-6.2L3 9.7l6.2-.9z"></path></svg></div>
-        <div style="font-size: 13px; color: #6F6B64;">Friend · last touch 12 days ago · <span style="color: #7638AD;">Birthday in 5 days</span></div>
+        <div style="font-size: 16px; display: flex; align-items: center; gap: 6px;">Amira Shah <svg width="13" height="13" viewBox="0 0 24 24" fill="#7638AD" aria-label="Starred" role="img"><path d="M12 3l2.8 5.8 6.2.9-4.5 4.4 1 6.2L12 17.4 6.5 20.3l1-6.2L3 9.7l6.2-.9z"></path></svg></div>
+        <div style="font-size: 13px; color: #6F6B64;">Friend · last touch 12 days ago · <span style="color: #7638AD;">Birthday in 4 days</span></div>
       </div>
     </a>
-    <div style="display: flex; align-items: center; gap: 12px; padding: 8px 20px;">
-      <span style="width: 40px; height: 40px; border-radius: 20px; background: #DCE8F4; display: flex; align-items: center; justify-content: center; font-weight: 600; color: #266FC4;">AD</span>
+    <div class="person-row" style="display:flex;align-items:center;gap:12px;padding:8px 12px;margin:2px 8px;background:none;border:0;border-radius:0">
+      <span style="width: 40px; height: 40px; border-radius: 20px; background: #F4EFF8; display: flex; align-items: center; justify-content: center; font-weight: 600; color: #7638AD;">AD</span>
       <div style="flex-grow: 1; border-bottom: 1px solid #EEEBE5; padding-bottom: 8px;"><div style="font-size: 16px;">Ana Díaz</div><div style="font-size: 13px; color: #6F6B64;">Landlord · last touch 3 days ago · <span style="color: #7638AD;">Birthday today</span></div></div>
     </div>
     <div style="font-size: 13px; font-weight: 600; color: #6F6B64; padding: 10px 20px 4px;">B</div>
-    <div style="display: flex; align-items: center; gap: 12px; padding: 8px 20px;">
-      <span style="width: 40px; height: 40px; border-radius: 20px; background: #F6E3D6; display: flex; align-items: center; justify-content: center; font-weight: 600; color: #BB365C;">BO</span>
+    <div class="person-row" style="display:flex;align-items:center;gap:12px;padding:8px 12px;margin:2px 8px;background:none;border:0;border-radius:0">
+      <span style="width: 40px; height: 40px; border-radius: 20px; background: #F4EFF8; display: flex; align-items: center; justify-content: center; font-weight: 600; color: #7638AD;">BO</span>
       <div style="flex-grow: 1; border-bottom: 1px solid #EEEBE5; padding-bottom: 8px;"><div style="font-size: 16px;">Bea Okafor</div><div style="font-size: 13px; color: #85807A;">No touch logged yet</div></div>
     </div>
     <div style="font-size: 13px; font-weight: 600; color: #6F6B64; padding: 10px 20px 4px;">D</div>
-    <div style="display: flex; align-items: center; gap: 12px; padding: 8px 20px;">
-      <span style="width: 40px; height: 40px; border-radius: 20px; background: #DDEDE3; display: flex; align-items: center; justify-content: center; font-weight: 600; color: #087990;">DR</span>
+    <div class="person-row" style="display:flex;align-items:center;gap:12px;padding:8px 12px;margin:2px 8px;background:none;border:0;border-radius:0">
+      <span style="width: 40px; height: 40px; border-radius: 20px; background: #F4EFF8; display: flex; align-items: center; justify-content: center; font-weight: 600; color: #7638AD;">DR</span>
       <div style="flex-grow: 1; border-bottom: 1px solid #EEEBE5; padding-bottom: 8px; display: flex; align-items: center;">
         <div style="flex-grow: 1;"><div style="font-size: 16px;">Dana Reyes</div><div style="font-size: 13px; color: #6F6B64;">College friend · last touch 40 days ago</div></div>
         <span style="font-size: 11px; font-weight: 700; color: #C8392F; background: #FBE7E4; padding: 3px 6px; border-radius: 6px;">OVERDUE</span>
       </div>
     </div>
     <div style="font-size: 13px; font-weight: 600; color: #6F6B64; padding: 10px 20px 4px;">M</div>
-    <div style="display: flex; align-items: center; gap: 12px; padding: 8px 20px;">
-      <span style="width: 40px; height: 40px; border-radius: 20px; background: #EFE7D8; display: flex; align-items: center; justify-content: center; font-weight: 600; color: #8A6A1F;">MK</span>
+    <div class="person-row" style="display:flex;align-items:center;gap:12px;padding:8px 12px;margin:2px 8px;background:none;border:0;border-radius:0">
+      <span style="width: 40px; height: 40px; border-radius: 20px; background: #F4EFF8; display: flex; align-items: center; justify-content: center; font-weight: 600; color: #7638AD;">MK</span>
       <div style="flex-grow: 1; padding-bottom: 8px;"><div style="font-size: 16px;">Mum</div><div style="font-size: 13px; color: #6F6B64;">Family · every 7 days · last touch 2 days ago</div></div>
     </div>
     <div style="position: absolute; right: 6px; top: 10px; display: flex; flex-direction: column; gap: 2px; font-size: 10px; font-weight: 600; color: #7638AD; text-align: center;" aria-hidden="true">
       <span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span><span>I</span><span>J</span><span>K</span><span>L</span><span>M</span><span>N</span><span>O</span><span>P</span><span>R</span><span>S</span><span>T</span><span>#</span>
     </div>
   </div>
-  <p style="margin: 8px 20px 0; font-size: 13px; color: #6F6B64; text-align: center;">12 people · 3 to reconnect · 2 starred</p>
+
+  </main>
 
   <div style="position: absolute; left: 16px; right: 16px; bottom: 24px; display: flex; align-items: center; gap: 8px;">
     <button aria-label="Home" style="width: 56px; height: 56px; flex-shrink: 0; border-radius: 28px; border: 1px solid rgba(255,255,255,0.7); background: rgba(255,255,255,0.72); box-shadow: 0 6px 20px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: center;">

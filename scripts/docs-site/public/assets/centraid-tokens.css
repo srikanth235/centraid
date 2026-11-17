@@ -196,6 +196,29 @@
   --c-slate-text: #3a5e8b;
   --c-teal-text: #006774;
   --c-violet-text: #744e7d;
+  --brand-teal: #00AA98;
+  --brand-orange: #F48E04;
+  --brand-blue: #5698F8;
+  --brand-coral: #F83F6E;
+  --shell-colour: #1F4A45;
+  --app-calendar-identity: #266FC4;
+  --app-calendar-tint: #EEF3FA;
+  --app-reminders-identity: #087668;
+  --app-reminders-tint: #E6F3F0;
+  --app-notes-identity: #8C6802;
+  --app-notes-tint: #F6F3EB;
+  --app-people-identity: #7638AD;
+  --app-people-tint: #F4EFF8;
+  --app-docs-identity: #087990;
+  --app-docs-tint: #EBF4F6;
+  --app-money-identity: #27388B;
+  --app-money-tint: #ECEAF6;
+  --app-locker-identity: #454E58;
+  --app-locker-tint: #F0F1F2;
+  --app-health-identity: #BB365C;
+  --app-health-tint: #FAEFF2;
+  --app-photos-identity: #A8398A;
+  --app-photos-tint: #F8EFF6;
 }
 
 @media (pointer: fine) {
@@ -311,6 +334,29 @@
     --c-slate-text: #7ea7dc;
     --c-teal-text: #58b4c4;
     --c-violet-text: #be92c8;
+    --brand-teal: #00AA98;
+    --brand-orange: #F48E04;
+    --brand-blue: #5698F8;
+    --brand-coral: #F83F6E;
+    --shell-colour: #7FC4B8;
+    --app-calendar-identity: #569EF7;
+    --app-calendar-tint: #202F41;
+    --app-reminders-identity: #4FD1BE;
+    --app-reminders-tint: #17302C;
+    --app-notes-identity: #BF9738;
+    --app-notes-tint: #372E14;
+    --app-people-identity: #BA82F5;
+    --app-people-tint: #362940;
+    --app-docs-identity: #30A9C6;
+    --app-docs-tint: #163136;
+    --app-money-identity: #7C97F4;
+    --app-money-tint: #241D44;
+    --app-locker-identity: #939DA8;
+    --app-locker-tint: #2D2F31;
+    --app-health-identity: #F76E8E;
+    --app-health-tint: #42242B;
+    --app-photos-identity: #E573C3;
+    --app-photos-tint: #3F2636;
   }
 }
 
@@ -390,6 +436,29 @@
   --c-slate-text: #3a5e8b;
   --c-teal-text: #006774;
   --c-violet-text: #744e7d;
+  --brand-teal: #00AA98;
+  --brand-orange: #F48E04;
+  --brand-blue: #5698F8;
+  --brand-coral: #F83F6E;
+  --shell-colour: #1F4A45;
+  --app-calendar-identity: #266FC4;
+  --app-calendar-tint: #EEF3FA;
+  --app-reminders-identity: #087668;
+  --app-reminders-tint: #E6F3F0;
+  --app-notes-identity: #8C6802;
+  --app-notes-tint: #F6F3EB;
+  --app-people-identity: #7638AD;
+  --app-people-tint: #F4EFF8;
+  --app-docs-identity: #087990;
+  --app-docs-tint: #EBF4F6;
+  --app-money-identity: #27388B;
+  --app-money-tint: #ECEAF6;
+  --app-locker-identity: #454E58;
+  --app-locker-tint: #F0F1F2;
+  --app-health-identity: #BB365C;
+  --app-health-tint: #FAEFF2;
+  --app-photos-identity: #A8398A;
+  --app-photos-tint: #F8EFF6;
 }
 
 [data-theme='dark'] {
@@ -468,6 +537,29 @@
   --c-slate-text: #7ea7dc;
   --c-teal-text: #58b4c4;
   --c-violet-text: #be92c8;
+  --brand-teal: #00AA98;
+  --brand-orange: #F48E04;
+  --brand-blue: #5698F8;
+  --brand-coral: #F83F6E;
+  --shell-colour: #7FC4B8;
+  --app-calendar-identity: #569EF7;
+  --app-calendar-tint: #202F41;
+  --app-reminders-identity: #4FD1BE;
+  --app-reminders-tint: #17302C;
+  --app-notes-identity: #BF9738;
+  --app-notes-tint: #372E14;
+  --app-people-identity: #BA82F5;
+  --app-people-tint: #362940;
+  --app-docs-identity: #30A9C6;
+  --app-docs-tint: #163136;
+  --app-money-identity: #7C97F4;
+  --app-money-tint: #241D44;
+  --app-locker-identity: #939DA8;
+  --app-locker-tint: #2D2F31;
+  --app-health-identity: #F76E8E;
+  --app-health-tint: #42242B;
+  --app-photos-identity: #E573C3;
+  --app-photos-tint: #3F2636;
 }
 
 [data-density='comfortable'] {

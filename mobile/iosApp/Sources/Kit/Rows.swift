@@ -262,7 +262,7 @@ struct SectionHeader: View {
             Text(head.title)
                 .kitType(sentenceCase ? .row : .group)
                 .fontWeight(sentenceCase ? .semibold : nil)
-                .foregroundStyle(Surface.meta)
+                .foregroundStyle(accent.text)
                 .accessibilityAddTraits(.isHeader)
             if let count = head.count {
                 Text("\(count)")

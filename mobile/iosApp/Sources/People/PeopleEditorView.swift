@@ -20,7 +20,6 @@ struct PeopleEditorView: View {
     @State private var seeded = false
 
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.appAccent) private var accent
 
     var body: some View {
         let chrome = state.chrome
@@ -65,10 +64,7 @@ struct PeopleEditorView: View {
                             send(PeopleEvents.editor { $0.met = .with { $0.text = typed } })
                         }
                         }
-                        .background(
-                            Surface.card,
-                            in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)
-                        )
+                        .kitBorderedCard()
                         .padding(.horizontal, CentraidGeometry.pageMargin)
                         .padding(.top, 8)
                         cadences(chrome)
@@ -109,11 +105,11 @@ struct PeopleEditorView: View {
                             Text(cadence.label)
                                 .kitType(.row)
                                 .fontWeight(cadence.selected ? .semibold : .regular)
-                                .foregroundStyle(cadence.selected ? Color.white : Surface.ink)
+                                .foregroundStyle(Surface.ink)
                                 .padding(.horizontal, 16)
                                 .frame(minHeight: CentraidGeometry.targetMinCoarse)
-                                .background(cadence.selected ? accent.fill : Surface.card, in: Capsule())
-                                .overlay(Capsule().strokeBorder(Surface.border, lineWidth: cadence.selected ? 0 : CentraidGeometry.hairline))
+                                .background(cadence.selected ? Surface.fill : Surface.card, in: Capsule())
+                                .overlay(Capsule().strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline))
                                 .contentShape(Capsule())
                         }
                         .buttonStyle(.plain)

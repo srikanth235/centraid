@@ -36,6 +36,9 @@ struct TodoDetailView: View {
         EditorRoom(
             title: state.chrome.title,
             status: state.autosave,
+            statusLine: state.status,
+            statusIdentifier: "tasks-status-action",
+            onStatusAct: { send(event { $0.statusActed = .init() }) },
             onClose: onClose,
             onDeparted: {}
         ) {
@@ -55,9 +58,6 @@ struct TodoDetailView: View {
                     if case let .data(detail)? = state.content {
                         editor(detail, state: state)
                     }
-                }
-                StatusLineView(status: state.status, identifier: "tasks-status-action") {
-                    send(event { $0.statusActed = .init() })
                 }
             }
         }

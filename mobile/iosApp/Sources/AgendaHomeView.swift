@@ -55,7 +55,7 @@ struct AgendaHomeView: View {
             subtitle: toolbarSubtitle(state, eventCountText),
             bar: header.map { header in
                 PlaceBar(
-                    leading: AnyView(AgendaMonthChip(header: header, send: send)),
+                    leading: AnyView(AgendaMonthChip(appID: state.appKey, header: header, send: send)),
                     actions: AnyView(AgendaLayoutKey(header: header, send: send)),
                     showsTitle: !header.title.isEmpty
                 )

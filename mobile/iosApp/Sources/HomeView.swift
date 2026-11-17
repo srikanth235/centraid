@@ -285,33 +285,19 @@ private struct Springboard: View {
     }
 }
 
-/// Day one: the vault holds nothing anywhere.
-///
-/// Reached ONLY when every readable tile has settled and is empty. A
-/// still-loading vault, or an unreachable replica, gets the ordinary grid —
-/// this page is a claim about the vault, and an unanswered read has not
-/// earned it.
+/// Rust's first-run grade keeps the open catalogue order and size. Each tile still draws its own
+/// typed read result; unknown and loading tiles keep their ordinary status treatment.
 private struct DayOne: View {
     let data: Centraid_Core_V1_HomeData
     @ObservedObject var shell: ShellModel
     var header: AnyView?
-    @Environment(\.colorScheme) private var scheme
-
     var body: some View {
         ScrollView {
             header
-            VStack(alignment: .leading, spacing: 12) {
-                Text(data.dayOneTitle)
-                    .centraidType("title")
-                    .foregroundStyle(Theme.color("text", scheme))
-                Text(data.dayOneBody)
-                .centraidType("small")
-                .foregroundStyle(Theme.color("textSoft", scheme))
-                WidgetGrid(data: data, shell: shell)
-                    .padding(.top, 12)
-            }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .padding(pageMargin)
+            WidgetGrid(data: data, shell: shell)
+                .padding(.horizontal, pageMargin)
+                .padding(.top, 10)
+                .padding(.bottom, 24)
         }
         .accessibilityIdentifier("home-day-one")
     }

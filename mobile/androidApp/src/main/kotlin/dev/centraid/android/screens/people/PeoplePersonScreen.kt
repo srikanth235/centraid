@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -21,8 +20,7 @@ import dev.centraid.android.kit.KitText
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
-import dev.centraid.android.kit.kitCard
-import dev.centraid.android.theme.centraidDark
+import dev.centraid.android.kit.kitBorderedCard
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -66,6 +64,7 @@ import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StatusChipView
 import dev.centraid.android.kit.StatusLine
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.screens.agenda.AgendaAttachmentsView
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
@@ -90,13 +89,21 @@ public fun PeoplePersonScreen(
     val chrome = state.chrome
     val data = state.data_
     fun open(which: Which) = onEvent(PeoplePersonEvent(sheet_opened = PeoplePersonEvent.SheetOpened(which = which)))
+    val moreItems = if (data != null && chrome != null) buildList {
+        state.edit?.takeIf { chrome.edit.isNotEmpty() }?.let { route -> add(RoomAction("Pencil", chrome.edit, "people-person-edit") { onOpen(route) }) }
+        if (!data.is_me) {
+            add(RoomAction("Star", data.star_label, "people-person-star") { onEvent(PeoplePersonEvent(star = PeoplePersonEvent.StarToggled())) })
+            add(RoomAction("Share", chrome.share, "people-person-share") { onEvent(PeoplePersonEvent(share_requested = PeoplePersonEvent.ShareRequested())) })
+            add(RoomAction("dupe", chrome.merge, "people-person-merge") { open(Which.WHICH_MERGE) })
+            add(RoomAction("Trash", chrome.move_to_trash, "people-person-trash", destructive = true) { onEvent(PeoplePersonEvent(trash_tapped = PeoplePersonEvent.TrashTapped())) })
+        }
+    } else emptyList()
     PushedPage(
         title = data?.name ?: state.name_hint,
         parentTitle = chrome?.back.orEmpty(),
         onBack = onBack,
-        trailing = state.edit?.takeIf { data != null && !chrome?.edit.isNullOrEmpty() }?.let { route ->
-            RoomAction("Pencil", chrome?.edit.orEmpty(), "people-person-edit") { onOpen(route) }
-        },
+        more = if (moreItems.isNotEmpty() && chrome != null) RoomAction("MoreHoriz", chrome.more, "people-person-menu") {} else null,
+        moreItems = moreItems,
         statusLine = { StatusLine(state.status, actTag = "people-person-status-action") },
     ) {
         ReadStateView(
@@ -278,33 +285,6 @@ private fun PersonBody(
         state.earlier?.let { entry -> item(key = "earlier") { EarlierEntryCard(entry, onOpen) } }
         item(key = "origin") { dev.centraid.android.kit.OriginLineView(state.origin) }
 
-        if (chrome != null && !person.is_me) {
-            item(key = "foot") {
-                Column(Modifier.padding(top = 16.dp, bottom = 24.dp)) {
-                    SheetRow(
-                        person.star_label,
-                        iconKey = "Star",
-                        selected = person.starred,
-                        testTag = "people-person-star",
-                        onTap = { onEvent(PeoplePersonEvent(star = PeoplePersonEvent.StarToggled())) },
-                    )
-                    SheetRow(
-                        chrome.share,
-                        iconKey = "Share",
-                        testTag = "people-person-share",
-                        onTap = { onEvent(PeoplePersonEvent(share_requested = PeoplePersonEvent.ShareRequested())) },
-                    )
-                    SheetRow(chrome.merge, iconKey = "dupe", testTag = "people-person-merge", onTap = { open(Which.WHICH_MERGE) })
-                    SheetRow(
-                        chrome.move_to_trash,
-                        iconKey = "Trash",
-                        destructive = true,
-                        testTag = "people-person-trash",
-                        onTap = { onEvent(PeoplePersonEvent(trash_tapped = PeoplePersonEvent.TrashTapped())) },
-                    )
-                }
-            }
-        }
     }
 }
 
@@ -315,21 +295,15 @@ private fun Hero(person: PeoplePersonData, onPhoneSays: (PhoneSaysTaken) -> Unit
     Column(
         Modifier
             .fillMaxWidth()
-            .background(
-                Brush.verticalGradient(listOf(accent.wash(centraidDark()), Color.Transparent)),
-            )
             .padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Avatar(person.avatar, size = 96)
-        KitText(
-            person.name,
-            KitType.Hero,
-            Surface.ink,
-            modifier = Modifier.padding(top = 10.dp).semantics { heading() },
-        )
-        PhoneSaysLine(person.name_phone_says, onPhoneSays, centered = true)
+        if (rememberLargestText()) {
+            KitText(person.name, KitType.Hero, Surface.ink, modifier = Modifier.fillMaxWidth().padding(top = 10.dp).semantics { heading() })
+        }
         if (person.role.isNotEmpty()) KitText(person.role, KitType.Row, Surface.body)
+        PhoneSaysLine(person.name_phone_says, onPhoneSays, centered = true)
         PhoneSaysLine(person.role_phone_says, onPhoneSays, centered = true)
         val line = if (person.is_me) person.my_card_label else person.cadence_line
         if (line.isNotEmpty()) KitText(line, KitType.Meta, Surface.meta, modifier = Modifier.padding(top = 4.dp))
@@ -360,7 +334,7 @@ private fun HeroActions(actions: List<PeopleHeroAction>, onTap: (String) -> Unit
                     Modifier
                         .size(52.dp)
                         .clip(CircleShape)
-                        .background(if (action.primary) accent.fill else Surface.card)
+                        .background(if (action.primary) accent.fill else (accent.tint ?: Surface.fill))
                         .then(if (action.primary) Modifier else Modifier.border(KitGeometry.HAIRLINE, Surface.border, CircleShape))
                         .clickable { onTap(action.key) }
                         .testTag("people-person-hero-${action.key}")
@@ -370,7 +344,7 @@ private fun HeroActions(actions: List<PeopleHeroAction>, onTap: (String) -> Unit
                         },
                     contentAlignment = Alignment.Center,
                 ) {
-                    CentraidIcon(iconKey = action.icon_key, tint = if (action.primary) Color.White else Surface.ink, size = 20.dp)
+                    CentraidIcon(iconKey = action.icon_key, tint = if (action.primary) Color.White else accent.text, size = 20.dp)
                 }
                 KitText(action.label, KitType.Meta, Surface.body, modifier = Modifier.padding(top = 4.dp).clearAndSetSemantics { })
             }
@@ -385,7 +359,7 @@ private fun VaultCard(person: PeoplePersonData, onOpen: (Route) -> Unit) {
         Modifier
             .fillMaxWidth()
             .padding(horizontal = KitGeometry.GUTTER, vertical = 10.dp)
-            .kitCard()
+            .kitBorderedCard()
             .padding(bottom = 8.dp)
             .testTag("people-vault"),
     ) {

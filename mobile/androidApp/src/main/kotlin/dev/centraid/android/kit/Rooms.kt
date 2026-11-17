@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.SheetValue
@@ -33,7 +35,10 @@ import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.SecureFlagPolicy
 import centraid.core.v1.Autosave
 import centraid.core.v1.StatusLine as StatusLineMessage
+import dev.centraid.design.CentraidCatalog
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -85,6 +91,8 @@ public data class RoomAction(
     val pill: Boolean = false,
     /** A pill that cannot be pressed yet is drawn quiet. */
     val enabled: Boolean = true,
+    /** A menu item whose existing action removes data. */
+    val destructive: Boolean = false,
     val onPress: () -> Unit,
 )
 
@@ -217,11 +225,15 @@ public fun AppPlace(
             if (!showsTitle && barLeading != null) {
                 // NO TITLE (the Calendar's Day and Week): the month chip is the page's name and
                 // stands in the top row, where the title would.
+                RootAppMark(app)
                 barLeading.invoke()
                 Spacer(Modifier.weight(1f))
             }
             if (showsTitle) Column(Modifier.weight(1f).padding(top = 2.dp)) {
-                RoomTitle(title)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    RootAppMark(app)
+                    RoomTitle(title, Modifier.weight(1f))
+                }
                 if (showsTitle && meta.isNotEmpty()) {
                     KitText(meta, KitType.Meta, Surface.meta)
                 }
@@ -302,6 +314,8 @@ public fun PushedPage(
     trailing: RoomAction? = null,
     /** A second key before the trailing one: the "…" that opens a page's verbs (a Locker item). */
     more: RoomAction? = null,
+    /** Existing page verbs, hosted by the trailing More key. */
+    moreItems: List<RoomAction> = emptyList(),
     /** The header's filter menu, beside the one trailing action, for a pushed list (Docs' folder). */
     filter: RoomFilter? = null,
     /** The app's id, which the filter menu's test tags are made from (`<app>-filter-menu`). */
@@ -318,6 +332,7 @@ public fun PushedPage(
     content: @Composable () -> Unit,
 ) {
     CompositionLocalProvider(LocalAppAccentId provides app.ifEmpty { LocalAppAccentId.current }) {
+    var moreExpanded by remember { mutableStateOf(false) }
     Column(modifier.fillMaxSize().background(Surface.page).testTag("pushed-page")) {
         // THE TITLE IS IN THE TOP ROW (#1173, round 9): the back chevron, the title inline beside
         // it, the page's keys at the end; the scope line, if any, under the title.
@@ -351,7 +366,21 @@ public fun PushedPage(
                 }
             }
             if (filter != null) FilterMenuButton(app, filter)
-            if (more != null) HeaderVerb(more)
+            if (more != null) {
+                Box {
+                    HeaderVerb(more.copy(onPress = { if (moreItems.isEmpty()) more.onPress() else moreExpanded = true }))
+                    DropdownMenu(expanded = moreItems.isNotEmpty() && moreExpanded, onDismissRequest = { moreExpanded = false }) {
+                        moreItems.forEach { item ->
+                            DropdownMenuItem(
+                                text = { KitText(item.label, KitType.Row, if (item.destructive) centraidColor("danger") else Surface.ink) },
+                                leadingIcon = { CentraidIcon(item.iconKey, tint = if (item.destructive) centraidColor("danger") else Surface.ink) },
+                                onClick = { moreExpanded = false; item.onPress() },
+                                modifier = Modifier.testTag(item.testTag),
+                            )
+                        }
+                    }
+                }
+            }
             if (trailing != null) HeaderVerb(trailing)
         }
         Box(Modifier.weight(1f).fillMaxWidth()) { content() }
@@ -368,13 +397,14 @@ public fun PushedPage(
  * The close key and the system back gesture both call [onClose] (the shell's
  * pop). [onDeparted] runs when the room leaves composition by ANY road — close,
  * back, Home — and is where the route calls its bridge's `departed()`, so
- * unsaved words are saved on the way out. The autosave status line is hosted
- * under the header, never as a button: there is no Save.
+ * unsaved words are saved on the way out. Rust status and autosave feedback
+ * share the docked foot; neither adds a Save button.
  */
 @Composable
 public fun EditorRoom(
     title: String,
     status: Autosave?,
+    statusLine: (@Composable () -> Unit)? = null,
     onClose: () -> Unit,
     onDeparted: () -> Unit,
     modifier: Modifier = Modifier,
@@ -402,7 +432,6 @@ public fun EditorRoom(
                         modifier = Modifier.semantics { heading() },
                     )
                 }
-                AutosaveStatus(status)
             }
             if (trailing != null && trailing.pill) {
                 KitPillButton(trailing.label, trailing.onPress, testTag = trailing.testTag, enabled = trailing.enabled)
@@ -411,6 +440,7 @@ public fun EditorRoom(
             }
         }
         Column(Modifier.weight(1f).fillMaxWidth(), content = content)
+        if (statusLine != null) statusLine() else AutosaveStatus(status)
     }
 }
 
@@ -676,6 +706,14 @@ internal fun RoomTitle(title: String, modifier: Modifier = Modifier) {
         modifier = modifier.semantics { heading() },
         maxLines = 2,
     )
+}
+
+/** THE APP ROOT'S IDENTITY: decorative catalogue mark before its existing title, not page titles. */
+@Composable
+private fun RootAppMark(appId: String) {
+    if (rememberLargestText()) return
+    val icon = CentraidCatalog.byId[appId]?.iconKey ?: return
+    KitTile(iconKey = icon, fill = appAccent(appId).fill)
 }
 
 /** THE STATUS HOST: one quiet line, drawn only when there is something to say. */

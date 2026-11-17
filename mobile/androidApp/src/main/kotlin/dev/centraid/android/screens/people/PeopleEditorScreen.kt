@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
@@ -20,8 +19,7 @@ import androidx.compose.ui.semantics.semantics
 import dev.centraid.android.kit.KitText
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.Surface
-import dev.centraid.android.kit.appAccent
-import dev.centraid.android.kit.kitCard
+import dev.centraid.android.kit.kitBorderedCard
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -40,10 +38,7 @@ import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
-import dev.centraid.android.kit.SheetRow
 import dev.centraid.android.kit.StatusLine
-import dev.centraid.android.theme.centraidColor
-import dev.centraid.android.theme.centraidType
 
 /**
  * `people.editor` (#1135) in the kit's `EditorRoom`: autosave, close = done.
@@ -60,16 +55,17 @@ public fun PeopleEditorScreen(
     val chrome = state.chrome
     val draft = state.draft
     val autosave = state.autosave
+    val visibleStatus = state.status?.sentence?.takeIf { it.isNotEmpty() }
     val clean = autosave != null && !autosave.refused && autosave.edit_seq == autosave.saved_seq
     val reload: Any? = if (clean) Pair(autosave?.base_revision_id, autosave?.saved_seq) else null
     EditorRoom(
         title = chrome?.title.orEmpty(),
         status = if (draft != null) autosave else null,
+        statusLine = if (visibleStatus != null) ({ StatusLine(visibleStatus) }) else null,
         closeLabel = chrome?.close_label?.takeIf { it.isNotEmpty() } ?: KitWords.DONE,
         onClose = onClose,
         onDeparted = {},
     ) {
-        StatusLine(state.status?.sentence.orEmpty())
         ReadStateView(
             page = state.page!!,
             onRetry = { onEvent(PeopleEditorEvent(refreshed = PeopleEditorEvent.Refreshed())) },
@@ -81,7 +77,7 @@ public fun PeopleEditorScreen(
                 Modifier.fillMaxWidth().background(Surface.page).verticalScroll(rememberScrollState()).testTag("people-editor"),
             ) {
                 // THE FOUR FIELDS ARE ONE WHITE CARD on the page (#1173).
-                Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).kitCard()) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).kitBorderedCard()) {
                 EditableFieldRow(
                     key = chrome?.name_field.orEmpty(),
                     value = profile.display_name,
@@ -116,9 +112,7 @@ public fun PeopleEditorScreen(
                 }
                 if (state.cadences.isNotEmpty()) {
                     Label(chrome?.cadence_field.orEmpty())
-                    // THE CHOSEN CADENCE IS FILLED in the app's colour under a white label; the
-                    // others are white pills with a hairline.
-                    val accent = appAccent("people")
+                    // Selection uses a neutral ground and edge; cadence is a choice, not an alert.
                     Row(
                         Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = KitGeometry.GUTTER + 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -128,10 +122,8 @@ public fun PeopleEditorScreen(
                                 Modifier
                                     .heightIn(min = KitGeometry.ROW_MIN)
                                     .clip(CircleShape)
-                                    .background(if (cadence.selected) accent.fill else Surface.card)
-                                    .then(
-                                        if (cadence.selected) Modifier else Modifier.border(KitGeometry.HAIRLINE, Surface.border, CircleShape),
-                                    )
+                                    .background(if (cadence.selected) Surface.fill else Surface.card)
+                                    .border(KitGeometry.HAIRLINE, if (cadence.selected) Surface.meta else Surface.border, CircleShape)
                                     .clickable { onEvent(PeopleEditorEvent(cadence = PeopleEditorEvent.CadencePicked(cadence.days))) }
                                     .padding(horizontal = 16.dp)
                                     .testTag("people-cadence-${cadence.days}")
@@ -141,7 +133,7 @@ public fun PeopleEditorScreen(
                                     },
                                 contentAlignment = Alignment.Center,
                             ) {
-                                KitText(cadence.label, KitType.Row, if (cadence.selected) Color.White else Surface.ink, maxLines = 1)
+                                KitText(cadence.label, KitType.Row, Surface.ink, maxLines = 1)
                             }
                         }
                     }

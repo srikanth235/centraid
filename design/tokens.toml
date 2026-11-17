@@ -511,6 +511,8 @@ appMarkViewBox = 24
 durationOne = 140
 durationTwo = 280
 hairline = 1
+# The solid app-glyph block in Home's open empty invitation.
+homeInvitationGlyphSize = 36
 iconChipRadiusRatio = 0.26
 iconChipTintDark = 0.2
 iconChipTintLight = 0.13
@@ -704,6 +706,14 @@ colors = [
   { light = "#E3F0F2", fill = "#1F3D42" },
   { light = "#E3F1E8", fill = "#20412C" },
   { light = "#E4E0D8", fill = "#3A3733", line = "#3A3733" },
+  { light = "#E6F3F0", fill = "#17302C" },
+  { light = "#EEF3FA", fill = "#202F41" },
+  { light = "#F0F1F2", fill = "#2D2F31" },
+  { light = "#F4EFF8", fill = "#362940" },
+  { light = "#F6F3EB", fill = "#372E14" },
+  { light = "#F8EFF6", fill = "#3F2636" },
+  { light = "#FAEFF2", fill = "#42242B" },
+  { light = "#EBF4F6", fill = "#163136" },
   { light = "#E6ECF3", fill = "#1F2F41" },
   { light = "#E6EEF8", fill = "#1D2E44" },
   { light = "#E8E4DC", text = "#3A3426" },

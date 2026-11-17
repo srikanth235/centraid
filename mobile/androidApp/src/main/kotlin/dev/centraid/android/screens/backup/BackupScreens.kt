@@ -46,6 +46,7 @@ import dev.centraid.android.kit.KitTile
 import dev.centraid.android.kit.StateColor
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.tokenSp
 import dev.centraid.android.screens.words.WordsCallout
 import androidx.compose.ui.Alignment
@@ -151,12 +152,20 @@ private fun BackupPage(
             .testTag("backup-screen"),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            model.title,
-            style = centraidType("title"),
-            color = Surface.ink,
-            modifier = Modifier.padding(horizontal = 4.dp).testTag("backup-title").semantics { heading() },
-        )
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (!rememberLargestText()) KitTile(iconKey = "Backup", fill = centraidColor("shell"))
+            Text(
+                model.title,
+                style = centraidType("title"),
+                color = Surface.ink,
+                maxLines = if (rememberLargestText()) 2 else 1,
+                modifier = Modifier.weight(1f).testTag("backup-title").semantics { heading() },
+            )
+        }
         // THE STATUS CARD: where the backup stands, and the one act that moves it (iOS `statusCard`).
         // THE ONE-TIME PROMPT after the first confirmed backup (#1188, NB5): dismissible, no checkbox.
         model.key_prompt?.let { prompt ->

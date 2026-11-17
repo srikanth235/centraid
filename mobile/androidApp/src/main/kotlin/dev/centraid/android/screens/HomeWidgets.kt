@@ -28,7 +28,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -46,6 +45,9 @@ import centraid.core.v1.Route
 import dev.centraid.android.R
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ContentImage
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitTile
+import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.rememberLargestText
@@ -53,13 +55,15 @@ import dev.centraid.android.kit.tokenSp
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidType
 import dev.centraid.design.CentraidCatalog
+import dev.centraid.design.CentraidGeometry
+import dev.centraid.design.CentraidScale
 
 // HOME AS WIDGETS (#1173; boards `AndroidHome`, `FirstHome`). Rust folds every
 // app's tile into widgets (`crates/screens/src/shell/policy.rs`): which widgets,
 // in what order, how wide (small is one of four columns, medium two, large all
 // four), how tall, and the rows they sit in. This file draws what it sends and
-// preserves that order, allowing native text to reflow a row when it cannot fit. A
-// widget wears the colour of the app it shows (`app_id`); `widget` is its
+// preserves that order, allowing native text to reflow a row when it cannot fit. An
+// empty invitation uses the app's mark; populated widgets stay paper. `widget` is its
 // identity (one per app since Calendar and Reminders split).
 
 private const val COLUMNS = 4
@@ -174,7 +178,7 @@ internal fun WidgetGrid(data: HomeData, loading: String, onOpen: (Route) -> Unit
 private fun glanceText(tile: HomeTile): Pair<String, String> {
     val body = tile.body
     return when {
-        tile.status != HomeTileStatus.HOME_TILE_STATUS_CONTENT || body == null -> "" to tile.empty_copy
+        tile.status != HomeTileStatus.HOME_TILE_STATUS_CONTENT || body == null -> "" to ""
         body.money != null -> body.money!!.amounts.firstOrNull().orEmpty() to body.money!!.caption
         body.health != null -> body.health!!.figure to body.health!!.caption
         body.people != null -> body.people!!.figure to body.people!!.caption
@@ -189,21 +193,18 @@ private fun spanOf(tile: HomeTile): Int = when (tile.size) {
     else -> COLUMNS
 }
 
-/**
- * One widget: a card in the app's colour, pressed to open the app. The card is
- * white on the light page and the dark card in dark, with no border; only
- * floating glass casts a shadow.
- */
+/** A typed-empty invitation stays open paper with its app mark; populated widgets are paper cards. */
 @Composable
 private fun WidgetCard(tile: HomeTile, loading: String, onOpen: (Route) -> Unit) {
-    val radius = dimensionResource(R.dimen.centraid_radius_card) *
-        if (tile.height > 1 || tile.size == HomeTileSize.HOME_TILE_SIZE_LARGE) 1.375f else 1.125f
-    val shape = RoundedCornerShape(radius)
+    val emptyInvitation = tile.status == HomeTileStatus.HOME_TILE_STATUS_EMPTY
+    val shape = RoundedCornerShape(CentraidScale.cardRadius.dp)
     val photos = tile.body?.photos
     Box(
         Modifier
-            .clip(shape)
-            .background(Surface.card)
+            .then(
+                if (emptyInvitation) Modifier
+                else Modifier.clip(shape).background(Surface.card).border(1.dp, Surface.border, shape),
+            )
             // A WIDGET WITH NO ROUTE (still reading, or could not be) is not a control.
             .clickable(enabled = tile.route != null) { tile.route?.let(onOpen) }
             // Keyed on the widget: Calendar's and Reminders' are `home-tile-calendar` and
@@ -211,10 +212,10 @@ private fun WidgetCard(tile: HomeTile, loading: String, onOpen: (Route) -> Unit)
             .testTag("home-tile-${tile.widget}")
             .semantics { contentDescription = tile.accessibility_label },
     ) {
-        if (photos != null && tile.status != HomeTileStatus.HOME_TILE_STATUS_LOADING) {
+        if (photos != null && tile.status == HomeTileStatus.HOME_TILE_STATUS_CONTENT) {
             PhotoWidget(tile)
         } else {
-            WidgetBody(tile, loading, Modifier.padding(PAD))
+            WidgetBody(tile, loading, if (emptyInvitation) Modifier else Modifier.padding(PAD))
         }
     }
 }
@@ -259,9 +260,8 @@ private fun WidgetBody(tile: HomeTile, loading: String, modifier: Modifier) {
     val body = tile.body
     when {
         tile.status == HomeTileStatus.HOME_TILE_STATUS_LOADING -> Skeleton(loading, modifier)
-        tile.status != HomeTileStatus.HOME_TILE_STATUS_CONTENT || body == null ->
-            // A SMALL SLOT HOLDS A GLANCE, NOT A SENTENCE: Health's one word under its mark.
-            if (tile.size == HomeTileSize.HOME_TILE_SIZE_SMALL) Glance(tile, "", tile.empty_copy, modifier) else Invitation(tile, modifier)
+        tile.status == HomeTileStatus.HOME_TILE_STATUS_EMPTY -> Invitation(tile, modifier)
+        tile.status != HomeTileStatus.HOME_TILE_STATUS_CONTENT || body == null -> UnknownWidget(tile, modifier)
         body.agenda != null -> AgendaWidget(tile, body.agenda!!, modifier)
         body.reminders != null -> RemindersWidget(tile, body.reminders!!, modifier)
         body.money != null || body.health != null || body.people != null || body.locker != null -> {
@@ -275,6 +275,7 @@ private fun WidgetBody(tile: HomeTile, loading: String, modifier: Modifier) {
             body.docs!!.rows.firstOrNull()?.size.orEmpty(),
             modifier,
         )
+        else -> UnknownWidget(tile, modifier)
     }
 }
 
@@ -288,8 +289,8 @@ private fun AgendaWidget(tile: HomeTile, day: centraid.core.v1.HomeTileBody.Agen
         WText(day.weekday.uppercase(), appAccent(tile.app_id).text, strong = true, type = "eyebrow")
         Text(
             day.day,
-            color = ink(),
-            fontSize = tokenSp(R.dimen.centraid_text_section),
+            color = appAccent(tile.app_id).text,
+            fontSize = tokenSp(R.dimen.centraid_text_title),
             fontWeight = FontWeight.SemiBold,
         )
         day.events.forEach { event ->
@@ -321,7 +322,7 @@ private fun RemindersWidget(tile: HomeTile, owed: centraid.core.v1.HomeTileBody.
             Text(
                 (tile.count?.let { if (it.capped) "${it.value_}+" else "${it.value_}" } ?: "0"),
                 color = appAccent(tile.app_id).text,
-                fontSize = tokenSp(R.dimen.centraid_text_section),
+                fontSize = tokenSp(R.dimen.centraid_text_title),
                 fontWeight = FontWeight.Bold,
             )
         }
@@ -345,7 +346,7 @@ private fun Glance(tile: HomeTile, figure: String, caption: String, modifier: Mo
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         CentraidCatalog.byId[tile.app_id]?.let { app ->
-            CentraidIcon(iconKey = widgetIcon(tile.app_id, app.iconKey), tint = appAccent(tile.app_id).text, size = 22.dp)
+            CentraidIcon(iconKey = app.iconKey, tint = appAccent(tile.app_id).text, size = 22.dp)
         }
         if (figure.isNotEmpty()) {
             BasicText(
@@ -381,18 +382,32 @@ private fun LineWidget(tile: HomeTile, title: String, line: String, modifier: Mo
     }
 }
 
-/** NOTHING TO SHOW YET (or nothing readable): the app's mark and name, and what to DO. */
+/** A known empty tile invites the app; its copy has the whole row width below the app mark. */
 @Composable
 private fun Invitation(tile: HomeTile, modifier: Modifier) {
-    Column(modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(
+        modifier.fillMaxSize().padding(horizontal = PAD, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CentraidCatalog.byId[tile.app_id]?.let { app ->
-                CentraidIcon(iconKey = widgetIcon(tile.app_id, app.iconKey), tint = appAccent(tile.app_id).text, size = 16.dp)
+                KitTile(
+                    iconKey = app.iconKey,
+                    size = CentraidGeometry.HOME_INVITATION_GLYPH_SIZE.dp,
+                    fill = appAccent(tile.app_id).fill,
+                )
             }
-            WText(tile.name, appAccent(tile.app_id).text, strong = true)
+            KitText(tile.name, KitType.Row, Surface.ink, maxLines = 1)
         }
-        Spacer(Modifier.weight(1f))
-        WText(tile.empty_copy, Surface.body, maxLines = 3)
+        Text(tile.empty_copy, style = centraidType("annotLabel"), color = Surface.body, maxLines = 3)
+    }
+}
+
+/** Unknown is neither a blank invitation nor a loading skeleton. Keep only its known app identity. */
+@Composable
+private fun UnknownWidget(tile: HomeTile, modifier: Modifier) {
+    Box(modifier.fillMaxSize().padding(PAD), contentAlignment = Alignment.CenterStart) {
+        WText(tile.name, Surface.meta, strong = true, type = "control", maxLines = 2)
     }
 }
 
@@ -462,6 +477,3 @@ private fun PhotoWidget(tile: HomeTile) {
         }
     }
 }
-
-/** THE MARK A WIDGET DRAWS: the app's own, except People's, which the board draws as the person. */
-private fun widgetIcon(appId: String, appIcon: String): String = if (appId == "people") "User" else appIcon

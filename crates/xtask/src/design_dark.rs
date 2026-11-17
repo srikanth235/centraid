@@ -711,6 +711,12 @@ fn rewrite_start_tag(
             continue;
         };
         let value = &tag[start..end];
+        if name.eq_ignore_ascii_case("html")
+            && attr.name.eq_ignore_ascii_case("data-theme")
+            && value == "light"
+        {
+            edits.push((start, end, "dark".to_owned()));
+        }
         let mapped = match attr.name {
             "style" => Some(scope.map_style(value)?),
             "fill" | "stroke" => Some(scope.map_value(value, Role::Ink, attr.name)?),

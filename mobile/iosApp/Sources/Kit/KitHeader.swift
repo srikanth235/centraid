@@ -15,7 +15,7 @@ struct KitHeader: View {
 
     var body: some View {
         // AN EMPTY TITLE DRAWS ONLY THE SCOPE LINE (#1173, round 9): the title is in the bar's top
-        // row (`kitRootTitle` / the inline title of a pushed page), never on a line of its own.
+        // row (`RootBarTitle` / the inline title of a pushed page), never on a line of its own.
         VStack(alignment: .leading, spacing: 2) {
             if !title.isEmpty {
                 Text(title)

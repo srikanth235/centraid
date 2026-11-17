@@ -943,15 +943,16 @@ private const val VIDEO_ASPECT = 16f / 9f
 internal fun DocsEditorScreen(state: DocsEditorState, onEvent: (DocsEditorEvent) -> Unit, onClose: () -> Unit) {
     val chrome = state.chrome
     val draft = state.draft
+    val footerStatus = listOf(state.version_label, state.remote_note).filter { it.isNotEmpty() }.joinToString(" · ")
     EditorRoom(
         title = draft?.title?.ifEmpty { null } ?: state.title_hint,
         status = state.autosave,
+        statusLine = if (footerStatus.isNotEmpty()) ({ StatusLine(footerStatus) }) else null,
         onClose = onClose,
         // CLOSE = DONE: the pop is a `NavPopped`, which Rust turns into the screen's `Left`, the flush.
         onDeparted = {},
         closeLabel = chrome?.done.orEmpty().ifEmpty { KitWords.DONE },
     ) {
-        StatusLine(listOf(state.version_label, state.remote_note).filter { it.isNotEmpty() }.joinToString(" · "))
         ReadStateView(
             page = state.page!!,
             onRetry = { onEvent(DocsEditorEvent(refreshed = DocsEditorEvent.Refreshed())) },

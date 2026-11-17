@@ -2,7 +2,7 @@
 
 ## Source and tools
 
-- App source: published HEAD `7d22a64fe2241cc84b59c3a283630f1a96d462dd`. Root verified the iOS and Android application source directories remained at this commit; later workspace changes are docs/build checks.
+- App source for the screen-flow checkpoint below: published `7d22a64fe2241cc84b59c3a283630f1a96d462dd`. Root verified the later published docs/test batch did not change either application's runtime source. The subsequent owner-requested visual redesign is local and needs matching rebuilt artifacts and fresh visual evidence.
 - iOS build: Xcode 27.1 (repo pin 26.3), iOS 17.5 deployment target, built from `/private/tmp/centraid-1200-ios-build/Build/Products/Debug-iphonesimulator/Centraid.app`; executable SHA-256 `62eff5183cb906d3965d70234b8cf860e315203c4d82b25efa39bff405b8f19f`.
 - Android SDK: `/opt/homebrew/share/android-commandlinetools`, JDK 21, NDK `27.0.12077973`; API 35 arm64 core built with `mobile/scripts/android-core.sh arm64-v8a`.
 - Pinned Maestro 2.6.1 is task-local at `/private/tmp/centraid-1200-target/tools/maestro-2.6.1/unpacked/maestro/bin/maestro`. Official `cli-2.6.1` release archive SHA-256: `3440825f514f537c6a96bcf5de995780c2a4a7f83a43208fdc95d4f1fecfad3b`. Global Maestro remains 2.0.0.
@@ -23,10 +23,10 @@ Root reviewed the final iOS and Android task/person JSON and screenshots, plus A
 
 ## Android build, unit tests, and emulator flows
 
-- Guarded Android core build succeeded for `aarch64-linux-android`; copied library: [`libcentraid_core_ffi.so`](../../mobile/androidApp/src/main/jniLibs/arm64-v8a/libcentraid_core_ffi.so), 112 MiB, SHA-256 `bc73565cdae43bfe3a26ffb59a7b8c0148e9e4e64dd61e9bb8005fdda8ce994c`.
+- Guarded Android core build succeeded for `aarch64-linux-android`; task-local copied library at `mobile/androidApp/src/main/jniLibs/arm64-v8a/libcentraid_core_ffi.so` was 112 MiB, SHA-256 `bc73565cdae43bfe3a26ffb59a7b8c0148e9e4e64dd61e9bb8005fdda8ce994c` (this ignored binary is not in the repository).
 - Guarded Gradle command `./gradlew -Pcentraid.android=true :androidApp:assembleDebug :androidApp:testDebugUnitTest --console=plain` succeeded. APK: `mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk`, 140 MiB, SHA-256 `45830d9ae2d3217694af79384a4f30f400db9b9ea49e13a959df7d6ec02b2314`.
 - Root parsed the JUnit XML: 35 suites, 154 tests, 0 failures, errors, or skips. These are Gradle/Robolectric tests, separate from Maestro UI flows and CI's iOS XCTest run (121 tests, 0 failures).
-- A task-owned Pixel 7 API 35 Google APIs arm64 AVD is booted as `centraid-1201-review`, serial `emulator-5554`, under `/private/tmp/centraid-1201-android-avd/avds/centraid-1201-review.avd`. `sys.boot_completed=1`. The app was installed and exercised on this AVD with pinned Maestro 2.6.1. Each completed-command count below includes Maestro setup commands recorded in the JSON.
+- A task-owned Pixel 7 API 35 Google APIs arm64 AVD, `centraid-1201-review`, serial `emulator-5554`, is retained under `/private/tmp/centraid-1201-android-avd/avds/centraid-1201-review.avd`. Its completed boot reported `sys.boot_completed=1`. The app was installed and exercised on this AVD with pinned Maestro 2.6.1; the AVD has since been gracefully stopped for builds, preserving its data. Each completed-command count below includes Maestro setup commands recorded in the JSON.
 
 | Flow | Result | Evidence |
 | --- | --- | --- |
@@ -37,6 +37,12 @@ Root reviewed the final iOS and Android task/person JSON and screenshots, plus A
 
 The first person-flow attempt waited on `home-grid`; the screenshot showed Home, but the container tag was not surfaced to Maestro in that state. The flow was corrected to use the People tile ID already verified by Home density. A later combined create-and-delete attempt created the unique synthetic person and returned to People but lost the Maestro driver during editor close; the separate continuation from the visible person row completed Trash and Undo. These harness attempts are not counted as passes.
 
+## Subsequent OS and recovery checkpoint
+
+Both real notification permission prompts were observed. iOS delivered the synthetic `Nios` reminder after app termination; root reviewed the Notification Center capture at `/private/tmp/centraid-1201-review-flows/ios-device/notify-cold-after-terminate.png`. The card remained collapsed during expansion attempts, so no Done/Snooze/Open callback is proved. Android's synthetic `R7` card showed Mark as done, Snooze 1 hour and Tomorrow, and remained after background process termination. Its cold-action flow failed before the tap; no callback result is claimed. The later emulator restart preserved its app data but the old card is unavailable.
+
+Independent recovery fixtures were created without copying a source container or keychain. The injected source seed reached the intended unsettled-seed Restore-first gate against an empty gateway. Root inspected the actual Maestro command status: the recovery-words branch was skipped, so this setup did not keep a new phrase or finish a native restore. The private fixtures remain outside the repository.
+
 ## Still unverified
 
-Android/iOS native notification permission prompts, cold-process notification actions/replay, and vault-isolation behavior remain unverified by this lane; build, unit tests, and screen flows do not establish those OS callbacks or system behaviors. No recovery drill is claimed here.
+Cold-process notification action callbacks/replay, durable receipt Undo, vault isolation, native recovery, original-byte round trip and takeover remain unverified. Builds, unit tests and the completed screen flows above do not establish these OS or recovery behaviors. New visual source also requires matching native builds and light/dark/large-text review before acceptance.

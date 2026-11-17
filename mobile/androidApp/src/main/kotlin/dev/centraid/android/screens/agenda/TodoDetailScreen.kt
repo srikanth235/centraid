@@ -84,9 +84,13 @@ internal fun TodoDetailScreen(
     onClose: () -> Unit,
     onPhoneSays: (PhoneSaysTaken) -> Unit,
 ) {
+    val visibleStatus = state.status?.takeIf { it.sentence.isNotEmpty() }
     EditorRoom(
         title = state.chrome?.title.orEmpty(),
         status = state.autosave,
+        statusLine = if (visibleStatus != null) ({
+            StatusLine(visibleStatus) { onEvent(TodoDetailEvent(status_acted = TodoDetailEvent.StatusActed())) }
+        }) else null,
         onClose = onClose,
         onDeparted = {},
     ) {
@@ -101,7 +105,6 @@ internal fun TodoDetailScreen(
                 val data = state.data_ ?: return@ReadStateView
                 TodoDetailBody(state, data, onEvent, onOpen, onPhoneSays)
             }
-            StatusLine(state.status) { onEvent(TodoDetailEvent(status_acted = TodoDetailEvent.StatusActed())) }
         }
     }
     val open = state.data_?.fields?.firstOrNull { it.key == state.open_field }

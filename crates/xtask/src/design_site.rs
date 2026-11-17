@@ -23,7 +23,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use centraid_design::tokens::{PropList, Tokens};
+use centraid_design::tokens::{APP_IDS, PropList, Tokens};
 
 /// The sheet's name, in each site's `public/assets`.
 pub const SHEET: &str = "centraid-tokens.css";
@@ -236,6 +236,48 @@ fn theme_props(tokens: &Tokens, scheme: Scheme) -> Result<Vec<(String, String)>>
             .with_context(|| format!("[site.{name}] has no `{property}`"))?;
         out.push((property, value.clone()));
     }
+
+    // Reusable identity aliases for the public sites. Their values are always
+    // lowered from the canonical brand/shell/app tokens, so a site does not
+    // keep a second palette in `[site.*]` or hard-code a fallback for dark.
+    for (property, token) in [
+        ("--brand-teal", "teal"),
+        ("--brand-orange", "orange"),
+        ("--brand-blue", "blue"),
+        // The canonical brand token is named `pink`; the public-site alias
+        // uses the role name approved for the logo treatment.
+        ("--brand-coral", "pink"),
+    ] {
+        let value = tokens
+            .brand
+            .get(token)
+            .with_context(|| format!("[brand] has no `{token}`"))?;
+        out.push((property.to_owned(), value.clone()));
+    }
+    let shell_colour = match scheme {
+        Scheme::Light => &tokens.shell.light,
+        Scheme::Dark => &tokens.shell.dark_text,
+    };
+    out.push(("--shell-colour".to_owned(), shell_colour.clone()));
+
+    for app_id in APP_IDS {
+        let app = tokens
+            .app
+            .get(app_id)
+            .with_context(|| format!("[app.{app_id}] is missing"))?;
+        let identity = match scheme {
+            Scheme::Light => &app.light,
+            Scheme::Dark => &app.dark_text,
+        };
+        let tint = match scheme {
+            Scheme::Light => app.tint.as_ref(),
+            Scheme::Dark => app.dark_tint.as_ref(),
+        }
+        .with_context(|| format!("[app.{app_id}] has no {name} tint"))?;
+        out.push((format!("--app-{app_id}-identity"), identity.clone()));
+        out.push((format!("--app-{app_id}-tint"), tint.clone()));
+    }
+
     let wanted: BTreeSet<String> = HUES
         .iter()
         .map(|hue| format!("--c-{hue}-text"))
@@ -735,6 +777,14 @@ pub fn lint(root: &Path, sheet: &str) -> Result<Vec<String>> {
 mod tests {
     use super::*;
 
+    fn tokens() -> Tokens {
+        Tokens::parse(
+            include_str!("../../../design/tokens.toml"),
+            include_str!("../../../design/icons.toml"),
+        )
+        .unwrap()
+    }
+
     fn set(names: &[&str]) -> BTreeSet<String> {
         names.iter().map(|name| (*name).to_owned()).collect()
     }
@@ -826,5 +876,50 @@ mod tests {
         }
         let error = lint(dir.path(), "").unwrap_err().to_string();
         assert!(error.contains("scanned zero files"), "{error}");
+    }
+
+    #[test]
+    fn reusable_identity_aliases_follow_canonical_tokens_in_both_schemes() {
+        let tokens = tokens();
+        for (scheme, name) in [(Scheme::Light, "light"), (Scheme::Dark, "dark")] {
+            let properties = theme_props(&tokens, scheme).unwrap();
+            let value = |property: &str| {
+                properties
+                    .iter()
+                    .find(|(name, _)| name == property)
+                    .map(|(_, value)| value.as_str())
+                    .unwrap_or_else(|| panic!("missing {property} in {name} scheme"))
+            };
+
+            for (alias, token) in [
+                ("--brand-teal", "teal"),
+                ("--brand-orange", "orange"),
+                ("--brand-blue", "blue"),
+                ("--brand-coral", "pink"),
+            ] {
+                assert_eq!(value(alias), tokens.brand[token], "{alias} in {name}");
+            }
+
+            let shell = match scheme {
+                Scheme::Light => &tokens.shell.light,
+                Scheme::Dark => &tokens.shell.dark_text,
+            };
+            assert_eq!(value("--shell-colour"), shell, "shell in {name}");
+
+            for app_id in APP_IDS {
+                let app = &tokens.app[app_id];
+                let identity = match scheme {
+                    Scheme::Light => &app.light,
+                    Scheme::Dark => &app.dark_text,
+                };
+                let tint = match scheme {
+                    Scheme::Light => app.tint.as_ref(),
+                    Scheme::Dark => app.dark_tint.as_ref(),
+                }
+                .unwrap_or_else(|| panic!("[app.{app_id}] lacks {name} tint"));
+                assert_eq!(value(&format!("--app-{app_id}-identity")), identity);
+                assert_eq!(value(&format!("--app-{app_id}-tint")), tint);
+            }
+        }
     }
 }

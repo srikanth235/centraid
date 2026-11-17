@@ -10,15 +10,16 @@
 <body>
 <x-dc>
 <helmet>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+
 <style>
 body{margin:0}
+@font-face{font-family:Instrument Sans;src:url('../fonts/InstrumentSans_470Book.ttf') format('truetype');font-style:normal;font-weight:400}@font-face{font-family:Instrument Sans;src:url('../fonts/InstrumentSans-SemiBold.ttf') format('truetype');font-style:normal;font-weight:600 700}
 button{font:inherit;color:inherit}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #0E0D0C; font-family: Geist, system-ui, sans-serif; color: #F2EFEA;">
-  <div style="display: flex; align-items: flex-start; justify-content: space-between; padding: 56px 20px 4px;">
-    <h1 style="margin: 4px 0 0; flex: 1; min-width: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">Recents</h1>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #0E0D0C; font-family: Instrument Sans, system-ui, sans-serif; color: #F2EFEA;">
+  <div style="display: flex; align-items: flex-start; justify-content: space-between; padding: 56px 18px 4px;">
+    <div class="root-title-line" style="display:flex;align-items:center;gap:8px;flex:1;min-width:0"><span class="root-app-mark" aria-hidden="true" style="width:32px;height:32px;flex:0 0 32px;display:flex;align-items:center;justify-content:center;border-radius:8.32px;background:#01819B"><svg data-catalog-icon="Folder" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span><h1 style="margin:0; flex: 1; min-width: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">Recents</h1></div>
     <div style="display: flex; gap: 8px;">
       <button aria-label="Filter, sort and view" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid #3A3733; background: rgba(44,42,39,0.85); display: flex; align-items: center; justify-content: center;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 5h16l-6.5 7.5V19l-3 1.5v-8z" stroke-linejoin="round"/></svg>
@@ -32,11 +33,8 @@ button{font:inherit;color:inherit}
 
   <p style="margin: 0 20px 12px; font-size: 13px; color: #A39E95;">Changed lately · 42 documents in Docs</p>
 
-  <div style="display: flex; gap: 8px; padding: 0 20px 12px;">
-    <span style="font-size: 13px; padding: 6px 10px; border-radius: 14px; background: #1D4144; color: #30A9C6; display: flex; align-items: center; gap: 6px;"><span style="width: 8px; height: 8px; border-radius: 4px; background: #468DE5;"></span>Taxes</span>
-    <span style="font-size: 13px; padding: 6px 10px; border-radius: 14px; background: #2A2826; display: flex; align-items: center; gap: 6px;"><span style="width: 8px; height: 8px; border-radius: 4px; background: #E55D7E;"></span>Medical</span>
-    <span style="font-size: 13px; padding: 6px 10px; border-radius: 14px; background: #2A2826; display: flex; align-items: center; gap: 6px;"><span style="width: 8px; height: 8px; border-radius: 4px; background: #1399B5;"></span>Receipts</span>
-  </div>
+  <!-- Filter choices remain in the native funnel menu; no duplicate chip strip. -->
+
 
   <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 12px; padding: 0 20px;">
     <a href="DocsFolderDark.dc.html" style="text-decoration: none; color: inherit; display: flex; flex-direction: column; align-items: center; gap: 6px;">
