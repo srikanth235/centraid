@@ -12,7 +12,7 @@ const rail = [
   {
     "href": "#addressing",
     "no": "§02",
-    "label": "Addressing",
+    "label": "Reachability",
     "current": false
   },
   {
@@ -22,44 +22,44 @@ const rail = [
     "current": false
   },
   {
-    "href": "#iroh",
+    "href": "#connection",
     "no": "§04",
-    "label": "Connectivity",
+    "label": "Phone connection",
     "current": false
   },
   {
-    "href": "#replica",
+    "href": "#takeover",
     "no": "§05",
-    "label": "Replica",
+    "label": "Restore and takeover",
+    "current": false
+  },
+  {
+    "href": "#operator",
+    "no": "§06",
+    "label": "Operator setup",
     "current": false
   },
   {
     "href": "#desktop",
-    "no": "§06",
-    "label": "Desktop shell",
+    "no": "§07",
+    "label": "Desktop",
     "current": false
   },
   {
     "href": "#web",
-    "no": "§07",
-    "label": "Web app",
+    "no": "§08",
+    "label": "Web",
     "current": false
   },
   {
     "href": "#mobile",
-    "no": "§08",
-    "label": "Mobile companion",
-    "current": false
-  },
-  {
-    "href": "#runtimes",
     "no": "§09",
-    "label": "Harness runtimes",
+    "label": "Phone builds",
     "current": false
   }
 ];
 const footer = {
-  "manifesto": "No relay to rent, no sync to reconcile, no account to lose. <em>Just your machines, talking to each other.</em>",
+  "manifesto": "One phone writes the vault. <em>A gateway stores its sealed backup.</em>",
   "links": [
     {
       "href": "https://centraid.dev",
@@ -86,12 +86,12 @@ const footer = {
 ---
 
 <DocsLayout
-  title="Centraid Devices: Peer-to-Peer Gateway and Mobile Client"
-  description="See how Centraid connects devices: one gateway, per-vault addressing, QR pairing, the iroh peer-to-peer tunnel, desktop shell, mobile companion, and harness runtimes."
+  title="Centraid devices: phone vault and backup gateway"
+  description="How the phone pairs directly with a member-controlled gateway for blind, sealed backups, and how operators keep it reachable."
   current="devices"
   canonicalPath="devices/"
   searchLabel="Devices"
-  searchKeywords="gateway devices clients vault addressing pairing QR iroh peer-to-peer tunnel desktop mobile companion harness runtimes"
+  searchKeywords="phone vault gateway direct HTTPS pinned certificate QR pairing safety number restore takeover reachability operator iOS Android"
   bodyClass="has-rail"
   rail={rail}
   footer={footer}

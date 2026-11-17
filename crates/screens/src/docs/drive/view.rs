@@ -78,12 +78,7 @@ pub(super) fn state(drive: &Drive, ctx: &Ctx) -> wire::ViewState {
                     sheets::view(drive, locale)
                 }),
                 status: drive.undo.status(),
-                confirm: drive.asking.as_ref().map(|_| wire::Confirm {
-                    title: words::trash_confirm_title(locale),
-                    body: words::trash_confirm_body(locale),
-                    confirm_label: words::trash_confirm(locale),
-                    destructive: true,
-                }),
+                confirm: None,
                 // THE STOP CONFIRM (#1185): the kit's sheet, named for the folder.
                 stop: drive
                     .asking_stop

@@ -36,6 +36,9 @@ struct TodoDetailView: View {
         EditorRoom(
             title: state.chrome.title,
             status: state.autosave,
+            statusLine: state.status,
+            statusIdentifier: "tasks-status-action",
+            onStatusAct: { send(event { $0.statusActed = .init() }) },
             onClose: onClose,
             onDeparted: {}
         ) {
@@ -46,13 +49,15 @@ struct TodoDetailView: View {
             }
         } content: {
             // THE TASK'S READ (#1185): a task that is gone is the page's failure, in its own words.
-            PageReadStateView(
-                page: state.page,
-                loadingLabel: state.chrome.loading,
-                onRetry: { send(event { $0.refreshed = .init() }) }
-            ) {
-                if case let .data(detail)? = state.content {
-                    editor(detail, state: state)
+            VStack(spacing: 0) {
+                PageReadStateView(
+                    page: state.page,
+                    loadingLabel: state.chrome.loading,
+                    onRetry: { send(event { $0.refreshed = .init() }) }
+                ) {
+                    if case let .data(detail)? = state.content {
+                        editor(detail, state: state)
+                    }
                 }
             }
         }
@@ -96,7 +101,7 @@ struct TodoDetailView: View {
             )
         }
         .linkPickerSheet(state.linkPicker) { link in send(event { $0.link = link }) }
-        // THE TASK LEFT — deleted, or gone from the vault: the view pops.
+        // THE PAGE LEFT — the screen says when its route is finished.
         .onChange(of: state.finished) { _, finished in
             if finished { onClose() }
         }
@@ -205,10 +210,6 @@ struct TodoDetailView: View {
                 }
                 .padding(CentraidGeometry.pageMargin)
             }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            StatusLineView(status: state.status, identifier: "tasks-status-action") { send(event { $0.statusActed = .init() }) }
-                .background(Theme.color("bg", scheme))
         }
         .onAppear {
             // ONCE. See `seeded`.

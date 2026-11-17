@@ -670,6 +670,7 @@ public enum CentraidGeometry {
     public static let durationOne: CGFloat = 140
     public static let durationTwo: CGFloat = 280
     public static let hairline: CGFloat = 1
+    public static let homeInvitationGlyphSize: CGFloat = 36
     public static let iconChipRadiusRatio: CGFloat = 0.26
     public static let iconChipTintDark: CGFloat = 0.2
     public static let iconChipTintLight: CGFloat = 0.13

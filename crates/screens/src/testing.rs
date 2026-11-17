@@ -14,6 +14,99 @@ use centraid_core::{Core, CoreConfig, Handle};
 use crate::runtime::Runtime;
 use crate::screen::{Ctx, Environment};
 
+/// One load request made while a test runs against [`Driver::with_load_observer`].
+#[derive(Clone, Debug)]
+pub struct ObservedLoad {
+    pub request: wire::LoadRequest,
+    pub response: Result<wire::LoadResponse, String>,
+}
+
+/// Test-only record of load calls and their answers.
+#[derive(Default)]
+pub struct LoadObserver {
+    loads: std::cell::RefCell<Vec<ObservedLoad>>,
+}
+
+impl LoadObserver {
+    /// A stable snapshot in the order calls reached the core.
+    #[must_use]
+    pub fn loads(&self) -> Vec<ObservedLoad> {
+        self.loads.borrow().clone()
+    }
+}
+
+struct ObservedScreenCtx<'a> {
+    inner: &'a dyn centraid_core::screens::ScreenCtx,
+    observer: &'a LoadObserver,
+}
+
+impl centraid_core::screens::ScreenCtx for ObservedScreenCtx<'_> {
+    fn now_ms(&self) -> Option<i64> {
+        self.inner.now_ms()
+    }
+    fn load(&self, request: &wire::LoadRequest) -> centraid_core::Result<wire::LoadResponse> {
+        let answer = self.inner.load(request);
+        self.observer.loads.borrow_mut().push(ObservedLoad {
+            request: request.clone(),
+            response: answer
+                .as_ref()
+                .map(Clone::clone)
+                .map_err(ToString::to_string),
+        });
+        answer
+    }
+    fn act(&self, request: &wire::ActRequest) -> centraid_core::Result<wire::ActResponse> {
+        self.inner.act(request)
+    }
+    fn command(
+        &self,
+        name: &str,
+        input: &serde_json::Value,
+        invoke_key: &str,
+    ) -> centraid_core::Result<centraid_vault::commands::CommandOutcome> {
+        self.inner.command(name, input, invoke_key)
+    }
+    fn originals(
+        &self,
+        request: &wire::OriginalsRequest,
+    ) -> centraid_core::Result<wire::OriginalsResponse> {
+        self.inner.originals(request)
+    }
+    fn content_urls(
+        &self,
+        request: &wire::ContentUrlRequest,
+    ) -> centraid_core::Result<wire::ContentUrls> {
+        self.inner.content_urls(request)
+    }
+    fn locker(
+        &self,
+        request: &wire::LockerSessionRequest,
+    ) -> centraid_core::Result<wire::LockerSessionResponse> {
+        self.inner.locker(request)
+    }
+    fn vault(
+        &self,
+        request: centraid_core::screens::VaultRequest,
+    ) -> centraid_core::Result<wire::Response> {
+        self.inner.vault(request)
+    }
+    fn assist(&self, request: &wire::AssistRequest) -> centraid_core::Result<wire::AssistResponse> {
+        self.inner.assist(request)
+    }
+    fn off_thread(&self, job: u64, work: centraid_core::screens::OffThreadWork) {
+        self.inner.off_thread(job, work);
+    }
+    fn vaults(&self) -> Option<std::sync::Arc<dyn centraid_core::vaults::Vaults>> {
+        self.inner.vaults()
+    }
+    fn push(&self, update: wire::ScreenUpdate) {
+        self.inner.push(update);
+    }
+    fn wake_after(&self, after: Duration) {
+        self.inner.wake_after(after);
+    }
+}
+
 /// The shell's two secret stores and its synchronised-store reading, as a
 /// test double: what [`Driver::serve`] answers a [`wire::SecretBatch`] from.
 /// `synced_works: false` is a platform that refuses a synchronised write
@@ -169,6 +262,22 @@ impl Driver {
     ) -> Self {
         let seeded_at_ms = centraid_vault::Clock::now_ms(&*clock);
         Self::opened_on(runtime, false, seeded_at_ms, Some(clock))
+    }
+
+    /// Attach the test runtime to an already opened core handle. The caller
+    /// retains ownership of any directory or files behind the handle and must
+    /// close the Driver before cleaning them up.
+    #[must_use]
+    pub fn over_handle(runtime: Runtime, handle: Handle) -> Self {
+        handle.attach_screens(std::sync::Arc::new(runtime));
+        Self {
+            handle,
+            views: BTreeMap::new(),
+            navigation: None,
+            effects: Vec::new(),
+            closed: Vec::new(),
+            scratch: None,
+        }
     }
 
     /// [`Self::with_runtime`] over a core that holds the vault's keys, so a
@@ -449,6 +558,19 @@ impl Driver {
     pub fn with_ctx<R>(&self, body: impl FnOnce(&Ctx) -> R) -> R {
         let environment = Environment::default();
         body(&Ctx::new(&*self.handle, &environment))
+    }
+
+    /// Run a test with the same core door while recording every app `load`
+    /// request and its response. This observes the existing screen/core
+    /// boundary; it does not instrument SQL statements below that boundary.
+    pub fn with_load_observer<R>(&self, body: impl FnOnce(&Ctx, &LoadObserver) -> R) -> R {
+        let environment = Environment::default();
+        let observer = LoadObserver::default();
+        let core = ObservedScreenCtx {
+            inner: &*self.handle,
+            observer: &observer,
+        };
+        body(&Ctx::new(&core, &environment), &observer)
     }
 
     /// [`Self::with_ctx`] in the member's `zone` instead of UTC: the same door, placing "today" and

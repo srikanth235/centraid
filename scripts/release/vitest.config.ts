@@ -5,7 +5,10 @@ import { defineConfig } from "vitest/config";
 // #501 release unit lane (sync-versions / restamp).
 export default defineConfig({
   test: {
-    include: ["scripts/release/**/*.test.mjs"],
+    include: [
+      "scripts/release/**/*.test.mjs",
+      "scripts/docs-site/**/*.test.mjs",
+    ],
     exclude: ["scripts/release/surfaces.test.mjs"],
     environment: "node",
   },

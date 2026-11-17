@@ -4,6 +4,7 @@
 //! `HomeReadsSpec` and the tile specs over a real vault; every sentence is Rust's.
 
 use centraid_api_proto::core_v1 as wire;
+use centraid_core::{Core, CoreConfig};
 use centraid_screens::shell;
 use centraid_screens::testing::Driver;
 use wire::home_event::Kind as H;
@@ -14,6 +15,32 @@ fn started() -> (Driver, u64) {
     d.start();
     let root = d.navigation.as_ref().expect("navigation").tabs[0].entries[0].instance;
     (d, root)
+}
+
+fn started_empty_vault() -> (Driver, u64, std::path::PathBuf) {
+    let dir = centraid_ontology::scratch::scratch_dir();
+    std::fs::create_dir_all(&dir).expect("the empty vault directory is made");
+    let handle = Core::open(CoreConfig::new(dir.join("vault.db"))).expect("the core opens");
+    handle
+        .open_own_bytes(dir.join("vault.bytes"))
+        .expect("the byte store opens");
+    let response = handle
+        .call(&wire::Request {
+            kind: Some(wire::request::Kind::Found(wire::FoundRequest {
+                display_name: "Empty vault".to_owned(),
+                owner_name: "Me".to_owned(),
+                content: wire::FoundContent::Unspecified as i32,
+            })),
+        })
+        .expect("the empty vault is founded");
+    assert!(matches!(
+        response.kind,
+        Some(wire::response::Kind::Found(_))
+    ));
+    let mut d = Driver::over_handle(shell::runtime(), handle);
+    d.start();
+    let root = d.navigation.as_ref().expect("navigation").tabs[0].entries[0].instance;
+    (d, root, dir)
 }
 
 fn state(d: &Driver, i: u64) -> wire::HomeState {
@@ -218,6 +245,46 @@ fn the_seeded_vault_fills_the_tiles_and_a_count_agrees_with_its_noun() {
     assert_eq!(locker.empty_copy, "Unlock to see your items");
     assert_eq!(locker.count.map(|c| c.value), Some(0));
     assert_eq!(locker.count_label, "items");
+}
+
+#[test]
+fn an_empty_vault_keeps_all_nine_launchable_medium_invitations_compact() {
+    let (d, i, dir) = started_empty_vault();
+    let data = data(&d, i);
+    assert_eq!(data.springboard, wire::HomeSpringboard::FirstRun as i32);
+    assert_eq!(data.tiles.len(), 9);
+    for tile in &data.tiles {
+        assert_eq!(
+            tile.status,
+            wire::HomeTileStatus::Empty as i32,
+            "{}",
+            tile.app_id
+        );
+        assert_eq!(tile.size(), wire::HomeTileSize::Medium, "{}", tile.app_id);
+        assert_eq!(tile.height, 1, "{}", tile.app_id);
+        assert!(
+            !tile.empty_copy.is_empty(),
+            "{} has no invitation",
+            tile.app_id
+        );
+        assert_eq!(tile.open_label, format!("Open {}", tile.name));
+        let route = tile
+            .route
+            .as_ref()
+            .unwrap_or_else(|| panic!("{} has no destination", tile.app_id));
+        assert!(
+            route.screen.starts_with(&format!("{}.", tile.app_id)),
+            "{} opens {}",
+            tile.app_id,
+            route.screen
+        );
+    }
+    let notes = tile(&data, "notes");
+    assert_eq!(notes.empty_copy, "Write your first note");
+    let reminders = tile(&data, "reminders");
+    assert_eq!(reminders.empty_copy, "Nothing due today");
+    drop(d);
+    std::fs::remove_dir_all(dir).expect("the empty vault is removed");
 }
 
 #[test]

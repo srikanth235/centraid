@@ -8,7 +8,7 @@ import SwiftUI
 /// `.status`); this file draws whichever one the state holds and hands each
 /// keystroke back as the sheet's own event. Edit is a `Route` the state carries;
 /// a channel's tap is an event and Rust asks this shell to call, mail, map or
-/// copy it; `done` (a person moved to the trash) pops.
+/// copy it; the screen's `done` state controls when its route pops.
 struct PeoplePersonView: View {
     let state: Centraid_Core_V1_PeoplePersonState
     let send: (Centraid_Core_V1_PeoplePersonEvent) -> Void
@@ -16,30 +16,24 @@ struct PeoplePersonView: View {
     let onBack: () -> Void
     let onPhoneSays: (Centraid_Core_V1_PhoneSaysTaken) -> Void
 
-    @Environment(\.colorScheme) private var scheme
-
     var body: some View {
         let chrome = state.chrome
         let person: Centraid_Core_V1_PeoplePersonData? = {
             if case let .data(data)? = state.content { return data }
             return nil
         }()
-        // THE NAME IS THE HERO'S, so the bar carries no title of its own once the person is read:
-        // only the back chevron and the keys. Until then the bar holds the name the row carried
-        // (`nameHint`), as Android's does.
+        // The existing record name is the inline title; at the largest text size the scrollable
+        // hero also carries the full name so a narrow toolbar never hides it.
         PushedPage(
-            title: person == nil ? state.nameHint : "",
+            title: person?.name ?? state.nameHint,
             parentTitle: chrome.back,
-            onBack: onBack
+            onBack: onBack,
+            titleColor: Surface.ink,
+            titleIdentifier: "kit-header-title"
         ) {
             HStack(spacing: 4) {
-                if let person, !person.isMe {
+                if let person, !person.isMe || (state.hasEdit && !chrome.edit.isEmpty) {
                     personMenu(person, chrome)
-                }
-                if person != nil, state.hasEdit, !chrome.edit.isEmpty {
-                    ToolbarVerb(label: chrome.edit, identifier: "people-person-edit") {
-                        open(state.edit)
-                    }
                 }
             }
         } content: {
@@ -49,6 +43,11 @@ struct PeoplePersonView: View {
                 onRetry: { send(PeopleEvents.person { $0.refreshed = .init() }) }
             ) {
                 PeoplePersonBody(person: state.data, state: state, send: send, open: open, onPhoneSays: onPhoneSays)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                StatusLineView(status: state.status, identifier: "people-person-status-action")
+                    .padding(.vertical, 4)
+                    .background(Surface.page)
             }
         }
         .sheet(isPresented: Binding(
@@ -86,27 +85,33 @@ struct PeoplePersonView: View {
         _ chrome: Centraid_Core_V1_PeoplePersonChrome
     ) -> some View {
         Menu {
-            Button(person.starLabel) {
-                send(PeopleEvents.person { $0.star = .init() })
+            if state.hasEdit, !chrome.edit.isEmpty {
+                Button(chrome.edit) { open(state.edit) }
+                    .accessibilityIdentifier("people-person-edit")
             }
-            .accessibilityIdentifier("people-person-star")
-            if !chrome.share.isEmpty {
-                Button(chrome.share) {
-                    send(PeopleEvents.person { $0.shareRequested = .init() })
+            if !person.isMe {
+                Button(person.starLabel) {
+                    send(PeopleEvents.person { $0.star = .init() })
                 }
-                .accessibilityIdentifier("people-person-share")
-            }
-            if !chrome.merge.isEmpty {
-                Button(chrome.merge) {
-                    send(PeopleEvents.person { $0.sheetOpened = .with { $0.which = .merge } })
+                .accessibilityIdentifier("people-person-star")
+                if !chrome.share.isEmpty {
+                    Button(chrome.share) {
+                        send(PeopleEvents.person { $0.shareRequested = .init() })
+                    }
+                    .accessibilityIdentifier("people-person-share")
                 }
-                .accessibilityIdentifier("people-person-merge")
-            }
-            if !chrome.moveToTrash.isEmpty {
-                Button(chrome.moveToTrash, role: .destructive) {
-                    send(PeopleEvents.person { $0.trashTapped = .init() })
+                if !chrome.merge.isEmpty {
+                    Button(chrome.merge) {
+                        send(PeopleEvents.person { $0.sheetOpened = .with { $0.which = .merge } })
+                    }
+                    .accessibilityIdentifier("people-person-merge")
                 }
-                .accessibilityIdentifier("people-person-trash")
+                if !chrome.moveToTrash.isEmpty {
+                    Button(chrome.moveToTrash, role: .destructive) {
+                        send(PeopleEvents.person { $0.trashTapped = .init() })
+                    }
+                    .accessibilityIdentifier("people-person-trash")
+                }
             }
         } label: {
             CentraidIconView(iconKey: "MoreHoriz", tint: Surface.ink, size: 18)
@@ -138,10 +143,6 @@ private struct PeoplePersonBody: View {
             LazyVStack(alignment: .leading, spacing: 0) {
                 hero
                 heroActions
-                if state.hasStatus, !state.status.sentence.isEmpty {
-                    StatusLineView(status: state.status, identifier: "people-person-status-action")
-                }
-
                 SectionHeader(
                     title: person.channelsHead.title,
                     count: person.channelsHead.count,
@@ -289,17 +290,16 @@ private struct PeoplePersonBody: View {
     /// says "My card" where the cadence would be.
     private var hero: some View {
         VStack(spacing: 4) {
+            if largestText {
+                Text(person.name)
+                    .kitType(.hero)
+                    .foregroundStyle(Surface.ink)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+            }
             PeopleAvatarView(avatar: person.avatar, size: 96)
                 .padding(.bottom, 6)
-            Text(person.name)
-                .kitType(.hero)
-                .foregroundStyle(Surface.ink)
-                .multilineTextAlignment(.center)
-                // THE HERO REFLOWS AT THE LARGEST SIZES: the name wraps rather than shrinks or clips.
-                .lineLimit(largestText ? nil : 2)
-                .minimumScaleFactor(largestText ? 1 : 0.7)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityAddTraits(.isHeader)
             if person.hasNamePhoneSays {
                 PhoneSaysLines(lines: [person.namePhoneSays], centered: true, padded: false, onTake: onPhoneSays)
             }
@@ -481,11 +481,9 @@ private struct PeoplePersonBody: View {
 }
 
 private extension View {
-    /// A white card on the page: the card radius, nothing under it (only floating glass casts a
-    /// shadow), side margins and a gap below.
+    /// A paper detail card with the shared edge and radius, side margins and a gap below.
     func peopleCard() -> some View {
-        background(Surface.card, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
-            .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+        kitBorderedCard()
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .padding(.bottom, 10)
     }

@@ -70,7 +70,7 @@ struct VaultHeader: View {
                     .foregroundStyle(Theme.color(loud ? "text" : "textFaint", scheme))
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(minHeight: 18)
+            .frame(minHeight: CentraidGeometry.targetMinCoarse)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -100,6 +100,8 @@ struct VaultHeader: View {
                 // A static control rung, not `iconChipRadius` — that
                 // ratio is for app chips.
                 .background(mark.ground, in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
+                .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
+                .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .accessibilityHidden(true)
@@ -113,11 +115,11 @@ struct VaultHeader: View {
                 store.sendHome(.vault(.init()))
             } label: {
                 Text(vault.name)
-                    .centraidType("smallStrong")
+                    .centraidType("display")
                     .foregroundStyle(Theme.color("text", scheme))
                     .lineLimit(largestText ? nil : 1)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

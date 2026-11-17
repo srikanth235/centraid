@@ -5,15 +5,16 @@
 //!   (`people.editor`); Log a touch, Add note, Add date and Add channel are write
 //!   sheets over this screen; Merge is a choices sheet that picks, from the
 //!   roster, who folds INTO this person.
-//! - **Destroying is asked first**, in full sentences: move to trash, remove a
-//!   channel (no undo), merge (cannot be undone).
+//! - **Irreversible writes are asked first**: removing a channel (no undo) and
+//!   merging (cannot be undone). Moving a person to trash writes immediately and
+//!   keeps the detail route on its gone state for Undo.
 //! - **Writes are synchronous.** A refused write keeps the sheet and its fields
 //!   with the sentence over them; with no sheet, the sentence goes on the status
 //!   line. Nothing on screen changes on a guess: what committed is in the next
 //!   load.
-//! - A person moved to the trash here sets `done`: the shell pops. One gone by any
-//!   other road (merged away, trashed elsewhere) draws the `gone` state with a way
-//!   back.
+//! - A person moved to trash here stays on the `gone` state with Undo. One gone
+//!   by any other road (merged away, trashed elsewhere) draws the `gone` state
+//!   with a way back.
 //!
 //! Calling, mailing and opening a map are Rust's to ask for as effects
 //! (`ChannelTapped`): `OpenUrl` for `tel:` and `mailto:`, `OpenMap`, or the
@@ -100,10 +101,9 @@ fn vcard(ctx: &Ctx, person_id: &str) -> Result<ExportFile, String> {
     export::file_of(&settled, "text/vcard", "Contact.vcf")
 }
 
-/// What a confirm on screen will do once the member says so.
+/// Irreversible or non-undoable actions that require the member's confirmation.
 enum Asking {
     Nothing,
-    Trash,
     RemoveChannel(String),
     Merge { party_id: String, name: String },
 }
@@ -508,18 +508,6 @@ impl Person {
         let locale = ctx.locale();
         let name = self.name();
         match std::mem::replace(&mut self.asking, Asking::Nothing) {
-            Asking::Trash => {
-                let request = act::people::TrashPerson {
-                    person_id: self.party_id.clone(),
-                };
-                let outcome = fill(&words::outcome_trashed(locale), &[("name", &name)]);
-                let party = self.party_id.clone();
-                if self.write(ctx, request.into(), &party, outcome) {
-                    // THE PAGE CLOSES: "moved to trash" and its Undo go to the page beneath.
-                    self.undo.hand_down(ctx);
-                    self.done = true;
-                }
-            }
             Asking::RemoveChannel(channel_id) => {
                 let kind = self
                     .loaded()
@@ -559,15 +547,6 @@ impl Person {
     fn confirm(&self, locale: Locale) -> Option<wire::Confirm> {
         match &self.asking {
             Asking::Nothing => None,
-            Asking::Trash => Some(wire::Confirm {
-                title: fill(
-                    &words::confirm_trash_title(locale),
-                    &[("name", &self.name())],
-                ),
-                body: words::confirm_trash_body(locale),
-                confirm_label: words::move_to_trash(locale),
-                destructive: true,
-            }),
             Asking::RemoveChannel(id) => {
                 let kind = self
                     .loaded()
@@ -704,7 +683,13 @@ impl Person {
             }
             P::TrashTapped(_) => {
                 if self.loaded().is_some() && !self.is_me() {
-                    self.asking = Asking::Trash;
+                    let name = self.name();
+                    let party = self.party_id.clone();
+                    let request = act::people::TrashPerson {
+                        person_id: party.clone(),
+                    };
+                    let outcome = fill(&words::outcome_trashed(ctx.locale()), &[("name", &name)]);
+                    self.write(ctx, request.into(), &party, outcome);
                 }
             }
             P::Confirmed(_) => self.confirmed(ctx),

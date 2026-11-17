@@ -3,42 +3,32 @@ import DocsLayout from '../layouts/DocsLayout.astro';
 import ontologyBodyRaw from '../content/ontology-body.html?raw';
 import ontologyStyle from '../content/ontology-style.css?raw';
 
-const base = import.meta.env.BASE_URL.endsWith('/')
-  ? import.meta.env.BASE_URL
-  : `${import.meta.env.BASE_URL}/`;
-
 const rail = [
-  { href: '#hero', no: '§01', label: 'Thesis', current: true },
-  { href: '#map', no: '§02', label: 'Entity map', current: false },
+  { href: '#hero', no: '§01', label: 'Overview', current: true },
+  { href: '#map', no: '§02', label: 'Kinds and links', current: false },
   { href: '#schema', no: '§03', label: 'Schema', current: false },
   { href: '#principles', no: '§04', label: 'Principles', current: false },
-  { href: '#rules', no: '§05', label: 'The rules', current: false },
+  { href: '#rules', no: '§05', label: 'Checks', current: false },
 ];
 const footer = {
-  manifesto:
-    'Centraid is one personal ontology with many replaceable projections. <em>The model is the asset.</em>',
+  manifesto: 'One phone vault. Nine first-party apps. <em>Shared records.</em>',
   links: [
-    { href: '../start/', label: 'start', external: false },
     { href: '../data/', label: 'data', external: false },
     { href: '../apps/', label: 'apps', external: false },
     { href: '../devices/', label: 'devices', external: false },
+    { href: '../backups/', label: 'backups', external: false },
   ],
 };
-const ontologyBody = ontologyBodyRaw
-  .replaceAll('__DOCS_BASE__', base)
-  .replace(/<header class="topbar">[\s\S]*?<\/header>\s*/u, '')
-  .replace(/<nav class="rail"[\s\S]*?<\/nav>\s*/u, '')
-  .replace(/^\s*<main>\s*/u, '')
-  .replace(/\s*<\/main>\s*<footer>[\s\S]*?<\/footer>\s*/u, '\n');
+const ontologyBody = ontologyBodyRaw;
 ---
 
 <DocsLayout
   title="Centraid Ontology: Personal Data Model and Schema"
-  description="Centraid's personal ontology: an entity for everything with a title, a kind for what it is, typed edges, the schema of a new vault, and the rules that keep it one model."
+  description="A concise map of Centraid's shared phone records, kinds, relations, and generated vault schema."
   current="ontology"
   canonicalPath="ontology/"
   searchLabel="Ontology"
-  searchKeywords="personal ontology entity kinds edges blobs origin source journal schema commitments typed commands data model"
+  searchKeywords="personal ontology records kinds relations schema shared phone vault"
   bodyClass="has-rail ontology-page"
   rail={rail}
   footer={footer}

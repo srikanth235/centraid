@@ -138,7 +138,8 @@ pub struct Reading {
     /// when nothing waits or the core does not say. The core clamps it to no earlier than the
     /// first pairing.
     pub oldest_waiting_ms: Option<i64>,
-    /// The vault moved to another phone; this one is read-only.
+    /// At least one paired gateway says another phone took over there. The
+    /// action door refuses ordinary member writes and this drives the warning.
     pub frozen: bool,
     /// WHAT EACH APP'S BACKUP HOLDS (#1144), in the catalogue's order; empty
     /// when the core could not say (no vault, or no keys to name its files).

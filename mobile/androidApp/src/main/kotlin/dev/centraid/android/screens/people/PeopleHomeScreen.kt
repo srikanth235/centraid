@@ -86,7 +86,6 @@ import dev.centraid.android.kit.SectionHeader
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
-import dev.centraid.android.kit.hueColor
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -523,7 +522,7 @@ internal fun RailEmpty(sentence: String) {
 @Composable
 private fun PersonRow(row: PeopleRow, onOpen: (Route) -> Unit, onEvent: (PeopleHomeEvent) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = KitGeometry.GUTTER)) {
-        Avatar(row.avatar)
+        Avatar(row.avatar, size = 40)
         Box(Modifier.weight(1f)) {
             CentraidRow(
                 title = row.name,
@@ -549,14 +548,16 @@ private fun PersonRow(row: PeopleRow, onOpen: (Route) -> Unit, onEvent: (PeopleH
 /** The avatar: initials on the person's hue. Decorative; the row speaks the name. */
 @Composable
 internal fun Avatar(avatar: PeopleAvatar?, size: Int = 32) {
+    val accent = appAccent("people")
     Box(
         Modifier
             .size(size.dp)
             .clip(CircleShape)
-            .background(hueColor(avatar?.hue_key.orEmpty()))
+            .background(accent.tint ?: Surface.fill)
+            .border(KitGeometry.HAIRLINE, Surface.border, CircleShape)
             .clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
     ) {
-        Text(avatar?.initials.orEmpty(), style = centraidType("smallStrong"), color = centraidColor("onAccent"))
+        Text(avatar?.initials.orEmpty(), style = centraidType("smallStrong"), color = accent.text)
     }
 }

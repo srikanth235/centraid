@@ -1,115 +1,54 @@
-<header class="topbar">
-  <a class="brand" href="../"><span class="mark" aria-hidden="true"><img src="__DOCS_BASE__assets/centraid-mark.svg" alt=""></span>Centraid</a>
-  <span class="doc">The ontology</span>
-  <span class="spacer"></span>
-  <span class="nav">
-    <a href="../start/">start</a>
-    <a href="../data/">data</a>
-    <a href="../apps/">apps</a>
-    <a href="../devices/">devices</a>
-  </span>
-  <span class="ver">the vault model · first principles</span>
-</header>
-
-<nav class="rail" aria-label="Section index">
-  <a href="#hero" class="on"><span class="n">§01</span>Thesis</a>
-  <a href="#map"><span class="n">§02</span>Entity map</a>
-  <a href="#schema"><span class="n">§03</span>Schema</a>
-  <a href="#principles"><span class="n">§04</span>Principles</a>
-  <a href="#rules"><span class="n">§05</span>The rules</a>
-</nav>
-
-<main>
-
-<!-- ================= §01 THESIS ================= -->
-<section id="hero" class="hero">
-  <div class="wrap">
-    <p class="eyebrow">§01 · Thesis</p>
-    <h1>One life. One model. <em>Apps become projections.</em></h1>
-    <p class="lede">Your life is usually modelled by whoever shipped the app: your heart rate belongs to a watch vendor, your invoices to an accounting service, your relationships to a contacts silo. Centraid inverts the ownership. A single, person-owned SQLite file on the member's phone holds the canonical record, and every app is a screen over it. The model is small on purpose: <strong>an entity for everything with a title and a trash, a kind row for what it is, typed edges between them, blobs for bytes, and an origin and a source for whatever is followed.</strong> Everything else is computed when it is read.</p>
-    <div class="hero-kv">
-      <div><b data-count="kinds">26</b>kinds</div>
-      <div><b data-count="relations">9</b>edge relations</div>
-      <div><b data-count="tables">47</b>tables</div>
-      <div><b>1</b>file, on the phone</div>
-      <div><b>0</b>silos</div>
-    </div>
-
-    <div class="stackscroll rv">
-      <div class="stack" role="img" aria-label="Stacked system map: app screens project over kind tables, which extend the entity kernel; the command gate sits across every write, and the assistant acts through the same commands.">
-        <div class="band surface">
-          <div class="bt"><h3>Screens</h3><span class="tag">projections: rebuildable, replaceable</span></div>
-          <div class="row">
-            <span class="pill">Notes</span><span class="pill">Agenda</span><span class="pill">People</span>
-            <span class="pill">Docs</span><span class="pill">Photos</span><span class="pill">Money</span>
-            <span class="pill">Health</span><span class="pill">Chat</span><span class="pill">Locker</span>
-          </div>
-        </div>
-        <div class="band ext">
-          <div class="bt"><h3>Kind tables</h3><span class="tag">columns only one kind has</span></div>
-          <div class="row">
-            <span class="pill">person</span><span class="pill">place</span><span class="pill">event</span><span class="pill">task</span>
-            <span class="pill">activity</span><span class="pill">note</span><span class="pill">document</span><span class="pill">photo</span>
-            <span class="pill">account</span><span class="pill">txn</span><span class="pill">thread</span>
-            <span class="pill">concept (6 kinds)</span><span class="pill">container (8 kinds)</span>
-          </div>
-        </div>
-        <div class="band core">
-          <div class="bt"><h3>The kernel</h3><span class="tag">identity, joins and history: the owned asset</span></div>
-          <div class="row">
-            <span class="pill">entity</span><span class="pill">edge</span><span class="pill">blob</span><span class="pill">derivative</span>
-            <span class="pill">origin · source</span><span class="pill">revision</span><span class="pill">search</span><span class="pill">action key</span>
-          </div>
-        </div>
-        <div class="band plane">
-          <div class="bt"><h3>The gate</h3><span class="tag">every write is a typed command</span></div>
-          <div class="row">
-            <span class="pill">input schema</span><span class="pill">authority</span><span class="pill">preconditions</span>
-            <span class="pill">handler</span><span class="pill">postconditions</span><span class="pill">action key, same transaction</span>
-          </div>
-        </div>
-        <div class="band plane">
-          <div class="bt"><h3>The assistant</h3><span class="tag">acts through the same commands, never the tables</span></div>
-          <div class="row">
-            <span class="pill">tools are commands</span><span class="pill">reads are the apps' reads</span><span class="pill">a refusal is a sentence</span>
-          </div>
-        </div>
+<section id="hero" class="doc-home-hero wrap">
+  <div>
+    <p class="eyebrow">Ontology · shared records</p>
+    <h1 class="hero-title">One phone vault. <em>Nine apps.</em></h1>
+    <p class="lede">The phone’s Rust core writes one set of records. Apps share those records and the links you make between them.</p>
+    <div class="doc-actions"><a class="doc-action primary" href="../apps/">Explore the apps</a><a class="doc-action" href="../data/">How the vault works</a></div>
+  </div>
+  <div class="doc-diagram" role="group" aria-label="Model overview">
+    <div class="doc-node">
+      <h2>Shared records</h2>
+      <p>26 kinds · 9 relations · 47 tables</p>
+      <div class="doc-app-grid" aria-label="Nine first-party apps">
+        <span class="doc-app-chip">People</span><span class="doc-app-chip">Notes</span><span class="doc-app-chip">Docs</span>
+        <span class="doc-app-chip">Calendar</span><span class="doc-app-chip">Reminders</span><span class="doc-app-chip">Photos</span>
+        <span class="doc-app-chip">Money</span><span class="doc-app-chip">Health</span><span class="doc-app-chip">Locker</span>
       </div>
     </div>
-    <div class="legend" aria-hidden="true">
-      <span class="l-core"><i></i>kernel</span>
-      <span class="l-ext"><i></i>kind table</span>
-      <span class="l-ui"><i></i>screen</span>
-      <span class="l-pol"><i></i>gate / assistant</span>
-    </div>
-    <p class="note" style="margin-top:18px"><strong>The product is the substrate, not the apps.</strong> The phone is the vault: its core is the one writer. A machine the member controls may hold a sealed copy for backup, and it can read nothing in it. Read the page top-down as a member, bottom-up as an engineer: screens render projections; kinds add columns; the kernel keeps identity and history; the gate is the only way in.</p>
+    <p class="doc-diagram-caption">Every app works with the same phone vault.</p>
   </div>
 </section>
 
-<!-- ================= §02 ENTITY MAP ================= -->
-<section id="map" class="dark">
-  <div class="wrap">
-    <p class="eyebrow">§02 · Entity map</p>
-    <h2>Twenty-six kinds, three hosts, nine relations</h2>
-    <p class="lede">Every kind is a row in <span class="k">entity</span>, and each has exactly one <strong>host</strong>: the table that holds the columns only that kind has. Eleven kinds have a table of their own. The six kinds that are <em>words the member names</em> share <span class="k">concept</span>; the eight that are <em>things that hold things</em> share <span class="k">container</span>. A kind table carries its kind as a generated constant and a composite key into <span class="k">entity</span>, so the engine, not a trigger, refuses a task filed under a notebook.</p>
-    <div class="kindgrid">
-<div class="zone"><h3>Own table<span class="zk">12 kinds</span></h3><ul><li class="rel-own" data-kind="person"><span class="cn">person</span><span>a person, the owner included · <em>People</em></span></li><li class="rel-own" data-kind="place"><span class="cn">place</span><span>where something was or happened · <em>Photos</em></span></li><li class="rel-own" data-kind="event"><span class="cn">event</span><span>something at a time · <em>Agenda</em></span></li><li class="rel-own" data-kind="task"><span class="cn">task</span><span>something to do · <em>Agenda</em></span></li><li class="rel-own" data-kind="activity"><span class="cn">activity</span><span>something done: a call, a run · <em>People, Health</em></span></li><li class="rel-own" data-kind="note"><span class="cn">note</span><span>words with a title; a journal entry when it is about you · <em>Notes</em></span></li><li class="rel-own" data-kind="document"><span class="cn">document</span><span>a file · <em>Docs</em></span></li><li class="rel-own" data-kind="photo"><span class="cn">photo</span><span>a photograph or video · <em>Photos</em></span></li><li class="rel-own" data-kind="account"><span class="cn">account</span><span>where money is held · <em>Money</em></span></li><li class="rel-own" data-kind="txn"><span class="cn">txn</span><span>a statement line · <em>Money</em></span></li><li class="rel-own" data-kind="thread"><span class="cn">thread</span><span>a conversation with the assistant · <em>Chat</em></span></li><li class="rel-own" data-kind="locker_item"><span class="cn">locker_item</span><span>a sealed login, card, note or other secret · <em>Locker</em></span></li></ul></div>
+<section id="map" class="sec wrap doc-reference">
+  <p class="eyebrow">Kinds and links</p>
+  <h2>Records can connect</h2>
+  <p class="lede">A note can link to a document; a reminder can link to that note. Each stays its own record.</p>
+  <figure class="ref-map" aria-label="Document, Note and Reminder records linked in that order. The Note links to the Document; the Reminder links to the Note. Each remains a separate record.">
+    <div class="ref-record"><span class="kind">Document</span><strong>Project brief</strong><span>original bytes + history</span></div>
+    <div class="ref-relation"><b>←</b><span>Note links to document</span></div>
+    <div class="ref-record"><span class="kind">Note</span><strong>Planning notes</strong><span>its own record</span></div>
+    <div class="ref-relation"><b>←</b><span>Reminder links to note</span></div>
+    <div class="ref-record"><span class="kind">Reminder</span><strong>Review the brief</strong><span>its own record</span></div>
+    <figcaption class="doc-diagram-caption">Links are chosen by the member; they do not merge records.</figcaption>
+  </figure>
+  <p class="lede">Twenty-six kinds, three storage groups, nine relations.</p>
+  <div class="kindgrid">
+
+<div class="zone"><h3>Own table<span class="zk">12 kinds</span></h3><ul><li class="rel-own" data-kind="person"><span class="cn">person</span><span>a person, the owner included · <em>People</em></span></li><li class="rel-own" data-kind="place"><span class="cn">place</span><span>where something was or happened · <em>Photos</em></span></li><li class="rel-own" data-kind="event"><span class="cn">event</span><span>something at a time · <em>Calendar</em></span></li><li class="rel-own" data-kind="task"><span class="cn">task</span><span>something to do · <em>Reminders</em></span></li><li class="rel-own" data-kind="activity"><span class="cn">activity</span><span>something done: a call, a run · <em>People, Health</em></span></li><li class="rel-own" data-kind="note"><span class="cn">note</span><span>words with a title; a journal entry when it is about you · <em>Notes</em></span></li><li class="rel-own" data-kind="document"><span class="cn">document</span><span>a file · <em>Docs</em></span></li><li class="rel-own" data-kind="photo"><span class="cn">photo</span><span>a photograph or video · <em>Photos</em></span></li><li class="rel-own" data-kind="account"><span class="cn">account</span><span>where money is held · <em>Money</em></span></li><li class="rel-own" data-kind="txn"><span class="cn">txn</span><span>a statement line · <em>Money</em></span></li><li class="rel-own" data-kind="thread"><span class="cn">thread</span><span>a conversation with the assistant · <em>assistant thread</em></span></li><li class="rel-own" data-kind="locker_item"><span class="cn">locker_item</span><span>a sealed login, card, note or other secret · <em>Locker</em></span></li></ul></div>
 <div class="zone"><h3>concept<span class="zk">6 kinds · words</span></h3><ul><li class="rel-ref" data-kind="tag"><span class="cn">tag</span><span>a word on anything · <em>every app</em></span></li><li class="rel-ref" data-kind="flag"><span class="cn">flag</span><span>starred, pinned, archived · <em>every app</em></span></li><li class="rel-ref" data-kind="category"><span class="cn">category</span><span>what a line was for · <em>Money</em></span></li><li class="rel-ref" data-kind="workout_kind"><span class="cn">workout_kind</span><span>run, ride, swim · <em>Health</em></span></li><li class="rel-ref" data-kind="activity_kind"><span class="cn">activity_kind</span><span>call, message, met up · <em>People</em></span></li><li class="rel-ref" data-kind="relation"><span class="cn">relation</span><span>mother, colleague · <em>People</em></span></li></ul></div>
-<div class="zone"><h3>container<span class="zk">8 kinds · holders</span></h3><ul><li class="rel-ref" data-kind="notebook"><span class="cn">notebook</span><span>holds notes · <em>Notes</em></span></li><li class="rel-ref" data-kind="folder"><span class="cn">folder</span><span>holds documents · <em>Docs</em></span></li><li class="rel-ref" data-kind="album"><span class="cn">album</span><span>holds photographs, in order · <em>Photos</em></span></li><li class="rel-ref" data-kind="list"><span class="cn">list</span><span>holds people, in order · <em>People</em></span></li><li class="rel-ref" data-kind="project"><span class="cn">project</span><span>holds tasks · <em>Agenda</em></span></li><li class="rel-ref" data-kind="section"><span class="cn">section</span><span>a part of a project · <em>Agenda</em></span></li><li class="rel-ref" data-kind="area"><span class="cn">area</span><span>holds projects · <em>Agenda</em></span></li><li class="rel-ref" data-kind="calendar"><span class="cn">calendar</span><span>holds events · <em>Agenda</em></span></li></ul></div>
-    </div>
-    <h2 style="margin-top:48px;font-size:1.6rem">Nine relations join them</h2>
-    <p class="lede">An <span class="k">edge</span> is a typed, directed join of two entities. <span class="k">edge_shape</span> names which kinds each relation may join and a trigger refuses any other pair; an edge's ends never change. What only one relation has (<span class="k">position</span>, <span class="k">state</span>, <span class="k">anchor</span>, <span class="k">label_id</span>) is a typed column on the edge.</p>
-    <div class="zone"><ul class="rels"><li data-rel="contains"><span class="cn">contains</span><span>album → photo, list → person — ordered membership; a note, document, task or event has its holder as a column instead</span></li><li data-rel="tagged"><span class="cn">tagged</span><span>anything → tag or flag — a word put on a thing: also a star, a pin, an archive</span></li><li data-rel="about"><span class="cn">about</span><span>note, task or event → anything — a note about Maya, a journal entry, a task about Mum, an anniversary; also document → person, and Locker item → account, place or person</span></li><li data-rel="links"><span class="cn">links</span><span>item → item — a link set by hand between any two items (a person, place, event, task, note, document, photo, account, transaction or workout), or a note’s <code>[[wikilink]]</code> with its anchor in the text; a Locker item may start a link and is never the end of one</span></li><li data-rel="attached"><span class="cn">attached</span><span>anything → document or photo — a file brought to a thing</span></li><li data-rel="attendee"><span class="cn">attendee</span><span>event → person — a guest, with their answer on the edge</span></li><li data-rel="with"><span class="cn">with</span><span>activity, transaction or Locker item → person — who a call or a visit was with, who a payment was with</span></li><li data-rel="related"><span class="cn">related</span><span>person → person — labelled by a relation concept</span></li><li data-rel="depicts"><span class="cn">depicts</span><span>photo → person — who is in a photograph, tagged by hand (no face detection)</span></li></ul></div>
-    <p class="note" style="margin-top:14px">A star, a pin or an archive is a <span class="k">tagged</span> edge to a flag. A journal entry is a note with an <span class="k">about</span> edge to you; a note about anything else shows with its subject. A thumbnail, a caption or extracted text is a <span class="k">derivative</span> of a blob. A followed contact, event, file, workout or statement line is a <span class="k">source</span> under an <span class="k">origin</span>. Last contacted, a balance and a total are computed at read, never stored.</p>
+<div class="zone"><h3>container<span class="zk">8 kinds · holders</span></h3><ul><li class="rel-ref" data-kind="notebook"><span class="cn">notebook</span><span>holds notes · <em>Notes</em></span></li><li class="rel-ref" data-kind="folder"><span class="cn">folder</span><span>holds documents · <em>Docs</em></span></li><li class="rel-ref" data-kind="album"><span class="cn">album</span><span>holds photographs, in order · <em>Photos</em></span></li><li class="rel-ref" data-kind="list"><span class="cn">list</span><span>holds people, in order · <em>People</em></span></li><li class="rel-ref" data-kind="project"><span class="cn">project</span><span>holds tasks · <em>Reminders</em></span></li><li class="rel-ref" data-kind="section"><span class="cn">section</span><span>a part of a project · <em>Reminders</em></span></li><li class="rel-ref" data-kind="area"><span class="cn">area</span><span>holds projects · <em>Reminders</em></span></li><li class="rel-ref" data-kind="calendar"><span class="cn">calendar</span><span>holds events · <em>Calendar</em></span></li></ul></div>
   </div>
+  <h3>Nine relations join them</h3>
+  <p>An edge is a directed link between two records. The vault checks that each relation connects allowed kinds.</p>
+  <div class="zone"><ul class="rels"><li data-rel="contains"><span class="cn">contains</span><span>album → photo, list → person — ordered membership; a note, document, task or event has its holder as a column instead</span></li><li data-rel="tagged"><span class="cn">tagged</span><span>anything → tag or flag — a word put on a thing: also a star, a pin, an archive</span></li><li data-rel="about"><span class="cn">about</span><span>note, task or event → anything — a note about Maya, a journal entry, a task about Mum, an anniversary; also document → person, and Locker item → account, place or person</span></li><li data-rel="links"><span class="cn">links</span><span>item → item — a link set by hand between any two items (a person, place, event, task, note, document, photo, account, transaction or workout), or a note’s <code>[[wikilink]]</code> with its anchor in the text; a Locker item may start a link and is never the end of one</span></li><li data-rel="attached"><span class="cn">attached</span><span>anything → document or photo — a file brought to a thing</span></li><li data-rel="attendee"><span class="cn">attendee</span><span>event → person — a guest, with their answer on the edge</span></li><li data-rel="with"><span class="cn">with</span><span>activity, transaction or Locker item → person — who a call or a visit was with, who a payment was with</span></li><li data-rel="related"><span class="cn">related</span><span>person → person — labelled by a relation concept</span></li><li data-rel="depicts"><span class="cn">depicts</span><span>photo → person — who is in a photograph, tagged by hand (no face detection)</span></li></ul></div>
+  <p class="doc-diagram-caption">Counts: <b data-count="kinds">26</b> kinds · <b data-count="relations">9</b> relations · <b data-count="tables">47</b> tables.</p>
 </section>
 
-<!-- ================= §03 SCHEMA (generated) ================= -->
-<section id="schema">
-  <div class="wrap">
-    <p class="eyebrow">§03 · Schema</p>
-    <h2>The tables, read off a vault this build founded</h2>
-    <p class="lede">This section is not written. It is rendered from the schema a new vault gets (<span class="k">contracts/migrations/001_baseline.sql</span>) by <span class="k">cargo run -p centraid-vault --bin export-ontology-page</span>, and a test (<span class="k">crates/vault/tests/ontology_page.rs</span>) re-renders it and fails when the page and the file differ, when a table has no sentence saying what it is for, and when §02 names a kind or a relation the code does not. The page cannot age behind the schema.</p>
+<section id="schema" class="sec wrap">
+  <p class="eyebrow">Full reference</p>
+  <h2>Schema for a new vault</h2>
+  <p class="lede">The generated reference lists every table, column and constraint. Open it when you need implementation detail.</p>
+  <details class="doc-details onto-schema"><summary>Browse all 47 tables and their columns</summary>
     <div class="erd" id="erd">
 <!-- schema:begin (generated by `cargo run -p centraid-vault --bin export-ontology-page`; do not edit) -->
 <div class="schemahdr" data-group="kernel"><span class="sid">kernel</span><h3>the kernel</h3><p class="sdesc">What every kind shares: the entity, the typed edge between two of them, the vault's own row, the keys of acts already run, every record's earlier values (revisions) and the one search index.</p></div>
@@ -604,80 +543,26 @@
 <p class="note" data-tables="47" data-columns="342">47 tables and 342 columns, read off a vault this build founded.</p>
 <!-- schema:end -->
     </div>
-    <div class="physcard rv">
-      <h3>Physical target: local-first SQLite</h3>
-      <p><span class="k">STRICT</span> tables throughout. An entity's id is a text key minted once on the phone, offline-safe and meaningless; a seeded word has a readable one (<span class="k">flag:starred</span>). Money is never floating point: an integer of minor units beside an ISO 4217 currency. Timestamps are ISO-8601 UTC text, with the IANA zone beside them where a wall clock matters. A hash is only ever a foreign key into <span class="k">blob</span>. The file is one rung of one migration; a release that must migrate adds the second.</p>
-    </div>
-  </div>
+  </details>
 </section>
 
-<!-- ================= §04 PRINCIPLES ================= -->
-<section id="principles" class="dark">
-  <div class="wrap">
-    <p class="eyebrow">§04 · Principles</p>
-    <h2>Five commitments the model never breaks</h2>
-    <p class="lede">Each is checked by a test that asks the founded file, so a change that breaks one is red before it ships (<span class="k">crates/vault/tests/commitments.rs</span>).</p>
-    <div class="cards4">
-      <article class="pcard rv"><span class="pn">P1</span><h3>One shape for what is shared, a column for what is not</h3><p>A title, a trash and an id are on <span class="k">entity</span> and nowhere else; every kind has exactly one host; a typed pointer into a shared host carries a generated constant. A second table for “a thing with a title” is the defect this model exists to prevent.</p></article>
-      <article class="pcard rv"><span class="pn">P2</span><h3>Own the meaning, claim the bytes</h3><p>The durable asset is the graph. Bytes are named by hash in <span class="k">blob</span>; every column that holds a hash is a foreign key into it, and garbage collection asks SQLite which columns those are rather than keeping a list.</p></article>
-      <article class="pcard rv"><span class="pn">P3</span><h3>Words are data until the code must read them</h3><p>A word the code interprets is a <span class="k">CHECK</span> and an enum, held equal by a test. A word the member names is a <span class="k">concept</span> row. No app roster, no per-app decoration table and no stored aggregate is in the file.</p></article>
-      <article class="pcard rv"><span class="pn">P4</span><h3>Writes are commands, and a retry runs once</h3><p>The gate validates the input, checks authority, runs preconditions, the handler and postconditions, and, for a keyed act, writes its <span class="k">action key</span> in the same transaction, so a delivery repeated after a restart runs nothing. The vault keeps no record of what a member asked for. The assistant acts through the same commands.</p></article>
-      <article class="pcard rv"><span class="pn">P5</span><h3>Following is a merge, never an overwrite</h3><p>A followed system's record is merged with the row per field against what it last stated: the member's edit wins on that field, the system's change lands on the rest, and an absence in a complete read trashes only an untouched row.</p></article>
-    </div>
-  </div>
+<section id="principles" class="sec wrap">
+  <p class="eyebrow">Principles</p>
+  <h2>How the model stays coherent</h2>
+  <details class="doc-details"><summary>One identity, then kind-specific fields</summary><p>Every record has one row in <code>entity</code>. A kind table stores only that kind’s fields; concepts and containers use shared tables.</p></details>
+  <details class="doc-details"><summary>Links are typed and directed</summary><p>The edge table records the relation and its two ends. Allowed kind pairs are checked by the vault.</p></details>
+  <details class="doc-details"><summary>Files are separate from records</summary><p>Blob bytes are addressed by hash. Records refer to those bytes; derived previews are rebuildable.</p></details>
+  <details class="doc-details"><summary>Imports preserve member edits</summary><p>Followed sources update fields they last supplied. A member’s edit to a field is kept when that field has changed locally.</p></details>
 </section>
 
-<!-- ================= §05 THE RULES ================= -->
-<section id="rules">
-  <div class="wrap">
-    <p class="eyebrow">§05 · The rules</p>
-    <h2>Eight enforced commitments, then how a table is added</h2>
-    <p class="lede">The stance in §01 survives contact with engineering only if these are enforced, not hoped for. Each is tied to a test.</p>
-    <div class="rules">
-      <article class="rule rv"><h3>Every kind has exactly one host</h3><p>The tables with an <span class="k">(id, kind)</span> cascade are exactly the kinds' hosts, and a kind table's generated constant equals its name.</p></article>
-      <article class="rule rv"><h3>The trash pair lives on <span class="k">entity</span></h3><p><span class="k">deleted_at</span> and <span class="k">purge_at</span> are on no other table: a Locker item is an entity, and its trash is its entity's.</p></article>
-      <article class="rule rv"><h3>A hash is a foreign key into <span class="k">blob</span></h3><p>Every column holding one is declared, so the byte plane finds every reference from <span class="k">foreign_key_list</span> alone.</p></article>
-      <article class="rule rv"><h3>Delete rules are chosen, not defaulted</h3><p>Kind rows, child rows, edges, revisions and a category's budgets and rules cascade; only <span class="k">source.entity_id</span> and <span class="k">message_attachment.entity_id</span> null; every other pointer has no action.</p></article>
-      <article class="rule rv"><h3>An edge joins only what <span class="k">edge_shape</span> allows</h3><p>Checked exhaustively over relation × kind × kind, and the relation list equals the <span class="k">CHECK</span>.</p></article>
-      <article class="rule rv"><h3>The incremental index equals a rebuild</h3><p>After every search-relevant command, the <span class="k">search</span> table and <span class="k">search_past</span> (what items said in earlier versions) are what a rebuild would write. A seeded red proves the comparison can see an untouched edit.</p></article>
-      <article class="rule rv"><h3>Concept and container lists equal the code's</h3><p>The <span class="k">CHECK</span> lists are <span class="k">Kind::CONCEPTS</span> and <span class="k">Kind::CONTAINERS</span>, and seed keys are folded.</p></article>
-      <article class="rule rv"><h3>No table outside the spec is founded</h3><p>The set of tables of a new vault is a list a test holds, and so is the set of tables on this page.</p></article>
-    </div>
-    <div class="cta rv" style="border-color:var(--ext-text)">
-      <h3>Adding or changing a table</h3>
-      <p>In the same change: edit the one baseline and regenerate <span class="k">vault-ddl.sql</span>; decide the table's place first (a new kind is a row in the <span class="k">kind</span> CHECK, in <span class="k">Kind</span>, with a host, and nothing else; a new relation is a CHECK value, a <span class="k">Rel</span> and <span class="k">edge_shape</span> rows; anything else is a child of one kind and cascades from it); make a hash column a foreign key; put searchable text in <span class="k">text_of</span> and have the command call <span class="k">ctx.touch</span>; write the typed commands; then give the table a sentence in <span class="k">ontology_doc::TABLES</span> and run <span class="k">export-ontology-page</span>. The page test is red until you do.</p>
-    </div>
-  </div>
+<section id="rules" class="sec wrap">
+  <p class="eyebrow">Checks</p>
+  <h2>What the tests hold in place</h2>
+  <details class="doc-details"><summary>One host per kind</summary><p>The code’s kind list, each kind’s storage group, and the generated kind constants agree.</p></details>
+  <details class="doc-details"><summary>Trash and identity live on the entity</summary><p>Deletion and purge state belong to the shared entity row, including for Locker items.</p></details>
+  <details class="doc-details"><summary>Every byte reference is declared</summary><p>Columns that hold blob hashes are foreign keys, so collection can find all references from the schema.</p></details>
+  <details class="doc-details"><summary>Relations allow only defined pairs</summary><p>Every relation and source-kind/target-kind pair is checked against the code’s relation shapes.</p></details>
+  <details class="doc-details"><summary>Search matches a rebuild</summary><p>Incremental current and earlier-version indexes must match what rebuilding the index writes.</p></details>
+  <details class="doc-details"><summary>The schema page matches the migration</summary><p>Counts, kinds, relations and every generated table definition are checked against the vault source.</p></details>
+  <nav class="doc-pill-links" aria-label="Related guides"><a href="../data/">Data</a><a href="../apps/">Apps</a><a href="../devices/">Devices</a></nav>
 </section>
-
-</main>
-
-<footer>
-  <div class="wrap">
-    <span>Centraid · the vault model · <a href="https://github.com/srikanth235/centraid/issues/1135">#1135</a></span>
-    <span>standards the kinds follow: vCard · RFC 5545 / JSCalendar · ISO 4217 · ISO 8601 · IANA time zones</span>
-  </div>
-</footer>
-
-<script>
-/* ---- reveal + scroll-spy ---- */
-(function(){
-  const reduce=(typeof matchMedia==='function')?matchMedia('(prefers-reduced-motion: reduce)').matches:false;
-  document.querySelectorAll('section .wrap > *:not(.rv)').forEach(el=>{if(!el.closest('.erd'))el.classList.add('rv');});
-  if(reduce||!('IntersectionObserver' in window)){document.querySelectorAll('.rv').forEach(el=>el.classList.add('in'));}
-  else{
-    const io=new IntersectionObserver(es=>es.forEach(en=>{if(en.isIntersecting){en.target.classList.add('in');io.unobserve(en.target);}}),{rootMargin:'0px 0px -8% 0px',threshold:.05});
-    document.querySelectorAll('.rv').forEach(el=>io.observe(el));
-  }
-  const links=[...document.querySelectorAll('.rail a')];
-  const secs=links.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);
-  if('IntersectionObserver' in window){
-    const spy=new IntersectionObserver(es=>{
-      es.forEach(en=>{ if(en.isIntersecting){
-        links.forEach(a=>a.classList.toggle('on', a.getAttribute('href')==='#'+en.target.id));
-      }});
-    },{rootMargin:'-30% 0px -55% 0px'});
-    secs.forEach(s=>spy.observe(s));
-  }
-})();
-</script>

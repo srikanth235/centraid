@@ -112,11 +112,24 @@ public fun NotesEditorScreen(
     }
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
     var menuOpen by remember(state.note_id) { mutableStateOf(false) }
+    val hasRustStatus = !chrome?.status.isNullOrEmpty()
     CompositionLocalProvider(LocalAppAccentId provides "notes") {
     EditorRoom(
         title = chrome?.title.orEmpty(),
         // Notes owns refusal/conflict and Reload on chrome.status below, over the kept draft.
         status = state.autosave?.takeUnless { it.refused },
+        statusLine = if (hasRustStatus) {
+            {
+            if (chrome != null && chrome.status_action.isNotEmpty()) {
+                StatusLine(
+                    line = StatusLineMessage(sentence = chrome.status, action_label = chrome.status_action, refused = state.autosave?.refused == true),
+                    actTag = "notes-editor-status-action",
+                ) { send(NotesEditorEvent(status_acted = NotesEditorEvent.StatusActed())) }
+            } else {
+                StatusLine(line = StatusLineMessage(sentence = chrome?.status.orEmpty(), refused = state.autosave?.refused == true))
+            }
+            }
+        } else null,
         closeLabel = chrome?.close.orEmpty().ifEmpty { dev.centraid.android.kit.KitWords.DONE },
         onClose = onClose,
         // The page's pop is the flush: Rust sends itself `Left`.
@@ -129,15 +142,6 @@ public fun NotesEditorScreen(
             null
         },
     ) {
-        // THE ONE STATUS LINE: the core's sentence, with its one verb (Undo) while it has one.
-        if (chrome != null && chrome.status_action.isNotEmpty()) {
-            StatusLine(
-                line = StatusLineMessage(sentence = chrome.status, action_label = chrome.status_action, refused = state.autosave?.refused == true),
-                actTag = "notes-editor-status-action",
-            ) { send(NotesEditorEvent(status_acted = NotesEditorEvent.StatusActed())) }
-        } else {
-            StatusLine(line = StatusLineMessage(sentence = chrome?.status.orEmpty(), refused = state.autosave?.refused == true))
-        }
         ReadStateView(
             page = state.page!!,
             onRetry = { onEvent(NotesEditorEvent(refreshed = NotesEditorEvent.Refreshed())) },

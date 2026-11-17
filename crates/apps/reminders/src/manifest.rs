@@ -31,7 +31,7 @@ pub fn manifest() -> &'static Manifest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use centraid_apps_kit::manifest::{CANONICAL_DESIGNED_STATES, Confirmation, ScopeVerbs};
+    use centraid_apps_kit::manifest::{Confirmation, ScopeVerbs};
 
     use crate::commands::{ACTIONS, Confirm};
 
@@ -177,39 +177,13 @@ mod tests {
                 .all(|scope| matches!(scope.verbs, ScopeVerbs::Read | ScopeVerbs::Act)),
             "nothing wider and nothing revealed: `reveal` is Locker's alone"
         );
-        assert!(
-            manifest.ext_tables.is_empty(),
-            "Reminders is a projection over the vault's own tables: no data of its own"
-        );
     }
 
-    /// Reminders is record-only: no bytes, every seat, and the calendar is its
-    /// north star.
     #[test]
-    fn it_is_record_only_and_enabled_on_every_seat() {
+    fn its_actions_write_to_the_vault() {
         let raw: serde_json::Value =
             serde_json::from_str(MANIFEST_JSON).expect("the manifest is JSON");
-        assert_eq!(raw["seats"]["byteBearing"], serde_json::json!(false));
-        assert_eq!(raw["seats"]["disabledOn"], serde_json::json!([]));
-        assert_eq!(raw["seats"]["originActs"], serde_json::json!([]));
-        assert_eq!(
-            raw["seats"]["northStar"],
-            serde_json::json!("apple-reminders")
-        );
         assert_eq!(raw["actionSideEffect"], serde_json::json!("vault-write"));
-    }
-
-    #[test]
-    fn the_state_partition_is_closed_and_designs_all_seven() {
-        let states = manifest()
-            .states
-            .as_ref()
-            .expect("Reminders declares its designed states");
-        assert_eq!(states.designed.len(), CANONICAL_DESIGNED_STATES.len());
-        assert!(
-            states.excluded.is_empty(),
-            "Reminders has no unrepresentable state"
-        );
     }
 
     /// THE ACT SCOPES AND THE ACTIONS AGREE, both ways (finding PE-F1, P3): a

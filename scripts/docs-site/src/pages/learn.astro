@@ -10,62 +10,32 @@ const rail = [
     "current": true
   },
   {
-    "href": "#skos",
-    "no": "§02",
-    "label": "Vocabularies (SKOS)",
-    "current": false
-  },
-  {
-    "href": "#shapes",
-    "no": "§03",
-    "label": "Borrowed shapes",
-    "current": false
-  },
-  {
     "href": "#sqlite",
+    "no": "§02",
+    "label": "SQLite on the phone",
+    "current": false
+  },
+  {
+    "href": "#locker",
+    "no": "§03",
+    "label": "Locker",
+    "current": false
+  },
+  {
+    "href": "#backup",
     "no": "§04",
-    "label": "SQLite",
+    "label": "Backup and recovery",
     "current": false
   },
   {
-    "href": "#cas",
+    "href": "#actions",
     "no": "§05",
-    "label": "Content addressing",
+    "label": "Typed actions",
     "current": false
   },
-  {
-    "href": "#p2p",
-    "no": "§06",
-    "label": "Peer-to-peer",
-    "current": false
-  },
-  {
-    "href": "#oauth",
-    "no": "§07",
-    "label": "OAuth & PKCE",
-    "current": false
-  },
-  {
-    "href": "#sealed",
-    "no": "§08",
-    "label": "Sealed secrets",
-    "current": false
-  },
-  {
-    "href": "#consent",
-    "no": "§09",
-    "label": "Consent lineage",
-    "current": false
-  },
-  {
-    "href": "#agents",
-    "no": "§10",
-    "label": "Agents & MCP",
-    "current": false
-  }
 ];
 const footer = {
-  "manifesto": "None of these ideas are ours. <em>The composition is.</em>",
+  "manifesto": "The phone holds the live vault. Backup devices store sealed copies.",
   "links": [
     {
       "href": "https://centraid.dev",
@@ -92,12 +62,12 @@ const footer = {
 ---
 
 <DocsLayout
-  title="Learn the Foundations: Standards Behind Centraid"
-  description="Primers on the prior art behind Centraid: ontologies and SKOS, SQLite, content addressing, iroh peer-to-peer, OAuth with PKCE, sealed secrets, and MCP agents."
+  title="Learn how Centraid records connect"
+  description="A short guide to shared records, the phone vault, Locker protection, and sealed backups."
   current="learn"
   canonicalPath="learn/"
   searchLabel="Learn"
-  searchKeywords="ontology skos vocabulary standards sqlite content addressing sha256 iroh quic nat traversal oauth pkce totp aes-gcm encryption consent prov odrl dpv mcp agents primer foundations"
+  searchKeywords="phone vault ontology shared records SQLite Locker sealed values assistant typed actions gateway backup recovery key pairing code"
   bodyClass="has-rail"
   rail={rail}
   footer={footer}

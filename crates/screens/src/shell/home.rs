@@ -472,8 +472,6 @@ impl Home {
         wire::HomeData {
             springboard: folded.springboard as i32,
             grid_rows: folded.rows,
-            day_one_title: words::home_day_one_title(locale),
-            day_one_body: words::home_day_one_body(locale),
             tiles: folded.tiles,
         }
     }

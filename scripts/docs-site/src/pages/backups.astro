@@ -6,19 +6,19 @@ const rail = [
   {
     "href": "#why",
     "no": "§01",
-    "label": "Why",
+    "label": "What is backed up",
     "current": true
   },
   {
     "href": "#setup",
     "no": "§02",
-    "label": "Setup",
+    "label": "Connect a gateway",
     "current": false
   },
   {
-    "href": "#kit",
+    "href": "#recovery",
     "no": "§03",
-    "label": "Recovery kit",
+    "label": "Recovery key",
     "current": false
   },
   {
@@ -28,26 +28,20 @@ const rail = [
     "current": false
   },
   {
-    "href": "#health",
+    "href": "#check",
     "no": "§05",
-    "label": "Health",
+    "label": "Check and retention",
     "current": false
   },
   {
-    "href": "#providers",
+    "href": "#limits",
     "no": "§06",
-    "label": "Provider ecosystem",
+    "label": "Limits",
     "current": false
   },
-  {
-    "href": "#caveats",
-    "no": "§07",
-    "label": "Honest caveats",
-    "current": false
-  }
 ];
 const footer = {
-  "manifesto": "An outage is an inconvenience. <em>A loss is forever — that's the whole difference backups buy.</em>",
+  "manifesto": "A backup counts when acknowledged. <em>A restore checks before it takes over.</em>",
   "links": [
     {
       "href": "https://centraid.dev",
@@ -74,12 +68,12 @@ const footer = {
 ---
 
 <DocsLayout
-  title="Centraid Backups: Client-Encrypted Offsite Vault Backup"
-  description="How Centraid backs up your vault offsite: client-side encryption, the recovery kit, quarantined restores, generation fencing, and the open backup provider protocol."
+  title="Centraid backups and phone recovery"
+  description="How the phone seals backups to a reachable gateway, what acknowledgement means, and how to restore with your recovery key and a fresh pairing code."
   current="backups"
   canonicalPath="backups/"
   searchLabel="Backups"
-  searchKeywords="backup offsite recovery kit keyring encryption restore quarantine generation fencing provider clawgnition retention verification"
+  searchKeywords="backup acknowledge records originals waiting phone gateway recovery key 24 words fresh pairing code restore check retention offline"
   bodyClass="has-rail"
   rail={rail}
   footer={footer}

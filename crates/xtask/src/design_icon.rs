@@ -42,6 +42,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
+use std::path::Path;
 
 use anyhow::{Context, Result};
 use centraid_design::tokens::Tokens;
@@ -262,8 +263,8 @@ fn tile_svg(palette: &Palette, edge: Option<&str>, scale: f64) -> String {
 }
 
 /// The bare mark, cropped to its own extent (the viewBox `22 22 76 76`).
-fn mark_svg(palette: &Palette) -> String {
-    let mut out = svg_open("22 22 76 76", Some(1024));
+fn mark_paths(palette: &Palette) -> String {
+    let mut out = String::new();
     for ((_, turns), colour) in QUARTERS.iter().zip(&palette.quarters) {
         let _ = writeln!(
             out,
@@ -271,8 +272,48 @@ fn mark_svg(palette: &Palette) -> String {
             path_data(*turns, 0.0, 1.0)
         );
     }
+    out
+}
+
+fn mark_svg(palette: &Palette) -> String {
+    let mut out = svg_open("22 22 76 76", Some(1024));
+    out.push_str(&mark_paths(palette));
     out.push_str("</svg>\n");
     out
+}
+
+fn social_preview(tokens: &Tokens, root: &Path, palette: &Palette) -> Result<String> {
+    const TEMPLATE: &str = "scripts/docs-site/src/content/og-docs.template.svg";
+    let mut svg =
+        std::fs::read_to_string(root.join(TEMPLATE)).with_context(|| format!("read {TEMPLATE}"))?;
+    let scale = 80.0 / 76.0;
+    let mut mark = format!(
+        "  <g transform=\"translate(104 104) scale({}) translate(-22 -22)\">\n",
+        num(scale)
+    );
+    mark.push_str(&mark_paths(palette));
+    mark.push_str("  </g>");
+    for (key, value) in [
+        ("mark", mark),
+        ("page", tokens.surface.light.page.clone()),
+        ("card", tokens.surface.light.card.clone()),
+        ("border", tokens.surface.light.border.clone()),
+        ("meta", tokens.text.light.meta.clone()),
+        ("body", tokens.text.light.body.clone()),
+        ("ink", tokens.text.light.ink.clone()),
+        ("font", tokens.site.fonts.family.clone()),
+    ] {
+        svg = svg.replace(&format!("{{{{{key}}}}}"), &value);
+    }
+    anyhow::ensure!(
+        !svg.contains("{{") && !svg.contains("}}"),
+        "{TEMPLATE} contains an unknown or unfilled placeholder"
+    );
+    anyhow::ensure!(
+        svg.matches("<path ").count() == QUARTERS.len(),
+        "{TEMPLATE} must embed the four generated brand paths once"
+    );
+    Ok(svg)
 }
 
 /// A vector drawable of `viewport` units holding the quarters mapped by
@@ -489,7 +530,7 @@ fn appiconset_json() -> String {
 // --- Everything ------------------------------------------------------------
 
 /// The icon's files by repository-relative path.
-pub fn files(tokens: &Tokens) -> Result<BTreeMap<String, Vec<u8>>> {
+pub fn files(tokens: &Tokens, root: &Path) -> Result<BTreeMap<String, Vec<u8>>> {
     let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::new();
     let mut text = |path: String, body: String| {
         files.insert(path, body.into_bytes());
@@ -520,7 +561,20 @@ pub fn files(tokens: &Tokens) -> Result<BTreeMap<String, Vec<u8>>> {
         format!("{SVG_DIR}/centraid-themed.svg"),
         tile_svg(&themed, None, 1.0),
     );
-    text(format!("{SVG_DIR}/centraid-mark.svg"), mark_svg(&light));
+    let mark = mark_svg(&light);
+    text(format!("{SVG_DIR}/centraid-mark.svg"), mark.clone());
+    text(
+        "scripts/docs-site/public/assets/centraid-mark.svg".to_owned(),
+        mark.clone(),
+    );
+    text(
+        "scripts/home-site/public/assets/centraid-mark.svg".to_owned(),
+        mark,
+    );
+    text(
+        "scripts/docs-site/public/assets/og-docs.svg".to_owned(),
+        social_preview(tokens, root, &light)?,
+    );
 
     text(format!("{ICON_BUNDLE}/icon.json"), icon_json(tokens)?);
     for (key, turns) in QUARTERS {
@@ -579,15 +633,18 @@ mod tests {
     use super::*;
     use std::path::Path;
 
+    fn root() -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    }
+
     fn tokens() -> Tokens {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        Tokens::load(&root).unwrap_or_else(|error| panic!("{error}"))
+        Tokens::load(&root()).unwrap_or_else(|error| panic!("{error}"))
     }
 
     /// The emitted files, made once: rasterising three 1024 squares is the cost.
     fn emitted() -> &'static BTreeMap<String, Vec<u8>> {
         static FILES: std::sync::OnceLock<BTreeMap<String, Vec<u8>>> = std::sync::OnceLock::new();
-        FILES.get_or_init(|| files(&tokens()).unwrap_or_else(|error| panic!("{error}")))
+        FILES.get_or_init(|| files(&tokens(), &root()).unwrap_or_else(|error| panic!("{error}")))
     }
 
     /// Decode an emitted PNG to its size and RGB bytes.
@@ -850,6 +907,34 @@ mod tests {
     }
 
     #[test]
+    fn site_marks_are_exact_copies_and_the_social_card_embeds_the_generated_paths() {
+        let files = emitted();
+        let canonical = &files["design/icon/centraid-mark.svg"];
+        assert_eq!(
+            &files["scripts/docs-site/public/assets/centraid-mark.svg"], canonical,
+            "the docs header and favicon use the canonical mark bytes"
+        );
+        assert_eq!(
+            &files["scripts/home-site/public/assets/centraid-mark.svg"], canonical,
+            "the home site uses the canonical mark bytes"
+        );
+
+        let tokens = tokens();
+        let light = palette(&tokens, Variant::Light).unwrap_or_else(|error| panic!("{error}"));
+        let card = String::from_utf8(files["scripts/docs-site/public/assets/og-docs.svg"].clone())
+            .unwrap_or_else(|error| panic!("{error}"));
+        for path in mark_paths(&light).lines() {
+            assert!(card.contains(path.trim()), "social card omitted {path}");
+        }
+        assert_eq!(card.matches("<path ").count(), QUARTERS.len());
+        assert!(
+            !card.contains("<image"),
+            "social preview must be self-contained"
+        );
+        assert!(!card.contains("peer-to-peer"));
+    }
+
+    #[test]
     fn every_icon_file_is_emitted() {
         let files = emitted();
         let names: Vec<&str> = files.keys().map(String::as_str).collect();
@@ -859,6 +944,9 @@ mod tests {
             "design/icon/centraid-tinted.svg",
             "design/icon/centraid-themed.svg",
             "design/icon/centraid-mark.svg",
+            "scripts/docs-site/public/assets/centraid-mark.svg",
+            "scripts/home-site/public/assets/centraid-mark.svg",
+            "scripts/docs-site/public/assets/og-docs.svg",
             "mobile/iosApp/Resources/AppIcon.icon/icon.json",
             "mobile/iosApp/Resources/AppIcon.icon/Assets/teal.svg",
             "mobile/iosApp/Resources/AppIcon.icon/Assets/orange.svg",

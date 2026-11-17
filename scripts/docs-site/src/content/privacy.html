@@ -1,10 +1,8 @@
 <!--
   DRAFT FOR THE OWNER'S REVIEW. Not approved, not published.
 
-  A published policy is the owner's. This is a rewrite around what Centraid is now: a phone that is
-  the vault, backing up to a backup device the member owns. Every factual sentence below was
-  checked against code or a current doc; the drafting report lists the few that could not be.
-  Remove this comment when you publish.
+  A published policy is the owner's. This draft is checked against current app and site code; the
+  remaining owner decisions are listed below. Remove this comment when you publish.
 
   TODO(owner): the effective date in the eyebrow is the draft date (15 October 2026). Set it to
   the day this goes live.
@@ -16,244 +14,84 @@
   are added here. Say so if you want them.
   TODO(owner): the contact address is the one the earlier text used. Confirm it is the address you
   want public.
+  TODO(owner): the public site is served by Cloudflare and `wrangler.json` enables observability.
+  Confirm whether that setting records static page requests and what the operator retains before
+  making a broader analytics or logging claim.
 -->
-<section class="hero sec wrap" id="summary">
-  <p class="eyebrow r">Privacy policy · effective 15 October 2026</p>
-  <h1 class="r" style="--d: 0.06s">Your phone keeps the keys.</h1>
-  <p class="lede r" style="--d: 0.12s">
-    Centraid keeps your <b>vault</b> on your phone. Encrypted copies go only to a
-    <b>backup device</b> you own, which cannot read them. Centraid has no account and no cloud, and
-    runs no server that holds your data.
-  </p>
-  <div class="prose r" style="--d: 0.18s">
-    <p>
-      Centraid collects nothing about you. It contains no analytics, no advertising and no crash
-      reporting. The sections below say what the app reads on this phone, what the phone sends and
-      fetches, and where it goes.
-    </p>
+<section class="ref-hero wrap" id="summary">
+  <div>
+    <p class="eyebrow">Privacy policy · effective 15 October 2026</p>
+    <h1>Your phone keeps <em>the vault and its keys.</em></h1>
+  </div>
+  <p class="lede">The Centraid phone app has no account. Your phone keeps the live vault; a gateway you choose receives only sealed backup data. Recovery needs your 24-word key and a reachable sealed backup.</p>
+</section>
+
+<section class="ref-board wrap" aria-labelledby="privacy-path-title">
+  <h2 id="privacy-path-title">Where information goes</h2>
+  <div class="ref-foot">
+    <div class="ref-note"><h3>On this phone</h3><p>The vault, imported records, assistant chats and locally run assistant stay in the phone app.</p></div>
+    <div class="ref-note"><h3>To a gateway</h3><p>The phone seals backup data before sending it directly. The gateway cannot open the copy.</p></div>
   </div>
 </section>
 
-<section class="dark" id="this-phone">
-  <div class="wrap">
-    <p class="eyebrow r">§02 · on this phone</p>
-    <h2 class="r" style="--d: 0.06s">The vault is a file on this phone.</h2>
-    <div class="prose r" style="--d: 0.12s">
-      <p>
-        Everything you add to Centraid's apps lives in your vault, a database on this phone that
-        only Centraid's code on this phone writes. Centraid does not encrypt the vault file itself:
-        the phone's lock and storage protection guard it. Locker secrets are the exception. They
-        are encrypted inside the vault and open only after you unlock Locker. Centraid also marks
-        its files so that the phone's iCloud or Google backup leaves them out.
-      </p>
-      <!-- TODO(owner): the backup exclusion is implemented on both platforms, but on iOS it is
-           measured only on a physical device. Confirm on a device
-           before this sentence ships. -->
-      <p>
-        <b>What Centraid reads from this phone.</b> When you make a vault, the phone asks, one at a
-        time, whether Centraid may read your photos, contacts, calendars and, on iPhone,
-        reminders. Each answer is yours, and Centraid reads nothing you decline. If you decline, the
-        apps offer the import again later.
-      </p>
-      <p>
-        <b>Photos and videos</b> are read from your library, with the place each was taken, to fill
-        Photos and to back them up. Centraid looks for new ones each time it opens and when a
-        backup runs, until you turn photo access off in Settings. <b>Contacts</b> bring names,
-        phone numbers, email addresses and birthdays. <b>Calendars</b> bring events
-        from the calendars on your phone, except Birthdays, from the past week to the next two months, with titles, notes,
-        times and repeat rules. <b>Reminders</b> bring open reminders with their notes and due
-        dates. Contacts, calendars and reminders are copied into the vault once, and nothing is
-        written back.
-      </p>
-      <p>
-        <b>Camera and unlock.</b> The camera scans the code on a backup device and scans paper into
-        Docs. Those images stay on this phone. Face ID, fingerprint or your passcode unlock Locker.
-        The phone does that check, and Centraid never receives it.
-      </p>
+<section class="ref-details wrap" aria-label="Privacy policy details">
+  <section id="this-phone">
+    <h2>The phone and its permissions</h2>
+    <p>The vault is a database in the phone app's private storage. The database file itself is not encrypted; the phone's lock and storage protections guard it. Locker secrets are encrypted inside the vault and open only after you unlock Locker. The Android app opts out of operating-system backup. On iPhone, Centraid marks vault files for exclusion from iCloud backup.</p>
+    <p>Centraid asks the operating system for access when you choose an import or connect a source. You can refuse. Turning a permission off stops future reads; records already imported stay in the vault until you delete them.</p>
+    <ul>
+      <li><b>Photos:</b> reads items you allow from the phone's photo library, including available date and place details. Originals that exist only in iCloud are fetched only when the backup rule allows it.</li>
+      <li><b>Contacts:</b> imports names and available contact details. Following can read later changes; it does not write changes back to Contacts.</li>
+      <li><b>Calendars:</b> reads events from calendars you choose, not the Birthdays calendar. Following can read later changes; it does not write to the calendar.</li>
+      <li><b>Reminders:</b> on iPhone, reads open reminders and available notes and due dates. It does not write back.</li>
+      <li><b>Health:</b> when you tap Connect, reads the health records you allow from Apple Health or Android Health Connect. Centraid does not write to those stores.</li>
+      <li><b>Camera and files:</b> the camera scans pairing QR codes and captures document scans; the file picker opens files you choose. The operating system presents those choices.</li>
+    </ul>
+    <p>Face ID, fingerprint or your passcode unlocks Locker through the phone. Centraid receives the result, not your biometric data.</p>
+  </section>
+
+  <section id="assistant">
+    <h2>The assistant runs on your phone</h2>
+    <p>The on-device model reads the vault data it needs to answer. Your question, answer and the data it reads stay on the phone. It cannot read Locker secrets, and it changes nothing until you confirm an action. Chats are saved in the vault and go with its backup.</p>
+    <p>When you choose Download model, the phone fetches the release's model file from Hugging Face. The first time you attach a photo to a chat, it may fetch a separate vision file there. These requests carry no vault data; the service can receive ordinary connection details such as your network address. The hosting provider's terms apply.</p>
+  </section>
+
+  <section id="backups">
+    <h2>Backups and the recovery key</h2>
+    <p>Your phone seals the vault and any backup files before sending them directly over HTTPS to the gateways you pair. It pins each gateway's certificate from its pairing QR. A gateway can see connection details, the phone label, data sizes and timing, but has no key to read the backup. There is no Centraid account or relay in this transfer.</p>
+    <p>The 24 words of your recovery key derive the keys that open the backup. When available, iCloud Keychain on iPhone or Google's Block Store on Android may keep a protected copy. Android returns that copy only during new-phone setup. The Backup screen says where the key is saved and lets you keep it off that service. Keep the words, and keep a reachable gateway with a sealed backup.</p>
+    <p>Backups keep recent daily, weekly and monthly snapshots, so deleted records can remain in older copies. The phone requests deletion only after no kept snapshot needs an item. The gateway holds a requested deletion for at least seven days, and may keep it longer while paused or offline. See <a href="../backups/#check">backup retention</a>.</p>
+  </section>
+
+  <section id="network">
+    <h2>Connections made by the phone app</h2>
+    <div class="ref-board" role="group" aria-label="Phone app network connections">
+      <table>
+        <thead><tr><th>Information</th><th>Destination</th><th>When</th></tr></thead>
+        <tbody>
+          <tr><td>Sealed vault and backup files</td><td>Each gateway you pair</td><td>When a backup runs, in the foreground or an operating-system background window.</td></tr>
+          <tr><td>Assistant model files</td><td>Hugging Face</td><td>When you choose Download model, or first attach a photo to chat.</td></tr>
+          <tr><td>Photo originals stored only in iCloud</td><td>Apple, through the Photos library</td><td>When a backup needs the original and your transfer rule allows the download.</td></tr>
+          <tr><td>Protected recovery-key copy</td><td>iCloud Keychain or Google Block Store</td><td>When the platform can save or restore it.</td></tr>
+          <tr><td>A number, address, link or file you choose to share</td><td>The app you select</td><td>When you tap to call, write, open a map or link, or send a copy. You choose whether a photo's place goes with it.</td></tr>
+        </tbody>
+      </table>
     </div>
-  </div>
-</section>
+    <p>The phone app is not configured to send product analytics or crash reports to a Centraid endpoint. It does not contact a Centraid data service. Other providers handle the requests above under their own terms.</p>
+    <p><b>The public docs site:</b> these pages are static files served through Cloudflare. They set no cookies; a light or dark choice stays in browser storage. The site configuration enables Cloudflare observability.</p>
+  </section>
 
-<section class="sec wrap" id="assistant">
-  <p class="eyebrow r">§03 · the assistant</p>
-  <h2 class="r" style="--d: 0.06s">It runs on this phone.</h2>
-  <div class="prose r" style="--d: 0.12s">
-    <p>
-      When you ask the assistant something, a small language model on this phone reads what it
-      needs from your vault and writes the answer. Your questions, its answers and what it reads
-      never leave the phone. It never reads Locker, and it changes nothing until you confirm.
-    </p>
-    <p>
-      Chats are saved in your vault, backed up with it, and deleted when you delete them. The model
-      is a file of roughly half a gigabyte that Centraid downloads once, when you tap Download
-      model, and a smaller second file the first time you attach a photo to a chat. Both come from
-      <code>huggingface.co</code>. The request carries no vault data. Hugging Face sees what any
-      download shows, such as your network address, and its own terms apply.
-    </p>
-    <!-- TODO(owner): the model host is pinned in ChatModelAsset (Hugging Face, ggml-org and
-         unsloth repositories). A Centraid-published
-         fine-tuned model is planned, and its repository name is still yours to confirm. Update the host named
-         here when that ships. -->
-  </div>
-</section>
+  <section id="choices">
+    <h2>Your choices and deletion</h2>
+    <p>Manage photo, contact, calendar, reminder, health, camera, notification and local-network permissions in the phone's Settings. Imported records remain in the vault if you revoke permission.</p>
+    <p>Forget a gateway in Backup to stop this phone sending to it. If it is unreachable, revoke its token with <code>centraid-gateway pairings revoke</code>. Copies already stored remain until their backup retention expires or the operator removes the data.</p>
+    <p>Delete an item in Centraid to remove it from the vault; some apps keep deleted items in Trash first. Older backups retain data while a kept snapshot needs it. Deleting the app removes the local vault, but a recovery-key copy may remain with the platform and gateways may still hold backups.</p>
+    <p>Centraid keeps no account record to export, correct or delete on request. Questions about privacy or deletion: <a href="mailto:srikanth@crowdshakti.com">srikanth@crowdshakti.com</a>.</p>
+  </section>
 
-<section class="dark" id="backups">
-  <div class="wrap">
-    <p class="eyebrow r">§04 · backups and the recovery key</p>
-    <h2 class="r" style="--d: 0.06s">A copy only your key opens.</h2>
-    <div class="prose r" style="--d: 0.12s">
-      <p>
-        A backup device is a computer you own or rent that runs Centraid's backup software,
-        <code>centraid-gateway</code>. You pair it by scanning the QR code it shows. This phone
-        then encrypts your vault, photos and files and sends them straight to the addresses in
-        that code, over a connection it checks against the backup device's own certificate.
-        Nothing sits in between: no relay and no Centraid service. The backup device stores what
-        arrives. It holds no key, so it cannot open any of it. Installing the software downloads
-        Centraid's release from <code>github.com</code>.
-      </p>
-      <p>
-        <b>What a backup device can see.</b> The name you gave it for your phone, when and from
-        where the phone connects, and how much is stored and when. Nothing hides sizes or timing.
-        It cannot read the contents, and neither can anyone who takes its files.
-      </p>
-      <p>
-        <b>Old copies and off-site copies.</b> Backups keep recent daily, weekly and monthly
-        copies, so a note or photo you delete can stay in older copies for months. You own the
-        backup device, so deleting its data deletes every copy. One backup device at home is a
-        local backup: fire or theft can take the phone and the backup device together. A second
-        backup device somewhere else is the off-site copy.
-      </p>
-      <p>
-        <b>Your recovery key is the only way back.</b> Centraid makes your recovery key, 24 words,
-        when you make your first vault, and every key that protects your vault comes from it. If
-        you lose this phone and the recovery key, the vault is gone. Centraid cannot reset or
-        recover the key, because it never has a copy. To restore on a new phone, type the 24 words
-        of your recovery key and pair the backup device.
-      </p>
-      <p>
-        <b>Where the key is kept.</b> This phone keeps the key in its protected storage, and
-        the Backup tab shows it again after the phone's own check. By default the phone's system also
-        saves a copy in iCloud Keychain on iPhone, or with Google on Android, so a new phone can
-        bring it back. That copy is Apple's or Google's to keep under their terms, and Centraid
-        never receives it. Turn it off in the Backup tab, under Recovery key, and the key stays on
-        this phone alone.
-      </p>
-    </div>
-  </div>
-</section>
-
-<section class="sec wrap" id="network">
-  <p class="eyebrow r">§05 · what leaves this phone</p>
-  <h2 class="r" style="--d: 0.06s">Everything the app sends or fetches.</h2>
-  <div class="dt-scroll r" style="--d: 0.12s; margin-top: 24px">
-    <table class="dt">
-      <thead>
-        <tr>
-          <th>What</th>
-          <th>With</th>
-          <th>When</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Encrypted backups</td>
-          <td>Each backup device you paired</td>
-          <td>When a backup runs: from Back up now, or in the background when the phone allows.</td>
-        </tr>
-        <tr>
-          <td>The assistant's model files</td>
-          <td><code>huggingface.co</code></td>
-          <td>When you tap Download model, and the first time you attach a photo to a chat.</td>
-        </tr>
-        <tr>
-          <td>Photos kept only in iCloud</td>
-          <td>Apple, through the phone's Photos library</td>
-          <td>When a backup needs the original and your Wi-Fi and cellular rule allows it.</td>
-        </tr>
-        <tr>
-          <td>A copy of your recovery key</td>
-          <td>iCloud Keychain, or Google on Android</td>
-          <td>By default, when the key is made or restored. Turn it off in Backup.</td>
-        </tr>
-        <tr>
-          <td>A number, address, link or file</td>
-          <td>The app you pick</td>
-          <td>
-            When you tap to call, write, open a map or link, or send a copy of a photo. On iPhone a
-            map address opens in Apple Maps. You choose whether a photo's place goes with a copy.
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-  <div class="prose r" style="--d: 0.18s">
-    <p>
-      Nothing else. Centraid does not check for updates itself, send logs or crash reports, or
-      contact a server of its own. Each service above applies its own terms to what it handles.
-    </p>
-    <p>
-      <b>These web pages.</b> <code>centraid.dev</code> is static pages served by Cloudflare. They
-      set no cookies and run no analytics, and your light or dark choice stays in your browser.
-    </p>
-    <!-- TODO(owner): wrangler.json has Workers observability enabled for the site. Confirm that
-         no Cloudflare analytics or logging beyond serving the pages is switched on, so the
-         sentence above stays true. -->
-  </div>
-</section>
-
-<section class="dark" id="choices">
-  <div class="wrap">
-    <p class="eyebrow r">§06 · your choices</p>
-    <h2 class="r" style="--d: 0.06s">Turn it off, forget it, delete it.</h2>
-    <div class="prose r" style="--d: 0.12s">
-      <p>
-        <b>Permissions.</b> Photos, contacts, calendars, reminders, camera and local network are
-        the phone's to give and take back, in Settings. Centraid stops reading the moment you turn
-        one off. What it already copied stays in your vault until you delete it.
-      </p>
-      <p>
-        <b>Backup devices.</b> Forget one in the Backup tab and this phone stops sending to it and
-        tells it to refuse this phone. If it cannot be reached, run
-        <code>centraid-gateway pairings revoke</code> on it. Copies already stored stay there until
-        you delete them. Backup settings choose whether videos are included and whether backups use
-        Wi-Fi or cellular.
-      </p>
-      <p>
-        <b>Deleting.</b> Delete an item, a photo or a chat and it leaves the vault. Some apps keep
-        deleted items in a trash for a while first, and older backups keep them until they age out.
-        Deleting the app removes the vault from this phone. The phone's keychain can still hold your
-        recovery key afterward, so a reinstall can find it, and backup devices keep their copies.
-      </p>
-      <!-- TODO(owner): there is no in-app "delete vault" or "erase my key" action, and a
-           settled seed survives an app delete (commit 8271d2592). The last sentence above says
-           so. Decide whether the product should offer a way to remove the key. -->
-      <p>
-        <b>Nothing to request.</b> Centraid holds no record of you, so there is nothing for it to
-        export, correct or delete on request. If you think otherwise, write to the address below.
-      </p>
-    </div>
-  </div>
-</section>
-
-<section class="sec wrap" id="contact">
-  <p class="eyebrow r">§07 · changes and contact</p>
-  <h2 class="r" style="--d: 0.06s">No silent expansion.</h2>
-  <div class="prose r" style="--d: 0.12s">
-    <p>
-      If Centraid materially changes what it reads from your phone or what it sends off it, this
-      policy and the in-product disclosure will be updated before the change, and the phone will ask
-      for any new permission. The effective date above identifies this version.
-    </p>
-    <p>
-      Privacy, access, or deletion questions:
-      <a href="mailto:srikanth@crowdshakti.com">srikanth@crowdshakti.com</a>. Security
-      vulnerabilities should follow the private reporting instructions in the
-      <a href="https://github.com/srikanth235/centraid/security/policy" target="_blank" rel="noopener"
-        >security policy</a
-      >.
-    </p>
-    <p class="aside">
-      Related: <a href="../terms/">Terms of Service</a>
-    </p>
-  </div>
+  <section id="contact">
+    <h2>Questions and security</h2>
+    <p>Questions: <a href="mailto:srikanth@crowdshakti.com">srikanth@crowdshakti.com</a>. Report a vulnerability through the <a href="https://github.com/srikanth235/centraid/security/policy" target="_blank" rel="noopener">security policy</a>.</p>
+    <p>Related: <a href="../terms/">Terms of Service</a> · <a href="../backups/">Backups</a></p>
+  </section>
 </section>

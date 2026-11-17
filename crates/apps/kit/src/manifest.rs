@@ -14,11 +14,7 @@
 //! 2. **Duplicate handler names**, per list. One name may appear in *both*
 //!    actions and queries — two different tools — but two actions with one name
 //!    would let the dispatcher silently pick one (`manifest.ts:464`).
-//! 3. **`states` is a closed partition** over the seven canonical states, each
-//!    claimed exactly once across the two sides (`manifest.ts:508-537`). A
-//!    manifest that forgets a state fails validation instead of reading as "it
-//!    does not apply here".
-//! 4. **No action declares `writes`**.
+//! 3. **No action declares `writes`**.
 //!    v0 required each action to list the tables it wrote, so that change-stream
 //!    invalidation could not drop a subscriber. The vault now says what a commit
 //!    wrote itself: the commit guard's `update_hook` census, carried as
@@ -66,12 +62,6 @@ use crate::error::{KitError, KitResult};
 
 pub const MANIFEST_VERSION: u64 = 1;
 pub const RESERVED_HANDLER_PREFIX: &str = "_";
-
-/// Facts about the vault/replica plane, never per-app inventions (#839). The
-/// ORDER is what manifests declare and reports render in — keep it stable.
-pub const CANONICAL_DESIGNED_STATES: [&str; 7] = [
-    "dayone", "pending", "offline", "stale", "conflict", "parked", "denied",
-];
 
 /// The two Undos every app shares, actions of the shell's catalogue and not of an app's manifest
 /// (#1185): `undo-change` puts a record back to the earlier version an act made, `undo-create`
@@ -421,21 +411,6 @@ pub struct VaultBlock {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct StateExclusion {
-    pub state: String,
-    /// Says why the case is UNREPRESENTABLE; an unbuilt state is a gap and
-    /// belongs in `designed`.
-    pub reason: String,
-    pub citation: String,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct StatesBlock {
-    pub designed: Vec<String>,
-    pub excluded: Vec<StateExclusion>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct Manifest {
     pub manifest_version: u64,
     pub id: String,
@@ -445,13 +420,8 @@ pub struct Manifest {
     pub actions: Vec<ActionEntry>,
     pub queries: Vec<QueryEntry>,
     pub vault: Option<VaultBlock>,
-    pub states: Option<StatesBlock>,
     /// The model-facing kinds this app owns.
     pub kinds: Vec<KindDecl>,
-    /// App-declared tables the gateway creates inside the vault. **No bundled
-    /// app uses `ext`**; the block is read so a manifest that grows one is not
-    /// silently dropped.
-    pub ext_tables: Vec<String>,
 }
 
 impl Manifest {
@@ -608,18 +578,9 @@ pub fn parse_manifest(text: &str) -> KitResult<Manifest> {
 
     let actions = parse_actions(&raw)?;
     let queries = parse_queries(&raw)?;
-    let states = parse_states(&raw)?;
     let vault = parse_vault(&raw)?;
     let kinds = parse_kinds(&raw)?;
     check_classification(&actions, &kinds)?;
-    let ext_tables = match field(&raw, "ext").and_then(|ext| field(ext, "tables")) {
-        Some(Value::Array(tables)) => tables
-            .iter()
-            .map(|table| required_string(table, "name", "ext.tables[].name"))
-            .collect::<KitResult<Vec<String>>>()?,
-        _ => Vec::new(),
-    };
-
     Ok(Manifest {
         manifest_version: MANIFEST_VERSION,
         id,
@@ -629,9 +590,7 @@ pub fn parse_manifest(text: &str) -> KitResult<Manifest> {
         actions,
         queries,
         vault,
-        states,
         kinds,
-        ext_tables,
     })
 }
 
@@ -1090,88 +1049,6 @@ fn check_classification(actions: &[ActionEntry], kinds: &[KindDecl]) -> KitResul
     Ok(())
 }
 
-fn parse_states(raw: &Value) -> KitResult<Option<StatesBlock>> {
-    let Some(block) = field(raw, "states").filter(|block| block.is_object()) else {
-        return Ok(None);
-    };
-    let designed = string_list(block, "designed", "states.designed")?;
-    let excluded = match field(block, "excluded") {
-        None => Vec::new(),
-        Some(Value::Array(entries)) => entries
-            .iter()
-            .map(|entry| {
-                Ok(StateExclusion {
-                    state: required_string(entry, "state", "states.excluded[].state")?,
-                    reason: required_string(entry, "reason", "states.excluded[].reason")?,
-                    citation: required_string(entry, "citation", "states.excluded[].citation")?,
-                })
-            })
-            .collect::<KitResult<Vec<StateExclusion>>>()?,
-        Some(_) => {
-            return Err(KitError::manifest(
-                "invalid_field",
-                "\"states.excluded\" must be an array",
-                Some("states.excluded"),
-            ));
-        }
-    };
-
-    // A schema can say each entry is one of the seven; only this pass can say
-    // each of the seven is claimed exactly once.
-    let mut claimed: Vec<(&str, &'static str)> = Vec::new();
-    let mut claim = |state: &str, side: &'static str| -> KitResult<()> {
-        if !CANONICAL_DESIGNED_STATES.contains(&state) {
-            return Err(KitError::manifest(
-                "invalid_field",
-                format!(
-                    "states names \"{state}\", which is not a canonical designed state ({})",
-                    CANONICAL_DESIGNED_STATES.join(", ")
-                ),
-                Some("states"),
-            ));
-        }
-        if let Some((_, prior)) = claimed.iter().find(|(known, _)| *known == state) {
-            return Err(KitError::manifest(
-                "invalid_field",
-                format!(
-                    "states declares \"{state}\" twice ({prior}, then {side}); each canonical state belongs to exactly one side"
-                ),
-                Some(&format!("states.{side}")),
-            ));
-        }
-        claimed.push((
-            CANONICAL_DESIGNED_STATES
-                .iter()
-                .find(|known| **known == state)
-                .expect("checked above"),
-            side,
-        ));
-        Ok(())
-    };
-    for state in &designed {
-        claim(state, "designed")?;
-    }
-    for entry in &excluded {
-        claim(&entry.state, "excluded")?;
-    }
-    let missing: Vec<&str> = CANONICAL_DESIGNED_STATES
-        .iter()
-        .copied()
-        .filter(|state| !claimed.iter().any(|(known, _)| known == state))
-        .collect();
-    if !missing.is_empty() {
-        return Err(KitError::manifest(
-            "invalid_field",
-            format!(
-                "states omits {}; list every canonical state under \"designed\", or under \"excluded\" with a reason and a citation",
-                missing.join(", ")
-            ),
-            Some("states"),
-        ));
-    }
-    Ok(Some(StatesBlock { designed, excluded }))
-}
-
 fn parse_vault(raw: &Value) -> KitResult<Option<VaultBlock>> {
     let Some(block) = field(raw, "vault").filter(|block| block.is_object()) else {
         return Ok(None);
@@ -1372,48 +1249,6 @@ mod tests {
         }
         let plain = minimal(&format!(r#", "actions": [{}]"#, action("add", "")));
         assert_eq!(parse_manifest(&plain).unwrap().actions[0].name, "add");
-    }
-
-    #[test]
-    fn states_is_a_closed_partition() {
-        let missing = minimal(r#", "states": {"designed": ["dayone"], "excluded": []}"#);
-        let error = parse_manifest(&missing).unwrap_err();
-        assert!(
-            matches!(&error, KitError::Manifest { code: "invalid_field", message, .. }
-                if message.contains("pending") && message.contains("denied")),
-            "{error}"
-        );
-
-        let twice = minimal(
-            r#", "states": {"designed": ["dayone", "pending", "offline", "stale", "conflict", "parked", "denied"], "excluded": [{"state": "denied", "reason": "r", "citation": "c"}]}"#,
-        );
-        assert!(matches!(
-            parse_manifest(&twice).unwrap_err(),
-            KitError::Manifest {
-                code: "invalid_field",
-                ..
-            }
-        ));
-
-        let whole = minimal(
-            r##", "states": {"designed": ["dayone", "pending", "offline", "stale", "conflict", "parked"], "excluded": [{"state": "denied", "reason": "first-party apps hold no grant", "citation": "#928"}]}"##,
-        );
-        let manifest = parse_manifest(&whole).unwrap();
-        let states = manifest.states.unwrap();
-        assert_eq!(states.designed.len(), 6);
-        assert_eq!(states.excluded.len(), 1);
-    }
-
-    #[test]
-    fn an_uncanonical_state_is_refused() {
-        let text = minimal(r#", "states": {"designed": ["sparkling"], "excluded": []}"#);
-        assert!(matches!(
-            parse_manifest(&text).unwrap_err(),
-            KitError::Manifest {
-                code: "invalid_field",
-                ..
-            }
-        ));
     }
 
     /// EVERY CLASSIFYING FIELD IS REQUIRED, one at a time: dropping any of them

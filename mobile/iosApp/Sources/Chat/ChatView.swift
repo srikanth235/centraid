@@ -504,7 +504,7 @@ private struct ChatHeader: View {
     let onNewChat: () -> Void
     let onRename: () -> Void
     let onDelete: () -> Void
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.isLargestText) private var largestText
 
     var body: some View {
         // THE BOARD'S HEADER (Chat.dc.html): the title and the vault line, round glass keys at the
@@ -519,26 +519,25 @@ private struct ChatHeader: View {
                     action: onBack
                 )
             }
-            VStack(alignment: .center, spacing: 0) {
+            if !largestText { CentraidMark(size: 32) }
+            VStack(alignment: .leading, spacing: 0) {
                 Text(verbatim: state.title)
-                    .centraidType("smallStrong")
-                    .foregroundStyle(Theme.color("text", scheme))
+                    .kitType(.section)
+                    .foregroundStyle(Surface.ink)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("chat-title")
-                // THE ASSISTANT'S AVATAR is the bare app mark (#1173), small, before the line.
                 HStack(spacing: 5) {
-                    CentraidMark(size: 16)
                     Text(verbatim: state.subtitle)
-                        .centraidType("mono")
-                        .foregroundStyle(Theme.color("textFaint", scheme))
+                        .kitType(.meta)
+                        .foregroundStyle(Surface.meta)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
                 .accessibilityIdentifier("chat-subtitle")
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
             .contextMenu {
                 if state.canManageThread {
@@ -973,7 +972,7 @@ private struct ChatErrorLine: View {
 // MARK: - Result cards
 
 /// ONE ROW THE ANSWER FOUND (#1173), drawn in the colour of the app it is from: a white
-/// card with a bar down its left edge in that app's colour, the row's title in ink, its
+/// card with its app glyph, the row's title in ink, its
 /// subtitle and meta under it, and the app's name in the app's colour at the right. Anything
 /// shown from another app uses that app's colour.
 private struct ChatCardRow: View {
@@ -1004,11 +1003,8 @@ private struct ChatCardRow: View {
                         .frame(width: 32, height: 32)
                         .background(Circle().fill(AppAccent(card.app).fill.opacity(0.16)))
                         .accessibilityHidden(true)
-                } else {
-                    Capsule()
-                        .fill(AppAccent(card.app).fill)
-                        .frame(width: 4)
-                        .padding(.vertical, 2)
+                } else if let app = CentraidCatalog.byID[card.app] {
+                    KitTile(iconKey: app.iconKey, fill: AppAccent(card.app).fill)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(verbatim: card.title)

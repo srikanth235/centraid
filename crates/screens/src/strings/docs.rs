@@ -157,9 +157,6 @@ catalog! {
     plain sort_z_to_a = ("Z to A", "Z to A");
     plain starred = ("Starred", "Starred");
     plain trashed_not_editable = ("Restore this document to edit it.", "Restore this document to edit it.");
-    plain trash_confirm = ("Move to trash", "Move to trash");
-    plain trash_confirm_body = ("It can be restored from trash for 30 days.", "It can be restored from trash for 30 days.");
-    plain trash_confirm_title = ("Move to trash?", "Move to trash?");
     plain truncated = ("Older documents aren't listed; search finds them.", "Older documents aren't listed; search finds them.");
     plain type_any = ("Any type", "Any type");
     plain type_audio = ("Audio", "Audio");

@@ -110,15 +110,10 @@ struct WidgetGrid: View {
 private struct WidgetCard: View {
     let tile: Centraid_Core_V1_HomeTile
     @ObservedObject var shell: ShellModel
-    @Environment(\.colorScheme) private var scheme
-
-    private var radius: CGFloat {
-        CentraidScale.cardRadius * (tile.height > 1 || tile.size == .large ? 1.375 : 1.125)
-    }
-
-    private var content: Bool { tile.status == .content }
+    private var isOpenInvitation: Bool { tile.status == .empty }
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)
         Button {
             // A widget with no route is not tappable (loading, or unreadable).
             if tile.hasRoute { shell.open(tile.route) }
@@ -132,10 +127,19 @@ private struct WidgetCard: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(Surface.card)
-            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .background(isOpenInvitation ? Color.clear : Surface.card)
+            .clipShape(shape)
+            .contentShape(shape)
+            .overlay {
+                if !isOpenInvitation {
+                    shape.strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline)
+                }
+            }
         }
         .buttonStyle(.plain)
+        // The photo collage has decorative children whose accessibility frames can exceed
+        // the clipped card. Keep one bounded control with Rust's existing spoken label.
+        .accessibilityElement(children: .ignore)
         // Keyed on the widget: Calendar's and Reminders' are `home-tile-calendar` and
         // `home-tile-reminders`. The label carries the live count; the id does not.
         .accessibilityIdentifier("home-tile-\(tile.widget)")
@@ -160,6 +164,8 @@ private struct WidgetBody: View {
     var body: some View {
         if tile.status == .loading {
             skeleton
+        } else if tile.status == .empty {
+            if tile.size == .small { glance(figure: "", caption: tile.emptyCopy) } else { catalogInvitation }
         } else if tile.status != .content {
             // A SMALL SLOT HOLDS A GLANCE, NOT A SENTENCE: Health's one word under its mark.
             if tile.size == .small { glance(figure: "", caption: tile.emptyCopy) } else { invitation }
@@ -187,7 +193,7 @@ private struct WidgetBody: View {
                 .foregroundStyle(accent)
             Text(day.day)
                 .centraidType("display")
-                .foregroundStyle(ink)
+                .foregroundStyle(accent)
                 .padding(.top, -4)
             ForEach(Array(day.events.enumerated()), id: \.offset) { _, event in
                 HStack(spacing: 6) {
@@ -262,7 +268,7 @@ private struct WidgetBody: View {
             if !figure.isEmpty {
                 Text(figure)
                     .centraidType("annotLabelOn")
-                    .foregroundStyle(ink)
+                    .foregroundStyle(accent)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
             }
@@ -326,6 +332,31 @@ private struct WidgetBody: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    /// A typed EMPTY stays open wherever it appears: the app glyph and name share the first row,
+    /// while the existing invitation copy gets the full tile width below.
+    private var catalogInvitation: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                if let app = CentraidCatalog.byID[tile.appID] {
+                    KitTile(
+                        iconKey: app.iconKey,
+                        size: CentraidGeometry.homeInvitationGlyphSize,
+                        fill: AppAccent(tile.appID).fill
+                    )
+                }
+                Text(tile.name)
+                    .kitType(.row)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(ink)
+            }
+            Text(tile.emptyCopy)
+                .kitType(.meta)
+                .foregroundStyle(Surface.body)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 
     /// STATIC BARS, NEVER A SPINNER: a read in flight holds its slot, and the

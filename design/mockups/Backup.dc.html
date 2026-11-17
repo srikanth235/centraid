@@ -6,22 +6,26 @@
 <script src="./support.js"></script>
 </head>
 <body>
+<!-- IMPLEMENTATION SCOPE: only the new shell identity heading is approved here.
+     Lower legacy prototype rows/toggles are not runtime policy or current copy.
+     Keep BackupHomeState and the existing native source authoritative. -->
 <x-dc>
 <helmet>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+
 <style>
 body{margin:0}
+@font-face{font-family:Instrument Sans;src:url('../fonts/InstrumentSans_470Book.ttf') format('truetype');font-style:normal;font-weight:400}@font-face{font-family:Instrument Sans;src:url('../fonts/InstrumentSans-SemiBold.ttf') format('truetype');font-style:normal;font-weight:600 700}
 button{font:inherit;color:inherit}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #F4F2EE; font-family: Geist, system-ui, sans-serif; color: #1C1B19;">
-  <h1 style="margin: 64px 20px 12px; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">Backup</h1>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #F4F2EE; font-family: Instrument Sans, system-ui, sans-serif; color: #1C1B19;">
+  <div class="root-title-line" style="display:flex;align-items:center;gap:8px;padding:56px 18px 12px;min-width:0"><span class="root-app-mark" aria-hidden="true" style="width:32px;height:32px;flex:0 0 32px;display:flex;align-items:center;justify-content:center;border-radius:8.32px;background:#1F4A45"><svg data-catalog-icon="Backup" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 0-3 6.2"/><path d="M20 6v6h-6"/></svg></span><h1 style="margin:0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">Backup</h1></div>
 
-  <div style="margin: 0 16px; background: #FFFFFF; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; align-items: center; text-align: center;">
-    <span style="width: 52px; height: 52px; border-radius: 26px; background: #E3F1E8; display: flex; align-items: center; justify-content: center;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#2B7B51" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></span>
-    <div style="font-size: 18px; font-weight: 600; margin-top: 8px;">Backed up</div>
-    <div style="font-size: 14px; color: #6F6B64; margin-top: 2px;">10 minutes ago to Srikanth's Mac mini</div>
-    <button style="margin-top: 12px; height: 40px; padding: 0 18px; border-radius: 20px; border: none; background: #E3EEEB; color: #1F4A45; font-weight: 600; font-size: 15px;">Back up now</button>
+  <div style="margin: 0 16px; background: #FFFFFF; border-radius: 16px; padding:16px;display:grid;grid-template-columns:40px 1fr;column-gap:12px;align-items:center;">
+    <span style="width:40px;height:40px;border-radius:20px;grid-row:span 2; background: #E3F1E8; display: flex; align-items: center; justify-content: center;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#2B7B51" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></span>
+    <div style="font-size:20px;font-weight:600;">Backed up</div>
+    <div style="font-size:13px;color:#6F6B64;">10 minutes ago to Srikanth's Mac mini</div>
+    <button style="grid-column:2;justify-self:start;margin-top:12px;min-height:44px; padding: 0 18px; border-radius: 20px; border: none; background: #E3EEEB; color: #1F4A45; font-weight: 600; font-size: 15px;">Back up now</button>
   </div>
 
   <div style="font-size: 13px; color: #6F6B64; margin: 18px 32px 6px;">BACKUP DEVICES</div>

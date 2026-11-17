@@ -370,7 +370,7 @@ fn the_star_is_a_write_and_the_label_follows_the_vault() {
 }
 
 #[test]
-fn move_to_trash_and_remove_a_channel_are_asked_first_and_the_trash_commit_pops_the_screen() {
+fn trash_is_immediate_and_undo_restores_same_person_while_other_confirms_remain() {
     let mut d = clean();
     let (i, id) = opened(&mut d);
     let email = person_data(d.view(i))
@@ -420,21 +420,29 @@ fn move_to_trash_and_remove_a_channel_are_asked_first_and_the_trash_commit_pops_
     assert_eq!(person_data(d.view(i)).channels.len(), 1);
 
     send_person(&mut d, i, P::TrashTapped(ev::TrashTapped {}));
-    let confirm = person_state(d.view(i)).confirm.clone().unwrap();
-    assert_eq!(confirm.title, "Move Dana Reyes to trash?");
-    assert_eq!(confirm.body, "Restorable for 30 days.");
-    assert!(!person_state(d.view(i)).done);
-    send_person(&mut d, i, P::Confirmed(ev::Confirmed {}));
     let state = person_state(d.view(i));
-    assert!(state.done, "the shell pops");
+    assert!(state.confirm.is_none());
     assert_eq!(
         state.status.as_ref().unwrap().sentence,
         "Dana Reyes moved to trash"
     );
-    assert!(
-        sheet_of(&d, &id).sheet.is_none(),
-        "the person is in the trash"
+    assert_eq!(state.status.as_ref().unwrap().action_label, "Undo");
+    assert!(!person_state(d.view(i)).done);
+    assert!(matches!(
+        state.page.as_ref().unwrap().state,
+        Some(wire::page_state::State::Failed(ref failure))
+            if failure.sentence == "This person is not in People."
+    ));
+    assert!(state.content.is_none(), "the trashed person data is absent");
+    d.send(
+        i,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
     );
+    assert_eq!(
+        person_state(d.view(i)).status.as_ref().unwrap().sentence,
+        "Undone"
+    );
+    assert_eq!(person_data(d.view(i)).party_id, id);
 }
 
 #[test]

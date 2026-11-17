@@ -721,6 +721,54 @@
       "x": 5140,
       "y": 27200
     },
+    "DocsIndex.dc.html": {
+      "h": 1100,
+      "page": "light",
+      "title": "Docs home · phone vault and backup",
+      "w": 1440,
+      "x": 9950,
+      "y": 0
+    },
+    "DocsApps.dc.html": {
+      "h": 930,
+      "page": "light",
+      "title": "Apps · nine jobs, one vault",
+      "w": 1200,
+      "x": 9950,
+      "y": 3600
+    },
+    "DocsData.dc.html": {
+      "h": 900,
+      "page": "light",
+      "title": "Data · records and their sources",
+      "w": 1200,
+      "x": 9950,
+      "y": 4800
+    },
+    "DocsSystem.dc.html": {
+      "h": 900,
+      "page": "light",
+      "title": "Understand · screens and the phone core",
+      "w": 1200,
+      "x": 9950,
+      "y": 6000
+    },
+    "DocsReference.dc.html": {
+      "h": 1080,
+      "page": "light",
+      "title": "Data · connected records reference",
+      "w": 1200,
+      "x": 9950,
+      "y": 2400
+    },
+    "DocsGuide.dc.html": {
+      "h": 1160,
+      "page": "light",
+      "title": "Start · setup, imports and recovery",
+      "w": 1200,
+      "x": 9950,
+      "y": 1200
+    },
     "DocsStopFolder.dc.html": {
       "h": 844,
       "page": "light",
@@ -3265,6 +3313,14 @@
       "x": 2350,
       "y": 68680
     },
+    "HomeSite.dc.html": {
+      "h": 5600,
+      "page": "light",
+      "title": "Centraid home · phone vault",
+      "w": 1440,
+      "x": 8450,
+      "y": 0
+    },
     "MorePhotos.dc.html": {
       "h": 844,
       "page": "light",
@@ -3895,6 +3951,12 @@
     "LockerItem.dc.html",
     "People.dc.html",
     "Person.dc.html",
+    "DocsIndex.dc.html",
+    "DocsGuide.dc.html",
+    "DocsReference.dc.html",
+    "DocsApps.dc.html",
+    "DocsData.dc.html",
+    "DocsSystem.dc.html",
     "Docs.dc.html",
     "DocsFolder.dc.html",
     "Health.dc.html",

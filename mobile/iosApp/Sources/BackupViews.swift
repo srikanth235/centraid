@@ -20,6 +20,7 @@ struct BackupHomeView: View {
     /// recovery key (`key_show`).
     let open: (Centraid_Core_V1_Route) -> Void
     @State private var ruleOpen = false
+    @Environment(\.isLargestText) private var largestText
 
     private func event(_ build: (inout Centraid_Core_V1_BackupHomeEvent) -> Void) -> Centraid_Core_V1_BackupHomeEvent {
         var event = Centraid_Core_V1_BackupHomeEvent()
@@ -44,8 +45,24 @@ struct BackupHomeView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    KitHeader(title: model.title)
-                        .padding(.horizontal, -CentraidGeometry.pageMargin)
+                    HStack(spacing: 8) {
+                        if !largestText {
+                            KitTile(iconKey: "Backup", fill: AppAccent.shell.fill)
+                        }
+                        Text(model.title)
+                            .kitType(.title)
+                            .foregroundStyle(Surface.ink)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .layoutPriority(1)
+                            .accessibilityAddTraits(.isHeader)
+                            .accessibilityIdentifier("kit-header-title")
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, CentraidGeometry.pageMargin + 2)
+                    .padding(.top, 2)
+                    .padding(.bottom, 8)
+                    .padding(.horizontal, -CentraidGeometry.pageMargin)
                     statusCard(model)
                     if !model.apps.isEmpty {
                         group(model.appsHeading) { appRows(model.apps) }

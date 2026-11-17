@@ -6,54 +6,66 @@ const rail = [
   {
     "href": "#install",
     "no": "§01",
-    "label": "Install",
+    "label": "Open your vault",
     "current": true
   },
   {
     "href": "#first-open",
     "no": "§02",
-    "label": "First open",
+    "label": "Recovery words",
     "current": false
   },
   {
     "href": "#first-app",
     "no": "§03",
-    "label": "Your first app",
-    "current": false
-  },
-  {
-    "href": "#talk",
-    "no": "§04",
-    "label": "Talk to it",
-    "current": false
-  },
-  {
-    "href": "#import",
-    "no": "§05",
-    "label": "Bring your data",
+    "label": "Bring in records",
     "current": false
   },
   {
     "href": "#phone",
-    "no": "§06",
-    "label": "Pair your phone",
+    "no": "§04",
+    "label": "Pair a backup device",
     "current": false
   },
   {
     "href": "#always-on",
-    "no": "§07",
-    "label": "Go always-on",
+    "no": "§05",
+    "label": "Pairing and reachability",
     "current": false
   },
   {
     "href": "#backup",
+    "no": "§06",
+    "label": "Keep your recovery key",
+    "current": false
+  },
+  {
+    "href": "#recovery",
+    "no": "§07",
+    "label": "Restore requirements",
+    "current": false
+  },
+  {
+    "href": "#restore-flow",
     "no": "§08",
-    "label": "Back up the keys",
+    "label": "Restore to a new phone",
+    "current": false
+  },
+  {
+    "href": "#talk",
+    "no": "§09",
+    "label": "Assistant",
+    "current": false
+  },
+  {
+    "href": "#import",
+    "no": "§10",
+    "label": "Imports",
     "current": false
   }
 ];
 const footer = {
-  "manifesto": "Sixty minutes in, the vault is yours. <em>The rest of the manual explains why that matters.</em>",
+  "manifesto": "The phone holds the live vault. Backup devices store sealed copies.",
   "links": [
     {
       "href": "https://centraid.dev",
@@ -80,12 +92,12 @@ const footer = {
 ---
 
 <DocsLayout
-  title="Get Started with Centraid: Install Your Personal Vault"
-  description="Install Centraid from source, open the desktop shell, create a private vault, install your first app, import data, pair your phone, and back up keys."
+  title="Get started with Centraid"
+  description="Open your phone vault, bring in records, pair a backup device, and keep the recovery key needed to restore."
   current="start"
   canonicalPath="start/"
   searchLabel="Start"
-  searchKeywords="install bun node desktop shell first app grant import data pair phone daemon always-on backup keys"
+  searchKeywords="phone vault create restore recovery words key imports People Docs Notes backup device centraid-gateway pairing sealed copy assistant"
   bodyClass="has-rail"
   rail={rail}
   footer={footer}

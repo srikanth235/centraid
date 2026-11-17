@@ -147,9 +147,9 @@ extension View {
             .textCase(rung.caps ? .uppercase : nil)
     }
 
-    /// A white card on a card page: the card radius, no shadow, no border.
+    /// A paper card with the shared edge and radius, whether it sits on a card page or a plain list.
     func kitCard() -> some View {
-        background(Surface.card, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+        kitBorderedCard()
     }
 
     /// A card on a plain list page, where its white needs an edge to be read.

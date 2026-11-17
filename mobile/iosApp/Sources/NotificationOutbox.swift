@@ -1,14 +1,7 @@
 import Foundation
 
-/// THE PRESSES NOT YET KNOWN TO BE APPLIED (#1188, A6): a small queue for the phone's own writer, not
-/// a replica log; nothing in it waits for a gateway.
-///
-/// A button on a notification must not be lost because the core could not start in the seconds iOS
-/// gives a background action. The press is written here BEFORE the shell asks for the store, and
-/// leaves only when the core has taken it; whatever remains is sent again at the next start
-/// (`Notifications.drain`). Each press has an id of its own that travels to Rust
-/// (`NotificationAnswered.pressID`), which runs the write under a key made from it, so a press sent
-/// twice is applied once. The file is excluded from the device backup, like the vault.
+/// THE PRESSES NOT YET KNOWN TO BE APPLIED (#1188, A6): a small queue for the phone's own writer.
+/// A press is returned only after its identity is durably written and excluded from device backup.
 enum NotificationOutbox {
     struct Press: Codable, Equatable {
         var pressID: String
@@ -16,53 +9,130 @@ enum NotificationOutbox {
         var verb: Int
     }
 
+    enum Failure: Error, Equatable {
+        case unavailable
+        case unreadable
+        case corrupt
+        case notExcluded
+        case notProtected
+        case writeFailed
+    }
+
     private static let lock = NSLock()
 
-    private static var url: URL? {
+    /// File-backed store; tests supply a disposable URL and exercise real Foundation I/O.
+    struct Store {
+        let url: URL
+        private let failReplacementForTesting: Bool
+
+        init(url: URL, failReplacementForTesting: Bool = false) {
+            self.url = url
+            self.failReplacementForTesting = failReplacementForTesting
+        }
+
+        func add(notificationID: String, verb: Int) throws -> Press {
+            try Self.locked {
+                var presses = try read()
+                let press = Press(pressID: UUID().uuidString, notificationID: notificationID, verb: verb)
+                presses.append(press)
+                try write(presses)
+                return press
+            }
+        }
+
+        func remove(_ pressID: String) throws {
+            try Self.locked {
+                var presses = try read()
+                presses.removeAll { $0.pressID == pressID }
+                try write(presses)
+            }
+        }
+
+        func pending() throws -> [Press] {
+            try Self.locked { try read() }
+        }
+
+        private func read() throws -> [Press] {
+            let data: Data
+            do { data = try Data(contentsOf: url) }
+            catch {
+                if let cocoa = error as? CocoaError, cocoa.code == .fileReadNoSuchFile { return [] }
+                if let posix = error as? POSIXError, posix.code == .ENOENT { return [] }
+                throw Failure.unreadable
+            }
+            let values: URLResourceValues
+            do { values = try url.resourceValues(forKeys: [.isExcludedFromBackupKey]) }
+            catch { throw Failure.notExcluded }
+            guard values.isExcludedFromBackup == true else { throw Failure.notExcluded }
+            let protection: URLResourceValues
+            do { protection = try url.resourceValues(forKeys: [.fileProtectionKey]) }
+            catch { throw Failure.notProtected }
+            guard protection.fileProtection == .completeUntilFirstUserAuthentication else {
+                throw Failure.notProtected
+            }
+            do { return try JSONDecoder().decode([Press].self, from: data) }
+            catch { throw Failure.corrupt }
+        }
+
+        private func write(_ presses: [Press]) throws {
+            let data: Data
+            do { data = try JSONEncoder().encode(presses) }
+            catch { throw Failure.writeFailed }
+            var temporary = url.deletingLastPathComponent()
+                .appendingPathComponent(".notification-outbox-\(UUID().uuidString).tmp")
+            do {
+                try data.write(to: temporary, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+                var values = URLResourceValues()
+                values.isExcludedFromBackup = true
+                try temporary.setResourceValues(values)
+                let stored = try temporary.resourceValues(forKeys: [.isExcludedFromBackupKey])
+                guard stored.isExcludedFromBackup == true else { throw Failure.notExcluded }
+                if FileManager.default.fileExists(atPath: url.path) {
+                    if failReplacementForTesting { throw Failure.writeFailed }
+                    _ = try FileManager.default.replaceItemAt(url, withItemAt: temporary)
+                } else {
+                    if failReplacementForTesting { throw Failure.writeFailed }
+                    try FileManager.default.moveItem(at: temporary, to: url)
+                }
+                let final = try url.resourceValues(forKeys: [.isExcludedFromBackupKey])
+                guard final.isExcludedFromBackup == true else { throw Failure.notExcluded }
+                let finalProtection = try url.resourceValues(forKeys: [.fileProtectionKey])
+                guard finalProtection.fileProtection == .completeUntilFirstUserAuthentication else {
+                    throw Failure.notProtected
+                }
+            } catch {
+                // The live queue is untouched until a protected, excluded replacement is ready.
+                try? FileManager.default.removeItem(at: temporary)
+                throw Failure.writeFailed
+            }
+        }
+
+        private static func locked<T>(_ body: () throws -> T) rethrows -> T {
+            lock.lock()
+            defer { lock.unlock() }
+            return try body()
+        }
+    }
+
+    private static var sharedStore: Store? {
         guard let base = try? FileManager.default.url(
             for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true
         ) else { return nil }
-        return base.appendingPathComponent("notification-outbox.json")
+        return Store(url: base.appendingPathComponent("notification-outbox.json"))
     }
 
-    /// Write a press down, and give it its id.
-    @discardableResult
-    static func add(notificationID: String, verb: Int) -> Press {
-        let press = Press(pressID: UUID().uuidString, notificationID: notificationID, verb: verb)
-        mutate { $0.append(press) }
-        return press
+    static func add(notificationID: String, verb: Int) throws -> Press {
+        guard let sharedStore else { throw Failure.unavailable }
+        return try sharedStore.add(notificationID: notificationID, verb: verb)
     }
 
-    /// The core has it: the press leaves.
-    static func remove(_ pressID: String) {
-        mutate { $0.removeAll { $0.pressID == pressID } }
+    static func remove(_ pressID: String) throws {
+        guard let sharedStore else { throw Failure.unavailable }
+        try sharedStore.remove(pressID)
     }
 
-    static func pending() -> [Press] {
-        lock.lock()
-        defer { lock.unlock() }
-        return read()
-    }
-
-    private static func mutate(_ change: (inout [Press]) -> Void) {
-        lock.lock()
-        defer { lock.unlock() }
-        var presses = read()
-        change(&presses)
-        write(presses)
-    }
-
-    private static func read() -> [Press] {
-        guard let url, let data = try? Data(contentsOf: url) else { return [] }
-        return (try? JSONDecoder().decode([Press].self, from: data)) ?? []
-    }
-
-    private static func write(_ presses: [Press]) {
-        guard var url else { return }
-        guard let data = try? JSONEncoder().encode(presses) else { return }
-        try? data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-        var values = URLResourceValues()
-        values.isExcludedFromBackup = true
-        try? url.setResourceValues(values)
+    static func pending() throws -> [Press] {
+        guard let sharedStore else { throw Failure.unavailable }
+        return try sharedStore.pending()
     }
 }

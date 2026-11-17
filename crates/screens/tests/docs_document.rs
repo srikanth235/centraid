@@ -197,17 +197,19 @@ fn the_heads_writes_star_rename_move_and_labels() {
 }
 
 #[test]
-fn trashing_asks_first_and_a_trashed_document_offers_restore_and_delete_forever() {
+fn trash_moves_document_immediately_and_keeps_undo_on_same_route() {
     let mut d = driver();
     let id = text(&d, "Return", "x");
     let i = open(&mut d, &id, "Return", "Docs");
     pick_doc(&mut d, i, "trash");
     let state = document_state(d.view(i));
-    assert_eq!(state.confirm.as_ref().unwrap().title, "Move to trash?");
-    document_send(&mut d, i, DD::Dismissed(dd::Dismissed {}));
-    assert!(document_state(d.view(i)).confirm.is_none());
-    pick_doc(&mut d, i, "trash");
-    document_send(&mut d, i, DD::Confirmed(dd::Confirmed {}));
+    assert!(state.confirm.is_none());
+    assert_eq!(
+        state.status.as_ref().unwrap().sentence,
+        "Return moved to trash"
+    );
+    assert_eq!(state.status.as_ref().unwrap().action_label, "Undo");
+    assert_eq!(state.document_id, id);
     let data = document_data(d.view(i));
     assert!(data.row.as_ref().unwrap().trashed);
     assert_eq!(keys(d.view(i)), ["restore", "purge"]);
@@ -223,12 +225,63 @@ fn trashing_asks_first_and_a_trashed_document_offers_restore_and_delete_forever(
         panic!();
     };
     assert!(!reader.editable);
-    // A verb it does not offer is nothing.
+    // A trashed detail offers only restore and purge; a stale star action is a no-op.
     pick_doc(&mut d, i, "star");
+    assert!(document_data(d.view(i)).row.as_ref().unwrap().trashed);
     assert!(!document_data(d.view(i)).row.as_ref().unwrap().starred);
-    pick_doc(&mut d, i, "restore");
+    d.send(
+        i,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    assert_eq!(
+        document_state(d.view(i)).status.as_ref().unwrap().sentence,
+        "Undone"
+    );
     assert!(!document_data(d.view(i)).row.as_ref().unwrap().trashed);
     assert_eq!(document_data(d.view(i)).trashed_note, "");
+    assert_eq!(
+        document_data(d.view(i)).row.as_ref().unwrap().document_id,
+        id
+    );
+}
+
+#[test]
+fn drive_row_trash_is_immediate_and_undo_restores_the_same_document() {
+    let mut d = driver();
+    let id = text(&d, "Drive file", "x");
+    let i = d.push(
+        docs::TAB,
+        docs_support::drive_route(wire::DocsDestination::Recent),
+    );
+    row_menu(&mut d, i, &id);
+    pick(&mut d, i, "trash");
+    let state = drive_state(d.view(i));
+    assert!(state.confirm.is_none());
+    assert_eq!(
+        state.status.as_ref().unwrap().sentence,
+        "Drive file moved to trash"
+    );
+    assert_eq!(state.status.as_ref().unwrap().action_label, "Undo");
+    assert!(
+        !drive_data(d.view(i))
+            .rows
+            .iter()
+            .any(|row| row.document_id == id)
+    );
+    d.send(
+        i,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    assert_eq!(
+        drive_state(d.view(i)).status.as_ref().unwrap().sentence,
+        "Undone"
+    );
+    assert!(
+        drive_data(d.view(i))
+            .rows
+            .iter()
+            .any(|row| row.document_id == id)
+    );
 }
 
 #[test]

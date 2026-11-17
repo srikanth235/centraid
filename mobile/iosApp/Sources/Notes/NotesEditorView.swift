@@ -4,8 +4,8 @@ import SwiftUI
 ///
 /// **AN EDITOR ROOM: AUTOSAVE, CLOSE = DONE (#1015 D3).** There is no Save
 /// button and no save event from here: every edit is handed to Rust, whose
-/// autosave writes after its debounce, and `AutosaveStatus` — hosted by
-/// `EditorRoom` — says whether the words are safe. Done pops the page; Rust
+/// autosave writes after its debounce, and the foot status host says whether
+/// the words are safe. Done pops the page; Rust
 /// flushes what is unsaved when it sees the page leave (`Left`).
 ///
 /// **EVERY WORD IS RUST'S** — the close verb, the placeholders, the pin, link,
@@ -70,10 +70,6 @@ struct NotesEditorView: View {
         let chrome = state.chrome
         NotesEditorRoom(
             title: chrome.title,
-            // Notes owns refusal/conflict and Reload on the inline row over the kept draft.
-            // Ordinary save feedback stays in the header while editing actions have their row.
-            status: state.autosave.refused ? "" : (chrome.statusAction.isEmpty ? chrome.status : state.autosave.label),
-            refused: state.autosave.refused,
             closeLabel: chrome.close,
             onClose: onClose
         ) {
@@ -176,11 +172,12 @@ struct NotesEditorView: View {
                     VStack(spacing: 0) {
                         // THE EDITING SENTENCE with its one verb ("Item checked", Undo).
                         ProgressStatusLine(
-                            sentence: state.autosave.refused || !chrome.statusAction.isEmpty ? chrome.status : "",
+                            sentence: chrome.status.isEmpty ? state.autosave.label : chrome.status,
                             refused: state.autosave.refused,
                             actionLabel: chrome.statusAction,
                             onAct: { dispatch(event { $0.statusActed = .init() }) },
-                            identifier: "notes-editor-status"
+                            identifier: "notes-editor-status",
+                            sentenceIdentifier: "kit-autosave-status"
                         )
                         toolbar(chrome)
                     }
@@ -331,12 +328,10 @@ private struct NotesPinMark: View {
     }
 }
 
-/// THE NOTES EDITOR'S PAGE: the kit's editor room with the app's colour on Done and the plain
-/// list page under it (#1173). Close is Done; the status is the autosave's word, centred.
+/// THE NOTES EDITOR'S PAGE: the existing note noun in the bar, with one status host above the
+/// floating tool rail. Close is Done; the editable title remains in the scrollable page.
 private struct NotesEditorRoom<Trailing: View, Content: View>: View {
     let title: String
-    let status: String
-    let refused: Bool
     let closeLabel: String
     let onClose: () -> Void
     @ViewBuilder let trailing: () -> Trailing
@@ -368,14 +363,12 @@ private struct NotesEditorRoom<Trailing: View, Content: View>: View {
                     .accessibilityIdentifier("kit-editor-close")
                 }
                 ToolbarItem(placement: .principal) {
-                    Text(status)
-                        .kitType(.meta)
-                        .foregroundStyle(refused ? StateColor.red.text : Surface.meta)
+                    Text(title)
+                        .kitType(.section)
+                        .foregroundStyle(Surface.ink)
                         .lineLimit(1)
-                        .accessibilityIdentifier("kit-autosave-status")
-                        // A principal toolbar item does not redraw when only its text changes; a
-                        // new identity per sentence does, so a tapped chip's "in the trash" shows.
-                        .id(status)
+                        .accessibilityAddTraits(.isHeader)
+                        .accessibilityIdentifier("kit-header-title")
                 }
                 ToolbarItem(placement: .topBarTrailing) { trailing() }
             }

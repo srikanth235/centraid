@@ -8,16 +8,17 @@
 <body>
 <x-dc>
 <helmet>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+
+
 <style>
 body{margin:0}
+@font-face{font-family:Instrument Sans;src:url('../fonts/InstrumentSans_470Book.ttf') format('truetype');font-style:normal;font-weight:400}@font-face{font-family:Instrument Sans;src:url('../fonts/InstrumentSans-SemiBold.ttf') format('truetype');font-style:normal;font-weight:600 700}
 button{font:inherit;color:inherit}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #0E0D0C; font-family: Geist, system-ui, sans-serif; color: #F2EFEA;">
-  <div style="display: flex; align-items: flex-start; justify-content: space-between; padding: 56px 20px 8px;">
-    <h1 style="margin: 4px 0 0; flex: 1; min-width: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">Reminders</h1>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #0E0D0C; font-family: Instrument Sans, system-ui, sans-serif; color: #F2EFEA;">
+  <div style="display: flex; align-items: flex-start; justify-content: space-between; padding: 56px 18px 8px;">
+    <div class="root-title-line" style="display:flex;align-items:center;gap:8px;flex:1;min-width:0"><span class="root-app-mark" aria-hidden="true" style="width:32px;height:32px;flex:0 0 32px;display:flex;align-items:center;justify-content:center;border-radius:8.32px;background:#12806F"><svg data-catalog-icon="Todo" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 10h8M8 14h5"/><path d="M7 10l1 1 2-2"/></svg></span><h1 style="margin:0; flex: 1; min-width: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">Reminders</h1></div>
     <div style="display: flex; gap: 8px;">
       <button aria-label="Filter and sort" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid #3A3733; background: rgba(44,42,39,0.85); display: flex; align-items: center; justify-content: center;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 5h16l-6.5 7.5V19l-3 1.5v-8z" stroke-linejoin="round"/></svg>
@@ -31,31 +32,31 @@ button{font:inherit;color:inherit}
 
 
   <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 0 20px;">
-    <a href="TodayDark.dc.html" style="text-decoration: none; color: #FFFFFF; background: #468DE5; border-radius: 18px; padding: 14px; height: 92px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
+    <a href="TodayDark.dc.html" style="text-decoration: none; color: #F2EFEA; background: #1F1E1C; border-radius: 16px; padding: 14px; min-height: 92px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18"/></svg>
-        <span style="font-size: 28px; font-weight: 700;">5</span>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#468DE5" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18"/></svg>
+        <span style="font-size:34px;font-weight:700;">5</span>
       </div>
       <span style="font-size: 17px; font-weight: 600;">Today</span>
     </a>
-    <div style="color: #FFFFFF; background: #E55D7E; border-radius: 18px; padding: 14px; height: 92px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
+    <div style="color: #F2EFEA; background: #1F1E1C; border-radius: 16px; padding: 14px; min-height: 92px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 13h.01M12 13h.01M16 13h.01M8 17h.01M12 17h.01"/></svg>
-        <span style="font-size: 28px; font-weight: 700;">14</span>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#E55D7E" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 13h.01M12 13h.01M16 13h.01M8 17h.01M12 17h.01"/></svg>
+        <span style="font-size:34px;font-weight:700;">14</span>
       </div>
       <span style="font-size: 17px; font-weight: 600;">Scheduled</span>
     </div>
-    <div style="color: #FFFFFF; background: #3A3936; border-radius: 18px; padding: 14px; height: 92px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
+    <div style="color: #F2EFEA; background: #1F1E1C; border-radius: 16px; padding: 14px; min-height: 92px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" aria-hidden="true"><path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1 2h6l1-2h5"/></svg>
-        <span style="font-size: 28px; font-weight: 700;">31</span>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" aria-hidden="true"><path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1 2h6l1-2h5"/></svg>
+        <span style="font-size:34px;font-weight:700;">31</span>
       </div>
       <span style="font-size: 17px; font-weight: 600;">All</span>
     </div>
-    <div style="color: #FFFFFF; background: #964C04; border-radius: 18px; padding: 14px; height: 92px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
+    <div style="color: #F2EFEA; background: #1F1E1C; border-radius: 16px; padding: 14px; min-height: 92px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" aria-hidden="true"><path d="M5 21V4h11l-2 4 2 4H5"/></svg>
-        <span style="font-size: 28px; font-weight: 700;">3</span>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#F2A64F" stroke-width="2" aria-hidden="true"><path d="M5 21V4h11l-2 4 2 4H5"/></svg>
+        <span style="font-size:34px;font-weight:700;">3</span>
       </div>
       <span style="font-size: 17px; font-weight: 600;">Flagged</span>
     </div>

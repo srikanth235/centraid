@@ -538,27 +538,14 @@ private fun SpringboardGrid(data: HomeData, loading: String, onOpen: (Route) -> 
     }
 }
 
-/**
- * Day one: the vault holds nothing anywhere.
- *
- * Reached ONLY when every readable tile has settled and is empty. A still-loading
- * vault, or an unreachable replica, gets the ordinary grid — this page is a claim
- * about the vault, and an unanswered read has not earned it.
- */
+/** Rust's first-run grade keeps the same open catalogue grid and typed tile states. */
 @Composable
 private fun DayOne(data: HomeData, loading: String, onOpen: (Route) -> Unit, header: (@Composable () -> Unit)? = null) {
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).testTag("home-day-one")) {
         header?.invoke()
         Column(
-            Modifier.padding(PAGE_MARGIN),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            Modifier.padding(horizontal = PAGE_MARGIN).padding(top = 10.dp, bottom = 24.dp),
         ) {
-            Text(data.day_one_title, style = centraidType("title"), color = centraidColor("text"))
-            Text(
-                data.day_one_body,
-                style = centraidType("small"),
-                color = centraidColor("textSoft"),
-            )
             WidgetGrid(data, loading, onOpen)
         }
     }

@@ -94,9 +94,11 @@ internal fun AgendaEditorScreen(
     val chrome = state.chrome
     val data = state.data_
     val leave = { onEvent(AgendaEditorEvent(leave = AgendaEditorEvent.LeaveRequested())) }
+    val statusMessage = state.status?.takeIf { it.sentence.isNotEmpty() }
     EditorRoom(
         title = data?.heading.orEmpty(),
         status = null,
+        statusLine = if (statusMessage != null) ({ StatusLine(statusMessage) }) else null,
         onClose = leave,
         onDeparted = {},
         closeLabel = chrome?.close?.ifEmpty { null } ?: KitWords.DONE,
@@ -113,7 +115,6 @@ internal fun AgendaEditorScreen(
             null
         },
     ) {
-        StatusLine(state.status)
         // THE READ IS THE KIT'S PAGE STATE (#1185): a task or event that is gone is its final failure.
         ReadStateView(
             page = state.page!!,

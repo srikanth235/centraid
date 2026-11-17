@@ -863,6 +863,7 @@ dependencies = [
  "centraid-api-proto",
  "centraid-apps-calendar",
  "centraid-apps-docs",
+ "centraid-apps-kit",
  "centraid-apps-locker",
  "centraid-apps-reminders",
  "centraid-assist",

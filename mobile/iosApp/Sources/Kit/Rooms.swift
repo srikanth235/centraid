@@ -117,10 +117,12 @@ struct PlaceBar {
 /// glass plate behind it.
 struct RootBarTitle: ToolbarContent {
     let title: String
+    let app: String
+    let reflowsAtLargeText: Bool
 
     var body: some ToolbarContent {
         if #available(iOS 26, *) {
-            ToolbarItem(placement: .topBarLeading) { label }
+            ToolbarItem(placement: .title) { label }
                 .sharedBackgroundVisibility(.hidden)
         } else {
             ToolbarItem(placement: .topBarLeading) { label }
@@ -128,26 +130,21 @@ struct RootBarTitle: ToolbarContent {
     }
 
     private var label: some View {
-        Text(title)
-            .kitType(.title)
-            .foregroundStyle(Surface.ink)
-            .lineLimit(1)
-            .fixedSize()
-            .accessibilityAddTraits(.isHeader)
-            .accessibilityIdentifier("kit-header-title")
+        HStack(spacing: reflowsAtLargeText ? 0 : 8) {
+            if !reflowsAtLargeText { AppIdentityGlyph(appID: app) }
+            Text(title)
+                .kitType(.title)
+                .foregroundStyle(Surface.ink)
+                .lineLimit(reflowsAtLargeText ? 2 : 1)
+                .fixedSize(horizontal: !reflowsAtLargeText, vertical: true)
+                .layoutPriority(1)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("kit-header-title")
+        }
     }
 }
 
 extension View {
-    /// An app root's title in the bar's top row, large at the leading edge (see `RootBarTitle`).
-    func kitRootTitle(_ title: String) -> some View {
-        self
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(true)
-            .toolbar { RootBarTitle(title: title) }
-    }
-
     /// A pushed page's title inline in the bar, beside the back chevron.
     func kitInlineTitle(_ title: String) -> some View {
         self.navigationTitle(title).navigationBarTitleDisplayMode(.inline)
@@ -270,14 +267,19 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
     var subtitle: SubtitleSlot? = nil
     /// A bar of the place's own: no drawn title, its leading view and keys in the system bar.
     var bar: PlaceBar? = nil
+    /// A plain list can sit on the shared plain-page surface while card-based apps keep `page`.
+    var pageSurface: Color = Surface.page
     var showsBand: Bool = true
     let trailing: () -> Trailing
     let band: () -> Band
     let content: () -> Content
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.shellStatusLine) private var shellLine
     @State private var keyboardUp = false
+
+    private var reflowsAtLargeText: Bool { dynamicTypeSize >= Theme.reflowSize }
 
     /// File-private: an app passes its one action as a `RoomAction` value
     /// (R-CHROME-1), through the init below.
@@ -289,6 +291,7 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         filter: FilterSlot? = nil,
         subtitle: SubtitleSlot? = nil,
         bar: PlaceBar? = nil,
+        pageSurface: Color = Surface.page,
         showsBand: Bool = true,
         @ViewBuilder trailing: @escaping () -> Trailing,
         @ViewBuilder band: @escaping () -> Band,
@@ -301,6 +304,7 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         self.filter = filter
         self.subtitle = subtitle
         self.bar = bar
+        self.pageSurface = pageSurface
         self.showsBand = showsBand
         self.trailing = trailing
         self.band = band
@@ -308,6 +312,16 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
     }
 
     private var showsBarTitle: Bool { bar == nil || bar?.showsTitle == true }
+
+    private var needsPrincipalPlaceholder: Bool {
+        if #available(iOS 26, *) { return !showsBarTitle }
+        return true
+    }
+
+    private var rootTitleDisplayMode: ToolbarTitleDisplayMode {
+        if #available(iOS 26, *), showsBarTitle { return .inlineLarge }
+        return .inline
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -327,18 +341,18 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Surface.page.ignoresSafeArea())
+        .background(pageSurface.ignoresSafeArea())
         .overlay(alignment: .leading) { EdgeSwipeHome() }
         .environment(\.appAccent, AppAccent(app))
         .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbarTitleDisplayMode(rootTitleDisplayMode)
         // AN APP ROOT HAS NO BACK CHEVRON: it is reached from Home and returns by the band's
         // Home key; a chevron appears only on a page drilled into (`PushedPage`).
         .navigationBarBackButtonHidden(true)
         .toolbar {
             // THE HEADER'S TWO TRAILING ITEMS: the filter menu, then the app's one verb.
             if showsBarTitle {
-                RootBarTitle(title: title)
+                RootBarTitle(title: title, app: app, reflowsAtLargeText: reflowsAtLargeText)
             } else if let bar {
                 // NO TITLE (the Calendar's Day and Week): the month chip is the page's name and
                 // stands in the top row, where the title would.
@@ -354,10 +368,12 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
                 // app's accent from here and not the shell's teal.
                 trailing().environment(\.appAccent, AppAccent(app))
             }
-            // The title is drawn in the page, so the bar's own is put away; the item keeps the
-            // back label the system takes from `navigationTitle`.
-            ToolbarItem(placement: .principal) {
-                Color.clear.frame(width: 1, height: 1).accessibilityHidden(true)
+            // The semantic title placement owns this slot on iOS 26+. The clear principal item
+            // continues to suppress a duplicate system title for custom and older-system bars.
+            if needsPrincipalPlaceholder {
+                ToolbarItem(placement: .principal) {
+                    Color.clear.frame(width: 1, height: 1).accessibilityHidden(true)
+                }
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -414,6 +430,7 @@ extension AppPlace where Trailing == RoomTrailing {
         filter: FilterSlot? = nil,
         subtitle: SubtitleSlot? = nil,
         bar: PlaceBar? = nil,
+        pageSurface: Color = Surface.page,
         showsBand: Bool = true,
         @ViewBuilder band: @escaping () -> Band,
         @ViewBuilder content: @escaping () -> Content
@@ -426,6 +443,7 @@ extension AppPlace where Trailing == RoomTrailing {
             filter: filter,
             subtitle: subtitle,
             bar: bar,
+            pageSurface: pageSurface,
             showsBand: showsBand,
             trailing: { RoomTrailing(action: trailing, app: app) },
             band: band,
@@ -528,6 +546,9 @@ struct PushedPage<Trailing: View, Content: View>: View {
 struct EditorRoom<Trailing: View, Content: View>: View {
     let title: String
     let status: Centraid_Core_V1_Autosave
+    var statusLine: Centraid_Core_V1_StatusLine? = nil
+    var statusIdentifier: String = "status-action"
+    var onStatusAct: (() -> Void)? = nil
     var closeLabel: String = KitWords.DONE
     let onClose: () -> Void
     let onDeparted: () -> Void
@@ -539,6 +560,9 @@ struct EditorRoom<Trailing: View, Content: View>: View {
     init(
         title: String,
         status: Centraid_Core_V1_Autosave,
+        statusLine: Centraid_Core_V1_StatusLine? = nil,
+        statusIdentifier: String = "status-action",
+        onStatusAct: (() -> Void)? = nil,
         closeLabel: String = KitWords.DONE,
         onClose: @escaping () -> Void,
         onDeparted: @escaping () -> Void,
@@ -547,6 +571,9 @@ struct EditorRoom<Trailing: View, Content: View>: View {
     ) {
         self.title = title
         self.status = status
+        self.statusLine = statusLine
+        self.statusIdentifier = statusIdentifier
+        self.onStatusAct = onStatusAct
         self.closeLabel = closeLabel
         self.onClose = onClose
         self.onDeparted = onDeparted
@@ -556,17 +583,23 @@ struct EditorRoom<Trailing: View, Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // WITH NO TRAILING CONTROL THE STATUS TAKES THE BAR'S TRAILING SLOT (the boards' "Done |
-            // title | Saved"); an editor with its own trailing key keeps the line over the content.
-            if !statusInBar {
-                AutosaveStatus(status)
-                    .padding(.horizontal, CentraidGeometry.pageMargin)
-                    .padding(.bottom, 4)
-            }
             content()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .background(Theme.color("bg", scheme).ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Group {
+                if let statusLine,
+                   !statusLine.sentence.isEmpty {
+                    StatusLineView(status: statusLine, identifier: statusIdentifier, onAct: onStatusAct)
+                } else {
+                    AutosaveStatus(status)
+                        .padding(.horizontal, CentraidGeometry.pageMargin)
+                        .padding(.vertical, 8)
+                        .background(Surface.page)
+                }
+            }
+        }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
@@ -585,8 +618,8 @@ struct EditorRoom<Trailing: View, Content: View>: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("kit-editor-close")
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                if statusInBar { AutosaveStatus(status, inline: true) } else { trailing() }
+            if !statusInBar {
+                ToolbarItem(placement: .topBarTrailing) { trailing() }
             }
         }
         .onDisappear(perform: onDeparted)

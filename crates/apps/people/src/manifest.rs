@@ -32,7 +32,7 @@ pub fn manifest() -> &'static Manifest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use centraid_apps_kit::manifest::{CANONICAL_DESIGNED_STATES, Confirmation, ScopeVerbs};
+    use centraid_apps_kit::manifest::{Confirmation, ScopeVerbs};
 
     use crate::commands::{ACTIONS, Confirm, act_scope_tables, action_row};
     use crate::queries::{ROSTER_MAX, ROSTER_MIN};
@@ -141,23 +141,6 @@ mod tests {
                 .scopes
                 .iter()
                 .all(|scope| matches!(scope.verbs, ScopeVerbs::Read | ScopeVerbs::Act))
-        );
-        assert!(
-            manifest.ext_tables.is_empty(),
-            "People is a projection over the vault's own tables: no data of its own"
-        );
-    }
-
-    #[test]
-    fn the_state_partition_is_closed_and_people_designs_all_seven() {
-        let states = manifest()
-            .states
-            .as_ref()
-            .expect("People declares its designed states");
-        assert_eq!(states.designed.len(), CANONICAL_DESIGNED_STATES.len());
-        assert!(
-            states.excluded.is_empty(),
-            "People has no unrepresentable state; every exclusion needs a reason and a citation"
         );
     }
 

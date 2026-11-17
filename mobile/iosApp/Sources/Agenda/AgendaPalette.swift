@@ -21,8 +21,8 @@ enum AgendaPalette {
     }
 }
 
-/// The smart-list cards of the Reminders home: a 2-column grid of rounded
-/// cards, each a glyph, a big count and the label, in the card's colour.
+/// The smart-list cards of the Reminders home: a 2-column grid of paper cards,
+/// each a list-coloured glyph, an ink count and the label.
 struct AgendaSmartListGrid: View {
     let lists: [Centraid_Core_V1_AgendaSmartList]
     let open: (Centraid_Core_V1_Route) -> Void
@@ -35,23 +35,27 @@ struct AgendaSmartListGrid: View {
                 Button { open(list.route) } label: {
                     VStack(alignment: .leading) {
                         HStack(alignment: .top) {
-                            CentraidIconView(iconKey: list.iconKey, tint: .white, size: 26)
+                            CentraidIconView(
+                                iconKey: list.iconKey,
+                                tint: AgendaPalette.list(list.colorKey) ?? AppAccent("reminders").text,
+                                size: 26
+                            )
                             Spacer(minLength: 0)
                             if !list.count.isEmpty {
                                 Text(list.count)
-                                    .kitScaledFont(28, weight: .bold)
-                                    .foregroundStyle(.white)
+                                    .kitType(.title)
+                                    .foregroundStyle(Surface.ink)
                             }
                         }
                         Spacer(minLength: 0)
                         Text(list.label)
-                            .kitScaledFont(17, weight: .semibold)
-                            .foregroundStyle(.white)
+                            .kitType(.row)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(Surface.ink)
                     }
                     .padding(14)
                     .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
-                    .background(AgendaPalette.token(list.colorKey))
-                    .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+                    .kitBorderedCard()
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(list.accessibilityLabel)

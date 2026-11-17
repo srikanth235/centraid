@@ -201,6 +201,7 @@ struct AgendaViewMenu: View {
 /// and the anchor's month, leading in the system bar. A tap sends `MonthChipTapped`; Rust opens
 /// the Month. Nothing is drawn until Rust has named the month.
 struct AgendaMonthChip: View {
+    let appID: String
     let header: Centraid_Core_V1_AgendaCalendarHeader
     let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
 
@@ -209,7 +210,8 @@ struct AgendaMonthChip: View {
             Button {
                 send(AgendaEvents.make { $0.monthChip = .init() })
             } label: {
-                HStack(spacing: 4) {
+                HStack(spacing: 8) {
+                    AppIdentityGlyph(appID: appID)
                     CentraidIconView(iconKey: header.monthIconKey, tint: Surface.ink, size: 18)
                     Text(header.monthLabel)
                         .centraidType("smallStrong")

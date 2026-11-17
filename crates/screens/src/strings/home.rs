@@ -1,4 +1,4 @@
-//! HOME'S OWN SENTENCES (#1135): the springboard, its tiles and day-one page,
+//! HOME'S OWN SENTENCES (#1135): the springboard,
 //! the vault switcher, the band and the search, plus the tile sentences the app
 //! string modules here do not have (Agenda's, Docs', Notes', People's, Health's). A tile's
 //! sentence an app module already has (Locker's, Money's, Photos') is read from
@@ -11,8 +11,6 @@ catalog! {
     plain band_chat = ("Chat", "Chat");
     plain band_current_spoken = ("current place", "current place");
     plain band_home = ("Home", "Home");
-    plain home_day_one_body = ("Add photos and documents to get started.", "Add photos and documents to get started.");
-    plain home_day_one_title = ("Nothing in here yet", "Nothing in here yet");
     plain first_launch_body = ("Apps and an assistant on this phone, backed up to your own devices.", "Apps and an assistant on this phone, backed up to your own devices.");
     plain first_launch_house_title = ("Apps on this phone", "Apps on this phone");
     plain first_launch_house_body = ("Photos, notes, documents, money and more, with no account to make.", "Photos, notes, documents, money and more, with no account to make.");

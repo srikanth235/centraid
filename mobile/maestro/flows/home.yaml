@@ -22,31 +22,30 @@ name: home
 - assertVisible:
     id: "home-backup-status"
 
-# DAY ONE is a claim about the vault, and only a settled, readable, empty vault
-# earns it. When it shows, first moves show with it — never dashed placeholders.
+# DAY ONE keeps Rust's first-run tile order and shows each app's own typed state.
+# A tile invitation never turns into an aggregate claim about the whole vault.
 - runFlow:
     when:
       visible:
         id: "home-day-one"
     commands:
-      - assertVisible: "Nothing in here yet"
       - assertVisible:
-          id: "home-first-moves"
-      # An unreadable Home must NOT be able to reach this screen.
-      - assertNotVisible: "Not on this phone yet"
+          id: "home-grid"
+      - assertNotVisible: "Nothing in here yet"
 
-# EVERY TILE UNREADABLE still shows the grid — demoting them all would leave a
-# launcher with no tiles — and it must never claim the vault is empty.
+# An unreadable tile remains visibly distinct from a typed-empty invitation;
+# the grid remains available so the member can still open another app.
 - runFlow:
     when:
       visible: "Not on this phone yet"
     commands:
       - assertVisible:
           id: "home-grid"
+      - assertVisible: "Not on this phone yet"
       - assertNotVisible: "Nothing in here yet"
 
-# A Home that could not load at all has NO grid: it does not invent eight empty
-# apps out of one failure.
+# A Home that could not load at all has NO grid: a read failure is not a set of
+# empty app invitations.
 - runFlow:
     when:
       visible:
@@ -56,6 +55,66 @@ name: home
           id: "home-grid"
 
 # EVERY APP IS A TILE ON HOME (R-ONBOARD-11), empty or not. There is no All
-# apps sheet.
+# apps sheet. Rust can choose first-run or content order; return to the top
+# before searching down for each app so neither order depends on the last one.
 - assertVisible:
     id: "home-grid"
+- scrollUntilVisible:
+    element: { id: "home-tile-calendar" }
+    direction: UP
+    centerElement: true
+- scrollUntilVisible:
+    element: { id: "home-tile-calendar" }
+    centerElement: true
+- scrollUntilVisible:
+    element: { id: "home-tile-reminders" }
+    centerElement: true
+- scrollUntilVisible:
+    element: { id: "home-tile-calendar" }
+    direction: UP
+    centerElement: true
+- scrollUntilVisible:
+    element: { id: "home-tile-photos" }
+    centerElement: true
+- scrollUntilVisible:
+    element: { id: "home-tile-calendar" }
+    direction: UP
+    centerElement: true
+- scrollUntilVisible:
+    element: { id: "home-tile-notes" }
+    centerElement: true
+- scrollUntilVisible:
+    element: { id: "home-tile-calendar" }
+    direction: UP
+    centerElement: true
+- scrollUntilVisible:
+    element: { id: "home-tile-docs" }
+    centerElement: true
+- scrollUntilVisible:
+    element: { id: "home-tile-calendar" }
+    direction: UP
+    centerElement: true
+- scrollUntilVisible:
+    element: { id: "home-tile-people" }
+    centerElement: true
+- scrollUntilVisible:
+    element: { id: "home-tile-calendar" }
+    direction: UP
+    centerElement: true
+- scrollUntilVisible:
+    element: { id: "home-tile-money" }
+    centerElement: true
+- scrollUntilVisible:
+    element: { id: "home-tile-calendar" }
+    direction: UP
+    centerElement: true
+- scrollUntilVisible:
+    element: { id: "home-tile-health" }
+    centerElement: true
+- scrollUntilVisible:
+    element: { id: "home-tile-calendar" }
+    direction: UP
+    centerElement: true
+- scrollUntilVisible:
+    element: { id: "home-tile-locker" }
+    centerElement: true

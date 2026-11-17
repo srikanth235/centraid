@@ -101,89 +101,93 @@ public fun VaultHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(
-            Modifier
-                .weight(1f)
-                .clickable(onClick = onSwitchVault)
-                .testTag("home-vault-switch")
-                // The label REPLACES the lines for assistive tech, so a screen
-                // reader hears one sentence rather than a name and an orphan
-                // line. The backup status is a door of its own, below.
-                .semantics(mergeDescendants = true) {
-                    contentDescription = bar.switch_label
-                },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Box(
+        Column(Modifier.weight(1f)) {
+            Row(
                 Modifier
-                    .size(30.dp)
-                    // The control rung from the token scale, not the chip
-                    // ratio — that is for app marks.
-                    .clip(RoundedCornerShape((LocalCentraidTokens.current.radii["md"] ?: 0).dp))
-                    .background(hue.ground),
-                contentAlignment = Alignment.Center,
+                    .fillMaxWidth()
+                    .heightIn(min = KitGeometry.ROW_MIN)
+                    .clickable(onClick = onSwitchVault)
+                    .testTag("home-vault-switch")
+                    // The label REPLACES the lines for assistive tech, so a screen
+                    // reader hears one sentence rather than a name and an orphan
+                    // line. The backup status is a separate door below.
+                    .semantics(mergeDescendants = true) {
+                        contentDescription = bar.switch_label
+                    },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(
-                    vault?.initial.orEmpty(),
-                    style = centraidType("smallStrong"),
-                    color = hue.ink,
-                )
-            }
-            Column(Modifier.weight(1f)) {
-                Text(
-                    name,
-                    style = centraidType("smallStrong"),
-                    color = centraidColor("text"),
-                    // AT THE LARGEST TEXT THE NAME WRAPS and is never cut (#1173).
-                    maxLines = if (rememberLargestText()) Int.MAX_VALUE else 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (status.isNotEmpty()) {
-                    // THE BACKUP STATUS (R-ONBOARD-11): a dot in the tone's
-                    // colour when it wants the member, then the few words, in
-                    // the same mono line the state line was; the Backup tab's
-                    // door (iOS `VaultHeader.statusLine`).
-                    Row(
-                        Modifier
-                            .heightIn(min = 18.dp)
-                            .clickable(onClick = onOpenBackup)
-                            .testTag("home-backup-status")
-                            .semantics(mergeDescendants = true) {
-                                contentDescription = bar.backup_open_label
-                            },
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        if (loud) {
-                            Box(
-                                Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        centraidColor(if (backup?.tone == HomeTone.HOME_TONE_URGENT) "danger" else "attention"),
-                                    ),
-                            )
-                        }
-                        Text(
-                            status,
-                            style = centraidType("mono"),
-                            color = centraidColor(if (loud) "text" else "textFaint"),
-                        )
-                    }
-                } else if (line.isNotEmpty()) {
+                Box(
+                    Modifier
+                        .size(30.dp)
+                        // The control rung from the token scale, not the chip
+                        // ratio — that is for app marks.
+                        .clip(RoundedCornerShape((LocalCentraidTokens.current.radii["md"] ?: 0).dp))
+                        .background(hue.ground),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Text(
-                        line,
-                        style = centraidType("mono"),
-                        color = centraidColor("textFaint"),
+                        vault?.initial.orEmpty(),
+                        style = centraidType("smallStrong"),
+                        color = hue.ink,
                     )
                 }
-                if (waiting.isNotEmpty()) {
+                Column(Modifier.weight(1f)) {
                     Text(
-                        waiting,
+                        name,
+                        style = centraidType("display"),
+                        color = centraidColor("text"),
+                        // AT THE LARGEST TEXT THE NAME WRAPS and is never cut (#1173).
+                        maxLines = if (rememberLargestText()) Int.MAX_VALUE else 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (status.isEmpty() && line.isNotEmpty()) {
+                        Text(
+                            line,
+                            style = centraidType("mono"),
+                            color = centraidColor("textFaint"),
+                        )
+                    }
+                    if (waiting.isNotEmpty()) {
+                        Text(
+                            waiting,
+                            style = centraidType("mono"),
+                            color = centraidColor("textFaint"),
+                            modifier = Modifier.testTag("home-originals-waiting"),
+                        )
+                    }
+                }
+            }
+            if (status.isNotEmpty()) {
+                // THE BACKUP STATUS IS ITS OWN FULL-SIZE DOOR: it no longer sits
+                // inside the vault-switch hit target or merges two actions.
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = KitGeometry.ROW_MIN)
+                        .clickable(onClick = onOpenBackup)
+                        .padding(start = 42.dp)
+                        .testTag("home-backup-status")
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = bar.backup_open_label
+                        },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    if (loud) {
+                        Box(
+                            Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    centraidColor(if (backup?.tone == HomeTone.HOME_TONE_URGENT) "danger" else "attention"),
+                                ),
+                        )
+                    }
+                    Text(
+                        status,
                         style = centraidType("mono"),
-                        color = centraidColor("textFaint"),
-                        modifier = Modifier.testTag("home-originals-waiting"),
+                        color = centraidColor(if (loud) "text" else "textFaint"),
                     )
                 }
             }

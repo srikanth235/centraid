@@ -5,6 +5,13 @@
 
 mod common;
 
+use std::collections::BTreeMap;
+
+use centraid_apps_kit::error::KitResult;
+use centraid_apps_kit::page::{Page, PageCursor, PageRequest};
+use centraid_apps_kit::reads::PageDoor;
+use centraid_apps_kit::row::{Cell, Row};
+use centraid_apps_kit::statement::PageQuery;
 use centraid_apps_kit::testdoor::TestDoor;
 use centraid_apps_money::import::{CsvOptions, read_csv};
 use centraid_apps_money::queries::{
@@ -22,6 +29,102 @@ fn read<T>(world: &World, body: impl FnOnce(&TestDoor<'_>) -> T) -> T {
         .vault
         .read(|connection| Ok(body(&TestDoor::new(connection))))
         .expect("reads")
+}
+
+struct BoundedLedgerDoor {
+    total: usize,
+    amount_minor: i64,
+    pending_rows: usize,
+    short_page: bool,
+    empty_cursor: bool,
+    calls: std::cell::Cell<usize>,
+    max_limit: std::cell::Cell<usize>,
+    delivered: std::cell::Cell<usize>,
+    trash_reads: std::cell::Cell<usize>,
+}
+
+impl PageDoor for BoundedLedgerDoor {
+    fn page(&self, query: &PageQuery, request: &PageRequest) -> KitResult<Page<Row>> {
+        self.calls.set(self.calls.get() + 1);
+        self.max_limit.set(self.max_limit.get().max(request.limit));
+        if query.name == "money.transactions.trashed" {
+            self.trash_reads.set(self.trash_reads.get() + 1);
+            return Ok(Page {
+                rows: Vec::new(),
+                next: None,
+            });
+        }
+        assert_eq!(query.name, "money.account.ledger");
+        if self.empty_cursor && request.after.is_none() {
+            return Ok(Page {
+                rows: Vec::new(),
+                next: Some(PageCursor {
+                    sort_key: "2024-03-06".to_owned(),
+                    pk: "empty-cursor".to_owned(),
+                }),
+            });
+        }
+        if self.short_page && request.after.is_none() {
+            let mut row = Row::new();
+            row.insert("id".to_owned(), Cell::Text("txn-short".to_owned()));
+            row.insert("posted_on".to_owned(), Cell::Text("2024-03-06".to_owned()));
+            row.insert("amount_minor".to_owned(), Cell::Integer(self.amount_minor));
+            row.insert("status".to_owned(), Cell::Text("posted".to_owned()));
+            self.delivered.set(self.delivered.get() + 1);
+            return Ok(Page {
+                rows: vec![row],
+                next: Some(PageCursor {
+                    sort_key: "2024-03-06".to_owned(),
+                    pk: "txn-short".to_owned(),
+                }),
+            });
+        }
+        let start = request.after.as_ref().map_or(0, |cursor| {
+            cursor
+                .pk
+                .strip_prefix("txn-")
+                .expect("transaction cursor")
+                .parse::<usize>()
+                .expect("numeric transaction cursor")
+                + 1
+        });
+        let end = (start + request.limit).min(self.total);
+        let rows: Vec<Row> = (start..end)
+            .map(|index| {
+                let mut row = Row::new();
+                row.insert("id".to_owned(), Cell::Text(format!("txn-{index}")));
+                row.insert("posted_on".to_owned(), Cell::Text("2024-03-06".to_owned()));
+                row.insert("amount_minor".to_owned(), Cell::Integer(self.amount_minor));
+                let status = if index < self.pending_rows {
+                    "pending"
+                } else {
+                    "posted"
+                };
+                row.insert("status".to_owned(), Cell::Text(status.to_owned()));
+                row
+            })
+            .collect();
+        self.delivered.set(self.delivered.get() + rows.len());
+        let next = (end < self.total).then(|| PageCursor {
+            sort_key: "2024-03-06".to_owned(),
+            pk: format!("txn-{}", end - 1),
+        });
+        Ok(Page { rows, next })
+    }
+}
+
+fn bounded_ledger_door(total: usize, amount_minor: i64, pending_rows: usize) -> BoundedLedgerDoor {
+    BoundedLedgerDoor {
+        total,
+        amount_minor,
+        pending_rows,
+        short_page: false,
+        empty_cursor: false,
+        calls: std::cell::Cell::default(),
+        max_limit: std::cell::Cell::default(),
+        delivered: std::cell::Cell::default(),
+        trash_reads: std::cell::Cell::default(),
+    }
 }
 
 #[test]
@@ -107,6 +210,11 @@ fn an_account_reads_with_its_bank_number_its_close_and_nothing_from_the_trash() 
                 "on_budget": false }),
     );
     world.ok("flag.set", json!({ "id": "acct-2", "flag": "archived" }));
+    world.ok(
+        "account.add",
+        json!({ "id": "acct-3", "title": "Euro cash", "type": "cash", "currency": "EUR",
+                "opening_minor": 300, "opening_on": "2024-02-01", "on_budget": true }),
+    );
     let accounts = read(&world, |door| load_accounts(door).expect("accounts"));
     let everyday = accounts.iter().find(|a| a.account_id == "acct-1").unwrap();
     let card = accounts.iter().find(|a| a.account_id == "acct-2").unwrap();
@@ -133,9 +241,33 @@ fn an_account_reads_with_its_bank_number_its_close_and_nothing_from_the_trash() 
         )
     );
     assert!(card.closed_on.as_deref().is_some_and(|day| day.len() == 10));
+    let today = card.closed_on.as_deref().expect("close date");
+    let screen = read(&world, |door| {
+        centraid_apps_money::phone::accounts(door, today).expect("Accounts")
+    });
+    let closed_card = screen
+        .off_budget
+        .iter()
+        .find(|a| a.account_id == "acct-2")
+        .unwrap();
+    assert!(closed_card.closed);
+    let worth: BTreeMap<&str, (i64, bool)> = screen
+        .net_worth
+        .iter()
+        .map(|line| {
+            (
+                line.amount.currency.code(),
+                (line.amount.amount_minor, line.complete),
+            )
+        })
+        .collect();
+    assert_eq!(
+        worth,
+        BTreeMap::from([("EUR", (300, true)), ("USD", (0, true))])
+    );
     world.ok("entity.trash", json!({ "id": "acct-1" }));
     let accounts = read(&world, |door| load_accounts(door).expect("accounts"));
-    assert_eq!(accounts.len(), 1);
+    assert_eq!(accounts.len(), 2);
 }
 
 #[test]
@@ -504,13 +636,273 @@ fn a_balance_counts_the_lines_after_the_opening_day_and_no_line_twice() {
     assert_eq!(account.opening_on.as_deref(), Some("2024-03-05"));
     assert_eq!(
         centraid_apps_money::engine::balance_on(&account, &ledger, "2024-03-31"),
-        100_000 - 250 + 5_000
+        Some(100_000 - 250 + 5_000)
     );
     assert_eq!(
         centraid_apps_money::engine::balance_on(&account, &ledger, "2024-03-05"),
-        100_000,
+        Some(100_000),
         "the opening day itself is the opening balance"
     );
+    let screen = read(&world, |door| {
+        centraid_apps_money::phone::accounts(door, "2024-03-31").expect("Accounts")
+    });
+    assert_eq!(
+        screen.on_budget[0].balance.as_ref().map(|m| m.amount_minor),
+        Some(104_750),
+        "the streamed Accounts fold shares the opening-day arithmetic"
+    );
+}
+
+#[test]
+fn streamed_accounts_uses_latest_past_checkpoint_and_keeps_void_and_future_rows_out() {
+    let world = World::founded("accounts-checkpoints");
+    world.ok(
+        "account.add",
+        json!({ "id": "acct-1", "title": "Everyday", "type": "checking", "currency": "USD",
+                "opening_minor": 1_000, "opening_on": "2024-03-05" }),
+    );
+    world.import(
+        "acct-1",
+        &[
+            ("csv:void", "2024-03-06", -100, "VOIDED"),
+            ("csv:credit", "2024-03-12", 500, "CREDIT"),
+            ("csv:debit", "2024-03-18", -50, "DEBIT"),
+            ("csv:future", "2024-04-02", 700, "FUTURE"),
+        ],
+    );
+    world.ok("txn.void", json!({ "id": world.line("csv:void") }));
+    for (day, balance_minor) in [
+        ("2024-03-10", 1_000),
+        ("2024-03-20", 1_450),
+        ("2024-04-03", 9_999),
+    ] {
+        world.ok(
+            "checkpoint.record",
+            json!({ "account_id": "acct-1", "day": day, "balance_minor": balance_minor }),
+        );
+    }
+    let screen = read(&world, |door| {
+        centraid_apps_money::phone::accounts(door, "2024-03-31").expect("Accounts")
+    });
+    let account = &screen.on_budget[0];
+    assert_eq!(
+        account.balance.as_ref().map(|m| m.amount_minor),
+        Some(1_450)
+    );
+    let checkpoint = account.checkpoint.as_ref().expect("past checkpoint");
+    assert_eq!(
+        (
+            checkpoint.as_of.as_str(),
+            checkpoint.stated.amount_minor,
+            checkpoint.delta.amount_minor,
+            checkpoint.agrees
+        ),
+        ("2024-03-20", 1_450, 0, true),
+        "future checkpoint ignored; void and opening-day rules stay in the shared fold"
+    );
+}
+
+#[test]
+fn streamed_accounts_finds_a_past_checkpoint_beyond_the_global_four_hundred_rows() {
+    let world = World::founded("accounts-checkpoint-window");
+    world.account("acct-many", "Many statements", "checking", "USD");
+    world.account("acct-target", "Target", "savings", "EUR");
+    world.ok(
+        "checkpoint.record",
+        json!({ "account_id": "acct-target", "day": "2024-03-20", "balance_minor": 900 }),
+    );
+    for offset in 0..401 {
+        let day = centraid_apps_money::civil::shift("2025-01-01", offset).expect("future day");
+        world.ok(
+            "checkpoint.record",
+            json!({ "account_id": "acct-many", "day": day, "balance_minor": offset }),
+        );
+    }
+
+    let screen = read(&world, |door| {
+        centraid_apps_money::phone::accounts(door, "2024-03-31").expect("Accounts")
+    });
+    let target = screen
+        .on_budget
+        .iter()
+        .chain(&screen.off_budget)
+        .find(|account| account.account_id == "acct-target")
+        .expect("target account");
+    let checkpoint = target
+        .checkpoint
+        .as_ref()
+        .expect("checkpoint outside global page");
+    assert_eq!(
+        (checkpoint.as_of.as_str(), checkpoint.stated.amount_minor),
+        ("2024-03-20", 900)
+    );
+    let many = screen
+        .on_budget
+        .iter()
+        .chain(&screen.off_budget)
+        .find(|account| account.account_id == "acct-many")
+        .expect("many-checkpoint account");
+    assert!(
+        many.checkpoint.is_none(),
+        "no past checkpoint is actually present"
+    );
+}
+
+#[test]
+fn streamed_ledger_preserves_the_forty_thousand_row_probe_boundary() {
+    for (total, pending_rows, complete, expected_balance) in [
+        (39_999, 1, true, Some(-39_998)),
+        (40_000, 0, true, Some(-40_000)),
+        (40_001, 0, false, None),
+    ] {
+        let door = bounded_ledger_door(total, -1, pending_rows);
+        let mut trash = None;
+        let mut visited = 0;
+        let account = centraid_apps_money::queries::AccountRow {
+            account_id: "acct-1".to_owned(),
+            name: "Everyday".to_owned(),
+            kind: "checking".to_owned(),
+            on_budget: true,
+            opening_minor: 0,
+            opening_on: None,
+            closed_on: None,
+            currency: "USD".to_owned(),
+            external_ref: None,
+        };
+        let mut fold =
+            centraid_apps_money::engine::AccountBalanceFold::new(&account, &[], "2024-03-31");
+        let result =
+            centraid_apps_money::queries::fold_account_ledger(&door, "acct-1", &mut trash, |row| {
+                visited += 1;
+                fold.push(row);
+            })
+            .expect("bounded ledger fold");
+        assert_eq!(result, complete, "total source rows: {total}");
+        let delivered = total.min(40_000);
+        let pages = delivered.div_ceil(500);
+        assert_eq!(
+            visited, delivered,
+            "rows folded before completion is decided"
+        );
+        assert_eq!(door.delivered.get(), delivered, "delivered source rows");
+        assert_eq!(
+            door.calls.get(),
+            pages + 1,
+            "ledger pages plus one trash read"
+        );
+        assert_eq!(door.max_limit.get(), 500, "one page at a time");
+        assert_eq!(door.trash_reads.get(), 1, "trash set loaded once");
+        let balance = fold.finish(result);
+        assert_eq!(balance.balance_minor, expected_balance);
+        let worth = centraid_apps_money::engine::net_worth(
+            std::slice::from_ref(&balance),
+            std::slice::from_ref(&account),
+            "2024-03-31",
+        );
+        assert_eq!(worth["USD"].1, complete, "net-worth completeness");
+    }
+}
+
+#[test]
+fn streamed_ledger_stops_on_short_pages_that_still_have_a_cursor() {
+    for (short_page, empty_cursor, expected_calls, expected_trash_reads) in
+        [(true, false, 2, 1), (false, true, 1, 0)]
+    {
+        let mut door = bounded_ledger_door(1_000, -1, 0);
+        door.short_page = short_page;
+        door.empty_cursor = empty_cursor;
+        let mut trash = None;
+        let complete =
+            centraid_apps_money::queries::fold_account_ledger(&door, "acct-1", &mut trash, |_| {})
+                .expect("short page result");
+        assert!(!complete, "a short page with a continuation is incomplete");
+        assert_eq!(door.calls.get(), expected_calls);
+        assert_eq!(door.trash_reads.get(), expected_trash_reads);
+    }
+}
+
+#[test]
+fn balance_fold_cancels_wide_prefixes_and_marks_unrepresentable_totals_unavailable() {
+    let account = centraid_apps_money::queries::AccountRow {
+        account_id: "acct-1".to_owned(),
+        name: "Everyday".to_owned(),
+        kind: "checking".to_owned(),
+        on_budget: true,
+        opening_minor: i64::MAX,
+        opening_on: None,
+        closed_on: None,
+        currency: "USD".to_owned(),
+        external_ref: None,
+    };
+    let txn = |txn_id: &str, amount_minor: i64, direction| centraid_apps_money::queries::TxnRow {
+        txn_id: txn_id.to_owned(),
+        account_id: account.account_id.clone(),
+        posted_on: "2024-03-06".to_owned(),
+        amount_minor,
+        currency: "USD".to_owned(),
+        direction,
+        status: "posted".to_owned(),
+        description: String::new(),
+        category_concept_id: None,
+        external_id: None,
+        display_name: None,
+        display_name_source: None,
+        memo: None,
+        check_number: None,
+        bank_type: None,
+        imported_from: None,
+    };
+    let cancelling = [
+        txn("credit", 1, centraid_apps_money::import::Direction::Credit),
+        txn("debit", 1, centraid_apps_money::import::Direction::Debit),
+    ];
+    assert_eq!(
+        centraid_apps_money::engine::balance_on(&account, &cancelling, "2024-03-31"),
+        Some(i64::MAX),
+        "the final representable balance survives an out-of-range prefix"
+    );
+    let mut fold =
+        centraid_apps_money::engine::AccountBalanceFold::new(&account, &[], "2024-03-31");
+    for row in &cancelling {
+        fold.push(row);
+    }
+    assert_eq!(fold.finish(true).balance_minor, Some(i64::MAX));
+
+    let overflowing = [txn(
+        "credit",
+        1,
+        centraid_apps_money::import::Direction::Credit,
+    )];
+    assert_eq!(
+        centraid_apps_money::engine::balance_on(&account, &overflowing, "2024-03-31"),
+        None,
+        "an unrepresentable final total is unavailable"
+    );
+    let mut fold =
+        centraid_apps_money::engine::AccountBalanceFold::new(&account, &[], "2024-03-31");
+    fold.push(&overflowing[0]);
+    let balance = fold.finish(true);
+    assert_eq!(balance.balance_minor, None);
+    assert_eq!(
+        centraid_apps_money::engine::net_worth(
+            std::slice::from_ref(&balance),
+            std::slice::from_ref(&account),
+            "2024-03-31",
+        )["USD"],
+        (0, false)
+    );
+
+    let door = bounded_ledger_door(40_001, i64::MAX, 0);
+    let mut trash = None;
+    let mut fold =
+        centraid_apps_money::engine::AccountBalanceFold::new(&account, &[], "2024-03-31");
+    let complete =
+        centraid_apps_money::queries::fold_account_ledger(&door, "acct-1", &mut trash, |row| {
+            fold.push(row)
+        })
+        .expect("bounded prefix");
+    assert!(!complete);
+    assert_eq!(fold.finish(complete).balance_minor, None);
 }
 
 #[test]
@@ -589,6 +981,17 @@ fn a_trashed_line_is_the_entitys_stamp_alone_and_a_restore_brings_it_back_exactl
     let before = figures(&world);
     // `amount_minor` is the magnitude: the sum is of what moved, in or out.
     assert_eq!(before, (4_250 + 300_000, 2, 2));
+    let account_balance = |world: &World| {
+        let screen = read(world, |door| {
+            centraid_apps_money::phone::accounts(door, "2024-03-31").expect("Accounts")
+        });
+        screen.on_budget[0]
+            .balance
+            .as_ref()
+            .expect("complete balance")
+            .amount_minor
+    };
+    assert_eq!(account_balance(&world), 295_750);
     let line_before = read(&world, |door| load_transaction(door, &grocer).expect("one"));
 
     world.ok("entity.trash", json!({ "id": grocer }));
@@ -597,6 +1000,7 @@ fn a_trashed_line_is_the_entitys_stamp_alone_and_a_restore_brings_it_back_exactl
         (300_000, 1, 1),
         "the trashed line is in no figure"
     );
+    assert_eq!(account_balance(&world), 300_000);
     assert_eq!(
         read(&world, |door| load_transaction(door, &grocer).expect("one")),
         None,
@@ -611,6 +1015,7 @@ fn a_trashed_line_is_the_entitys_stamp_alone_and_a_restore_brings_it_back_exactl
 
     world.ok("entity.restore", json!({ "id": grocer }));
     assert_eq!(figures(&world), before, "restored: every figure is back");
+    assert_eq!(account_balance(&world), 295_750);
     assert_eq!(
         read(&world, |door| load_transaction(door, &grocer).expect("one")),
         line_before,

@@ -1,364 +1,62 @@
-<section class="ch-hero wrap">
-        <p class="eyebrow r">Chapter 4 · backups</p>
-        <h1 class="r" style="--d: 0.1s">One home for your data. <em>One copy that isn't there.</em></h1>
-        <p class="lede r" style="--d: 0.22s">
-          The gateway is the sovereign control plane for your data — and one machine is still one
-          failure domain. A dead disk, a stolen laptop, a bad <code>rm</code> don't ask permission.
-          Offsite custody turns that loss into an outage: databases and code travel in encrypted
-          snapshots, while attachments are born as sealed bytes in your provider's
-          content-addressed store.
-        </p>
-      </section>
+<section class="ref-hero wrap">
+  <div>
+    <p class="eyebrow">Backups · recovery</p>
+    <h1>A backup is real <em>when it is acknowledged.</em></h1>
+  </div>
+  <p class="lede">Your phone is the vault and its only writer. It seals the backup before sending it to a gateway you control. Recovery needs both your 24-word recovery key and a reachable gateway with a sealed copy.</p>
+</section>
 
-      <!-- §01 WHY -->
-      <section class="sec wrap" id="why">
-        <p class="eyebrow r">§01 · why</p>
-        <h2 class="r" style="--d: 0.06s">A snapshot is <em>everything, sealed.</em></h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            A backup only counts if restoring it gives you back the thing you actually had — not a
-            database with no apps, or a Locker full of ciphertext nobody can open. A Centraid
-            snapshot takes that literally:
-          </p>
-        </div>
-        <div class="dt-scroll r" style="--d: 0.18s; margin-top: 24px">
-          <table class="dt">
-            <thead>
-              <tr>
-                <th>What's in it</th>
-                <th>Source</th>
-                <th>Why it has to be there</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>The vault</td>
-                <td><code>vault.db</code>, staged point-in-time</td>
-                <td>Every row, every receipt — the record itself.</td>
-              </tr>
-              <tr>
-                <td>Attachments</td>
-                <td>local-primary objects, or only the bounded outbox not yet in a remote-primary CAS</td>
-                <td>Photos, documents and receipts remain recoverable without duplicating remote bytes in every snapshot.</td>
-              </tr>
-              <tr>
-                <td>Your automations</td>
-                <td>a bundle of the gateway's code store</td>
-                <td>Automation sources are the one kind of app code you author rather than receive; the system apps themselves come back with the release.</td>
-              </tr>
-              <tr>
-                <td>The sealing key</td>
-                <td>the vault's sealed-columns key, which normally lives outside the vault directory</td>
-                <td>
-                  Without it, a restore brings back Locker's passwords as permanent ciphertext — a
-                  backup that looks complete and isn't. This is the entry that makes it a backup and
-                  not a placebo.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="aside r" style="--d: 0.24s">
-          And what never leaves your machine unencrypted: everything. Chunking, encryption and the
-          manifest all happen before a byte reaches the network — a provider stores opaque,
-          content-addressed ciphertext, never plaintext, never a key. Full format:
-          <code>packages/backup/FORMAT.md</code>.
-        </p>
-      </section>
+<section class="ref-board wrap" aria-labelledby="backup-flow-title">
+  <h2 id="backup-flow-title">From this phone to your backup</h2>
+  <figure>
+    <div class="record-map">
+      <div class="record"><span class="kind">PHONE</span><strong>Live vault</strong><span>reads and writes</span></div>
+      <div class="relation"><b aria-hidden="true">→</b>seals · direct HTTPS</div>
+      <div class="record"><span class="kind">GATEWAY</span><strong>Sealed copy</strong><span>stores · cannot open</span></div>
+    </div>
+    <figcaption class="ref-note">The phone sends each backup directly to the address in the pairing code. A gateway has no vault key and cannot read the copy.</figcaption>
+  </figure>
+  <div class="ref-foot">
+    <div class="ref-note"><h3>Records</h3><p>The Backup screen reports what each gateway acknowledged.</p></div>
+    <div class="ref-note"><h3>Original files</h3><p>Photos and videos move separately. Items still waiting keep the backup marked incomplete.</p></div>
+  </div>
+</section>
 
-      <!-- §02 SETUP -->
-      <section class="dark" id="setup">
-        <div class="wrap">
-          <p class="eyebrow r">§02 · setup</p>
-          <h2 class="r" style="--d: 0.06s">Turn it on. <em>Pick where it goes.</em></h2>
-          <p class="lede r" style="--d: 0.12s">
-            Backups are a gateway config block, same discipline as everything else here — declared,
-            not discovered:
-          </p>
-          <div class="artifact r" style="--d: 0.16s; max-width: 640px; margin-top: 8px">
-            <div class="artifact-head">
-              <span>gateway config</span><span class="tag">backup</span>
-            </div>
-            <div class="artifact-body" style="white-space: pre-wrap">
-backup: {
-  enabled: true,
-  keyringPath: "~/.centraid/backup-keyring.json",
-  provider: { kind: "local", dir: "/Volumes/backup-drive" }
-  // or: { kind: "remote", endpoint: "https://api.clawgnition.com", apiKey: "…" }
-}
+<section class="ref-details wrap" aria-label="Backup details">
+  <details open>
+      <summary><h3 id="why">What a complete backup means</h3></summary>
+      <p>Records count as backed up only when a gateway acknowledges them and confirms their content. If a file still waits, the Backup screen shows how many and why. A manual backup sends records on mobile data, but not heavy originals. Photos follow your Wi-Fi or cellular rule; video originals never cross a metered link.</p>
+  </details>
+  <details>
+      <summary><h3 id="setup">Pair a backup device</h3></summary>
+      <p>On a machine you control, run <code>centraid-gateway serve --data-dir DIR</code>. In the phone's Backup screen, scan its fresh QR code and compare every group of the safety number with the number shown by the gateway. Stop if they differ. Pair each gateway separately; each keeps its own sealed copy.</p>
+      <p>The phone makes direct HTTPS connections and checks the certificate fingerprint carried in the QR. It works offline; backup waits when the gateway is unreachable. Background work runs only in the windows the operating system grants, and force-quitting stops it until the next launch.</p>
+  </details>
+  <details>
+      <summary><h3 id="recovery">Keep the recovery key and a reachable backup</h3></summary>
+      <p>Your recovery key is 24 words. Those words derive the keys that open your backup. The phone may also keep a protected copy with iCloud Keychain on iPhone or Google on Android when that platform can restore it. The Backup screen says where the key is saved; keep the 24 words even when it is saved elsewhere.</p>
+      <p>The words alone cannot restore a lost vault: you also need a reachable gateway that holds its sealed backup. Centraid cannot replace a missing key or a missing backup.</p>
+  </details>
+  <details>
+      <summary><h3 id="restore">Restore to a new phone</h3></summary>
+      <p>Choose <b>Restore my vaults</b>, provide the 24 words if the phone cannot use a key restored by its operating system, and connect to a reachable gateway. If you need a new QR, run <code>centraid-gateway pair --data-dir DIR</code> beside the running gateway. Pairing codes are single-use and expire after a day.</p>
+      <p>The phone checks the records before it claims a new writer position. If it cannot establish that the copy is newest, it asks before claiming. Originals that reached the gateway can be fetched later; an original that never arrived may be unavailable after the source phone is lost.</p>
+      <p>A verified takeover stops backup work to that gateway and invalidates the old phone's token there. The old phone learns only when it contacts a gateway. Once it has learned of any verified move, ordinary member write actions are refused. Its backup pass may continue to other gateways that have not moved; the whole backup door stops only after every paired gateway has moved.</p>
+  </details>
+  <details>
+      <summary><h3 id="check">Check a backup and understand retention</h3></summary>
+      <p><b>Check my backup</b> restores records from each reachable gateway into a scratch copy, verifies files by name and opens a bounded sample. The result says whether the copy opened, had a problem, or could not be checked. The check needs free space equal to the vault size, plus one tenth and 64 MiB.</p>
+      <p>The phone keeps up to seven daily, four weekly and six monthly snapshots, counting only periods with a snapshot; the newest is always kept. A deleted file stays while a kept snapshot needs it. After the phone requests deletion, the gateway holds the copy for at least seven days; if it is paused or offline, it may keep it longer. There is no exact deletion date to promise.</p>
+      <p>Technical detail: <a href="https://github.com/srikanth235/centraid/blob/main/.claude/skills/backup/phone.md">phone backup rules</a> · <a href="https://github.com/srikanth235/centraid/blob/main/crates/gateway/README.md">gateway README</a>.</p>
+  </details>
+  <details>
+      <summary><h3 id="limits">What a backup cannot promise</h3></summary>
+      <p>Only a reachable gateway can acknowledge a backup. A backup device stores sealed records and objects, not the keys that open them. Keep its data directory and identity safe. A second gateway somewhere else can protect against losing both your phone and a nearby backup device.</p>
+  </details>
+</section>
 
-// Per-vault cadence and byte budgets live on the Backups page:
-// RPO · snapshot/verify cadence · cache/outbox headroom · bandwidth</div>
-          </div>
-          <p class="prose r" style="--d: 0.2s; margin-top: 18px">
-            The same shape covers both cases the config supports: a <b>local-folder provider</b> —
-            an external drive or a mounted network share, the zero-setup default — and a
-            <b>remote provider</b> speaking the open storage protocol, where <code>endpoint</code> and
-            <code>apiKey</code> are all the gateway needs to know.
-          </p>
-          <div class="term r" style="--d: 0.26s; margin-top: 22px; max-width: 720px">
-            <div class="term-bar"><span>backup CLI · admin shell</span></div>
-            <div class="term-body">
-              <div class="ln">
-                <span class="p">$</span>
-                <code>centraid-gateway backup status --data-dir ~/centraid-data --vault Local</code>
-              </div>
-              <div class="ln">
-                <span class="p">$</span>
-                <code>centraid-gateway backup run --data-dir ~/centraid-data --vault Local</code>
-              </div>
-              <div class="ln">
-                <span class="p">$</span>
-                <code>centraid-gateway backup list --data-dir ~/centraid-data --vault Local</code>
-              </div>
-              <div class="ln">
-                <span class="p">$</span>
-                <code>centraid-gateway backup restore-verify --data-dir ~/centraid-data --vault Local</code>
-              </div>
-              <div class="cm"># status · run · list · verify · restore · restore-verify · kit — one verb per concern</div>
-              <div class="cm"># blank machine? centraid-gateway recover --kit … --api-key … --data-dir … (top-level verb)</div>
-            </div>
-          </div>
-          <p class="note r" style="--d: 0.3s; margin-top: 16px">
-            The keyring (<code>keyringPath</code>) is the one file in this whole setup that isn't
-            just convenience: it holds the key material that makes every snapshot readable. It's
-            covered on its own, next.
-          </p>
-        </div>
-      </section>
-
-      <!-- §03 RECOVERY KIT -->
-      <section class="sec wrap" id="kit">
-        <p class="eyebrow r">§03 · the recovery kit</p>
-        <h2 class="r" style="--d: 0.06s">Export it now. <em>Not when you need it.</em></h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            The keyring is a small JSON file holding your key material as a set of
-            <b>epochs</b> — the active encryption key plus every prior one still needed to read old
-            snapshots. Rotating the key (say, after a suspected compromise) mints a new epoch rather
-            than discarding the old one, so nothing already backed up becomes unreadable.
-          </p>
-          <p>
-            <code>centraid-gateway backup kit</code> exports a <b>recovery kit</b>: the full keyring
-            plus enough provider metadata (endpoint, target id, a label — never the provider api-key,
-            which is rotatable server-side and re-issued by logging in) to restore
-            <b>from nothing but this one file</b> on a blank machine. That's the acceptance test for
-            the whole feature: kit in hand, no other state, full restore.
-          </p>
-        </div>
-        <p class="aside r" style="--d: 0.2s">
-          Export it the day you turn backups on, store it offline — printed, a hardware key, a
-          safety-deposit box, anywhere that isn't the disk it's protecting — and treat it exactly
-          like the credential it is. <b>Losing every key epoch means losing the backups. By design.</b>
-          A provider that could recover your key for you is a provider that can read your data.
-        </p>
-      </section>
-
-      <!-- §04 RESTORE -->
-      <section class="dark" id="restore">
-        <div class="wrap">
-          <p class="eyebrow r">§04 · restore</p>
-          <h2 class="r" style="--d: 0.06s">
-            Never onto the live vault. <em>Never a silent resend.</em>
-          </h2>
-          <p class="lede r" style="--d: 0.12s">
-            <code>centraid-gateway backup restore</code> materializes a snapshot into a
-            <b>fresh directory</b> — it never touches, never overwrites, never swaps the running
-            vault. It's <b>lazy by default</b>: rows and code come down first, and every blob the
-            provider's attested inventory already holds is fetched on first access rather than
-            pulled up front — <code>--full</code> forces eager materialization,
-            <code>--at&nbsp;&lt;time&gt;</code> restores to any moment between snapshots (PITR).
-            Before it downloads a single chunk it gates on compatibility: an unknown format, or a
-            snapshot written by a newer ontology or vault schema than the running gateway
-            understands, is refused outright. This is v0 — there is no migration path, only "update
-            the gateway first."
-          </p>
-          <p class="prose r" style="--d: 0.15s">
-            Restore is the surgical tool; <b>recover</b> is the front door. A truly blank machine —
-            new disk, nothing but a recovery kit and a provider access key — runs one top-level
-            verb, <code>centraid-gateway recover</code>, and the desktop wraps the very same service
-            in a first-run gate: <b>Start fresh</b>, or <b>Recover my vault</b>. Drop the kit, enter
-            your <b>Access key</b>, <b>Find my vault</b>, then <b>Recover this vault</b> — and if the
-            provider prices egress, a metered-recovery confirm stands between you and the first
-            billed byte. What you watch is three honest stages —
-            <b>Fetching your vault → Replaying recent changes → Warming previews</b> — before
-            <b>Enter Centraid</b>. Underneath, the engine walks discovering → fetching → replaying →
-            fencing → adopting → warming: it settles compatibility from registry metadata alone (a
-            refusal never bills a metered home), replays the WAL to the tip, and — lazy by default —
-            leaves the bytes the attested inventory holds to arrive on demand. The vault is live
-            before all of it is local.
-          </p>
-          <div class="steps r" style="--d: 0.18s; max-width: 860px">
-            <div class="step">
-              <span class="dot">1</span>
-              <div>
-                <h3>The quarantine</h3>
-                <p>
-                  A restored vault comes back holding <i>yesterday's</i> world — including an outbox
-                  full of drafts and automations ready to fire the instant they mount. Restoring a
-                  backup must never re-send an email, so the engine marks the restore and the gateway,
-                  on first mount, parks every outbox row, disables every automation, and flags every
-                  connection for re-auth review. You re-arm each one deliberately, not by accident of
-                  timing.
-                </p>
-              </div>
-            </div>
-            <div class="step">
-              <span class="dot">2</span>
-              <div>
-                <h3>Takeover, loudly</h3>
-                <p>
-                  Restoring onto a new machine and resuming backups from there is a
-                  <b>takeover</b>. The recover engine <b>fences</b> it: it reads the provider's
-                  current generation counter and seeds its own state at <b>generation + 1</b>, so
-                  the recovered machine owns the next snapshot. If the old machine is still running
-                  and tries to back up, its registration 409s — and it's required to surface
-                  "another machine has taken over this vault" and stop, never silently retry with a
-                  bumped number. Split-brain becomes a notification, not a silent fork.
-                </p>
-              </div>
-            </div>
-            <div class="step">
-              <span class="dot">3</span>
-              <div>
-                <h3>Orphan-grace, so PITR stays honest</h3>
-                <p>
-                  Lazy restore means bytes keep trickling in after the vault is already live, so the
-                  custody sweep can't treat a not-yet-fetched blob as garbage. <b>Orphan-grace GC</b>
-                  holds orphaned blobs for the full recovery-window duration — the same span the
-                  provider lets you restore across — so a point-in-time restore between two snapshots
-                  never finds its bytes reaped out from under it.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- §05 HEALTH -->
-      <section class="sec wrap" id="health">
-        <p class="eyebrow r">§05 · health</p>
-        <h2 class="r" style="--d: 0.06s">Cadence, custody and proof. <em>One screen.</em></h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            Custody has its own screen now — <b>Operations → Backups</b>, headed "Backups" with a
-            <b>Protected by {provider}</b> badge and a <b>Manage</b> link straight to Settings →
-            Storage. One derivation renders five plain-language metrics: <b>Freshness</b> (how
-            recently you were provably protected offsite — the tightest of four custody clocks),
-            <b>Recovery window</b> (how far back you can restore), <b>Privacy</b> (a structural
-            constant: sealed bytes, client-only keys), <b>Cost</b> (bytes stored against quota), and
-            <b>Exit</b> (<b>Export everything</b>, always, with restore egress priced honestly). An
-            inline gate keeps the recovery kit honest too — <b>Export recovery kit</b> /
-            <b>I've saved my recovery kit</b>.
-          </p>
-          <p>
-            A collapsed <b>Diagnostics</b> panel holds the levers and the raw clocks: <b>Verify
-            now</b>, <b>Back up now</b>, and a four-cell grid — <b>Newest snapshot</b>, <b>Last
-            verification</b>, <b>Newest WAL segment</b>, <b>Outbox drained</b> — plus per-vault
-            policy and <b>what the provider holds</b>: provider-attested (or raw-bucket computed)
-            object and byte totals, recent snapshots, the WAL/PITR span, prune history, and any
-            missing or orphaned objects. A weekly reconciliation runs before eviction can trust
-            remote custody; if a provider silently loses an attachment, the gateway demotes that
-            replica immediately and pins any remaining local copy — it never auto-deletes an orphan.
-            “Confirmed when offsite” is a completion policy, not a long-held request: a provider
-            outage never rolls back a durable local claim.
-          </p>
-          <p>
-            Verification is the one the protocol insists on, because the provider contract is
-            explicit that providers verify nothing on your behalf — no chunk-existence check at
-            commit, no manifest parsing, no server-side integrity sweep. That is the deliberate
-            division of labor: the provider owns durability and lifecycle bookkeeping, the client
-            owns knowing whether the bytes are actually still good. On <code>verifyEveryDays</code>,
-            the gateway HEADs every object the newest manifest references and downloads + decrypts a
-            random sample, recomputing their keyed ids. A backup you've never verified is a backup
-            you're only assuming works.
-          </p>
-        </div>
-      </section>
-
-      <!-- §06 PROVIDER ECOSYSTEM -->
-      <section class="dark" id="providers">
-        <div class="wrap">
-          <p class="eyebrow r">§06 · provider ecosystem</p>
-          <h2 class="r" style="--d: 0.06s">The seam is <em>open, on purpose.</em></h2>
-          <p class="lede r" style="--d: 0.12s">
-            Backups follow the same anti-lock-in instinct as connections and connectors: the wire
-            contract between a gateway and a provider — <code>centraid-storage-provider/1</code> — is
-            a published, versioned protocol, not a Clawgnition implementation detail. Any operator
-            fronting S3-compatible storage can implement it: discovery and capabilities, two auth
-            tiers, target lifecycle, generation fencing, the GC min-age rule. A reference
-            <b>conformance kit</b> runs the same assertions against any implementation; passing it is
-            what "certified provider" means.
-          </p>
-          <p class="prose r" style="--d: 0.18s">
-            What differs between providers is declared, not guessed: retention (how aggressively
-            older snapshots get pruned into a ladder — keep-all, then daily, then weekly) and
-            restore cost class (free-egress vs. metered) are both part of the discovery document a
-            client reads before you commit to a plan, and both are things the gateway shows you —
-            not fine print you find out about during a 300&nbsp;GB restore.
-          </p>
-          <p class="prose r" style="--d: 0.21s">
-            Underneath, the provider fronts S3-compatible storage on your behalf — the gateway never
-            handles raw bucket credentials, and there is no bring-your-own-bucket connection to wire
-            up. That's what the <b>home connection</b> buys: one managed bundle covering every store
-            class (snapshots, CAS, derivatives), reached over the wire routes under
-            <code>/v1/storage/*</code>, with the gateway holding only an endpoint and an access key.
-          </p>
-          <p class="aside r" style="--d: 0.24s">
-            Normative text lives in the protocol source, not here: <code>packages/backup/PROTOCOL.md</code>
-            (the provider seam) and <code>packages/backup/FORMAT.md</code> (the snapshot format
-            itself). This chapter is the tour; those are the spec.
-          </p>
-        </div>
-      </section>
-
-      <!-- §07 CAVEATS -->
-      <section class="sec wrap" id="caveats">
-        <p class="eyebrow r">§07 · honest caveats</p>
-        <h2 class="r" style="--d: 0.06s">What backups <em>don't</em> smooth over.</h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            A few things worth knowing before they surprise you:
-          </p>
-        </div>
-        <div class="grid cols-3" style="margin-top: 26px">
-          <div class="card r" style="--d: 0.1s">
-            <p class="c-no">irreversible</p>
-            <h3>Purge means purge</h3>
-            <p>
-              Deleting a target is soft and undoable within a declared window. <b>Purge</b> is not —
-              it's a one-way erasure that permanently blocks undelete, and the protocol requires it
-              to run through the provider's own interactive session, never an api-key call. A
-              compromised gateway credential cannot destroy your backup history; only you, logged in
-              directly, can.
-            </p>
-          </div>
-          <div class="card r" style="--d: 0.18s">
-            <p class="c-no">retention</p>
-            <h3>History gets pruned</h3>
-            <p>
-              A provider's retention ladder means old snapshots don't live forever — the newest is
-              always protected, but the daily-then-weekly thinning is real. If you need a specific
-              point in time kept indefinitely, that's a provider policy question, not a gateway
-              setting.
-            </p>
-          </div>
-          <div class="card r" style="--d: 0.26s">
-            <p class="c-no">first upload</p>
-            <h3>Seeding still takes time</h3>
-            <p>
-              The first backup of a vault with hundreds of gigabytes of photos and documents is a
-              full upload — hours, not minutes, depending on your connection. A capable paired device
-              hashes, seals and uploads attachments directly through presigned URLs (including native
-              iOS/Android background transfer), so the gateway's disk and uplink are not the bulk-byte
-              path. Thin clients use the bounded gateway outbox; when that honest transit budget is
-              full and the remote is down, admission waits instead of risking ENOSPC or loss.
-            </p>
-          </div>
-        </div>
-
-        <div class="chapter-next r" style="margin-top: 40px">
-          <a href="../devices/">← previous: devices</a>
-          <a href="../ontology/">deep-dive: the ontology →</a>
-        </div>
-      </section>
+<nav class="ref-links wrap" aria-label="Related pages">
+  <a href="../devices/#topology">How devices connect</a>
+  <a href="../learn/">Learn the basics</a>
+  <a href="../start/">Back to start</a>
+</nav>

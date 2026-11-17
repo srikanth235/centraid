@@ -164,12 +164,12 @@ public fun KitText(
     )
 }
 
-/** A white card on a card page: the card radius, no shadow, no border. */
+/** Paper on a card page: the exact generated card radius, with no shadow. */
 @Composable
 public fun Modifier.kitCard(): Modifier =
     clip(RoundedCornerShape(CentraidScale.cardRadius.dp)).background(Surface.card)
 
-/** A card on a plain list page, where its white needs an edge to be read. */
+/** Paper on a plain page, where a neutral hairline keeps the edge readable. */
 @Composable
 public fun Modifier.kitBorderedCard(): Modifier {
     val shape = RoundedCornerShape(CentraidScale.cardRadius.dp)
@@ -198,8 +198,8 @@ public fun KitBadge(label: String, state: StateColor, modifier: Modifier = Modif
 internal val KitBadgeRadius = 6.dp
 
 /**
- * A SMALL GLYPH TILE: a white glyph on a solid fill, the radius a ratio of the side so every size
- * keeps one shape. The default fill is the app's; a destructive row passes the state's.
+ * A SOLID GLYPH TILE: a white glyph on the app's generated fill, the radius a ratio of the side
+ * so every size keeps one shape. A destructive row passes the state's fill.
  */
 @Composable
 public fun KitTile(iconKey: String, modifier: Modifier = Modifier, size: Dp = 32.dp, fill: Color? = null) {

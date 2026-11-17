@@ -26,6 +26,7 @@ enum NotificationStartupTrace {
         case matchingAnswerPerformed
         case answerReturned
         case callbackExpired
+        case outboxFailure
     }
 
     #if DEBUG
@@ -202,7 +203,13 @@ enum Notifications {
         }
         guard let verb else { return }
         // Persist the upstream idempotent press before cold startup can suspend this callback.
-        let press = NotificationOutbox.add(notificationID: id, verb: verb.rawValue)
+        let press: NotificationOutbox.Press
+        do {
+            press = try NotificationOutbox.add(notificationID: id, verb: verb.rawValue)
+        } catch {
+            NotificationStartupTrace.mark(.outboxFailure, succeeded: false)
+            return
+        }
         NotificationStartupTrace.mark(.shellModelTouchStarted)
         _ = ShellModel.shared
         NotificationStartupTrace.mark(.shellModelTouched)
@@ -214,19 +221,30 @@ enum Notifications {
         NotificationStartupTrace.mark(.storeWaitCompleted)
         let matched = await store.answerNotification(id: id, verb: verb, pressID: press.pressID)
         NotificationStartupTrace.mark(.answerReturned, succeeded: matched)
-        if matched { NotificationOutbox.remove(press.pressID) }
+        if matched {
+            do { try NotificationOutbox.remove(press.pressID) }
+            catch { NotificationStartupTrace.mark(.outboxFailure, succeeded: false) }
+        }
     }
 
     /// Replay every persisted press through its original idempotency key. A startup failure
     /// or callback expiry leaves it in the outbox; only its exact terminal schedule removes it.
     @MainActor static func drain(_ store: ScreenStore) async {
-        for press in NotificationOutbox.pending() {
+        let presses: [NotificationOutbox.Press]
+        do { presses = try NotificationOutbox.pending() }
+        catch {
+            NotificationStartupTrace.mark(.outboxFailure, succeeded: false)
+            return
+        }
+        for press in presses {
             guard let verb = Centraid_Core_V1_NotificationVerb(rawValue: press.verb) else {
-                NotificationOutbox.remove(press.pressID)
+                do { try NotificationOutbox.remove(press.pressID) }
+                catch { NotificationStartupTrace.mark(.outboxFailure, succeeded: false) }
                 continue
             }
             if await store.answerNotification(id: press.notificationID, verb: verb, pressID: press.pressID) {
-                NotificationOutbox.remove(press.pressID)
+                do { try NotificationOutbox.remove(press.pressID) }
+                catch { NotificationStartupTrace.mark(.outboxFailure, succeeded: false) }
             }
         }
     }

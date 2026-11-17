@@ -85,6 +85,8 @@ struct ProgressStatusLine: View {
     var closeLabel: String = ""
     var onClose: () -> Void = {}
     var identifier: String = "status"
+    /// A host may retain an established sentence selector while sharing this status layout.
+    var sentenceIdentifier: String? = nil
     /// A mark before the sentence (FirstImports draws a green check once the work is done).
     var leadingIcon: String = ""
     var leadingTint: Color = StateColor.green.text
@@ -103,7 +105,7 @@ struct ProgressStatusLine: View {
                         .kitType(.row)
                         .foregroundStyle(refused ? StateColor.red.text : Surface.ink)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .accessibilityIdentifier("\(identifier)-sentence")
+                        .accessibilityIdentifier(sentenceIdentifier ?? "\(identifier)-sentence")
                     if !actionLabel.isEmpty {
                         Button(action: onAct) {
                             Text(actionLabel)

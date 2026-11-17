@@ -1,336 +1,72 @@
-<section class="ch-hero wrap">
-        <p class="eyebrow r">Chapter 3 · devices</p>
-        <h1 class="r" style="--d: 0.1s">The phone is the vault. <em>Your machines keep it safe.</em></h1>
-        <p class="lede r" style="--d: 0.22s">
-          Centraid refuses the hardest problem in personal software — multi-master sync — by never
-          having it. <b>Your phone holds the vault</b>: the one copy anything writes to, and the
-          only device that holds its keys. <b>Gateways</b> — any machine you control running
-          <code>centraid-gateway</code>, the laptop at home, a VPS, a NAS — keep sealed copies they
-          cannot open, reached straight over HTTPS with no relay service to subscribe to. This
-          chapter is that arrangement, wire by wire.
-        </p>
-      </section>
+<section class="ref-hero wrap">
+  <div>
+    <p class="eyebrow">Devices · topology</p>
+    <h1>The phone is the vault. <em>The gateway keeps its backup.</em></h1>
+  </div>
+  <p class="lede">The Rust core on your phone is the vault's only writer. A gateway is a machine you control that stores sealed backup data. It cannot open the copy or act as another Centraid app.</p>
+</section>
 
-      <!-- §01 TOPOLOGY -->
-      <section class="sec wrap" id="topology">
-        <p class="eyebrow r">§01 · topology</p>
-        <h2 class="r" style="--d: 0.06s">One writer, <em>never a mesh.</em></h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            The Rust core on the phone is the vault's sole authority and writer — apps, the camera
-            roll and your own taps all go through it, and nothing else ever touches the database
-            file. That single fact buys the consent story (one door to check), the audit story (one
-            place receipts mint) and the sync story (there is nothing to reconcile, because there is
-            one writer). A gateway is not a second home for the vault; it is where the vault's
-            backup lives:
-          </p>
-        </div>
-        <div class="grid cols-2" style="margin-top: 26px">
-          <div class="card r" style="--d: 0.1s">
-            <p class="c-no">the vault</p>
-            <h3>Your phone</h3>
-            <p>
-              The native app over the Rust core holds <code>vault.db</code> and the keys your 24
-              words derive. It works with no network at all; backing up is what it does when a
-              gateway is in reach.
-            </p>
-          </div>
-          <div class="card r" style="--d: 0.18s">
-            <p class="c-no">the backup</p>
-            <h3>A blind store</h3>
-            <p>
-              <code>centraid-gateway serve</code> on a laptop, a spare machine or a VPS. It keeps
-              sealed objects and a snapshot history per vault — no key, no plaintext, no schema —
-              and a phone may back up to several.
-            </p>
-          </div>
-        </div>
-        <p class="aside r" style="--d: 0.3s">
-          The trade is explicit: the phone becomes the thing to protect — which is why its backup is
-          sealed snapshots on machines you choose, and why 24 words bring it back onto a new phone.
-        </p>
-      </section>
+<section class="ref-board wrap" aria-labelledby="device-map-title">
+  <h2 id="device-map-title">The phone calls out</h2>
+  <figure>
+    <div class="record-map">
+      <div class="record"><span class="kind">PHONE</span><strong>Vault + keys</strong><span>one writer</span></div>
+      <div class="relation"><b aria-hidden="true">→</b>pinned HTTPS</div>
+      <div class="record"><span class="kind">GATEWAY</span><strong>Sealed backup</strong><span>no vault key</span></div>
+    </div>
+    <figcaption class="ref-note">No relay or web vault sits between them. If the gateway cannot be reached, local use continues and backup waits.</figcaption>
+  </figure>
+  <div class="ref-foot">
+    <div class="ref-note"><h3>On the phone</h3><p>Apps read and change the live vault through its Rust core.</p></div>
+    <div class="ref-note"><h3>On the gateway</h3><p>Encrypted records and objects arrive from the phone; the gateway cannot read them.</p></div>
+  </div>
+</section>
 
-      <!-- §02 ADDRESSING -->
-      <section class="dark" id="addressing">
-        <div class="wrap">
-          <p class="eyebrow r">§02 · addressing</p>
-          <h2 class="r" style="--d: 0.06s">Every request names <em>its vault.</em></h2>
-          <p class="lede r" style="--d: 0.12s">
-            A gateway can keep the backups of several vaults — yours, a household member's — so no
-            request is ever "to the gateway": every route lives under <code>/v2/v/{vault}</code>,
-            where a vault's id is its identity public key, and the bearer token a request carries
-            was minted for that vault alone. A token for one vault opens nothing of another's, and an
-            unknown vault gets the same refusal as a foreign token, so neither is an oracle.
-          </p>
-          <div class="grid cols-2" style="margin-top: 26px">
-            <div class="card r" style="--d: 0.1s">
-              <p class="c-no">who may write</p>
-              <h3>One writer per vault, by epoch</h3>
-              <p>
-                Each vault has a <b>writer epoch</b> on every gateway, and each token carries the
-                epoch it was minted at. A write under an older one is refused <code>MOVED</code>:
-                when a vault moves to a new phone, the old one stops at its next upload.
-              </p>
-            </div>
-            <div class="card r" style="--d: 0.18s">
-              <p class="c-no">two planes</p>
-              <h3>The operator holds ciphertext</h3>
-              <p>
-                Pairing QRs, health checks and scrubs are the gateway's own commands
-                (<code>centraid-gateway pair / pairings / health / scrub</code>), run by whoever
-                holds the machine. Everything they touch was sealed on the phone first, so even the
-                gateway's operator holds nothing that opens.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
+<section class="ref-details wrap" aria-label="Device and gateway details">
+  <details open>
+    <summary><h3 id="topology">One phone, one writer</h3></summary>
+    <p>The phone holds the live vault and its keys. A gateway holds only sealed data acknowledged from the phone; it is not a second vault to work in. Pairing more than one gateway makes a separate backup at each.</p>
+  </details>
+  <details>
+    <summary><h3 id="addressing">Reach a gateway directly</h3></summary>
+    <p>The phone connects over HTTPS to an address in the gateway's pairing QR and pins the certificate fingerprint in that QR. A port forward may carry the connection to the gateway, but a proxy must not terminate TLS: the phone must see the pinned gateway certificate.</p>
+    <p>On a local network, the gateway advertises an address unless it starts with <code>--no-mdns</code>. Remote access needs routing and firewall rules that make the QR address reachable from the phone.</p>
+  </details>
+  <details>
+    <summary><h3 id="pairing">Pair with a fresh QR and compare the safety number</h3></summary>
+    <p>Run <code>centraid-gateway serve --data-dir DIR</code> on a machine you control. First run creates the gateway identity and prints a pairing QR and safety number. To issue a new QR, run <code>centraid-gateway pair --data-dir DIR</code> beside the running gateway. Codes are single-use and expire after a day.</p>
+    <p>Scan the fresh QR in the phone's Backup screen, then compare every group of the safety number with the number printed by the gateway. Stop if they differ. The phone connects directly over HTTPS and checks the certificate pin.</p>
+  </details>
+  <details>
+    <summary><h3 id="connection">What the gateway does not do</h3></summary>
+    <p>The gateway accepts HTTPS requests from the phone. It does not relay traffic, list vaults, initiate phone connections, or serve as a remote shell. Local discovery can help find its address; it does not replace QR pairing or certificate pinning.</p>
+  </details>
+  <details>
+    <summary><h3 id="takeover">Restore and move the writer</h3></summary>
+    <p>A restore checks the recovered records before claiming a new writer position. A verified takeover invalidates the old phone's token at that gateway. An old phone learns only when it contacts a gateway. A verified moved mark fences ordinary member write actions; the backup pass can continue to gateways that have not moved. Only when all paired gateways have moved does the whole backup door refuse writes.</p>
+    <p>The gateway keeps sealed snapshots and objects under the retention rules. It does not hold a live replica of the phone's vault.</p>
+  </details>
+  <details>
+    <summary><h3 id="operator">Run and maintain the gateway</h3></summary>
+    <p>Build the binary with <code>cargo build --release -p centraid-gateway</code>. <code>--data-dir</code> selects the complete gateway data directory; <code>--bind</code> selects its listening address and defaults to <code>0.0.0.0:8443</code>. The environment variables are <code>CENTRAID_GATEWAY_DATA_DIR</code> and <code>CENTRAID_GATEWAY_BIND</code>. Copying the directory copies the gateway identity and sealed objects, so protect it like important machine data.</p>
+    <p><code>install --dry-run</code> previews a supported Linux user service or macOS LaunchAgent. <code>install</code> writes the unit but does not enable or start it. See the <a href="https://github.com/srikanth235/centraid/blob/main/crates/gateway/README.md">gateway README</a> for container and network setup.</p>
+  </details>
+  <details>
+    <summary><h3 id="desktop">Is there a desktop app?</h3></summary>
+    <p>No. The gateway stores a sealed backup; it does not open or edit your vault.</p>
+  </details>
+  <details>
+    <summary><h3 id="web">Is there a web vault?</h3></summary>
+    <p>No. The live vault and apps run on the phone. The gateway exposes only its backup protocol.</p>
+  </details>
+  <details>
+    <summary><h3 id="mobile">Build the phone apps</h3></summary>
+    <p>The iOS shell uses SwiftUI and Android uses Jetpack Compose over the Rust core. Source-build instructions for this pre-release are in <a href="https://github.com/srikanth235/centraid/blob/main/mobile/README.md">mobile/README.md</a>.</p>
+  </details>
+</section>
 
-      <!-- §03 PAIRING -->
-      <section class="sec wrap" id="pairing">
-        <p class="eyebrow r">§03 · pairing</p>
-        <h2 class="r" style="--d: 0.06s">A QR that <em>admits one vault, once.</em></h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            Adding a gateway is a one-time QR: <code>centraid-gateway serve</code> prints one while
-            nothing has paired, and <code>centraid-gateway pair</code> prints a fresh one beside a
-            running <code>serve</code>. It carries the gateway's id, the addresses to dial, the
-            <b>pin</b> — the BLAKE3 hash of the gateway's certificate — and a secret that admits one
-            vault, once, within 24 hours. The gateway keeps only the secret's hash.
-          </p>
-          <p>
-            The phone — <b>Pair with your laptop</b> on the More sheet, or <b>Add a gateway</b> on
-            the Backup screen — scans it, dials the addresses in order, refuses any certificate whose
-            hash is not the pin, and trades the secret for a bearer token for its vault. No password,
-            no account, nothing reusable to intercept: a spent, an expired and an unknown secret all
-            get the same refusal.
-          </p>
-          <p>
-            Then you compare a <b>safety number</b> — 60 digits in 12 groups of 5, drawn by one
-            function on both screens from the vault's identity key and the certificate's pin. A
-            phone may pair with more than one gateway from the first day, each with its own QR, and
-            backs up to whichever it can reach; a second gateway somewhere else is your off-site
-            copy.
-          </p>
-        </div>
-        <div class="term r" style="--d: 0.2s; margin-top: 24px; max-width: 720px">
-          <div class="term-bar"><span>pairing · the gateway's shell</span></div>
-          <div class="term-body">
-            <div class="ln">
-              <span class="p">$</span>
-              <code>centraid-gateway pair --data-dir ~/centraid-gateway</code>
-            </div>
-            <div class="out">
-              { "v": 2, "gw": "…", "addrs": ["192.168.1.20:8443", "laptop.local:8443"], "pin":
-              "…", "secret": "…", "exp_ms": … } # and the same text as a QR
-            </div>
-            <div class="ln">
-              <span class="p">$</span>
-              <code>centraid-gateway pairings --data-dir ~/centraid-gateway</code>
-            </div>
-            <div class="out"># each vault: its writer epoch, its head, its tokens, its safety number</div>
-          </div>
-        </div>
-      </section>
-
-      <!-- §04 CONNECTIVITY -->
-      <section class="dark" id="iroh">
-        <div class="wrap">
-          <p class="eyebrow r">§04 · connectivity</p>
-          <h2 class="r" style="--d: 0.06s">HTTPS to a machine you own, <em>no rented middleman.</em></h2>
-          <p class="lede r" style="--d: 0.12s">
-            Phone and gateway speak plain HTTPS, straight from one to the other. The gateway mints
-            its own certificate — ECDSA P-256, because Apple's TLS stack refuses an Ed25519 one — and
-            no certificate authority vouches for it: the phone trusts exactly the certificate whose
-            hash the pairing QR named. No relay, no push service, no sync fleet, no domain to buy.
-          </p>
-          <div class="steps r" style="--d: 0.16s; max-width: 880px">
-            <div class="step">
-              <span class="dot">1</span>
-              <div>
-                <h3>LAN first</h3>
-                <p>
-                  At home the phone finds its gateway on the local network — <code>serve</code>
-                  advertises itself over Bonjour — and keeps the last addresses that answered, so an
-                  upload the system runs in the background needs no lookup. Away from home a gateway
-                  works at any address the phone can dial directly: a VPS, a name on your own VPN.
-                  Nothing punches holes through NATs and nothing relays; a gateway the phone cannot
-                  reach is one it waits for.
-                </p>
-              </div>
-            </div>
-            <div class="step">
-              <span class="dot">2</span>
-              <div>
-                <h3>HTTPS because of the iPhone</h3>
-                <p>
-                  An iPhone keeps uploading for a suspended app only through the system's background
-                  upload session, and that session speaks HTTPS. So the phone seals what it backs up
-                  into a bounded spool and hands the files to the system, which uploads them while
-                  the app sleeps — under the cellular allowance you set — and wakes it to record
-                  each acknowledgement. Android moves them in its own background windows.
-                </p>
-              </div>
-            </div>
-            <div class="step">
-              <span class="dot">3</span>
-              <div>
-                <h3>One version, in the path</h3>
-                <p>
-                  Every route lives under <code>/v2</code> and a pairing QR carries <code>v: 2</code>;
-                  a phone refuses a QR it cannot read, and a change that breaks a route is
-                  <code>/v3</code>. No negotiation, no fallback — and every refusal is a typed code
-                  the phone turns into its own sentence, never a bare status it has to guess at.
-                </p>
-              </div>
-            </div>
-          </div>
-          <p class="note r" style="--d: 0.24s; margin-top: 16px">
-            A proxy that terminates TLS in front of a gateway presents its own certificate, and the
-            phone refuses it; a port forward or a TCP pass-through is fine.
-          </p>
-        </div>
-      </section>
-
-      <!-- §05 ONE WRITER -->
-      <section class="sec wrap" id="replica">
-        <p class="eyebrow r">§05 · one writer</p>
-        <h2 class="r" style="--d: 0.06s">Offline, <em>without a second writer.</em></h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            The vault is on the phone, so offline is the normal case rather than a degraded one:
-            every read and write runs against the vault in your pocket, and the network matters only
-            to the backup, which catches up when a gateway is in reach. There is no replica to keep
-            current, no second writer and no two-way merge.
-          </p>
-          <p>
-            What the gateways keep is <b>snapshots</b>: the vault copied page for page, cut into
-            small ranges sealed under names derived from their own bytes, so an hour of edits
-            uploads only the ranges that changed. "Backed up" means a gateway acknowledged it, and
-            no screen says more than that.
-          </p>
-        </div>
-        <div class="steps r" style="--d: 0.16s; max-width: 880px">
-          <div class="step">
-            <span class="dot">1</span>
-            <div>
-              <h3>A restore reads before it claims</h3>
-              <p>
-                Restoring onto a new phone starts from your 24 words and a read-only grant: the
-                phone fetches the newest snapshot and checks every range, the file's hash and its
-                row counts against the manifest before it trusts a byte of it.
-              </p>
-            </div>
-          </div>
-          <div class="step">
-            <span class="dot">2</span>
-            <div>
-              <h3>Then it claims the vault</h3>
-              <p>
-                Only a checked snapshot earns a <b>claim</b>: the next writer epoch, signed by the
-                vault's identity key and naming the head it checked. A head that moved in the
-                meantime moves no writer until the new one has been checked too.
-              </p>
-            </div>
-          </div>
-          <div class="step">
-            <span class="dot">3</span>
-            <div>
-              <h3>The old phone freezes, it does not fork</h3>
-              <p>
-                The phone that lost the claim keeps what it has, readable, and stops writing: its
-                next upload is refused <code>MOVED</code>, and it says so rather than carry on as a
-                second master.
-              </p>
-            </div>
-          </div>
-        </div>
-        <p class="aside r" style="--d: 0.3s">
-          This is how one vault survives a lost phone without ever growing a second master: the
-          gateways hold sealed history, and the writer epoch decides which phone may add to it.
-        </p>
-      </section>
-
-      <!-- §06 DESKTOP -->
-      <section class="sec wrap" id="desktop">
-        <p class="eyebrow r">§06 · desktop shell</p>
-        <h2 class="r" style="--d: 0.06s">Not in v0. <em>The laptop is a gateway.</em></h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            There is no desktop shell in this release: v0 ships the phone app and the gateway, and
-            nothing but the phone holds the vault. A laptop's part is to keep the backup —
-            <code>centraid-gateway serve</code>, holding sealed copies of your phone's vault — and
-            <code>centraid-gateway install</code> brings it back after a reboot.
-          </p>
-          <p class="aside">
-            <code>install</code> writes a systemd user unit or a macOS LaunchAgent and prints the
-            command that starts it — it never enables what it writes, because a service that starts
-            because a file was unpacked is one nobody chose to run.
-          </p>
-        </div>
-      </section>
-
-      <!-- §07 WEB -->
-      <section class="dark" id="web">
-        <div class="wrap">
-          <p class="eyebrow r">§07 · web app</p>
-          <h2 class="r" style="--d: 0.06s">No browser door <em>in v0.</em></h2>
-          <p class="lede r" style="--d: 0.12s">
-            There is no web app in this release, and a gateway could not serve one: it holds no key
-            and no plaintext, only sealed objects for the phone that sealed them. The vault is read
-            where it lives — on the phone, in the native app.
-          </p>
-        </div>
-      </section>
-
-      <!-- §08 MOBILE -->
-      <section class="sec wrap" id="mobile">
-        <p class="eyebrow r">§08 · the phone app</p>
-        <h2 class="r" style="--d: 0.06s">Native on both platforms, <em>and the vault itself.</em></h2>
-        <div class="prose r" style="--d: 0.12s">
-          <p>
-            The phone app is native on iOS and Android — SwiftUI and Jetpack Compose views over one
-            Kotlin Multiplatform module and the Rust core, linked through a C interface. The core
-            holds the vault; the views draw what it answers. Every first-party app is a native
-            screen, and everything works in airplane mode, because the vault every screen reads is on
-            the phone.
-          </p>
-          <p>
-            The backup runs on its own. Each <b>pass</b> prepares — a snapshot when one is due, then
-            everything no gateway has confirmed, sealed into a bounded spool — moves it to a
-            reachable gateway, and settles what was acknowledged. Your transfer rule decides what
-            may cross a metered link: by default no original does, and a video's original never
-            does; thumbnails and previews always go first, because they are the grid.
-          </p>
-          <p>
-            Two touches earn a mention. <b>Backed up</b> means a gateway acknowledged it — the Backup
-            screen and the line on Home never claim more. And <b>Free up space</b> offers only
-            originals a gateway has acknowledged and no kept album holds, then hands them to the
-            system's own delete confirmation; the photo stays in Centraid's grid with its thumbnail,
-            and its original comes back from a gateway when you open it.
-          </p>
-          <p class="note">
-            Pre-release note: the apps build from source, from the repository's
-            <code>mobile/</code> directory.
-          </p>
-        </div>
-      </section>
-
-      <!-- §09 RUNTIMES -->
-      <section class="dark" id="runtimes">
-        <div class="wrap">
-          <p class="eyebrow r">§09 · harness runtimes</p>
-          <h2 class="r" style="--d: 0.06s">No brain <em>on the gateway.</em></h2>
-          <p class="lede r" style="--d: 0.12s">
-            There are no agent runtimes in this release. A gateway runs nothing but its blind store
-            — it holds no key and no plaintext, so there is nothing on it for an agent to read — and
-            the assistant and automation planes are not part of v0.
-          </p>
-
-          <div class="chapter-next r" style="margin-top: 40px">
-            <a href="../apps/">← previous: apps</a>
-            <a href="../backups/">next chapter: backups →</a>
-          </div>
-        </div>
-      </section>
+<nav class="ref-links wrap" aria-label="Related pages">
+  <a href="../backups/#setup">Pair a backup device</a>
+  <a href="../backups/#restore">Restore a vault</a>
+  <a href="../start/">Back to start</a>
+</nav>

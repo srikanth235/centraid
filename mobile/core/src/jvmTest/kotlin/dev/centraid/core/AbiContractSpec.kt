@@ -37,7 +37,7 @@ class AbiContractSpec : StringSpec({
     "the status codes are the committed header's" {
         // A copy that is checked rather than trusted. `CoreStatus` is written
         // out in `commonMain` because JNA reads no header at all and cinterop
-        // reads one only on Apple hosts — two spellings of five numbers would
+        // reads one only on Apple hosts — two spellings of these numbers would
         // be two answers on two platforms.
         val header = File(
             System.getProperty("centraid.core.headerPath")
@@ -54,17 +54,39 @@ class AbiContractSpec : StringSpec({
         CoreStatus.entries.associate { it.name to it.code } shouldBe defines
     }
 
-    "an undefined status code is its own failure and never the nearest known one" {
-        // A core one version ahead of a shell that invented a sixth code must
-        // not have it read as CLOSED.
-        CoreStatus.of(-6) shouldBe null
-        val core = CentraidCore.overAbi(
-            FakeCentraidAbi { AbiAnswer(null, -6, null) },
-            Dispatchers.Default,
-            UI_THREAD,
+    "unassigned status codes stay unknown through the binding" {
+        val header = File(
+            System.getProperty("centraid.core.headerPath")
+                ?: error("centraid.core.headerPath is unset; see mobile/core/build.gradle.kts"),
         )
-        core.call(hello()) shouldBe CoreOutcome.Failed(CoreFailure.UnknownStatus(-6))
-        core.close()
+        header.exists().shouldBeTrue()
+        val headerCodes = Regex("""#define CENTRAID_([A-Z_]+) (-?\d+)""")
+            .findAll(header.readText())
+            .map { it.groupValues[2].toInt() }
+            .toSet()
+
+        // The committed header and the Kotlin enum define every status the
+        // binding knows. Exercise both ends of Int outside that set.
+        for (rawCode in listOf(Int.MIN_VALUE, Int.MAX_VALUE)) {
+            withClue("$rawCode is absent from the committed header") {
+                (rawCode !in headerCodes).shouldBeTrue()
+            }
+            withClue("$rawCode is absent from CoreStatus") {
+                CoreStatus.entries.none { it.code == rawCode }.shouldBeTrue()
+            }
+            CoreStatus.of(rawCode) shouldBe null
+
+            val core = CentraidCore.overAbi(
+                FakeCentraidAbi { AbiAnswer(null, rawCode, null) },
+                Dispatchers.Default,
+                UI_THREAD,
+            )
+            try {
+                core.call(hello()) shouldBe CoreOutcome.Failed(CoreFailure.UnknownStatus(rawCode))
+            } finally {
+                core.close()
+            }
+        }
     }
 
     "clause 8: a refusal renders the CODE's sentence and never the core's detail" {

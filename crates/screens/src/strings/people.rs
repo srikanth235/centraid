@@ -45,8 +45,6 @@ catalog! {
         "There is no undo for this one."
     );
     plain confirm_remove_channel_title = ("Remove this {kind}?", "Remove this {kind}?");
-    plain confirm_trash_body = ("Restorable for 30 days.", "Restorable for 30 days.");
-    plain confirm_trash_title = ("Move {name} to trash?", "Move {name} to trash?");
     plain date_a11y = ("{label}, {day}", "{label}, {day}");
     plain date_field = ("Date", "Date");
     plain date_invalid = ("Use month and day, like 08-14.", "Use month and day, like 08-14.");

@@ -91,12 +91,15 @@ import centraid.core.v1.Route
 import centraid.core.v1.Confirm
 import dev.centraid.android.R
 import dev.centraid.android.kit.CentraidMark
+import dev.centraid.android.kit.KitTile
 import dev.centraid.android.kit.RoomSearch
 import dev.centraid.android.kit.SearchField
 import dev.centraid.android.kit.SearchFoot
 import dev.centraid.android.kit.appAccent
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.centraidResource
 import dev.centraid.android.kit.tokenSp
+import dev.centraid.design.CentraidCatalog
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.CentraidSearchField
 import dev.centraid.android.kit.ConfirmSheet
@@ -411,9 +414,8 @@ private fun ChatHeader(
     onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    // THE BOARD'S HEADER: the title and the vault line, round keys at the trailing edge (Chats,
-    // then New chat only inside a saved chat), no rule under it. Rename and Delete are a long
-    // press on the title.
+    // THE BOARD'S HEADER: the assistant mark leads the current title and vault line; round keys
+    // remain at the trailing edge. Rename and Delete are still a long press on this same group.
     var menu by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
@@ -421,31 +423,24 @@ private fun ChatHeader(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Box(Modifier.weight(1f)) {
-            Column(
+            Row(
                 Modifier
                     .fillMaxWidth()
                     .combinedClickable(enabled = state.can_manage_thread, onClick = {}, onLongClick = { menu = true }),
-                horizontalAlignment = Alignment.CenterHorizontally,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    state.title,
-                    style = centraidType("smallStrong"),
-                    color = centraidColor("text"),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.semantics { heading() }.testTag("chat-title"),
-                )
-                // THE ASSISTANT'S AVATAR is the bare app mark (#1173), small, before the line.
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    CentraidMark(size = 16.dp)
+                if (!rememberLargestText()) CentraidMark(size = 32.dp)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        state.subtitle,
-                        style = centraidType("mono"),
-                        color = centraidColor("textFaint"),
-                        maxLines = 1,
+                        state.title,
+                        style = kitTextStyle(KitType.Section),
+                        color = centraidColor("text"),
+                        maxLines = if (rememberLargestText()) 2 else 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.testTag("chat-subtitle"),
+                        modifier = Modifier.semantics { heading() }.testTag("chat-title"),
                     )
+                    KitText(state.subtitle, KitType.Meta, Surface.meta, maxLines = 1, modifier = Modifier.testTag("chat-subtitle"))
                 }
             }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = centraidColor("bgElev")) {
@@ -838,7 +833,7 @@ private fun MarkdownText(text: String, streaming: Boolean, spoken: String) {
 
 /**
  * ONE ROW THE ANSWER FOUND (#1173), drawn in the colour of the app it is from: a white card
- * with a bar down its left edge in that app's colour, the title in ink, the subtitle and meta
+ * with its app mark, the title in ink, the subtitle and meta
  * under it, and the app's name in the app's colour at the right.
  */
 @Composable
@@ -876,13 +871,9 @@ private fun CardRow(card: ChatCard, index: Int, appName: String, onOpen: () -> U
                 )
             }
         } else {
-            Box(
-                Modifier
-                    .width(4.dp)
-                    .fillMaxHeight()
-                    .clip(CircleShape)
-                    .background(appAccent(card.app).fill),
-            )
+            CentraidCatalog.byId[card.app]?.iconKey?.let { icon ->
+                KitTile(iconKey = icon, fill = appAccent(card.app).fill)
+            }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(

@@ -684,6 +684,7 @@ public object CentraidGeometry {
     public const val DURATION_ONE: Int = 140
     public const val DURATION_TWO: Int = 280
     public const val HAIRLINE: Int = 1
+    public const val HOME_INVITATION_GLYPH_SIZE: Int = 36
     public const val ICON_CHIP_RADIUS_RATIO: Double = 0.26
     public const val ICON_CHIP_TINT_DARK: Double = 0.2
     public const val ICON_CHIP_TINT_LIGHT: Double = 0.13

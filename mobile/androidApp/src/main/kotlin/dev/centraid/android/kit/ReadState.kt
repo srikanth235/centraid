@@ -262,25 +262,21 @@ public fun EmptyStateView(
     onAction: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    // THE EMPTY STATE PATTERN (#1173): a card on the page with the app's glyph on a wash of its
-    // colour, the one sentence, the reason, and at most one action as the app's pill.
+    // A typed empty keeps the page's existing words/action and gives its app a solid, canonical mark.
     val accent = appAccent()
     val glyph = empty.icon_key.ifEmpty { CentraidCatalog.byId[accent.appId]?.iconKey }
     Column(
         modifier
             .fillMaxWidth()
             .padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp)
-            .kitCard()
+            .kitBorderedCard()
             .padding(horizontal = 20.dp, vertical = 28.dp)
             .testTag("kit-empty"),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (glyph != null) {
-            Box(
-                Modifier.size(52.dp).clip(CircleShape).background(accent.wash(centraidDark())).clearAndSetSemantics { },
-                contentAlignment = Alignment.Center,
-            ) { CentraidIcon(iconKey = glyph, tint = accent.text, size = 22.dp) }
+            KitTile(iconKey = glyph, size = 52.dp, fill = accent.fill)
         }
         KitText(empty.headline, KitType.Section, Surface.ink, Modifier.semantics { heading() })
         if (empty.body.isNotEmpty()) {

@@ -1612,53 +1612,5 @@
       "trash": true,
       "container": false
     }
-  ],
-  "knobs": [
-    {
-      "key": "appColor",
-      "label": "Color",
-      "type": "swatch",
-      "default": "#2F63E6",
-      "options": [
-        {
-          "value": "#2F63E6",
-          "label": "Steel"
-        },
-        {
-          "value": "#4E68DD",
-          "label": "Indigo"
-        },
-        {
-          "value": "#2FA36B",
-          "label": "Green"
-        },
-        {
-          "value": "#7C5BD9",
-          "label": "Violet"
-        },
-        {
-          "value": "#3AA6B9",
-          "label": "Cyan"
-        }
-      ]
-    }
-  ],
-  "seats": {
-    "byteBearing": true,
-    "originActs": [],
-    "disabledOn": [],
-    "northStar": "1password"
-  },
-  "states": {
-    "designed": [
-      "dayone",
-      "pending",
-      "offline",
-      "stale",
-      "conflict",
-      "parked",
-      "denied"
-    ],
-    "excluded": []
-  }
+  ]
 }

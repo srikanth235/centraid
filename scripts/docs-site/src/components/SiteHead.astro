@@ -25,6 +25,16 @@ const github = 'https://github.com/srikanth235/centraid';
       >
       Centraid <span class="docs-tag">docs</span>
     </a>
+    <nav class="head-nav">
+      {
+        nav.map(([slug, label]) => (
+          <a href={hrefFor(`${slug}/`)} aria-current={current === slug ? 'page' : undefined}>
+            {label}
+          </a>
+        ))
+      }
+      <a href={github} target="_blank" rel="noopener" class="hide-sm">github</a>
+    </nav>
     <button
       type="button"
       class="doc-search"
@@ -39,16 +49,6 @@ const github = 'https://github.com/srikanth235/centraid';
       <span class="doc-search-label">Search the docs…</span>
       <kbd class="doc-search-key"><span>⌘</span>K</kbd>
     </button>
-    <nav class="head-nav">
-      {
-        nav.map(([slug, label]) => (
-          <a href={hrefFor(`${slug}/`)} aria-current={current === slug ? 'page' : undefined}>
-            {label}
-          </a>
-        ))
-      }
-      <a href={github} target="_blank" rel="noopener" class="hide-sm">github</a>
-    </nav>
     <button class="toggle" id="theme-toggle" aria-label="Toggle theme"></button>
     <button
       type="button"
