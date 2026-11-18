@@ -83,12 +83,16 @@ internal object NotifyPlan {
         val schedule = next.values.filter { !it.immediate && it.fire_at_ms > nowMs }
         val scheduled = schedule.map { it.notification_id }.toSet()
         val keep = next.keys + live
-        // A TIMED ONE WHOSE MOMENT HAS JUST PASSED AND WHOSE ALARM HAS NOT YET SOUNDED IS NOT CANCELLED.
-        // Rust sends only what is still to come, so a resync in the minutes an inexact alarm runs late
-        // would take the alarm down and the reminder would never alert. A delivered one leaves the
-        // record at once ([NotifyStore.deliveredTimed]), so what is recorded here is undelivered.
+        // A TIMED ONE WHOSE MOMENT HAS JUST PASSED AND WHOSE ALARM HAS NOT YET SOUNDED IS NOT CANCELLED,
+        // BUT ONLY WHILE RUST STILL WANTS IT. Rust sends only what is still to come, so a resync in the
+        // minutes an inexact alarm runs late would take the alarm down and the reminder would never
+        // alert. Absence from the new set cannot tell "late" from "resolved": Rust's [live] (the items
+        // whose moment has passed and that are still open) can. A task completed, deleted or moved
+        // (its id embeds the moment) is not in it, so its alarm goes. A delivered one leaves the record
+        // at once ([NotifyStore.deliveredTimed]), so what is recorded here is undelivered.
         val late = recorded.filter {
-            !it.immediate && it.notification_id !in scheduled && it.fire_at_ms <= nowMs && nowMs - it.fire_at_ms < LATE_GRACE_MS
+            !it.immediate && it.notification_id !in scheduled && it.notification_id in live &&
+                it.fire_at_ms <= nowMs && nowMs - it.fire_at_ms < LATE_GRACE_MS
         }.associateBy { it.notification_id }.values.toList()
         val lateIds = late.map { it.notification_id }.toSet()
         return Plan(
