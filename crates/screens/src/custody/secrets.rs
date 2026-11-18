@@ -492,6 +492,17 @@ impl VaultSecrets {
         self.cache().identities.get(shelf_id).cloned()
     }
 
+    /// The id the shelf holds the vault under, from its identity (what the OS names a vault by
+    /// when it reports a finished upload).
+    #[must_use]
+    pub fn shelf_id_of(&self, identity: &str) -> Option<String> {
+        self.cache()
+            .identities
+            .iter()
+            .find(|(_, held)| held.as_str() == identity)
+            .map(|(shelf_id, _)| shelf_id.clone())
+    }
+
     /// Forget the identity noted for `shelf_id`: the vault is gone.
     pub fn forget_identity(&self, shelf_id: &str) {
         self.cache().identities.remove(shelf_id);

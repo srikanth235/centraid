@@ -169,6 +169,8 @@ fn a_paired_phone_is_still_paired_and_still_backs_up_after_the_process_dies() {
     );
     assert_ne!(parts[0], id);
     let identity = parts[0].to_owned();
+    // THE OS NAMES A FINISHED UPLOAD'S VAULT BY ITS IDENTITY; the shelf finds its own id from it.
+    assert_eq!(phone.secrets.shelf_id_of(&identity), Some(id.clone()));
 
     // THE FIRST BACKUP IS ACKNOWLEDGED, and nothing is left for the operating system to be handed.
     let first = drain(&core);
