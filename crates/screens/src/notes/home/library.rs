@@ -521,7 +521,10 @@ impl Library {
         let first_open = !self.filtered() && count > 0 && fold::starters_only(library);
         let mut sections = fold::sections(locale, rows);
         if first_open {
-            for head in sections.iter_mut().filter_map(|section| section.head.as_mut()) {
+            for head in sections
+                .iter_mut()
+                .filter_map(|section| section.head.as_mut())
+            {
                 head.title = words::section_starters(locale);
             }
         }

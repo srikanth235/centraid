@@ -106,7 +106,9 @@ pub fn warns(reading: &Reading, now_ms: i64, running: bool) -> bool {
 /// member's says nothing at all. Pure over the reading and this phone's clock.
 #[must_use]
 pub fn pair_owed(reading: &Reading, now_ms: i64) -> bool {
-    reading.first_item_ms.is_some_and(|first| now_ms - first >= DAY_MS)
+    reading
+        .first_item_ms
+        .is_some_and(|first| now_ms - first >= DAY_MS)
 }
 
 /// The line for one vault. `reading` `None` is "the core could not be asked" (a

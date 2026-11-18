@@ -193,8 +193,9 @@ impl Home {
                     vault_id: String::new(),
                     kind: Some(wire::imports_camera_roll_event::Kind::Requested(
                         wire::imports_camera_roll_event::Requested {
-                            action: wire::imports_camera_roll_event::requested::Action::ReadPermission
-                                as i32,
+                            action:
+                                wire::imports_camera_roll_event::requested::Action::ReadPermission
+                                    as i32,
                         },
                     )),
                 })),

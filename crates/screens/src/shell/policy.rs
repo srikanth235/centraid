@@ -250,7 +250,12 @@ mod tests {
             }
         }
         let small = |folded: &Folded, widget: &str| {
-            folded.tiles.iter().find(|t| t.widget == widget).unwrap().size()
+            folded
+                .tiles
+                .iter()
+                .find(|t| t.widget == widget)
+                .unwrap()
+                .size()
         };
         // Money, Health, People and Locker stay glances even while they only invite.
         let day_zero = fold(of(&ORDER, Status::Empty));

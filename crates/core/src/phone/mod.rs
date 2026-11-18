@@ -1374,9 +1374,7 @@ fn first_item_ms(vault: &Vault) -> Option<i64> {
     );
     let sql = format!("SELECT MIN(at) FROM ({})", parts.join(" UNION ALL "));
     let first: Option<String> = vault
-        .read(|connection| {
-            Ok(connection.query_row(&sql, [], |row| row.get(0))?)
-        })
+        .read(|connection| Ok(connection.query_row(&sql, [], |row| row.get(0))?))
         .ok()
         .flatten();
     first.and_then(|at| centraid_vault::clock::parse_iso_ms(&at))

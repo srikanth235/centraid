@@ -239,7 +239,10 @@ fn a_filter_with_nobody_says_so_and_day_one_offers_the_phones_contacts() {
     let i = begin(&mut d);
     // Day one: nobody at all.
     let empty = empty_of(&home_state(d.view(i)).page).clone();
-    assert_eq!(empty.headline, "The people you know, and what you write about them.");
+    assert_eq!(
+        empty.headline,
+        "The people you know, and what you write about them."
+    );
     assert_eq!(empty.hint, "Or tap + to add one.");
     assert_eq!(empty.action_label, "");
     assert_eq!(empty.import_source, wire::ImportSource::Contacts as i32);
@@ -668,10 +671,12 @@ fn a_phone_that_refused_its_contacts_gets_add_person_on_the_card_and_no_hint() {
             request.instance,
             wire::screen_event::Kind::EffectResult(wire::EffectResult {
                 effect_id: request.effect_id,
-                outcome: Some(wire::effect_result::Outcome::Keychain(wire::KeychainValue {
-                    found: false,
-                    value: Vec::new(),
-                })),
+                outcome: Some(wire::effect_result::Outcome::Keychain(
+                    wire::KeychainValue {
+                        found: false,
+                        value: Vec::new(),
+                    },
+                )),
             }),
         );
     }

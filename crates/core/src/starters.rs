@@ -32,14 +32,8 @@ use crate::example::{Report, Seeder};
 /// The starter notes, in the order they are written: `(title, body)`, each a
 /// plain-text `note.create`.
 pub const NOTES: &[(&str, &str)] = &[
-    (
-        "This note is yours",
-        "Change it, or move it to trash.",
-    ),
-    (
-        "Link with [[",
-        "Type [[ in a note to link to another one.",
-    ),
+    ("This note is yours", "Change it, or move it to trash."),
+    ("Link with [[", "Type [[ in a note to link to another one."),
 ];
 
 /// WRITE EVERY STARTER ROW into a founded vault through the command plane, and

@@ -63,7 +63,10 @@ const FIRST_STEPS: u32 = 2;
 fn step_label(locale: Locale, step: u32) -> String {
     fill(
         &words::step_of(locale),
-        &[("n", &step.to_string()), ("total", &FIRST_STEPS.to_string())],
+        &[
+            ("n", &step.to_string()),
+            ("total", &FIRST_STEPS.to_string()),
+        ],
     )
 }
 
@@ -579,7 +582,11 @@ impl Home {
                         .collect(),
                     step: if day_one { 2 } else { 0 },
                     steps: if day_one { FIRST_STEPS } else { 0 },
-                    step_label: if day_one { step_label(locale, 2) } else { String::new() },
+                    step_label: if day_one {
+                        step_label(locale, 2)
+                    } else {
+                        String::new()
+                    },
                     ..wire::LockerHomeData::default()
                 },
                 said,

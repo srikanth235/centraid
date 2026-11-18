@@ -357,7 +357,12 @@ fn first_item(phone: &mut Phone) {
         })
         .keyed("arrange:first-item"),
     );
-    assert_eq!(told.status, wire::ActStatus::Executed as i32, "{}", told.reason);
+    assert_eq!(
+        told.status,
+        wire::ActStatus::Executed as i32,
+        "{}",
+        told.reason
+    );
     phone.driver.pump(Duration::from_millis(800));
 }
 

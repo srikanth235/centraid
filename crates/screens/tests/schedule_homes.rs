@@ -1053,7 +1053,10 @@ fn a_hidden_calendar_re_folds_and_says_so_in_the_sheet_and_hides_no_task() {
     assert!(choice.hidden);
     assert_eq!(choice.state_label, "Hidden");
     // EVERYTHING HIDDEN IS NOT DAY ONE.
-    assert_ne!(r.empty_headline(), Some("Your events and invitations, day by day."));
+    assert_ne!(
+        r.empty_headline(),
+        Some("Your events and invitations, day by day.")
+    );
     // Toggled back.
     r.send(H::CalendarToggled(
         wire::agenda_home_event::CalendarToggled {
@@ -1524,15 +1527,19 @@ fn a_phone_that_refused_its_calendar_gets_new_event_on_the_card_and_no_hint() {
             request.instance,
             wire::screen_event::Kind::EffectResult(wire::EffectResult {
                 effect_id: request.effect_id,
-                outcome: Some(wire::effect_result::Outcome::Keychain(wire::KeychainValue {
-                    found: false,
-                    value: Vec::new(),
-                })),
+                outcome: Some(wire::effect_result::Outcome::Keychain(
+                    wire::KeychainValue {
+                        found: false,
+                        value: Vec::new(),
+                    },
+                )),
             }),
         );
     }
     r.driver.effects.clear();
-    r.send(H::ImportRequested(wire::agenda_home_event::ImportRequested {}));
+    r.send(H::ImportRequested(
+        wire::agenda_home_event::ImportRequested {},
+    ));
     r.driver.effects.retain(|request| {
         matches!(
             request.effect.as_ref().and_then(|e| e.kind.as_ref()),

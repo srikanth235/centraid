@@ -809,6 +809,13 @@ fn trashing_a_person_hands_its_line_and_undo_to_the_people_page_beneath() {
         ("Dana Reyes moved to trash", "Undo")
     );
     // The Undo brings her back.
-    d.send(home, wire::screen_event::Kind::StatusActed(wire::StatusActed {}));
-    assert!(names(roster_data(d.view(home))).iter().any(|name| name == "Dana Reyes"));
+    d.send(
+        home,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    assert!(
+        names(roster_data(d.view(home)))
+            .iter()
+            .any(|name| name == "Dana Reyes")
+    );
 }

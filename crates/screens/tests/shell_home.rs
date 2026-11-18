@@ -923,7 +923,10 @@ fn a_fresh_vault_is_day_zero_with_the_one_layout_and_the_first_add_ends_it() {
     assert_eq!(after.springboard, wire::HomeSpringboard::Content as i32);
     assert_eq!(after.welcome, "");
     let after_order: Vec<&str> = after.tiles.iter().map(|t| t.widget.as_str()).collect();
-    assert_eq!(after_order, order, "the layout does not move as the vault fills");
+    assert_eq!(
+        after_order, order,
+        "the layout does not move as the vault fills"
+    );
 }
 
 #[test]
@@ -982,7 +985,15 @@ fn a_refused_photo_grant_changes_only_the_photos_widget() {
         "Photo access is off · Open Settings"
     );
     // Every other widget, and the welcome card, are as they were: no second ask, alert or badge.
-    for widget in ["calendar", "reminders", "money", "health", "people", "locker", "docs"] {
+    for widget in [
+        "calendar",
+        "reminders",
+        "money",
+        "health",
+        "people",
+        "locker",
+        "docs",
+    ] {
         assert_eq!(
             tile_of(&after, widget).empty_copy,
             tile_of(&before, widget).empty_copy,
