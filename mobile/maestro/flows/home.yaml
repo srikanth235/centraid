@@ -16,10 +16,10 @@ name: home
 # The grid is the root. Every other screen in the product is reached through it.
 - assertVisible:
     id: "home-grid"
-# The lockup's second line is the backup's status, always (R-ONBOARD-11). The
-# health ribbon (`home-status`) is drawn only while there is something to say,
-# so a healthy vault has none.
-- assertVisible:
+# The lockup's second line is the backup's status, empty on day zero and day one by ruling
+# (2026-11-17, R-ONBOARD-11): a fresh vault shows the welcome card and no status line. The health
+# ribbon (`home-status`) is drawn only while there is something to say, so a healthy vault has none.
+- assertNotVisible:
     id: "home-backup-status"
 
 # DAY ZERO is a claim about the vault, and only a settled, readable vault that holds nothing of

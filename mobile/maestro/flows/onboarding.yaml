@@ -51,8 +51,10 @@ name: onboarding
     timeout: 30000
 - assertVisible:
     id: "home-vault-switch"
-# THE LOCKUP'S SECOND LINE IS THE BACKUP'S STATUS (R-ONBOARD-11).
-- assertVisible:
+# THE LOCKUP'S SECOND LINE IS EMPTY ON DAY ZERO AND DAY ONE (ruling 2026-11-17, R-ONBOARD-11): the
+# backup's one seat says nothing until about a day after the first item. The day-zero state below is
+# the welcome card, and no status line.
+- assertNotVisible:
     id: "home-backup-status"
 
 # DAY ZERO: the welcome card over the one Home, each empty widget with its one action, and the
