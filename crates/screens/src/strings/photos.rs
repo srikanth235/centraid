@@ -186,6 +186,8 @@ catalog! {
     plain photos_opening_library = ("Opening your library", "Opening your library");
     plain photos_open_item = ("Open {label}", "Open {label}");
     plain photos_open_item_sub = ("Open {label}, {sub}", "Open {label}, {sub}");
+    plain photos_refused_body = ("Turn it on in Settings to import your camera roll.", "Turn it on in Settings to import your camera roll.");
+    plain photos_refused_title = ("Photo access is off.", "Photo access is off.");
     plain photos_open_settings = ("Open Settings", "Open Settings");
     plain photos_original_downloading_now = ("Downloading the original now.", "Downloading the original now.");
     plain photos_original_downloading_percent = ("Downloading the original — {percent}%", "Downloading the original — {percent}%");

@@ -144,6 +144,14 @@ internal fun PhotosLibraryBody(
                 ReadStateView(
                     page = library.page!!,
                     onRetry = { onEvent(PhotosHomeEvent(refreshed = PhotosRefreshed())) },
+                    // THE REFUSED CARD'S "Open Settings" (PhotosRefused) is the banner's own remedy.
+                    onEmptyAction = {
+                        onEvent(
+                            PhotosHomeEvent(
+                                remedy = centraid.core.v1.PhotosBannerRemedy(remedy = PhotosHomeImportBanner.Remedy.REMEDY_SETTINGS),
+                            ),
+                        )
+                    },
                     modifier = Modifier.weight(1f),
                     // THE GRID IS THE LOADING STATE (v0 §14): skeleton tiles at the
                     // rung's real geometry, so nothing reflows when the bytes land.

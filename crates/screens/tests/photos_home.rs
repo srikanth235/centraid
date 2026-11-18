@@ -718,6 +718,30 @@ fn import_now_over_an_emptied_library_asks_the_camera_roll_for_a_pass_and_the_sh
 }
 
 #[test]
+fn an_empty_library_behind_a_refused_grant_is_the_card_with_open_settings_alone() {
+    let mut r = rig();
+    r.clear_library();
+    r.send(H::Permission(wire::PhotosPermissionChanged {
+        permission: Perm::Denied as i32,
+    }));
+    let empty = r.library_empty();
+    assert_eq!(empty.headline, "Photo access is off.");
+    assert_eq!(
+        empty.body,
+        "Turn it on in Settings to import your camera roll."
+    );
+    assert_eq!(empty.action_label, "Open Settings");
+    // NO SECOND ASK: the banner does not repeat the card.
+    assert!(r.state().import_banner.is_none());
+    // Granted again, the library is empty in its own words and the grant can fill it.
+    r.send(H::Permission(wire::PhotosPermissionChanged {
+        permission: Perm::Granted as i32,
+    }));
+    assert_eq!(r.library_empty().headline, "No photos on this phone yet.");
+    assert!(r.state().import_banner.is_some());
+}
+
+#[test]
 fn the_platforms_own_pages_are_effects_the_shell_performs_and_the_prompt_is_the_rolls() {
     use wire::camera_roll::Action;
     use wire::photos_home_import_banner::Remedy;

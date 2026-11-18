@@ -147,6 +147,8 @@ struct PhotosLibraryBody: View {
         PageReadStateView(
             page: library.page,
             onRetry: { send(PhotosHomeEvents.make { $0.refreshed = .init() }) },
+            // THE REFUSED CARD'S "Open Settings" (PhotosRefused) is the banner's own remedy.
+            onEmptyAction: { send(PhotosHomeEvents.make { $0.remedy = .with { $0.remedy = .settings } }) },
             flat: true,
             // THE GRID IS THE LOADING STATE (v0 §14): skeleton tiles at the rung's
             // real geometry, so nothing reflows when the bytes land. Never a spinner.

@@ -101,6 +101,8 @@ struct Home {
     /// transfer rule is read from it and written through it.
     secrets: VaultSecrets,
     transfer_sheet_open: bool,
+    /// What the phone says of photo access, as the camera roll last told it.
+    photo_access: wire::PhotosMediaPermission,
     /// The rule write in flight, to be folded into the cache when it is answered.
     keeping: Option<Vec<wire::SecretOp>>,
 }
@@ -130,6 +132,7 @@ impl Home {
             outcome: String::new(),
             appearance: Appearance::System,
             transfer_sheet_open: false,
+            photo_access: wire::PhotosMediaPermission::Unspecified,
             keeping: None,
         }
     }
@@ -182,6 +185,21 @@ impl Home {
     /// Read every tile, in one pass. Nothing to read on a phone with no vault.
     fn reload(&mut self, ctx: &Ctx) {
         self.read = true;
+        // THE CAMERA ROLL TELLS WHAT THE PHONE SAYS of photo access (a read, never an ask).
+        ctx.post(
+            crate::imports::CAMERA_ROLL,
+            wire::ScreenEvent {
+                kind: Some(E::ImportsCameraRoll(wire::ImportsCameraRollEvent {
+                    vault_id: String::new(),
+                    kind: Some(wire::imports_camera_roll_event::Kind::Requested(
+                        wire::imports_camera_roll_event::Requested {
+                            action: wire::imports_camera_roll_event::requested::Action::ReadPermission
+                                as i32,
+                        },
+                    )),
+                })),
+            },
+        );
         if self.none {
             return;
         }
@@ -232,6 +250,10 @@ impl Home {
             // Following the phone is the shell's to draw: Home no longer words a switch
             // that depends on where the phone is.
             H::PhoneSchemeTold(_) => {}
+            H::PhotoAccessTold(told) => {
+                self.photo_access = wire::PhotosMediaPermission::try_from(told.permission)
+                    .unwrap_or(wire::PhotosMediaPermission::Unspecified);
+            }
             H::Vault(_) => self.sheet_open = true,
             H::VaultPicked(picked) => {
                 self.sheet_open = false;
@@ -441,7 +463,16 @@ impl Home {
             status: made.status as i32,
             count: made.count,
             count_label: made.count_label.clone(),
-            empty_copy: empty_copy(locale, widget, made.holds),
+            // A REFUSED PHOTO GRANT changes only the Photos widget (FirstHomeRefused): where it
+            // holds nothing, it says so, and its tap opens Photos, which says the same with Open Settings.
+            empty_copy: if widget == "photos"
+                && !made.holds
+                && self.photo_access == wire::PhotosMediaPermission::Denied
+            {
+                words::tile_photos_refused(locale)
+            } else {
+                empty_copy(locale, widget, made.holds)
+            },
             holds: made.holds,
             body: made
                 .body

@@ -112,5 +112,6 @@ catalog! {
     plain tile_quiet_calendar = ("Nothing coming up", "Nothing coming up");
     plain tile_quiet_money = ("Nothing spent this month", "Nothing spent this month");
     plain tile_empty_people = ("Import contacts", "Import contacts");
+    plain tile_photos_refused = ("Photo access is off · Open Settings", "Photo access is off · Open Settings");
     plain tile_empty_photos = ("Import your camera roll", "Import your camera roll");
 }

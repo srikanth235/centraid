@@ -959,6 +959,19 @@ impl Roll {
             crate::photos::HOME,
             home(wire::photos_home_event::Kind::Backup(self.backup.clone())),
         );
+        // THE SPRINGBOARD'S PHOTOS WIDGET says "Photo access is off" and nothing else moves.
+        ctx.post(
+            crate::shell::HOME,
+            wire::ScreenEvent {
+                kind: Some(E::Home(wire::HomeEvent {
+                    kind: Some(wire::home_event::Kind::PhotoAccessTold(
+                        wire::home_event::PhotoAccessTold {
+                            permission: self.permission as i32,
+                        },
+                    )),
+                })),
+            },
+        );
     }
 
     /// The vault this roll is offered to: the one an event named, else the vault in front.

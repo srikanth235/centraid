@@ -821,7 +821,15 @@ impl Home {
     /// NOTHING TO SHOW, AND WHY: the Favorites filter has its own sentence, never the
     /// empty-library copy.
     fn library_empty(&self, locale: Locale) -> wire::EmptyState {
-        if self.filter == Filter::Favorites {
+        if self.refused_empty() {
+            // PhotosRefused: the app says the same as the Home widget, with Open Settings alone.
+            wire::EmptyState {
+                headline: words::photos_refused_title(locale),
+                body: words::photos_refused_body(locale),
+                action_label: words::photos_open_settings(locale),
+                ..wire::EmptyState::default()
+            }
+        } else if self.filter == Filter::Favorites {
             wire::EmptyState {
                 headline: words::photos_grid_no_favorites(locale),
                 body: words::photos_grid_no_favorites_caption(locale),
@@ -834,6 +842,11 @@ impl Home {
                 ..wire::EmptyState::default()
             }
         }
+    }
+
+    /// An empty library behind a refused grant: the card says so (no banner beside it, no second ask).
+    fn refused_empty(&self) -> bool {
+        self.empty_library() && self.roll.permission == wire::PhotosMediaPermission::Denied
     }
 
     fn empty_library(&self) -> bool {
@@ -1015,7 +1028,7 @@ impl Screen for Home {
             ),
             chrome: Some(chrome::words_of(locale)),
             sheet: self.sheet as i32,
-            import_banner: if library {
+            import_banner: if library && !self.refused_empty() {
                 self.roll.banner(locale, self.empty_library())
             } else {
                 None

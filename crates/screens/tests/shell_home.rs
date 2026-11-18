@@ -958,3 +958,48 @@ fn the_first_item_is_the_members_own_and_never_a_starter() {
     assert_eq!(told.status, wire::ActStatus::Executed as i32);
     assert!(first(&d).is_some_and(|at| at > 0));
 }
+
+#[test]
+fn a_refused_photo_grant_changes_only_the_photos_widget() {
+    let mut d = Driver::first_vault(shell::runtime());
+    d.start();
+    let i = d.navigation.as_ref().expect("navigation").tabs[0].entries[0].instance;
+    let before = data(&d, i);
+    assert_eq!(
+        tile_of(&before, "photos").empty_copy,
+        "Import your camera roll"
+    );
+    tell(
+        &mut d,
+        i,
+        H::PhotoAccessTold(wire::home_event::PhotoAccessTold {
+            permission: wire::PhotosMediaPermission::Denied as i32,
+        }),
+    );
+    let after = data(&d, i);
+    assert_eq!(
+        tile_of(&after, "photos").empty_copy,
+        "Photo access is off · Open Settings"
+    );
+    // Every other widget, and the welcome card, are as they were: no second ask, alert or badge.
+    for widget in ["calendar", "reminders", "money", "health", "people", "locker", "docs"] {
+        assert_eq!(
+            tile_of(&after, widget).empty_copy,
+            tile_of(&before, widget).empty_copy,
+            "{widget}"
+        );
+    }
+    assert_eq!(after.welcome, before.welcome);
+    // The grant comes back: the invitation does too.
+    tell(
+        &mut d,
+        i,
+        H::PhotoAccessTold(wire::home_event::PhotoAccessTold {
+            permission: wire::PhotosMediaPermission::Granted as i32,
+        }),
+    );
+    assert_eq!(
+        tile_of(&data(&d, i), "photos").empty_copy,
+        "Import your camera roll"
+    );
+}
