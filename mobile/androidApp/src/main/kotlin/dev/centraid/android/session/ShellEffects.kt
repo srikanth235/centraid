@@ -40,6 +40,7 @@ import dev.centraid.android.kit.AndroidHealth
 import dev.centraid.android.kit.ClipboardDeadline
 import dev.centraid.android.kit.EffectReason
 import dev.centraid.android.kit.SecretStores
+import dev.centraid.android.kit.StoreRefusal
 import dev.centraid.android.kit.effectAttempt
 import dev.centraid.android.notify.Notify
 import dev.centraid.android.screens.PhotoHandOff
@@ -228,7 +229,7 @@ internal class ShellEffects(
             effect.calendar_read != null -> {
                 val read = effect.calendar_read!!
                 if (!allowed(Manifest.permission.READ_CALENDAR, read.ask_permission)) {
-                    EffectResult(failed = EffectFailed(reason = EffectReason.DENIED, denied = true))
+                    EffectResult(failed = StoreRefusal.failure(StoreRefusal.asked(context, Manifest.permission.READ_CALENDAR)))
                 } else {
                     effectAttempt {
                         withContext(Dispatchers.IO) { readCalendarSnapshot(context, read.days_back, read.days_on, InstallId.of(context)) }
@@ -238,7 +239,7 @@ internal class ShellEffects(
             effect.contacts_read != null -> {
                 val read = effect.contacts_read!!
                 if (!allowed(Manifest.permission.READ_CONTACTS, read.ask_permission)) {
-                    EffectResult(failed = EffectFailed(reason = EffectReason.DENIED, denied = true))
+                    EffectResult(failed = StoreRefusal.failure(StoreRefusal.asked(context, Manifest.permission.READ_CONTACTS)))
                 } else {
                     effectAttempt {
                         withContext(Dispatchers.IO) { readContactsSnapshot(context, InstallId.of(context)) }
@@ -387,9 +388,12 @@ internal class ShellEffects(
     }
 
     /** Granted now, or asked at the member's own tap when [ask] and an activity is up. */
-    private suspend fun allowed(permission: String, ask: Boolean): Boolean =
-        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED ||
-            (ask && ui?.ask(permission) == true)
+    private suspend fun allowed(permission: String, ask: Boolean): Boolean {
+        if (ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED) return true
+        if (!ask || ui == null) return false
+        StoreRefusal.noteAsked(context, permission)
+        return ui?.ask(permission) == true
+    }
 
     /** The ribbon's doors into the system's settings (the backup's is a tab Rust selects itself). */
     private fun settingsDoor(door: HomeStatus.Destination): EffectResult = when (door) {
