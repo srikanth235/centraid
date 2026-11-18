@@ -536,12 +536,11 @@ private struct PeopleRosterRowView: View {
         }
     }
 
-    private var meta: Text {
-        var line = Text([row.role, row.meta].filter { !$0.isEmpty }.joined(separator: " · "))
-        for chip in row.chips where isReminder(chip) {
-            line = line + Text(" · ") + Text(chip.label).foregroundStyle(accent.text)
-        }
-        return line
+    private var meta: MetaLine {
+        MetaLine(
+            parts: [row.role, row.meta],
+            accented: row.chips.filter(isReminder).map(\.label)
+        )
     }
 
     var body: some View {
@@ -557,7 +556,6 @@ private struct PeopleRosterRowView: View {
                         meta
                             .kitType(.meta)
                             .foregroundStyle(Surface.meta)
-                            .lineLimit(2)
                     }
                     Spacer(minLength: 8)
                     ForEach(Array(row.chips.filter { !isReminder($0) }.enumerated()), id: \.offset) { _, chip in
