@@ -100,16 +100,36 @@ pub fn checked(outcome: wire::owner_checked::Outcome) -> wire::effect_result::Ou
     })
 }
 
-/// Start the runtime, push Locker's home and pass the owner check.
+/// Whether an owner check is out that asks the member.
+fn asked(d: &Driver) -> bool {
+    d.effects
+        .iter()
+        .any(|e| matches!(e.effect.as_ref().and_then(|e| e.kind.as_ref()), Some(wire::effect::Kind::OwnerCheck(c)) if c.ask))
+}
+
+/// The member presses the wall's button.
+pub fn tap_unlock(d: &mut Driver, id: u64) {
+    d.send(
+        id,
+        wire::screen_event::Kind::LockerWall(wire::LockerWallEvent {
+            kind: Some(wire::locker_wall_event::Kind::Unlock(
+                wire::locker_wall_event::UnlockTapped {},
+            )),
+        }),
+    );
+}
+
+/// Start the runtime, push Locker's home and pass the owner check. Over a vault with no item the
+/// wall is the first check and waits for its button, so the button is pressed here.
 pub fn open_home(d: &mut Driver) -> u64 {
     d.start();
     let home = home_instance(d);
-    assert!(
-        d.effects
-            .iter()
-            .any(|e| matches!(e.effect.as_ref().and_then(|e| e.kind.as_ref()), Some(wire::effect::Kind::OwnerCheck(c)) if c.ask)),
-        "opening Locker asks the owner check"
-    );
+    if !asked(d) {
+        // The wall's quiet probe of what the phone can do is not this test's.
+        d.effects.clear();
+        tap_unlock(d, home);
+    }
+    assert!(asked(d), "opening Locker asks the owner check");
     d.answer_effect(passed(wire::Biometry::Face));
     home
 }

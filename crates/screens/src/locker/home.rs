@@ -1032,10 +1032,12 @@ impl Home {
 impl Screen for Home {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
-            // OPENING LOCKER IS THE ASK: no wall before the prompt.
+            // OPENING LOCKER IS THE ASK: no wall before the prompt. The one exception is the first
+            // check (LockerFirstCheck), over a vault with no item: the wall is the screen, and its
+            // button is the ask.
             Some(E::Appeared(_)) => {
                 self.read_holds(ctx);
-                let step = self.wall.appeared(ctx, true);
+                let step = self.wall.appeared(ctx, self.holds_none != Some(true));
                 let effects = self.walled(ctx, step);
                 // A home that finds the session already open still reads.
                 if self.wall.is_open() && matches!(self.items, Page::Loading) {

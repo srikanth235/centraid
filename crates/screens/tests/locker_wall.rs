@@ -42,9 +42,7 @@ fn opening_locker_asks_at_once_and_a_cancel_leaves_the_wall_to_try_again() {
 #[test]
 fn the_os_saying_yes_opens_the_locker_only_through_the_core() {
     let mut d = driver();
-    d.start();
-    let id = home_instance(&d);
-    d.answer_effect(passed(wire::Biometry::Face));
+    let id = open_home(&mut d);
     let state = home(&d, id);
     assert!(state.wall.is_none(), "the core opened its session");
     assert!(state.secure, "the capture shield holds while open");
@@ -84,6 +82,8 @@ fn a_failed_check_names_the_way_back_and_a_lockout_says_so() {
     let mut d = driver();
     d.start();
     let id = home_instance(&d);
+    d.effects.clear();
+    tap_unlock(&mut d, id);
     d.answer_effect(checked(wire::owner_checked::Outcome::Failed));
     let wall = wall_of(&d, id).unwrap();
     assert_eq!(wall.phase, wire::locker_wall::Phase::Failed as i32);
@@ -553,6 +553,8 @@ fn generate_draws_from_the_given_bytes_and_a_relock_drops_the_candidate() {
     ));
     d.start();
     let id = home_instance(&d);
+    d.effects.clear();
+    tap_unlock(&mut d, id);
     d.answer_effect(passed(wire::Biometry::Passcode));
     let generator = home_data(&d, id).generator.expect("generate tab");
     assert_eq!(generator.output.chars().count(), 20);
@@ -588,9 +590,7 @@ fn generate_draws_from_the_given_bytes_and_a_relock_drops_the_candidate() {
 #[test]
 fn the_header_lock_key_covers_the_locker_and_says_its_words() {
     let mut d = driver();
-    d.start();
-    let id = home_instance(&d);
-    d.answer_effect(passed(wire::Biometry::Face));
+    let id = open_home(&mut d);
     assert!(home(&d, id).wall.is_none());
     assert_eq!(home(&d, id).chrome.unwrap().lock_label, "Lock now");
     d.send(
@@ -778,23 +778,46 @@ fn selecting_another_tab_drops_a_pending_unlock() {
 }
 
 #[test]
-fn over_a_vault_with_no_item_the_wall_is_the_first_check_step_one_of_two() {
+fn over_a_vault_with_no_item_the_wall_is_the_first_check_and_its_button_is_the_ask() {
     let mut d = driver();
     d.start();
     let id = home_instance(&d);
-    // The prompt is still the first thing; the wall under it already counts the steps.
+    // NO PROMPT YET (LockerFirstCheck): the wall is the screen, counts the steps and says what the
+    // check is for; the check is raised only when the member presses its button.
+    assert!(
+        !d.effects.iter().any(|e| matches!(
+            e.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::OwnerCheck(check)) if check.ask
+        )),
+        "nothing asks before the button"
+    );
     let wall = wall_of(&d, id).expect("a wall");
-    assert_eq!((wall.step, wall.steps), (1, 2));
-    assert_eq!(wall.step_label, "Step 1 of 2");
-    d.answer_effect(checked(wire::owner_checked::Outcome::Cancelled));
-    let wall = wall_of(&d, id).expect("still a wall");
     assert_eq!(wall.phase, wire::locker_wall::Phase::Locked as i32);
+    assert_eq!((wall.step, wall.steps), (1, 2));
     assert_eq!(wall.step_label, "Step 1 of 2");
     assert_eq!(wall.title, "Confirm it's you");
     assert_eq!(
         wall.body,
         "Locker opens with your face or your passcode, every time."
     );
+    assert_eq!(wall.unlock_label, "Confirm it's you");
+    assert_eq!(wall.notice, "");
+    // THE BUTTON ASKS, and the wall under the prompt still counts the steps.
+    d.effects.clear();
+    tap_unlock(&mut d, id);
+    assert!(matches!(
+        effects_of(&d, 0).as_slice(),
+        [wire::effect::Kind::OwnerCheck(check)] if check.ask
+    ));
+    let wall = wall_of(&d, id).expect("a wall");
+    assert_eq!((wall.step, wall.steps), (1, 2));
+    assert_eq!(wall.step_label, "Step 1 of 2");
+    // A cancel returns to the card, button and all.
+    d.answer_effect(checked(wire::owner_checked::Outcome::Cancelled));
+    let wall = wall_of(&d, id).expect("still a wall");
+    assert_eq!(wall.phase, wire::locker_wall::Phase::Locked as i32);
+    assert_eq!(wall.step_label, "Step 1 of 2");
+    assert_eq!(wall.title, "Confirm it's you");
     assert_eq!(wall.unlock_label, "Confirm it's you");
     assert_eq!(wall.notice, "");
 }

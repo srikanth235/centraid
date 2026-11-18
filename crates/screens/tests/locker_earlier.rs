@@ -16,8 +16,7 @@ use wire::screen_event::Kind as E;
 fn opened() -> (Driver, u64) {
     let mut d = driver();
     login(&d, "i1", "Bank");
-    d.start();
-    d.answer_effect(passed(wire::Biometry::Face));
+    open_home(&mut d);
     let id = push_item(&mut d, "i1");
     (d, id)
 }
@@ -482,8 +481,7 @@ fn an_imported_item_says_the_files_name_only_and_a_typed_one_does_not() {
             ..act::locker::AddItem::default()
         },
     );
-    d.start();
-    d.answer_effect(passed(wire::Biometry::Face));
+    open_home(&mut d);
     let page = push_item(&mut d, "imported");
     let line = item_data(&d, page).origin.expect("a line");
     assert_eq!(line.text, "From Chrome Passwords.csv");

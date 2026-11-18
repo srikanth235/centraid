@@ -34,8 +34,7 @@ fn export_event(d: &mut centraid_screens::testing::Driver, id: u64, kind: X) {
 fn ready() -> centraid_screens::testing::Driver {
     let mut d = driver();
     login(&d, "i1", "Bank");
-    d.start();
-    d.answer_effect(passed(wire::Biometry::Face));
+    open_home(&mut d);
     // The unlock's announcement is the shell's to take; nothing answers it.
     d.effects.clear();
     d

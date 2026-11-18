@@ -102,6 +102,22 @@ impl<'a> Shell<'a> {
             .next()
             .copied()
             .expect("Locker's home is open");
+        // THE FIRST CHECK waits for its button, over a vault with no item.
+        if shell.home().wall.is_some() {
+            let root = shell.root;
+            shell.call(wire::screen_request::Kind::Send(wire::InstanceEvent {
+                instance: root,
+                event: Some(wire::ScreenEvent {
+                    kind: Some(wire::screen_event::Kind::LockerWall(
+                        wire::LockerWallEvent {
+                            kind: Some(wire::locker_wall_event::Kind::Unlock(
+                                wire::locker_wall_event::UnlockTapped {},
+                            )),
+                        },
+                    )),
+                }),
+            }));
+        }
         shell
     }
 
