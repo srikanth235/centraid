@@ -153,6 +153,9 @@ struct LockerHomeView: View {
                 }
             }
         }
+        // THE PAGE STARTS AT THE TOP: a short page (the first run's note, step and card) is not
+        // centred in the frame, which left a blank gap under the title.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if state.hasStatus {
                 StatusLineView(status: state.status, identifier: "locker-home-status")
