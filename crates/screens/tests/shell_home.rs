@@ -3,6 +3,10 @@
 //! about. Ports the cases of the KMP `HomeMachineSpec`, `SpringboardPolicySpec`,
 //! `HomeReadsSpec` and the tile specs over a real vault; every sentence is Rust's.
 
+#[allow(dead_code)]
+#[path = "locker_support/mod.rs"]
+mod locker_support;
+
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::shell;
 use centraid_screens::testing::Driver;
@@ -1013,4 +1017,41 @@ fn a_refused_photo_grant_changes_only_the_photos_widget() {
         tile_of(&data(&d, i), "photos").empty_copy,
         "Import your camera roll"
     );
+}
+
+/// ONCE LOCKER HOLDS AN ITEM its tile is the ordinary one, shut or open: "Set up Locker" is for a
+/// Locker that holds none.
+#[test]
+fn a_locker_with_an_item_is_no_longer_set_up_locker_on_home() {
+    let mut d = Driver::keyed(shell::runtime());
+    d.start();
+    let root = d.navigation.as_ref().expect("navigation").tabs[0].entries[0].instance;
+    // Nothing yet: the invitation.
+    let before = data(&d, root);
+    assert_eq!(tile(&before, "locker").empty_copy, "Set up Locker");
+    assert!(!tile(&before, "locker").holds);
+    // The first item is written while the Locker is open, and the Locker shuts again.
+    locker_support::login(&d, "i0", "Bank");
+    // THE HOME HEARS THE WRITE, as a shell's event thread delivers it.
+    d.pump(std::time::Duration::from_millis(300));
+    let after = data(&d, root);
+    let locker = tile(&after, "locker");
+    assert_eq!(locker.status, wire::HomeTileStatus::Content as i32);
+    assert!(locker.holds);
+    assert_eq!(locker.count.map(|count| count.value), Some(1));
+    assert_eq!(
+        locker.body.as_ref().and_then(|body| match &body.kind {
+            Some(wire::home_tile_body::Kind::Locker(body)) => Some(body.state_label.clone()),
+            _ => None,
+        }),
+        Some("Locked".to_owned())
+    );
+    // Open, it reads the same: an item, and its state.
+    locker_support::unlock_core(&d);
+    d.send(root, E::DataChanged(wire::DataChanged { tables: vec![] }));
+    let open = data(&d, root);
+    let locker = tile(&open, "locker");
+    assert_eq!(locker.status, wire::HomeTileStatus::Content as i32);
+    assert!(locker.holds);
+    assert_eq!(locker.count.map(|count| count.value), Some(1));
 }
