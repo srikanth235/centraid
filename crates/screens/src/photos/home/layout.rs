@@ -125,10 +125,10 @@ pub fn justify(boxes: &[Boxed], container: f64, target: f64) -> Vec<Vec<Packed>>
     rows
 }
 
-/// THE GRID IS ONE SIZE: every tile is the same square, `columns` to a row, so a
-/// photograph alone in its row is one cell and not a stretched one, and the first
-/// row is the height of every other (the tile's shape is the grid's, never the
-/// photograph's: a photograph is cropped to fill its cell).
+/// THE PLACEHOLDERS ARE ONE SIZE: only the loading state packs equal squares,
+/// `columns` to a row (there is no photograph yet whose shape could size a cell).
+/// The library itself is justified rows ([`justify`]), sized by each photograph's
+/// shape; owner ruling 2026-11-19 replaced #1174's uniform squares with them.
 fn pack(count: usize, container: f64, target: f64) -> Vec<Vec<Packed>> {
     if container <= 0.0 || target <= 0.0 || count == 0 {
         return Vec::new();
