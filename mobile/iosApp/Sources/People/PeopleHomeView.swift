@@ -60,6 +60,7 @@ struct PeopleHomeView: View {
                     page: state.page,
                     loadingLabel: chrome.loading,
                     onRetry: { send(PeopleEvents.home { $0.refreshed = .init() }) },
+                    onEmptyAction: offersImport ? nil : { if state.hasAddPerson { open(state.addPerson) } },
                     emptyExtra: emptyUnder,
                     emptyAction: offersImport ? { AnyView(PeopleImportButton(label: state.chrome.importContacts, send: send)) } : nil
                 ) {
