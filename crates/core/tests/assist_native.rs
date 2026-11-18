@@ -22,7 +22,7 @@ use centraid_core::api_proto as wire;
 use wire::assist_event::Kind as Event;
 use wire::assist_request::Kind as Ask;
 
-use common::chat::{FOUND_TASKS, read_tasks, script, step};
+use common::chat::{FOUND_TASKS, TZ, read_tasks, script, step};
 
 fn native_sample(model: Arc<dyn Model>) -> common::chat::Sample {
     let sample = common::chat::sample();
@@ -410,6 +410,51 @@ fn a_question_for_the_vault_that_finds_nothing_says_so() {
     let answer = answered(&sent);
     assert_eq!(answer.text, "Nothing found.");
     assert!(answer.cards.is_empty());
+}
+
+/// A reminder due today, added the way the Reminders app adds one (`task.add`), with the day the
+/// chat reads as today (UTC, the sample's zone).
+fn a_reminder_due_today(sample: &common::chat::Sample, title: &str) -> String {
+    use centraid_assist::native::Door as _;
+    let day = ymd(sample.handle.assist_door().now_ms().div_euclid(86_400_000));
+    let added = sample
+        .handle
+        .command(
+            "task.add",
+            &serde_json::json!({ "title": title, "due": format!("{day}T23:00:00.000Z") }),
+            "test:reminder-today",
+        )
+        .expect("the reminder is added");
+    assert_eq!(added.status, centraid_vault::CommandStatus::Executed);
+    day
+}
+
+#[test]
+fn a_question_about_today_finds_the_reminder_due_today_and_never_says_nothing() {
+    let sample = native_sample(script(&[]));
+    let day = a_reminder_due_today(&sample, "Renew the harbour permit");
+    sample.install(script(&[
+        step("plan: look", "find", &[("kind", "task"), ("when", &day)]),
+        step("plan: answer", "answer", &[("rows", "@1")]),
+    ]));
+    let session = sample.start("");
+    let sent = send_in(&sample, session, 1, "What reminders do I have today?", TZ);
+    let answer = answered(&sent);
+    assert_ne!(answer.text, "Nothing found.", "{answer:?}");
+    assert!(
+        answer
+            .cards
+            .iter()
+            .any(|card| card.title == "Renew the harbour permit"),
+        "the reminder due today is a card: {answer:?}"
+    );
+    assert!(
+        answer
+            .cards
+            .iter()
+            .all(|card| (card.app.as_str(), card.entity.as_str()) == ("reminders", "task")),
+        "{answer:?}"
+    );
 }
 
 #[test]
