@@ -1291,6 +1291,7 @@ fn agenda_home_route() -> wire::Route {
             destination: wire::AgendaDestination::Month as i32,
             quick_add_title: String::new(),
             open_quick_add: false,
+            open_import: false,
         })),
     }
 }

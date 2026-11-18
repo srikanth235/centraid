@@ -211,6 +211,10 @@ pub const REGISTER: &[Entry] = &[
         platform(Shell::Ios, REMINDERS),
     ),
     (
+        "AgendaHomeEvent.import_reminders_requested",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
         "AgendaHomeState.import_reminders",
         platform(Shell::Ios, REMINDERS),
     ),

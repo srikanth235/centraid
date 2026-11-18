@@ -208,6 +208,9 @@ message AgendaHomeRoute {
   // (a widget's "New Reminder"). Nothing is written until the member taps Add.
   // It names To-do as the place, as naming words does.
   bool open_quick_add = 3;
+  // Start the phone's Reminders import as the page opens (Home's "Import your reminders" tile).
+  // It names To-do as the place, and does nothing where the phone has no Reminders to read.
+  bool open_import = 4;
 }
 
 // `agenda.event`: one occurrence of an event.

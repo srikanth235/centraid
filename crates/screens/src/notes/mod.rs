@@ -103,6 +103,7 @@ pub mod routes {
                 destination: wire::AgendaDestination::Todo as i32,
                 quick_add_title: title.to_owned(),
                 open_quick_add: false,
+                open_import: false,
             }),
         )
     }

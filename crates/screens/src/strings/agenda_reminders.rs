@@ -15,6 +15,7 @@ catalog! {
     plain flag = ("Flag", "Flag");
     plain flagged_empty = ("Nothing is flagged.", "Nothing is flagged.");
     plain hide_completed = ("Hide", "Hide");
+    plain import_from_reminders = ("Import from Reminders", "Import from Reminders");
     plain paused_title = ("Reminders paused", "Reminders paused");
     plain paused_body = ("Open Centraid to keep reminders coming.", "Open Centraid to keep reminders coming.");
     plain move_down = ("Move down", "Move down");

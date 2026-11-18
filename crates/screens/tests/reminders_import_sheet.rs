@@ -27,13 +27,20 @@ struct Rig {
 
 /// Agenda's home and the three import services, on a phone of `platform`.
 fn rig(platform: &str) -> Rig {
+    rig_on(platform, routes::home(wire::AgendaDestination::Todo, ""))
+}
+
+/// The same, with Reminders opened on `route` (Home's tile opens it importing).
+fn rig_on(platform: &str, route: wire::Route) -> Rig {
+    rig_in(Driver::with_runtime, platform, route)
+}
+
+/// The same, over `make`'s vault.
+fn rig_in(make: fn(Runtime) -> Driver, platform: &str, route: wire::Route) -> Rig {
     let registry = agenda::registry().merge(imports::registry(&VaultSecrets::new()));
-    let mut tabs = vec![(
-        agenda::TAB.to_owned(),
-        routes::home(wire::AgendaDestination::Todo, ""),
-    )];
+    let mut tabs = vec![(agenda::TAB.to_owned(), route)];
     tabs.extend(imports::roots());
-    let mut d = Driver::with_runtime(Runtime::new(registry, tabs));
+    let mut d = make(Runtime::new(registry, tabs));
     d.start();
     d.call(wire::screen_request::Kind::Environment(wire::Environment {
         locale: "en".to_owned(),
@@ -451,4 +458,48 @@ fn a_cold_start_reads_the_stored_follow_and_stop_works_from_it() {
         r.state().status.as_ref().map(|s| s.sentence.as_str()),
         Some("Reminders stopped reading your phone reminders.")
     );
+}
+
+/// THE FIRST-OPEN CARD'S IMPORT AND HOME'S TILE (FirstImports): one tap, or the tile's route, asks the
+/// phone for its Reminders at once, without the option sheet and without the completed ones; where
+/// the phone has no Reminders it asks nothing.
+#[test]
+fn the_card_and_the_tile_start_the_import_without_the_sheet() {
+    let mut r = rig("ios");
+    // The first-open card names the import where the phone has Reminders, and not elsewhere.
+    let first = |platform| {
+        rig_in(
+            Driver::first_vault,
+            platform,
+            routes::home(wire::AgendaDestination::Todo, ""),
+        )
+    };
+    assert_eq!(first("ios").state().import_label, "Import from Reminders");
+    assert_eq!(first("android").state().import_label, "");
+    r.send(H::ImportRemindersRequested(
+        wire::agenda_home_event::ImportRemindersRequested {},
+    ));
+    let reads = r.reads();
+    assert_eq!(reads.len(), 1, "{reads:?}");
+    assert!(reads[0].ask_permission && !reads[0].include_completed);
+    assert_eq!(r.state().sheet, Sheet::None as i32);
+
+    let tile = centraid_screens::reminders::routes::home_importing();
+    let mut r = rig_on("ios", tile.clone());
+    // The screen first appeared before the environment named the platform: it appears again.
+    let home = r.home;
+    r.d.send(home, E::Appeared(wire::Appeared {}));
+    let reads = r.reads();
+    assert_eq!(
+        reads.len(),
+        1,
+        "opening on the tile's route imports: {reads:?}"
+    );
+    assert!(reads[0].ask_permission);
+
+    let mut android = rig_on("android", tile);
+    android.send(H::ImportRemindersRequested(
+        wire::agenda_home_event::ImportRemindersRequested {},
+    ));
+    assert!(android.reads().is_empty());
 }

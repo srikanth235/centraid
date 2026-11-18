@@ -792,6 +792,10 @@ fn tile_route(app: &str, made: &Made) -> Option<wire::Route> {
         (_, Status::Loading) => None,
         ("notes", Status::Empty) => Some(crate::notes::routes::new_note()),
         ("notes", Status::Unknown) => None,
+        // "IMPORT YOUR REMINDERS": the tile's invitation starts the import as Reminders opens.
+        ("reminders", Status::Empty) if !made.holds => {
+            Some(crate::reminders::routes::home_importing())
+        }
         _ => row_routes::app_home(app),
     }
 }
@@ -953,6 +957,15 @@ mod tests {
         assert_eq!(
             screen("reminders", Status::Empty).as_deref(),
             Some("reminders.home")
+        );
+        // ... and an empty one that holds nothing opens it importing: that is what its tile says.
+        assert_eq!(
+            tile_route("reminders", &made(Status::Empty)),
+            Some(crate::reminders::routes::home_importing())
+        );
+        assert_eq!(
+            tile_route("reminders", &made(Status::Content)),
+            Some(crate::reminders::routes::home())
         );
         assert_eq!(
             screen("photos", Status::Unknown).as_deref(),

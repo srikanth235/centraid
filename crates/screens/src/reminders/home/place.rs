@@ -71,6 +71,8 @@ pub fn fold_shaped(
         wire::EmptyState {
             headline: words::day_one(locale),
             import_source: wire::ImportSource::Reminders as i32,
+            // FIRST OPEN (FirstImports): the way to add by hand, under the import.
+            hint: crate::strings::agenda::first_open_hint(locale),
             ..wire::EmptyState::default()
         }
     } else {
@@ -451,6 +453,7 @@ mod tests {
         assert_eq!(empty.headline, "Add the first thing you must not forget.");
         assert_eq!(empty.import_source, wire::ImportSource::Reminders as i32);
         assert_eq!(empty.action_label, "");
+        assert_eq!(empty.hint, "Or tap + to write one.");
     }
 
     #[test]

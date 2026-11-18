@@ -879,7 +879,12 @@ message AgendaHomeEvent {
     QuickStagedRemoved quick_staged_removed = 65;
     // THE EDIT CALENDAR SHEET'S MOVE TO TRASH (#1185): the calendar and its events go to the trash.
     StyleTrashed style_trashed = 66;
+    // THE REMINDERS FIRST-OPEN CARD'S IMPORT (FirstImports): the one tap that asks the phone for its
+    // Reminders and imports them, without the option sheet.
+    ImportRemindersRequested import_reminders_requested = 67;
   }
+
+  message ImportRemindersRequested {}
 
   message QuickStagedRemoved {
     // `TodoStagedRow.key`.

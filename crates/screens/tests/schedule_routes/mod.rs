@@ -20,6 +20,7 @@ pub fn home(destination: wire::AgendaDestination, quick_add_title: &str) -> wire
                 destination: destination as i32,
                 quick_add_title: quick_add_title.to_owned(),
                 open_quick_add: false,
+                open_import: false,
             })),
         }
     } else {

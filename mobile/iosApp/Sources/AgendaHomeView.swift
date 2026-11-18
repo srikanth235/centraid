@@ -405,6 +405,22 @@ private struct CalendarImportButton: View {
     }
 }
 
+/// THE PHONE REMINDERS' IMPORT: the verb is the app's, the tap is Rust's (`ImportRemindersRequested`,
+/// which asks this shell to read the reminders through the `RemindersRead` effect).
+private struct RemindersImportButton: View {
+    /// Rust's words (`import_label`, "Import from Reminders").
+    let label: String
+    let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
+
+    var body: some View {
+        KitOutlineButton(label: label) {
+            send(AgendaEvents.make { $0.importRemindersRequested = .init() })
+        }
+        .accessibilityIdentifier("kit-empty-import")
+        .padding(.top, 4)
+    }
+}
+
 // MARK: - Toolbar
 
 /// The ‹ › of Month, Year and the lists, stepping a period or a day. Today is the floating key
@@ -609,7 +625,15 @@ private struct AgendaTodoList: View {
                     TodoCountLine(count: todo.countLabel, window: todo.windowLabel)
                 }
                 if !todo.empty.headline.isEmpty {
-                    EmptyStateView(todo.empty, onAction: { send(AgendaEvents.make { $0.todoEmptyActed = .init() }) })
+                    // THE PHONE'S REMINDERS, where Rust names the import (day one, or all done): the
+                    // card's one action, with the add under it as the board draws it.
+                    EmptyStateView(
+                        todo.empty,
+                        actionSlot: todo.empty.importSource == .reminders && !state.importLabel.isEmpty
+                            ? AnyView(RemindersImportButton(label: state.importLabel, send: send))
+                            : nil,
+                        onAction: { send(AgendaEvents.make { $0.todoEmptyActed = .init() }) }
+                    )
                 }
             }
             .todoPlainRow()
