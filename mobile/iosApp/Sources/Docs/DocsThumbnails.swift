@@ -59,6 +59,7 @@ struct DocsThumbnail: View {
 
     @State private var image: UIImage?
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         ZStack {
@@ -66,6 +67,11 @@ struct DocsThumbnail: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
+                // A PAGE IS WHITE PAPER (#1202): on the dark grid it is dimmed, so it sits in the
+                // page instead of glaring out of it.
+                if pdf, scheme == .dark {
+                    Color.black.opacity(0.45)
+                }
             }
         }
         .task(id: path) {
