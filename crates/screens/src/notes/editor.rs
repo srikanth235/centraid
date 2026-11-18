@@ -69,6 +69,7 @@ use crate::kit::read::{self, Note, Page, Reading};
 use crate::kit::share::{self, Share};
 use crate::kit::undo::Undo as Door;
 use crate::screen::{Ctx, Screen};
+use crate::shell::row_routes;
 use crate::strings::{Locale, fill, links as link_words, notes as words, shared};
 use std::collections::{BTreeSet, HashMap};
 
@@ -81,11 +82,24 @@ enum Resolution {
         id: String,
         title: String,
     },
+    /// The title names another kind of item (a person, a document): the chip is that item's,
+    /// opened at its own page and said by its kind, never taken for a missing note.
+    Item {
+        title: String,
+        kind: String,
+        route: Option<wire::Route>,
+    },
     /// In the trash, as this note: the id Restore brings back.
     Trashed {
         id: String,
     },
     Missing,
+}
+
+/// The kind's word for a chip's spoken label ("Person"); the entity's own name for a kind the
+/// link sheet has no word for.
+fn item_kind(locale: Locale, entity: &str) -> String {
+    Kind::parse(entity).map_or_else(|| entity.to_owned(), |kind| kind.name(locale))
 }
 
 /// WHAT A TAP ON A DEAD LINK OFFERS, on the status line beside its sentence: make the note the
@@ -659,15 +673,41 @@ impl Editor {
                 return;
             };
             let wanted = title.trim().to_lowercase();
-            match targets.into_iter().find(|target| {
-                target.entity == "note" && target.title.trim().to_lowercase() == wanted
-            }) {
-                Some(target) => {
+            let named =
+                |target: &&wire::NotesLinkTarget| target.title.trim().to_lowercase() == wanted;
+            // A NOTE OF THAT NAME WINS; failing one, any other item the powerbox offered under it
+            // (a person picked from the sheet lands `[[Name]]` too) is that item, not a missing note.
+            let found = targets
+                .iter()
+                .filter(named)
+                .find(|target| target.entity == "note")
+                .or_else(|| targets.iter().find(named));
+            match found {
+                Some(target) if target.entity == "note" => {
                     self.resolutions.insert(
                         title,
                         Resolution::Resolved {
-                            id: target.id,
-                            title: target.title,
+                            id: target.id.clone(),
+                            title: target.title.clone(),
+                        },
+                    );
+                }
+                Some(target) => {
+                    self.resolutions.insert(
+                        title,
+                        Resolution::Item {
+                            title: target.title.clone(),
+                            kind: target.entity.clone(),
+                            route: row_routes::route(
+                                &row_routes::RowRef::new(
+                                    &target.app_id,
+                                    &target.entity,
+                                    &target.id,
+                                    &target.title,
+                                ),
+                                "",
+                                &[],
+                            ),
                         },
                     );
                 }
@@ -823,7 +863,9 @@ impl Editor {
             }],
             LinkTarget::Wiki(title) => {
                 let (template, offer) = match self.resolutions.get(title) {
-                    Some(Resolution::Resolved { .. }) => return Vec::new(),
+                    Some(Resolution::Resolved { .. } | Resolution::Item { .. }) => {
+                        return Vec::new();
+                    }
                     Some(Resolution::Trashed { id }) => (
                         words::link_trashed(locale),
                         Offer::Restore {
@@ -1392,6 +1434,15 @@ impl Editor {
                         wire::NotesLinkResolution::Resolved,
                         Some(routes::editor(id)),
                         words::link_note_spoken(locale),
+                    ),
+                    Some(Resolution::Item { title, kind, route }) => (
+                        title.clone(),
+                        wire::NotesLinkResolution::Resolved,
+                        route.clone(),
+                        fill(
+                            &words::link_item_spoken(locale),
+                            &[("kind", &item_kind(locale, kind))],
+                        ),
                     ),
                     Some(Resolution::Trashed { .. }) => (
                         typed.clone(),
@@ -2413,6 +2464,41 @@ mod tests {
             ctx,
             N::LinkOpened(wire::notes_editor_event::LinkOpened { at }),
         )
+    }
+
+    #[test]
+    fn a_wiki_link_naming_a_person_is_that_person_not_a_missing_note() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let mut request: wire::ActRequest = act::people::AddPerson {
+            title: "Jake Bennett".into(),
+            ..Default::default()
+        }
+        .into();
+        request.invoke_key = format!("test:{}", kit_act::fresh());
+        let added = driver.act(request);
+        let output: serde_json::Value = serde_json::from_slice(&added.output).expect("output");
+        let person = output["id"].as_str().expect("id").to_owned();
+        let id = make(&driver, "Host", "Ask [[Jake Bennett]] and [[Nowhere]]");
+        let core = Flaky::new(&driver.handle);
+        let (screen, ctx) = opened(&core, &id);
+        let view = state(&*screen, &ctx);
+        let chips = chips(&view);
+        assert_eq!(chips.len(), 2, "{chips:?}");
+        assert_eq!(chips[0].label, "Jake Bennett");
+        assert_eq!(
+            chips[0].resolution,
+            wire::NotesLinkResolution::Resolved as i32,
+            "a person is not a missing note"
+        );
+        assert_eq!(chips[0].accessibility_label, "Person Jake Bennett");
+        assert_eq!(
+            chips[0].route,
+            Some(links::person_route(&person, "Jake Bennett"))
+        );
+        assert_eq!(
+            chips[1].resolution,
+            wire::NotesLinkResolution::Missing as i32
+        );
     }
 
     #[test]
