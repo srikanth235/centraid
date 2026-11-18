@@ -48,7 +48,7 @@ catalog! {
         "Health reads the daily totals {store} keeps, from your watch, phone and apps, into your vault. Nothing is written back."
     );
     plain connect_depth_note = ("Health starts with a year of days and 90 days of workouts.", "Health starts with a year of days and 90 days of workouts.");
-    plain connect_empty = ("Bring in your steps, sleep and workouts from {store}.", "Bring in your steps, sleep and workouts from {store}.");
+    plain connect_empty = ("Steps, sleep and workouts, read from {store}.", "Steps, sleep and workouts, read from {store}.");
     plain connect_background_why = ("Health is read while Centraid is closed so new figures arrive.", "Health is read while Centraid is closed so new figures arrive.");
     plain connect_failed = ("{store} didn’t answer. Try again.", "{store} didn’t answer. Try again.");
     plain connect_headline = ("Your daily totals, kept with you", "Your daily totals, kept with you");

@@ -250,7 +250,8 @@ impl Home {
             let store = Store::of(ctx).name(locale);
             return wire::EmptyState {
                 headline: fill(&words::connect_empty(locale), &[("store", &store)]),
-                action_label: fill(&words::connect_action(locale), &[("store", &store)]),
+                // FirstOpenHealth: "Turn on Apple Health", the same words as the More row.
+                action_label: crate::kit::follow::turn_on_row(locale, &store),
                 ..Default::default()
             };
         }
