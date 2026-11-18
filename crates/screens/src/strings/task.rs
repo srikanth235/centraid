@@ -115,9 +115,9 @@ catalog! {
     plain reads_fact_writes_value = ("tasks, projects and sections you make", "tasks, projects and sections you make");
     plain reads_title = ("What Reminders may read", "What Reminders may read");
     plain read_incomplete = ("Part of this list didn't load.", "Part of this list didn't load.");
-    plain release = ("Won't do", "Won't do");
+    plain release = ("Release", "Release");
     plain release_body = ("It goes to the Logbook as won't do, with its history. Nothing is erased.", "It goes to the Logbook as won't do, with its history. Nothing is erased.");
-    plain release_title = ("Mark this task won't do?", "Mark this task won't do?");
+    plain release_title = ("Release this task?", "Release this task?");
     plain reminder = ("reminder", "reminder");
     plain reminders_empty = ("No open task has a reminder.", "No open task has a reminder.");
     plain reminder_needs_due = ("A reminder needs a due date.", "A reminder needs a due date.");
