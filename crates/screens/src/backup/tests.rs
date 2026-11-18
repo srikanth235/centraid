@@ -2547,6 +2547,48 @@ mod recovery_key_prompt {
         assert!(!data.key_summary.trim().is_empty());
     }
 
+    /// A SHELL THAT CANNOT ANSWER THE PROBE does not leave a phone-only key unasked for ever: the failed
+    /// effect is the answer "not carried".
+    #[test]
+    fn it_is_asked_when_the_probe_fails_and_never_answers() {
+        let mut page = Page::over(steady());
+        page.shell.synced.clear();
+        page.send(E::Appeared(wire::Appeared {}));
+        let at = page
+            .effects
+            .iter()
+            .position(|effect| matches!(effect.kind, Some(wire::effect::Kind::SyncedProbe(_))))
+            .expect("the page probes");
+        page.effects.remove(at);
+        page.serve();
+        assert!(
+            page.data().key_prompt.is_none(),
+            "not before the probe has been answered or failed"
+        );
+        page.send(E::EffectResult(wire::EffectResult {
+            effect_id: 0,
+            outcome: Some(wire::effect_result::Outcome::Failed(wire::EffectFailed {
+                reason: "unavailable".to_owned(),
+                ..Default::default()
+            })),
+        }));
+        assert!(page.data().key_prompt.is_some(), "the prompt is due");
+    }
+
+    /// THE KEY ROW AND THE PROMPT SAY THE SAME THING: a key in the synchronised store that the platform
+    /// will not carry is warned about on the row too.
+    #[test]
+    fn the_key_row_warns_for_a_key_the_platform_does_not_carry() {
+        let mut page = Page::over(steady());
+        page.shell.synchronizing = false;
+        page.env.platform = "android".to_owned();
+        page.send(E::Appeared(wire::Appeared {}));
+        page.serve();
+        let data = page.data();
+        assert!(data.key_prompt.is_some());
+        assert!(data.key_warning, "the row reads the same as the prompt");
+    }
+
     #[test]
     fn it_waits_for_a_confirmed_backup() {
         let mut never = steady();

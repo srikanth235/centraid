@@ -581,6 +581,13 @@ impl Backup {
 
     fn on_result(&mut self, result: wire::EffectResult, ctx: &Ctx) -> Vec<wire::Effect> {
         use wire::effect_result::Outcome as O;
+        // A SHELL THAT FAILS ITS EFFECTS NEVER ANSWERS THE SYNC PROBE, and the recovery-key prompt
+        // waits on that answer. A failure with the probe unanswered is the answer "does not
+        // synchronise": the key is not carried, so the prompt may be asked. (A failure cannot be told
+        // from the probe's own; a later real status replaces this one.)
+        if matches!(result.outcome, Some(O::Failed(_))) && self.synced.is_none() {
+            self.synced = Some(wire::SyncedSecretsStatus::default());
+        }
         match result.outcome {
             Some(O::Secrets(batched)) => self.secrets_answered(&batched, ctx),
             Some(O::SyncedStatus(status)) => {
@@ -817,7 +824,10 @@ impl Backup {
         // sentence once the member said they saved a copy and a warning until then.
         let (key_heading, key_line, key_warning, key_show_label, key_sync_label) =
             if self.settled && key.held {
-                let warning = !key.synced && !key.saved;
+                // THE SAME TEST AS THE PROMPT: a key the platform will not carry (no place) is on
+                // this phone alone, synchronised store or not. The sentence stays the platform's own,
+                // which says why.
+                let warning = !key.carried() && !key.saved;
                 (
                     words::backup_key_heading(locale),
                     if key.synced {
