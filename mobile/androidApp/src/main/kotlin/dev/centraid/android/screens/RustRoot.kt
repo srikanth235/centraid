@@ -401,6 +401,23 @@ internal class RustRoot(
         // answered cancelled, so the bar never opened.
         LaunchedEffect(runtime) { AgendaIntents.deliver(runtime) }
         LaunchedEffect(runtime) { HealthIntents.deliver(runtime) }
+        // THE PHONE'S 12 OR 24 HOUR SETTING CHANGED WHILE THE APP IS OPEN: Rust words every time by it,
+        // so it is told again at once and not at the next start.
+        val appContext = LocalContext.current.applicationContext
+        DisposableEffect(open) {
+            val resolver = appContext.contentResolver
+            val clock = object : android.database.ContentObserver(android.os.Handler(android.os.Looper.getMainLooper())) {
+                override fun onChange(selfChange: Boolean) {
+                    scope?.launch { open.environment() }
+                }
+            }
+            resolver.registerContentObserver(
+                android.provider.Settings.System.getUriFor(android.provider.Settings.System.TIME_12_24),
+                false,
+                clock,
+            )
+            onDispose { resolver.unregisterContentObserver(clock) }
+        }
         val owner = LocalLifecycleOwner.current
         DisposableEffect(owner, runtime) {
             val observer = LifecycleEventObserver { _, event ->
@@ -515,7 +532,7 @@ internal class RustRoot(
 
         // THE SCREEN IS DONE (a cancel committed, the editor saved or left, the task deleted): its page goes.
         val done = event?.dismissed == true || editor?.dismissed == true || detail?.finished == true ||
-            doc?.dismissed == true || peoplePerson?.done == true || earlierPreview?.done == true || healthConnect?.finished == true ||
+            doc?.dismissed == true || peoplePerson?.done == true || earlierPreview?.done == true || healthConnect?.finished == true || notesEditor?.finished == true ||
             lockerItem?.finished == true || lockerEditor?.finished == true || lockerLock?.finished == true ||
             moneyTarget?.finished == true || moneyImport?.finished == true ||
             wordsMake?.finished == true || wordsEnter?.finished == true || wordsShow?.finished == true

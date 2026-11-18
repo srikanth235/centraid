@@ -32,6 +32,14 @@ internal object NotifyPlan {
     }
 
     /**
+     * WHAT THE MEMBER'S ANSWER TO THE PROMPT MEANS. A "yes" is a grant: the answer is trusted over
+     * `areNotificationsEnabled()`, which can still read false for a moment after the system sheet
+     * closes, and recording a denial then would keep the editor saying "Notifications are off" until
+     * a restart. Only a "no" is denied.
+     */
+    fun afterAsk(answer: Boolean): Gate = if (answer) Gate.GRANTED else Gate.DENIED
+
+    /**
      * PENDING AND DELIVERED ARE SEPARATE (#1188, A2). What to do to make the OS hold what Rust wants:
      *
      * - [removePending]: alarms set for ids that are no longer wanted to come, or that are already past.

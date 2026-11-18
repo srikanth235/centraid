@@ -29,6 +29,8 @@ import dev.centraid.android.screens.words.CodeScanDoor
 import dev.centraid.android.session.AppSession
 import dev.centraid.android.session.UiHost
 import java.io.File
+import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -69,7 +71,10 @@ internal fun HostScreenEffects(
     val manyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { pickingMany.answer(it) }
     val pickingFolder = remember { Ask<android.net.Uri?>() }
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { pickingFolder.answer(it) }
-    val saving = remember { Ask<android.net.Uri?>() }
+    // PROCESS-WIDE, NOT `remember`ed: the activity can be recreated (a font or locale change, a rotation)
+    // while the system's save sheet is up, and the answer must reach the export that is waiting for it
+    // and not a fresh `Ask` that nobody waits on, which left a 0-byte document and a screen that never heard.
+    val saving = SaveSheet.ask
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { saving.answer(it) }
     // PAIRING'S SCAN (`ScanCode`): the camera, or the photo picker on a phone with none.
     val scanDoor = remember { CodeScanDoor() }
@@ -178,6 +183,11 @@ internal fun HostScreenEffects(
     }
 }
 
+/** The save sheet's answer, held for the life of the process (see [HostScreenEffects]). */
+private object SaveSheet {
+    val ask = Ask<android.net.Uri?>()
+}
+
 /** One system prompt or sheet out at a time, and its answer. */
 private class Ask<T> {
     private var waiting: CompletableDeferred<T>? = null
@@ -215,10 +225,15 @@ private suspend fun pickBytes(context: Context, uri: android.net.Uri?): EffectRe
 private suspend fun saveFile(context: Context, file: centraid.core.v1.SaveFile, uri: android.net.Uri?): EffectResult {
     uri ?: return EffectResult(failed = EffectFailed(reason = EffectReason.CANCELLED, cancelled = true))
     return withContext(Dispatchers.IO) {
-        runCatching {
+        try {
             context.contentResolver.openOutputStream(uri)?.use { it.write(file.content.toByteArray()) } ?: error("unwritable")
             EffectResult(done = EffectDone())
-        }.getOrElse { failed(EffectReason.UNWRITABLE) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.w("Centraid", "the saved file was not written: $error")
+            failed(EffectReason.UNWRITABLE)
+        }
     }
 }
 
@@ -230,12 +245,18 @@ private suspend fun saveFile(context: Context, file: centraid.core.v1.SaveFile, 
 private suspend fun saveFilePath(file: centraid.core.v1.SaveFilePath, uri: android.net.Uri?, context: Context): EffectResult {
     uri ?: return EffectResult(failed = EffectFailed(reason = EffectReason.CANCELLED, cancelled = true))
     return withContext(Dispatchers.IO) {
-        runCatching {
+        try {
             File(file.path).inputStream().use { input ->
                 context.contentResolver.openOutputStream(uri)?.use { output -> input.copyTo(output, 64 * 1024) } ?: error("unwritable")
             }
             EffectResult(done = EffectDone())
-        }.getOrElse { failed(EffectReason.UNWRITABLE) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            // LOGGED, NOT SWALLOWED: a save that leaves 0 bytes must say why.
+            Log.w("Centraid", "the export was not written: $error")
+            failed(EffectReason.UNWRITABLE)
+        }
     }
 }
 

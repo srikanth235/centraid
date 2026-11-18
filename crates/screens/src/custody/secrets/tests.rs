@@ -357,3 +357,52 @@ fn a_store_that_cannot_list_a_vaults_keys_is_asked_for_them_by_id() {
         Some("abcdabcdabcdabcd")
     );
 }
+
+#[test]
+fn a_gateway_token_is_written_to_the_device_store_handed_back_per_vault_and_deleted_with_its_gateway()
+ {
+    let secrets = VaultSecrets::new();
+    let vault = "a1".repeat(32);
+    let other = "c3".repeat(32);
+    let (one, two) = ("b2".repeat(16), "d4".repeat(16));
+    let minted = |vault: &str, gateway: &str| wire::GatewayToken {
+        vault_id: vault.to_owned(),
+        gateway_id: gateway.to_owned(),
+        token: "7f".repeat(32),
+    };
+    let writes = secrets.token_writes(&[
+        minted(&vault, &one),
+        minted(&vault, &two),
+        minted(&other, &one),
+    ]);
+    // THE PAIRING'S TOKEN IS WRITTEN under its documented key, to the device store and never the
+    // synchronised one.
+    assert_eq!(writes.len(), 3);
+    assert!(
+        writes
+            .iter()
+            .all(|op| op.store == wire::SecretStore::Device as i32
+                && op.op == wire::secret_op::Op::Set as i32)
+    );
+    assert_eq!(writes[0].key, format!("gateway-token.{vault}.{one}"));
+    // A RELAUNCH HANDS A CORE ITS OWN VAULT'S TOKENS and nobody else's, from what the shell listed.
+    let relaunched = VaultSecrets::new();
+    relaunched.absorb(
+        &[device(wire::secret_op::Op::List, "", "")],
+        &[listing(&[
+            (&format!("gateway-token.{vault}.{one}"), &"7f".repeat(32)),
+            (&format!("gateway-token.{other}.{one}"), &"7f".repeat(32)),
+        ])],
+    );
+    let held = relaunched.tokens_for(&vault);
+    assert_eq!(held.len(), 1);
+    assert_eq!(held[0].gateway_id, one);
+    // FORGETTING A GATEWAY, AND A VAULT, DELETES THEM.
+    let delete = secrets.token_delete(&vault, &one);
+    assert_eq!(delete[0].op, wire::secret_op::Op::Delete as i32);
+    assert_eq!(secrets.tokens_for(&vault).len(), 1);
+    let gone = secrets.forget_vault_tokens(&vault);
+    assert_eq!(gone.len(), 1);
+    assert!(secrets.tokens_for(&vault).is_empty());
+    assert_eq!(secrets.tokens_for(&other).len(), 1);
+}

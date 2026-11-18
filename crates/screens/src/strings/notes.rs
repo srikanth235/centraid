@@ -120,8 +120,8 @@ catalog! {
     plain notebooks_title = ("Notebooks", "Notebooks");
     plain pin = ("Pin", "Pin");
     plain powerbox_foot = (
-        "Locker items link by name; their secrets stay locked.",
-        "Locker items link by name; their secrets stay locked."
+        "Any item can be linked except Locker items.",
+        "Any item can be linked except Locker items."
     );
     plain remove_tag = ("Remove tag", "Remove tag");
     plain tag_placeholder = ("Add a tag", "Add a tag");

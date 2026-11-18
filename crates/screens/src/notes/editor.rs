@@ -280,6 +280,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         attachments: None,
         attachments_for: String::new(),
         attachments_open: false,
+        finished: false,
         started: false,
     }))
 }
@@ -370,6 +371,8 @@ struct Editor {
     attachments: Option<Attachments>,
     /// The note's id `attachments` was built for.
     attachments_for: String,
+    /// The note was moved to Trash from the menu: the page is closing.
+    finished: bool,
     /// The menu's "Attachments" sheet is up.
     attachments_open: bool,
     /// `Appeared` has been seen.
@@ -991,6 +994,41 @@ impl Editor {
         }
     }
 
+    /// MOVE TO TRASH, asking nothing (`behaviour.md`): the write is made at once, its Undo is handed
+    /// to the page beneath and this page closes. The words not yet saved go with the note.
+    fn trash(&mut self, ctx: &Ctx) {
+        let Some(id) = self.note_id.clone() else {
+            return;
+        };
+        let title = self
+            .auto
+            .draft()
+            .map(|draft| {
+                if draft.title.trim().is_empty() {
+                    fold::first_line(&draft.body)
+                } else {
+                    draft.title.trim().to_owned()
+                }
+            })
+            .unwrap_or_default();
+        self.forget_sentence();
+        self.status = None;
+        self.said = false;
+        let request: wire::ActRequest = act::notes::DeleteNote {
+            note_id: id.clone(),
+        }
+        .into();
+        let key = kit_act::key(&[&request.action.clone(), &id], kit_act::fresh());
+        let settled = self.door.act_handing_down(ctx, request, &key, |locale| {
+            crate::kit::trash::moved_to_trash(locale, &title)
+        });
+        self.wrote(&settled);
+        if settled.committed {
+            self.finished = true;
+            self.auto = Autosave::new();
+        }
+    }
+
     /// A TAG IS ITS OWN WRITE, sent at once under the note's id (`add-tag`,
     /// `remove-tag`): a choice, not typing. A note not yet created has nothing to
     /// tag, so the field is not offered then. The load after shows what committed.
@@ -1150,6 +1188,7 @@ impl Editor {
                 return self.share.tap(ctx.locale());
             }
             Some(N::ShareRequested(_)) => {}
+            Some(N::TrashTapped(_)) => self.trash(ctx),
             Some(N::ChecklistRequested(_)) => self.checklist(ctx),
             // THE POWERBOX. The link button opens it at the END of the note,
             // whatever a field's caret says (no shell reports one); a pick
@@ -1577,6 +1616,7 @@ impl Screen for Editor {
         };
         let reminders_words = title.clone();
         let mut state = wire::NotesEditorState {
+            finished: self.finished,
             note_id: self.note_id.clone().unwrap_or_default(),
             page: Some(wired),
             content: draft.filter(|_| ready).map(|draft| {
@@ -1644,6 +1684,11 @@ impl Screen for Editor {
                 // Share waits for the first save: a note that does not exist is not shared.
                 share_label: if exists {
                     share::label(locale)
+                } else {
+                    String::new()
+                },
+                trash_label: if exists {
+                    crate::strings::shared::trash_move(locale)
                 } else {
                     String::new()
                 },

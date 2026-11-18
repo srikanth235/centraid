@@ -18,6 +18,12 @@ import java.io.File
  */
 @RunWith(RobolectricTestRunner::class)
 class NotifyPlanTest {
+    @Test
+    fun aYesToThePromptIsAGrantAndOnlyANoIsDenied() {
+        assertEquals(NotifyPlan.Gate.GRANTED, NotifyPlan.afterAsk(true))
+        assertEquals(NotifyPlan.Gate.DENIED, NotifyPlan.afterAsk(false))
+    }
+
     private fun item(id: String, at: Long = 10_000L, immediate: Boolean = false, title: String = "t") =
         PendingNotification(notification_id = id, fire_at_ms = at, immediate = immediate, title = title)
 

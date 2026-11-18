@@ -536,28 +536,18 @@ fn labels_add_tags_a_label_it_has_is_nothing_and_remove_untags() {
 }
 
 #[test]
-fn trash_asks_first_says_it_can_be_restored_and_dismissing_writes_nothing() {
+fn trash_asks_nothing_and_says_so_with_an_undo_on_the_status_line() {
     let mut d = driver();
     let i = root(&d);
     let id = text(&d, "Scratch", "x");
     drive_send(&mut d, i, D::Refreshed(de::Refreshed {}));
     row_menu(&mut d, i, &id);
     pick(&mut d, i, "trash");
-    let confirm_now = state(&d, i).confirm.as_ref().expect("a confirm");
-    assert_eq!(confirm_now.title, "Move to trash?");
+    assert!(state(&d, i).confirm.is_none(), "move to trash asks nothing");
     assert_eq!(
-        confirm_now.body,
-        "It can be restored from trash for 30 days."
+        state(&d, i).status.as_ref().expect("a status").sentence,
+        "Scratch moved to trash"
     );
-    assert_eq!(confirm_now.confirm_label, "Move to trash");
-    assert!(confirm_now.destructive);
-    drive_send(&mut d, i, D::Dismissed(de::Dismissed {}));
-    assert!(state(&d, i).confirm.is_none());
-    assert!(titles(d.view(i)).contains(&"Scratch".to_owned()));
-    row_menu(&mut d, i, &id);
-    pick(&mut d, i, "trash");
-    confirm(&mut d, i);
-    assert!(state(&d, i).confirm.is_none());
     assert!(!titles(d.view(i)).contains(&"Scratch".to_owned()));
 }
 

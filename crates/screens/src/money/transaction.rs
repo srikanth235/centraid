@@ -813,7 +813,12 @@ impl Screen for Transaction {
         let page = if self.gone {
             wire::PageState {
                 state: Some(wire::page_state::State::Failed(read::gone(
-                    words::transaction_gone(locale),
+                    // WHILE THE UNDO IS ON OFFER the line is in the trash, not "no longer here".
+                    if self.undo.can_undo() {
+                        shared::trash_here(locale)
+                    } else {
+                        words::transaction_gone(locale)
+                    },
                     String::new(),
                 ))),
                 note: None,

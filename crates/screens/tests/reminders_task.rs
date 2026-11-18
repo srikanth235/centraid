@@ -1063,21 +1063,11 @@ fn subtasks_count_what_is_done_are_added_as_a_write_and_stay_one_level() {
 // -----------------------------------------------------------------------------
 
 #[test]
-fn delete_asks_in_full_sentences_then_trashes_and_ends_the_screen() {
+fn delete_asks_nothing_trashes_at_once_and_ends_the_screen() {
     let mut d = driver();
     let id = rent(&d);
     let i = open(&mut d, &id);
     send_detail(&mut d, i, de::Kind::Delete(de::DeleteRequested {}));
-    let state = detail(d.view(i));
-    let confirm = state.confirm.as_ref().expect("a confirm");
-    assert_eq!(confirm.title, "Move this task to trash?");
-    assert!(confirm.destructive);
-    // Dismissed, nothing is written.
-    send_detail(&mut d, i, de::Kind::Dismissed(de::Dismissed {}));
-    assert!(detail(d.view(i)).confirm.is_none());
-    assert_eq!(task_of(&d, &id).status, "open");
-    send_detail(&mut d, i, de::Kind::Delete(de::DeleteRequested {}));
-    send_detail(&mut d, i, de::Kind::Confirmed(de::Confirmed {}));
     let state = detail(d.view(i));
     assert!(state.finished);
     assert_eq!(
@@ -1102,7 +1092,6 @@ fn closing_a_deleted_task_does_not_save_its_unsaved_words() {
     let i = open(&mut d, &id);
     typed_title(&mut d, i, "Rent, never saved");
     send_detail(&mut d, i, de::Kind::Delete(de::DeleteRequested {}));
-    send_detail(&mut d, i, de::Kind::Confirmed(de::Confirmed {}));
     d.pop(agenda::TAB, i);
     d.pump(DEBOUNCED);
     let trash_page = d.push(agenda::TAB, routes::trash());

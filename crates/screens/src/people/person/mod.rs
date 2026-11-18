@@ -103,7 +103,6 @@ fn vcard(ctx: &Ctx, person_id: &str) -> Result<ExportFile, String> {
 /// What a confirm on screen will do once the member says so.
 enum Asking {
     Nothing,
-    Trash,
     RemoveChannel(String),
     Merge { party_id: String, name: String },
 }
@@ -504,22 +503,26 @@ impl Person {
         self.sheet = None;
     }
 
+    /// MOVE TO TRASH, asking nothing (`behaviour.md`): the write and its Undo go down at once.
+    fn trash(&mut self, ctx: &Ctx) {
+        let locale = ctx.locale();
+        let name = self.name();
+        let request = act::people::TrashPerson {
+            person_id: self.party_id.clone(),
+        };
+        let outcome = fill(&words::outcome_trashed(locale), &[("name", &name)]);
+        let party = self.party_id.clone();
+        if self.write(ctx, request.into(), &party, outcome) {
+            // THE PAGE CLOSES: "moved to trash" and its Undo go to the page beneath.
+            self.undo.hand_down(ctx);
+            self.done = true;
+        }
+    }
+
     fn confirmed(&mut self, ctx: &Ctx) {
         let locale = ctx.locale();
         let name = self.name();
         match std::mem::replace(&mut self.asking, Asking::Nothing) {
-            Asking::Trash => {
-                let request = act::people::TrashPerson {
-                    person_id: self.party_id.clone(),
-                };
-                let outcome = fill(&words::outcome_trashed(locale), &[("name", &name)]);
-                let party = self.party_id.clone();
-                if self.write(ctx, request.into(), &party, outcome) {
-                    // THE PAGE CLOSES: "moved to trash" and its Undo go to the page beneath.
-                    self.undo.hand_down(ctx);
-                    self.done = true;
-                }
-            }
             Asking::RemoveChannel(channel_id) => {
                 let kind = self
                     .loaded()
@@ -559,15 +562,6 @@ impl Person {
     fn confirm(&self, locale: Locale) -> Option<wire::Confirm> {
         match &self.asking {
             Asking::Nothing => None,
-            Asking::Trash => Some(wire::Confirm {
-                title: fill(
-                    &words::confirm_trash_title(locale),
-                    &[("name", &self.name())],
-                ),
-                body: words::confirm_trash_body(locale),
-                confirm_label: words::move_to_trash(locale),
-                destructive: true,
-            }),
             Asking::RemoveChannel(id) => {
                 let kind = self
                     .loaded()
@@ -704,7 +698,7 @@ impl Person {
             }
             P::TrashTapped(_) => {
                 if self.loaded().is_some() && !self.is_me() {
-                    self.asking = Asking::Trash;
+                    self.trash(ctx);
                 }
             }
             P::Confirmed(_) => self.confirmed(ctx),

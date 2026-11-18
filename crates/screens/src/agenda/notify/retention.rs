@@ -228,7 +228,7 @@ impl Sources {
 }
 
 fn task_eligible(task: &wire::AgendaTask) -> bool {
-    task.status == "open" && task.remind_before_min.is_some() && !task.remind_at_local.is_empty()
+    task.status == "open" && !task.remind_at_local.is_empty()
 }
 
 fn event_minutes(id: &str) -> Option<i64> {

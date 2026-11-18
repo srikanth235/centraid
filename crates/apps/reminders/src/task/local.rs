@@ -146,10 +146,13 @@ pub struct DuePlacement {
     pub overdue: bool,
     /// The due day is today or before — v0's `landsToday`, which Today draws.
     pub lands_today: bool,
-    /// When the reminder fires, `YYYY-MM-DDTHH:MM` in the zone; empty when the
-    /// task carries no lead time or no moment to count back from. A date-only
-    /// due has no moment (see `remind_at`).
+    /// When the reminder fires first, `YYYY-MM-DDTHH:MM` in the zone: the early alert when a lead
+    /// is set, else the due time itself. Empty for a date-only due with no lead time (it has no
+    /// moment to count back from; see `remind_at`).
     pub remind_at_local: String,
+    /// The alert AT the due time that stands beside an early one (`remind_at_local` is the early
+    /// one then); empty when there is no early reminder, the due is a date, or a snooze is set.
+    pub remind_on_time_local: String,
 }
 
 /// Place a task's EFFECTIVE due (`next_due`, else `due_at`) in `zone`.
@@ -165,6 +168,25 @@ pub fn place_due(
         return DuePlacement::default();
     };
     let days = days_between(today.day, civil.day);
+    // A TIMED DUE ALERTS AT ITS TIME BY DEFAULT (owner ruling, 2026-11-18): "Early reminder" only
+    // ADDS an earlier alert. A date-only due has no moment, so it alerts only when a lead was set.
+    let timed = !civil.time_text().is_empty();
+    // A SNOOZE MOVES THE ALERT, NOT THE DUE (#1188, NA5): while one is set it is the task's only
+    // alert, at that instant, read in the zone; the due is untouched.
+    let snoozed = snoozed_until
+        .filter(|_| timed || remind_before_min.is_some())
+        .and_then(|until| parse_civil_ms(until, zone))
+        .map(|millis| {
+            let wall = zone.zoned_parts(millis);
+            format!(
+                "{}T{:02}:{:02}",
+                wall_iso(wall, false),
+                wall.hour,
+                wall.minute
+            )
+        });
+    let early = effective_due.and_then(|due| remind_at(due, remind_before_min?, zone));
+    let on_time_too = timed && snoozed.is_none() && remind_before_min.is_some_and(|lead| lead > 0);
     DuePlacement {
         due_day: civil.day_text(),
         due_local: civil.local_text(),
@@ -172,22 +194,16 @@ pub fn place_due(
         days_from_today: Some(days),
         overdue: days < 0,
         lands_today: days <= 0,
-        // A SNOOZE MOVES THE ALERT, NOT THE DUE (#1188, NA5): while one is set the reminder is at
-        // that instant, read in the zone; the due above is untouched.
-        remind_at_local: snoozed_until
-            .filter(|_| remind_before_min.is_some())
-            .and_then(|until| parse_civil_ms(until, zone))
-            .map(|millis| {
-                let wall = zone.zoned_parts(millis);
-                format!(
-                    "{}T{:02}:{:02}",
-                    wall_iso(wall, false),
-                    wall.hour,
-                    wall.minute
-                )
-            })
-            .or_else(|| effective_due.and_then(|due| remind_at(due, remind_before_min?, zone)))
+        // The alert that fires first: the snooze, else the early one, else the time itself.
+        remind_at_local: snoozed
+            .or(early)
+            .or_else(|| timed.then(|| civil.local_text()))
             .unwrap_or_default(),
+        remind_on_time_local: if on_time_too {
+            civil.local_text()
+        } else {
+            String::new()
+        },
     }
 }
 

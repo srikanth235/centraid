@@ -55,15 +55,26 @@ class AbiContractSpec : StringSpec({
     }
 
     "an undefined status code is its own failure and never the nearest known one" {
-        // A core one version ahead of a shell that invented a sixth code must
-        // not have it read as CLOSED.
-        CoreStatus.of(-6) shouldBe null
+        // A core one version ahead of a shell that invented a new code must not have it read as
+        // CLOSED. The code is derived, never typed: one below the lowest the header defines, so the
+        // next code the header adds does not make this test stale.
+        val header = File(
+            System.getProperty("centraid.core.headerPath")
+                ?: error("centraid.core.headerPath is unset; see mobile/core/build.gradle.kts"),
+        )
+        val defined = Regex("""#define CENTRAID_([A-Z_]+) (-?\d+)""")
+            .findAll(header.readText())
+            .map { it.groupValues[2].toInt() }
+            .toList()
+        withClue("status codes found in centraid.h") { defined.isNotEmpty().shouldBeTrue() }
+        val undefined = defined.min() - 1
+        CoreStatus.of(undefined) shouldBe null
         val core = CentraidCore.overAbi(
-            FakeCentraidAbi { AbiAnswer(null, -6, null) },
+            FakeCentraidAbi { AbiAnswer(null, undefined, null) },
             Dispatchers.Default,
             UI_THREAD,
         )
-        core.call(hello()) shouldBe CoreOutcome.Failed(CoreFailure.UnknownStatus(-6))
+        core.call(hello()) shouldBe CoreOutcome.Failed(CoreFailure.UnknownStatus(undefined))
         core.close()
     }
 

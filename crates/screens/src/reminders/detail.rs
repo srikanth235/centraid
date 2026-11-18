@@ -75,7 +75,10 @@ const SCHEDULED: &str = "scheduled";
 const COMPLETION: &str = "completion";
 
 /// Reminder lead times in minutes, and the words each is drawn in.
-const REMINDER_LEADS: [u32; 5] = [0, 10, 30, 60, 1440];
+///
+/// THERE IS NO "AT THE TIME" CHOICE (owner ruling, 2026-11-18): a reminder with a time alerts at that
+/// time by default, so "None" already means it, and "Early reminder" only adds earlier alerts.
+const REMINDER_LEADS: [u32; 4] = [10, 30, 60, 1440];
 
 /// The repeat presets: choice key and the rule it writes.
 const REPEAT_RULES: [(&str, &str); 4] = [
@@ -552,6 +555,7 @@ impl Detail {
                     return;
                 }
                 if key == NONE {
+                    // A stored lead of 0 is the old "At the time": the same as none.
                     if task.remind_before_min.is_some() {
                         let edit = act::reminders::EditTask {
                             remind_before_min: Field::Clear,
@@ -758,29 +762,34 @@ impl Detail {
         );
     }
 
+    /// MOVE TO TRASH, asking nothing (`behaviour.md`): the write, the words and the Undo go down at once.
+    fn trash(&mut self, ctx: &Ctx) {
+        let Some(task) = self.task() else {
+            return;
+        };
+        let request = act::reminders::DeleteTask {
+            task_id: task.task_id.clone(),
+        };
+        if self.write(
+            ctx,
+            request,
+            &[act::reminders::DeleteTask::NAME, &task.task_id],
+            |locale| crate::kit::trash::moved_to_trash(locale, &task.title),
+        ) {
+            // THE PAGE CLOSES: "moved to trash" and its Undo go to the page beneath.
+            self.ops.line.hand_down(ctx);
+            self.finished = true;
+            // The words are gone with the task: leaving saves nothing.
+            self.autosave = Autosave::new();
+        }
+    }
+
     fn confirmed(&mut self, ctx: &Ctx) {
         let asking = std::mem::replace(&mut self.asking, Asking::None);
         let Some(task) = self.task() else {
             return;
         };
         match asking {
-            Asking::Delete => {
-                let request = act::reminders::DeleteTask {
-                    task_id: task.task_id.clone(),
-                };
-                if self.write(
-                    ctx,
-                    request,
-                    &[act::reminders::DeleteTask::NAME, &task.task_id],
-                    |locale| crate::kit::trash::moved_to_trash(locale, &task.title),
-                ) {
-                    // THE PAGE CLOSES: "moved to trash" and its Undo go to the page beneath.
-                    self.ops.line.hand_down(ctx);
-                    self.finished = true;
-                    // The words are gone with the task: leaving saves nothing.
-                    self.autosave = Autosave::new();
-                }
-            }
             Asking::Release => {
                 let request = act::reminders::CancelTask {
                     task_id: task.task_id.clone(),
@@ -938,7 +947,7 @@ impl Detail {
                     words::subtask_added,
                 );
             }
-            Some(D::Delete(_)) => self.asking = Asking::Delete,
+            Some(D::Delete(_)) => self.trash(ctx),
             // RELEASING DESTROYS NOTHING: the outlined secondary, not `net`.
             Some(D::Release(_)) => self.asking = Asking::Release,
             Some(D::Confirmed(_)) => self.confirmed(ctx),
@@ -992,12 +1001,6 @@ impl Detail {
 
     fn confirm(&self, locale: Locale) -> Option<wire::Confirm> {
         match self.asking {
-            Asking::Delete => Some(wire::Confirm {
-                title: words::delete_title(locale),
-                body: words::delete_body(locale),
-                confirm_label: words::delete(locale),
-                destructive: true,
-            }),
             Asking::Release => Some(wire::Confirm {
                 title: words::release_title(locale),
                 body: words::release_body(locale),
@@ -1331,7 +1334,7 @@ fn reminder_value(
     task: &wire::AgendaTask,
     today: &str,
 ) -> String {
-    if task.remind_before_min.is_none() {
+    if task.remind_before_min.is_none_or(|lead| lead == 0) {
         words::remind_none(locale)
     } else if !task.remind_at_local.is_empty() && task.due_time.is_empty() {
         // A DAY HAS NO MOMENT (#1188, NA6): the alert sounds at the day's own time; the due keeps none.
@@ -1440,7 +1443,7 @@ fn fields(
     let mut reminder_choices = vec![chip(
         NONE,
         words::remind_none(locale),
-        task.remind_before_min.is_none(),
+        task.remind_before_min.is_none_or(|lead| lead == 0),
         dated,
         String::new(),
     )];
@@ -1462,13 +1465,11 @@ fn fields(
             words::reminder_needs_due(locale)
         } else if task.due_time.is_empty() {
             notify_words::date_only_task_alert(locale)
-        } else if task.remind_before_min.is_some() {
-            // WHAT THE PHONE SAYS ABOUT ALERTS (#1188, NA1): said once the reminder would sound.
-            alert.line.unwrap_or_else(|| words::reminder_note_a(locale))
         } else {
-            words::reminder_note_a(locale)
+            // WHAT THE PHONE SAYS ABOUT ALERTS (#1188, NA1): a timed reminder always sounds at its time.
+            alert.line.unwrap_or_else(|| words::reminder_note_a(locale))
         },
-        action_label: if dated && !task.due_time.is_empty() && task.remind_before_min.is_some() {
+        action_label: if dated && !task.due_time.is_empty() {
             alert.settings
         } else {
             String::new()

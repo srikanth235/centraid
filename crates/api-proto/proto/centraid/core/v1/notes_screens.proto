@@ -514,6 +514,9 @@ message NotesEditorState {
   // Add photo and Add file. The kit's shared section (`AgendaAttachmentsSection`); its events go
   // back as `NotesEditorEvent.attachment`.
   optional AgendaAttachmentsSection attachments = 23;
+  // The note went to Trash from the menu: the shell closes the page, and the line beneath carries
+  // the Undo.
+  bool finished = 24;
 }
 
 // The menu row that opens the "Attachments" sheet.
@@ -666,6 +669,8 @@ message NotesEditorChrome {
   string status_action = 16;
   // "Share", the menu's row (#1185); empty until the note exists.
   string share_label = 17;
+  // "Move to trash", the menu's last row (red); empty until the note exists.
+  string trash_label = 18;
 }
 
 message NotesLinkSheet {
@@ -746,7 +751,12 @@ message NotesEditorEvent {
     AttachmentsClosed attachments_closed = 22;
     // A tap in the sheet: the kit's `AgendaAttachmentEvent`.
     AgendaAttachmentEvent attachment = 23;
+    // The menu's "Move to trash" row: the note goes to Trash at once and the page closes
+    // (`behaviour.md`: nothing is asked; the status line below carries the Undo).
+    TrashTapped trash_tapped = 24;
   }
+
+  message TrashTapped {}
 
   message AttachmentsOpened {}
 

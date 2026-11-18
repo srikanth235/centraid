@@ -165,7 +165,10 @@ impl<W: Write + Seek> ZipWriter<W> {
         let central = &mut self.central;
         central.extend_from_slice(&CENTRAL.to_le_bytes());
         let version: u16 = if zip64 { 45 } else { 20 };
-        central.extend_from_slice(&version.to_le_bytes()); // made by
+        // MADE BY HOST 3 (UNIX): Info-ZIP's `unzip` (macOS's) reads a name from an MS-DOS host (0) in
+        // the OEM code page whatever bit 11 says, so a note titled with an em dash came out as "???"
+        // and would not extract. From a Unix host the bytes are the native UTF-8 they are.
+        central.extend_from_slice(&((3_u16 << 8) | version).to_le_bytes()); // made by
         central.extend_from_slice(&version.to_le_bytes()); // needed
         central.extend_from_slice(&UTF8.to_le_bytes());
         central.extend_from_slice(&0_u16.to_le_bytes()); // stored
@@ -178,8 +181,10 @@ impl<W: Write + Seek> ZipWriter<W> {
         central.extend_from_slice(&(name.len() as u16).to_le_bytes());
         let extra_len = if zip64 { extra.len() as u16 + 4 } else { 0 };
         central.extend_from_slice(&extra_len.to_le_bytes());
-        // comment length, disk, internal and external attributes.
-        central.extend_from_slice(&[0; 10]);
+        // comment length, disk and internal attributes, then the external ones: a Unix host's mode in
+        // the high half (a regular file, 0644), so an extractor does not make unreadable files.
+        central.extend_from_slice(&[0; 6]);
+        central.extend_from_slice(&(0o100_644_u32 << 16).to_le_bytes());
         let placed = if big_offset {
             0xFFFF_FFFF
         } else {
@@ -393,6 +398,8 @@ mod tests {
         let end = bytes.len() - 22;
         let central = u32_at(&bytes, end + 16).unwrap() as usize;
         assert_eq!(u16_at(&bytes, central + 8).unwrap() & UTF8, UTF8);
+        // Made by a Unix host, so macOS's unzip does not read the name in the OEM code page.
+        assert_eq!(u16_at(&bytes, central + 4).unwrap() >> 8, 3);
         assert_eq!(stored_entries(&bytes).unwrap()[0].0, "Café/日本語 ✓.txt");
     }
 

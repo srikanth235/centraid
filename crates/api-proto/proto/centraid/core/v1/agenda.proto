@@ -687,8 +687,8 @@ message AgendaTask {
   bool overdue = 27;
   // The due day is today or before — what Today draws.
   bool lands_today = 28;
-  // When the reminder fires, `YYYY-MM-DDTHH:MM`; empty with no lead time, and
-  // for a date-only due, which has no moment to count back from.
+  // When the reminder fires first, `YYYY-MM-DDTHH:MM`: the early alert when a lead is set, else the
+  // due time itself. Empty for a date-only due with no lead time (no moment to count back from).
   string remind_at_local = 29;
   // The local day `completed_at` falls on; empty when there is none.
   string completed_day = 30;
@@ -723,6 +723,10 @@ message AgendaTask {
   // The words matched only in an EARLIER VERSION of the item, not in what it says now (#1185):
   // the row is the live item, once, and it opens that item's Earlier versions. Search rows only.
   bool in_earlier_version = 42;
+  // The alert AT the due time beside an early one (`remind_at_local` is the early one then):
+  // `YYYY-MM-DDTHH:MM`; empty with no early reminder, a date-only due, or a snooze set. A timed
+  // reminder alerts at its time by default; "Early reminder" only adds earlier alerts.
+  string remind_on_time_local = 43;
 }
 
 message AgendaTaskTag {

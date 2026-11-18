@@ -18,6 +18,7 @@ use centraid_api_proto::core_v1 as wire;
 use wire::pair_laptop_state::Phase;
 
 use super::door::{self, Answer, Refusal, Verdict};
+use crate::custody::secrets::{self, VaultSecrets};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, pairing as words, shared};
 
@@ -29,8 +30,11 @@ pub(super) const PAIR_TAG: &str = "pair";
 pub const ANNOUNCE_PAIRED: &str = "backup.destinations";
 
 #[must_use]
-pub fn build(_route: &wire::Route) -> Option<Box<dyn Screen>> {
-    Some(Box::new(Laptop::default()))
+pub fn build(_route: &wire::Route, secrets: &VaultSecrets) -> Option<Box<dyn Screen>> {
+    Some(Box::new(Laptop {
+        secrets: secrets.clone(),
+        ..Laptop::default()
+    }))
 }
 
 /// The pairing code's secret is spent on first use, and the code is still never
@@ -39,6 +43,8 @@ struct Laptop {
     phase: Phase,
     payload: String,
     answer: Option<Answer>,
+    /// Where the token a pairing mints is kept (E12).
+    secrets: VaultSecrets,
     notice: String,
     /// NEEDS_WORDS because the vault opened without its words, so re-key is the
     /// way on.
@@ -56,6 +62,7 @@ impl Default for Laptop {
             phase: Phase::Unspecified,
             payload: String::new(),
             answer: None,
+            secrets: VaultSecrets::default(),
             notice: String::new(),
             rekey: false,
             barred: false,
@@ -173,9 +180,16 @@ impl Laptop {
                 } else {
                     self.phase = Phase::Paired;
                     self.payload.clear();
+                    // THE TOKEN IS KEPT IN THE DEVICE STORE (E12): the core holds it in memory only,
+                    // so a process that dies after this would otherwise ask to pair again.
+                    let writes = self.secrets.token_writes(&answer.tokens);
                     self.answer = Some(answer);
                     self.notice.clear();
-                    vec![announce(ANNOUNCE_PAIRED)]
+                    let mut effects = vec![announce(ANNOUNCE_PAIRED)];
+                    if !writes.is_empty() {
+                        effects.push(secrets::effect(writes));
+                    }
+                    effects
                 }
             }
         }

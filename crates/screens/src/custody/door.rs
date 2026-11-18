@@ -187,7 +187,7 @@ pub struct UnclaimedVaultAt {
 
 /// What a restore answered. `Debug` carries counts only: a path or a safety
 /// number is not a log line's to keep.
-#[derive(Clone, PartialEq, Eq, Default)]
+#[derive(Clone, PartialEq, Default)]
 pub struct RestoreAnswer {
     pub vaults: Vec<RestoredVaultAt>,
     pub gap_scanned: u32,
@@ -268,6 +268,7 @@ impl RestoreAnswer {
                 .collect(),
             offers: self.offers.clone(),
             unproven: self.unproven.clone(),
+            tokens: self.tokens.clone(),
         }
     }
 
@@ -340,6 +341,17 @@ pub fn restore_answer(response: &wire::RestoreResponse) -> RestoreAnswer {
             })
             .collect(),
         gap_scanned: response.gap_scanned,
+        tokens: response
+            .tokens
+            .iter()
+            .filter_map(|token| {
+                let vault = response
+                    .vaults
+                    .iter()
+                    .find(|vault| vault.vault_id == token.vault_id)?;
+                Some((vault.path.clone(), token.clone()))
+            })
+            .collect(),
         offers: response
             .older_offers
             .iter()

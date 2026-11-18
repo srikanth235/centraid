@@ -490,7 +490,14 @@ fn every_gateway_refusing_this_phones_token_reads_pair_again_never_all_backed_up
     assert!(!line.sentence.starts_with("Backed up"));
     assert!(!line.status.starts_with("Backed up"));
     assert_eq!(line.tone, Tone::Attention as i32);
-    assert_eq!(line.detail, "All 1,240 photos and files");
+    // A DEVICE THAT DOES NOT KNOW THIS PHONE CONFIRMS NOTHING: no "All ... is backed up" beside it,
+    // and the reason under the card is not the headline said again.
+    assert_eq!(line.detail, "");
+    assert!(!line.accessibility_label.contains("backed up"));
+    assert_eq!(
+        line::behind_reason(EN, "UTC", &reading(&refused), NOW),
+        None
+    );
 
     // ONE OF TWO REFUSING: the other carries the backup, so the line is the
     // ordinary one and only its tone earns a look.

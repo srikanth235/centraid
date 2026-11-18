@@ -53,6 +53,8 @@ Calendar follows Apple's: a dated reminder is a row of its day, and the day is w
 
 An event's alerts are shown **longest lead first** (owner, 2026-11-13): the first alert is the one that fires first (1440 then 60; 30 then 10), the editor's Reminder holds the longer lead and Second reminder the shorter, whatever order the member typed them. The order typed is not kept; the vault holds a set.
 
+A task's alerts (owner, 2026-11-18): a timed reminder alerts at its time by default, and "Early reminder" adds one earlier alert beside it; the editor offers None, 10 minutes, 30 minutes, 1 hour and 1 day, and None means the alert at the time alone.
+
 ## Status line
 
 State is reported on **one status line** and never a toast. It is a single persistent line docked at the foot of the place directly above its band, or at the foot of a pushed page, sheet or editor, which draw no band. It is a sentence in the small style (the refusal tone when refused), updated in place: no stacking, no overlay, no auto-dismiss animation, no dot, at most one inline text action. The shell's import line takes the same seat: progress, then outcome, one action, and a close key once the work is done. No badge counts, red dots, bounces or parallax.

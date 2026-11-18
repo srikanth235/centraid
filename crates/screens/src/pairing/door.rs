@@ -29,13 +29,21 @@ pub enum Refusal {
 }
 
 /// What a pairing answered: the gateway's label and address and the safety
-/// number the core computed (A7). Nothing secret comes back; the bearer token
-/// stays in the core's ledger.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// number the core computed (A7), and the token the pairing minted, which the
+/// screen hands to the device store (#1191 E12). It has no `Debug`.
+#[derive(Clone, Default, PartialEq)]
 pub struct Answer {
     pub safety_number: String,
     pub label: String,
     pub address: String,
+    /// The tokens the pairing minted. Never printed.
+    pub tokens: Vec<wire::GatewayToken>,
+}
+
+impl std::fmt::Debug for Answer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Answer({}, tokens={})", self.label, self.tokens.len())
+    }
 }
 
 pub enum Verdict {
@@ -68,6 +76,7 @@ pub fn verdict(done: &wire::OffThreadDone) -> Verdict {
         safety_number: paired.safety_number,
         label: destination.label,
         address: destination.addrs.into_iter().next().unwrap_or_default(),
+        tokens: paired.tokens,
     })
 }
 

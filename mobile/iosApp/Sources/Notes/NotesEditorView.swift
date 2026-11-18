@@ -112,6 +112,11 @@ struct NotesEditorView: View {
                     if !chrome.shareLabel.isEmpty {
                         Button(chrome.shareLabel) { send(event { $0.shareRequested = .init() }) }
                     }
+                    if !chrome.trashLabel.isEmpty {
+                        // MOVE TO TRASH asks nothing (`behaviour.md`): the page closes with an Undo beneath.
+                        Button(chrome.trashLabel, role: .destructive) { send(event { $0.trashTapped = .init() }) }
+                            .accessibilityIdentifier("note-editor-trash")
+                    }
                 } label: {
                     ToolbarIconFace(iconKey: "MoreHoriz")
                 }
@@ -193,6 +198,10 @@ struct NotesEditorView: View {
                     }
                 }
             }
+        }
+        .onChange(of: state.finished) { _, finished in
+            // MOVED TO TRASH from the menu: the page closes, and the Undo is on the page beneath.
+            if finished { onClose() }
         }
         .sheet(isPresented: Binding(
             get: { state.hasLink },

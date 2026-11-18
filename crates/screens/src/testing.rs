@@ -25,6 +25,8 @@ pub struct FakeShell {
     pub synced_works: bool,
     pub synchronizing: bool,
     pub restores_after_setup: bool,
+    /// A device store that takes no write: every set and delete answers `ok: false`.
+    pub refuse_device_writes: bool,
 }
 
 impl Default for FakeShell {
@@ -35,6 +37,7 @@ impl Default for FakeShell {
             synced_works: true,
             synchronizing: true,
             restores_after_setup: true,
+            refuse_device_writes: false,
         }
     }
 }
@@ -50,6 +53,12 @@ impl FakeShell {
             .map(|op| {
                 let synced_store = op.store == wire::SecretStore::Synced as i32;
                 if synced_store && !self.synced_works {
+                    return wire::SecretAnswer::default();
+                }
+                if !synced_store
+                    && self.refuse_device_writes
+                    && matches!(Op::try_from(op.op), Ok(Op::Set | Op::Delete))
+                {
                     return wire::SecretAnswer::default();
                 }
                 let store = if synced_store {

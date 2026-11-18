@@ -234,6 +234,8 @@ public fun NotesEditorScreen(
             }
             if (state.send_to_agenda != null) add(SheetOption(key = MENU_SEND, label = chrome.send_to_agenda_label))
             add(SheetOption(key = MENU_SHARE, label = chrome.share_label))
+            // MOVE TO TRASH asks nothing (`behaviour.md`): the last row, red; the page closes with an Undo beneath.
+            add(SheetOption(key = MENU_TRASH, label = chrome.trash_label, destructive = true))
         }.filter { it.label.isNotEmpty() }
         OptionSheet(
             title = chrome.menu_label,
@@ -248,6 +250,7 @@ public fun NotesEditorScreen(
                     MENU_EARLIER -> state.earlier?.route?.let(onOpen)
                     MENU_SEND -> state.send_to_agenda?.let(onOpen)
                     MENU_SHARE -> onEvent(NotesEditorEvent(share_requested = NotesEditorEvent.ShareRequested()))
+                    MENU_TRASH -> onEvent(NotesEditorEvent(trash_tapped = NotesEditorEvent.TrashTapped()))
                 }
             },
             onDismiss = { menuOpen = false },
@@ -403,3 +406,4 @@ private const val MENU_EARLIER = "earlier-entry"
 private const val MENU_ORIGIN = "origin-line"
 private const val MENU_SEND = "send-to-agenda"
 private const val MENU_SHARE = "share"
+private const val MENU_TRASH = "trash"

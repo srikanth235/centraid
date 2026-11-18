@@ -370,7 +370,7 @@ fn the_star_is_a_write_and_the_label_follows_the_vault() {
 }
 
 #[test]
-fn move_to_trash_and_remove_a_channel_are_asked_first_and_the_trash_commit_pops_the_screen() {
+fn remove_a_channel_is_asked_first_and_move_to_trash_asks_nothing_and_pops_the_screen() {
     let mut d = clean();
     let (i, id) = opened(&mut d);
     let email = person_data(d.view(i))
@@ -420,12 +420,9 @@ fn move_to_trash_and_remove_a_channel_are_asked_first_and_the_trash_commit_pops_
     assert_eq!(person_data(d.view(i)).channels.len(), 1);
 
     send_person(&mut d, i, P::TrashTapped(ev::TrashTapped {}));
-    let confirm = person_state(d.view(i)).confirm.clone().unwrap();
-    assert_eq!(confirm.title, "Move Dana Reyes to trash?");
-    assert_eq!(confirm.body, "Restorable for 30 days.");
-    assert!(!person_state(d.view(i)).done);
-    send_person(&mut d, i, P::Confirmed(ev::Confirmed {}));
+    // MOVE TO TRASH ASKS NOTHING: the write is made at once and the status line carries the Undo.
     let state = person_state(d.view(i));
+    assert!(state.confirm.is_none(), "no confirm is asked");
     assert!(state.done, "the shell pops");
     assert_eq!(
         state.status.as_ref().unwrap().sentence,

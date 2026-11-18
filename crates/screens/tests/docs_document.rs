@@ -197,17 +197,17 @@ fn the_heads_writes_star_rename_move_and_labels() {
 }
 
 #[test]
-fn trashing_asks_first_and_a_trashed_document_offers_restore_and_delete_forever() {
+fn trashing_asks_nothing_and_a_trashed_document_offers_restore_and_delete_forever() {
     let mut d = driver();
     let id = text(&d, "Return", "x");
     let i = open(&mut d, &id, "Return", "Docs");
     pick_doc(&mut d, i, "trash");
     let state = document_state(d.view(i));
-    assert_eq!(state.confirm.as_ref().unwrap().title, "Move to trash?");
-    document_send(&mut d, i, DD::Dismissed(dd::Dismissed {}));
-    assert!(document_state(d.view(i)).confirm.is_none());
-    pick_doc(&mut d, i, "trash");
-    document_send(&mut d, i, DD::Confirmed(dd::Confirmed {}));
+    assert!(state.confirm.is_none(), "move to trash asks nothing");
+    assert_eq!(
+        state.status.as_ref().unwrap().sentence,
+        "Return moved to trash"
+    );
     let data = document_data(d.view(i));
     assert!(data.row.as_ref().unwrap().trashed);
     assert_eq!(keys(d.view(i)), ["restore", "purge"]);

@@ -66,6 +66,8 @@ enum Job {
     NotifyDismissed,
     /// What the last check found, read again after the check page closes.
     CheckKept,
+    /// The device-store delete of a forgotten gateway's token (#1191 E12).
+    Forget(Vec<wire::SecretOp>),
     /// Moving the recovery key into the keychain, or out of it: the first batch,
     /// then (once it said whether the platform took it) the second.
     Seed {
@@ -241,6 +243,7 @@ impl Backup {
             Job::Prompt => vec![rule::write_key_prompt_answered()],
             Job::NotifyDismissed => vec![rule::write_notify_ask_dismissed()],
             Job::CheckKept => vec![rule::read_check()],
+            Job::Forget(ops) => ops.clone(),
             Job::Seed { write, stage, .. } => match stage {
                 Stage::First => write.first(),
                 // The second batch is built from the first's answers, in `answered`.
@@ -282,6 +285,7 @@ impl Backup {
             }
             Job::CheckKept => self.check_kept = rule::kept_check(answers.first()),
             Job::Prompt | Job::NotifyDismissed => {}
+            Job::Forget(_) => self.secrets.absorb(&ops, answers),
             Job::Rule(_) | Job::Videos => {
                 // Written as the member set it; a store that refused leaves the
                 // value on screen until the next load says what it holds.
@@ -524,9 +528,9 @@ impl Backup {
     }
 
     /// An off-thread job came back.
-    fn job_done(&mut self, done: &wire::OffThreadDone, ctx: &Ctx) {
+    fn job_done(&mut self, done: &wire::OffThreadDone, ctx: &Ctx) -> Vec<wire::Effect> {
         let Some(done) = doors::done(&done.tag, &done.bytes) else {
-            return;
+            return Vec::new();
         };
         match done {
             // WHETHER THE GATEWAY WILL REFUSE THIS PHONE NOW is said either way
@@ -536,6 +540,7 @@ impl Backup {
                 gateway_id,
                 forgotten,
                 revoked,
+                forget_token,
             } => {
                 let locale = ctx.locale();
                 let name = self.label_of(locale, &gateway_id);
@@ -547,6 +552,12 @@ impl Backup {
                     words::backup_forgotten_not_revoked(locale)
                 };
                 self.notice = Notice::Said(fill(&sentence, &[("name", &name)]));
+                // THE TOKEN THE SHELL KEPT GOES WITH THE GATEWAY (E12).
+                if let Some((vault_id, gateway_id)) = forget_token {
+                    return self.run(Job::Forget(
+                        self.secrets.token_delete(&vault_id, &gateway_id),
+                    ));
+                }
             }
             // NOTHING RESTORED IS NOT A SUCCESS: the holds had already gone or the door did not
             // answer, and the member is told so.
@@ -1147,8 +1158,7 @@ impl Screen for Backup {
                     }
                     return Vec::new();
                 }
-                self.job_done(&done, ctx);
-                Vec::new()
+                self.job_done(&done, ctx)
             }
             _ => Vec::new(),
         }

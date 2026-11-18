@@ -528,10 +528,13 @@ impl Screen for EventPage {
         );
         // An occurrence that is no longer there says so in its own words and offers no Retry.
         if self.gone && matches!(wired.state, Some(wire::page_state::State::Failed(_))) {
-            wired.state = Some(wire::page_state::State::Failed(kit_read::gone(
-                words::gone_title(locale),
-                words::gone_body(locale),
-            )));
+            // WHILE THE UNDO IS ON OFFER the occurrence is in the trash, not "removed".
+            let (title, body) = if self.undo.can_undo() {
+                (shared::trash_here(locale), String::new())
+            } else {
+                (words::gone_title(locale), words::gone_body(locale))
+            };
+            wired.state = Some(wire::page_state::State::Failed(kit_read::gone(title, body)));
         }
         let content = match (self.event(), self.page.data()) {
             (Some(event), Some(detail)) => Some(wire::agenda_event_state::Content::Data(Box::new(

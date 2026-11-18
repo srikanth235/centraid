@@ -5,12 +5,11 @@
 //! core turn them into the seed that is stored and settled; the vault is
 //! founded after that, keyed from its first commit.
 //!
-//! **THE KEY IS SHOWN ONLY WHERE NOTHING ELSE WILL HOLD IT (R-ONBOARD-10).** A
-//! phone whose synchronised store takes the seed (iCloud Keychain, Google's
-//! Block Store) keeps it there without a word to the member: the vault comes
-//! back on their next phone the way their passwords do. Only a phone whose key
-//! would stay on it alone SHOWS the words once on a secure screen and waits for
-//! "I've saved it", and a vault on its own key always does. A phone whose seed
+//! **THE KEY IS ASKED FOR AFTER THE FIRST BACKUP, ON BOTH PLATFORMS (owner, 2026-11-18).** The
+//! seed is kept without a word at creation: in the synchronised store (iCloud Keychain, Google's
+//! Block Store) when it will take it, else on this phone alone, and the first backup raises
+//! `RecoveryKeyPrompt` (`backup::home`) when no synchronised copy exists. Only a vault on its own
+//! key SHOWS the words once on a secure screen and waits for "I've saved it". A phone whose seed
 //! is its own makes the vault at the next index with no words at all. A phone
 //! holding a seed that arrived from elsewhere is sent to restore first.
 //!
@@ -62,9 +61,6 @@ pub struct Make {
     finished: bool,
     phrase: Vec<String>,
     custody: String,
-    /// The synchronised store will take the key, so it is kept without being
-    /// shown (R-ONBOARD-10).
-    quiet: bool,
     notice: String,
     retry: Retry,
     /// CHOOSE: keep this vault on its own words (R-1047-E18).
@@ -124,7 +120,6 @@ impl Make {
             finished: false,
             phrase: Vec::new(),
             custody: String::new(),
-            quiet: false,
             notice: String::new(),
             retry: Retry::None,
             own: false,
@@ -201,7 +196,6 @@ impl Make {
             // show that follows.
             Standing::NoSeed => {
                 self.custody = assessed.custody;
-                self.quiet = assessed.synchronizing;
                 self.mint(ctx)
             }
             // A SETTLED SEED AND NO VAULT ON THE PHONE: the app was deleted and
@@ -211,7 +205,6 @@ impl Make {
             // is made at the next index, as a quiet first make is.
             Standing::Settled if !assessed.holds_a_vault => {
                 self.custody = assessed.custody;
-                self.quiet = assessed.synchronizing;
                 self.phase = Phase::Making;
                 self.make(ctx)
             }
@@ -220,7 +213,6 @@ impl Make {
             // next index with no words.
             Standing::Settled => {
                 self.custody = assessed.custody;
-                self.quiet = assessed.synchronizing;
                 self.phase = Phase::Choose;
                 Vec::new()
             }
@@ -240,10 +232,12 @@ impl Make {
             self.fail(words::mint_failed(ctx.locale()), Retry::Mint);
             return Vec::new();
         };
-        // THE KEYCHAIN WILL HOLD IT: kept without being shown (R-ONBOARD-10). A
-        // vault on its own key is always shown: its key is filed in the main
-        // vault's Locker too, but that is a copy the member should know of.
-        if self.quiet && !self.own {
+        // KEPT WITHOUT BEING SHOWN, ON BOTH PLATFORMS (owner, 2026-11-18): the key is asked for after
+        // the first backup (`RecoveryKeyPrompt`), where it is worth something. The synchronised
+        // store takes it when it can, else this phone alone does, and the Backup tab says which. A
+        // vault on its own key is always shown: its key is filed in the main vault's Locker too,
+        // but that is a copy the member should know of.
+        if !self.own {
             self.phase = Phase::Making;
             self.phrase.clone_from(&minted);
             return self.begin(Job::keep(minted, true, false), ctx);
@@ -405,7 +399,6 @@ impl Make {
         self.phase = Phase::Checking;
         self.phrase.clear();
         self.custody.clear();
-        self.quiet = false;
         self.notice.clear();
         self.retry = Retry::None;
         self.own = false;

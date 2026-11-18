@@ -304,7 +304,10 @@ fn a_trashed_line_leaves_every_figure_and_a_restore_brings_each_back_exactly() {
     else {
         panic!("the page is not the gone failure");
     };
-    assert_eq!(gone.sentence, "This transaction is no longer here.");
+    assert_eq!(
+        gone.sentence, "This is in the trash.",
+        "while Undo is on offer it is in the trash, not gone"
+    );
     assert!(gone.permanent, "trying again cannot bring it back");
 
     // The balance, the month's spending, the month's rows and the search lose it.

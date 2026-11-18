@@ -116,6 +116,21 @@ fn paired_with(label: &str, address: &str, safety: &str) -> wire::VaultCalled {
     }
 }
 
+/// A pairing answer that carries the token the core minted, as the core's `pair_phone` does.
+fn paired_with_token(vault: &str, gateway: &str, token: &str) -> wire::VaultCalled {
+    let mut called = paired_with("Home laptop", "192.168.1.20:7443", "12345 67890");
+    let mut response = wire::Response::decode(called.response.as_slice()).expect("a response");
+    if let Some(wire::response::Kind::PairPhone(paired)) = response.kind.as_mut() {
+        paired.tokens = vec![wire::GatewayToken {
+            vault_id: vault.to_owned(),
+            gateway_id: gateway.to_owned(),
+            token: token.to_owned(),
+        }];
+    }
+    called.response = response.encode_to_vec();
+    called
+}
+
 fn refused(code: wire::ErrorCode) -> wire::VaultCalled {
     wire::VaultCalled {
         response: Vec::new(),
@@ -763,4 +778,33 @@ fn a_browse_is_asked_for_once_and_ended_on_request() {
     assert!(follow.stop().is_empty());
     // Sightings that arrive after the browse ended are not acted on.
     assert_eq!(follow.refreshed(), 0);
+}
+
+#[test]
+fn a_pairing_writes_its_token_to_the_device_store_so_a_restart_does_not_ask_to_pair_again() {
+    let (mut driver, id) = keyed();
+    pairing(&mut driver, id);
+    let (vault, gateway, token) = ("a1".repeat(32), "b2".repeat(16), "7f".repeat(32));
+    answered(
+        &mut driver,
+        id,
+        "pair",
+        paired_with_token(&vault, &gateway, &token),
+    );
+    assert_eq!(state(&driver, id).phase, Phase::Paired as i32);
+    // THE TOKEN IS WRITTEN under its documented key, to the device store and never the synchronised one.
+    let written: Vec<wire::SecretOp> = driver
+        .effects
+        .iter()
+        .filter_map(|request| match request.effect.as_ref()?.kind.as_ref()? {
+            wire::effect::Kind::Secrets(batch) => Some(batch.ops.clone()),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    assert_eq!(written.len(), 1, "{written:?}");
+    assert_eq!(written[0].key, format!("gateway-token.{vault}.{gateway}"));
+    assert_eq!(written[0].value, token.as_bytes());
+    assert_eq!(written[0].store, wire::SecretStore::Device as i32);
+    assert_eq!(written[0].op, wire::secret_op::Op::Set as i32);
 }

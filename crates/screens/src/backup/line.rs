@@ -158,7 +158,9 @@ pub fn line(
             waiting,
             sentence: words::backup_line_pair_again(locale),
             status: words::backup_status_pair_again(locale),
-            detail: detail(locale, reading),
+            // NO "ALL 901 KB IS BACKED UP" BESIDE "PAIR IT AGAIN": a device that does not know this
+            // phone confirms nothing, so the line makes no claim about what it holds.
+            detail: String::new(),
             tone: Tone::Attention as i32,
             ..Default::default()
         });
@@ -310,6 +312,10 @@ pub fn behind_last_good(locale: Locale, reading: &Reading, now_ms: i64) -> Strin
 /// on. No sentence names a command.
 #[must_use]
 pub fn behind_reason(locale: Locale, zone: &str, reading: &Reading, now_ms: i64) -> Option<String> {
+    // EVERY DEVICE REFUSING THIS PHONE is the headline already: said once, never twice.
+    if !reading.destinations.is_empty() && reading.destinations.iter().all(|d| d.pair_again) {
+        return None;
+    }
     let worst = worst(reading)?;
     let name = device_name(locale, worst);
     Some(match worst.footing() {

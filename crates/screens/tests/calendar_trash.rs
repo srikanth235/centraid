@@ -169,7 +169,11 @@ fn moving_an_event_to_trash_says_so_with_undo_and_takes_it_off_the_calendar_and_
     assert!(!status.refused);
     // The page reads the event as gone and keeps the line over it.
     assert!(world.event_state(page).content.is_none());
-    gone_of(&world.event_state(page).page);
+    // WHILE THE UNDO IS ON OFFER the page says it is in the trash, never "removed".
+    assert_eq!(
+        gone_of(&world.event_state(page).page).sentence,
+        "This is in the trash."
+    );
     // Off the grid and the agenda, and silent.
     assert!(in_window(&world, "Review").is_empty());
     assert!(world.event_row(&id).is_none());

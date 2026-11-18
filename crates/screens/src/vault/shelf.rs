@@ -679,6 +679,7 @@ impl Shelf {
         files::delete_vault(&front.dir, &going.path);
         let mut writes = vec![VaultSecrets::forget_vault_index(vault_id)];
         writes.extend(self.secrets.forget_own_vault(vault_id));
+        writes.extend(self.secrets.forget_vault_tokens(vault_id));
         if inner.foreground.as_deref() == Some(vault_id) {
             let next = inner
                 .holdings
@@ -1111,6 +1112,15 @@ impl Shelf {
     /// what a background vault says (a screen reads the vault in front, and a
     /// switch reopens every screen).
     fn pump(&self, vault_id: &str, core: &Handle) {
+        // THE TOKENS THE SHELL KEEPS (#1191 E12): every open hands the core what the device store
+        // holds for this vault. The core holds them in memory only, so without this a core opened
+        // after the process died would call every paired gateway "pair again".
+        let tokens = self.secrets.tokens_for(vault_id);
+        let _ = core.call(&wire::Request {
+            kind: Some(wire::request::Kind::GatewayTokens(
+                wire::GatewayTokensRequest { tokens },
+            )),
+        });
         let shelf = self.me.clone();
         let vault_id = vault_id.to_owned();
         let core = core.clone();

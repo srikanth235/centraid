@@ -8,6 +8,7 @@
 //! those reads "Other details".
 
 use centraid_api_proto::core_v1 as wire;
+use centraid_vault::time::{FireZone, has_zone_designator, parse_civil_ms};
 use serde_json::Value;
 use wire::app_query_response::Answer;
 
@@ -67,6 +68,19 @@ fn text(value: &Value) -> Option<String> {
 
 /// The due day and time as the page words them: `Thu 5 March, 09:00`, or the day alone.
 fn due(look: &Look, value: &str) -> Option<String> {
+    // AN INSTANT IS READ IN THE PHONE'S ZONE (B5): a stored `...T09:00:00.000Z` is 14:30 in IST. A
+    // floating due (no zone designator) is already the wall clock and is read as written.
+    let local = if has_zone_designator(value) {
+        let zone = FireZone::named(look.zone).ok()?;
+        let at = zone.zoned_parts(parse_civil_ms(value, &zone)?);
+        Some(format!(
+            "{:04}-{:02}-{:02}T{:02}:{:02}",
+            at.year, at.month, at.day, at.hour, at.minute
+        ))
+    } else {
+        None
+    };
+    let value = local.as_deref().unwrap_or(value);
     let day = value
         .get(..10)
         .filter(|day| civil::epoch_day_of(day).is_some())?;
@@ -139,4 +153,38 @@ fn first_line(notes: &str) -> String {
     }
     let cut: String = first.chars().take(MOST).collect();
     format!("{}…", cut.trim_end())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::kit::civil::HourCycle;
+    use crate::kit::quantity::UnitsPref;
+    use crate::strings::Locale;
+
+    fn look<'a>(zone: &'a str, names: &'a Names) -> Look<'a> {
+        Look {
+            locale: Locale::En,
+            cycle: HourCycle::H24,
+            zone,
+            units: UnitsPref::Metric,
+            names,
+            whole: true,
+        }
+    }
+
+    #[test]
+    fn a_stored_instant_is_worded_in_the_phones_zone_never_utc() {
+        let names = Names::new();
+        // 09:00 UTC is 14:30 in India.
+        assert_eq!(
+            due(&look("Asia/Kolkata", &names), "2026-11-17T09:00:00.000Z").as_deref(),
+            Some("Tue 17 November, 14:30")
+        );
+        // A floating due is the wall clock as written.
+        assert_eq!(
+            due(&look("Asia/Kolkata", &names), "2026-11-17T09:00").as_deref(),
+            Some("Tue 17 November, 09:00")
+        );
+    }
 }

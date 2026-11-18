@@ -105,6 +105,7 @@ catalog! {
     plain trash_entry = ("Trash", "Trash");
     plain trash_entry_meta = ("30 days, then erased", "30 days, then erased");
     plain trash_erased = ("Erased", "Erased");
+    plain trash_here = ("This is in the trash.", "This is in the trash.");
     plain trash_move = ("Move to trash", "Move to trash");
     plain trash_moved = ("{title} moved to trash", "{title} moved to trash");
     plain trash_moved_with = ("{title} and {things} moved to trash", "{title} and {things} moved to trash");

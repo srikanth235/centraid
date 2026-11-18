@@ -7,11 +7,11 @@
 # that People offers the phone's contacts at the point of use (the OS prompt
 # itself is not tapped here).
 #
-# THE RECOVERY KEY (R-1047-E15, R-ONBOARD-10). Where the keychain synchronises,
-# Get started keeps the key without showing it and goes straight to Home.
-# Elsewhere — the simulator, signed out of iCloud — the key shows once and
-# "I've saved it" founds the vault. There is no framing screen and no word
-# check, so the flow answers the one screen when it appears and nothing else.
+# THE RECOVERY KEY (R-1047-E15, R-ONBOARD-10). On both platforms Get started keeps the key
+# without showing it and goes straight to Home; the key is asked for after the first backup
+# (`RecoveryKeyPrompt`, owner 2026-11-18). Only a vault on its own key shows the words at
+# creation, so the conditional step below runs only for that. There is no framing screen and
+# no word check.
 #
 # A FRESH INSTALL WITH NO KEY HELD. `clearState` does not clear the simulator
 # keychain, and a phone that already holds a seed makes the next vault from it

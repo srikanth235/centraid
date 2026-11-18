@@ -64,6 +64,9 @@ internal object AppSession {
          * coming forward also reports the locale, zone and 12 or 24 hour clock again, and MediaStore
          * is watched while the app is in view.
          */
+        /** The locale, zone or 12 or 24 hour setting changed while the app is in view. */
+        suspend fun environment() = AppSession.environment(context, screens)
+
         suspend fun foreground(on: Boolean) {
             if (on) AppSession.environment(context, screens)
             screens.lifecycle(foreground = on)

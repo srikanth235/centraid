@@ -433,6 +433,23 @@ fn a_pin_is_its_own_write_sent_at_once() {
 }
 
 #[test]
+fn move_to_trash_asks_nothing_trashes_at_once_and_closes_the_page_with_an_undo_beneath() {
+    let mut d = driver();
+    let id = note(&d, "Plans", "x");
+    let i = open(&mut d, &id);
+    let chrome = editor_state(d.view(i)).chrome.clone().unwrap();
+    assert_eq!(chrome.trash_label, "Move to trash");
+    assert!(!editor_state(d.view(i)).finished);
+    send_editor(&mut d, i, N::TrashTapped(ev::TrashTapped {}));
+    let state = editor_state(d.view(i));
+    assert!(state.finished, "the shell closes the page");
+    assert!(
+        note_of(&d, &id).deleted_at.is_some(),
+        "the note is in the trash"
+    );
+}
+
+#[test]
 fn a_pin_chosen_before_the_note_exists_lands_once_its_create_does() {
     let mut d = driver();
     let i = open_new(&mut d);
@@ -570,10 +587,7 @@ fn the_powerbox_reads_link_targets_grouped_by_domain() {
     let sheet = link(d.view(i));
     assert_eq!(sheet.title, "Link to");
     assert_eq!(sheet.search_placeholder, "Search everything");
-    assert_eq!(
-        sheet.foot,
-        "Locker items link by name; their secrets stay locked."
-    );
+    assert_eq!(sheet.foot, "Any item can be linked except Locker items.");
     send_editor(
         &mut d,
         i,

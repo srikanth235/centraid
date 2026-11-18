@@ -462,7 +462,7 @@ fn time_grid(input: &Input) -> Option<wire::AgendaTimeGrid> {
         .any(|day| day == input.today)
         .then(|| {
             now_minute.map(|minute| {
-                let label = clock_label(minute);
+                let label = civil::time_for(locale, &clock_label(minute), input.tasks.cycle);
                 wire::AgendaGridNow {
                     day: input.today.to_owned(),
                     minute,
@@ -502,7 +502,8 @@ fn time_grid(input: &Input) -> Option<wire::AgendaTimeGrid> {
         hours: (0..24)
             .map(|hour| wire::AgendaHourMark {
                 minute: hour * 60,
-                label: clock_label(hour * 60),
+                // THE PHONE'S CLOCK (24-hour or 12-hour), like every other time on screen.
+                label: civil::time_for(locale, &clock_label(hour * 60), input.tasks.cycle),
             })
             .collect(),
         days,
@@ -703,7 +704,7 @@ fn blocks_of(input: &Input, day: &str) -> Vec<wire::AgendaGridBlock> {
             .and_then(|id| input.tasks.projects.get(id))
             .map(|project| project.name.clone())
             .unwrap_or_default();
-        let time_label = clock_label(at);
+        let time_label = civil::time_for(input.locale, &clock_label(at), input.tasks.cycle);
         let accessibility_label = [title.as_str(), time_label.as_str(), meta.as_str()]
             .into_iter()
             .filter(|part| !part.is_empty())
@@ -914,6 +915,7 @@ fn year(input: &Input) -> Option<wire::AgendaYearGrid> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kit::civil::HourCycle;
 
     #[test]
     fn lanes_split_overlaps_and_reuse_a_free_lane() {
@@ -1092,6 +1094,19 @@ mod tests {
             local_end: end.to_owned(),
             ..wire::AgendaEvent::default()
         }
+    }
+
+    #[test]
+    fn the_hour_axis_follows_the_phones_clock() {
+        let mut parts = Parts::empty();
+        let h24 =
+            time_grid(&parts.view(Dest::Day, "2026-11-04", WeekStart::Monday)).expect("a grid");
+        assert_eq!(h24.hours[14].label, "14:00");
+        parts.tasks.cycle = HourCycle::H12;
+        let h12 =
+            time_grid(&parts.view(Dest::Day, "2026-11-04", WeekStart::Monday)).expect("a grid");
+        assert_eq!(h12.hours[14].label, "2:00 PM");
+        assert_eq!(h12.hours[0].label, "12:00 AM");
     }
 
     #[test]

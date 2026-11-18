@@ -84,7 +84,8 @@ internal object Notify {
                 null -> NotificationPermission.NOTIFICATION_PERMISSION_NOT_ASKED
                 else -> {
                     store.markAsked()
-                    if (answer && manager.areNotificationsEnabled()) {
+                    // A "yes" is a grant (`NotifyPlan.afterAsk`): the OS can lag the answer.
+                    if (NotifyPlan.afterAsk(answer) == NotifyPlan.Gate.GRANTED) {
                         NotificationPermission.NOTIFICATION_PERMISSION_GRANTED
                     } else {
                         NotificationPermission.NOTIFICATION_PERMISSION_DENIED

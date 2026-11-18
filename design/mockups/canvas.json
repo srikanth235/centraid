@@ -780,7 +780,7 @@
     "FirstHome.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "2 · Home on first run",
+      "title": "2 · Home on first run, imports first",
       "w": 390,
       "x": 470,
       "y": 18560
@@ -788,7 +788,7 @@
     "FirstHomeDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "2 · Home on first run · dark",
+      "title": "2 · Home on first run, imports first · dark",
       "w": 390,
       "x": 470,
       "y": 18560
@@ -3344,6 +3344,198 @@
       "w": 390,
       "x": 940,
       "y": 70840
+    },
+    "FirstOpenCalendar.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Calendar, first open",
+      "w": 390,
+      "x": 0,
+      "y": 74200
+    },
+    "FirstOpenCalendarDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Calendar, first open · dark",
+      "w": 390,
+      "x": 0,
+      "y": 74200
+    },
+    "FirstOpenNotes.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Notes, first open",
+      "w": 390,
+      "x": 470,
+      "y": 74200
+    },
+    "FirstOpenNotesDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Notes, first open · dark",
+      "w": 390,
+      "x": 470,
+      "y": 74200
+    },
+    "FirstOpenDocs.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · Docs, first open",
+      "w": 390,
+      "x": 940,
+      "y": 74200
+    },
+    "FirstOpenDocsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · Docs, first open · dark",
+      "w": 390,
+      "x": 940,
+      "y": 74200
+    },
+    "FirstOpenPeople.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · People, first open",
+      "w": 390,
+      "x": 1410,
+      "y": 74200
+    },
+    "FirstOpenPeopleDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · People, first open · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 74200
+    },
+    "FirstOpenMoney.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Money, first open",
+      "w": 390,
+      "x": 1880,
+      "y": 74200
+    },
+    "FirstOpenMoneyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Money, first open · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 74200
+    },
+    "FirstOpenHealth.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Health, first open",
+      "w": 390,
+      "x": 2350,
+      "y": 74200
+    },
+    "FirstOpenHealthDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Health, first open · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 74200
+    },
+    "LockerFirstCheck.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Locker, step 1: the owner check",
+      "w": 390,
+      "x": 0,
+      "y": 75360
+    },
+    "LockerFirstCheckDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · Locker, step 1: the owner check · dark",
+      "w": 390,
+      "x": 0,
+      "y": 75360
+    },
+    "LockerFirstItem.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "8 · Locker, step 2: the first item",
+      "w": 390,
+      "x": 470,
+      "y": 75360
+    },
+    "LockerFirstItemDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "8 · Locker, step 2: the first item · dark",
+      "w": 390,
+      "x": 470,
+      "y": 75360
+    },
+    "FirstHomeRefused.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "9 · Home, photo access refused",
+      "w": 390,
+      "x": 940,
+      "y": 75360
+    },
+    "FirstHomeRefusedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "9 · Home, photo access refused · dark",
+      "w": 390,
+      "x": 940,
+      "y": 75360
+    },
+    "PhotosRefused.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "10 · Photos, access refused",
+      "w": 390,
+      "x": 1410,
+      "y": 75360
+    },
+    "PhotosRefusedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "10 · Photos, access refused · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 75360
+    },
+    "BackupUnpaired.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "11 · Backup, before anything is paired",
+      "w": 390,
+      "x": 1880,
+      "y": 75360
+    },
+    "BackupUnpairedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "11 · Backup, before anything is paired · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 75360
+    },
+    "HomeBackupDayTwo.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "12 · Home, a day after the first item",
+      "w": 390,
+      "x": 2350,
+      "y": 75360
+    },
+    "HomeBackupDayTwoDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "12 · Home, a day after the first item · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 75360
     }
   },
   "createdOnFiles": {
@@ -3404,7 +3596,9 @@
     "dark20",
     "dark21",
     "dark22",
-    "dark23"
+    "dark23",
+    "light25",
+    "dark24"
   ],
   "notes": {
     "dark0": {
@@ -3847,6 +4041,24 @@
       "w": 240,
       "x": 0,
       "y": 10240
+    },
+    "light25": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "First run: every app, Locker, refused access and the backup nudge",
+      "w": 240,
+      "x": 0,
+      "y": 74000
+    },
+    "dark24": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "First run: every app, Locker, refused access and the backup nudge",
+      "w": 240,
+      "x": 0,
+      "y": 74000
     }
   },
   "order": [
@@ -4221,7 +4433,31 @@
     "DocEditorUnavailable.dc.html",
     "DocEditorUnavailableDark.dc.html",
     "PhotoRemoteFailure.dc.html",
-    "PhotoRemoteFailureDark.dc.html"
+    "PhotoRemoteFailureDark.dc.html",
+    "FirstOpenCalendar.dc.html",
+    "FirstOpenCalendarDark.dc.html",
+    "FirstOpenNotes.dc.html",
+    "FirstOpenNotesDark.dc.html",
+    "FirstOpenDocs.dc.html",
+    "FirstOpenDocsDark.dc.html",
+    "FirstOpenPeople.dc.html",
+    "FirstOpenPeopleDark.dc.html",
+    "FirstOpenMoney.dc.html",
+    "FirstOpenMoneyDark.dc.html",
+    "FirstOpenHealth.dc.html",
+    "FirstOpenHealthDark.dc.html",
+    "LockerFirstCheck.dc.html",
+    "LockerFirstCheckDark.dc.html",
+    "LockerFirstItem.dc.html",
+    "LockerFirstItemDark.dc.html",
+    "FirstHomeRefused.dc.html",
+    "FirstHomeRefusedDark.dc.html",
+    "PhotosRefused.dc.html",
+    "PhotosRefusedDark.dc.html",
+    "BackupUnpaired.dc.html",
+    "BackupUnpairedDark.dc.html",
+    "HomeBackupDayTwo.dc.html",
+    "HomeBackupDayTwoDark.dc.html"
   ],
   "pages": [
     {

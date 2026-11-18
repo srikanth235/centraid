@@ -319,43 +319,48 @@ fn tasks(inputs: &Inputs, zone: &FireZone, window: &Window) -> Vec<wire::Pending
         if task.status != "open" || task.remind_at_local.is_empty() {
             continue;
         }
-        let Some(fire_ms) = parse_civil_ms(&task.remind_at_local, zone) else {
-            continue;
-        };
-        if !window.holds(fire_ms) {
-            continue;
-        }
-        let fire_local = local_of(zone, fire_ms);
-        // READ WHEN IT FIRES: "Today" is the day the notification arrives.
-        let fire_day = fire_local.get(..10).unwrap_or_default();
-        let day = if task.due_day.is_empty() {
-            String::new()
-        } else {
-            civil::relative_day(locale, &task.due_day, fire_day)
-        };
-        let list = task
-            .project_id
-            .as_deref()
-            .and_then(|id| inputs.projects.iter().find(|p| p.project_id == id))
-            .map_or_else(|| task_words::inbox(locale), |p| p.name.clone());
-        let mut notice = pending(
-            zone,
-            THREAD,
-            format!("task|{}|{}|{fire_local}", inputs.vault_id, task.task_id),
-            fire_ms,
-            titled(task_words::untitled, locale, &task.title),
-            body(
-                &when(
-                    locale,
-                    &day,
-                    &civil::time_for(locale, &task.due_time, inputs.hour_cycle),
+        // THE FIRST ALERT, then the one AT THE TIME beside an early reminder (a timed reminder
+        // alerts at its time by default; "Early reminder" only adds an earlier alert).
+        let alerts = [&task.remind_at_local, &task.remind_on_time_local];
+        for remind_at in alerts.into_iter().filter(|text| !text.is_empty()) {
+            let Some(fire_ms) = parse_civil_ms(remind_at, zone) else {
+                continue;
+            };
+            if !window.holds(fire_ms) {
+                continue;
+            }
+            let fire_local = local_of(zone, fire_ms);
+            // READ WHEN IT FIRES: "Today" is the day the notification arrives.
+            let fire_day = fire_local.get(..10).unwrap_or_default();
+            let day = if task.due_day.is_empty() {
+                String::new()
+            } else {
+                civil::relative_day(locale, &task.due_day, fire_day)
+            };
+            let list = task
+                .project_id
+                .as_deref()
+                .and_then(|id| inputs.projects.iter().find(|p| p.project_id == id))
+                .map_or_else(|| task_words::inbox(locale), |p| p.name.clone());
+            let mut notice = pending(
+                zone,
+                THREAD,
+                format!("task|{}|{}|{fire_local}", inputs.vault_id, task.task_id),
+                fire_ms,
+                titled(task_words::untitled, locale, &task.title),
+                body(
+                    &when(
+                        locale,
+                        &day,
+                        &civil::time_for(locale, &task.due_time, inputs.hour_cycle),
+                    ),
+                    &list,
                 ),
-                &list,
-            ),
-            if task.repeats { TASK_REPEATING } else { TASK },
-        );
-        notice.source_fingerprint = retention::task_fingerprint(task);
-        out.push(notice);
+                if task.repeats { TASK_REPEATING } else { TASK },
+            );
+            notice.source_fingerprint = retention::task_fingerprint(task);
+            out.push(notice);
+        }
     }
     out
 }
