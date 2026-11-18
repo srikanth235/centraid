@@ -300,7 +300,7 @@ private struct WelcomeCard: View {
             .foregroundStyle(Theme.color("textSoft", scheme))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
-            .background(Theme.color("bgSunken", scheme), in: RoundedRectangle(cornerRadius: 12))
+            .background(Theme.color("bgSunken", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
             .accessibilityIdentifier("home-welcome")
     }
 }
