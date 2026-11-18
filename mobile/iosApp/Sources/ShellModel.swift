@@ -206,6 +206,9 @@ final class ShellModel: ObservableObject {
         environmentChanges = [
             NSNotification.Name.NSSystemTimeZoneDidChange,
             UIApplication.significantTimeChangeNotification,
+            // The 12 or 24 hour switch in Settings posts this one (#1202), as Android's observer of
+            // `TIME_12_24` does: every time Rust words follows the phone's clock at once.
+            NSLocale.currentLocaleDidChangeNotification,
         ].map { name in
             NotificationObservation(NotificationCenter.default.addObserver(
                 forName: name,
