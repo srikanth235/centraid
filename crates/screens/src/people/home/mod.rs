@@ -548,13 +548,18 @@ impl Screen for Home {
         match kind {
             E::Appeared(_) => {
                 self.reload(ctx);
+                self.undo.take_handed(ctx);
                 ctx.follows().changed(ctx, Store::Contacts);
                 if !self.attached {
                     self.attached = true;
                     return self.contacts.attach();
                 }
             }
-            E::DataChanged(_) | E::EnvironmentChanged(_) => self.reload(ctx),
+            E::DataChanged(_) | E::EnvironmentChanged(_) => {
+                self.reload(ctx);
+                // THE PERSON'S PAGE ABOVE CLOSED (moved to trash): its line and Undo are drawn here.
+                self.undo.take_handed(ctx);
+            }
             E::PeopleHome(home) => return self.event(home, ctx),
             E::StatusActed(_) => {
                 if self.undo.acted(ctx) {

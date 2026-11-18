@@ -591,6 +591,9 @@ impl Screen for Home {
         match event.kind {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => {
                 self.reload(ctx);
+                // THE NOTE'S PAGE ABOVE CLOSED (moved to trash from its menu): its line and Undo
+                // are drawn here.
+                self.line.take_handed(ctx);
             }
             Some(E::StatusActed(_)) => {
                 self.line.acted(ctx);
