@@ -416,7 +416,25 @@ pub const REGISTER: &[Entry] = &[
         ),
     ),
     ("HomeEvent.outcome_told", rust_only(VAULT_TELLS_HOME)),
+    (
+        "HomeEvent.photo_access_told",
+        rust_only(
+            "the camera roll tells Home by name (`Ctx::post`, imports/camera_roll.rs to shell/home.rs) when the phone refuses photo access; no shell sends it",
+        ),
+    ),
     ("HomeEvent.vaults_told", rust_only(VAULT_TELLS_HOME)),
+    (
+        "HomeData.springboard",
+        rust_only(
+            "the springboard's grade is Rust's (policy::springboard): it picks the welcome card and Rust words it into `welcome`, which the shells draw; Rust's tests read the grade back",
+        ),
+    ),
+    (
+        "HomeTile.holds",
+        rust_only(
+            "whether the app holds anything of the member's is Rust's input to the springboard grade (policy::springboard reads it back off the tile); a shell draws `status` and `empty_copy`, never this",
+        ),
+    ),
     (
         "ImportsCameraRollEvent.BytesNeeded.needs",
         rust_only(PASS_TELLS_ROLL),
