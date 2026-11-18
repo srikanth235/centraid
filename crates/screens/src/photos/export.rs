@@ -92,11 +92,15 @@ fn export(ctx: &Ctx, key: &str) -> Result<Made, String> {
         },
         &kit_act::key(&["photo.export_zip", key], kit_act::fresh()),
     );
-    let staged = export::staged_of(&settled, "application/zip", "Photos.zip")?;
+    let mut staged = export::staged_of(&settled, "application/zip", "Photos.zip")?;
     let count = crate::kit::transfer::count(&settled.output, "count");
     let missing = crate::kit::transfer::count(&settled.output, "missing");
     if let Some(sentence) = nothing_to_save(ctx.locale(), count, missing) {
         return Err(sentence);
+    }
+    // SOME ORIGINALS ARE NOT ON THIS PHONE: the status line says how many were left out, and why.
+    if staged.missing > 0 {
+        staged.left_out_why = words::photos_export_left_out_why(ctx.locale());
     }
     Ok(staged.into())
 }

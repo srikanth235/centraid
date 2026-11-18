@@ -97,6 +97,10 @@ catalog! {
         "The originals of these photos are not on this phone, so there is nothing to export.",
         "The originals of these photos are not on this phone, so there is nothing to export."
     );
+    plain photos_export_left_out_why = (
+        "Their originals are not on this phone.",
+        "Their originals are not on this phone."
+    );
     plain photos_export_title = ("Export photos", "Export photos");
     plain photos_edit_cannot_draw = ("Centraid could not draw the edit.", "Centraid could not draw the edit.");
     plain photos_edit_cannot_open = ("Centraid could not open the original.", "Centraid could not open the original.");
