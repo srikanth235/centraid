@@ -671,10 +671,17 @@ mod tests {
                 },
             )
         };
-        assert_eq!(row("Ask [[Priya Nair]] about it", "").snippet, "Ask Priya Nair about it");
+        assert_eq!(
+            row("Ask [[Priya Nair]] about it", "").snippet,
+            "Ask Priya Nair about it"
+        );
         let hit = row("", "Ask [[⟦Priya⟧ Nair]] about it");
         assert_eq!(hit.snippet, "Ask Priya Nair about it");
-        assert!(hit.snippet_runs.iter().any(|run| run.highlighted && run.text == "Priya"));
+        assert!(
+            hit.snippet_runs
+                .iter()
+                .any(|run| run.highlighted && run.text == "Priya")
+        );
     }
 
     #[test]
