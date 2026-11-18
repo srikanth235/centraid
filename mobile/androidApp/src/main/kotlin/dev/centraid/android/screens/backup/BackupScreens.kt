@@ -74,6 +74,7 @@ import dev.centraid.android.kit.KitSpinner
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.kitTextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
@@ -114,7 +115,80 @@ internal fun BackupHomeScreen(
         onRetry = { onEvent(BackupHomeEvent(retry = BackupHomeEvent.Retry())) },
     ) {
         val data = state.data_ ?: return@ReadStateView
-        BackupPage(data, onEvent, onOpen)
+        // BEFORE PAIRING (BackupUnpaired): one card, two steps and a footnote, and nothing else.
+        if (data.unpaired != null) BackupUnpairedPage(data, onOpen) else BackupPage(data, onEvent, onOpen)
+    }
+}
+
+/**
+ * BEFORE PAIRING (BackupUnpaired): the card, "To pair" and its two steps, and the footnote. Every word is
+ * `model.unpaired`'s; the card's button is the page's pairing route. The SwiftUI twin is `unpairedPage`.
+ */
+@Composable
+private fun BackupUnpairedPage(model: BackupHomeData, onOpen: (Route) -> Unit) {
+    val unpaired = model.unpaired ?: return
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(Surface.page)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp, vertical = 16.dp)
+            .testTag("backup-screen"),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            model.title,
+            style = centraidType("title"),
+            color = Surface.ink,
+            modifier = Modifier.padding(horizontal = 4.dp).testTag("backup-title").semantics { heading() },
+        )
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(CardRadius)).background(Surface.card).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            val tint = StateColor.Amber.text
+            Box(
+                Modifier.size(52.dp).clip(CircleShape).background(tint.copy(alpha = 0.14f)).clearAndSetSemantics { },
+                contentAlignment = Alignment.Center,
+            ) { CentraidIcon(iconKey = "Refresh", tint = tint, size = 24.dp) }
+            Text(
+                unpaired.title,
+                style = centraidType("title").copy(fontSize = tokenSp(R.dimen.centraid_text_section)),
+                color = Surface.ink,
+                modifier = Modifier.semantics { heading() },
+            )
+            Sentence(unpaired.body)
+            InkButton(
+                label = unpaired.action_label,
+                testTag = "backup-add-destination",
+                modifier = Modifier.padding(top = 6.dp),
+            ) { model.add_destination?.let(onOpen) }
+        }
+        Group(unpaired.steps_heading) {
+            unpaired.steps.forEachIndexed { index, step ->
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text("${index + 1}", style = centraidType("annotLabel"), color = Surface.meta, modifier = Modifier.width(22.dp))
+                    Text(
+                        androidx.compose.ui.text.buildAnnotatedString {
+                            append(step.before)
+                            if (step.command.isNotEmpty()) {
+                                withStyle(
+                                    androidx.compose.ui.text.SpanStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                                ) { append(step.command) }
+                            }
+                            append(step.after)
+                        },
+                        style = kitTextStyle(KitType.Row),
+                        color = Surface.ink,
+                    )
+                }
+                if (index < unpaired.steps.size - 1) RowRule()
+            }
+        }
+        Sentence(unpaired.foot)
     }
 }
 

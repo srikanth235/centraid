@@ -2027,6 +2027,36 @@ fn condition_of(status: wire::BackupStatusResponse) -> wire::BackupCondition {
 }
 
 #[test]
+fn before_pairing_the_page_is_one_card_two_steps_and_a_footnote() {
+    let unpaired = Page::open(status(Vec::new())).data();
+    let card = unpaired.unpaired.as_ref().expect("the unpaired page");
+    assert_eq!(card.title, "Not backed up yet");
+    assert_eq!(card.body, "This phone holds the only copy of your vault.");
+    assert_eq!(card.action_label, "Pair a backup device");
+    assert_eq!(card.steps_heading, "To pair");
+    assert_eq!(card.steps.len(), 2);
+    assert_eq!(card.steps[0].before, "On a computer you own, run ");
+    assert_eq!(card.steps[0].command, "centraid-gateway pair");
+    assert_eq!(card.steps[0].after, ".");
+    assert_eq!(card.steps[1].before, "Scan the QR code it shows.");
+    assert_eq!(card.steps[1].command, "");
+    assert_eq!(card.foot, "The recovery key comes after the first backup.");
+    // The card's action is the page's pairing route.
+    assert!(unpaired.add_destination.is_some());
+    // A paired vault, and a vault that moved, draw the ordinary page.
+    assert!(Page::open(both()).data().unpaired.is_none());
+    assert!(
+        Page::open(wire::BackupStatusResponse {
+            frozen: true,
+            ..both()
+        })
+        .data()
+        .unpaired
+        .is_none()
+    );
+}
+
+#[test]
 fn the_page_names_where_the_backup_stands_in_one_condition() {
     use wire::BackupCondition as C;
     assert_eq!(condition_of(both()), C::UpToDate);

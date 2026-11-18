@@ -766,6 +766,35 @@ impl Backup {
         }
     }
 
+    /// BEFORE PAIRING (BackupUnpaired): the card, the two steps and the footnote.
+    fn unpaired(locale: Locale) -> wire::BackupUnpaired {
+        let step = |sentence: String| {
+            // The command rides between curly quotes; the shell sets it in the mono face.
+            match (sentence.find('“'), sentence.find('”')) {
+                (Some(open), Some(close)) if open < close => wire::BackupPairStep {
+                    before: sentence[..open].to_owned(),
+                    command: sentence[open + '“'.len_utf8()..close].to_owned(),
+                    after: sentence[close + '”'.len_utf8()..].to_owned(),
+                },
+                _ => wire::BackupPairStep {
+                    before: sentence,
+                    ..wire::BackupPairStep::default()
+                },
+            }
+        };
+        wire::BackupUnpaired {
+            title: backup_home::unpaired_title(locale),
+            body: backup_home::unpaired_body(locale),
+            action_label: backup_home::unpaired_action(locale),
+            steps_heading: backup_home::unpaired_steps_heading(locale),
+            steps: vec![
+                step(backup_home::unpaired_step_one(locale)),
+                step(backup_home::unpaired_step_two(locale)),
+            ],
+            foot: backup_home::unpaired_foot(locale),
+        }
+    }
+
     fn data(&self, ctx: &Ctx) -> wire::BackupHomeData {
         let locale = ctx.locale();
         let frozen = self.frozen();
@@ -984,6 +1013,8 @@ impl Backup {
             key_sync_label,
             ink: ink as i32,
             condition: condition as i32,
+            unpaired: (condition == wire::BackupCondition::Unpaired && self.settled)
+                .then(|| Self::unpaired(locale)),
             last_good,
             reason,
             waiting_heading,

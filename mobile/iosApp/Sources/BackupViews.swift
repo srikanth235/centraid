@@ -40,7 +40,71 @@ struct BackupHomeView: View {
         }
     }
 
+    /// BEFORE PAIRING (BackupUnpaired): one card, the two steps and the footnote, and nothing else. Every
+    /// word is `model.unpaired`'s; the card's button is the page's pairing route.
+    private func unpairedPage(_ model: Centraid_Core_V1_BackupHomeData) -> some View {
+        let unpaired = model.unpaired
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                KitHeader(title: model.title)
+                    .padding(.horizontal, -CentraidGeometry.pageMargin)
+                VStack(alignment: .leading, spacing: 10) {
+                    CentraidIconView(iconKey: "Refresh", tint: StateColor.amber.text, size: 24)
+                        .frame(width: 52, height: 52)
+                        .background(StateColor.amber.text.opacity(0.14), in: Circle())
+                        .accessibilityHidden(true)
+                    Text(unpaired.title)
+                        .kitType(.section)
+                        .foregroundStyle(Surface.ink)
+                        .accessibilityAddTraits(.isHeader)
+                    sentence(unpaired.body)
+                    KitInkButton(label: unpaired.actionLabel, identifier: "backup-add-destination") {
+                        open(model.addDestination)
+                    }
+                    .padding(.top, 6)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .kitCard()
+                .padding(.top, 8)
+                group(unpaired.stepsHeading) {
+                    ForEach(Array(unpaired.steps.enumerated()), id: \.offset) { index, step in
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            Text("\(index + 1)")
+                                .kitType(.meta)
+                                .foregroundStyle(Surface.meta)
+                                .frame(width: 22)
+                            (Text(step.before)
+                                + Text(step.command).font(.system(.callout, design: .monospaced))
+                                + Text(step.after))
+                                .kitType(.row)
+                                .foregroundStyle(Surface.ink)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 12)
+                        if index < unpaired.steps.count - 1 { Divider().padding(.leading, 46) }
+                    }
+                }
+                sentence(unpaired.foot)
+                    .padding(.top, 14)
+                    .padding(.horizontal, 4)
+            }
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.top, 4)
+            .padding(.bottom, 32)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(Surface.page.ignoresSafeArea())
+        .accessibilityIdentifier("backup-screen")
+    }
+
     private func page(_ model: Centraid_Core_V1_BackupHomeData) -> some View {
+        if model.hasUnpaired { return AnyView(unpairedPage(model)) }
+        return AnyView(pagePaired(model))
+    }
+
+    private func pagePaired(_ model: Centraid_Core_V1_BackupHomeData) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
