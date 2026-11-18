@@ -2518,6 +2518,25 @@ mod recovery_key_prompt {
         assert!(page.data().key_prompt.is_none());
     }
 
+    /// A KEY THE PLATFORM'S STORE HOLDS BUT WILL NOT CARRY (no end-to-end encryption, iCloud Keychain
+    /// off) IS ON THIS PHONE ALONE: the prompt is due, and the summary names no empty place.
+    #[test]
+    fn it_is_asked_when_the_store_holding_the_key_does_not_synchronise() {
+        let mut page = Page::over(steady());
+        page.shell.synchronizing = false;
+        page.env.platform = "android".to_owned();
+        page.send(E::Appeared(wire::Appeared {}));
+        page.serve();
+        let data = page.data();
+        assert!(data.key_prompt.is_some(), "the prompt is due");
+        assert!(
+            !data.key_summary.starts_with("Saved in"),
+            "{}",
+            data.key_summary
+        );
+        assert!(!data.key_summary.trim().is_empty());
+    }
+
     #[test]
     fn it_waits_for_a_confirmed_backup() {
         let mut never = steady();

@@ -932,7 +932,7 @@ impl Backup {
         };
         let key_summary = if key_heading.is_empty() {
             String::new()
-        } else if key.synced {
+        } else if key.carried() {
             fill(
                 &words::backup_key_summary_synced(locale),
                 &[("place", &key.place)],
@@ -1053,7 +1053,11 @@ impl Backup {
             key_prompt: (!frozen
                 && !self.key_prompt_answered
                 && !key.saved
-                && !key.synced
+                // A KEY IN A STORE THAT DOES NOT SYNCHRONISE (Google's end-to-end encryption or
+                // iCloud Keychain off) is on this phone alone: the prompt is due. Not before the
+                // platform has said whether it synchronises.
+                && self.synced.is_some()
+                && !key.carried()
                 && self.reading().is_some_and(|r| r.last_ack_ms.is_some()))
             .then(|| wire::BackupKeyPrompt {
                 title: backup_home::key_prompt_title(locale),

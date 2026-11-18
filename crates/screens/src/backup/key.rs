@@ -32,6 +32,13 @@ pub struct KeyCustody {
 }
 
 impl KeyCustody {
+    /// The synchronised store holds the key AND the platform carries that store to another device
+    /// (it names a place). A key in a store that does not synchronise is on this phone alone.
+    #[must_use]
+    pub fn carried(&self) -> bool {
+        self.synced && !self.place.is_empty()
+    }
+
     /// The key as the stores last said it. `probe` is the platform's answer to
     /// whether it synchronises, `None` when it would not say.
     #[must_use]
