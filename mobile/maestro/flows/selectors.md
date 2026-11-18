@@ -187,7 +187,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `chat-pending-settled` | Chat | the one clause that says how the card ended ("Done.", "Not done.") |
 | `chat-new` | Chat | the header's round New chat key (the pencil, trailing); drawn only inside a saved chat, never on a fresh conversation |
 | `chat-menu-rename`, `chat-menu-delete` | Chat | the long-press menu on the header's title (the old "⋮" menu is gone, #1173): Rename and Delete, only on a chat that exists |
-| `kit-empty-import` | any app | the import from where the phone holds the data ("Import contacts" on People), in place of the empty state's action |
+| `kit-empty-import` | any app | the import from where the phone holds the data ("Import from Contacts" on People), in place of the empty state's action |
 | `kit-empty` | any app | the empty state itself (its sentence); on Photos search it is the no-match block ("No results", then "Nothing matches “…”." and the line saying everywhere search looked), drawn when a query reached no photograph and no door, with the Ask row (`search-ask-about` on iOS) under it |
 | `kit-empty-action` | any app | the empty state's one action ("Add a document"), when there is no import |
 | `words-shown` | words.make / words.show | the recovery key's 24 cells, read as one grid (each cell is `words-word-<n>`) |

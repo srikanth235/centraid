@@ -17,6 +17,8 @@ use wire::screen_event::Kind as E;
 #[test]
 fn opening_locker_asks_at_once_and_a_cancel_leaves_the_wall_to_try_again() {
     let mut d = driver();
+    // A VAULT WITH AN ITEM: the wall is the lock's own, not the first check's.
+    login(&d, "i0", "Bank");
     d.start();
     let id = home_instance(&d);
     // No wall before the prompt: the prompt is the first thing.
@@ -30,6 +32,7 @@ fn opening_locker_asks_at_once_and_a_cancel_leaves_the_wall_to_try_again() {
     let wall = wall_of(&d, id).expect("still a wall");
     assert_eq!(wall.phase, wire::locker_wall::Phase::Locked as i32);
     assert_eq!(wall.unlock_label, "Unlock with your face");
+    assert_eq!((wall.step, wall.steps), (0, 0));
     // A CANCEL IS NOT A FAILURE: the wall says only the member's lock setting.
     assert_eq!(wall.notice, "Locks after 5 minutes idle.");
     // The wall reads nothing: no content under it.
@@ -237,7 +240,12 @@ fn items_fold_into_a_menu_rows_and_a_day_one_state() {
     let data = home_data(&d, id);
     assert!(data.rows.is_empty());
     let empty = home_empty(&d, id);
-    assert_eq!(empty.headline, "Nothing is kept here yet");
+    assert_eq!(empty.headline, "Add your first item.");
+    assert_eq!(empty.action_label, "Add an item");
+    assert_eq!(empty.hint, "A password, a card, a Wi-Fi network or a code.");
+    // STEP 2 OF 2 sits over the card, and goes with the first item.
+    assert_eq!((data.step, data.steps), (2, 2));
+    assert_eq!(data.step_label, "Step 2 of 2");
     // A lone All is nothing to choose between: no button on day one.
     assert!(data.filter_menu.is_none());
     login(&d, "i1", "Bank");
@@ -767,4 +775,26 @@ fn selecting_another_tab_drops_a_pending_unlock() {
         wire::locker_session_request::Step::State(wire::LockerStateAsk::default()),
     );
     assert_eq!(state.state, wire::LockerSessionState::Locked as i32);
+}
+
+#[test]
+fn over_a_vault_with_no_item_the_wall_is_the_first_check_step_one_of_two() {
+    let mut d = driver();
+    d.start();
+    let id = home_instance(&d);
+    // The prompt is still the first thing; the wall under it already counts the steps.
+    let wall = wall_of(&d, id).expect("a wall");
+    assert_eq!((wall.step, wall.steps), (1, 2));
+    assert_eq!(wall.step_label, "Step 1 of 2");
+    d.answer_effect(checked(wire::owner_checked::Outcome::Cancelled));
+    let wall = wall_of(&d, id).expect("still a wall");
+    assert_eq!(wall.phase, wire::locker_wall::Phase::Locked as i32);
+    assert_eq!(wall.step_label, "Step 1 of 2");
+    assert_eq!(wall.title, "Confirm it's you");
+    assert_eq!(
+        wall.body,
+        "Locker opens with your face or your passcode, every time."
+    );
+    assert_eq!(wall.unlock_label, "Confirm it's you");
+    assert_eq!(wall.notice, "");
 }

@@ -30,6 +30,9 @@ struct LockerWallView: View {
         let accent = AppAccent("locker")
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
+                LockerStepRow(step: wall.step, steps: wall.steps, label: wall.stepLabel)
+                    .padding(.horizontal, -CentraidGeometry.pageMargin)
+                    .padding(.top, 8)
                 CentraidIconView(iconKey: "Lock", tint: accent.text, size: 28)
                     .frame(width: 64, height: 64)
                     .background(accent.wash(dark: scheme == .dark), in: Circle())
@@ -251,6 +254,39 @@ struct LockerChoicePills: View {
 }
 
 /// One quiet line of Rust's — a status, a note, a window's end.
+/// THE FIRST RUN'S TWO STEPS (LockerFirstCheck, LockerFirstItem): a dot per step, the current one long,
+/// and Rust's "Step 1 of 2". Drawn only while Rust says there are steps.
+struct LockerStepRow: View {
+    let step: UInt32
+    let steps: UInt32
+    let label: String
+
+    @Environment(\.appAccent) private var accent
+
+    var body: some View {
+        if steps > 0 {
+            HStack(spacing: 10) {
+                HStack(spacing: 6) {
+                    ForEach(1...Int(steps), id: \.self) { number in
+                        Capsule()
+                            .fill(number == Int(step) ? accent.text : Surface.border)
+                            .frame(width: number == Int(step) ? 22 : 6, height: 6)
+                    }
+                }
+                .accessibilityHidden(true)
+                Text(label)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.vertical, 8)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("locker-step")
+        }
+    }
+}
+
 struct LockerNote: View {
     let text: String
 

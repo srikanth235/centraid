@@ -127,6 +127,11 @@ struct LockerHomeView: View {
             if case let .data(home)? = state.content, !home.listTitle.isEmpty, drawsItems {
                 categoryHeader(home)
             }
+            // FIRST ITEM (LockerFirstItem): the open line and "Step 2 of 2" over the empty card.
+            if case let .data(first)? = state.content, first.steps > 0, drawsItems {
+                LockerNote(text: first.statusLine)
+                LockerStepRow(step: first.step, steps: first.steps, label: first.stepLabel)
+            }
             PageReadStateView(
                 page: state.page,
                 onRetry: { send(LockerHomeEvents.make { $0.refreshed = .init() }) },

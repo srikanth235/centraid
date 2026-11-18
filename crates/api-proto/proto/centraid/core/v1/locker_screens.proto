@@ -51,6 +51,11 @@ message LockerWall {
   // unlocks with a face, `Fingerprint` for a fingerprint; empty for none (a
   // passcode, or a check not yet probed).
   string unlock_icon = 9;
+  // FIRST CHECK (LockerFirstCheck): while Locker holds no item, the wall is step 1 of 2
+  // ("Step 1 of 2"), and the shell draws the two dots. `steps` is 0 on every other wall.
+  uint32 step = 10;
+  uint32 steps = 11;
+  string step_label = 12;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;
@@ -306,6 +311,11 @@ message LockerHomeData {
   // chevron-only back reads `list_back_label` and sends `category_closed`.
   string list_title = 20;
   string list_back_label = 21;
+  // FIRST ITEM (LockerFirstItem): the open Locker holds no item, so it is step 2 of 2 ("Step 2 of 2")
+  // over the empty card. `steps` is 0 everywhere else.
+  uint32 step = 22;
+  uint32 steps = 23;
+  string step_label = 24;
 }
 
 // ONE CATEGORY CARD: an icon in a list-palette colour, a count and a word.

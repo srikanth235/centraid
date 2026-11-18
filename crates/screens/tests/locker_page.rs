@@ -338,7 +338,7 @@ fn a_shelf_with_nothing_on_it_is_the_pages_empty_state_with_its_filter_kept() {
     let State::Empty(empty) = state_of(&shell.home().page).expect("a state") else {
         panic!("day one is not empty: {:?}", shell.home().page);
     };
-    assert_eq!(empty.headline, "Nothing is kept here yet");
+    assert_eq!(empty.headline, "Add your first item.");
     assert!(!empty.action_label.is_empty());
     // The answer stays, because the header's filter is built from it.
     assert!(shell.home().content.is_some());

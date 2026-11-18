@@ -691,6 +691,8 @@ impl Wall {
             accessibility_label,
             words_route: (unavailable && !self.keyed)
                 .then(crate::custody::routes::rekey_for_locker),
+            // THE FIRST CHECK's steps are the home's to say (`Home::first_check`).
+            ..wire::LockerWall::default()
         })
     }
 }
