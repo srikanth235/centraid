@@ -60,7 +60,7 @@ struct LockerItemView: View {
                     }
                 }
             } content: {
-                LockerShield(secure: state.secure) {
+                LockerShield(secure: state.secure, bleedsBottom: true) {
                     PageReadStateView(
                         page: state.page,
                         onRetry: { send(LockerItemEvents.make { $0.refreshed = .init() }) }
@@ -69,6 +69,7 @@ struct LockerItemView: View {
                             ScrollView {
                                 LazyVStack(alignment: .leading, spacing: 0) { page(item) }
                                     .padding(.bottom, 16)
+                                    .shieldFoot()
                             }
                             .accessibilityIdentifier("locker-item")
                         }
