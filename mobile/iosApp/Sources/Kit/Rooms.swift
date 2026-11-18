@@ -484,6 +484,10 @@ struct PushedPage<Trailing: View, Content: View>: View {
             if !meta.isEmpty { KitHeader(title: "", meta: meta) }
             content()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                // A FLOATING BAR AT THE FOOT (Docs' quick look, a Locker verb row) fades what scrolls
+                // under it instead of cutting through its text (#1202).
+                .contentMargins(.bottom, 12, for: .scrollContent)
+                .softBottomScrollEdge()
         }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Surface.page.ignoresSafeArea())
