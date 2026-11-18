@@ -901,6 +901,13 @@ impl Conductor {
         self.upload_settled_in(&settled.vault_id, settled)
     }
 
+    /// Whether the shelf has opened the vault it holds as `shelf_id` and can drain it: where a
+    /// settle can be routed now.
+    #[must_use]
+    pub fn drains(&self, shelf_id: &str) -> bool {
+        self.lock().drainable().iter().any(|held| held == shelf_id)
+    }
+
     /// [`Self::upload_settled`] for a report that names its vault by the vault's identity (the 64
     /// hex a handed-off part carries, which the OS hands back), with `shelf_id` the id the shelf
     /// holds that vault under: the two are not one string (#1202), and the settle is routed by the

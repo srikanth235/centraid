@@ -103,7 +103,14 @@ struct Service {
     /// Windows whose backup ended and whose follows are not done: the OS is told when the
     /// follow coordinator says every store ran ([`crate::follow`]).
     following: Vec<(String, bool)>,
+    /// Settles the OS delivered before the shelf had opened their vault (a background relaunch):
+    /// held until it has, then routed, never dropped. Bounded; the outbox row would be sent again
+    /// at the next pass if the oldest were ever lost.
+    early_settles: Vec<wire::UploadSettled>,
 }
+
+/// The most settles held while the shelf opens its vaults.
+const EARLY_SETTLES: usize = 64;
 
 impl Service {
     fn new(secrets: VaultSecrets) -> Self {
@@ -117,6 +124,7 @@ impl Service {
             started: false,
             foreground: None,
             following: Vec::new(),
+            early_settles: Vec::new(),
         }
     }
 
@@ -360,6 +368,23 @@ impl Service {
         }
     }
 
+    /// Route a settle to its vault's core, or hold it until the shelf has opened that vault: an OS
+    /// that relaunches the app for a finished background upload can deliver it first.
+    fn settle(&mut self, settled: wire::UploadSettled) -> Vec<Action> {
+        let shelf_id = self
+            .secrets
+            .shelf_id_of(&settled.vault_id)
+            .unwrap_or_else(|| settled.vault_id.clone());
+        if self.conductor.drains(&shelf_id) {
+            return self.conductor.upload_settled_in(&shelf_id, &settled);
+        }
+        if self.early_settles.len() >= EARLY_SETTLES {
+            self.early_settles.remove(0);
+        }
+        self.early_settles.push(settled);
+        Vec::new()
+    }
+
     fn fact(&mut self, fact: wire::ShellFact) -> Vec<Action> {
         use wire::shell_fact::Fact;
         match fact.fact {
@@ -387,19 +412,19 @@ impl Service {
                         })
                         .collect(),
                 );
-                Vec::new()
+                // A VAULT THE SHELF HAS NOW OPENED may be the one an early settle was waiting for.
+                let waiting = std::mem::take(&mut self.early_settles);
+                let mut actions = Vec::new();
+                for settled in waiting {
+                    actions.extend(self.settle(settled));
+                }
+                actions
             }
             Some(Fact::Asked(asked)) => wire::pass_asked::Ask::try_from(asked.ask)
                 .map_or_else(|_| Vec::new(), |ask| self.ask(ask)),
             // THE OS NAMES THE VAULT BY ITS IDENTITY (the hex a handed-off part carries); the shelf
             // holds it under its own id, and the settle goes to that vault's core (#1202).
-            Some(Fact::Settled(settled)) => {
-                let shelf_id = self
-                    .secrets
-                    .shelf_id_of(&settled.vault_id)
-                    .unwrap_or_else(|| settled.vault_id.clone());
-                self.conductor.upload_settled_in(&shelf_id, &settled)
-            }
+            Some(Fact::Settled(settled)) => self.settle(settled),
             Some(Fact::Drained(_)) => self.conductor.uploads_drained(),
         }
     }
