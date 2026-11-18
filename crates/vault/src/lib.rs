@@ -35,6 +35,7 @@ pub mod commands;
 pub mod custody;
 pub mod error;
 pub mod file;
+pub mod first_item;
 pub mod format;
 pub mod history;
 pub mod index;
