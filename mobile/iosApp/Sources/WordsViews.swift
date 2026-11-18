@@ -1077,6 +1077,9 @@ struct WordsShield<Content: View>: View {
                 content()
             }
         }
+        // THE PAGE FILLS THE SCREEN: the capture-proof host is laid out inside the safe area, so
+        // its own background leaves a band at the top and the foot.
+        .background(Surface.page.ignoresSafeArea())
         .overlay {
             if secure, captured || scenePhase != .active {
                 Theme.color("bg", scheme)
