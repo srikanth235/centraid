@@ -151,7 +151,8 @@ private struct PeoplePersonBody: View {
                     PeopleStatusLine(text: person.channelsEmpty)
                 } else {
                     VStack(spacing: 0) {
-                        ForEach(person.channels, id: \.channelID) { channel in
+                        ForEach(Array(person.channels.enumerated()), id: \.element.channelID) { index, channel in
+                            if index > 0 { KitHairline() }
                             channelRow(channel)
                         }
                     }
@@ -454,6 +455,7 @@ private struct PeoplePersonBody: View {
                     .joined(separator: " · "),
                 accessibility: channel.accessibilityLabel,
                 identifier: "people-channel-\(channel.channelID)",
+                divider: false,
                 onTap: { send(PeopleEvents.person { $0.channel = .with { $0.channelID = channel.channelID } }) }
             )
             if !channel.actionLabel.isEmpty {
@@ -464,6 +466,8 @@ private struct PeoplePersonBody: View {
                 ) {
                     send(PeopleEvents.person { $0.channel = .with { $0.channelID = channel.channelID } })
                 }
+                // ONE COLUMN FOR THE VERBS (#1202): Call and Email end on the same edge, whatever their width.
+                .frame(minWidth: 64, alignment: .trailing)
             }
             if !channel.removeLabel.isEmpty {
                 KitIconKey(
