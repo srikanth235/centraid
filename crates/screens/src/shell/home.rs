@@ -533,6 +533,13 @@ impl Home {
         // THE BACKUP HAS ONE SEAT, and it is empty on day zero: a vault that holds nothing of
         // the member's has nothing to lose, so the invitation to pair waits for the first item.
         let day_zero = self.stage(locale) == wire::HomeSpringboard::FirstRun;
+        // "ON THIS PHONE" IS NOT A LINE OF ITS OWN (FirstHome, HomeWidgets): the seat under the vault
+        // name is the backup's, and it is empty until there is something to say. A moved vault
+        // still says so.
+        let mut vault = vault;
+        if vault.state() == wire::HomeVaultState::Online {
+            vault.state_line.clear();
+        }
         let backup = self
             .backup
             .clone()

@@ -261,7 +261,7 @@ private fun WidgetBody(tile: HomeTile, loading: String, modifier: Modifier) {
         tile.status == HomeTileStatus.HOME_TILE_STATUS_LOADING -> Skeleton(loading, modifier)
         tile.status != HomeTileStatus.HOME_TILE_STATUS_CONTENT || body == null ->
             // A SMALL SLOT HOLDS A GLANCE, NOT A SENTENCE: Health's one word under its mark.
-            if (tile.size == HomeTileSize.HOME_TILE_SIZE_SMALL) Glance(tile, "", tile.empty_copy, modifier) else Invitation(tile, modifier)
+            if (tile.size == HomeTileSize.HOME_TILE_SIZE_SMALL) Glance(tile, "", tile.empty_copy, modifier, invites = true) else Invitation(tile, modifier)
         body.agenda != null -> AgendaWidget(tile, body.agenda!!, modifier)
         body.reminders != null -> RemindersWidget(tile, body.reminders!!, modifier)
         body.money != null || body.health != null || body.people != null || body.locker != null -> {
@@ -338,7 +338,7 @@ private fun RemindersWidget(tile: HomeTile, owed: centraid.core.v1.HomeTileBody.
 
 /** A GLANCE (small): the app's mark in its colour, a figure and a word. */
 @Composable
-private fun Glance(tile: HomeTile, figure: String, caption: String, modifier: Modifier) {
+private fun Glance(tile: HomeTile, figure: String, caption: String, modifier: Modifier, invites: Boolean = false) {
     Column(
         modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
@@ -359,7 +359,16 @@ private fun Glance(tile: HomeTile, figure: String, caption: String, modifier: Mo
                 ),
             )
         }
-        WText(caption, meta(), type = "eyebrow", minLines = 2, maxLines = 2, align = TextAlign.Center)
+        // AN INVITATION IS THE APP'S COLOUR (FirstHome); what a glance reports is the quiet one.
+        WText(
+            caption,
+            if (invites) appAccent(tile.app_id).text else meta(),
+            strong = invites,
+            type = "eyebrow",
+            minLines = 2,
+            maxLines = 2,
+            align = TextAlign.Center,
+        )
     }
 }
 
@@ -384,15 +393,42 @@ private fun LineWidget(tile: HomeTile, title: String, line: String, modifier: Mo
 /** NOTHING TO SHOW YET (or nothing readable): the app's mark and name, and what to DO. */
 @Composable
 private fun Invitation(tile: HomeTile, modifier: Modifier) {
+    val accent = appAccent(tile.app_id).text
+    val date = tile.body?.agenda
     Column(modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            CentraidCatalog.byId[tile.app_id]?.let { app ->
-                CentraidIcon(iconKey = widgetIcon(tile.app_id, app.iconKey), tint = appAccent(tile.app_id).text, size = 16.dp)
+        when {
+            // THE CALENDAR KEEPS ITS DATE (FirstHome): the weekday in caps and the day, then the
+            // invitation, then the app's name.
+            date != null -> {
+                WText(date.weekday.uppercase(), accent, strong = true, type = "eyebrow")
+                Text(
+                    date.day,
+                    color = ink(),
+                    fontSize = tokenSp(R.dimen.centraid_text_section),
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.weight(1f))
+                WText(tile.empty_copy, accent, strong = true, maxLines = 3)
+                WText(tile.name, meta())
             }
-            WText(tile.name, appAccent(tile.app_id).text, strong = true)
+            // THE STRIP'S INVITATION IS CENTRED, under the name (FirstHome).
+            tile.app_id == "photos" -> {
+                WText(tile.name, accent, strong = true)
+                Spacer(Modifier.weight(1f))
+                WText(tile.empty_copy, accent, Modifier.fillMaxWidth(), strong = true, maxLines = 3, align = TextAlign.Center)
+                Spacer(Modifier.weight(1f))
+            }
+            else -> {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    CentraidCatalog.byId[tile.app_id]?.let { app ->
+                        CentraidIcon(iconKey = widgetIcon(tile.app_id, app.iconKey), tint = accent, size = 16.dp)
+                    }
+                    WText(tile.name, accent, strong = true)
+                }
+                Spacer(Modifier.weight(1f))
+                WText(tile.empty_copy, accent, strong = true, maxLines = 3)
+            }
         }
-        Spacer(Modifier.weight(1f))
-        WText(tile.empty_copy, Surface.body, maxLines = 3)
     }
 }
 

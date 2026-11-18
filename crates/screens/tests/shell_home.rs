@@ -3,7 +3,6 @@
 //! about. Ports the cases of the KMP `HomeMachineSpec`, `SpringboardPolicySpec`,
 //! `HomeReadsSpec` and the tile specs over a real vault; every sentence is Rust's.
 
-#[allow(dead_code)]
 #[path = "locker_support/mod.rs"]
 mod locker_support;
 
@@ -347,7 +346,8 @@ fn the_lockup_is_worded_from_the_vault_the_shell_names() {
         (front.name.as_str(), front.initial.as_str()),
         ("Personal", "P")
     );
-    assert_eq!(front.state_line, "On this phone");
+    // THE LINE UNDER THE NAME IS THE BACKUP'S SEAT, and empty until it has something to say.
+    assert_eq!(front.state_line, "");
     assert_eq!(bar.search_label, "Search everything");
     assert_eq!(bar.search_route, Some(shell::routes::search()));
     // The backup line is shown as given, for a vault that has not moved.
@@ -818,13 +818,9 @@ fn the_lockups_spoken_sentences_are_finished_by_rust() {
     let (mut d, i) = started();
     let front = vault("v1", "Personal");
     tell(&mut d, i, told(&front, std::slice::from_ref(&front)));
-    // No backup line: the vault's own state line stands in the sentence.
+    // No backup line and a vault that is simply here: the name alone.
     let bar = state(&d, i).bar.unwrap();
-    let state_line = bar.vault.as_ref().unwrap().state_line.clone();
-    assert_eq!(
-        bar.switch_label,
-        format!("Personal, {state_line}. Switch vault")
-    );
+    assert_eq!(bar.switch_label, "Personal. Switch vault");
     assert_eq!(bar.backup_open_label, "");
     // A backup line replaces the state line, and is a door of its own.
     tell(

@@ -507,7 +507,17 @@ fn calendar_tile(locale: Locale, cycle: HourCycle, upcoming: &wire::AgendaUpcomi
         words::tile_agenda_count(locale),
     );
     if live.is_empty() {
-        return empty_with(0, one, many);
+        // AN EMPTY CALENDAR KEEPS ITS DATE (FirstHome): the weekday and the day, then its invitation.
+        return Made {
+            body: Some(Body::Agenda(wire::home_tile_body::Agenda {
+                weekday: weekday_long(locale, today),
+                day: civil::day_of_month_of(today)
+                    .map(|day| day.to_string())
+                    .unwrap_or_default(),
+                ..Default::default()
+            })),
+            ..empty_with(0, one, many)
+        };
     }
     // TODAY'S: what is still to come on the day, or still running (an all-day
     // run that covers it).
@@ -1208,7 +1218,10 @@ mod tests {
         let made = calendar_tile(Locale::En, HourCycle::default(), &upcoming(vec![]));
         assert_eq!(made.status, Status::Empty);
         assert_eq!(count(&made), 0);
-        assert!(made.body.is_none());
+        // IT KEEPS ITS DATE (FirstHome): the weekday and the day, no event and no foot.
+        let date = agenda_body(&made);
+        assert_eq!((date.weekday.as_str(), date.day.as_str()), ("Monday", "15"));
+        assert!(date.events.is_empty() && date.foot.is_empty());
         assert_eq!(made.count_label, "upcoming events");
         // An event that is over leaves the same: nothing to say.
         let over = agenda_of(vec![timed(

@@ -548,7 +548,7 @@ private fun WelcomeCard(welcome: String) {
             .fillMaxWidth()
             .padding(bottom = 12.dp)
             .clip(controlShape())
-            .background(centraidColor("bgSunken"))
+            .background(Surface.card)
             .padding(14.dp)
             .testTag("home-welcome"),
     )
