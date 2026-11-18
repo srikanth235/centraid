@@ -366,7 +366,8 @@ private fun Glance(tile: HomeTile, figure: String, caption: String, modifier: Mo
             strong = invites,
             type = "eyebrow",
             minLines = 2,
-            maxLines = 2,
+            // AN INVITATION IS NEVER CUT ("Turn on Health Connect" is three short words wide): it may take a third line.
+            maxLines = if (invites) 3 else 2,
             align = TextAlign.Center,
         )
     }

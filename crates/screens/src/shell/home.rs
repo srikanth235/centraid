@@ -40,6 +40,7 @@ use super::routes;
 use super::row_routes;
 use super::tiles::{self, Made};
 use crate::custody::secrets::{self as secrets, VaultSecrets};
+use crate::health::Store;
 use crate::passes::{Rules, TransferRule, rule};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, home as words, photos};
@@ -454,7 +455,14 @@ impl Home {
     /// A widget, finished. `app` is the mark and the colour (Reminders wears
     /// Agenda's); `widget` is its identity and the key a row lists. Its size,
     /// height and place are the fold's ([`policy::fold`]).
-    fn dress(&self, locale: Locale, widget: &str, app: &str, made: &Made) -> wire::HomeTile {
+    fn dress(
+        &self,
+        locale: Locale,
+        store: Store,
+        widget: &str,
+        app: &str,
+        made: &Made,
+    ) -> wire::HomeTile {
         let name = widget_name(locale, widget, app);
         let open = fill(&words::open_app(locale), &[("name", &name)]);
         wire::HomeTile {
@@ -472,7 +480,7 @@ impl Home {
             {
                 words::tile_photos_refused(locale)
             } else {
-                empty_copy(locale, widget, made.holds)
+                empty_copy(locale, store, widget, made.holds)
             },
             holds: made.holds,
             body: made
@@ -486,11 +494,11 @@ impl Home {
         }
     }
 
-    fn data(&self, locale: Locale) -> wire::HomeData {
+    fn data(&self, locale: Locale, store: Store) -> wire::HomeData {
         let tiles: Vec<wire::HomeTile> = self
             .tiles
             .iter()
-            .map(|(widget, app, made)| self.dress(locale, widget, app, made))
+            .map(|(widget, app, made)| self.dress(locale, store, widget, app, made))
             .collect();
         let folded = policy::fold(tiles);
         wire::HomeData {
@@ -510,7 +518,7 @@ impl Home {
         let tiles: Vec<wire::HomeTile> = self
             .tiles
             .iter()
-            .map(|(widget, app, made)| self.dress(locale, widget, app, made))
+            .map(|(widget, app, made)| self.dress(locale, Store::Any, widget, app, made))
             .collect();
         policy::springboard(&tiles)
     }
@@ -708,7 +716,8 @@ impl Screen for Home {
         // THE READ (#1185): a phone that holds no vault has nothing to read, which is a final failure in
         // its own sentence (the first-launch gate is its way on, so no Retry); until the shelf has
         // spoken Home is loading.
-        let content = (!self.none && self.read).then(|| Content::Data(Box::new(self.data(locale))));
+        let content = (!self.none && self.read)
+            .then(|| Content::Data(Box::new(self.data(locale, Store::of(ctx)))));
         let page = if self.none {
             wire::PageState {
                 state: Some(wire::page_state::State::Failed(wire::Failure {
@@ -839,7 +848,7 @@ pub(crate) fn app_name(locale: Locale, app: &str) -> String {
 
 /// What an empty widget says: its one invitation, or, when the app holds something and only has
 /// nothing to show now, a quiet line that never asks to import what is already there.
-fn empty_copy(locale: Locale, widget: &str, holds: bool) -> String {
+fn empty_copy(locale: Locale, store: Store, widget: &str, holds: bool) -> String {
     match (widget, holds) {
         ("calendar", true) => words::tile_quiet_calendar(locale),
         ("calendar", false) => words::tile_empty_calendar(locale),
@@ -847,7 +856,11 @@ fn empty_copy(locale: Locale, widget: &str, holds: bool) -> String {
         ("reminders", false) => words::tile_empty_reminders(locale),
         ("money", true) => words::tile_quiet_money(locale),
         ("docs", _) => words::tile_empty_docs(locale),
-        ("health", _) => words::tile_empty_health(locale),
+        // THE PHONE'S OWN STORE: Apple Health on iOS, Health Connect on Android.
+        ("health", _) => match store {
+            Store::HealthConnect => words::tile_empty_health_connect(locale),
+            Store::AppleHealth | Store::Any => words::tile_empty_health(locale),
+        },
         ("locker", _) => words::tile_empty_locker(locale),
         ("money", false) => words::tile_empty_money(locale),
         ("notes", _) => words::tile_empty_notes(locale),
@@ -932,6 +945,20 @@ fn finish_vault(locale: Locale, vault: &wire::ShellVault) -> wire::HomeVault {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// THE HEALTH TILE NAMES THE PHONE'S OWN STORE: Apple Health on iOS, Health Connect on Android.
+    #[test]
+    fn the_empty_health_tile_names_the_phones_store() {
+        let en = Locale::En;
+        assert_eq!(
+            empty_copy(en, Store::AppleHealth, "health", false),
+            "Connect Apple Health"
+        );
+        assert_eq!(
+            empty_copy(en, Store::HealthConnect, "health", false),
+            "Turn on Health Connect"
+        );
+    }
 
     #[test]
     fn a_tile_opens_its_app_and_notes_opens_a_new_note_when_it_holds_none() {

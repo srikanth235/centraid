@@ -105,6 +105,7 @@ catalog! {
     plain tile_empty_calendar = ("Import your calendar", "Import your calendar");
     plain tile_empty_docs = ("Add a document", "Add a document");
     plain tile_empty_health = ("Connect Apple Health", "Connect Apple Health");
+    plain tile_empty_health_connect = ("Turn on Health Connect", "Turn on Health Connect");
     plain tile_empty_locker = ("Set up Locker", "Set up Locker");
     plain tile_empty_money = ("Import a statement", "Import a statement");
     plain tile_empty_notes = ("Write your first note", "Write your first note");
