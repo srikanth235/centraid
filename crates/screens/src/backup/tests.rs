@@ -478,6 +478,25 @@ fn a_phone_with_no_room_to_copy_its_vault_says_so_in_a_row_of_its_own() {
     );
 }
 
+/// A PAIRED GATEWAY WHOSE TOKEN THIS PHONE LACKS (an upgrade) must be able to pair again: the page's one
+/// action is the pairing route, and "Back up now", which would do nothing, is not offered.
+#[test]
+fn a_paired_gateway_with_no_stored_token_offers_the_pairing_action() {
+    let mut refused = steady();
+    refused.destinations[0].pair_again = true;
+    let mut page = Page::over(refused);
+    page.send(E::Appeared(wire::Appeared {}));
+    page.serve();
+    let data = page.data();
+    assert_eq!(
+        data.add_destination_label,
+        words::backup_dest_pair_again(EN)
+    );
+    assert_eq!(data.add_destination, Some(routes::add_destination()));
+    assert_eq!(data.back_up_now_label, "");
+    assert_eq!(data.ink, wire::BackupInk::AddDestination as i32);
+}
+
 #[test]
 fn every_gateway_refusing_this_phones_token_reads_pair_again_never_all_backed_up() {
     // THE LEDGER STILL SAYS EVERYTHING IS ACKNOWLEDGED: nothing waits, so no row

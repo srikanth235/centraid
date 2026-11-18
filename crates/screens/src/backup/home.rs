@@ -809,12 +809,18 @@ impl Backup {
         let destinations = self.destinations();
         let stood = line::backlog_stood(self.reading(), frozen, now);
         let key = self.key(ctx);
+        // EVERY DEVICE REFUSED THIS PHONE'S TOKEN (an upgrade, a gateway that lost it): "Back up now"
+        // cannot help, so the page's one action is the way back, pairing it again. The same pairing
+        // page as "Add backup device", worded for what it does here.
+        let all_pair_again = !destinations.is_empty() && destinations.iter().all(|d| d.pair_again);
         let add_label = if frozen {
             String::new()
+        } else if all_pair_again {
+            words::backup_dest_pair_again(locale)
         } else {
             words::backup_add_destination(locale)
         };
-        let back_up_now_label = if destinations.is_empty() {
+        let back_up_now_label = if destinations.is_empty() || all_pair_again {
             String::new()
         } else {
             words::backup_now(locale)
@@ -867,7 +873,7 @@ impl Backup {
         };
         let ink = if key_warning && !key_show_label.is_empty() {
             wire::BackupInk::ShowKey
-        } else if destinations.is_empty() && !add_label.is_empty() {
+        } else if (destinations.is_empty() || all_pair_again) && !add_label.is_empty() {
             wire::BackupInk::AddDestination
         } else if !back_up_now_label.is_empty() {
             wire::BackupInk::BackUpNow
