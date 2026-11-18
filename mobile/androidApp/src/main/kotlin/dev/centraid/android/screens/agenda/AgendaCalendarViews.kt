@@ -3,7 +3,6 @@ package dev.centraid.android.screens.agenda
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -12,6 +11,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -261,7 +262,8 @@ internal fun AgendaLayoutKey(header: AgendaCalendarHeader, onEvent: (AgendaHomeE
     }
 }
 
-/** DAY'S ALL-DAY LANE: one row under the strip, Rust's label then its chips; none on a day with none. */
+/** DAY'S ALL-DAY LANE: under the strip, Rust's label then its chips, wrapping; none on a day with none. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AgendaAllDayLane(
     header: AgendaCalendarHeader,
@@ -280,9 +282,12 @@ private fun AgendaAllDayLane(
         Text(header.all_day_label, style = kitTextStyle(KitType.Badge), color = Surface.meta, modifier = Modifier.width(GUTTER_WIDTH))
         BoxWithConstraints(Modifier.weight(1f)) {
             val laneWidth = maxWidth
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            // THE CHIPS WRAP (#1202): a lane that scrolled sideways hid every chip past the overdue
+            // reminders that lead it, so today's all-day event was off screen.
+            FlowRow(
+                Modifier.fillMaxWidth().heightIn(max = 120.dp).verticalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 header.all_day.forEach { chip ->
                     AllDayChip(

@@ -284,14 +284,20 @@ private struct AgendaAllDayLane: View {
                     .centraidType("annotLabel")
                     .foregroundStyle(Theme.color("textSoft", scheme))
                     .frame(width: AgendaGridMetrics.gutter, alignment: .leading)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                // THE CHIPS WRAP (#1202): a lane that scrolled sideways hid every chip past the
+                // overdue reminders that lead it, so today's all-day event was off screen. Three
+                // rows show at once and the lane scrolls up and down past them.
+                ScrollView(.vertical, showsIndicators: false) {
+                    KitFlow(spacing: 8) {
                         ForEach(header.allDay, id: \.key) { chip in
                             AgendaChipView(chip: chip, send: send, open: open)
                                 .fixedSize(horizontal: true, vertical: false)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .frame(maxHeight: 120)
+                .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .padding(.vertical, 8)
