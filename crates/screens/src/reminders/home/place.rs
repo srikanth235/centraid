@@ -163,21 +163,31 @@ pub fn smart_counts(board: Option<&wire::AgendaTaskBoard>) -> SmartCounts {
 /// Scheduled raspberry, All the ink, Flagged the state amber, Completed graphite.
 fn smart_lists(locale: Locale, all: Option<&wire::AgendaTaskBoard>) -> Vec<wire::AgendaSmartList> {
     let counts = smart_counts(all);
+    let card_with =
+        |key: &str, label: String, icon: &str, color: &str, count_text: String, view| {
+            wire::AgendaSmartList {
+                key: key.to_owned(),
+                accessibility_label: if count_text.is_empty() {
+                    label.clone()
+                } else {
+                    format!("{label}, {count_text}")
+                },
+                label,
+                icon_key: icon.to_owned(),
+                color_key: color.to_owned(),
+                count: count_text,
+                route: Some(routes::todo_list(view)),
+            }
+        };
     let card = |key: &str, label: String, icon: &str, color: &str, count: Option<usize>, view| {
-        let count_text = count.map(|n| n.to_string()).unwrap_or_default();
-        wire::AgendaSmartList {
-            key: key.to_owned(),
-            accessibility_label: if count_text.is_empty() {
-                label.clone()
-            } else {
-                format!("{label}, {count_text}")
-            },
+        card_with(
+            key,
             label,
-            icon_key: icon.to_owned(),
-            color_key: color.to_owned(),
-            count: count_text,
-            route: Some(routes::todo_list(view)),
-        }
+            icon,
+            color,
+            count.map(|n| n.to_string()).unwrap_or_default(),
+            view,
+        )
     };
     vec![
         card(
@@ -212,12 +222,14 @@ fn smart_lists(locale: Locale, all: Option<&wire::AgendaTaskBoard>) -> Vec<wire:
             Some(counts.flagged),
             wire::TodoView::Flagged,
         ),
-        card(
+        // THE BOARD'S FIFTH TILE: "Completed" stands where the others carry a count, and the
+        // tile is named for the place it opens, the Logbook.
+        card_with(
             "completed",
-            reminders::smart_completed(locale),
+            words::view_logbook(locale),
             "Check",
             crate::reminders::list::smart_color(wire::TodoView::Logbook),
-            None,
+            reminders::smart_completed(locale),
             wire::TodoView::Logbook,
         ),
     ]
@@ -307,11 +319,14 @@ fn project_groups(
         .map(|(area, projects)| group(format!("area|{area}"), area.to_owned(), projects))
         .collect();
     if !unnamed.is_empty() {
-        out.push(group(
-            "area|".to_owned(),
-            words::projects_no_area(locale),
-            unnamed,
-        ));
+        // THE BOARD DRAWS NO "Projects" HEADING over My Lists: the unfiled projects carry one only
+        // where named areas stand beside them, so they are not read as the last area's.
+        let title = if out.is_empty() {
+            String::new()
+        } else {
+            words::projects_no_area(locale)
+        };
+        out.push(group("area|".to_owned(), title, unnamed));
     }
     out
 }
