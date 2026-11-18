@@ -925,3 +925,36 @@ fn a_fresh_vault_is_day_zero_with_the_one_layout_and_the_first_add_ends_it() {
     let after_order: Vec<&str> = after.tiles.iter().map(|t| t.widget.as_str()).collect();
     assert_eq!(after_order, order, "the layout does not move as the vault fills");
 }
+
+#[test]
+fn the_first_item_is_the_members_own_and_never_a_starter() {
+    use centraid_screens::catalog::act;
+    use centraid_screens::field::Keyed;
+    let d = Driver::first_vault(shell::runtime());
+    let first = |d: &Driver| {
+        let answer = d
+            .handle
+            .call(&wire::Request {
+                kind: Some(wire::request::Kind::BackupStatus(
+                    wire::BackupStatusRequest {},
+                )),
+            })
+            .expect("the status answers");
+        match answer.kind {
+            Some(wire::response::Kind::BackupStatus(status)) => status.first_item_ms,
+            other => panic!("not a status: {other:?}"),
+        }
+    };
+    // The starter notes and the founding person are not the member's first item.
+    assert_eq!(first(&d), None);
+    let told = d.act(
+        wire::ActRequest::from(act::notes::CreateNote {
+            title: "Groceries".to_owned(),
+            body: "Milk".to_owned(),
+            ..Default::default()
+        })
+        .keyed("first-item-1"),
+    );
+    assert_eq!(told.status, wire::ActStatus::Executed as i32);
+    assert!(first(&d).is_some_and(|at| at > 0));
+}

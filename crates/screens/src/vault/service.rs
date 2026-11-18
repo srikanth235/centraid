@@ -281,6 +281,10 @@ impl Service {
         // the Backup place, whose page says the same and offers the same door.
         let unpaired = standing.reading.destinations.is_empty() && !standing.reading.frozen;
         if unpaired {
+            // A DAY HAS TO PASS since the first thing the member added.
+            if !line::pair_owed(&standing.reading, standing.now_ms) {
+                return None;
+            }
             // ONE SEAT, ONE QUIET LINE (2026-11-17, HomeBackupDayTwo): the status and its verb.
             // Whether it is shown yet (not on day zero) is Home's to say.
             let locale = ctx.locale();

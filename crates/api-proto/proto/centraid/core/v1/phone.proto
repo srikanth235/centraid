@@ -551,6 +551,11 @@ message BackupStatusResponse {
   // member who pairs today with a year of data is not told items waited a year. Absent: nothing
   // waits, or no waiting item says when it was written. The screen subtracts it from now.
   optional int64 oldest_waiting_ms = 17;
+  // WHEN THE MEMBER'S FIRST ITEM WAS ADDED (ms since the epoch, this phone's clock): the earliest
+  // `created_at` among the rows the member made or imported, the starter notes and the owner's
+  // own person aside. Home's backup line waits about a day after it before it asks to pair.
+  // Absent: nothing of the member's yet.
+  optional int64 first_item_ms = 18;
 }
 
 // ONE APP'S PART OF THE BACKUP (#1144). Counts come from the app's own

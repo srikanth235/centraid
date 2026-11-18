@@ -1336,7 +1336,50 @@ pub fn backup_status(
         left_out_bytes: held.left_out_bytes,
         apps: held.apps,
         oldest_waiting_ms: standing.oldest_waiting_ms,
+        first_item_ms: vault.and_then(first_item_ms),
     })
+}
+
+/// THE MEMBER'S FIRST ITEM: the earliest `created_at` of a row they made or imported. One bounded
+/// read, a `MIN` per kind over the `entity_by_created` index (nothing is scanned or counted). The
+/// starter notes are not the member's, and nor is the founding person (the vault's first).
+fn first_item_ms(vault: &Vault) -> Option<i64> {
+    let starters = crate::starters::NOTES;
+    // Consts of ours, quoted for SQL all the same.
+    let marks = starters
+        .iter()
+        .map(|(title, _)| format!("'{}'", title.replace('\'', "''")))
+        .collect::<Vec<_>>()
+        .join(",");
+    let kinds = [
+        "event",
+        "task",
+        "document",
+        "photo",
+        "account",
+        "txn",
+        "locker_item",
+    ];
+    let mut parts: Vec<String> = kinds
+        .iter()
+        .map(|kind| format!("SELECT MIN(created_at) AS at FROM entity WHERE kind = '{kind}'"))
+        .collect();
+    parts.push(format!(
+        "SELECT MIN(created_at) FROM entity WHERE kind = 'note' AND title NOT IN ({marks})"
+    ));
+    parts.push(
+        "SELECT MIN(created_at) FROM entity WHERE kind = 'person' AND id NOT IN \
+         (SELECT id FROM entity WHERE kind = 'person' ORDER BY created_at, n LIMIT 1)"
+            .to_owned(),
+    );
+    let sql = format!("SELECT MIN(at) FROM ({})", parts.join(" UNION ALL "));
+    let first: Option<String> = vault
+        .read(|connection| {
+            Ok(connection.query_row(&sql, [], |row| row.get(0))?)
+        })
+        .ok()
+        .flatten();
+    first.and_then(|at| centraid_vault::clock::parse_iso_ms(&at))
 }
 
 // ─── free up space ──────────────────────────────────────────────────────────

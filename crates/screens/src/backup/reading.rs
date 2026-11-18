@@ -138,6 +138,8 @@ pub struct Reading {
     /// when nothing waits or the core does not say. The core clamps it to no earlier than the
     /// first pairing.
     pub oldest_waiting_ms: Option<i64>,
+    /// When the member's first item was added, on this phone's clock; `None` before one.
+    pub first_item_ms: Option<i64>,
     /// The vault moved to another phone; this one is read-only.
     pub frozen: bool,
     /// WHAT EACH APP'S BACKUP HOLDS (#1144), in the catalogue's order; empty
@@ -235,6 +237,7 @@ impl Reading {
             spool_bytes: status.spool_bytes,
             waiting,
             oldest_waiting_ms: status.oldest_waiting_ms.filter(|at| *at > 0),
+            first_item_ms: status.first_item_ms.filter(|at| *at > 0),
             frozen: status.frozen,
             apps: status.apps.clone(),
             total_bytes: status.total_bytes,

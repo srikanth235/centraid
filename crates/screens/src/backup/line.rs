@@ -101,6 +101,14 @@ pub fn warns(reading: &Reading, now_ms: i64, running: bool) -> bool {
         || backlog_old(reading, now_ms, running)
 }
 
+/// ABOUT A DAY AFTER THE MEMBER'S FIRST ITEM Home asks to pair (2026-11-17, `HomeBackupDayTwo`):
+/// before that a vault with nothing to lose says nothing, and an unpaired vault with no item of the
+/// member's says nothing at all. Pure over the reading and this phone's clock.
+#[must_use]
+pub fn pair_owed(reading: &Reading, now_ms: i64) -> bool {
+    reading.first_item_ms.is_some_and(|first| now_ms - first >= DAY_MS)
+}
+
 /// The line for one vault. `reading` `None` is "the core could not be asked" (a
 /// resting vault): the line is empty and the view draws nothing. `running` is whether a pass is
 /// going right now: "Backing up" is said only then. `now_ms` is this phone's clock, for
@@ -599,5 +607,24 @@ pub fn ago(locale: Locale, then_ms: i64, now_ms: i64) -> String {
         words::backup_ago_day(locale)
     } else {
         fill(&words::backup_ago_days(locale), &[("n", &n(days))])
+    }
+}
+
+#[cfg(test)]
+mod pair_tests {
+    use super::*;
+
+    #[test]
+    fn pairing_is_asked_about_a_day_after_the_first_item_and_never_before_one() {
+        const HOUR: i64 = 60 * 60 * 1000;
+        let at = 1_700_000_000_000_i64;
+        let none = Reading::default();
+        assert!(!pair_owed(&none, at + 100 * HOUR), "no item, no ask");
+        let reading = Reading {
+            first_item_ms: Some(at),
+            ..Reading::default()
+        };
+        assert!(!pair_owed(&reading, at + 23 * HOUR));
+        assert!(pair_owed(&reading, at + 25 * HOUR));
     }
 }
