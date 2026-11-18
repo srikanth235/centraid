@@ -518,17 +518,20 @@ struct MetaLine: View {
     let parts: [String]
     var accented: [String] = []
     var lines = 3
+    var alignment: HorizontalAlignment = .leading
 
     @Environment(\.appAccent) private var accent
 
     /// `text` is split on its own dots, so a part that Rust already joined stays a unit each.
-    init(_ text: String, accented: [String] = [], lines: Int = 3) {
+    init(_ text: String, accented: [String] = [], lines: Int = 3, alignment: HorizontalAlignment = .leading) {
+        self.alignment = alignment
         self.parts = text.components(separatedBy: " · ").filter { !$0.isEmpty }
         self.accented = accented.filter { !$0.isEmpty }
         self.lines = lines
     }
 
-    init(parts: [String], accented: [String] = [], lines: Int = 3) {
+    init(parts: [String], accented: [String] = [], lines: Int = 3, alignment: HorizontalAlignment = .leading) {
+        self.alignment = alignment
         self.parts = parts.flatMap { $0.components(separatedBy: " · ") }.filter { !$0.isEmpty }
         self.accented = accented.filter { !$0.isEmpty }
         self.lines = lines
@@ -545,11 +548,13 @@ struct MetaLine: View {
     var body: some View {
         ViewThatFits(in: .horizontal) {
             joined.lineLimit(1).fixedSize(horizontal: true, vertical: false)
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: alignment, spacing: 0) {
                 ForEach(Array((parts.map { ($0, false) } + accented.map { ($0, true) }).prefix(lines).enumerated()), id: \.offset) { _, part in
-                    Text(part.0)
-                        .foregroundStyle(part.1 ? accent.text : Surface.meta)
-                        .lineLimit(1)
+                    if part.1 {
+                        Text(part.0).foregroundStyle(accent.text).lineLimit(1)
+                    } else {
+                        Text(part.0).lineLimit(1)
+                    }
                 }
             }
         }
