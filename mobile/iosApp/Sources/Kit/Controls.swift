@@ -223,8 +223,10 @@ struct KitSegmented<Key: Hashable>: View {
                 .fontWeight(active ? .semibold : .regular)
                 .foregroundStyle(active ? Surface.ink : Surface.meta)
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .padding(.horizontal, 14)
+                // ONE SIZE FOR EVERY SEGMENT (#1202): a track that fills gives each the same width
+                // and a slim pad, and a label never shrinks alone ("6 months" came out smaller).
+                .minimumScaleFactor(fills ? 1 : 0.8)
+                .padding(.horizontal, fills ? 4 : 14)
                 .frame(maxWidth: fills ? .infinity : nil, minHeight: CentraidGeometry.targetMinCoarse)
                 .background(active ? Surface.card : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .contentShape(Rectangle())
