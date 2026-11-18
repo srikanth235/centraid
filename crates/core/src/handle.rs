@@ -768,6 +768,15 @@ impl HandleState {
         Ok(handle)
     }
 
+    /// THE VAULT'S IDENTITY IN ITS ONE SPELLING (64 lowercase hex): the id a gateway knows the
+    /// vault by and the spelling every gateway-token key carries (`gateway-token.<this>.<gateway>`,
+    /// E12). It is NOT the vault's own `self_id`, which is the owner's person row. `None` for a
+    /// core opened without its keys.
+    #[must_use]
+    pub fn vault_hex(&self) -> Option<String> {
+        self.keys.as_ref().map(crate::phone::Keyring::vault_hex)
+    }
+
     /// The file this core was opened on.
     #[must_use]
     pub fn path(&self) -> &std::path::Path {

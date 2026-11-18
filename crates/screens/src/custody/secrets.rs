@@ -132,6 +132,9 @@ struct Cache {
     loaded: bool,
     device: BTreeMap<String, String>,
     synced: BTreeMap<String, String>,
+    /// The identity (64 hex, the spelling of a token's key) of each vault the shelf opened keyed this
+    /// session, by the shelf's own id for it. Memory only.
+    identities: BTreeMap<String, String>,
 }
 
 /// The phone's vault secrets. Cheap to clone: every clone is the same cache, so
@@ -472,6 +475,26 @@ impl VaultSecrets {
                 set_device(&key, &given.token)
             })
             .collect()
+    }
+
+    /// THE SHELF OPENED THE VAULT IT KNOWS AS `shelf_id` AND ITS CORE SAYS IT IS `identity` (E12).
+    /// The shelf's id is the owner's person row; a token's key is spelled with the vault's identity,
+    /// so everything the shelf asks of the token keys goes through this one mapping.
+    pub fn note_identity(&self, shelf_id: &str, identity: &str) {
+        self.cache()
+            .identities
+            .insert(shelf_id.to_owned(), identity.to_owned());
+    }
+
+    /// The identity noted for the vault the shelf knows as `shelf_id`, if it opened one keyed.
+    #[must_use]
+    pub fn identity_of(&self, shelf_id: &str) -> Option<String> {
+        self.cache().identities.get(shelf_id).cloned()
+    }
+
+    /// Forget the identity noted for `shelf_id`: the vault is gone.
+    pub fn forget_identity(&self, shelf_id: &str) {
+        self.cache().identities.remove(shelf_id);
     }
 
     /// The delete of one gateway's token: forgetting that gateway.

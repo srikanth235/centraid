@@ -45,3 +45,10 @@ centraid-ontology = { path = "../ontology" }
 # `RepeatSpec` (`time::repeat`), so a rule the editor writes is one the engine
 # expands and one it reads is the rule that was stored.
 centraid-vault = { path = "../vault" }
+
+[dev-dependencies]
+# A REAL GATEWAY ON A REAL SOCKET for the backup-survives-a-restart test (#1202): the gateway crate's
+# own test harness, spawned on 127.0.0.1:0, as the core's tests do.
+centraid-gateway = { path = "../gateway", features = ["test-harness"] }
+tokio.workspace = true
+tempfile.workspace = true

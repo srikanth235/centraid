@@ -92,7 +92,7 @@ _Why the shell holds it and this library does not:_ a secret belongs in the plat
 
 - **Pair:** `PairResponse.tokens` carries the minted token. The core has already written the `gateway` row and holds the token in memory; the pairing screen writes the token (`OP_SET`) at once. A write the store refuses leaves the pairing working until the process dies, then `pair_again`.
 - **Restore:** `RestoreResponse.tokens` carries one token per claim. Each is written (`OP_SET`) and read back with that vault's key metadata before the vault is opened and brought forward.
-- **Open:** the device store is listed whole at launch. After every core open (launch, reopen, restore, switch) the shelf sends `GatewayTokens` with the tokens it holds for that vault; the tokens live in the core's memory only. A gateway row with no entry is `pair_again`.
+- **Open:** the device store is listed whole at launch. After every core open (launch, reopen, restore, switch) the shelf sends `GatewayTokens` with the tokens it holds under the vault's identity (the core's own 64-hex id, `Handle::vault_hex`; never the shelf's id for the vault, which is the owner's person row, and which finds none); the tokens live in the core's memory only. A gateway row with no entry is `pair_again`.
 - **Forget a gateway:** `ForgetDestinationResponse.forget_token` names the key and the screen `OP_DELETE`s it. **Forget a vault:** every key with the vault's prefix is deleted.
 - iOS keeps it as a Keychain generic password, `AfterFirstUnlockThisDeviceOnly`, not synchronizable, with no biometric access control (an enrolment change does not touch it). Android seals it under a non-exportable Keystore key in preferences Auto Backup and device transfer exclude.
 
