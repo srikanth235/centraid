@@ -95,6 +95,9 @@ struct BackupHomeView: View {
             .padding(.bottom, 32)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        // THE ROWS STOP AT THE BAR'S EDGE (#1202, S2-5): without it they scroll under the clock and
+        // the status icons with nothing between. The Android page is laid out inside the safe area.
+        .hardTopScrollEdge()
         .background(Surface.page.ignoresSafeArea())
         .accessibilityIdentifier("backup-screen")
     }
@@ -141,6 +144,7 @@ struct BackupHomeView: View {
                 kitWithAnimation { proxy.scrollTo(Self.top, anchor: .top) }
             }
         }
+        .hardTopScrollEdge()
         .background(Surface.page.ignoresSafeArea())
         .accessibilityIdentifier("backup-screen")
         // A DEVICE FORGOTTEN OR ADDED CHANGES THE PINS: the mover must never trust a certificate this
