@@ -325,6 +325,11 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
             }
             content()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                // THE FOOT OF EVERY LIST CLEARS THE BAND AND FADES UNDER IT (#1202): a last row sits
+                // fully above the plates, and rows that scroll beneath them dissolve instead of
+                // colliding with the glass keys.
+                .contentMargins(.bottom, 12, for: .scrollContent)
+                .softBottomScrollEdge()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Surface.page.ignoresSafeArea())
@@ -898,6 +903,18 @@ extension View {
     func hardTopScrollEdge() -> some View {
         if #available(iOS 26, *) {
             scrollEdgeEffectStyle(.hard, for: .top)
+        } else {
+            self
+        }
+    }
+
+    /// THE SCRIM UNDER THE BAND: on iOS 26 the content that scrolls beneath the glass band takes a
+    /// soft edge (a fade into the page), so a row's text never runs through the keys. Earlier
+    /// systems draw the band on the page's own strip (`BandStrip`), so nothing changes.
+    @ViewBuilder
+    func softBottomScrollEdge() -> some View {
+        if #available(iOS 26, *) {
+            scrollEdgeEffectStyle(.soft, for: .bottom)
         } else {
             self
         }
