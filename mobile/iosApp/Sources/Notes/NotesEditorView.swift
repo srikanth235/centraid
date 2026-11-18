@@ -99,13 +99,6 @@ struct NotesEditorView: View {
                         Button("\(state.earlier.label)  \(state.earlier.countLabel)") { open(state.earlier.route) }
                             .accessibilityIdentifier(EarlierEntryRow.identifier)
                     }
-                    if state.hasOrigin, OriginLineView.isDrawn(state.origin) {
-                        // WHERE IT CAME FROM (#1185): a quiet line in the menu, nothing to tap.
-                        Button(state.origin.text) {}
-                            .disabled(true)
-                            .accessibilityLabel(state.origin.accessibilityLabel)
-                            .accessibilityIdentifier(OriginLineView.identifier)
-                    }
                     if state.hasSendToAgenda {
                         Button(chrome.sendToAgendaLabel) { open(state.sendToAgenda) }
                     }
@@ -170,6 +163,16 @@ struct NotesEditorView: View {
                                     onLink: openChip
                                 )
                                 .frame(minHeight: 280, alignment: .top)
+                            }
+                            if state.hasOrigin, OriginLineView.isDrawn(state.origin) {
+                                // WHERE IT CAME FROM (#1185, #1202): an imported note ends with a quiet
+                                // "From <file>" line, as Docs' Details do; a typed note has none.
+                                Text(state.origin.text)
+                                    .kitType(.meta)
+                                    .foregroundStyle(Surface.meta)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .accessibilityLabel(state.origin.accessibilityLabel.isEmpty ? state.origin.text : state.origin.accessibilityLabel)
+                                    .accessibilityIdentifier(OriginLineView.identifier)
                             }
                         }
                         .padding(.horizontal, CentraidGeometry.pageMargin)

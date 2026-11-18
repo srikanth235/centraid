@@ -1737,7 +1737,8 @@ impl Screen for Editor {
         if let (Some(draft), true) = (draft, ready) {
             state.rich = Some(self.rich_view(locale, &rich::parse(&draft.body)));
         }
-        // WHERE IT CAME FROM (#1185): the menu's quiet "From ..." line, read with the entry.
+        // WHERE IT CAME FROM (#1185, #1202): the quiet "From ..." line a shell draws at the end of an
+        // imported note's words (a typed note has none), read with the entry.
         state.origin = self.earlier.origin.clone();
         // THE MENU'S "Earlier versions" ROW: the kit's entry, its route naming the note as the
         // page the member comes from.

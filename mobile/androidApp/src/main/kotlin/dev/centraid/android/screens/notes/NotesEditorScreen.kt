@@ -47,6 +47,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.NotesEditorEvent
 import centraid.core.v1.NotesEditorState
@@ -194,6 +196,20 @@ public fun NotesEditorScreen(
                     },
                     modifier = Modifier.padding(horizontal = KitGeometry.GUTTER).padding(top = 4.dp),
                 )
+                // WHERE IT CAME FROM (#1185, #1202): an imported note ends its words with a quiet
+                // "From <file>" line, as Docs' Details do; a typed note has none.
+                state.origin?.takeIf { dev.centraid.android.kit.originLineDrawn(it) }?.let { line ->
+                    KitText(
+                        line.text,
+                        KitType.Meta,
+                        Surface.meta,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
+                            .testTag(dev.centraid.android.kit.ORIGIN_LINE_TAG)
+                            .semantics { contentDescription = line.accessibility_label.ifEmpty { line.text } },
+                    )
+                }
                 // THE TOOLS under the words: checklist and link are Rust's events.
                 if (chrome != null) {
                     Row(
@@ -227,10 +243,6 @@ public fun NotesEditorScreen(
             }
             state.earlier?.takeIf { dev.centraid.android.kit.earlierEntryDrawn(it) }?.let { entry ->
                 add(SheetOption(key = MENU_EARLIER, label = entry.label, detail = entry.count_label))
-            }
-            // WHERE IT CAME FROM (#1185): a quiet line in the menu; picking it only closes the menu.
-            state.origin?.takeIf { dev.centraid.android.kit.originLineDrawn(it) }?.let { line ->
-                add(SheetOption(key = MENU_ORIGIN, label = line.text))
             }
             if (state.send_to_agenda != null) add(SheetOption(key = MENU_SEND, label = chrome.send_to_agenda_label))
             add(SheetOption(key = MENU_SHARE, label = chrome.share_label))
@@ -403,7 +415,6 @@ private const val MENU_LINK = "link"
 private const val MENU_LINKS = "linked-to"
 private const val MENU_ATTACHMENTS = "attachments"
 private const val MENU_EARLIER = "earlier-entry"
-private const val MENU_ORIGIN = "origin-line"
 private const val MENU_SEND = "send-to-agenda"
 private const val MENU_SHARE = "share"
 private const val MENU_TRASH = "trash"
