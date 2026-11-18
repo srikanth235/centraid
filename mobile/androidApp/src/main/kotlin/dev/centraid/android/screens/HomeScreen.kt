@@ -47,7 +47,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.HomeData
 import centraid.core.v1.HomeEvent
-import centraid.core.v1.HomeSpringboard
 import centraid.core.v1.HomeState
 import centraid.core.v1.HomeStatus
 import centraid.core.v1.HomeTile
@@ -192,11 +191,9 @@ public fun HomeScreen(
                     skeleton = { SpringboardGrid(HomeData(), state.loading_label, onOpen, header = if (scrolling) lockup else null) },
                 ) {
                     val ready = data ?: return@ReadStateView
-                    if (ready.springboard == HomeSpringboard.HOME_SPRINGBOARD_FIRST_RUN) {
-                        DayOne(ready, state.loading_label, onOpen, header = if (scrolling) lockup else null)
-                    } else {
-                        SpringboardGrid(ready, state.loading_label, onOpen, header = if (scrolling) lockup else null)
-                    }
+                    // ONE LAYOUT AT EVERY STAGE (2026-11-17): day zero is the same grid with the welcome
+                    // card above it, which Rust words and sends only until the first add or import.
+                    SpringboardGrid(ready, state.loading_label, onOpen, header = if (scrolling) lockup else null)
                 }
             }
         }
@@ -533,34 +530,26 @@ private fun SpringboardGrid(data: HomeData, loading: String, onOpen: (Route) -> 
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         header?.invoke()
         Column(Modifier.padding(horizontal = PAGE_MARGIN).padding(top = 10.dp, bottom = 24.dp)) {
+            // THE WELCOME CARD: day zero only, one sentence, gone after the first add or import.
+            if (data.welcome.isNotEmpty()) WelcomeCard(data.welcome)
             WidgetGrid(data, loading, onOpen)
         }
     }
 }
 
-/**
- * Day one: the vault holds nothing anywhere.
- *
- * Reached ONLY when every readable tile has settled and is empty. A still-loading
- * vault, or an unreachable replica, gets the ordinary grid — this page is a claim
- * about the vault, and an unanswered read has not earned it.
- */
+/** THE WELCOME CARD (`FirstHome`): one sentence above the grid, no button. */
 @Composable
-private fun DayOne(data: HomeData, loading: String, onOpen: (Route) -> Unit, header: (@Composable () -> Unit)? = null) {
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).testTag("home-day-one")) {
-        header?.invoke()
-        Column(
-            Modifier.padding(PAGE_MARGIN),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(data.day_one_title, style = centraidType("title"), color = centraidColor("text"))
-            Text(
-                data.day_one_body,
-                style = centraidType("small"),
-                color = centraidColor("textSoft"),
-            )
-            WidgetGrid(data, loading, onOpen)
-        }
-    }
+private fun WelcomeCard(welcome: String) {
+    Text(
+        text = welcome,
+        style = centraidType("small"),
+        color = centraidColor("textSoft"),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp)
+            .clip(controlShape())
+            .background(centraidColor("bgSunken"))
+            .padding(14.dp)
+            .testTag("home-welcome"),
+    )
 }
-

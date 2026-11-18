@@ -11,8 +11,7 @@ catalog! {
     plain band_chat = ("Chat", "Chat");
     plain band_current_spoken = ("current place", "current place");
     plain band_home = ("Home", "Home");
-    plain home_day_one_body = ("Add photos and documents to get started.", "Add photos and documents to get started.");
-    plain home_day_one_title = ("Nothing in here yet", "Nothing in here yet");
+    plain home_welcome = ("Nothing in here yet. Start with what this phone already holds.", "Nothing in here yet. Start with what this phone already holds.");
     plain first_launch_body = ("Apps and an assistant on this phone, backed up to your own devices.", "Apps and an assistant on this phone, backed up to your own devices.");
     plain first_launch_house_title = ("Apps on this phone", "Apps on this phone");
     plain first_launch_house_body = ("Photos, notes, documents, money and more, with no account to make.", "Photos, notes, documents, money and more, with no account to make.");
@@ -101,13 +100,15 @@ catalog! {
     plain tile_people_reconnect = ("reconnect", "reconnect");
     plain tile_people_count_one = ("person", "person");
     plain tile_people_count_many = ("people", "people");
-    plain tile_empty_calendar = ("Put something on the calendar", "Put something on the calendar");
-    plain tile_empty_docs = ("Add your first document", "Add your first document");
-    plain tile_empty_health = ("Connect your health app", "Connect your health app");
-    plain tile_empty_health_small = ("Connect", "Connect");
-    plain tile_empty_locker = ("Unlock to see your items", "Unlock to see your items");
-    plain tile_empty_money = ("Import your first statement", "Import your first statement");
+    plain tile_empty_calendar = ("Import your calendar", "Import your calendar");
+    plain tile_empty_docs = ("Add a document", "Add a document");
+    plain tile_empty_health = ("Connect Apple Health", "Connect Apple Health");
+    plain tile_empty_locker = ("Set up Locker", "Set up Locker");
+    plain tile_empty_money = ("Import a statement", "Import a statement");
     plain tile_empty_notes = ("Write your first note", "Write your first note");
-    plain tile_empty_people = ("Add someone you know", "Add someone you know");
-    plain tile_empty_photos = ("Import your first photo", "Import your first photo");
+    plain tile_empty_reminders = ("Import your reminders", "Import your reminders");
+    plain tile_quiet_calendar = ("Nothing coming up", "Nothing coming up");
+    plain tile_quiet_money = ("Nothing spent this month", "Nothing spent this month");
+    plain tile_empty_people = ("Import contacts", "Import contacts");
+    plain tile_empty_photos = ("Import your camera roll", "Import your camera roll");
 }

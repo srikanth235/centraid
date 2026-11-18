@@ -215,7 +215,7 @@ fn the_seeded_vault_fills_the_tiles_and_a_count_agrees_with_its_noun() {
     // Locker is empty in the example (no Locker), and says what to do.
     let locker = tile(&data, "locker");
     assert_eq!(locker.status, wire::HomeTileStatus::Empty as i32);
-    assert_eq!(locker.empty_copy, "Unlock to see your items");
+    assert_eq!(locker.empty_copy, "Set up Locker");
     assert_eq!(locker.count.map(|c| c.value), Some(0));
     assert_eq!(locker.count_label, "items");
 }

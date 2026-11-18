@@ -6,8 +6,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | --- | --- | --- |
 | `home-grid` | Home | the springboard grid |
 | `home-status` | Home | the health ribbon |
-| `home-day-one` | Home | the first-run page |
-| `home-first-moves` | Home | the first-moves band |
+| `home-welcome` | Home | the welcome card, day zero only |
 | `kit-failure` (on Home) | Home | the failed-read sentence (no grid), the kit's shared failure view with no Retry |
 | `home-tile-<appId>` | Home | one springboard widget, keyed on the widget id (the app id, except Agenda's second, `reminders`) — every launchable app has one (Tasks has none: it folded into Agenda, whose tile also carries today's due tasks, #1128), an empty app drawing what to do (R-ONBOARD-11) |
 | `home-vault-switch` | Home | the vault lockup, which IS the switch |

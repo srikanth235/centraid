@@ -8,17 +8,16 @@
 //! which exists only while something is owed. An app's widgets wear that app's
 //! colour; the shells take it from `app_id`, and `widget` is the identity.
 //!
-//! A widget with something to show is its own size ([`size_of`]). One with
-//! nothing to show (an empty app, an unreadable one) is medium, because what it
-//! says ("Write your first note") needs the room. The order is the content
-//! order, or on day one the first-run order, which leads with the apps a first
-//! move belongs to.
+//! ONE LAYOUT AT EVERY STAGE (owner, 2026-11-17): a widget is its own size
+//! ([`content_size`]) whether it holds something or only invites, and the order
+//! is [`CONTENT_ORDER`], so the grid never rearranges as the vault fills. What
+//! changes with the stage is only the welcome card above it, on day zero.
 //!
-//! Every verdict here is a statement about the grid AS A WHOLE, and three of
-//! them can flip on one tile's arrival, so [`fold`] recomputes all of them from
-//! the tiles on every change instead of patching: a `first-run` Home that stayed
-//! `first-run` after one app reported content would tell a member their vault is
-//! empty while showing them what is in it.
+//! Every verdict here is a statement about the grid AS A WHOLE, and it can flip
+//! on one tile's arrival, so [`fold`] recomputes it from the tiles on every
+//! change instead of patching: a `first-run` Home that stayed `first-run` after
+//! one app reported content would tell a member their vault is empty while
+//! showing them what is in it.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::HomeTileSize as Size;
@@ -27,7 +26,7 @@ use wire::HomeTileStatus as Status;
 use super::tiles::REMINDERS;
 
 /// Every app, in the order Home reads them. A widget's place is decided by
-/// [`CONTENT_ORDER`] or [`FIRST_RUN_ORDER`], never by arrival: a grid built from
+/// [`CONTENT_ORDER`], never by arrival: a grid built from
 /// arrival order would reorder itself under the member's thumb as reads landed.
 pub const ORDER: [&str; 9] = [
     "photos",
@@ -41,17 +40,10 @@ pub const ORDER: [&str; 9] = [
     "locker",
 ];
 
-/// The widgets in the order they sit once the vault holds something (the Home
-/// board): the day and what is owed, the photographs, the glances, then the two
+/// The widgets in the order they sit at every stage (the Home board): the day and what is owed, the photographs, the glances, then the two
 /// that read as a line.
 pub const CONTENT_ORDER: [&str; 9] = [
     "calendar", REMINDERS, "photos", "money", "health", "people", "locker", "notes", "docs",
-];
-
-/// The widgets on day one (the First Home board): every app's first move, the
-/// calendar and the photographs first.
-pub const FIRST_RUN_ORDER: [&str; 9] = [
-    "calendar", REMINDERS, "photos", "notes", "docs", "people", "money", "health", "locker",
 ];
 
 /// Columns on the grid: a small widget takes one, a medium two, a large four.
@@ -77,17 +69,6 @@ pub fn content_size(widget: &str) -> Size {
     }
 }
 
-/// How big a widget is: its own size with something to show, medium when it
-/// shows an invitation or nothing yet. A widget still reading keeps its own, so
-/// the usual case does not move when it lands.
-#[must_use]
-pub fn size_of(widget: &str, status: Status) -> Size {
-    match status {
-        Status::Empty | Status::Unknown => Size::Medium,
-        _ => content_size(widget),
-    }
-}
-
 /// How many grid rows tall: the calendar, the reminders and the photographs hold
 /// a list or a strip, so they take two; the rest take one.
 #[must_use]
@@ -107,15 +88,11 @@ pub struct Folded {
 }
 
 /// Fold the widgets read into the springboard: grade it, put the widgets in the
-/// order that grade names, size each, and cut them into rows.
+/// board's order, size each, and cut them into rows.
 #[must_use]
 pub fn fold(tiles: Vec<wire::HomeTile>) -> Folded {
     let springboard = springboard(&tiles);
-    let order: &[&str] = if springboard == wire::HomeSpringboard::FirstRun {
-        &FIRST_RUN_ORDER
-    } else {
-        &CONTENT_ORDER
-    };
+    let order: &[&str] = &CONTENT_ORDER;
     let place = |widget: &str| {
         order
             .iter()
@@ -125,14 +102,7 @@ pub fn fold(tiles: Vec<wire::HomeTile>) -> Folded {
     let mut tiles = tiles;
     tiles.sort_by_key(|tile| place(&tile.widget));
     for tile in &mut tiles {
-        // HEALTH'S INVITATION IS ONE WORD ("Connect") WHILE OTHER APPS HOLD DATA: a small slot,
-        // so the row of four glances stays whole. On day one every widget is the board's
-        // uniform medium, and Health says "Connect your health app" like the rest.
-        let size = if tile.widget == "health" && springboard != wire::HomeSpringboard::FirstRun {
-            Size::Small
-        } else {
-            size_of(&tile.widget, tile.status())
-        };
+        let size = content_size(&tile.widget);
         tile.size = size as i32;
         tile.height = height_of(&tile.widget);
     }
@@ -170,17 +140,19 @@ pub fn rows(tiles: &[wire::HomeTile]) -> Vec<wire::HomeTileRow> {
 
 /// The springboard as a whole.
 ///
-/// Content as soon as one tile has some; loading while any is still reading;
-/// content (not first-run) when nothing could be read at all, since eight
-/// unreadable apps are a failure and not a fresh vault; first-run only when
-/// every readable tile is empty.
+/// Content as soon as one app HOLDS something of the member's (`holds`, which is
+/// not the same as having something to show: a calendar with only past events
+/// holds a calendar); loading while any is still reading; content (not day zero)
+/// when nothing could be read at all, since nine unreadable apps are a failure
+/// and not a fresh vault; day zero only when every readable app holds nothing.
+/// The starter notes are not the member's, so they leave it day zero.
 #[must_use]
 pub fn springboard(tiles: &[wire::HomeTile]) -> wire::HomeSpringboard {
     use wire::HomeSpringboard as S;
     if tiles.is_empty() {
         return S::Loading;
     }
-    if tiles.iter().any(|tile| tile.status() == Status::Content) {
+    if tiles.iter().any(|tile| tile.holds) {
         return S::Content;
     }
     if tiles.iter().any(|tile| tile.status() == Status::Loading) {
@@ -201,6 +173,7 @@ mod tests {
             widget: widget.to_owned(),
             app_id: widget.to_owned(),
             status: status as i32,
+            holds: status == Status::Content,
             ..wire::HomeTile::default()
         }
     }
@@ -259,57 +232,30 @@ mod tests {
     }
 
     #[test]
-    fn day_one_is_the_first_run_order_with_every_invitation_medium() {
-        let folded = fold(of(&ORDER, Status::Empty));
-        assert_eq!(folded.springboard, wire::HomeSpringboard::FirstRun);
-        assert_eq!(order(&folded), FIRST_RUN_ORDER);
-        assert_eq!(
-            ids(&folded.rows),
-            vec![
-                vec!["calendar", "reminders"],
-                vec!["photos", "notes"],
-                vec!["docs", "people"],
-                vec!["money", "health"],
-                vec!["locker"],
-            ]
-        );
-        // The calendar and the photographs are tall mediums; the rest one row.
-        for tile in &folded.tiles {
-            assert_eq!(tile.size(), Size::Medium, "{}", tile.widget);
-        }
-        let height = |widget: &str| {
-            folded
-                .tiles
-                .iter()
-                .find(|t| t.widget == widget)
-                .unwrap()
-                .height
-        };
-        assert_eq!(
-            (height("calendar"), height("photos"), height("notes")),
-            (2, 2, 1)
-        );
-    }
-
-    #[test]
-    fn a_widget_that_has_nothing_to_show_grows_to_hold_its_invitation() {
-        assert_eq!(size_of("money", Status::Content), Size::Small);
-        assert_eq!(size_of("money", Status::Empty), Size::Medium);
-        assert_eq!(size_of("money", Status::Unknown), Size::Medium);
-        // Still reading: the usual shape, so the grid does not move on arrival.
-        assert_eq!(size_of("money", Status::Loading), Size::Small);
-        assert_eq!(size_of("notes", Status::Loading), Size::Medium);
-    }
-
-    #[test]
-    fn health_is_small_beside_content_whatever_it_has_to_show() {
+    fn the_layout_is_the_same_at_every_stage() {
+        // THE 2026-11-17 RULING: one Home layout from day zero to full. The order, the sizes,
+        // the heights and the rows do not depend on what the vault holds.
+        let full = fold(of(&ORDER, Status::Content));
         for status in [Status::Empty, Status::Unknown, Status::Loading] {
-            let mut read = of(&ORDER, Status::Content);
-            read.retain(|tile| tile.widget != "health");
-            read.push(tile("health", status));
-            let folded = fold(read);
-            let health = folded.tiles.iter().find(|t| t.widget == "health").unwrap();
-            assert_eq!(health.size(), Size::Small, "{status:?}");
+            let folded = fold(of(&ORDER, status));
+            assert_eq!(order(&folded), CONTENT_ORDER, "{status:?}");
+            assert_eq!(ids(&folded.rows), ids(&full.rows), "{status:?}");
+            for (tile, full) in folded.tiles.iter().zip(&full.tiles) {
+                assert_eq!(
+                    (tile.size(), tile.height),
+                    (full.size(), full.height),
+                    "{} at {status:?}",
+                    tile.widget
+                );
+            }
+        }
+        let small = |folded: &Folded, widget: &str| {
+            folded.tiles.iter().find(|t| t.widget == widget).unwrap().size()
+        };
+        // Money, Health, People and Locker stay glances even while they only invite.
+        let day_zero = fold(of(&ORDER, Status::Empty));
+        for widget in ["money", "health", "people", "locker"] {
+            assert_eq!(small(&day_zero, widget), Size::Small, "{widget}");
         }
     }
 
@@ -370,13 +316,30 @@ mod tests {
         assert_eq!(springboard(&of(&ORDER, Status::Empty)), S::FirstRun);
         let mut tiles = of(&ORDER, Status::Empty);
         tiles[3].status = Status::Content as i32;
+        tiles[3].holds = true;
         assert_eq!(springboard(&tiles), S::Content);
         // One still reading holds the verdict: not first-run yet.
         tiles[3].status = Status::Loading as i32;
+        tiles[3].holds = false;
         assert_eq!(springboard(&tiles), S::Loading);
         // Unknown tiles do not make a first run, and all of them make a failure.
         tiles[3].status = Status::Unknown as i32;
         assert_eq!(springboard(&tiles), S::FirstRun);
         assert_eq!(springboard(&of(&ORDER, Status::Unknown)), S::Content);
+    }
+
+    #[test]
+    fn day_zero_ends_when_an_app_holds_something_not_when_a_widget_has_something_to_show() {
+        use wire::HomeSpringboard as S;
+        // An app that holds data but has nothing to show now (past events only, nothing owed
+        // today, nothing spent this month) is the end of day zero.
+        let mut tiles = of(&ORDER, Status::Empty);
+        tiles[0].holds = true;
+        assert_eq!(springboard(&tiles), S::Content);
+        // A notes tile that shows the starter note is Content to draw but holds nothing.
+        let mut tiles = of(&ORDER, Status::Empty);
+        let notes = tiles.iter_mut().find(|t| t.widget == "notes").unwrap();
+        notes.status = Status::Content as i32;
+        assert_eq!(springboard(&tiles), S::FirstRun);
     }
 }

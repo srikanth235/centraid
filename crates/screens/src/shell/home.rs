@@ -441,7 +441,8 @@ impl Home {
             status: made.status as i32,
             count: made.count,
             count_label: made.count_label.clone(),
-            empty_copy: empty_copy(locale, app),
+            empty_copy: empty_copy(locale, widget, made.holds),
+            holds: made.holds,
             body: made
                 .body
                 .clone()
@@ -459,21 +460,15 @@ impl Home {
             .iter()
             .map(|(widget, app, made)| self.dress(locale, widget, app, made))
             .collect();
-        let mut folded = policy::fold(tiles);
-        // A small Health invitation has room for one word; the medium one says the sentence.
-        for tile in &mut folded.tiles {
-            if tile.widget == "health"
-                && tile.size() == wire::HomeTileSize::Small
-                && tile.status() != wire::HomeTileStatus::Content
-            {
-                tile.empty_copy = words::tile_empty_health_small(locale);
-            }
-        }
+        let folded = policy::fold(tiles);
         wire::HomeData {
             springboard: folded.springboard as i32,
             grid_rows: folded.rows,
-            day_one_title: words::home_day_one_title(locale),
-            day_one_body: words::home_day_one_body(locale),
+            welcome: if folded.springboard == wire::HomeSpringboard::FirstRun {
+                words::home_welcome(locale)
+            } else {
+                String::new()
+            },
             tiles: folded.tiles,
         }
     }
@@ -785,18 +780,22 @@ pub(crate) fn app_name(locale: Locale, app: &str) -> String {
     }
 }
 
-/// What an empty widget says to do.
-fn empty_copy(locale: Locale, app: &str) -> String {
-    match app {
-        "calendar" => words::tile_empty_calendar(locale),
-        "reminders" => crate::strings::agenda_glance::no_reminders(locale),
-        "docs" => words::tile_empty_docs(locale),
-        "health" => words::tile_empty_health(locale),
-        "locker" => words::tile_empty_locker(locale),
-        "money" => words::tile_empty_money(locale),
-        "notes" => words::tile_empty_notes(locale),
-        "people" => words::tile_empty_people(locale),
-        "photos" => words::tile_empty_photos(locale),
+/// What an empty widget says: its one invitation, or, when the app holds something and only has
+/// nothing to show now, a quiet line that never asks to import what is already there.
+fn empty_copy(locale: Locale, widget: &str, holds: bool) -> String {
+    match (widget, holds) {
+        ("calendar", true) => words::tile_quiet_calendar(locale),
+        ("calendar", false) => words::tile_empty_calendar(locale),
+        ("reminders", true) => crate::strings::agenda_glance::no_reminders(locale),
+        ("reminders", false) => words::tile_empty_reminders(locale),
+        ("money", true) => words::tile_quiet_money(locale),
+        ("docs", _) => words::tile_empty_docs(locale),
+        ("health", _) => words::tile_empty_health(locale),
+        ("locker", _) => words::tile_empty_locker(locale),
+        ("money", false) => words::tile_empty_money(locale),
+        ("notes", _) => words::tile_empty_notes(locale),
+        ("people", _) => words::tile_empty_people(locale),
+        ("photos", _) => words::tile_empty_photos(locale),
         _ => String::new(),
     }
 }
@@ -882,6 +881,7 @@ mod tests {
         use wire::HomeTileStatus as Status;
         let made = |status| Made {
             status,
+            holds: status == Status::Content,
             count: None,
             count_label: String::new(),
             body: None,

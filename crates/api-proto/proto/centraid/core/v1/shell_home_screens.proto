@@ -41,7 +41,9 @@ enum HomeTileSize {
 enum HomeSpringboard {
   HOME_SPRINGBOARD_UNSPECIFIED = 0;
   HOME_SPRINGBOARD_LOADING = 1;
-  // Every readable tile is empty: the day-one page.
+  // DAY ZERO (the 2026-11-17 ruling): no app holds anything of the member's, the
+  // untouched starter notes aside. The layout is the same as at every stage; this
+  // grade only puts the one welcome card above it, until the first add or import.
   HOME_SPRINGBOARD_FIRST_RUN = 2;
   HOME_SPRINGBOARD_CONTENT = 3;
 }
@@ -198,6 +200,11 @@ message HomeTile {
   string widget = 13;
   // How many grid rows tall: 1, or 2 for a widget with a list in it.
   uint32 height = 14;
+  // THE APP HOLDS SOMETHING OF THE MEMBER'S, even when the widget has nothing to
+  // show now (no event in the next fortnight, nothing owed today, nothing spent
+  // this month). The starter notes alone do not count. This, and not `status`,
+  // is what ends day zero, and what picks the import invitation over a quiet line.
+  bool holds = 15;
 }
 
 message HomeTileRow {
@@ -242,9 +249,12 @@ message HomeData {
   // 4 was `every_tile_unreadable`: nothing read it (#1152).
   reserved 4;
   reserved "every_tile_unreadable";
-  // The day-one page's words, set when `springboard` is `FIRST_RUN`.
-  string day_one_title = 5;
-  string day_one_body = 6;
+  // 5 and 6 were the day-one page's title and body: day zero is the one Home
+  // with a welcome card above it (2026-11-17).
+  reserved 5, 6;
+  reserved "day_one_title", "day_one_body";
+  // The welcome card's sentence, set when `springboard` is `FIRST_RUN`.
+  string welcome = 7;
 }
 
 enum HomeVaultState {

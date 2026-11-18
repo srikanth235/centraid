@@ -22,16 +22,17 @@ name: home
 - assertVisible:
     id: "home-backup-status"
 
-# DAY ONE is a claim about the vault, and only a settled, readable, empty vault
-# earns it. When it shows, first moves show with it — never dashed placeholders.
+# DAY ZERO is a claim about the vault, and only a settled, readable vault that holds nothing of
+# the member's earns it. It is the one Home with a welcome card above it; each empty widget says
+# its one action (2026-11-17).
 - runFlow:
     when:
       visible:
-        id: "home-day-one"
+        id: "home-welcome"
     commands:
-      - assertVisible: "Nothing in here yet"
-      - assertVisible:
-          id: "home-first-moves"
+      - assertVisible: "Nothing in here yet. Start with what this phone already holds."
+      - assertVisible: "Import your calendar"
+      - assertVisible: "This note is yours"
       # An unreadable Home must NOT be able to reach this screen.
       - assertNotVisible: "Not on this phone yet"
 

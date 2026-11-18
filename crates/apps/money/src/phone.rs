@@ -1327,6 +1327,8 @@ pub struct MoneyHomeTile {
     /// Spent this month, one per currency; empty on day one.
     pub spent: Vec<Money>,
     pub empty: bool,
+    /// The ledger holds an account (a statement was imported), whatever this month spent.
+    pub held: bool,
 }
 
 /// The tile Home shows: this month's spending per currency, or nothing yet.
@@ -1337,6 +1339,7 @@ pub fn home_tile(door: &dyn PageDoor, month: &str, today: &str) -> KitResult<Mon
     Ok(MoneyHomeTile {
         month: month.to_owned(),
         empty: data.accounts.is_empty() || (window.value.is_empty() && folded.is_empty()),
+        held: !data.accounts.is_empty(),
         spent: folded
             .iter()
             .map(|e| money(e.spent_minor, &e.currency))
