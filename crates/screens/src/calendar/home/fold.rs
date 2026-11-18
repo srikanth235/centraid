@@ -347,6 +347,13 @@ pub fn events(fold: &Fold) -> Option<Folded> {
     // today that draws an Overdue group or the absence notice has something on
     // it, so it says nothing (R-1128-3). A day whose only task was just checked
     // off draws no row and no group, and there the sentence is right.
+    // FIRST OPEN SHOWS ITS CARD IN THE DEFAULT VIEW TOO (FirstOpenCalendar): Day draws a grid, and an
+    // untouched calendar has no grid worth drawing, so the card stands in for it there.
+    let first_open = (fold.destination == Dest::Schedule
+        || (fold.destination == Dest::Day && held.untouched == Some(true)))
+        && fold.term.is_none()
+        && fold.hidden.is_empty()
+        && upcoming.events.is_empty();
     let empty = if drawn_grid && fold.destination != Dest::Day {
         // A GRID IS DRAWN EMPTY: its cells say what they hold.
         Emptiness::None
@@ -356,10 +363,7 @@ pub fn events(fold: &Fold) -> Option<Folded> {
         Emptiness::NoMatch
     } else if waiting_only {
         Emptiness::NothingWaiting
-    } else if fold.destination == Dest::Schedule
-        && fold.hidden.is_empty()
-        && upcoming.events.is_empty()
-    {
+    } else if first_open {
         Emptiness::DayOne
     } else {
         Emptiness::NothingOnDay
@@ -459,25 +463,28 @@ pub fn events(fold: &Fold) -> Option<Folded> {
     };
     // A drawn grid is the place whatever it holds (its cells say what they hold): only a list with
     // nothing to list is the page's empty state.
-    let empty = (empty != Emptiness::None && !drawn_grid).then(|| wire::EmptyState {
-        headline: empty_title,
-        body: empty_body,
-        action_label: empty_action,
-        // FIRST OPEN ONLY: the way to add by hand, under the import.
-        hint: if empty == Emptiness::DayOne && !fold.import_denied {
-            words::first_open_hint(locale)
-        } else {
-            String::new()
-        },
-        // THE PHONE ALREADY HOLDS A CALENDAR: the import is the empty state's door, where the
-        // shell can read one (a search that found nothing offers none).
-        import_source: if offer_import {
-            wire::ImportSource::Calendar as i32
-        } else {
-            wire::ImportSource::Unspecified as i32
-        },
-        ..wire::EmptyState::default()
-    });
+    let empty =
+        (empty != Emptiness::None && (!drawn_grid || empty == Emptiness::DayOne)).then(|| {
+            wire::EmptyState {
+                headline: empty_title,
+                body: empty_body,
+                action_label: empty_action,
+                // FIRST OPEN ONLY: the way to add by hand, under the import.
+                hint: if empty == Emptiness::DayOne && !fold.import_denied {
+                    words::first_open_hint(locale)
+                } else {
+                    String::new()
+                },
+                // THE PHONE ALREADY HOLDS A CALENDAR: the import is the empty state's door, where the
+                // shell can read one (a search that found nothing offers none).
+                import_source: if offer_import {
+                    wire::ImportSource::Calendar as i32
+                } else {
+                    wire::ImportSource::Unspecified as i32
+                },
+                ..wire::EmptyState::default()
+            }
+        });
     Some(Folded { data, empty })
 }
 
@@ -1192,5 +1199,21 @@ mod tests {
                 "2026-06-16"
             ))
         );
+    }
+
+    /// FIRST OPEN IS THE CARD IN DAY TOO (FirstOpenCalendar): the default view draws a grid, which an
+    /// untouched calendar has no use for; a quiet week in a calendar that holds events keeps its grid.
+    #[test]
+    fn an_untouched_calendar_shows_its_first_open_card_in_day() {
+        let mut held = held_of(vec![]);
+        held.untouched = Some(true);
+        let card = folded_of(&held, Dest::Day, &[]).empty.expect("the card");
+        assert_eq!(card.headline, words::first_open(Locale::En));
+        assert_eq!(card.hint, words::first_open_hint(Locale::En));
+        assert_eq!(card.import_source, wire::ImportSource::Calendar as i32);
+        held.untouched = Some(false);
+        assert!(folded_of(&held, Dest::Day, &[]).empty.is_none());
+        held.untouched = None;
+        assert!(folded_of(&held, Dest::Day, &[]).empty.is_none());
     }
 }

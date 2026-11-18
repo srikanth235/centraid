@@ -42,12 +42,17 @@ use crate::screen::Ctx;
 
 /// Schedule's and Waiting's reach from the anchor, in days.
 pub const LIST_DAYS: i64 = 120;
+/// How far either side of today a calendar is looked through to learn it holds nothing.
+const WIDE_DAYS: i64 = 366;
 /// `search`'s own ceiling.
 pub const SEARCH_LIMIT: u32 = 100;
 
 #[derive(Default)]
 pub struct Held {
     pub window: Option<String>,
+    /// Whether the calendar holds no event at all, a year either side of today: read only for Day
+    /// on a week with nothing in it, to tell a first open from a quiet week.
+    pub untouched: Option<bool>,
     pub upcoming: Option<wire::AgendaUpcoming>,
     pub context: Option<wire::AgendaDayContext>,
     pub dated: Option<String>,
@@ -76,6 +81,7 @@ impl Held {
     /// Take back, for what a refresh that failed did not read again, what was held before it.
     pub fn keep_unread(&mut self, old: Self) {
         self.window = self.window.take().or(old.window);
+        self.untouched = self.untouched.take().or(old.untouched);
         self.upcoming = self.upcoming.take().or(old.upcoming);
         self.context = self.context.take().or(old.context);
         self.dated = self.dated.take().or(old.dated);
@@ -232,7 +238,9 @@ impl Home {
             self.held.context = Some(context);
             self.held.window = Some(key.clone());
             self.held.dated = None;
+            self.held.untouched = None;
         }
+        self.fill_untouched(ctx)?;
         self.today = self.held.today();
         let dated = matches!(
             self.destination,
@@ -277,6 +285,43 @@ impl Home {
             self.held.reminders = Some(board_of(&window));
             self.held.dated = Some(dated_key);
         }
+        Ok(())
+    }
+
+    /// WHETHER THE CALENDAR HOLDS NOTHING AT ALL (FirstOpenCalendar): Day draws a week's grid, so a
+    /// week with nothing in it says nothing of the calendar. A year either side of today decides.
+    fn fill_untouched(&mut self, ctx: &Ctx) -> Result<(), Stop> {
+        let quiet = self
+            .held
+            .upcoming
+            .as_ref()
+            .is_some_and(|upcoming| upcoming.events.is_empty());
+        if self.destination != wire::AgendaDestination::Day
+            || !quiet
+            || self.held.untouched.is_some()
+        {
+            return Ok(());
+        }
+        let today = self.held.today();
+        let (Some(from), Some(to)) = (
+            civil::plus_days(&today, -WIDE_DAYS).and_then(|day| midnight(&day)),
+            civil::plus_days(&today, WIDE_DAYS).and_then(|day| midnight(&day)),
+        ) else {
+            return Ok(());
+        };
+        let wide = get(read(
+            ctx,
+            query_cal::Upcoming {
+                from: Some(from),
+                to: Some(to),
+                alerts: None,
+            },
+            |answer| match answer {
+                Answer::AgendaUpcoming(upcoming) => Some(upcoming),
+                _ => None,
+            },
+        ))?;
+        self.held.untouched = Some(wide.events.is_empty());
         Ok(())
     }
 

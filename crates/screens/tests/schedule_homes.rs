@@ -1614,9 +1614,25 @@ fn the_empties_are_four_different_screens() {
     );
     assert_eq!(r.state().import_label, "");
 
+    // FIRST OPEN IS THE CARD IN DAY TOO (FirstOpenCalendar): a calendar that holds nothing at all
+    // draws no grid.
     let mut d = rig(Dest::Day);
     d.clear_day();
-    // Day draws its hour grid whatever the day holds: a drawn grid is the place, not an empty page.
+    assert_eq!(
+        d.empty().headline,
+        "Your events and invitations, day by day."
+    );
+    assert_eq!(d.empty().hint, "Or tap + to write one.");
+    assert!(d.state().content.is_none());
+    // A calendar that holds an event keeps its grid on a day with nothing, wherever the event is.
+    let anchor = d.state().anchor_day.clone();
+    d.event(
+        "zq-far",
+        "Zq Far",
+        &format!("{}T09:00", civil::plus_days(&anchor, 40).unwrap()),
+        None,
+    );
+    d.settle();
     d.not_empty();
     assert!(d.data().time_grid.is_some());
 }
