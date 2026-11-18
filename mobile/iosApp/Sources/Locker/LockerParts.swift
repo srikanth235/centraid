@@ -185,10 +185,9 @@ struct LockerRowView: View {
                         .foregroundStyle(Surface.ink)
                         .lineLimit(1)
                     if !row.meta.isEmpty {
-                        Text(row.meta)
+                        MetaLine(row.meta)
                             .kitType(.meta)
                             .foregroundStyle(Surface.meta)
-                            .lineLimit(1)
                     }
                 }
                 Spacer(minLength: 8)
