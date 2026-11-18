@@ -1687,9 +1687,10 @@ impl Screen for Editor {
                 })
             }),
             chrome: Some(wire::NotesEditorChrome {
-                // "Cancel" only before the first keystroke of this visit; after
-                // it, close = done, and an autosave does not undo that.
-                close: if autosave.edit_seq == 0 {
+                // "Cancel" only on a NEW note before its first keystroke: nothing exists to keep.
+                // A note that is already there closes with "Done" (close = done, #1202, S2-4):
+                // opening it and leaving changes nothing, and an autosave does not undo that.
+                close: if self.note_id.is_none() && autosave.edit_seq == 0 {
                     words::cancel(locale)
                 } else {
                     words::done(locale)

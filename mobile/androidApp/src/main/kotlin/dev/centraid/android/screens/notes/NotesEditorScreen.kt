@@ -80,7 +80,7 @@ import dev.centraid.android.kit.StatusLine
  * AUTOSAVE, CLOSE = DONE (#1015 D3). There is no Save button: Rust saves after
  * the last keystroke, a pin saves at once, and leaving by any road is the
  * page's pop, which Rust sees as `Left` and flushes. The close key's word
- * ("Cancel" before a keystroke, "Done" after) and the status line are Rust's
+ * ("Cancel" on a new note before a keystroke, "Done" otherwise) and the status line are Rust's
  * `chrome`. History and Send to Agenda are routes the state carries; the
  * powerbox is a sheet the state opens (`link`), also on a typed `[[`.
  *

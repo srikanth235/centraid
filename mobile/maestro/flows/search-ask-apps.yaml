@@ -54,13 +54,13 @@ name: search-ask-apps
 - launchApp
 - tapOn:
     id: "home-tile-notes"
-# A first vault opens Notes on its starter note: Cancel goes back to the library.
+# A first vault opens Notes on its starter note: Done goes back to the library.
 - runFlow:
     when:
       notVisible:
         id: "notes-search-open"
     commands:
-      - tapOn: "Cancel"
+      - tapOn: "Done"
 - tapOn:
     id: "notes-search-open"
 - inputText: "zzqxn"

@@ -70,6 +70,9 @@ fn parts(look: &Look, fields: &[Field]) -> Vec<String> {
     let body = named("note.body")
         .map(|field| fold::excerpt(field.value.as_str().unwrap_or_default()))
         .filter(|excerpt| !excerpt.is_empty());
+    // A NOTE WITH NO TITLE OF ITS OWN IS TITLED FROM ITS FIRST LINE, so a typed body moves both
+    // together: the words say it once (#1202, S2-4), as the Versions boards draw them.
+    let title = title.filter(|title| body.as_ref().is_none_or(|words| words != title));
     let notebook = named("note.notebook_id").map(|field| {
         text(&field.value).map_or_else(
             || words::unfiled_row(look.locale),

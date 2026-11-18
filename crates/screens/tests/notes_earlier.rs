@@ -292,3 +292,22 @@ fn a_trashed_note_offers_no_entry_and_the_entry_returns_with_the_note() {
     refresh(&mut d, i);
     assert!(editor_state(d.view(i)).earlier.is_some());
 }
+
+#[test]
+fn a_body_typed_in_the_editor_reads_as_its_words_in_the_list() {
+    let mut d = driver();
+    let e = d.push(notes::TAB, routes::new_note());
+    for words in ["milk", "milk and eggs"] {
+        send_editor(
+            &mut d,
+            e,
+            wire::notes_editor_event::Kind::Body(wire::notes_editor_event::BodyEdited {
+                body: words.into(),
+            }),
+        );
+        d.pump(std::time::Duration::from_millis(1500));
+    }
+    let id = editor_state(d.view(e)).note_id.clone();
+    let i = open_earlier(&mut d, &id);
+    assert_eq!(lines(&d, i), ["milk and eggs", "milk"]);
+}

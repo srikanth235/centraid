@@ -179,7 +179,8 @@ fn an_existing_note_opens_on_its_words_and_saves_the_title_alone() {
     assert_eq!(draft(d.view(i)).body, "first draft");
     assert_eq!(
         editor_state(d.view(i)).chrome.as_ref().unwrap().close,
-        "Cancel"
+        "Done",
+        "a note that exists closes with Done, edited or not"
     );
     type_title(&mut d, i, "Plans v2");
     settle(&mut d);

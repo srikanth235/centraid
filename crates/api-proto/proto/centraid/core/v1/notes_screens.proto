@@ -644,7 +644,7 @@ message NotesEditorDraft {
 }
 
 message NotesEditorChrome {
-  // "Cancel" before the first keystroke of this visit, "Done" after.
+  // "Cancel" on a new note before its first keystroke, "Done" otherwise.
   string close = 1;
   string title_placeholder = 2;
   string body_placeholder = 3;
