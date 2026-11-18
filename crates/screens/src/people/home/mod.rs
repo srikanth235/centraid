@@ -485,15 +485,18 @@ impl Home {
 
     /// The page's own sentence for having nothing to show: a term that matched no one, day one on
     /// Touch, or the roster's (day one, or the chip's own).
-    fn empty_state(&self, locale: Locale, searching: bool) -> wire::EmptyState {
+    fn empty_state(&self, ctx: &Ctx, searching: bool) -> wire::EmptyState {
+        let locale = ctx.locale();
+        // THE PHONE REFUSED ITS CONTACTS: day one offers the add and not an import that cannot work.
+        let can_import = !ctx.follows().report(Store::Contacts).denied;
         if searching {
             rows::search_empty(locale)
         } else if self.destination == wire::PeopleDestination::Touch {
-            rows::day_one(locale)
+            rows::day_one(locale, can_import)
         } else {
             self.held_roster.as_ref().map_or_else(
-                || rows::day_one(locale),
-                |roster| rows::roster_empty(locale, roster, self.chip),
+                || rows::day_one(locale, can_import),
+                |roster| rows::roster_empty(locale, roster, self.chip, can_import),
             )
         }
     }
@@ -548,13 +551,18 @@ impl Screen for Home {
         match kind {
             E::Appeared(_) => {
                 self.reload(ctx);
+                self.undo.take_handed(ctx);
                 ctx.follows().changed(ctx, Store::Contacts);
                 if !self.attached {
                     self.attached = true;
                     return self.contacts.attach();
                 }
             }
-            E::DataChanged(_) | E::EnvironmentChanged(_) => self.reload(ctx),
+            E::DataChanged(_) | E::EnvironmentChanged(_) => {
+                self.reload(ctx);
+                // THE PERSON'S PAGE ABOVE CLOSED (moved to trash): its line and Undo are drawn here.
+                self.undo.take_handed(ctx);
+            }
             E::PeopleHome(home) => return self.event(home, ctx),
             E::StatusActed(_) => {
                 if self.undo.acted(ctx) {
@@ -573,7 +581,7 @@ impl Screen for Home {
         // The page the surface shows: the answer to the term while one is asked, else the
         // destination's own read.
         let searching = self.search.active() && self.search.held.is_some();
-        let empty = self.empty_state(locale, searching);
+        let empty = self.empty_state(ctx, searching);
         let gate = |denial: &wire::AppQueryDenial| denied(locale, denial);
         let wired = match (&self.search.held, searching) {
             (Some(held), true) => held.wire(locale, gate, || empty.clone()),

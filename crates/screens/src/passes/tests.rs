@@ -933,6 +933,25 @@ fn each_finished_task_settles_in_its_own_vaults_core_routed_by_the_vault_id() {
 }
 
 #[test]
+fn a_finished_task_that_names_its_vault_by_identity_settles_in_the_shelfs_id_for_it() {
+    // The OS reports the 64-hex identity a handed-off part carried; the shelf holds the vault under
+    // its own id, and the settle is routed by that one (#1202).
+    let conductor = ios(vec![held("shelf-1", true)]);
+    let report = wire::UploadSettled {
+        name: "a".to_owned(),
+        http_status: 201,
+        gateway_id: "gw-1".to_owned(),
+        vault_id: "ab".repeat(32),
+        ..Default::default()
+    };
+    // Looked up by the identity alone, it is a vault nobody holds.
+    assert!(conductor.upload_settled(&report).is_empty());
+    let actions = conductor.upload_settled_in("shelf-1", &report);
+    assert!(matches!(&actions[..], [Action::Settle { vault, settled }]
+        if vault == "shelf-1" && settled.vault_id == "ab".repeat(32)));
+}
+
+#[test]
 fn a_drained_session_hands_every_open_vaults_next_batch_off_one_vault_at_a_time() {
     let conductor = ios(vec![held("v1", true), held("v2", true)]);
     let first = conductor.uploads_drained();

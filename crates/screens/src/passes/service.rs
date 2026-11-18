@@ -389,7 +389,15 @@ impl Service {
             }
             Some(Fact::Asked(asked)) => wire::pass_asked::Ask::try_from(asked.ask)
                 .map_or_else(|_| Vec::new(), |ask| self.ask(ask)),
-            Some(Fact::Settled(settled)) => self.conductor.upload_settled(&settled),
+            // THE OS NAMES THE VAULT BY ITS IDENTITY (the hex a handed-off part carries); the shelf
+            // holds it under its own id, and the settle goes to that vault's core (#1202).
+            Some(Fact::Settled(settled)) => {
+                let shelf_id = self
+                    .secrets
+                    .shelf_id_of(&settled.vault_id)
+                    .unwrap_or_else(|| settled.vault_id.clone());
+                self.conductor.upload_settled_in(&shelf_id, &settled)
+            }
             Some(Fact::Drained(_)) => self.conductor.uploads_drained(),
         }
     }

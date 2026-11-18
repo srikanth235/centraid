@@ -29,27 +29,62 @@ struct AgendaSmartListGrid: View {
 
     private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
 
+    /// THE BOARD'S SHAPE (`AndroidReminders`): the counted lists are tiles in two columns, and
+    /// Completed (the Logbook, which shows no count) is one bar across both, so its word is on one
+    /// line and never breaks mid-word at a large text size.
+    private var tiles: [Centraid_Core_V1_AgendaSmartList] { lists.filter { $0.key != "completed" } }
+    private var bars: [Centraid_Core_V1_AgendaSmartList] { lists.filter { $0.key == "completed" } }
+
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 10) {
-            ForEach(lists, id: \.key) { list in
-                Button { open(list.route) } label: {
-                    VStack(alignment: .leading) {
-                        HStack(alignment: .top) {
-                            CentraidIconView(iconKey: list.iconKey, tint: .white, size: 26)
-                            Spacer(minLength: 0)
-                            if !list.count.isEmpty {
-                                Text(list.count)
-                                    .kitScaledFont(28, weight: .bold)
-                                    .foregroundStyle(.white)
+        VStack(spacing: 10) {
+            LazyVGrid(columns: columns, spacing: 10) {
+                ForEach(tiles, id: \.key) { list in
+                    Button { open(list.route) } label: {
+                        VStack(alignment: .leading) {
+                            HStack(alignment: .top) {
+                                CentraidIconView(iconKey: list.iconKey, tint: .white, size: 26)
+                                Spacer(minLength: 0)
+                                if !list.count.isEmpty {
+                                    Text(list.count)
+                                        .kitScaledFont(28, weight: .bold)
+                                        .foregroundStyle(.white)
+                                }
                             }
+                            Spacer(minLength: 0)
+                            Text(list.label)
+                                .kitScaledFont(17, weight: .semibold)
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
                         }
-                        Spacer(minLength: 0)
+                        .padding(14)
+                        .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
+                        .background(AgendaPalette.token(list.colorKey))
+                        .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(list.accessibilityLabel)
+                    .accessibilityIdentifier("agenda-smart-\(list.key)")
+                }
+            }
+            ForEach(bars, id: \.key) { list in
+                Button { open(list.route) } label: {
+                    HStack(spacing: 12) {
+                        CentraidIconView(iconKey: list.iconKey, tint: .white, size: 24)
                         Text(list.label)
                             .kitScaledFont(17, weight: .semibold)
                             .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                        Spacer(minLength: 0)
+                        if !list.count.isEmpty {
+                            Text(list.count)
+                                .kitScaledFont(17, weight: .semibold)
+                                .foregroundStyle(.white)
+                        }
                     }
-                    .padding(14)
-                    .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
                     .background(AgendaPalette.token(list.colorKey))
                     .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
                 }

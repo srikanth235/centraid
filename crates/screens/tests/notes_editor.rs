@@ -450,6 +450,31 @@ fn move_to_trash_asks_nothing_trashes_at_once_and_closes_the_page_with_an_undo_b
 }
 
 #[test]
+fn move_to_trash_hands_its_line_and_undo_to_the_notes_page_beneath() {
+    let mut d = driver();
+    let id = note(&d, "Plans", "x");
+    let home = home(&mut d, wire::NotesPlace::Notes);
+    let i = open(&mut d, &id);
+    send_editor(&mut d, i, N::TrashTapped(ev::TrashTapped {}));
+    assert!(editor_state(d.view(i)).finished);
+    d.pop(notes::TAB, i);
+    let line = home_state(d.view(home))
+        .status
+        .clone()
+        .expect("the page beneath says it was trashed");
+    assert_eq!(
+        (line.sentence.as_str(), line.action_label.as_str()),
+        ("Plans moved to trash", "Undo")
+    );
+    // The Undo brings the note back.
+    d.send(
+        home,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    assert!(note_of(&d, &id).deleted_at.is_none());
+}
+
+#[test]
 fn a_pin_chosen_before_the_note_exists_lands_once_its_create_does() {
     let mut d = driver();
     let i = open_new(&mut d);

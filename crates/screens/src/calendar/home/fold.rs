@@ -68,6 +68,9 @@ pub struct Fold<'a> {
     /// weeks begin.
     pub week_start: WeekStart,
     pub month_style: wire::AgendaMonthStyle,
+    /// The phone refused the calendar the last time an import was tried: the first-open card offers
+    /// "New event" instead of an import it cannot do.
+    pub import_denied: bool,
 }
 
 /// One row on a day: an event or a task, and the key it sorts by.
@@ -365,6 +368,11 @@ pub fn events(fold: &Fold) -> Option<Folded> {
         // FIRST OPEN (FirstOpenCalendar): what Calendar is for, then the way to add by hand. The
         // import is the card's one action where the phone holds a calendar; the plus is in the
         // header, so the card holds no "New event" button of its own.
+        Emptiness::DayOne if fold.import_denied => (
+            words::first_open(locale),
+            String::new(),
+            words::new_event(locale),
+        ),
         Emptiness::DayOne => (words::first_open(locale), String::new(), String::new()),
         Emptiness::NoMatch => (
             words::empty_no_match(locale),
@@ -384,7 +392,10 @@ pub fn events(fold: &Fold) -> Option<Folded> {
         Emptiness::None => (String::new(), String::new(), String::new()),
     };
 
-    let offer_import = fold.term.is_none() && fold.hidden.is_empty() && upcoming.events.is_empty();
+    let offer_import = fold.term.is_none()
+        && fold.hidden.is_empty()
+        && upcoming.events.is_empty()
+        && !fold.import_denied;
 
     let data = wire::AgendaHomeData {
         today: today.to_owned(),
@@ -453,7 +464,7 @@ pub fn events(fold: &Fold) -> Option<Folded> {
         body: empty_body,
         action_label: empty_action,
         // FIRST OPEN ONLY: the way to add by hand, under the import.
-        hint: if empty == Emptiness::DayOne {
+        hint: if empty == Emptiness::DayOne && !fold.import_denied {
             words::first_open_hint(locale)
         } else {
             String::new()
@@ -958,6 +969,7 @@ mod tests {
             held,
             week_start: WeekStart::Monday,
             month_style: wire::AgendaMonthStyle::Grid,
+            import_denied: false,
         })
         .unwrap()
     }
@@ -1163,6 +1175,7 @@ mod tests {
             held: &held,
             week_start: WeekStart::Monday,
             month_style: wire::AgendaMonthStyle::Grid,
+            import_denied: false,
         })
         .unwrap()
         .data;

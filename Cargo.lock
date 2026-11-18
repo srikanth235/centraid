@@ -868,12 +868,15 @@ dependencies = [
  "centraid-assist",
  "centraid-core",
  "centraid-design",
+ "centraid-gateway",
  "centraid-identity",
  "centraid-ontology",
  "centraid-vault",
  "prost",
  "rand",
  "serde_json",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]
