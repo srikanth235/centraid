@@ -190,6 +190,40 @@ impl Driver {
         Self::opened(runtime, true, centraid_core::example::now_ms())
     }
 
+    /// A FIRST VAULT, as a member's first launch founds it: the starter rows of
+    /// [`centraid_core::starters`] and nothing else (no example scenario).
+    ///
+    /// # Panics
+    /// When the scratch vault cannot be made.
+    #[must_use]
+    pub fn first_vault(runtime: Runtime) -> Self {
+        let dir = centraid_ontology::scratch::scratch_dir();
+        std::fs::create_dir_all(&dir).expect("the scratch directory is made");
+        let handle = Core::open(CoreConfig::new(dir.join("vault.db"))).expect("a core opens");
+        handle
+            .open_own_bytes(dir.join("vault.bytes"))
+            .expect("the byte store opens");
+        let found = handle
+            .call(&wire::Request {
+                kind: Some(wire::request::Kind::Found(wire::FoundRequest {
+                    display_name: "First".to_owned(),
+                    owner_name: "Me".to_owned(),
+                    content: wire::FoundContent::Starters as i32,
+                })),
+            })
+            .expect("the vault founds");
+        assert!(matches!(found.kind, Some(wire::response::Kind::Found(_))));
+        handle.attach_screens(std::sync::Arc::new(runtime));
+        Self {
+            handle,
+            views: BTreeMap::new(),
+            navigation: None,
+            effects: Vec::new(),
+            closed: Vec::new(),
+            scratch: Some(dir),
+        }
+    }
+
     /// A core that holds no vault at all: the file is not there and is not
     /// made, as on a phone that has not made one yet. A screen that needs the
     /// vault is refused `Unpaired`.

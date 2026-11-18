@@ -1,10 +1,10 @@
 # Search says what it searched for (#1097): a one-letter slip finds the row
 # and the line under the field names the word searched ("Including results for
-# “circle”"); a term nothing matches offers the assistant.
+# “yours”"); a term nothing matches offers the assistant.
 #
 # A VAULT-HOLDING INSTALL, as `home-search.yaml`: the onboarding starters are
-# enough — the Tasks starter "Tap the circle to finish me" (an Agenda group row) holds the word "circle", and
-# "circel" is its two neighbours swapped. Re-runnable: the flow relaunches and
+# enough — the starter note "This note is yours" (a Notes group row) holds the word "yours", and
+# "yuors" is its two neighbours swapped. Re-runnable: the flow relaunches and
 # leaves nothing behind but a recent search.
 #
 # THE ASSISTANT NEEDS A MODEL. On a phone with no model file the Chat tab
@@ -21,22 +21,22 @@ name: search-correction
     id: "home-search-open"
 - tapOn:
     id: "home-search-field"
-- inputText: "circel"
+- inputText: "yuors"
 # The slip finds the row, and the field says what was searched for.
 - extendedWaitUntil:
     visible:
       id: "search-corrected"
     timeout: 5000
-- assertVisible: "Including results for “circle”"
+- assertVisible: "Including results for “yours”"
 - assertVisible:
-    id: "home-search-group-reminders"
-- assertVisible: "Tap the circle to finish me"
+    id: "home-search-group-notes"
+- assertVisible: "This note is yours"
 # An exact term says nothing: no line over rows it did not correct.
 - eraseText: 6
-- inputText: "circle"
+- inputText: "yours"
 - extendedWaitUntil:
     visible:
-      id: "home-search-group-reminders"
+      id: "home-search-group-notes"
     timeout: 5000
 - assertNotVisible:
     id: "search-corrected"

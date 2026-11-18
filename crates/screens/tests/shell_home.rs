@@ -839,3 +839,88 @@ fn the_lockups_spoken_sentences_are_finished_by_rust() {
     assert_eq!(bar.switch_label, "Personal. Switch vault");
     assert_eq!(bar.backup_open_label, "Backed up today. Open backup");
 }
+
+#[test]
+fn a_fresh_vault_is_day_zero_with_the_one_layout_and_the_first_add_ends_it() {
+    use centraid_screens::catalog::act;
+    use centraid_screens::field::Keyed;
+    let mut d = Driver::first_vault(shell::runtime());
+    d.start();
+    let i = d.navigation.as_ref().expect("navigation").tabs[0].entries[0].instance;
+    let day_zero = data(&d, i);
+    // THE STARTER NOTES ARE NOT THE MEMBER'S: the vault is day zero, with the welcome card's words.
+    assert_eq!(
+        day_zero.springboard,
+        wire::HomeSpringboard::FirstRun as i32,
+        "{:?}",
+        day_zero
+            .tiles
+            .iter()
+            .map(|t| (t.widget.clone(), t.status, t.holds))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        day_zero.welcome,
+        "Nothing in here yet. Start with what this phone already holds."
+    );
+    // One layout: the board's order, and every small glance small.
+    let order: Vec<&str> = day_zero.tiles.iter().map(|t| t.widget.as_str()).collect();
+    assert_eq!(
+        order,
+        [
+            "calendar",
+            "reminders",
+            "photos",
+            "money",
+            "health",
+            "people",
+            "locker",
+            "notes",
+            "docs"
+        ]
+    );
+    // Each empty widget says its one action, in the ruling's words.
+    for (widget, words) in [
+        ("calendar", "Import your calendar"),
+        ("reminders", "Import your reminders"),
+        ("photos", "Import your camera roll"),
+        ("money", "Import a statement"),
+        ("health", "Connect Apple Health"),
+        ("people", "Import contacts"),
+        ("locker", "Set up Locker"),
+        ("docs", "Add a document"),
+    ] {
+        assert_eq!(tile_of(&day_zero, widget).empty_copy, words, "{widget}");
+    }
+    // Notes shows its starter note, and starter rows exist nowhere else.
+    let notes = tile_of(&day_zero, "notes");
+    assert_eq!(notes.status, wire::HomeTileStatus::Content as i32);
+    assert!(!notes.holds);
+    let Some(wire::home_tile_body::Kind::Notes(body)) =
+        notes.body.as_ref().and_then(|b| b.kind.as_ref())
+    else {
+        panic!("no notes body");
+    };
+    assert_eq!(body.title, "This note is yours");
+    assert_eq!(
+        tile_of(&day_zero, "reminders").status,
+        wire::HomeTileStatus::Empty as i32
+    );
+    assert!(!tile_of(&day_zero, "reminders").holds);
+    // The first thing the member adds ends day zero, and the welcome card goes.
+    let response = d.act(
+        wire::ActRequest::from(act::notes::CreateNote {
+            title: "Groceries".to_owned(),
+            body: "Milk".to_owned(),
+            ..Default::default()
+        })
+        .keyed("day-zero-1"),
+    );
+    assert_eq!(response.status, wire::ActStatus::Executed as i32);
+    d.pump(std::time::Duration::from_secs(2));
+    let after = data(&d, i);
+    assert_eq!(after.springboard, wire::HomeSpringboard::Content as i32);
+    assert_eq!(after.welcome, "");
+    let after_order: Vec<&str> = after.tiles.iter().map(|t| t.widget.as_str()).collect();
+    assert_eq!(after_order, order, "the layout does not move as the vault fills");
+}

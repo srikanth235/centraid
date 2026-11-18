@@ -56,9 +56,8 @@ pub fn fold_shaped(
     let day_one = counts.is_some_and(|counts| counts.open == 0 && counts.closed == 0)
         && board.projects.is_empty()
         && answer.projects.is_empty();
-    // NOTHING OPEN (day one, or the starters finished) is when the phone's
-    // reminders are offered: a first vault's starter tasks mean day one is
-    // never seen, and "all done" is the point of use.
+    // NOTHING OPEN (day one, or everything finished) is when the phone's
+    // reminders are offered: "all done" is the point of use as much as day one.
     let reminders = if open == Some(0) {
         wire::ImportSource::Reminders
     } else {

@@ -392,7 +392,7 @@ pub fn events(fold: &Fold) -> Option<Folded> {
         days: sections_out,
         // NO EVENT OF THE MEMBER'S YET, AND THE PHONE ALREADY HOLDS A CALENDAR:
         // the import is offered, where the shell can read one. Not "day one"
-        // alone: a first vault's starter tasks and an imported contact's
+        // alone: a reminder on its day and an imported contact's
         // birthday fill the list with marks, and an offer keyed on an empty
         // screen would never be seen.
         import_source: if offer_import {
