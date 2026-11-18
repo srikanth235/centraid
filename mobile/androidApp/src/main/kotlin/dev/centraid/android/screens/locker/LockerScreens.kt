@@ -20,7 +20,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,7 +37,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -323,7 +321,8 @@ internal fun LockerHomeScreen(
                     onClear = { onEvent(LockerHomeEvent(filter_menu_cleared = FilterMenuCleared())) },
                 )
             },
-            status = if (generating) "" else data?.status_line.orEmpty(),
+            // THE OPEN LINE IS SAID ONCE: on the first run the page's own note draws it, under the title.
+            status = if (generating || (data?.steps ?: 0) > 0) "" else data?.status_line.orEmpty(),
             statusLine = state.status?.let { line ->
                 { StatusLine(line) }
             },
@@ -639,13 +638,15 @@ internal fun LockerNote(text: String, modifier: Modifier = Modifier, ink: String
 
 /** A row of Rust's choices as kit chips; the selected one is `bgSunken`, never accent. */
 @Composable
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 internal fun LockerChoices(choices: List<LockerChoice>, testTag: String, onPick: (String) -> Unit) {
-    Row(
+    // THE CHIPS WRAP: a row that scrolls ran the last one ("Wi-Fi") to the screen edge.
+    androidx.compose.foundation.layout.FlowRow(
         Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
             .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         choices.forEach { choice ->
             KitChip(
