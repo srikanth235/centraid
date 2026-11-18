@@ -259,13 +259,14 @@ struct TodoDetailView: View {
                         .lineLimit(1)
                 }
                 if !field.choices.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(field.choices, id: \.key) { choice in
-                                chip(choice, field: field)
-                            }
+                    // THE CHOICES WRAP (#1202): a chip row that scrolled sideways cut "Next week" and
+                    // "Yearly" mid-word at the card's edge with no cue that more was there.
+                    KitFlow(spacing: 6) {
+                        ForEach(field.choices, id: \.key) { choice in
+                            chip(choice, field: field)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 pickers(field, today: today)
                 if field.addText {
@@ -286,12 +287,10 @@ struct TodoDetailView: View {
                 }
                 // "Open Settings" under a line that sends the member there (#1188, NA1).
                 if !field.actionLabel.isEmpty {
-                    Button(field.actionLabel) {
+                    KitOutlineButton(label: field.actionLabel) {
                         send(event { $0.alertSettings = .init() })
                     }
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color("text", scheme))
-                    .frame(minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+                    .padding(.top, 4)
                     .accessibilityIdentifier("tasks-field-\(field.key)-settings")
                 }
             }

@@ -1072,20 +1072,29 @@ final class WordTextField: UITextField {
 /// while the screen is being recorded or mirrored, or the scene is not active.
 struct WordsShield<Content: View>: View {
     let secure: Bool
+    /// A scrolling detail page lets its scroll view run to the screen's foot: the capture-proof
+    /// host is laid out inside the safe area, so the scroll content stopped at a hard edge above
+    /// the home indicator (#1202). The inset it gives up is handed to the page as `shieldBottomInset`.
+    var bleedsBottom = false
     @ViewBuilder let content: () -> Content
 
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var scheme
     @State private var captured = WordsShieldCapture.now
+    @State private var foot: CGFloat = 0
 
     var body: some View {
         Group {
-            if secure {
+            if secure, bleedsBottom {
+                CaptureProof(content: content().environment(\.shieldBottomInset, foot))
+                    .ignoresSafeArea(.container, edges: .bottom)
+            } else if secure {
                 CaptureProof(content: content())
             } else {
                 content()
             }
         }
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { foot = $0 }
         // THE PAGE FILLS THE SCREEN: the capture-proof host is laid out inside the safe area, so
         // its own background leaves a band at the top and the foot.
         .background(Surface.page.ignoresSafeArea())
@@ -1101,6 +1110,30 @@ struct WordsShield<Content: View>: View {
             captured = (note.object as? UIScreen)?.isCaptured ?? WordsShieldCapture.now
         }
     }
+}
+
+private struct ShieldBottomInsetKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+extension EnvironmentValues {
+    /// The bottom safe-area inset a bleeding `WordsShield` gave up; a scroll view inside adds it to
+    /// its own foot padding so the last row clears the home indicator.
+    var shieldBottomInset: CGFloat {
+        get { self[ShieldBottomInsetKey.self] }
+        set { self[ShieldBottomInsetKey.self] = newValue }
+    }
+}
+
+private struct ShieldFoot: ViewModifier {
+    @Environment(\.shieldBottomInset) private var inset
+
+    func body(content: Content) -> some View { content.padding(.bottom, inset) }
+}
+
+extension View {
+    /// Pads the foot of a scroll page by the inset a bleeding `WordsShield` gave up.
+    func shieldFoot() -> some View { modifier(ShieldFoot()) }
 }
 
 enum WordsShieldCapture {

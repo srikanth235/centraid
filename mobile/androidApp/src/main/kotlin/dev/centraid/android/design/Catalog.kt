@@ -306,6 +306,9 @@ public object CentraidCatalog {
             NativeIconPath(d = "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9H3z", filled = false, evenOdd = false),
             NativeIconPath(d = "M12 11v5M9.5 13.5h5", filled = false, evenOdd = false),
         ),
+        "Footprints" to listOf(
+            NativeIconPath(d = "M8 20c-2 0-3-2-3-4s2-3 3-3 2 2 2 4-1 3-2 3zM16 13c-2 0-3-2-3-4s2-3 3-3 2 2 2 4-1 3-2 3z", filled = false, evenOdd = false),
+        ),
         "Gauge" to listOf(
             NativeIconPath(d = "M12 14l4-4", filled = false, evenOdd = false),
             NativeIconPath(d = "M3.34 19a10 10 0 1 1 17.32 0", filled = false, evenOdd = false),

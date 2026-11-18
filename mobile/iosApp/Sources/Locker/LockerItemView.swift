@@ -60,7 +60,7 @@ struct LockerItemView: View {
                     }
                 }
             } content: {
-                LockerShield(secure: state.secure) {
+                LockerShield(secure: state.secure, bleedsBottom: true) {
                     PageReadStateView(
                         page: state.page,
                         onRetry: { send(LockerItemEvents.make { $0.refreshed = .init() }) }
@@ -69,6 +69,7 @@ struct LockerItemView: View {
                             ScrollView {
                                 LazyVStack(alignment: .leading, spacing: 0) { page(item) }
                                     .padding(.bottom, 16)
+                                    .shieldFoot()
                             }
                             .accessibilityIdentifier("locker-item")
                         }
@@ -224,13 +225,17 @@ struct LockerItemView: View {
             }, open: open)
         }
         if !item.tags.isEmpty {
+            // FRAMED LIKE THE CARDS ABOVE (#1202), not a bare row on the page.
             FieldRow(key: item.tagsLabel, value: item.tags.joined(separator: " · "))
+                .kitCard()
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.vertical, 8)
         }
         if !item.memo.isEmpty || !item.memoAction.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 if !item.memo.isEmpty {
                     FieldRow(key: item.memoLabel, value: item.memo)
-                        .padding(.horizontal, -CentraidGeometry.pageMargin)
+                        .kitCard()
                 }
                 if !item.memoAction.isEmpty {
                     KitOutlineButton(label: item.memoAction) { send(LockerItemEvents.make { $0.memoOpened = .init() }) }
@@ -299,6 +304,8 @@ struct LockerFieldRowView: View {
                             Button(action: { onVerb(verb) }) {
                                 Text(verb.label)
                                     .centraidType("smallStrong")
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: true, vertical: false)
                                     .foregroundStyle(StateColor.green.text)
                                     .padding(.horizontal, 14)
                                     .frame(minHeight: 36)

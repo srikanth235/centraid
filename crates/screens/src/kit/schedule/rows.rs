@@ -279,11 +279,23 @@ pub fn reminder_part(
     cycle: HourCycle,
 ) -> Option<String> {
     if !task.remind_at_local.is_empty() {
-        let day = civil::relative_day(
-            locale,
-            task.remind_at_local.get(..10).unwrap_or_default(),
-            today,
-        );
+        let remind_day = task.remind_at_local.get(..10).unwrap_or_default();
+        // THE ROW SAYS A MOMENT ONCE (#1202): the due label already carries the day and the time,
+        // so a reminder that sounds at the due moment is the bare word, and one on the due's own
+        // day names only its clock.
+        // An overdue due says "5 days ago", so its reminder keeps the full date.
+        if remind_day == task.due_day && !task.overdue {
+            let remind_time = task.remind_at_local.get(11..16).unwrap_or_default();
+            if !task.due_time.is_empty() && task.due_time.get(..5) == Some(remind_time) {
+                return Some(words::reminder(locale));
+            }
+            return Some(format!(
+                "{} {}",
+                words::reminder(locale),
+                civil::clock_for(locale, &task.remind_at_local, cycle)
+            ));
+        }
+        let day = civil::relative_day(locale, remind_day, today);
         return Some(format!(
             "{} {day} {}",
             words::reminder(locale),

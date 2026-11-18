@@ -59,6 +59,7 @@ struct DocsThumbnail: View {
 
     @State private var image: UIImage?
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         ZStack {
@@ -66,6 +67,11 @@ struct DocsThumbnail: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
+                // A PAGE IS WHITE PAPER (#1202): on the dark grid it is dimmed, so it sits in the
+                // page instead of glaring out of it.
+                if pdf, scheme == .dark {
+                    Color.black.opacity(0.45)
+                }
             }
         }
         .task(id: path) {
@@ -188,13 +194,14 @@ struct DocsGridTile: View {
                     .centraidType("smallStrong")
                     .foregroundStyle(Theme.color("text", scheme))
                     .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                HStack(spacing: 4) {
-                    if !row.dotColorKey.isEmpty { DocsDot(colorKey: row.dotColorKey, size: 6) }
-                    Text(row.meta)
+                    .lineLimit(3)
+                // THE SIZE MUST SHOW (#1202): a tile is about 100 pt wide, so the parts of the meta
+                // take a line each (kind, then size) instead of one line cut after the kind.
+                HStack(alignment: .top, spacing: 4) {
+                    if !row.dotColorKey.isEmpty { DocsDot(colorKey: row.dotColorKey, size: 6).padding(.top, 4) }
+                    MetaLine(row.meta, lines: 2, alignment: .center)
                         .centraidType("annotLabel")
                         .foregroundStyle(Theme.color("textFaint", scheme))
-                        .lineLimit(1)
                 }
             }
             .frame(maxWidth: .infinity)

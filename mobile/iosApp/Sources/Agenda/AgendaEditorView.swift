@@ -424,15 +424,14 @@ struct AgendaEditorView: View {
                 .foregroundStyle(Theme.color("textSoft", scheme))
             if !draft.tags.isEmpty {
                 // A TAG IS A LIT CHIP: a tap takes it off.
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(draft.tags, id: \.self) { tag in
-                            KitChip(label: tag, selected: true, identifier: "agenda-editor-tag-\(tag)") {
-                                send(event { $0.tagRemoved = .with { $0.text = tag } })
-                            }
+                KitFlow(spacing: 6) {
+                    ForEach(draft.tags, id: \.self) { tag in
+                        KitChip(label: tag, selected: true, identifier: "agenda-editor-tag-\(tag)") {
+                            send(event { $0.tagRemoved = .with { $0.text = tag } })
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             TextField(chrome.tagPlaceholder, text: $typedTag)
                 .centraidType("body")

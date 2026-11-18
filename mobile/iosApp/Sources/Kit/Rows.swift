@@ -509,3 +509,54 @@ struct SearchContainerList: View {
         }
     }
 }
+
+
+/// A META LINE OF PARTS (#1202): the parts joined by a dot while they fit on one line, and one part
+/// to a line when they do not, so a separator never dangles at a line's end and a part never
+/// breaks at its own spaces ("Last / touch 30 days ago"). `accented` parts are set in the app's colour.
+struct MetaLine: View {
+    let parts: [String]
+    var accented: [String] = []
+    var lines = 3
+    var alignment: HorizontalAlignment = .leading
+
+    @Environment(\.appAccent) private var accent
+
+    /// `text` is split on its own dots, so a part that Rust already joined stays a unit each.
+    init(_ text: String, accented: [String] = [], lines: Int = 3, alignment: HorizontalAlignment = .leading) {
+        self.alignment = alignment
+        self.parts = text.components(separatedBy: " · ").filter { !$0.isEmpty }
+        self.accented = accented.filter { !$0.isEmpty }
+        self.lines = lines
+    }
+
+    init(parts: [String], accented: [String] = [], lines: Int = 3, alignment: HorizontalAlignment = .leading) {
+        self.alignment = alignment
+        self.parts = parts.flatMap { $0.components(separatedBy: " · ") }.filter { !$0.isEmpty }
+        self.accented = accented.filter { !$0.isEmpty }
+        self.lines = lines
+    }
+
+    private var joined: Text {
+        var line = Text(parts.joined(separator: " · "))
+        for part in accented {
+            line = line + Text(parts.isEmpty ? "" : " · ") + Text(part).foregroundStyle(accent.text)
+        }
+        return line
+    }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            joined.lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            VStack(alignment: alignment, spacing: 0) {
+                ForEach(Array((parts.map { ($0, false) } + accented.map { ($0, true) }).prefix(lines).enumerated()), id: \.offset) { _, part in
+                    if part.1 {
+                        Text(part.0).foregroundStyle(accent.text).lineLimit(1)
+                    } else {
+                        Text(part.0).lineLimit(1)
+                    }
+                }
+            }
+        }
+    }
+}

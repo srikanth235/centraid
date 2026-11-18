@@ -158,10 +158,11 @@ struct LockerCovered<Content: View>: View {
 /// wall replaces the page.
 struct LockerShield<Content: View>: View {
     let secure: Bool
+    var bleedsBottom = false
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        WordsShield(secure: secure, content: content)
+        WordsShield(secure: secure, bleedsBottom: bleedsBottom, content: content)
     }
 }
 
@@ -184,10 +185,9 @@ struct LockerRowView: View {
                         .foregroundStyle(Surface.ink)
                         .lineLimit(1)
                     if !row.meta.isEmpty {
-                        Text(row.meta)
+                        MetaLine(row.meta)
                             .kitType(.meta)
                             .foregroundStyle(Surface.meta)
-                            .lineLimit(1)
                     }
                 }
                 Spacer(minLength: 8)

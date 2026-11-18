@@ -2014,7 +2014,7 @@ message TodoRow {
   // `due_label` in the attention tone. Never red, never a count.
   bool overdue = 4;
   // One clamped line: "Home · Daily · missed 2 · next is Fri 14 March ·
-  // reminder Tomorrow 08:30 · ~25 min · #errand · 2 of 5 · sitting since March".
+  // reminder 08:30 · ~25 min · #errand · 2 of 5 · sitting since March".
   string meta = 5;
   // "!!!", "!!", "!", or empty: no room is reserved for a priority.
   string priority_label = 6;

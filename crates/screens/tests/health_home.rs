@@ -177,7 +177,7 @@ fn today_is_the_days_numbers_against_the_members_own_typical_in_the_members_word
         .collect();
     assert_eq!(
         icons,
-        ["MapPin", "Moon", "Bolt", "Activity", "Heart", "Gauge"]
+        ["Footprints", "Moon", "Bolt", "Activity", "Heart", "Gauge"]
     );
     assert_eq!(sleep.spark_bp.len(), 7);
     assert!(

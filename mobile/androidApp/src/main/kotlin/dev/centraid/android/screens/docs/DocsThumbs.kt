@@ -148,6 +148,10 @@ internal fun DocsDocTile(
             val bitmap = picture
             if (bitmap != null) {
                 Image(bitmap, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize()) // decorative: the tile names the document
+                // A PAGE IS WHITE PAPER (#1202): on the dark grid it is dimmed, so it sits in the page.
+                if (row.badge == "PDF" && androidx.compose.foundation.isSystemInDarkTheme()) {
+                    Box(Modifier.matchParentSize().background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f)))
+                }
             } else {
                 Box(Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
                     CentraidIcon(row.kind_icon_key.ifEmpty { "FileText" }, tint = centraidColor("textSoft"), size = 30.dp)

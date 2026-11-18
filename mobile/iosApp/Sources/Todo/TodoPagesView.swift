@@ -158,27 +158,33 @@ struct TodoProjectView: View {
             // The header's verbs stand while the project is on the page, ready or empty.
             if state.hasHead {
                 let head = state.head
-                HStack(spacing: 4) {
-                    // "EDIT LIST" (#1173 wave 2): name, colour and icon in one sheet.
-                    if !head.styleLabel.isEmpty {
-                        ToolbarVerb(label: head.styleLabel, identifier: "tasks-project-edit") {
-                            send(event { $0.styleRequested = .init() })
-                        }
-                    }
-                    if !head.renameLabel.isEmpty {
-                        ToolbarVerb(label: head.renameLabel, identifier: "tasks-rename-project") {
-                            send(event { $0.rename = .init() })
-                        }
-                    }
-                    if !head.addSectionLabel.isEmpty {
-                        ToolbarVerb(label: head.addSectionLabel, identifier: "tasks-add-section") {
-                            send(event { $0.addSection = .init() })
-                        }
+                // ONE VERB IN THE HEADER (#1202): three text keys filled the bar and pushed the list's
+                // name out of it. Edit list and Rename are quiet links under it, as on Android.
+                if !head.addSectionLabel.isEmpty {
+                    ToolbarVerb(label: head.addSectionLabel, identifier: "tasks-add-section") {
+                        send(event { $0.addSection = .init() })
                     }
                 }
             }
         } content: {
             VStack(spacing: 0) {
+                if state.hasHead, !state.head.styleLabel.isEmpty || !state.head.renameLabel.isEmpty {
+                    HStack(spacing: 4) {
+                        // "EDIT LIST" (#1173 wave 2): name, colour and icon in one sheet.
+                        if !state.head.styleLabel.isEmpty {
+                            KitLink(label: state.head.styleLabel, identifier: "tasks-project-edit") {
+                                send(event { $0.styleRequested = .init() })
+                            }
+                        }
+                        if !state.head.renameLabel.isEmpty {
+                            KitLink(label: state.head.renameLabel, identifier: "tasks-rename-project") {
+                                send(event { $0.rename = .init() })
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                }
                 PageReadStateView(
                     page: state.page,
                     loadingLabel: state.chrome.loading,

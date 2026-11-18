@@ -309,16 +309,11 @@ private fun TodoFieldRow(field: TodoField, onEvent: (TodoDetailEvent) -> Unit) {
         if (field.note.isNotEmpty()) FieldNote(field.note)
         // "Open Settings" under a line that sends the member there (#1188, NA1).
         if (field.action_label.isNotEmpty()) {
-            Text(
+            OutlineButton(
                 field.action_label,
-                style = centraidType("annotLabel"),
-                color = centraidColor("text"),
-                modifier = Modifier
-                    .heightIn(min = KitGeometry.ROW_MIN)
-                    .clickable(role = Role.Button) { onEvent(TodoDetailEvent(alert_settings = AlertSettingsPressed())) }
-                    .padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp)
-                    .testTag("tasks-field-${field.key}-settings"),
-            )
+                modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
+                testTag = "tasks-field-${field.key}-settings",
+            ) { onEvent(TodoDetailEvent(alert_settings = AlertSettingsPressed())) }
         }
     } else {
         FieldRow(key = field.label, value = field.value_, note = field.note)

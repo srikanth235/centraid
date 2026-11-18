@@ -1338,9 +1338,9 @@ fn seed_photos(seeder: &mut Seeder, now: i64, rich: bool) {
     }
 
     // THE ONE VIDEO, which is what makes the video badge something a screenshot
-    // can show — and the one cell in the demo library that draws no image.
-    // Nothing in this workspace writes a `poster` derivative, so the mosaic has
-    // no still to fall back to and says so by drawing an empty cell.
+    // can show. Its bytes are a stub, so a poster frame is staged beside it the way a shell
+    // stages the still it renders for a real video (#1202); without one the cell drew a flat
+    // square with only the duration.
     let film = video_bytes();
     if let Some(blob) = seeder.spill(&film) {
         seeder.run(
@@ -1359,6 +1359,19 @@ fn seed_photos(seeder: &mut Seeder, now: i64, rich: bool) {
                 "lon": WEST_SHORE_RIDGE.1,
             }),
         );
+        let poster = synth::gradient_png(31, 360, 240);
+        if let Some(poster_hash) = seeder.spill(&poster) {
+            let staged = centraid_vault::blob::StagedDerivative {
+                hash: poster_hash,
+                byte_size: i64::try_from(poster.len()).unwrap_or(0),
+                media_type: "image/png".to_owned(),
+                variant: "poster".to_owned(),
+                variant_of: blob,
+            };
+            if let Err(error) = seeder.vault.stage_derivative(&staged) {
+                seeder.report.refused.push(format!("video poster: {error}"));
+            }
+        }
     }
 
     seed_album(seeder, &photo_by_file);
