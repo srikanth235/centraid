@@ -230,13 +230,15 @@ struct WordsEntryView: View {
                             .foregroundStyle(Surface.meta)
                             .fixedSize(horizontal: false, vertical: true)
                         HStack(spacing: 8) {
-                            MachineTextField(placeholder: state.endpointPlaceholder, value: state.endpoint) { text in
+                            // THE WHOLE CODE: it has no word breaks, so it wraps anywhere in a field that
+                            // grows (#1202, S2-6), as pairing's does.
+                            MachineTextEditor(value: state.endpoint, minHeight: 56, maxHeight: 140, placeholder: state.endpointPlaceholder) { text in
                                 send(Self.event { $0.endpoint = .with { $0.text = text } })
                             }
-                            .keyboardType(.URL)
+                            .keyboardType(.asciiCapable)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
-                            .centraidType(held ? "mono" : "body")
+                            .centraidType("mono")
                             .wordsFieldBox()
                             .accessibilityLabel(state.endpointLabel)
                             .accessibilityIdentifier("words-endpoint")
@@ -604,23 +606,6 @@ struct WordsFrame<Content: View, Footer: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !closeLabel.isEmpty {
-                HStack {
-                    Button(action: onClose) {
-                        CentraidIconView(iconKey: "X", tint: Surface.ink, size: 16)
-                            .frame(width: 44, height: 44)
-                            .background(Surface.card, in: Circle())
-                            .overlay(Circle().strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline))
-                            .contentShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(closeLabel)
-                    .accessibilityIdentifier(closeIdentifier)
-                    Spacer()
-                }
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-                .padding(.top, 8)
-            }
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     content()
@@ -630,6 +615,30 @@ struct WordsFrame<Content: View, Footer: View>: View {
                 .padding(.bottom, 16)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            // THE ROUND X STANDS OVER THE SCROLL, ON THE PAGE'S OWN GROUND (#1202, S2-6): the heading
+            // scrolls away behind it and stops at its edge, never sliding under the button.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if !closeLabel.isEmpty {
+                    HStack {
+                        Button(action: onClose) {
+                            CentraidIconView(iconKey: "X", tint: Surface.ink, size: 16)
+                                .frame(width: 44, height: 44)
+                                .background(Surface.card, in: Circle())
+                                .overlay(Circle().strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline))
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(closeLabel)
+                        .accessibilityIdentifier(closeIdentifier)
+                        Spacer()
+                    }
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
+                    .background(Surface.page)
+                }
+            }
+            .hardTopScrollEdge()
             .scrollDismissesKeyboard(dismissesKeyboard ? .interactively : .automatic)
             VStack(spacing: 12) {
                 footer()

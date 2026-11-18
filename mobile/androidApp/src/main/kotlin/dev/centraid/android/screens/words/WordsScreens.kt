@@ -638,7 +638,11 @@ private fun EndpointField(
                             }
                         },
                         enabled = enabled,
-                        singleLine = true,
+                        // THE CODE IS NOT ONE LINE (#1202, S2-6): it has no word breaks, so it wraps
+                        // anywhere in a field that grows to five lines; a name stays on one.
+                        singleLine = name,
+                        minLines = if (name) 1 else 2,
+                        maxLines = if (name) 1 else 5,
                         keyboardOptions = KeyboardOptions(
                             capitalization = if (name) KeyboardCapitalization.Words else KeyboardCapitalization.None,
                             autoCorrectEnabled = false,

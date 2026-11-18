@@ -63,6 +63,8 @@ struct MachineTextEditor: View {
     let value: String
     var minHeight: CGFloat = 96
     var maxHeight: CGFloat = 180
+    /// What the empty field asks for, drawn in the meta ink and read by nothing.
+    var placeholder: String = ""
     let onEdit: (String) -> Void
 
     @State private var typed = ""
@@ -73,6 +75,15 @@ struct MachineTextEditor: View {
         TextEditor(text: $typed)
             .focused($focused)
             .scrollContentBackground(.hidden)
+            .overlay(alignment: .topLeading) {
+                if typed.isEmpty, !placeholder.isEmpty {
+                    Text(placeholder)
+                        .foregroundStyle(Surface.meta)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 8)
+                        .allowsHitTesting(false)
+                }
+            }
             .frame(minHeight: minHeight, maxHeight: maxHeight)
             .onAppear {
                 echoes = TypedText(initial: value)
