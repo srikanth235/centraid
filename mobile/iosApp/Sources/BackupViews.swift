@@ -129,7 +129,8 @@ struct BackupHomeView: View {
                 }
                 .padding(.horizontal, CentraidGeometry.pageMargin)
                 .padding(.top, 4)
-                .padding(.bottom, 32)
+                // THE FLOATING BAND STANDS OVER THE FOOT: the last rows scroll clear of it.
+                .padding(.bottom, 120)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .id(Self.top)
             }

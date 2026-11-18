@@ -2362,6 +2362,16 @@ mod one_device_behind {
         }
     }
 
+    /// ONE TRUTH ON A ROW: a device that never acknowledged a backup says it is catching up, beside
+    /// "Not backed up yet", and is never "Up to date" in the same breath.
+    #[test]
+    fn a_device_that_never_acknowledged_a_backup_is_not_up_to_date() {
+        let data = Page::open(office(|d| d.last_ack_ms = 0)).data();
+        let row = &data.destinations[1];
+        assert_eq!(row.backed_up, "Not backed up yet");
+        assert!(row.held.starts_with("Catching up"), "{}", row.held);
+    }
+
     #[test]
     fn a_silent_device_is_named_with_the_day_it_last_answered() {
         let data = Page::open(office(|d| {
