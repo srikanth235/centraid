@@ -173,8 +173,13 @@ impl<D: Draft> Autosave<D> {
     /// notes that the vault moved (returns `false`); otherwise it is the draft
     /// and the baseline (returns `true`).
     pub fn loaded(&mut self, fresh: D) -> bool {
-        if self.unsaved() && self.draft.is_some() {
-            self.remote_changed = true;
+        if let (true, Some(draft)) = (self.unsaved(), self.draft.as_ref()) {
+            // A row at the revision the draft is based on is this editor's own commit read back
+            // (its save advanced the base): the vault did not move, so nothing is "elsewhere".
+            let own = fresh.base_rev().is_some() && fresh.base_rev() == draft.base_rev();
+            if !own {
+                self.remote_changed = true;
+            }
             return false;
         }
         self.draft = Some(fresh.clone());
