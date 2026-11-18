@@ -1590,6 +1590,49 @@ mod asked_tests {
 }
 
 #[cfg(test)]
+mod first_item_tests {
+    use centraid_vault::clock::{FixedClock, SeededIds};
+    use centraid_vault::model::Kind;
+
+    fn note(vault: &centraid_vault::Vault, id: &str, title: &str, at: &str) {
+        vault
+            .commit(|tx| {
+                tx.set_producer("test.note");
+                tx.insert_entity(id, Kind::Note, title, at)?;
+                Ok(())
+            })
+            .expect("a note");
+    }
+
+    /// **THE STATUS'S `first_item_ms`**: only the starter notes and the founding person give none;
+    /// the member's first note gives its own time.
+    #[test]
+    fn the_first_item_is_the_first_note_in_milliseconds_and_never_a_starter() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = centraid_vault::Vault::create_with(
+            dir.path().join("vault.db"),
+            Box::new(FixedClock::frozen()),
+            Box::new(SeededIds::new("first-item-core")),
+        )
+        .expect("a vault");
+        vault.found("Test", "Test Owner").expect("founded");
+        for (at, (title, _)) in ["2026-01-01T00:00:00.000Z", "2026-01-01T00:00:01.000Z"]
+            .iter()
+            .zip(crate::starters::NOTES)
+        {
+            note(&vault, &format!("starter-{at}"), title, at);
+        }
+        assert_eq!(super::first_item_ms(&vault), None);
+        note(&vault, "mine", "Groceries", "2026-02-03T04:05:06.000Z");
+        note(&vault, "later", "Later", "2026-03-01T00:00:00.000Z");
+        assert_eq!(
+            super::first_item_ms(&vault),
+            centraid_vault::clock::parse_iso_ms("2026-02-03T04:05:06.000Z")
+        );
+    }
+}
+
+#[cfg(test)]
 mod item_tests {
     #[test]
     fn a_live_photo_is_one_item_under_both_its_refs() {
