@@ -224,6 +224,10 @@ message NotesLibraryData {
   string window_end_label = 6;
   string window_end_verb = 7;
   bool can_widen = 8;
+  // FIRST OPEN: the library holds only the starter notes, so the page draws this card over them
+  // (what Notes is for, and the way to add), and their section reads "To get you started".
+  // Absent once the member has a note of their own.
+  optional EmptyState first_open = 9;
 }
 
 message NotesSearchState {

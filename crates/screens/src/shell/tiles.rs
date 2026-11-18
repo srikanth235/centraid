@@ -638,7 +638,7 @@ fn notes_tile(locale: Locale, library: &wire::NotesLibrary, today: Option<&str>)
     };
     // THE STARTER NOTES ALONE ARE DAY ZERO (2026-11-17): the tile shows the one that says whose
     // the note is, and the app still holds nothing of the member's.
-    let starters = starters_only(library);
+    let starters = crate::notes::fold::starters_only(library);
     let shown = if starters {
         library
             .notes
@@ -674,19 +674,6 @@ fn notes_tile(locale: Locale, library: &wire::NotesLibrary, today: Option<&str>)
 
 /// The starter note the Home tile shows on day zero.
 const STARTER_TITLE: Option<&str> = Some(centraid_core::starters::NOTES[0].0);
-
-/// Whether every note the library holds is one of the starters a first vault was founded with.
-/// A complete library only: a window that says more exist holds something of the member's.
-fn starters_only(library: &wire::NotesLibrary) -> bool {
-    let starters = centraid_core::starters::NOTES;
-    !library.truncated
-        && library.notes.len() <= starters.len()
-        && library.notes.iter().all(|row| {
-            row.title
-                .as_deref()
-                .is_some_and(|title| starters.iter().any(|(starter, _)| *starter == title))
-        })
-}
 
 // -- money --------------------------------------------------------------------
 

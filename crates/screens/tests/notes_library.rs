@@ -816,3 +816,41 @@ fn a_truncated_window_offers_to_show_older() {
     assert_eq!(library_data(d.view(i)).window_end_verb, "");
     assert!(!library_data(d.view(i)).can_widen);
 }
+
+#[test]
+fn first_open_is_a_card_over_the_starter_notes_and_the_first_note_of_the_members_ends_it() {
+    // A FIRST VAULT holds the two starter notes and nothing else.
+    let mut d = Driver::first_vault(notes::runtime());
+    d.start();
+    let i = home(&mut d, wire::NotesPlace::Notes);
+    let data = library_data(d.view(i)).clone();
+    let card = data.first_open.as_ref().expect("the first-open card");
+    assert_eq!(card.headline, "Write down what you want to keep.");
+    assert_eq!(card.hint, "Tap + to write one.");
+    assert_eq!(card.action_label, "");
+    let heads: Vec<&str> = data
+        .sections
+        .iter()
+        .map(|section| section.head.as_ref().unwrap().title.as_str())
+        .collect();
+    assert_eq!(heads, ["To get you started"]);
+    assert_eq!(data.count_label, "2 notes");
+    assert_eq!(
+        titles(d.view(i)),
+        ["Link with [[", "This note is yours"],
+        "the newest starter first"
+    );
+
+    // THE MEMBER'S OWN NOTE ends it: no card, and the section is the library's.
+    arrange(
+        &d,
+        act::notes::CreateNote {
+            title: "Mine".to_owned(),
+            ..Default::default()
+        },
+    );
+    let j = home(&mut d, wire::NotesPlace::Notes);
+    let data = library_data(d.view(j)).clone();
+    assert!(data.first_open.is_none());
+    assert_eq!(data.sections[0].head.as_ref().unwrap().title, "Notes");
+}

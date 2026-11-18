@@ -306,6 +306,21 @@ fn section(title: String, rows: Vec<wire::NotesNoteRow>) -> wire::NotesLibrarySe
     }
 }
 
+/// Whether every note the library holds is one of the starters a first vault was founded with
+/// (and so the member has written nothing yet). A complete library only: a window that says more
+/// exist holds something of the member's.
+#[must_use]
+pub fn starters_only(library: &wire::NotesLibrary) -> bool {
+    let starters = centraid_core::starters::NOTES;
+    !library.truncated
+        && library.notes.len() <= starters.len()
+        && library.notes.iter().all(|row| {
+            row.title
+                .as_deref()
+                .is_some_and(|title| starters.iter().any(|(starter, _)| *starter == title))
+        })
+}
+
 /// PINNED FIRST, as the core ordered them: a "Pinned" section, then the rest.
 #[must_use]
 pub fn sections(locale: Locale, rows: Vec<wire::NotesNoteRow>) -> Vec<wire::NotesLibrarySection> {

@@ -3,6 +3,7 @@ package dev.centraid.android.screens.notes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -213,6 +214,8 @@ private fun LibraryList(
     onEvent: (NotesHomeEvent) -> Unit,
 ) {
     LazyColumn(Modifier.testTag("notes-library")) {
+        // FIRST OPEN (`first_open`): the card over the starter notes, then their small head.
+        data.first_open?.let { card -> item(key = "first-open") { EmptyStateView(card, onAction = null) } }
         sections(data, state, onOpen, onEvent)
         if (data.truncated) {
             item(key = "window") {
@@ -243,7 +246,18 @@ private fun LazyListScope.sections(
     data.sections.forEachIndexed { index, section ->
         val head = section.head
         if (head != null && head.title.isNotEmpty()) {
-            item(key = "head-$index") { NotesSectionTitle(head.title, pinned = section.rows.firstOrNull()?.pinned == true) }
+            if (data.first_open != null) {
+                item(key = "head-$index") {
+                    Text(
+                        head.title.uppercase(),
+                        style = kitTextStyle(KitType.Meta),
+                        color = Surface.meta,
+                        modifier = Modifier.padding(start = KitGeometry.GUTTER + 2.dp, top = 10.dp, bottom = 6.dp).semantics { heading() },
+                    )
+                }
+            } else {
+                item(key = "head-$index") { NotesSectionTitle(head.title, pinned = section.rows.firstOrNull()?.pinned == true) }
+            }
         }
         itemsIndexed(section.rows, key = { _, row -> "$index-" + row.note_id }) { at, row ->
             NoteTile(row, state, at, section.rows.size, onOpen, onEvent)

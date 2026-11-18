@@ -516,8 +516,22 @@ impl Library {
         } else {
             self.window
         };
+        // FIRST OPEN (FirstOpenNotes): only the starter notes, so a card says what Notes is for and
+        // their section says what they are.
+        let first_open = !self.filtered() && count > 0 && fold::starters_only(library);
+        let mut sections = fold::sections(locale, rows);
+        if first_open {
+            for head in sections.iter_mut().filter_map(|section| section.head.as_mut()) {
+                head.title = words::section_starters(locale);
+            }
+        }
         wire::NotesLibraryData {
-            sections: fold::sections(locale, rows),
+            first_open: first_open.then(|| wire::EmptyState {
+                headline: words::first_open(locale),
+                hint: words::first_open_hint(locale),
+                ..wire::EmptyState::default()
+            }),
+            sections,
             count_label: fold::notes_count(locale, count, false),
             truncated: library.truncated,
             window_end_label: if library.truncated {

@@ -139,6 +139,9 @@ catalog! {
     plain search_no_match_body = ("No notes match that search.", "No notes match that search.");
     plain search_no_match_headline = ("No matches", "No matches");
     plain search_placeholder = ("Search notes", "Search notes");
+    plain first_open = ("Write down what you want to keep.", "Write down what you want to keep.");
+    plain first_open_hint = ("Tap + to write one.", "Tap + to write one.");
+    plain section_starters = ("To get you started", "To get you started");
     plain section_notes = ("Notes", "Notes");
     plain section_pinned = ("Pinned", "Pinned");
     plain send_to_reminders = ("Send to Reminders", "Send to Reminders");

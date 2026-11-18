@@ -358,9 +358,23 @@ private struct NotesLibraryList: View {
                             .padding(.bottom, 4)
                             .accessibilityIdentifier("notes-count")
                     }
+                    // FIRST OPEN (`first_open`): the card over the starter notes, then their small head.
+                    if library.hasFirstOpen {
+                        EmptyStateView(library.firstOpen)
+                    }
                     ForEach(Array(library.sections.enumerated()), id: \.offset) { _, section in
                         if !section.head.title.isEmpty {
-                            NotesSectionTitle(title: section.head.title, pinned: section.rows.first?.pinned == true)
+                            if library.hasFirstOpen {
+                                Text(section.head.title.uppercased())
+                                    .kitType(.meta)
+                                    .foregroundStyle(Surface.meta)
+                                    .padding(.horizontal, CentraidGeometry.pageMargin + 2)
+                                    .padding(.top, 10)
+                                    .padding(.bottom, 6)
+                                    .accessibilityAddTraits(.isHeader)
+                            } else {
+                                NotesSectionTitle(title: section.head.title, pinned: section.rows.first?.pinned == true)
+                            }
                         }
                         NotesCard {
                             ForEach(Array(section.rows.enumerated()), id: \.element.noteID) { at, row in
