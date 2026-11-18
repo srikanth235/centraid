@@ -391,8 +391,12 @@ internal class ShellEffects(
     private suspend fun allowed(permission: String, ask: Boolean): Boolean {
         if (ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED) return true
         if (!ask || ui == null) return false
+        // "ASKED" IS RECORDED ONLY ONCE THE SYSTEM PROMPT HAS ANSWERED: an ask that is cancelled or
+        // interrupted (the activity went away) throws out of `ask` before this line, and a later read
+        // is then "never asked", not "refused".
+        val granted = ui?.ask(permission) == true
         StoreRefusal.noteAsked(context, permission)
-        return ui?.ask(permission) == true
+        return granted
     }
 
     /** The ribbon's doors into the system's settings (the backup's is a tab Rust selects itself). */
