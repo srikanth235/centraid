@@ -197,10 +197,6 @@ fn the_row_opens_a_sheet_with_the_option_off_and_the_import_words() {
     assert_eq!(sheet.completed_label, "Include completed reminders");
     assert!(!sheet.completed_on, "off by default");
     assert_eq!(sheet.import_label, "Import reminders");
-    // The words are ImportsMadeState's.
-    let line = r.line();
-    assert_eq!(sheet.completed_label, line.completed_label);
-    assert_eq!(sheet.import_label, line.reminders_label);
 
     r.send(H::ImportRemindersCompleted(
         wire::agenda_home_event::ImportRemindersCompletedToggled {},
@@ -304,6 +300,9 @@ fn a_refusal_and_an_empty_phone_say_so_on_the_line_in_the_import_words() {
         // The line drops a sentence's final full stop, as every import line does.
         "Reminders access is off. Turn it on in Settings"
     );
+    // Nothing came in, so the line offers nothing to open: it is one short line and a close key.
+    assert_eq!(r.line().open_label, "");
+    assert!(!r.line().running);
 
     r.tap_row();
     r.send(H::ImportRemindersSubmitted(
@@ -311,6 +310,7 @@ fn a_refusal_and_an_empty_phone_say_so_on_the_line_in_the_import_words() {
     ));
     r.answer(reminders(&[]));
     assert_eq!(r.line().summary, "No open reminders to import");
+    assert_eq!(r.line().open_label, "");
 }
 
 #[test]

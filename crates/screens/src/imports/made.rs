@@ -304,10 +304,13 @@ impl Screen for Made {
             }
             (E::EffectResult(result), Step::Reminders) if self.standalone => {
                 let mut effects = Vec::new();
+                // The line's one action opens Reminders only when something came of the import.
+                let mut app = "";
                 let sentence = match &result.outcome {
                     Some(O::RemindersSnapshot(snapshot)) => {
                         let outcome =
                             reminders::run(ctx, &snapshot.reminders, self.include_completed);
+                        app = if outcome.added > 0 { "reminders" } else { "" };
                         effects = followed(ctx, &outcome);
                         reminders::status_line(ctx.locale(), outcome)
                     }
@@ -326,10 +329,7 @@ impl Screen for Made {
                     }
                     _ => return Vec::new(),
                 };
-                self.came = vec![Came {
-                    app: "reminders",
-                    sentence,
-                }];
+                self.came = vec![Came { app, sentence }];
                 self.step = Step::Done;
                 effects
             }
@@ -367,8 +367,6 @@ impl Screen for Made {
                     open_route: rows::app_home(open),
                     running: !matches!(self.step, Step::Idle | Step::Done),
                     finished,
-                    completed_label: words::completed_toggle(locale),
-                    reminders_label: words::reminders_import(locale),
                 },
             )),
             ..wire::ViewState::default()

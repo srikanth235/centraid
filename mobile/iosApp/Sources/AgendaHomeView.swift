@@ -117,6 +117,8 @@ struct AgendaHomeView: View {
                         }
                     }
                 }
+                // THE PAGE ENDS WHERE THE QUICK ADD BEGINS: tiles scrolled under its glass never show through.
+                .clipped()
                 // THE FLOATING TODAY KEY, bottom-leading above the band, while the anchor is not today.
                 .overlay(alignment: .bottomLeading) {
                     if let header {
@@ -152,6 +154,7 @@ struct AgendaHomeView: View {
                         onLink: { link in send(AgendaEvents.make { $0.quickLink = link }) },
                         onStagedRemove: { key in send(AgendaEvents.make { $0.quickStagedRemoved = .with { $0.key = key } }) }
                     )
+                    .background(Surface.page)
                 }
             }
         }
