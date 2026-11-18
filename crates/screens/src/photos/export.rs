@@ -93,8 +93,38 @@ fn export(ctx: &Ctx, key: &str) -> Result<Made, String> {
         &kit_act::key(&["photo.export_zip", key], kit_act::fresh()),
     );
     let staged = export::staged_of(&settled, "application/zip", "Photos.zip")?;
-    if crate::kit::transfer::count(&settled.output, "count") == 0 {
-        return Err(words::photos_export_nothing(ctx.locale()));
+    let count = crate::kit::transfer::count(&settled.output, "count");
+    let missing = crate::kit::transfer::count(&settled.output, "missing");
+    if let Some(sentence) = nothing_to_save(ctx.locale(), count, missing) {
+        return Err(sentence);
     }
     Ok(staged.into())
+}
+
+/// WHY AN ARCHIVE HOLDS NOTHING: the library is empty, or it holds photographs whose originals are
+/// not on this phone (a camera-roll import keeps them in the phone's own library, a freed-up one
+/// on a gateway). Never "no photos" while the library holds some.
+fn nothing_to_save(locale: crate::strings::Locale, count: u32, missing: u32) -> Option<String> {
+    match (count, missing) {
+        (0, 0) => Some(words::photos_export_nothing(locale)),
+        (0, _) => Some(words::photos_export_not_here(locale)),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::strings::Locale;
+
+    #[test]
+    fn a_library_whose_originals_are_elsewhere_is_not_an_empty_one() {
+        let said = |count, missing| nothing_to_save(Locale::En, count, missing);
+        assert_eq!(
+            said(0, 0).as_deref(),
+            Some("There are no photos or videos on this phone to export.")
+        );
+        assert!(said(0, 3).is_some_and(|line| line.contains("not on this phone")));
+        assert_eq!(said(2, 1), None);
+    }
 }
