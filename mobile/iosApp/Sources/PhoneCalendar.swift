@@ -22,7 +22,7 @@ enum PhoneCalendar {
     static func snapshot(_ read: Centraid_Core_V1_CalendarRead) async -> Centraid_Core_V1_EffectResult.OneOf_Outcome {
         let store = EKEventStore()
         if read.askPermission {
-            guard (try? await store.requestFullAccessToEvents()) ?? false else { return .failed(denied()) }
+            guard (try? await store.requestFullAccessToEvents()) ?? false else { return .failed(denied(asked: true)) }
         } else if !granted {
             return .failed(denied())
         }
@@ -31,14 +31,16 @@ enum PhoneCalendar {
 
     /// A REFUSAL BY VALUE: the grant's state, never its words (Rust says them). A policy that blocks
     /// Calendar is `restricted`; iOS 17's write-only access is `limited` (it cannot read); a no is `denied`.
-    private static func denied() -> Centraid_Core_V1_EffectFailed {
+    private static func denied(asked: Bool = false) -> Centraid_Core_V1_EffectFailed {
         var failed = Centraid_Core_V1_EffectFailed()
         failed.reason = EffectReason.denied
         switch EKEventStore.authorizationStatus(for: .event) {
         case .restricted: failed.restricted = true
         case .writeOnly: failed.limited = true
-        // NEVER ASKED is not a refusal: the screens keep offering the import, whose tap asks.
-        case .notDetermined: failed.reason = EffectReason.unavailable
+        // NEVER ASKED is not a refusal: the screens keep offering the import, whose tap asks. A
+        // request that was just ANSWERED NO is one even while the status still reads not determined:
+        // the store updates it a beat later, and the first refusal must say so at once.
+        case .notDetermined where !asked: failed.reason = EffectReason.unavailable
         default: failed.denied = true
         }
         return failed

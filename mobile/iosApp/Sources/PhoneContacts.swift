@@ -32,7 +32,7 @@ enum PhoneContacts {
     static func snapshot(_ read: Centraid_Core_V1_ContactsRead) async -> Centraid_Core_V1_EffectResult.OneOf_Outcome {
         let store = CNContactStore()
         if read.askPermission {
-            guard (try? await store.requestAccess(for: .contacts)) ?? false else { return .failed(denied()) }
+            guard (try? await store.requestAccess(for: .contacts)) ?? false else { return .failed(denied(asked: true)) }
         } else if !granted {
             return .failed(denied())
         }
@@ -42,13 +42,15 @@ enum PhoneContacts {
     /// A REFUSAL BY VALUE: the grant's state, never its words (Rust says them). A policy that blocks
     /// Contacts is `restricted`; a no is `denied`. (iOS 18's limited access still reads: it is a
     /// snapshot that is not complete, not a refusal.)
-    private static func denied() -> Centraid_Core_V1_EffectFailed {
+    private static func denied(asked: Bool = false) -> Centraid_Core_V1_EffectFailed {
         var failed = Centraid_Core_V1_EffectFailed()
         failed.reason = EffectReason.denied
         switch CNContactStore.authorizationStatus(for: .contacts) {
         case .restricted: failed.restricted = true
-        // NEVER ASKED is not a refusal: the screens keep offering the import, whose tap asks.
-        case .notDetermined: failed.reason = EffectReason.unavailable
+        // NEVER ASKED is not a refusal: the screens keep offering the import, whose tap asks. A
+        // request that was just ANSWERED NO is one even while the status still reads not determined:
+        // the store updates it a beat later, and the first refusal must say so at once.
+        case .notDetermined where !asked: failed.reason = EffectReason.unavailable
         default: failed.denied = true
         }
         return failed

@@ -1501,6 +1501,34 @@ fn to_dos_search_draws_the_containers_too() {
 /// refused the calendar: no import that fails again, and no "Or tap +" hint under the button.
 #[test]
 fn a_phone_that_refused_its_calendar_gets_new_event_on_the_card_and_no_hint() {
+    // THE FIRST REFUSAL, no second tap: the shell names a no as `denied` the moment the member says it.
+    let (empty, import_label) = first_open_after_failed_read(wire::EffectFailed {
+        denied: true,
+        ..Default::default()
+    });
+    // CANNOT IMPORT: "New event" is the card's action, with no hint and no import.
+    assert_eq!(empty.import_source, wire::ImportSource::Unspecified as i32);
+    assert_eq!(empty.action_label, "New event");
+    assert_eq!(empty.hint, "");
+    assert_eq!(import_label, "");
+}
+
+/// A PHONE THAT WAS NEVER ASKED IS NOT A PHONE THAT REFUSED: a read that fails with no grant's state
+/// keeps the card's import and hint (which is why a shell must say `denied` for a no it just heard).
+#[test]
+fn a_calendar_read_that_names_no_refusal_keeps_the_import_and_the_hint() {
+    let (empty, import_label) = first_open_after_failed_read(wire::EffectFailed {
+        reason: "unavailable".to_owned(),
+        ..Default::default()
+    });
+    assert_eq!(empty.import_source, wire::ImportSource::Calendar as i32);
+    assert_eq!(empty.action_label, "");
+    assert_eq!(empty.hint, "Or tap + to write one.");
+    assert_eq!(import_label, "Import from Calendar");
+}
+
+/// The first-open card, and its import label, after the phone answers the calendar read with `failed`.
+fn first_open_after_failed_read(failed: wire::EffectFailed) -> (wire::EmptyState, String) {
     let mut r = rig(Dest::Schedule);
     r.clear();
     for _ in 0..12 {
@@ -1547,16 +1575,8 @@ fn a_phone_that_refused_its_calendar_gets_new_event_on_the_card_and_no_hint() {
         )
     });
     r.driver
-        .answer_effect(wire::effect_result::Outcome::Failed(wire::EffectFailed {
-            denied: true,
-            ..Default::default()
-        }));
-    // CANNOT IMPORT: "New event" is the card's action, with no hint and no import.
-    let empty = r.empty().clone();
-    assert_eq!(empty.import_source, wire::ImportSource::Unspecified as i32);
-    assert_eq!(empty.action_label, "New event");
-    assert_eq!(empty.hint, "");
-    assert_eq!(r.state().import_label, "");
+        .answer_effect(wire::effect_result::Outcome::Failed(failed));
+    (r.empty().clone(), r.state().import_label.clone())
 }
 
 #[test]
