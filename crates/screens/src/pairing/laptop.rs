@@ -147,7 +147,7 @@ impl Laptop {
         door::pair(ctx, &ticket);
     }
 
-    fn answered(&mut self, locale: Locale, verdict: Verdict) -> Vec<wire::Effect> {
+    fn answered(&mut self, ctx: &Ctx, locale: Locale, verdict: Verdict) -> Vec<wire::Effect> {
         if self.phase != Phase::Pairing {
             return Vec::new();
         }
@@ -185,6 +185,11 @@ impl Laptop {
                     let writes = self.secrets.token_writes(&answer.tokens);
                     self.answer = Some(answer);
                     self.notice.clear();
+                    // THE FIRST BACKUP TO THIS GATEWAY STARTS NOW: a pairing writes no vault table, so
+                    // nothing else would run a pass until the next launch.
+                    self.secrets
+                        .conductor()
+                        .ask(ctx, wire::pass_asked::Ask::Paired);
                     let mut effects = vec![announce(ANNOUNCE_PAIRED)];
                     if !writes.is_empty() {
                         effects.push(secrets::effect(writes));
@@ -291,7 +296,7 @@ impl Screen for Laptop {
                 // nothing to say: the paste field is still there.
             }
             Some(E::OffThreadDone(done)) if done.tag == PAIR_TAG => {
-                return self.answered(ctx.locale(), door::verdict(&done));
+                return self.answered(ctx, ctx.locale(), door::verdict(&done));
             }
             _ => {}
         }

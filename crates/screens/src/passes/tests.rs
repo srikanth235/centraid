@@ -342,12 +342,16 @@ fn only_the_members_own_asks_and_the_app_leaving_force_a_snapshot() {
         (Reason::BackUpNow, 0),
         (Reason::EnteredBackground, 25_000),
         (Reason::Restored, 0),
+        (Reason::Paired, 0),
     ] {
         let actions = sim.conductor.trigger(reason, deadline);
         sim.run(actions);
     }
     let snapshots: Vec<_> = sim.requests().iter().map(|r| r.wants_snapshot).collect();
-    assert_eq!(snapshots, [false, false, false, false, true, true, true]);
+    assert_eq!(
+        snapshots,
+        [false, false, false, false, true, true, true, true]
+    );
     let forcing: Vec<_> = Reason::ALL
         .into_iter()
         .filter(|r| r.wants_snapshot())
@@ -357,7 +361,8 @@ fn only_the_members_own_asks_and_the_app_leaving_force_a_snapshot() {
         [
             Reason::BackUpNow,
             Reason::EnteredBackground,
-            Reason::Restored
+            Reason::Restored,
+            Reason::Paired
         ]
     );
 }
@@ -1163,6 +1168,7 @@ fn every_reason_a_pass_is_named_for_has_a_trigger() {
             Reason::Restored,
             Box::new(|c| c.trigger(Reason::Restored, 0)),
         ),
+        (Reason::Paired, Box::new(|c| c.trigger(Reason::Paired, 0))),
     ];
     assert_eq!(entries.len(), Reason::ALL.len());
     for (reason, start) in entries {

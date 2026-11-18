@@ -96,6 +96,8 @@ message PassAsked {
     // The transfer rule or "Include videos" changed: windows are asked for
     // again under the new constraints and the OS's queued uploads let go.
     ASK_RULE_CHANGED = 5;
+    // A gateway was paired: the first backup to it starts now, not at the next launch.
+    ASK_PAIRED = 6;
   }
   Ask ask = 1;
 }

@@ -383,6 +383,32 @@ fn paired_shows_the_safety_number_to_compare_and_names_the_gateway() {
 }
 
 #[test]
+fn a_pairing_asks_the_pass_service_for_the_first_backup_and_a_refusal_asks_nothing() {
+    let secrets = VaultSecrets::new();
+    let mut driver = Driver::keyed(Runtime::new(
+        pairing::registry(&secrets),
+        vec![("pair".to_owned(), routes::laptop())],
+    ));
+    driver.start();
+    let id = driver.navigation.as_ref().unwrap().tabs[0].entries[0].instance;
+    let asked = || secrets.conductor().is_asked(wire::pass_asked::Ask::Paired);
+    pairing(&mut driver, id);
+    answered(
+        &mut driver,
+        id,
+        "pair",
+        refused(wire::ErrorCode::Unauthorized),
+    );
+    assert!(!asked(), "a refused pairing starts nothing");
+    primary(&mut driver, id);
+    answered(&mut driver, id, "pair", paired_with("", "", NUMBER));
+    assert!(
+        asked(),
+        "a pairing writes no vault table: it asks for its own pass"
+    );
+}
+
+#[test]
 fn a_failed_pairing_announces_nothing_and_a_paired_one_announces_once() {
     let (mut driver, id) = keyed();
     pairing(&mut driver, id);

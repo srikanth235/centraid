@@ -609,6 +609,12 @@ impl Conductor {
         }
     }
 
+    /// Whether `ask` is waiting for the service's next turn.
+    #[must_use]
+    pub fn is_asked(&self, ask: wire::pass_asked::Ask) -> bool {
+        self.lock().inbox.contains(&ask)
+    }
+
     /// What the screens asked since the service last looked.
     pub(crate) fn take_asks(&self) -> Vec<wire::pass_asked::Ask> {
         self.lock().inbox.drain(..).collect()

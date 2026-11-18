@@ -352,6 +352,8 @@ impl Service {
                 actions
             }
             Ask::RestoreFinished => self.conductor.trigger(Reason::Restored, 0),
+            // A PAIRING IS A GATEWAY WITH NO HEAD OF THIS PHONE'S: its first backup starts at once.
+            Ask::Paired => self.conductor.trigger(Reason::Paired, 0),
             Ask::SessionOpened => self.conductor.trigger(Reason::SessionOpened, 0),
             Ask::RuleChanged => self.conductor.rule_changed(),
             Ask::Unspecified => Vec::new(),

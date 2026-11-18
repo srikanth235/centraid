@@ -22,6 +22,7 @@ use super::rule::Rules;
 /// | "Back up now" | `BackUpNow` | none | now | yes |
 /// | the app left the screen | `EnteredBackground` | the grace | now | no |
 /// | a restore finished | `Restored` | none | now | no |
+/// | a gateway was paired | `Paired` | none | now | no |
 ///
 /// A snapshot is forced only where the member or the platform is about to stop
 /// looking. **Only "Back up now" is the member asking** (`DrainRequest.asked`,
@@ -39,10 +40,11 @@ pub enum Reason {
     BackUpNow,
     EnteredBackground,
     Restored,
+    Paired,
 }
 
 impl Reason {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::SessionOpened,
         Self::BecameActive,
         Self::AfterCommit,
@@ -52,6 +54,7 @@ impl Reason {
         Self::BackUpNow,
         Self::EnteredBackground,
         Self::Restored,
+        Self::Paired,
     ];
 
     /// Take a snapshot now, whether or not one is due. A pass owed a snapshot
@@ -60,7 +63,7 @@ impl Reason {
     pub fn wants_snapshot(self) -> bool {
         matches!(
             self,
-            Self::BackUpNow | Self::EnteredBackground | Self::Restored
+            Self::BackUpNow | Self::EnteredBackground | Self::Restored | Self::Paired
         )
     }
 
