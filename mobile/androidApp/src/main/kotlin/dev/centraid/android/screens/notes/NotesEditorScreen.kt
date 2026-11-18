@@ -103,6 +103,7 @@ public fun NotesEditorScreen(
     // take the core's body even while it has the keyboard.
     val pending = remember(state.note_id) { CoreEditPending() }
     val bodyFocused = remember(state.note_id) { mutableStateOf(false) }
+    val bodyFocus = remember(state.note_id) { androidx.compose.ui.focus.FocusRequester() }
     val linkOpen = state.link != null
     val send: (NotesEditorEvent) -> Unit = { event ->
         if (event.checklist_requested != null || event.checklist_toggled != null || event.return_pressed != null ||
@@ -170,6 +171,8 @@ public fun NotesEditorScreen(
                     placeholder = chrome?.title_placeholder.orEmpty(),
                     style = "title",
                     testTag = "notes-title",
+                    // RETURN IN THE TITLE moves to the body; the title stays one line (#1202, S2-3).
+                    onNext = { bodyFocus.requestFocus() },
                     onEdit = { value -> onEvent(NotesEditorEvent(title = NotesEditorEvent.TitleEdited(value))) },
                 )
                 TagsRow(state, onEvent)
@@ -182,6 +185,7 @@ public fun NotesEditorScreen(
                     placeholder = chrome?.body_placeholder.orEmpty(),
                     onEdit = { value -> onEvent(NotesEditorEvent(body = NotesEditorEvent.BodyEdited(value))) },
                     onFocus = { bodyFocused.value = it },
+                    focusRequester = bodyFocus,
                     onReturn = { caret -> send(NotesEditorEvent(return_pressed = NotesEditorEvent.ReturnPressed(caret = caret))) },
                     onToggle = { at -> send(NotesEditorEvent(checklist_toggled = NotesEditorEvent.ChecklistToggled(at = at))) },
                     onLink = { chip, at ->

@@ -134,6 +134,13 @@ struct NotesEditorView: View {
                                 // AN EDIT IS A DIFFERENCE FROM THE DRAFT, not an
                                 // assignment to the field: seeding writes to it too.
                                 .onChange(of: typedTitle) { _, typed in
+                                    // RETURN IN THE TITLE moves to the body; the title stays one line
+                                    // (#1202, S2-3). The field wraps, so the key arrives as a line break.
+                                    if typed.contains(where: \.isNewline) {
+                                        typedTitle = String(typed.filter { !$0.isNewline })
+                                        bodyFocused = true
+                                        return
+                                    }
                                     guard typed != draft.title else { return }
                                     send(event { $0.title = .with { $0.title = typed } })
                                 }

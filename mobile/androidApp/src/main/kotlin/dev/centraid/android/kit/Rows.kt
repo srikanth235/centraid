@@ -17,6 +17,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
@@ -378,6 +381,7 @@ public fun EditableFieldRow(
     singleLine: Boolean = true,
     style: String = "body",
     testTag: String = "kit-field",
+    onNext: (() -> Unit)? = null,
 ) {
     val editor = rememberEditorText(value, reload)
     val text = editor.text
@@ -396,6 +400,9 @@ public fun EditableFieldRow(
                 value = text.value,
                 onValueChange = { next -> if (editor.edited(next)) onEdit(next) },
                 singleLine = singleLine,
+                // RETURN LEAVES THE FIELD for the next one (the note's title hands focus to its body).
+                keyboardOptions = if (onNext != null) KeyboardOptions(imeAction = ImeAction.Next) else KeyboardOptions.Default,
+                keyboardActions = KeyboardActions(onNext = { onNext?.invoke() }),
                 textStyle = centraidType(style).copy(color = centraidColor("text")),
                 cursorBrush = SolidColor(centraidColor("text")),
                 modifier = Modifier

@@ -234,6 +234,11 @@ impl Draft for NoteDraft {
     }
 }
 
+/// `text` without its line breaks.
+fn one_line(text: &str) -> String {
+    text.chars().filter(|c| !matches!(c, '\n' | '\r')).collect()
+}
+
 /// The title a save gives the note: the field, else the body's first line.
 fn effective_title(draft: &NoteDraft) -> String {
     if draft.title.trim().is_empty() {
@@ -1223,7 +1228,11 @@ impl Editor {
 
     fn event(&mut self, event: wire::NotesEditorEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
-            Some(N::Title(edited)) => self.auto.edit(ctx, |draft| draft.title = edited.title),
+            // A TITLE IS ONE LINE (#1202, S2-3): the shell moves focus to the body on Return, and a
+            // line break that still arrives (a paste) is dropped here.
+            Some(N::Title(edited)) => self
+                .auto
+                .edit(ctx, |draft| draft.title = one_line(&edited.title)),
             Some(N::Body(edited)) => self.body_edited(ctx, edited.body),
             Some(N::Pin(_)) => self.pin(ctx),
             Some(N::ShareRequested(_)) if self.note_exists() => {
@@ -2094,6 +2103,12 @@ mod tests {
             ["note.body", "entity.title"]
         );
         assert!(base.kept_fields(&base).is_empty());
+    }
+
+    #[test]
+    fn a_title_is_one_line() {
+        assert_eq!(one_line("Trip\nplan\r\n"), "Tripplan");
+        assert_eq!(one_line("Trip plan"), "Trip plan");
     }
 
     #[test]
