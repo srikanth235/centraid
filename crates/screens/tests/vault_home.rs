@@ -256,12 +256,15 @@ fn the_backup_line_under_the_vault_is_the_backup_lanes_reading_of_it() {
     lay_down(&dir, "a", "Alpha");
     let mut phone = Phone::standard(&dir);
     launched(&mut phone);
-    // No gateway is paired, and the line says so in the backup lane's words.
+    // DAY ZERO: the backup's one seat is empty, whatever is paired or not.
+    assert!(state(&phone).bar.expect("a bar").backup.is_none());
+    first_item(&mut phone);
+    // No gateway is paired, and the line says so in Home's one quiet line.
     let line = state(&phone)
         .bar
         .and_then(|bar| bar.backup)
         .expect("a line under the vault");
-    assert_eq!(line.status, "Not backed up. Pair a backup device.");
+    assert_eq!((line.status.as_str(), line.action.as_str()), ("Not backed up yet", "Pair"));
     assert_eq!(
         line.route.expect("the line leads to pairing").screen,
         "pair.laptop"
@@ -269,10 +272,7 @@ fn the_backup_line_under_the_vault_is_the_backup_lanes_reading_of_it() {
     // PRESSING IT LEADS TO PAIRING, not to the Backup place (decided in #1173),
     // and its spoken label is the line itself, which is the action.
     let bar = state(&phone).bar.expect("a bar");
-    assert_eq!(
-        bar.backup_open_label,
-        "Not backed up. Pair a backup device."
-    );
+    assert_eq!(bar.backup_open_label, "Not backed up yet. Pair");
     phone.driver.effects.clear();
     press(&mut phone, H::Backup(wire::home_event::BackupPressed {}));
     let opened = phone
@@ -337,6 +337,22 @@ fn pair_in_the_ledger(phone: &mut Phone, vault: &str, acked_at_ms: Option<u64>) 
     phone.driver.pump(Duration::from_millis(800));
 }
 
+/// THE FIRST THING THE MEMBER ADDS: ends day zero, so the backup's one seat may speak.
+fn first_item(phone: &mut Phone) {
+    use centraid_screens::catalog::act;
+    use centraid_screens::field::Keyed;
+    let told = phone.driver.act(
+        wire::ActRequest::from(act::notes::CreateNote {
+            title: "Groceries".to_owned(),
+            body: "Milk".to_owned(),
+            ..Default::default()
+        })
+        .keyed("arrange:first-item"),
+    );
+    assert_eq!(told.status, wire::ActStatus::Executed as i32, "{}", told.reason);
+    phone.driver.pump(Duration::from_millis(800));
+}
+
 fn backup_line(phone: &Phone) -> wire::HomeBackupLine {
     state(phone)
         .bar
@@ -355,10 +371,9 @@ fn the_backup_line_follows_the_ledger_after_a_pairing_and_after_an_acknowledgeme
     let mut phone = Phone::standard(&dir);
     launched(&mut phone);
     let a = phone.holdings().foreground;
-    assert_eq!(
-        backup_line(&phone).status,
-        "Not backed up. Pair a backup device."
-    );
+    first_item(&mut phone);
+    assert_eq!(backup_line(&phone).status, "Not backed up yet");
+    assert_eq!(backup_line(&phone).action, "Pair");
 
     pair_in_the_ledger(&mut phone, &a, None);
     let line = backup_line(&phone);

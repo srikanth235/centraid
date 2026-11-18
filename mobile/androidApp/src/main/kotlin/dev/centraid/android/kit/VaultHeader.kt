@@ -170,6 +170,12 @@ public fun VaultHeader(
                             style = centraidType("mono"),
                             color = centraidColor(if (loud) "text" else "textFaint"),
                         )
+                        // THE LINE'S ONE QUIET VERB ("Not backed up yet · Pair"): Rust's words.
+                        val action = backup?.action.orEmpty()
+                        if (action.isNotEmpty()) {
+                            Text("·", style = centraidType("mono"), color = centraidColor("textFaint"))
+                            Text(action, style = centraidType("mono"), color = centraidColor("link"))
+                        }
                     }
                 } else if (line.isNotEmpty()) {
                     Text(

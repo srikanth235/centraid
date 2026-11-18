@@ -46,6 +46,7 @@ use crate::custody::secrets::{self, VaultSecrets};
 use crate::kit::read::Reading;
 use crate::screen::{Ctx, Screen};
 use crate::shell::HOME;
+use crate::strings::home as words;
 
 /// The service's route name.
 pub const NAME: &str = "vault.shelf";
@@ -279,11 +280,26 @@ impl Service {
         // NOTHING PAIRED: the line is the way to pairing (decided in #1173), not
         // the Backup place, whose page says the same and offers the same door.
         let unpaired = standing.reading.destinations.is_empty() && !standing.reading.frozen;
+        if unpaired {
+            // ONE SEAT, ONE QUIET LINE (2026-11-17, HomeBackupDayTwo): the status and its verb.
+            // Whether it is shown yet (not on day zero) is Home's to say.
+            let locale = ctx.locale();
+            let status = words::home_backup_unpaired_status(locale);
+            let action = words::home_backup_unpaired_action(locale);
+            return Some(wire::HomeBackupLine {
+                accessibility_label: format!("{status}. {action}"),
+                status,
+                tone: line.tone,
+                route: Some(crate::pairing::routes::laptop()),
+                action,
+            });
+        }
         (!line.status.is_empty()).then_some(wire::HomeBackupLine {
             status: line.status,
             tone: line.tone,
             accessibility_label: line.accessibility_label,
-            route: unpaired.then(crate::pairing::routes::laptop),
+            route: None,
+            action: String::new(),
         })
     }
 

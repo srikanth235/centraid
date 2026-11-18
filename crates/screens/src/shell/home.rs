@@ -473,6 +473,16 @@ impl Home {
         }
     }
 
+    /// The springboard's grade as the tiles stand now.
+    fn stage(&self, locale: Locale) -> wire::HomeSpringboard {
+        let tiles: Vec<wire::HomeTile> = self
+            .tiles
+            .iter()
+            .map(|(widget, app, made)| self.dress(locale, widget, app, made))
+            .collect();
+        policy::springboard(&tiles)
+    }
+
     fn bar(&self, locale: Locale) -> wire::HomeBar {
         let vault = match &self.vault {
             Some(vault) => finish_vault(locale, vault),
@@ -488,10 +498,14 @@ impl Home {
         };
         // The backup's status stands in the line only for a vault that has not
         // moved: a moved vault says so itself.
+        // THE BACKUP HAS ONE SEAT, and it is empty on day zero: a vault that holds nothing of
+        // the member's has nothing to lose, so the invitation to pair waits for the first item.
+        let day_zero = self.stage(locale) == wire::HomeSpringboard::FirstRun;
         let backup = self
             .backup
             .clone()
-            .filter(|_| vault.state() != wire::HomeVaultState::Frozen);
+            .filter(|_| vault.state() != wire::HomeVaultState::Frozen)
+            .filter(|line| !(day_zero && line.route.is_some()));
         let switch_label = format!(
             "{}. {}",
             [
@@ -516,7 +530,7 @@ impl Home {
             .map(|line| {
                 // A line that leads to pairing is its own action.
                 if line.route.is_some() {
-                    line.status.clone()
+                    line.accessibility_label.clone()
                 } else {
                     format!("{}. {}", line.status, words::backup_status_open(locale))
                 }

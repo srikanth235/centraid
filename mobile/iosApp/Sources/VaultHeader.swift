@@ -69,6 +69,15 @@ struct VaultHeader: View {
                     .centraidType("mono")
                     .foregroundStyle(Theme.color(loud ? "text" : "textFaint", scheme))
                     .fixedSize(horizontal: false, vertical: true)
+                // THE LINE'S ONE QUIET VERB ("Not backed up yet · Pair"): Rust's words.
+                if !bar.backup.action.isEmpty {
+                    Text("·")
+                        .centraidType("mono")
+                        .foregroundStyle(Theme.color("textFaint", scheme))
+                    Text(bar.backup.action)
+                        .centraidType("mono")
+                        .foregroundStyle(Theme.color("link", scheme))
+                }
             }
             .frame(minHeight: 18)
             .contentShape(Rectangle())

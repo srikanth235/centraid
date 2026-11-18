@@ -832,6 +832,7 @@ fn the_lockups_spoken_sentences_are_finished_by_rust() {
                 tone: wire::HomeTone::Quiet as i32,
                 accessibility_label: "Backed up today".into(),
                 route: None,
+                action: String::new(),
             }),
         }),
     );

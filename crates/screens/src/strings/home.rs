@@ -11,6 +11,8 @@ catalog! {
     plain band_chat = ("Chat", "Chat");
     plain band_current_spoken = ("current place", "current place");
     plain band_home = ("Home", "Home");
+    plain home_backup_unpaired_status = ("Not backed up yet", "Not backed up yet");
+    plain home_backup_unpaired_action = ("Pair", "Pair");
     plain home_welcome = ("Nothing in here yet. Start with what this phone already holds.", "Nothing in here yet. Start with what this phone already holds.");
     plain first_launch_body = ("Apps and an assistant on this phone, backed up to your own devices.", "Apps and an assistant on this phone, backed up to your own devices.");
     plain first_launch_house_title = ("Apps on this phone", "Apps on this phone");

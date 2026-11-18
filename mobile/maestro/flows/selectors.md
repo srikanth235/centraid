@@ -143,7 +143,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `home-band` | Home | the floating band plate |
 | `home-band-<placeId>` | Home | one band destination (`home`, `notifs`, `stats`, `data`) |
 | `home-band-backup` | Home | the band's Backup tab — opens the Backup screen |
-| `home-backup-status` | Home | the lockup's second line: the backup's status, the door to the Backup tab, or to pairing while no backup device is paired, "Not backed up. Pair a backup device." (#1173; [#1080](https://github.com/srikanth235/centraid/issues/1080), R-ONBOARD-11) |
+| `home-backup-status` | Home | the lockup's second line: the backup's status, the door to the Backup tab, or to pairing while no backup device is paired, "Not backed up yet · Pair", and empty on day zero (2026-11-17; #1173; [#1080](https://github.com/srikanth235/centraid/issues/1080), R-ONBOARD-11) |
 | `pair-command` | Pairing | the terminal line with the command to run on the backup device (WAITING and FAILED) |
 | `pair-safety-number` | Pairing | the safety number in its groups of 5, four to a row, once paired (a screen reader says the whole number) |
 | `backup-screen` | Backup | the Backup screen itself |

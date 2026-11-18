@@ -301,6 +301,9 @@ message HomeBackupLine {
   // page while no backup device is paired ("Not backed up. Pair a backup
   // device."). Absent: the Backup place.
   optional Route route = 4;
+  // The line's one quiet verb, drawn after a dot ("Not backed up yet · Pair"); empty for
+  // every line that is only a status. Set with `route` while nothing is paired.
+  string action = 5;
 }
 
 // A vault the member is asked to delete or rename: the sheet's second step.
