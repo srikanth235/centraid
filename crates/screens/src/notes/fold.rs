@@ -128,16 +128,25 @@ fn note_row(locale: Locale, parts: Parts<'_>) -> wire::NotesNoteRow {
     .filter(|part| !part.is_empty())
     .collect::<Vec<_>>()
     .join(", ");
-    let snippet = if parts.runs.is_empty() {
-        parts.preview.to_owned()
+    // A LINK READS AS ITS TEXT in a row's preview and in a search hit: "Priya Nair", never "[[Priya Nair]]".
+    let runs: Vec<wire::NotesTextRun> = parts
+        .runs
+        .into_iter()
+        .map(|run| wire::NotesTextRun {
+            text: unlinked(&run.text),
+            ..run
+        })
+        .collect();
+    let snippet = if runs.is_empty() {
+        unlinked(parts.preview)
     } else {
-        parts.runs.iter().map(|run| run.text.as_str()).collect()
+        runs.iter().map(|run| run.text.as_str()).collect()
     };
     wire::NotesNoteRow {
         note_id: parts.note_id.to_owned(),
         title,
         snippet,
-        snippet_runs: parts.runs,
+        snippet_runs: runs,
         meta,
         pinned: parts.pinned,
         check_label: check,
@@ -236,6 +245,12 @@ pub fn hit(locale: Locale, hit: &wire::NotesSearchHit, today: Option<&str>) -> w
             today,
         },
     )
+}
+
+/// A text without its wiki-link brackets: `[[Name]]` reads `Name`. A highlighted span may split a
+/// pair, so this takes each bracket pair out of any run on its own.
+fn unlinked(text: &str) -> String {
+    text.replace("[[", "").replace("]]", "")
 }
 
 /// `⟦match⟧` spans as runs. No marker: no runs (the preview is drawn).
@@ -632,6 +647,34 @@ mod tests {
             .collect();
         assert_eq!(shape, [("a ", false), ("match", true), (" here", false)]);
         assert!(runs_of("no marker").is_empty());
+    }
+
+    #[test]
+    fn a_row_preview_and_a_hit_read_a_link_as_its_text() {
+        let row = |preview: &str, snippet: &str| {
+            note_row(
+                Locale::En,
+                Parts {
+                    note_id: "n1",
+                    title: Some("Trip"),
+                    preview,
+                    pinned: false,
+                    local_day: "2026-11-18",
+                    notebook_names: &[],
+                    notebook_ids: &[],
+                    check_total: 0,
+                    check_done: 0,
+                    runs: runs_of(snippet),
+                    about: Vec::new(),
+                    earlier: false,
+                    today: Some("2026-11-18"),
+                },
+            )
+        };
+        assert_eq!(row("Ask [[Priya Nair]] about it", "").snippet, "Ask Priya Nair about it");
+        let hit = row("", "Ask [[⟦Priya⟧ Nair]] about it");
+        assert_eq!(hit.snippet, "Ask Priya Nair about it");
+        assert!(hit.snippet_runs.iter().any(|run| run.highlighted && run.text == "Priya"));
     }
 
     #[test]
