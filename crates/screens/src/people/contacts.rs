@@ -607,6 +607,7 @@ impl ContactsFollow {
     fn read_failed(&mut self, ctx: &Ctx, failed: &wire::EffectFailed) -> Vec<wire::Effect> {
         let refusal = permission::refusal(ctx.locale(), Resource::Contacts, failed);
         ctx.follows().denied(Store::Contacts, refusal.is_some());
+        ctx.redraw_all();
         let locale = ctx.locale();
         self.status = Some(plain(
             refusal.unwrap_or_else(|| words::import_contacts_failed(locale)),

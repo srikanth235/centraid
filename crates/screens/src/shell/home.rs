@@ -108,6 +108,39 @@ struct Home {
     keeping: Option<Vec<wire::SecretOp>>,
 }
 
+/// Which phone stores the member refused, as the follows last heard (a grant the app asked for
+/// and was refused; read, never asked).
+#[derive(Clone, Copy)]
+struct Refusals {
+    /// The platform has a Reminders store to read.
+    reminders_source: bool,
+    calendar: bool,
+    reminders: bool,
+    contacts: bool,
+}
+
+impl Refusals {
+    const fn none() -> Self {
+        Self {
+            reminders_source: true,
+            calendar: false,
+            reminders: false,
+            contacts: false,
+        }
+    }
+
+    fn of(ctx: &Ctx) -> Self {
+        use crate::follow::Store as Follow;
+        let follows = ctx.follows();
+        Self {
+            reminders_source: ctx.reminders_source(),
+            calendar: follows.report(Follow::Calendar).denied,
+            reminders: follows.report(Follow::Reminders).denied,
+            contacts: follows.report(Follow::Contacts).denied,
+        }
+    }
+}
+
 /// The registry factory. Home shares the cache of what the shell keeps (the
 /// transfer rule lives in it) and the pass conductor with the other screens.
 pub fn build(
@@ -459,11 +492,12 @@ impl Home {
         &self,
         locale: Locale,
         store: Store,
-        reminders_source: bool,
+        refusals: Refusals,
         widget: &str,
         app: &str,
         made: &Made,
     ) -> wire::HomeTile {
+        let reminders_source = refusals.reminders_source;
         let name = widget_name(locale, widget, app);
         let open = fill(&words::open_app(locale), &[("name", &name)]);
         wire::HomeTile {
@@ -473,13 +507,12 @@ impl Home {
             status: made.status as i32,
             count: made.count,
             count_label: made.count_label.clone(),
-            // A REFUSED PHOTO GRANT changes only the Photos widget (FirstHomeRefused): where it
-            // holds nothing, it says so, and its tap opens Photos, which says the same with Open Settings.
-            empty_copy: if widget == "photos"
-                && !made.holds
-                && self.photo_access == wire::PhotosMediaPermission::Denied
+            // A REFUSED GRANT changes only its own widget (FirstHomeRefused): where it holds
+            // nothing, it says so, and its tap opens the app, which says the same with Open Settings.
+            empty_copy: if !made.holds
+                && let Some(refused) = self.refused_copy(locale, refusals, widget)
             {
-                words::tile_photos_refused(locale)
+                refused
             } else {
                 empty_copy(locale, store, reminders_source, widget, made.holds)
             },
@@ -495,13 +528,24 @@ impl Home {
         }
     }
 
-    fn data(&self, locale: Locale, store: Store, reminders_source: bool) -> wire::HomeData {
+    /// What a widget whose phone grant was refused says, or `None` when it is not one.
+    fn refused_copy(&self, locale: Locale, refusals: Refusals, widget: &str) -> Option<String> {
+        match widget {
+            "photos" if self.photo_access == wire::PhotosMediaPermission::Denied => {
+                Some(words::tile_photos_refused(locale))
+            }
+            "calendar" if refusals.calendar => Some(words::tile_calendar_refused(locale)),
+            "reminders" if refusals.reminders => Some(words::tile_reminders_refused(locale)),
+            "people" if refusals.contacts => Some(words::tile_contacts_refused(locale)),
+            _ => None,
+        }
+    }
+
+    fn data(&self, locale: Locale, store: Store, refusals: Refusals) -> wire::HomeData {
         let tiles: Vec<wire::HomeTile> = self
             .tiles
             .iter()
-            .map(|(widget, app, made)| {
-                self.dress(locale, store, reminders_source, widget, app, made)
-            })
+            .map(|(widget, app, made)| self.dress(locale, store, refusals, widget, app, made))
             .collect();
         let folded = policy::fold(tiles);
         wire::HomeData {
@@ -521,7 +565,9 @@ impl Home {
         let tiles: Vec<wire::HomeTile> = self
             .tiles
             .iter()
-            .map(|(widget, app, made)| self.dress(locale, Store::Any, true, widget, app, made))
+            .map(|(widget, app, made)| {
+                self.dress(locale, Store::Any, Refusals::none(), widget, app, made)
+            })
             .collect();
         policy::springboard(&tiles)
     }
@@ -723,7 +769,7 @@ impl Screen for Home {
             Content::Data(Box::new(self.data(
                 locale,
                 Store::of(ctx),
-                ctx.reminders_source(),
+                Refusals::of(ctx),
             )))
         });
         let page = if self.none {

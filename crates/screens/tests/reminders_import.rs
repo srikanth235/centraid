@@ -484,10 +484,8 @@ fn a_refused_or_denied_read_says_so_and_a_duplicate_is_folded() {
             ..Default::default()
         }),
     );
-    assert_eq!(
-        line(&shell),
-        "Reminders access is off. Turn it on in Settings"
-    );
+    // The shell's line stays silent: the refusal belongs to Reminders' card, not to every app.
+    assert_eq!(line(&shell), "");
     tap(&mut shell, false);
     answer(
         &mut shell,

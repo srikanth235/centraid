@@ -3481,6 +3481,22 @@
       "x": 1410,
       "y": 75360
     },
+    "RemindersRefused.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "10 · Reminders, access refused",
+      "w": 390,
+      "x": 1800,
+      "y": 75360
+    },
+    "RemindersRefusedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "10 · Reminders, access refused · dark",
+      "w": 390,
+      "x": 1800,
+      "y": 75360
+    },
     "BackupUnpaired.dc.html": {
       "h": 844,
       "page": "light",
@@ -4463,6 +4479,8 @@
     "FirstHomeRefusedDark.dc.html",
     "PhotosRefused.dc.html",
     "PhotosRefusedDark.dc.html",
+    "RemindersRefused.dc.html",
+    "RemindersRefusedDark.dc.html",
     "BackupUnpaired.dc.html",
     "BackupUnpairedDark.dc.html",
     "HomeBackupDayTwo.dc.html",

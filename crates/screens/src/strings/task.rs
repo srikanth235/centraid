@@ -115,6 +115,9 @@ catalog! {
     plain reads_fact_writes_value = ("tasks, projects and sections you make", "tasks, projects and sections you make");
     plain reads_title = ("What Reminders may read", "What Reminders may read");
     plain read_incomplete = ("Part of this list didn't load.", "Part of this list didn't load.");
+    plain refused_title = ("Reminders access is off.", "Reminders access is off.");
+    plain refused_body = ("Turn it on in Settings to import your reminders.", "Turn it on in Settings to import your reminders.");
+    plain refused_open_settings = ("Open Settings", "Open Settings");
     plain release = ("Won't do", "Won't do");
     plain release_body = ("It goes to the Logbook as won't do, with its history. Nothing is erased.", "It goes to the Logbook as won't do, with its history. Nothing is erased.");
     plain release_title = ("Mark this task won't do?", "Mark this task won't do?");

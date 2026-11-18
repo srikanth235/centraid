@@ -850,6 +850,7 @@ impl CalendarFollow {
         // and the first-open card stops offering an import it cannot do.
         let refusal = permission::refusal(locale, Resource::Calendar, failed);
         ctx.follows().denied(Store::Calendar, refusal.is_some());
+        ctx.redraw_all();
         self.status = Some(plain(
             refusal.unwrap_or_else(|| words::import_calendar_failed(locale)),
         ));

@@ -283,8 +283,12 @@ fn the_verb_asks_the_one_import_to_read_with_the_option_and_the_line_says_the_ou
 }
 
 #[test]
-fn a_refusal_and_an_empty_phone_say_so_on_the_line_in_the_import_words() {
-    let mut r = rig("ios");
+fn a_refusal_is_the_apps_card_and_an_empty_phone_says_so_on_the_line() {
+    let mut r = rig_in(
+        Driver::first_vault,
+        "ios",
+        routes::home(wire::AgendaDestination::Todo, ""),
+    );
     r.tap_row();
     r.send(H::ImportRemindersSubmitted(
         wire::agenda_home_event::ImportRemindersSubmitted {},
@@ -295,14 +299,22 @@ fn a_refusal_and_an_empty_phone_say_so_on_the_line_in_the_import_words() {
         cancelled: false,
         ..Default::default()
     }));
-    assert_eq!(
-        r.line().summary,
-        // The line drops a sentence's final full stop, as every import line does.
-        "Reminders access is off. Turn it on in Settings"
-    );
-    // Nothing came in, so the line offers nothing to open: it is one short line and a close key.
+    // A REFUSAL IS REMINDERS' TO SAY, not the shell's line (it would follow the member into every
+    // app): the line is silent, and Reminders' own card says it with Open Settings.
+    assert_eq!(r.line().summary, "");
     assert_eq!(r.line().open_label, "");
     assert!(!r.line().running);
+    let Some(wire::agenda_home_state::Content::Data(data)) = &r.state().content else {
+        panic!("no data");
+    };
+    let empty = data
+        .todo
+        .as_ref()
+        .and_then(|todo| todo.empty.clone())
+        .expect("the card");
+    assert_eq!(empty.headline, "Reminders access is off.");
+    assert_eq!(empty.action_label, "Open Settings");
+    assert_eq!(empty.import_source, wire::ImportSource::Unspecified as i32);
 
     r.tap_row();
     r.send(H::ImportRemindersSubmitted(
@@ -502,4 +514,82 @@ fn the_card_and_the_tile_start_the_import_without_the_sheet() {
         wire::agenda_home_event::ImportRemindersRequested {},
     ));
     assert!(android.reads().is_empty());
+}
+
+/// A REFUSED REMINDERS GRANT reads on Home's Reminders tile as Photos' does (FirstHomeRefused), and
+/// only there: the shell's import line says nothing.
+#[test]
+fn a_refused_reminders_grant_reads_on_the_home_tile_and_nowhere_else() {
+    let secrets = VaultSecrets::new();
+    let registry = agenda::registry()
+        .merge(imports::registry(&secrets))
+        .merge(centraid_screens::shell::registry(&secrets));
+    let mut tabs = vec![(
+        agenda::TAB.to_owned(),
+        routes::home(wire::AgendaDestination::Todo, ""),
+    )];
+    tabs.extend(imports::roots());
+    tabs.push((
+        centraid_screens::shell::TAB.to_owned(),
+        centraid_screens::shell::routes::home(),
+    ));
+    let mut d = Driver::first_vault(Runtime::new(registry, tabs));
+    d.start();
+    d.call(wire::screen_request::Kind::Environment(wire::Environment {
+        locale: "en".to_owned(),
+        zone: "UTC".to_owned(),
+        platform: "ios".to_owned(),
+        ..Default::default()
+    }));
+    let tabs = d.navigation.clone().expect("navigation").tabs;
+    let home = tabs[0].entries[0].instance;
+    let made = tabs[3].entries[0].instance;
+    let springboard = tabs[4].entries[0].instance;
+    d.effects.clear();
+    d.send(
+        home,
+        E::AgendaHome(wire::AgendaHomeEvent {
+            kind: Some(H::ImportRemindersRequested(
+                wire::agenda_home_event::ImportRemindersRequested {},
+            )),
+        }),
+    );
+    let at = d
+        .effects
+        .iter()
+        .position(|request| {
+            matches!(
+                request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+                Some(K::RemindersRead(_))
+            )
+        })
+        .expect("a reminders read was asked");
+    let request = d.effects.remove(at);
+    d.send(
+        request.instance,
+        E::EffectResult(wire::EffectResult {
+            effect_id: request.effect_id,
+            outcome: Some(O::Failed(wire::EffectFailed {
+                reason: "denied".to_owned(),
+                denied: true,
+                ..Default::default()
+            })),
+        }),
+    );
+    let Some(wire::view_state::Kind::Home(state)) = d.view(springboard).kind.clone() else {
+        panic!("not Home");
+    };
+    let Some(wire::home_state::Content::Data(data)) = state.content else {
+        panic!("no data");
+    };
+    let tile = data
+        .tiles
+        .iter()
+        .find(|tile| tile.widget == "reminders")
+        .expect("the reminders widget");
+    assert_eq!(tile.empty_copy, "Reminders access is off · Open Settings");
+    let Some(wire::view_state::Kind::ImportsMade(line)) = d.view(made).kind.clone() else {
+        panic!("not made");
+    };
+    assert_eq!(line.summary, "");
 }

@@ -115,5 +115,8 @@ catalog! {
     plain tile_quiet_money = ("Nothing spent this month", "Nothing spent this month");
     plain tile_empty_people = ("Import contacts", "Import contacts");
     plain tile_photos_refused = ("Photo access is off · Open Settings", "Photo access is off · Open Settings");
+    plain tile_calendar_refused = ("Calendar access is off · Open Settings", "Calendar access is off · Open Settings");
+    plain tile_contacts_refused = ("Contacts access is off · Open Settings", "Contacts access is off · Open Settings");
+    plain tile_reminders_refused = ("Reminders access is off · Open Settings", "Reminders access is off · Open Settings");
     plain tile_empty_photos = ("Import your camera roll", "Import your camera roll");
 }

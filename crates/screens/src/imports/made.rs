@@ -21,6 +21,7 @@ use wire::screen_event::Kind as E;
 
 use super::{effect, reminders};
 use crate::calendar::follow::{self as calendar, CalendarFollow};
+use crate::follow::Store;
 use crate::kit::permission::{self, Resource};
 use crate::people::contacts::{self, ContactsFollow};
 use crate::screen::{Ctx, Screen};
@@ -312,8 +313,22 @@ impl Screen for Made {
                             reminders::run(ctx, &snapshot.reminders, self.include_completed);
                         app = if outcome.added > 0 { "reminders" } else { "" };
                         effects = followed(ctx, &outcome);
+                        ctx.follows().denied(Store::Reminders, false);
                         reminders::status_line(ctx.locale(), outcome)
                     }
+                    // A REFUSED GRANT IS REMINDERS' TO SAY, never the shell's line (it would follow
+                    // the member into every app): Reminders' card and Home's tile read the refusal
+                    // and say it with Open Settings, as Photos does.
+                    Some(O::Failed(failed))
+                        if permission::State::of(failed) == Some(permission::State::Refused) =>
+                    {
+                        ctx.follows().denied(Store::Reminders, true);
+                        ctx.redraw_all();
+                        self.came.clear();
+                        self.step = Step::Done;
+                        return effects;
+                    }
+                    // A phone that does not allow it (or limits it) has no Settings to point to.
                     Some(O::Failed(failed)) if permission::State::of(failed).is_some() => {
                         permission::says(
                             ctx.locale(),

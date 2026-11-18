@@ -341,6 +341,11 @@ impl Home {
         Self::import(ctx, include_completed);
     }
 
+    /// The phone refused Reminders when the member last asked to import.
+    fn import_refused(ctx: &Ctx) -> bool {
+        ctx.reminders_source() && ctx.follows().report(crate::follow::Store::Reminders).denied
+    }
+
     /// Ask the one reminders import to read the phone, only where the platform has a Reminders store.
     fn import(ctx: &Ctx, include_completed: bool) {
         if !ctx.reminders_source() {
@@ -570,6 +575,14 @@ impl Screen for Home {
                 Some(H::QuickTool(picked)) if self.toolbar_up() => {
                     return self.quick.staged.press(&picked.key);
                 }
+                // THE REFUSED CARD'S ONE ACTION is the phone's Settings, not a new list.
+                Some(H::TodoEmptyActed(_)) if Self::import_refused(ctx) => {
+                    return vec![wire::Effect {
+                        kind: Some(wire::effect::Kind::CameraRoll(wire::CameraRoll {
+                            action: wire::camera_roll::Action::OpenSettings as i32,
+                        })),
+                    }];
+                }
                 Some(H::StopConfirmed(_)) => return self.stop(ctx),
                 Some(H::StopDismissed(_)) => self.asking_stop = false,
                 Some(kind) => self.on_event(kind, ctx),
@@ -604,6 +617,21 @@ impl Screen for Home {
                 .and_then(|todo| todo.empty.as_mut())
         {
             without_import(empty, locale);
+        }
+        // A REFUSED GRANT is said on the card, with Open Settings alone (as Photos says it): no
+        // import it cannot do, no hint, and no status line to follow the member elsewhere.
+        if Self::import_refused(ctx)
+            && let Some(empty) = data
+                .as_mut()
+                .and_then(|data| data.todo.as_mut())
+                .and_then(|todo| todo.empty.as_mut())
+            && empty.import_source == wire::ImportSource::Reminders as i32
+        {
+            empty.import_source = wire::ImportSource::Unspecified as i32;
+            empty.headline = task::refused_title(locale);
+            empty.body = task::refused_body(locale);
+            empty.action_label = task::refused_open_settings(locale);
+            empty.hint = String::new();
         }
         // A ready page with nothing to draw is a failure, never a blank.
         let page = if ready && data.is_none() {
