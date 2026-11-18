@@ -848,6 +848,25 @@ fn a_fresh_vault_is_day_zero_with_the_one_layout_and_the_first_add_ends_it() {
     let mut d = Driver::first_vault(shell::runtime());
     d.start();
     let i = d.navigation.as_ref().expect("navigation").tabs[0].entries[0].instance;
+    // A PHONE WITH NO REMINDERS STORE (anywhere but iOS) invites a first reminder, never an import
+    // that cannot read anything, and its tile opens Reminders plainly.
+    let by_hand = data(&d, i);
+    let reminders = tile_of(&by_hand, "reminders");
+    assert_eq!(reminders.empty_copy, "Write your first reminder");
+    assert_eq!(
+        reminders.route.as_ref().map(|route| route.screen.as_str()),
+        Some("reminders.home")
+    );
+    assert_eq!(
+        reminders.route,
+        Some(centraid_screens::reminders::routes::home())
+    );
+    d.call(wire::screen_request::Kind::Environment(wire::Environment {
+        locale: "en".to_owned(),
+        zone: "UTC".to_owned(),
+        platform: "ios".to_owned(),
+        ..Default::default()
+    }));
     let day_zero = data(&d, i);
     // THE STARTER NOTES ARE NOT THE MEMBER'S: the vault is day zero, with the welcome card's words.
     assert_eq!(

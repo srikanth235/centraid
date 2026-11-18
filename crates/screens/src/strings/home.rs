@@ -110,6 +110,7 @@ catalog! {
     plain tile_empty_money = ("Import a statement", "Import a statement");
     plain tile_empty_notes = ("Write your first note", "Write your first note");
     plain tile_empty_reminders = ("Import your reminders", "Import your reminders");
+    plain tile_empty_reminders_by_hand = ("Write your first reminder", "Write your first reminder");
     plain tile_quiet_calendar = ("Nothing coming up", "Nothing coming up");
     plain tile_quiet_money = ("Nothing spent this month", "Nothing spent this month");
     plain tile_empty_people = ("Import contacts", "Import contacts");

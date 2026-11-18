@@ -518,6 +518,15 @@ impl Home {
     }
 }
 
+/// THE CARD OF A PHONE WITH NO REMINDERS TO READ: no import, and the hint to add by hand without its
+/// "Or" ("Tap + to write one."), so the card still says how to add.
+fn without_import(empty: &mut wire::EmptyState, locale: crate::strings::Locale) {
+    empty.import_source = wire::ImportSource::Unspecified as i32;
+    if !empty.hint.is_empty() {
+        empty.hint = crate::strings::notes::first_open_hint(locale);
+    }
+}
+
 impl Screen for Home {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
@@ -586,15 +595,15 @@ impl Screen for Home {
         let denied = self.denied();
         let ready = matches!(self.page, Page::Ready { .. });
         let mut data = if ready { self.data(ctx) } else { None };
-        // A PHONE WITH NO REMINDERS TO READ offers no import, and so no "Or" hint to add by hand.
+        // A PHONE WITH NO REMINDERS TO READ offers no import, and so drops the "Or" of the hint to add by
+        // hand ("Tap + to write one."): the way to add stays.
         if !ctx.reminders_source()
             && let Some(empty) = data
                 .as_mut()
                 .and_then(|data| data.todo.as_mut())
                 .and_then(|todo| todo.empty.as_mut())
         {
-            empty.import_source = wire::ImportSource::Unspecified as i32;
-            empty.hint = String::new();
+            without_import(empty, locale);
         }
         // A ready page with nothing to draw is a failure, never a blank.
         let page = if ready && data.is_none() {
@@ -747,5 +756,27 @@ impl Screen for Home {
             ))),
             ..wire::ViewState::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::strings::Locale;
+
+    #[test]
+    fn a_phone_with_no_reminders_store_drops_the_import_and_the_or_but_keeps_the_way_to_add() {
+        let mut empty = wire::EmptyState {
+            import_source: wire::ImportSource::Reminders as i32,
+            hint: "Or tap + to write one.".to_owned(),
+            ..Default::default()
+        };
+        without_import(&mut empty, Locale::En);
+        assert_eq!(empty.import_source, wire::ImportSource::Unspecified as i32);
+        assert_eq!(empty.hint, "Tap + to write one.");
+        // A card with no hint (the inbox emptied) gets none.
+        let mut bare = wire::EmptyState::default();
+        without_import(&mut bare, Locale::En);
+        assert_eq!(bare.hint, "");
     }
 }

@@ -459,6 +459,7 @@ impl Home {
         &self,
         locale: Locale,
         store: Store,
+        reminders_source: bool,
         widget: &str,
         app: &str,
         made: &Made,
@@ -480,7 +481,7 @@ impl Home {
             {
                 words::tile_photos_refused(locale)
             } else {
-                empty_copy(locale, store, widget, made.holds)
+                empty_copy(locale, store, reminders_source, widget, made.holds)
             },
             holds: made.holds,
             body: made
@@ -489,16 +490,18 @@ impl Home {
                 .map(|kind| wire::HomeTileBody { kind: Some(kind) }),
             accessibility_label: spoken(&open, made),
             open_label: open,
-            route: tile_route(app, made),
+            route: tile_route(app, made, reminders_source),
             ..Default::default()
         }
     }
 
-    fn data(&self, locale: Locale, store: Store) -> wire::HomeData {
+    fn data(&self, locale: Locale, store: Store, reminders_source: bool) -> wire::HomeData {
         let tiles: Vec<wire::HomeTile> = self
             .tiles
             .iter()
-            .map(|(widget, app, made)| self.dress(locale, store, widget, app, made))
+            .map(|(widget, app, made)| {
+                self.dress(locale, store, reminders_source, widget, app, made)
+            })
             .collect();
         let folded = policy::fold(tiles);
         wire::HomeData {
@@ -518,7 +521,7 @@ impl Home {
         let tiles: Vec<wire::HomeTile> = self
             .tiles
             .iter()
-            .map(|(widget, app, made)| self.dress(locale, Store::Any, widget, app, made))
+            .map(|(widget, app, made)| self.dress(locale, Store::Any, true, widget, app, made))
             .collect();
         policy::springboard(&tiles)
     }
@@ -716,8 +719,13 @@ impl Screen for Home {
         // THE READ (#1185): a phone that holds no vault has nothing to read, which is a final failure in
         // its own sentence (the first-launch gate is its way on, so no Retry); until the shelf has
         // spoken Home is loading.
-        let content = (!self.none && self.read)
-            .then(|| Content::Data(Box::new(self.data(locale, Store::of(ctx)))));
+        let content = (!self.none && self.read).then(|| {
+            Content::Data(Box::new(self.data(
+                locale,
+                Store::of(ctx),
+                ctx.reminders_source(),
+            )))
+        });
         let page = if self.none {
             wire::PageState {
                 state: Some(wire::page_state::State::Failed(wire::Failure {
@@ -802,14 +810,16 @@ fn first_launch(locale: Locale) -> wire::HomeFirstLaunch {
 /// WHERE A TILE'S TAP GOES: the app's home. Notes opens its shelf when it has
 /// notes and a new note when it has none, and nothing while it is unread; a tile
 /// that is still reading opens nothing.
-fn tile_route(app: &str, made: &Made) -> Option<wire::Route> {
+fn tile_route(app: &str, made: &Made, reminders_source: bool) -> Option<wire::Route> {
     use wire::HomeTileStatus as Status;
     match (app, made.status) {
         (_, Status::Loading) => None,
         ("notes", Status::Empty) => Some(crate::notes::routes::new_note()),
         ("notes", Status::Unknown) => None,
-        // "IMPORT YOUR REMINDERS": the tile's invitation starts the import as Reminders opens.
-        ("reminders", Status::Empty) if !made.holds => {
+        // "IMPORT YOUR REMINDERS": the tile's invitation starts the import as Reminders opens, where
+        // the platform has a Reminders store to read. Elsewhere the tile invites a first reminder
+        // and opens Reminders plainly.
+        ("reminders", Status::Empty) if !made.holds && reminders_source => {
             Some(crate::reminders::routes::home_importing())
         }
         _ => row_routes::app_home(app),
@@ -848,11 +858,19 @@ pub(crate) fn app_name(locale: Locale, app: &str) -> String {
 
 /// What an empty widget says: its one invitation, or, when the app holds something and only has
 /// nothing to show now, a quiet line that never asks to import what is already there.
-fn empty_copy(locale: Locale, store: Store, widget: &str, holds: bool) -> String {
+fn empty_copy(
+    locale: Locale,
+    store: Store,
+    reminders_source: bool,
+    widget: &str,
+    holds: bool,
+) -> String {
     match (widget, holds) {
         ("calendar", true) => words::tile_quiet_calendar(locale),
         ("calendar", false) => words::tile_empty_calendar(locale),
         ("reminders", true) => crate::strings::agenda_glance::no_reminders(locale),
+        // NO REMINDERS STORE TO READ (Android): the tile never invites an import that cannot work.
+        ("reminders", false) if !reminders_source => words::tile_empty_reminders_by_hand(locale),
         ("reminders", false) => words::tile_empty_reminders(locale),
         ("money", true) => words::tile_quiet_money(locale),
         ("docs", _) => words::tile_empty_docs(locale),
@@ -951,11 +969,11 @@ mod tests {
     fn the_empty_health_tile_names_the_phones_store() {
         let en = Locale::En;
         assert_eq!(
-            empty_copy(en, Store::AppleHealth, "health", false),
+            empty_copy(en, Store::AppleHealth, true, "health", false),
             "Connect Apple Health"
         );
         assert_eq!(
-            empty_copy(en, Store::HealthConnect, "health", false),
+            empty_copy(en, Store::HealthConnect, false, "health", false),
             "Turn on Health Connect"
         );
     }
@@ -970,7 +988,8 @@ mod tests {
             count_label: String::new(),
             body: None,
         };
-        let screen = |app: &str, status| tile_route(app, &made(status)).map(|route| route.screen);
+        let screen =
+            |app: &str, status| tile_route(app, &made(status), true).map(|route| route.screen);
         assert_eq!(
             screen("notes", Status::Content).as_deref(),
             Some("notes.home")
@@ -994,11 +1013,25 @@ mod tests {
         );
         // ... and an empty one that holds nothing opens it importing: that is what its tile says.
         assert_eq!(
-            tile_route("reminders", &made(Status::Empty)),
+            tile_route("reminders", &made(Status::Empty), true),
             Some(crate::reminders::routes::home_importing())
         );
+        // ... but not where the platform has no Reminders store: it opens Reminders plainly, and the
+        // tile invites a first reminder, not an import.
         assert_eq!(
-            tile_route("reminders", &made(Status::Content)),
+            tile_route("reminders", &made(Status::Empty), false),
+            Some(crate::reminders::routes::home())
+        );
+        assert_eq!(
+            empty_copy(Locale::En, Store::HealthConnect, false, "reminders", false),
+            "Write your first reminder"
+        );
+        assert_eq!(
+            empty_copy(Locale::En, Store::AppleHealth, true, "reminders", false),
+            "Import your reminders"
+        );
+        assert_eq!(
+            tile_route("reminders", &made(Status::Content), true),
             Some(crate::reminders::routes::home())
         );
         assert_eq!(
