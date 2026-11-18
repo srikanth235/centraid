@@ -54,6 +54,7 @@ import centraid.core.v1.DocsCrumb
 import centraid.core.v1.DocsDestination
 import centraid.core.v1.DocsDocumentEvent
 import centraid.core.v1.DocsDocumentData
+import centraid.core.v1.DocsReader
 import centraid.core.v1.DocsDocumentState
 import centraid.core.v1.DocsDriveData
 import centraid.core.v1.DocsDriveEvent
@@ -666,7 +667,12 @@ internal fun DocsDocumentScreen(
                     val facts = document.facts_only
                     when {
                         reading != null -> Column(Modifier.fillMaxWidth().padding(KitGeometry.GUTTER)) {
-                            Text(
+                            if (reading.has_text && reading.body.isNotEmpty() && reading.format == DocsReader.Format.FORMAT_MARKDOWN) {
+                                // MARKDOWN IS READ, NOT SHOWN (#1202): headings and lists, never `#` and `-`.
+                                dev.centraid.android.screens.chat.MarkdownText(
+                                    reading.body, false, dev.centraid.android.screens.chat.ChatMarkdown.plain(reading.body), "docs-reader-markdown",
+                                )
+                            } else Text(
                                 when {
                                     reading.has_text && reading.body.isNotEmpty() -> reading.body
                                     reading.has_text -> reading.empty_body

@@ -773,9 +773,9 @@ private fun MessageRow(
 }
 
 @Composable
-private fun MarkdownText(text: String, streaming: Boolean, spoken: String) {
+internal fun MarkdownText(text: String, streaming: Boolean, spoken: String, tag: String = "chat-message-answer") {
     Column(
-        Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = spoken }.testTag("chat-message-answer"),
+        Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = spoken }.testTag(tag),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         ChatMarkdown.blocks(text, streaming).forEach { block ->
