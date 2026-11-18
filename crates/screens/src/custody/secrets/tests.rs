@@ -406,3 +406,67 @@ fn a_gateway_token_is_written_to_the_device_store_handed_back_per_vault_and_dele
     assert!(secrets.tokens_for(&vault).is_empty());
     assert_eq!(secrets.tokens_for(&other).len(), 1);
 }
+
+#[test]
+fn a_refused_token_write_is_rolled_back_and_a_refused_delete_puts_the_token_back() {
+    let secrets = VaultSecrets::new();
+    let vault = "a1".repeat(32);
+    let gateway = "b2".repeat(16);
+    let refused = wire::SecretAnswer {
+        ok: false,
+        ..Default::default()
+    };
+    let token = wire::GatewayToken {
+        vault_id: vault.clone(),
+        gateway_id: gateway.clone(),
+        token: "7f".repeat(32),
+    };
+    // The cache takes the token ahead of the store; the store refuses it: it is not held.
+    let writes = secrets.token_writes(std::slice::from_ref(&token));
+    assert_eq!(secrets.tokens_for(&vault).len(), 1);
+    secrets.absorb(&writes, std::slice::from_ref(&refused));
+    assert!(
+        secrets.tokens_for(&vault).is_empty(),
+        "a refused write is rolled back"
+    );
+    // The store takes it; a refused delete keeps it, so a later forget retries.
+    let writes = secrets.token_writes(std::slice::from_ref(&token));
+    secrets.absorb(
+        &writes,
+        &[wire::SecretAnswer {
+            ok: true,
+            ..Default::default()
+        }],
+    );
+    let delete = secrets.token_delete(&vault, &gateway);
+    assert!(secrets.tokens_for(&vault).is_empty());
+    secrets.absorb(&delete, std::slice::from_ref(&refused));
+    assert_eq!(
+        secrets.tokens_for(&vault).len(),
+        1,
+        "the store still holds it"
+    );
+    assert_eq!(
+        secrets.forget_vault_tokens(&vault).len(),
+        1,
+        "and a forget retries"
+    );
+}
+
+#[test]
+fn tokens_outside_the_kept_vaults_are_deleted_by_prefix() {
+    let secrets = VaultSecrets::new();
+    let (mine, gone) = ("a1".repeat(32), "c3".repeat(32));
+    let gateway = "b2".repeat(16);
+    secrets.absorb(
+        &[device(wire::secret_op::Op::List, "", "")],
+        &[listing(&[
+            (&format!("gateway-token.{mine}.{gateway}"), "t1"),
+            (&format!("gateway-token.{gone}.{gateway}"), "t2"),
+        ])],
+    );
+    let deletes = secrets.forget_tokens_outside(std::slice::from_ref(&mine));
+    assert_eq!(deletes.len(), 1);
+    assert_eq!(deletes[0].key, format!("gateway-token.{gone}.{gateway}"));
+    assert_eq!(secrets.tokens_for(&mine).len(), 1);
+}

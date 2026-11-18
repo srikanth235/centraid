@@ -45,6 +45,9 @@ struct Laptop {
     answer: Option<Answer>,
     /// Where the token a pairing mints is kept (E12).
     secrets: VaultSecrets,
+    /// The token writes asked of the device store, whose answer is read back (a refusal rolls the
+    /// cache's early copy back).
+    writes: Vec<wire::SecretOp>,
     notice: String,
     /// NEEDS_WORDS because the vault opened without its words, so re-key is the
     /// way on.
@@ -63,6 +66,7 @@ impl Default for Laptop {
             payload: String::new(),
             answer: None,
             secrets: VaultSecrets::default(),
+            writes: Vec::new(),
             notice: String::new(),
             rekey: false,
             barred: false,
@@ -192,6 +196,7 @@ impl Laptop {
                         .ask(ctx, wire::pass_asked::Ask::Paired);
                     let mut effects = vec![announce(ANNOUNCE_PAIRED)];
                     if !writes.is_empty() {
+                        self.writes.clone_from(&writes);
                         effects.push(secrets::effect(writes));
                     }
                     effects
@@ -289,8 +294,16 @@ impl Screen for Laptop {
                 _ => {}
             },
             Some(E::EffectResult(result)) => {
-                if let Some(wire::effect_result::Outcome::CodeScanned(code)) = result.outcome {
-                    self.scanned(ctx, code.text);
+                match result.outcome {
+                    Some(wire::effect_result::Outcome::CodeScanned(code)) => {
+                        self.scanned(ctx, code.text);
+                    }
+                    // THE STORE'S ANSWER TO THE TOKEN WRITE: a refusal rolls the cache back.
+                    Some(wire::effect_result::Outcome::Secrets(batched)) => {
+                        let ops = std::mem::take(&mut self.writes);
+                        self.secrets.absorb(&ops, &batched.answers);
+                    }
+                    _ => {}
                 }
                 // A scan the member backed out of, or the camera refused, is
                 // nothing to say: the paste field is still there.

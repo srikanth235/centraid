@@ -135,6 +135,9 @@ struct Cache {
     /// The identity (64 hex, the spelling of a token's key) of each vault the shelf opened keyed this
     /// session, by the shelf's own id for it. Memory only.
     identities: BTreeMap<String, String>,
+    /// Tokens taken out of `device` ahead of the store's answer to their delete, by key, so a delete
+    /// the store refuses puts them back (the store still holds them, and a later forget retries).
+    unconfirmed_deletes: BTreeMap<String, String>,
 }
 
 /// The phone's vault secrets. Cheap to clone: every clone is the same cache, so
@@ -281,8 +284,35 @@ impl VaultSecrets {
         if answers.len() < ops.len() {
             return;
         }
-        let mut cache = self.cache();
+        let mut guard = self.cache();
+        let cache = &mut *guard;
         for (op, answer) in ops.iter().zip(answers) {
+            let device_token = op.store != wire::SecretStore::Synced as i32
+                && op.key.starts_with(GATEWAY_TOKEN_PREFIX);
+            // A TOKEN WRITE OR DELETE IS TAKEN INTO THE CACHE BEFORE THE STORE ANSWERS (see
+            // `token_writes`), so a refusal undoes it: otherwise the session reads "token held" while
+            // the store has none (a restart then asks to pair again), or a token the store still
+            // holds is forgotten here and never deleted.
+            if device_token && !answer.ok {
+                match wire::secret_op::Op::try_from(op.op) {
+                    Ok(wire::secret_op::Op::Set)
+                        if cache.device.get(&op.key).map(String::as_bytes)
+                            == Some(&op.value[..]) =>
+                    {
+                        cache.device.remove(&op.key);
+                    }
+                    Ok(wire::secret_op::Op::Delete) => {
+                        if let Some(token) = cache.unconfirmed_deletes.remove(&op.key) {
+                            cache.device.insert(op.key.clone(), token);
+                        }
+                    }
+                    _ => {}
+                }
+                continue;
+            }
+            if device_token {
+                cache.unconfirmed_deletes.remove(&op.key);
+            }
             let synced_store = op.store == wire::SecretStore::Synced as i32;
             let map = if synced_store {
                 &mut cache.synced
@@ -512,7 +542,11 @@ impl VaultSecrets {
     #[must_use]
     pub fn token_delete(&self, vault_id: &str, gateway_id: &str) -> Vec<wire::SecretOp> {
         let key = token_key(vault_id, gateway_id);
-        self.cache().device.remove(&key);
+        let mut cache = self.cache();
+        if let Some(token) = cache.device.remove(&key) {
+            cache.unconfirmed_deletes.insert(key.clone(), token);
+        }
+        drop(cache);
         vec![device(wire::secret_op::Op::Delete, &key, "")]
     }
 
@@ -522,6 +556,32 @@ impl VaultSecrets {
         self.tokens_for(vault_id)
             .iter()
             .flat_map(|held| self.token_delete(vault_id, &held.gateway_id))
+            .collect()
+    }
+
+    /// Delete every token kept for a vault whose identity is NOT among `kept`: what a forgotten vault
+    /// left when its identity was never noted (it was not opened keyed this session), found by the
+    /// prefix over the stored names. Only for a caller that knows the identity of every vault that
+    /// remains.
+    #[must_use]
+    pub fn forget_tokens_outside(&self, kept: &[String]) -> Vec<wire::SecretOp> {
+        let held: Vec<String> = self
+            .cache()
+            .device
+            .keys()
+            .filter_map(|key| key.strip_prefix(GATEWAY_TOKEN_PREFIX))
+            .filter_map(|rest| rest.split_once('.'))
+            .filter(|(vault, _)| !kept.iter().any(|keep| keep == vault))
+            .map(|(vault, gateway)| token_key(vault, gateway))
+            .collect();
+        held.iter()
+            .map(|key| {
+                let mut cache = self.cache();
+                if let Some(token) = cache.device.remove(key) {
+                    cache.unconfirmed_deletes.insert(key.clone(), token);
+                }
+                device(wire::secret_op::Op::Delete, key, "")
+            })
             .collect()
     }
 

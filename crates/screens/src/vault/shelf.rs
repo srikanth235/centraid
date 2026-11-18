@@ -682,6 +682,18 @@ impl Shelf {
         // THE TOKENS ARE KEYED BY THE VAULT'S IDENTITY, not by the shelf's id for it (E12).
         if let Some(identity) = self.secrets.identity_of(vault_id) {
             writes.extend(self.secrets.forget_vault_tokens(&identity));
+        } else {
+            // NEVER OPENED KEYED THIS SESSION, so its identity was never noted: what is left is every
+            // token no remaining vault owns. That is only known when every remaining vault's identity
+            // is; otherwise the tokens stay (a vault not yet opened may own them).
+            let kept: Option<Vec<String>> = inner
+                .holdings
+                .iter()
+                .map(|holding| self.secrets.identity_of(&holding.vault_id))
+                .collect();
+            if let Some(kept) = kept {
+                writes.extend(self.secrets.forget_tokens_outside(&kept));
+            }
         }
         self.secrets.forget_identity(vault_id);
         if inner.foreground.as_deref() == Some(vault_id) {
