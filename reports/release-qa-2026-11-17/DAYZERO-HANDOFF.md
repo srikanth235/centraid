@@ -8,12 +8,12 @@
 
 Checks: clippy -D warnings clean for screens/core; nextest on shell_home, vault_home, vault_shelf, agenda_glance, reminders_page, lib backup:: pass. Android `compileDebugKotlin` passes (needs `-Pcentraid.android=true`). Swift is not compiled locally.
 
-## Not done
+## Pieces 4 to 7 (done)
 
-4. Each app's first open (FirstOpenCalendar/People/Notes/Docs/Money/Health): the apps already have day-one empty states (`empty_day_one*` in each screens module); compare each to its board (one sentence, one import, "Or tap + to write one.", Docs and Money show the add as the button, Notes lists "TO GET YOU STARTED") and fix words in `strings/`. Health's button is "Turn on Apple Health".
-5. Refused permission states: Home's Photos widget reads "Photo access is off · Open Settings" (widget only); Photos app (PhotosRefused board): "Photo access is off." / "Turn it on in Settings to import your camera roll." / Open Settings. No second ask, alert or badge. `PhotoAccessRemedy.kt` exists on Android.
-6. Locker first check / first item: LockerFirstCheck ("Step 1 of 2", "Confirm it's you", ...) and LockerFirstItem ("Step 2 of 2", "Add your first item.", "Add an item", ...). The Home tile already reads "Set up Locker" while Locker holds no item (no set-up fact exists; item count stands in for it).
-7. Backup before pairing (BackupUnpaired board): "Not backed up yet", "This phone holds the only copy of your vault.", "Pair a backup device", "TO PAIR" 1/2 steps, "The recovery key comes after the first backup."
+4. First open: a82640af7 (EmptyState.hint; the import is drawn in the card's action slot by `emptyAction`/`actionSlot` in both kits; Calendar, People), d6605d0e4 (Notes: `NotesLibraryData.first_open` card over the starters, section "To get you started", `notes::fold::starters_only` shared with Home), 11e320d6a (Docs on Recents, Money Activity with no account), 9813866ac (Health "Turn on {store}").
+5. fed0b9ac0: `HomeEvent.PhotoAccessTold` from the camera roll; the Photos widget reads "Photo access is off · Open Settings"; the Photos app's empty library behind a Denied grant is the card with Open Settings and no banner.
+6. 8f31fd51c: `LockerWall.step/steps/step_label` (first check while no item) and `LockerHomeData.step*` (first item); `Home.holds_none` reads the item count while locked.
+7. 076549aef: `BackupHomeData.unpaired` (BackupUnpaired), shells draw it instead of the ordinary page.
 
 ## Notes for the owner
 
