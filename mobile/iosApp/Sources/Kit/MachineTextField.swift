@@ -52,3 +52,38 @@ struct MachineTextField: View {
             .onChange(of: focused) { _, now in onFocusChange?(now) }
     }
 }
+
+/// A PASTED CODE, WHOLE: the multi-line sibling of `MachineTextField` for text that has no word
+/// breaks (a pairing code is one long run of letters and digits, which a vertical `TextField` draws
+/// as one clipped line). A `TextEditor` wraps anywhere and scrolls past `maxHeight`; the keystrokes
+/// follow the same rule as `MachineTextField` (they live here, and the machine's echo never takes
+/// back what was typed).
+struct MachineTextEditor: View {
+    /// The machine's text.
+    let value: String
+    var minHeight: CGFloat = 96
+    var maxHeight: CGFloat = 180
+    let onEdit: (String) -> Void
+
+    @State private var typed = ""
+    @State private var echoes = TypedText(initial: "")
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextEditor(text: $typed)
+            .focused($focused)
+            .scrollContentBackground(.hidden)
+            .frame(minHeight: minHeight, maxHeight: maxHeight)
+            .onAppear {
+                echoes = TypedText(initial: value)
+                typed = value
+            }
+            .onChange(of: typed) { _, text in
+                if echoes.edited(next: text) { onEdit(text) }
+            }
+            .onChange(of: value) { _, text in
+                let open = text.isEmpty || !focused
+                if let adopted = echoes.answer(value: text, shown: typed, open: open) { typed = adopted }
+            }
+    }
+}

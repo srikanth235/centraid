@@ -78,10 +78,10 @@ struct PairLaptopPageView: View {
                         .centraidType("small")
                         .foregroundStyle(Theme.color("textSoft", scheme))
                         .accessibilityHidden(true)
-                    MachineTextField(placeholder: "", value: state.payload, axis: .vertical) { text in
+                    // THE WHOLE CODE: it has no word breaks, so it wraps anywhere and scrolls past five lines.
+                    MachineTextEditor(value: state.payload) { text in
                         send(PairLaptopEvents.make { $0.typed = .with { $0.text = text } })
                     }
-                    .lineLimit(2...5)
                     .keyboardType(.asciiCapable)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
