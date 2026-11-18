@@ -1494,6 +1494,64 @@ fn to_dos_search_draws_the_containers_too() {
 // Empties, failure, change
 // ---------------------------------------------------------------------------
 
+/// THE FIRST-OPEN CARD OFFERS ITS IMPORT WHILE THE PHONE CAN DO IT, and "New event" once the phone
+/// refused the calendar: no import that fails again, and no "Or tap +" hint under the button.
+#[test]
+fn a_phone_that_refused_its_calendar_gets_new_event_on_the_card_and_no_hint() {
+    let mut r = rig(Dest::Schedule);
+    r.clear();
+    for _ in 0..12 {
+        if r.data_or_default().days.is_empty() {
+            break;
+        }
+        r.step(30);
+    }
+    // CAN IMPORT: the import is the action and the hint names the plus.
+    let empty = r.empty().clone();
+    assert_eq!(empty.import_source, wire::ImportSource::Calendar as i32);
+    assert_eq!(empty.action_label, "");
+    assert_eq!(empty.hint, "Or tap + to write one.");
+    // The member taps Import and the phone says no.
+    // THE HOME HAS ASKED WHETHER THIS DEVICE FOLLOWS: it does not.
+    while let Some(at) = r.driver.effects.iter().position(|request| {
+        matches!(
+            request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::Keychain(_))
+        )
+    }) {
+        let request = r.driver.effects.remove(at);
+        r.driver.send(
+            request.instance,
+            wire::screen_event::Kind::EffectResult(wire::EffectResult {
+                effect_id: request.effect_id,
+                outcome: Some(wire::effect_result::Outcome::Keychain(wire::KeychainValue {
+                    found: false,
+                    value: Vec::new(),
+                })),
+            }),
+        );
+    }
+    r.driver.effects.clear();
+    r.send(H::ImportRequested(wire::agenda_home_event::ImportRequested {}));
+    r.driver.effects.retain(|request| {
+        matches!(
+            request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::CalendarRead(_))
+        )
+    });
+    r.driver
+        .answer_effect(wire::effect_result::Outcome::Failed(wire::EffectFailed {
+            denied: true,
+            ..Default::default()
+        }));
+    // CANNOT IMPORT: "New event" is the card's action, with no hint and no import.
+    let empty = r.empty().clone();
+    assert_eq!(empty.import_source, wire::ImportSource::Unspecified as i32);
+    assert_eq!(empty.action_label, "New event");
+    assert_eq!(empty.hint, "");
+    assert_eq!(r.state().import_label, "");
+}
+
 #[test]
 fn the_empties_are_four_different_screens() {
     // DAY ONE: Schedule's whole window empty, nothing hidden, no search. A window

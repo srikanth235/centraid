@@ -644,3 +644,51 @@ fn nobody_overdue_is_no_reconnect_line() {
     let i = begin(&mut d);
     assert!(roster_data(d.view(i)).reconnect.is_none());
 }
+
+/// THE FIRST-OPEN CARD OFFERS ITS IMPORT WHILE THE PHONE CAN DO IT, and "Add person" once the phone
+/// refused the contacts: no import that fails again, and no "Or tap +" hint.
+#[test]
+fn a_phone_that_refused_its_contacts_gets_add_person_on_the_card_and_no_hint() {
+    let mut d = clean();
+    let i = begin(&mut d);
+    let empty = empty_of(&home_state(d.view(i)).page).clone();
+    assert_eq!(empty.import_source, wire::ImportSource::Contacts as i32);
+    assert_eq!(empty.action_label, "");
+    assert_eq!(empty.hint, "Or tap + to add one.");
+    // The member taps Import and the phone says no.
+    // THE HOME HAS ASKED WHETHER THIS DEVICE FOLLOWS: it does not.
+    while let Some(at) = d.effects.iter().position(|request| {
+        matches!(
+            request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::Keychain(_))
+        )
+    }) {
+        let request = d.effects.remove(at);
+        d.send(
+            request.instance,
+            wire::screen_event::Kind::EffectResult(wire::EffectResult {
+                effect_id: request.effect_id,
+                outcome: Some(wire::effect_result::Outcome::Keychain(wire::KeychainValue {
+                    found: false,
+                    value: Vec::new(),
+                })),
+            }),
+        );
+    }
+    d.effects.clear();
+    send_home(&mut d, i, H::ImportContacts(ev::ImportContactsTapped {}));
+    d.effects.retain(|request| {
+        matches!(
+            request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::ContactsRead(_))
+        )
+    });
+    d.answer_effect(wire::effect_result::Outcome::Failed(wire::EffectFailed {
+        denied: true,
+        ..Default::default()
+    }));
+    let empty = empty_of(&home_state(d.view(i)).page).clone();
+    assert_eq!(empty.import_source, wire::ImportSource::Unspecified as i32);
+    assert_eq!(empty.action_label, "Add person");
+    assert_eq!(empty.hint, "");
+}

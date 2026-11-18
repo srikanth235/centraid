@@ -14,7 +14,18 @@ const REMINDER_CHIP_DAYS: i64 = 30;
 /// DAY ONE: nobody in People at all. The phone already holds the member's
 /// people, so a shell that can read its contacts offers them here in place of
 /// "Add person".
-pub fn day_one(locale: Locale) -> wire::EmptyState {
+///
+/// `can_import` is whether the phone's contacts can be read: the import is the card's one action
+/// and the hint under it names the plus. A phone that refused the contacts gets "Add person" and
+/// no hint, as the plus is then not the card's second way but its only one.
+pub fn day_one(locale: Locale, can_import: bool) -> wire::EmptyState {
+    if !can_import {
+        return wire::EmptyState {
+            headline: words::first_open(locale),
+            action_label: words::add_person(locale),
+            ..wire::EmptyState::default()
+        };
+    }
     wire::EmptyState {
         headline: words::first_open(locale),
         // The import is the card's one action where the phone holds contacts (the shell draws it
@@ -499,10 +510,11 @@ pub fn roster_empty(
     locale: Locale,
     answer: &wire::PeopleRoster,
     current: wire::PeopleChipKey,
+    can_import: bool,
 ) -> wire::EmptyState {
     use wire::PeopleChipKey as K;
     if answer.count_all == 0 {
-        day_one(locale)
+        day_one(locale, can_import)
     } else if current == K::Starred {
         wire::EmptyState {
             headline: words::empty_starred(locale),
@@ -634,7 +646,7 @@ mod tests {
         let data = roster(EN, &nobody, K::All, wire::PeopleOrder::Name);
         assert!(data.sections.is_empty() && data.index.is_empty());
         assert_eq!(
-            roster_empty(EN, &nobody, K::All).import_source,
+            roster_empty(EN, &nobody, K::All, true).import_source,
             wire::ImportSource::Contacts as i32,
             "day one offers the phone's contacts"
         );

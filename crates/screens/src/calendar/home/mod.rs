@@ -569,6 +569,7 @@ impl Home {
             held: &self.held,
             week_start: grid::week_start_of(ctx.region()),
             month_style: self.month_style,
+            import_denied: ctx.follows().report(Store::Calendar).denied,
         })
     }
 

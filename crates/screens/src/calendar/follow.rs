@@ -846,10 +846,12 @@ impl CalendarFollow {
 
     fn read_failed(&mut self, ctx: &Ctx, failed: &wire::EffectFailed) -> Vec<wire::Effect> {
         let locale = ctx.locale();
-        // A GRANT THAT IS NOT THERE (off, blocked, or write-only) says so in the one permission voice.
+        // A GRANT THAT IS NOT THERE (off, blocked, or write-only) says so in the one permission voice,
+        // and the first-open card stops offering an import it cannot do.
+        let refusal = permission::refusal(locale, Resource::Calendar, failed);
+        ctx.follows().denied(Store::Calendar, refusal.is_some());
         self.status = Some(plain(
-            permission::refusal(locale, Resource::Calendar, failed)
-                .unwrap_or_else(|| words::import_calendar_failed(locale)),
+            refusal.unwrap_or_else(|| words::import_calendar_failed(locale)),
         ));
         self.waiting = Waiting::Nothing;
         self.finish(ctx)
@@ -858,6 +860,7 @@ impl CalendarFollow {
     /// A read came back.
     fn read_ended(&mut self, ctx: &Ctx, snapshot: &wire::CalendarSnapshot) -> Vec<wire::Effect> {
         let (outcome, told) = run(ctx, snapshot);
+        ctx.follows().denied(Store::Calendar, false);
         self.status = Some(plain(sentence(ctx.locale(), &outcome)));
         self.outcome = Some(outcome);
         self.waiting = Waiting::Nothing;
