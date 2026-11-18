@@ -1,6 +1,6 @@
 # Release test plan
 
-Status: in progress, 2026-11-17. Release candidate: main `99cc70d8f` (#1195, which landed the #1185 audit fixes). PR #1195's CI passed the `pr` gate, iOS and Android on `2374afc2a`, whose tree is identical to `99cc70d8f`. Builds on the earlier audits: [ios-promises](../ios-promises-2026-11-12/PLAN.md), [android-promises](../android-promises-2026-11-12/REPORT.md), [mobile-audit](../mobile-audit-2026-11-13/README.md). This plan does not repeat their evidence. It says what must be re-proved on the release candidate and what blocks release.
+Status: in progress, 2026-11-17. Release candidate: main `99cc70d8f` (#1195, which landed the #1185 audit fixes). PR #1195's CI passed the `pr` gate, iOS and Android on `2374afc2a`, whose tree is identical to `99cc70d8f`. Builds on the earlier audits: ios-promises (2026-11-12, not committed), android-promises (2026-11-12, not committed), [mobile-audit](../mobile-audit-2026-11-13/README.md). This plan does not repeat their evidence. It says what must be re-proved on the release candidate and what blocks release.
 
 ## 1. Where we start
 
