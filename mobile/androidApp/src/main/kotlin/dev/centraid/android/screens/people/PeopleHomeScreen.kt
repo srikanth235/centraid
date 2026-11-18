@@ -344,8 +344,9 @@ private fun IndexRail(letters: List<PeopleIndexLetter>, modifier: Modifier, onJu
         letters.forEach { letter ->
             KitText(
                 text = letter.letter,
-                rung = KitType.Badge,
-                color = accent.text.copy(alpha = if (letter.has_rows) 1f else 0.4f),
+                // READABLE (#1202): the Meta rung, an empty letter in the quiet ink, not a 40% tint.
+                rung = KitType.Meta,
+                color = if (letter.has_rows) accent.text else Surface.meta,
                 modifier = Modifier
                     .padding(horizontal = 4.dp, vertical = 1.dp)
                     .clearAndSetSemantics {

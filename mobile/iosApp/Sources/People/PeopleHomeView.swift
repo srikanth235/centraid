@@ -364,7 +364,7 @@ private struct PeopleRosterList: View {
                 }
             }
             // The index sits over the trailing edge: the rows give it its own gutter.
-            .padding(.trailing, roster.index.isEmpty || largestText ? 0 : 18)
+            .padding(.trailing, roster.index.isEmpty || largestText ? 0 : 30)
         }
         .refreshable { send(PeopleEvents.home { $0.refreshed = .init() }) }
         .accessibilityIdentifier("people-roster")
@@ -397,21 +397,26 @@ private struct PeopleIndexRail: View {
 
     @Environment(\.appAccent) private var accent
     @State private var current: String?
-    @ScaledMetric(relativeTo: .caption2) private var cell: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption2) private var cell: CGFloat = 18
 
     var body: some View {
         VStack(spacing: 0) {
             ForEach(letters, id: \.letter) { letter in
+                // READABLE (#1202): 13 semibold, an empty letter in the quiet ink, not a 40% tint.
                 Text(letter.letter)
-                    .kitType(.badge)
-                    .foregroundStyle(accent.text.opacity(letter.hasRows_p ? 1 : 0.4))
-                    .frame(width: 18, height: cell)
+                    .kitType(.meta)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(letter.hasRows_p ? accent.text : Surface.meta)
+                    .frame(width: 28, height: cell)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(letter.accessibilityLabel)
                     .accessibilityAddTraits(.isButton)
                     .accessibilityAction { jump(letter.sectionKey) }
             }
         }
+        // THE TOUCH AREA IS A 44 PT-WIDE STRIP along the whole index, and a touch picks the nearest
+        // letter by its height, so a finger never has to land on a 13 pt glyph.
+        .frame(width: CentraidGeometry.targetMinCoarse)
         .contentShape(Rectangle())
         .gesture(
             DragGesture(minimumDistance: 0)
