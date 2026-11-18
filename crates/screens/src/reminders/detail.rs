@@ -1442,10 +1442,17 @@ fn fields(
         ..wire::TodoField::default()
     });
 
+    // A stored lead of 0 is the old "At the time": none for a timed due. On a date-only due it still
+    // alerts (at the day's own time), so "None" is lit only when no lead is stored.
+    let none_lit = match task.remind_before_min {
+        None => true,
+        Some(0) => !task.due_time.is_empty(),
+        Some(_) => false,
+    };
     let mut reminder_choices = vec![chip(
         NONE,
         words::remind_none(locale),
-        task.remind_before_min.is_none_or(|lead| lead == 0),
+        none_lit,
         dated,
         String::new(),
     )];
@@ -2065,5 +2072,48 @@ mod tests {
         assert!(rows(&*screen, &ctx).is_empty());
         assert!(state(&*screen, &ctx).status.is_none());
         assert!(core.acted.borrow().is_empty());
+    }
+
+    /// The "None" chip is lit for a stored lead of 0 only when the due has a time: on a date-only due
+    /// a lead of 0 still alerts, so lighting "None" would be a lie.
+    #[test]
+    fn the_none_chip_is_not_lit_for_a_date_only_due_that_still_alerts() {
+        let lit = |due_time: &str, lead: Option<i64>| {
+            let task = wire::AgendaTask {
+                due_day: "2026-11-20".to_owned(),
+                due_time: due_time.to_owned(),
+                remind_before_min: lead,
+                ..Default::default()
+            };
+            let out = fields(
+                Locale::En,
+                HourCycle::default(),
+                AlertText::default(),
+                &task,
+                "2026-11-18",
+                &[],
+                &[],
+            );
+            let field = out
+                .iter()
+                .find(|field| field.key == REMINDER)
+                .expect("the reminder field");
+            field
+                .choices
+                .iter()
+                .find(|choice| choice.key == NONE)
+                .expect("the None chip")
+                .selected
+        };
+        assert!(
+            lit("09:00", Some(0)),
+            "a timed due alerts at its time: None"
+        );
+        assert!(lit("", None), "no lead stored: None");
+        assert!(
+            !lit("", Some(0)),
+            "a date-only due with a lead of 0 still alerts at the day's time"
+        );
+        assert!(!lit("09:00", Some(30)));
     }
 }
