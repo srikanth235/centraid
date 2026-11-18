@@ -63,3 +63,46 @@ fn a_second_person_counts_and_the_founding_one_does_not() {
         .expect("a second person");
     assert_eq!(first_item_at(&scratch.vault, &STARTERS), Some(at));
 }
+
+/// A kind only an import or a workout makes still counts: Home leaves day zero for it, so the first
+/// item must exist for the pair prompt.
+#[test]
+fn a_workout_alone_is_a_first_item() {
+    use centraid_vault::model::Kind;
+    let scratch = Scratch::founded("first-item-activity").expect("a founded vault");
+    scratch.clock.advance_days(1);
+    let at = scratch.vault.clock().now_text();
+    let id = scratch.vault.ids().next();
+    scratch
+        .vault
+        .commit(|tx| {
+            tx.set_producer("test.activity");
+            tx.insert_entity(&id, Kind::Activity, "Morning run", &at)
+        })
+        .expect("a workout");
+    assert_eq!(first_item_at(&scratch.vault, &STARTERS), Some(at));
+}
+
+/// The starter tasks older vaults were founded with are starters, as the notes are.
+#[test]
+fn the_retired_starter_tasks_are_no_first_item() {
+    use centraid_vault::model::Kind;
+    let scratch = Scratch::founded("first-item-old-tasks").expect("a founded vault");
+    let titles = [
+        "Tap the circle to finish me",
+        "Open me to add a date, a tag or a subtask",
+    ];
+    let all: Vec<&str> = STARTERS.iter().chain(titles.iter()).copied().collect();
+    let now = scratch.vault.clock().now_text();
+    for title in titles {
+        let id = scratch.vault.ids().next();
+        scratch
+            .vault
+            .commit(|tx| {
+                tx.set_producer("test.old_task");
+                tx.insert_entity(&id, Kind::Task, title, &now)
+            })
+            .expect("an old starter task");
+    }
+    assert_eq!(first_item_at(&scratch.vault, &all), None);
+}

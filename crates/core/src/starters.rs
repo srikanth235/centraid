@@ -36,6 +36,13 @@ pub const NOTES: &[(&str, &str)] = &[
     ("Link with [[", "Type [[ in a note to link to another one."),
 ];
 
+/// The titles of the two starter TASKS that vaults founded before starters were Notes-only still
+/// hold. They are not the member's first item either.
+pub const RETIRED_TASKS: &[&str] = &[
+    "Tap the circle to finish me",
+    "Open me to add a date, a tag or a subtask",
+];
+
 /// WRITE EVERY STARTER ROW into a founded vault through the command plane, and
 /// report what was refused. The caller warns on a refusal and carries on; see
 /// the module header.

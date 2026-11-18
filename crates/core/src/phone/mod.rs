@@ -1342,11 +1342,12 @@ pub fn backup_status(
 
 /// THE MEMBER'S FIRST ITEM: the earliest `created_at` of a row they made or imported. One bounded
 /// read, a `MIN` per kind over the `entity_by_created` index (nothing is scanned or counted). The
-/// starter notes are not the member's, and nor is the founding person (the vault's first).
+/// starter notes and the retired starter tasks are not the member's, and nor is the founding person.
 fn first_item_ms(vault: &Vault) -> Option<i64> {
     let titles: Vec<&str> = crate::starters::NOTES
         .iter()
         .map(|(title, _)| *title)
+        .chain(crate::starters::RETIRED_TASKS.iter().copied())
         .collect();
     centraid_vault::first_item::first_item_at(vault, &titles)
         .and_then(|at| centraid_vault::clock::parse_iso_ms(&at))
