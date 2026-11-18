@@ -42,8 +42,6 @@ use crate::screen::Ctx;
 
 /// Schedule's and Waiting's reach from the anchor, in days.
 pub const LIST_DAYS: i64 = 120;
-/// How far either side of today a calendar is looked through to learn it holds nothing.
-const WIDE_DAYS: i64 = 366;
 /// `search`'s own ceiling.
 pub const SEARCH_LIMIT: u32 = 100;
 
@@ -303,24 +301,13 @@ impl Home {
             return Ok(());
         }
         let today = self.held.today();
-        let (Some(from), Some(to)) = (
-            civil::plus_days(&today, -WIDE_DAYS).and_then(|day| midnight(&day)),
-            civil::plus_days(&today, WIDE_DAYS).and_then(|day| midnight(&day)),
-        ) else {
+        let Some(query) = crate::calendar::holds_query(&today) else {
             return Ok(());
         };
-        let wide = get(read(
-            ctx,
-            query_cal::Upcoming {
-                from: Some(from),
-                to: Some(to),
-                alerts: None,
-            },
-            |answer| match answer {
-                Answer::AgendaUpcoming(upcoming) => Some(upcoming),
-                _ => None,
-            },
-        ))?;
+        let wide = get(read(ctx, query, |answer| match answer {
+            Answer::AgendaUpcoming(upcoming) => Some(upcoming),
+            _ => None,
+        }))?;
         self.held.untouched = Some(wide.events.is_empty());
         Ok(())
     }

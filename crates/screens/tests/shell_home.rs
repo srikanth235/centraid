@@ -948,6 +948,39 @@ fn a_fresh_vault_is_day_zero_with_the_one_layout_and_the_first_add_ends_it() {
     );
 }
 
+/// AN EVENT THREE WEEKS OUT IS NOT AN EMPTY CALENDAR: Home's tile asks the question Calendar's first-open
+/// card asks (`calendar::holds_query`, a year either side), not a fortnight's.
+#[test]
+fn an_event_three_weeks_out_means_the_calendar_holds_something_on_home() {
+    use centraid_screens::catalog::act;
+    use centraid_screens::field::{Field, Keyed};
+    use centraid_screens::kit::civil;
+    let mut d = Driver::first_vault(shell::runtime());
+    d.start();
+    let i = d.navigation.as_ref().expect("navigation").tabs[0].entries[0].instance;
+    assert!(!tile_of(&data(&d, i), "calendar").holds);
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("a clock after 1970")
+        .as_secs();
+    let today = civil::civil_day_of(i64::try_from(secs / 86_400).expect("a day count"));
+    let later = civil::plus_days(&today, 21).expect("a day");
+    let response = d.act(
+        wire::ActRequest::from(act::calendar::Propose {
+            id: Some("three-weeks".to_owned()),
+            title: "Three weeks out".to_owned(),
+            starts: format!("{later}T09:00"),
+            busy: Some(false),
+            zone: Field::Is("UTC".to_owned()),
+            ..Default::default()
+        })
+        .keyed("three-weeks-1"),
+    );
+    assert_eq!(response.status, wire::ActStatus::Executed as i32);
+    d.pump(std::time::Duration::from_secs(2));
+    assert!(tile_of(&data(&d, i), "calendar").holds);
+}
+
 #[test]
 fn the_first_item_is_the_members_own_and_never_a_starter() {
     use centraid_screens::catalog::act;

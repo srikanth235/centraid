@@ -46,8 +46,6 @@ pub const PREVIEW: usize = 3;
 /// How far ahead Agenda's next-event line looks, and how far its count does.
 const WINDOW_DAYS: i64 = 14;
 const COUNT_DAYS: i64 = 7;
-/// How far back an empty calendar looks to learn whether it holds anything at all.
-const HELD_LOOKBACK_DAYS: i64 = 366;
 /// The photographs asked for beyond the four drawn, so a video with no poster
 /// frame does not hold a blank cell in the strip.
 const PHOTO_WINDOW: u32 = 24;
@@ -397,28 +395,19 @@ fn calendar(ctx: &Ctx) -> Made {
         return unknown();
     };
     let mut made = calendar_tile(ctx.locale(), ctx.hour_cycle(), &upcoming);
-    // NOTHING IN THE FORTNIGHT IS NOT AN EMPTY CALENDAR: a member who imported only past events
-    // holds a calendar. Looked for only when the window is empty, over the last year.
+    // NOTHING IN THE FORTNIGHT IS NOT AN EMPTY CALENDAR: a member who imported only events further out
+    // or past ones holds a calendar. Looked for only when the window is empty, by the question
+    // Calendar's own first-open card asks (`calendar::holds_query`), so the two agree.
     if made.status == Status::Empty {
         made.holds = !upcoming.events.is_empty()
-            || civil::plus_days(&today, -HELD_LOOKBACK_DAYS)
-                .and_then(|from| midnight(&from))
-                .is_some_and(|from| {
-                    read::read(
-                        ctx,
-                        load::calendar::Upcoming {
-                            from: Some(from),
-                            to: midnight(&today),
-                            alerts: None,
-                        },
-                        |answer| match answer {
-                            Answer::AgendaUpcoming(past) => Some(past),
-                            _ => None,
-                        },
-                    )
-                    .data()
-                    .is_some_and(|past| !past.events.is_empty())
-                });
+            || crate::calendar::holds_query(&today).is_some_and(|query| {
+                read::read(ctx, query, |answer| match answer {
+                    Answer::AgendaUpcoming(wide) => Some(wide),
+                    _ => None,
+                })
+                .data()
+                .is_some_and(|wide| !wide.events.is_empty())
+            });
     }
     made
 }
