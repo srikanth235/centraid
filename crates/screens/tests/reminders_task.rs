@@ -1136,7 +1136,7 @@ fn release_destroys_nothing_and_goes_to_the_logbook_as_wont_do() {
     send_detail(&mut d, i, de::Kind::Release(de::ReleaseRequested {}));
     let state = detail(d.view(i));
     let confirm = state.confirm.as_ref().unwrap();
-    assert_eq!(confirm.title, "Release this task?");
+    assert_eq!(confirm.title, "Mark this task won't do?");
     assert!(!confirm.destructive);
     assert!(detail_data(d.view(i)).can_release);
     send_detail(&mut d, i, de::Kind::Confirmed(de::Confirmed {}));
