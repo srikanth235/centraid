@@ -649,8 +649,8 @@ impl Document {
     fn confirmed(&mut self, ctx: &Ctx) {
         let asking = std::mem::replace(&mut self.asking, Asking::None);
         let id = self.document_id.clone();
-        match asking {
-            Asking::Purge => {
+        if asking == Asking::Purge {
+            {
                 // DELETED FOREVER: nothing is left to show, so the page leaves.
                 let key = kit_act::key(&["purge", &id], kit_act::fresh());
                 let purged = self
@@ -663,7 +663,6 @@ impl Document {
                     self.rename = None;
                 }
             }
-            _ => {}
         }
     }
 

@@ -272,8 +272,12 @@ impl Adoption {
                     let minted: Vec<wire::GatewayToken> = answer
                         .tokens
                         .iter()
-                        .filter(|(path, _)| path == &vault.path)
-                        .map(|(_, token)| token.clone())
+                        .filter(|minted| minted.path == vault.path)
+                        .map(|minted| wire::GatewayToken {
+                            vault_id: minted.vault_id.clone(),
+                            gateway_id: minted.gateway_id.clone(),
+                            token: minted.token.clone(),
+                        })
                         .collect();
                     self.writes.extend(env.secrets.token_writes(&minted));
                     if self.writes.is_empty() {

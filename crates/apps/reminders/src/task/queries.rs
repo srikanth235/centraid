@@ -1188,7 +1188,7 @@ pub struct RemindersData {
     pub window: usize,
 }
 
-/// `reminders`: open, live tasks with a due and `remind_before_min`, whose stored
+/// `reminders`: open, live tasks with a due and an alert (`remind_before_min`, or a due with a time), whose stored
 /// due is `since` or later or that repeat, ordered by `(due, id)` over
 /// `task_by_due`, at most the caller's window (20..500) of them.
 ///
@@ -1269,7 +1269,10 @@ pub fn load_reminders_among(
     let rows: Vec<TaskRow> = found
         .into_iter()
         .filter(|task| {
-            task.status == "open" && task.remind_before_min.is_some() && task.due_at.is_some()
+            task.status == "open"
+                && (task.remind_before_min.is_some()
+                    || task.due_at.as_deref().is_some_and(|due| due.len() > 10))
+                && task.due_at.is_some()
         })
         .collect();
     let task_ids: Vec<String> = rows.iter().map(|task| task.task_id.clone()).collect();
@@ -1302,7 +1305,7 @@ fn reminder_rows(
         PageOrder::asc("due", "id"),
     )
     .filter(
-        "status = ? AND remind_before_min IS NOT NULL AND due IS NOT NULL \
+        "status = ? AND (remind_before_min IS NOT NULL OR length(due) > 10) AND due IS NOT NULL \
          AND (due >= ? OR rule IS NOT NULL)",
         vec![text("open"), text(since)],
     );

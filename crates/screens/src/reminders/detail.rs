@@ -789,8 +789,8 @@ impl Detail {
         let Some(task) = self.task() else {
             return;
         };
-        match asking {
-            Asking::Release => {
+        if asking == Asking::Release {
+            {
                 let request = act::reminders::CancelTask {
                     task_id: task.task_id.clone(),
                 };
@@ -801,7 +801,6 @@ impl Detail {
                     words::task_released,
                 );
             }
-            _ => {}
         }
     }
 
@@ -1334,7 +1333,10 @@ fn reminder_value(
     task: &wire::AgendaTask,
     today: &str,
 ) -> String {
-    if task.remind_before_min.is_none_or(|lead| lead == 0) {
+    // A lead of 0 is the old "At the time": none for a timed due; a date keeps "On the day".
+    if task.remind_before_min.is_none()
+        || (task.remind_before_min == Some(0) && !task.due_time.is_empty())
+    {
         words::remind_none(locale)
     } else if !task.remind_at_local.is_empty() && task.due_time.is_empty() {
         // A DAY HAS NO MOMENT (#1188, NA6): the alert sounds at the day's own time; the due keeps none.

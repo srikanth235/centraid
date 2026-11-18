@@ -576,6 +576,7 @@ impl Backup {
             }
         }
         self.read(ctx);
+        Vec::new()
     }
 
     fn on_result(&mut self, result: wire::EffectResult, ctx: &Ctx) -> Vec<wire::Effect> {

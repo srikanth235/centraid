@@ -1665,7 +1665,8 @@ fn a_forget_names_the_gateway_and_its_answer_finds_it_by_tag() {
         Some(doors::Done::Forgot {
             gateway_id: "gw-7".to_owned(),
             forgotten: false,
-            revoked: false
+            revoked: false,
+            forget_token: None,
         })
     );
     assert_eq!(
@@ -1673,7 +1674,8 @@ fn a_forget_names_the_gateway_and_its_answer_finds_it_by_tag() {
         Some(doors::Done::Forgot {
             gateway_id: "gw-7".to_owned(),
             forgotten: false,
-            revoked: false
+            revoked: false,
+            forget_token: None,
         })
     );
 }

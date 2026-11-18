@@ -123,7 +123,8 @@ fn a_skipped_day_is_not_the_next_firing() {
 }
 
 #[test]
-fn a_task_with_a_moment_and_a_lead_time_holds_one_row_and_done_removes_it() {
+fn a_task_with_a_moment_and_a_lead_time_holds_an_early_row_and_one_at_the_time_and_done_removes_them()
+ {
     let w = World::new();
     let id = w.ok(
         "task.add",
@@ -132,11 +133,31 @@ fn a_task_with_a_moment_and_a_lead_time_holds_one_row_and_done_removes_it() {
         .as_str()
         .unwrap()
         .to_owned();
-    let rows = w.rows();
-    assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].fire_key, "2026-03-01T08:45:00.000Z");
+    // "EARLY REMINDER" ONLY ADDS an earlier alert: the one at the time stays (owner, 2026-11-18).
+    let mut keys: Vec<String> = w.rows().iter().map(|r| r.fire_key.clone()).collect();
+    keys.sort();
+    assert_eq!(
+        keys,
+        ["2026-03-01T08:45:00.000Z", "2026-03-01T09:00:00.000Z"]
+    );
     w.ok("task.complete", json!({ "id": id }));
     assert!(w.rows().is_empty(), "a done task fires nothing");
+}
+
+#[test]
+fn a_timed_task_with_no_early_reminder_alerts_at_its_time_by_default() {
+    let w = World::new();
+    w.ok(
+        "task.add",
+        json!({ "title": "Call", "due": "2026-03-01T09:00:00Z" }),
+    );
+    let rows = w.rows();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].fire_key, "2026-03-01T09:00:00.000Z");
+    // A date alone has no moment: it alerts only when a lead was set.
+    let w = World::new();
+    w.ok("task.add", json!({ "title": "Bins", "due": "2026-03-01" }));
+    assert!(w.rows().is_empty());
 }
 
 /// NA5: A SNOOZE MOVES THE ALERT, NOT THE DUE. While one is set it is the task's one row; editing
@@ -282,7 +303,7 @@ fn a_followed_phone_reminder_holds_no_alert_and_stopping_the_follow_changes_noth
         "task.add",
         json!({ "title": "Mine", "due": "2026-03-01T09:00:00Z", "remind_before_min": 10 }),
     );
-    assert_eq!(w.rows().len(), 1, "an item Centraid owns still alerts");
+    assert_eq!(w.rows().len(), 2, "an item Centraid owns still alerts");
     w.ok(
         "follow.stop",
         json!({ "system": "phone_reminders", "ref": "list:1" }),
@@ -303,16 +324,16 @@ fn a_followed_phone_reminder_holds_no_alert_and_stopping_the_follow_changes_noth
     w.ok("task.edit", json!({ "id": id, "title": "Milk and eggs" }));
     assert_eq!(
         w.rows().len(),
-        1,
+        2,
         "a retired origin's untouched alert stays silent"
     );
     // THE MEMBER CHANGED THE ALERT: it is Centraid's own now, and it fires.
     w.ok("task.edit", json!({ "id": id, "remind_before_min": 5 }));
-    assert_eq!(w.rows().len(), 2, "an alert the member set notifies");
+    assert_eq!(w.rows().len(), 4, "an alert the member set notifies");
     w.ok("task.edit", json!({ "id": id, "remind_before_min": 10 }));
     assert_eq!(
         w.rows().len(),
-        1,
+        2,
         "put back to what the phone stated, it is silent again"
     );
 }
@@ -345,7 +366,7 @@ fn a_followed_reminder_whose_due_moved_is_centraids_until_it_agrees_again() {
         "task.edit",
         json!({ "id": id, "due": "2026-03-02T09:00:00Z" }),
     );
-    assert_eq!(w.rows().len(), 1, "a moved due fires");
+    assert_eq!(w.rows().len(), 2, "a moved due fires");
     w.ok(
         "task.edit",
         json!({ "id": id, "due": "2026-03-01T09:00:00Z" }),
@@ -417,7 +438,7 @@ fn the_rows_equal_a_rebuild_from_the_items() {
         json!({ "title": "Walk", "due": "2026-03-01T09:00", "remind_before_min": 0 }),
     );
     let before = w.rows();
-    assert_eq!(before.len(), 5);
+    assert_eq!(before.len(), 6);
     let ids: std::collections::BTreeSet<String> = w
         .scratch
         .vault

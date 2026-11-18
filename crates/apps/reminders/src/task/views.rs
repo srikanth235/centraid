@@ -55,6 +55,12 @@ impl Placed {
     fn is_open(&self) -> bool {
         is_open_status(&self.task.status)
     }
+    /// Alerts: an early reminder is set, or the due has a time (a timed reminder alerts at its time
+    /// by default, owner 2026-11-18).
+    fn alerts(&self) -> bool {
+        (self.task.remind_before_min.is_some() || !self.due.due_time.is_empty()) && self.dated()
+    }
+
     fn dated(&self) -> bool {
         !self.due.due_day.is_empty()
     }
@@ -351,10 +357,7 @@ pub fn groups(
         View::Reminders => vec![Group::new(
             GroupKind::Reminders,
             "reminders",
-            open_of(open)
-                .filter(|t| t.task.remind_before_min.is_some() && t.dated())
-                .cloned()
-                .collect(),
+            open_of(open).filter(|t| t.alerts()).cloned().collect(),
         )],
         View::Project(project_id) => {
             let mine: Vec<&Placed> = open_of(open)
@@ -435,7 +438,7 @@ pub fn counts(open: &[Placed]) -> Counts {
         if task.task.project_id.is_none() {
             counts.inbox += 1;
         }
-        if task.task.remind_before_min.is_some() && task.dated() {
+        if task.alerts() {
             counts.reminders += 1;
         }
     }
