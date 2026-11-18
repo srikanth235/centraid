@@ -273,6 +273,16 @@ private struct WidgetBody: View {
                 .lineLimit(2)
                 .minimumScaleFactor(0.7)
                 .multilineTextAlignment(.center)
+            // A SMALL TILE NAMES ITS APP (#1202, S2-7; `HomeWidgets`): "1 person" and "Connect Apple
+            // Health" say what is in it, and this says whose. Locker's caption already is the name.
+            if !tile.name.isEmpty, caption != tile.name {
+                Text(tile.name)
+                    .centraidType("annotLabel")
+                    .foregroundStyle(meta)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .accessibilityHidden(true)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

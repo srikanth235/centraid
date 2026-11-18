@@ -3512,6 +3512,38 @@
       "w": 390,
       "x": 2350,
       "y": 75360
+    },
+    "AndroidFirstHome.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "1 · Home on first run, Android",
+      "w": 412,
+      "x": 0,
+      "y": 76360
+    },
+    "AndroidFirstHomeDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "1 · Home on first run, Android · dark",
+      "w": 412,
+      "x": 0,
+      "y": 76360
+    },
+    "AndroidEmptyReminders.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "2 · Reminders first open, Android",
+      "w": 412,
+      "x": 470,
+      "y": 76360
+    },
+    "AndroidEmptyRemindersDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "2 · Reminders first open, Android · dark",
+      "w": 412,
+      "x": 470,
+      "y": 76360
     }
   },
   "createdOnFiles": {
@@ -4135,6 +4167,8 @@
     "AndroidHome.dc.html",
     "AndroidReminders.dc.html",
     "AndroidDetails.dc.html",
+    "AndroidFirstHome.dc.html",
+    "AndroidEmptyReminders.dc.html",
     "AndroidHealth.dc.html",
     "AndroidLocker.dc.html",
     "AndroidPeople.dc.html",
@@ -4236,6 +4270,8 @@
     "AndroidHomeDark.dc.html",
     "AndroidRemindersDark.dc.html",
     "AndroidDetailsDark.dc.html",
+    "AndroidFirstHomeDark.dc.html",
+    "AndroidEmptyRemindersDark.dc.html",
     "AndroidHealthDark.dc.html",
     "AndroidLockerDark.dc.html",
     "AndroidPeopleDark.dc.html",

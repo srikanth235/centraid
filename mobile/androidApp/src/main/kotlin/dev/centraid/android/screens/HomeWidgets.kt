@@ -370,6 +370,11 @@ private fun Glance(tile: HomeTile, figure: String, caption: String, modifier: Mo
             maxLines = if (invites) 3 else 2,
             align = TextAlign.Center,
         )
+        // A SMALL TILE NAMES ITS APP (#1202, S2-7; `HomeWidgets`): "1 person" and "Connect Health
+        // Connect" say what is in it, and this says whose. Locker's caption already is the name.
+        if (tile.name.isNotEmpty() && caption != tile.name) {
+            WText(tile.name, meta(), type = "eyebrow", maxLines = 1, align = TextAlign.Center)
+        }
     }
 }
 
