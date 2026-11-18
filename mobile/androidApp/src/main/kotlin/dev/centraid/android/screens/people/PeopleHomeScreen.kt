@@ -177,16 +177,18 @@ public fun PeopleHomeScreen(
             page = state.page!!,
             onRetry = { onEvent(PeopleHomeEvent(refreshed = PeopleHomeEvent.Refreshed())) },
             retryLabel = chrome?.retry.orEmpty(),
-            emptyExtra = if (asksUnderEmpty || offersImport) {
+            emptyExtra = if (asksUnderEmpty) {
+                { SearchAskRow(search?.ask, onOpen) }
+            } else {
+                null
+            },
+            // THE IMPORT IS DAY ONE'S ACTION, inside the card with the hint under it.
+            emptyAction = if (offersImport && !chrome?.import_contacts.isNullOrEmpty()) {
                 {
-                    if (asksUnderEmpty) SearchAskRow(search?.ask, onOpen)
-                    if (offersImport && !chrome?.import_contacts.isNullOrEmpty()) {
-                        OutlineButton(
-                            chrome?.import_contacts.orEmpty(),
-                            modifier = Modifier.padding(horizontal = KitGeometry.GUTTER),
-                            testTag = "kit-empty-import",
-                        ) { onEvent(PeopleHomeEvent(import_contacts = PeopleHomeEvent.ImportContactsTapped())) }
-                    }
+                    OutlineButton(
+                        chrome?.import_contacts.orEmpty(),
+                        testTag = "kit-empty-import",
+                    ) { onEvent(PeopleHomeEvent(import_contacts = PeopleHomeEvent.ImportContactsTapped())) }
                 }
             } else {
                 null

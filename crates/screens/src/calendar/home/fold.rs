@@ -362,11 +362,10 @@ pub fn events(fold: &Fold) -> Option<Folded> {
         Emptiness::NothingOnDay
     };
     let (empty_title, empty_body, empty_action) = match empty {
-        Emptiness::DayOne => (
-            words::empty_day_one_title(locale),
-            words::empty_day_one_body(locale),
-            words::new_event(locale),
-        ),
+        // FIRST OPEN (FirstOpenCalendar): what Calendar is for, then the way to add by hand. The
+        // import is the card's one action where the phone holds a calendar; the plus is in the
+        // header, so the card holds no "New event" button of its own.
+        Emptiness::DayOne => (words::first_open(locale), String::new(), String::new()),
         Emptiness::NoMatch => (
             words::empty_no_match(locale),
             words::empty_no_match_body(locale),
@@ -453,6 +452,12 @@ pub fn events(fold: &Fold) -> Option<Folded> {
         headline: empty_title,
         body: empty_body,
         action_label: empty_action,
+        // FIRST OPEN ONLY: the way to add by hand, under the import.
+        hint: if empty == Emptiness::DayOne {
+            words::first_open_hint(locale)
+        } else {
+            String::new()
+        },
         // THE PHONE ALREADY HOLDS A CALENDAR: the import is the empty state's door, where the
         // shell can read one (a search that found nothing offers none).
         import_source: if offer_import {

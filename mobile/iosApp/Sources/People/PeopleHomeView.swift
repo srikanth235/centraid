@@ -60,7 +60,8 @@ struct PeopleHomeView: View {
                     page: state.page,
                     loadingLabel: chrome.loading,
                     onRetry: { send(PeopleEvents.home { $0.refreshed = .init() }) },
-                    emptyExtra: emptyUnder
+                    emptyExtra: emptyUnder,
+                    emptyAction: offersImport ? { AnyView(PeopleImportButton(label: state.chrome.importContacts, send: send)) } : nil
                 ) {
                     if state.search.open, state.search.hasResults {
                         searchResults
@@ -140,18 +141,15 @@ struct PeopleHomeView: View {
     /// the header).
     private var emptyUnder: (() -> AnyView)? {
         let asks = state.search.open && state.search.hasAsk && !state.search.hasResults
-        // Day one is the empty state that names the phone's contacts (reading it picks the extra).
-        var offersImport = false
-        if case let .empty(empty)? = state.page.state { offersImport = empty.importSource == .contacts }
-        guard asks || offersImport else { return nil }
-        return {
-            AnyView(VStack(spacing: 0) {
-                if asks { SearchAskRow(ask: state.search.ask) }
-                if offersImport {
-                    PeopleImportButton(label: state.chrome.importContacts, send: send)
-                }
-            })
-        }
+        guard asks else { return nil }
+        return { AnyView(SearchAskRow(ask: state.search.ask)) }
+    }
+
+    /// Day one is the empty state that names the phone's contacts: its import is the card's action
+    /// (`emptyAction`), inside the card with the hint under it.
+    private var offersImport: Bool {
+        if case let .empty(empty)? = state.page.state { return empty.importSource == .contacts }
+        return false
     }
 
     @ViewBuilder

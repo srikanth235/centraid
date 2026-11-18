@@ -78,6 +78,7 @@ public fun ReadStateView(
     retryLabel: String = KitWords.RETRY,
     stage: Boolean = false,
     emptyExtra: (@Composable () -> Unit)? = null,
+    emptyAction: (@Composable () -> Unit)? = null,
     skeleton: @Composable () -> Unit = { RowSkeleton() },
     data: @Composable () -> Unit,
 ) {
@@ -96,7 +97,7 @@ public fun ReadStateView(
             }
             empty != null -> StageScheme(stage) {
                 Column {
-                    EmptyStateView(empty, onEmptyAction)
+                    EmptyStateView(empty, onEmptyAction, actionSlot = emptyAction)
                     // What a screen draws UNDER its empty state (People's phone-contacts import,
                     // search's Ask row). The SwiftUI twin is `PageReadStateView(emptyExtra:)`.
                     emptyExtra?.invoke()
@@ -261,6 +262,9 @@ public fun EmptyStateView(
     empty: EmptyState,
     onAction: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    // THE PHONE'S IMPORT, where the empty state names one: drawn in the action's place, inside the
+    // card, so the hint lands under it. The SwiftUI twin is `EmptyStateView(actionSlot:)`.
+    actionSlot: (@Composable () -> Unit)? = null,
 ) {
     // THE EMPTY STATE PATTERN (#1173): a card on the page with the app's glyph on a wash of its
     // colour, the one sentence, the reason, and at most one action as the app's pill.
@@ -286,8 +290,14 @@ public fun EmptyStateView(
         if (empty.body.isNotEmpty()) {
             Text(empty.body, style = kitTextStyle(KitType.Row), color = Surface.body, textAlign = TextAlign.Center)
         }
-        if (empty.action_label.isNotEmpty() && onAction != null) {
+        if (actionSlot != null) {
+            actionSlot()
+        } else if (empty.action_label.isNotEmpty() && onAction != null) {
             KitPillButton(empty.action_label, onAction, testTag = "kit-empty-action")
+        }
+        // THE WAY TO ADD BY HAND, under the action, on an app's first open ("Or tap + to write one.").
+        if (empty.hint.isNotEmpty()) {
+            Text(empty.hint, style = kitTextStyle(KitType.Meta), color = Surface.meta, textAlign = TextAlign.Center)
         }
     }
 }

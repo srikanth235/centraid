@@ -250,14 +250,16 @@ public fun AgendaHomeScreen(
                         onRetry = { onEvent(AgendaHomeEvent(refreshed = AgendaHomeEvent.Refreshed())) },
                         onEmptyAction = state.new_event?.takeUnless { offersImport }?.let { route -> { onOpen(route) } },
                         retryLabel = chrome.retry,
-                        emptyExtra = {
-                            if (offersImport) {
+                        emptyAction = if (offersImport) {
+                            {
                                 OutlineButton(
                                     label = state.import_label,
                                     testTag = "agenda-empty-import",
-                                    modifier = Modifier.padding(start = KitGeometry.GUTTER, top = 4.dp),
+                                    modifier = Modifier.padding(top = 4.dp),
                                 ) { onEvent(AgendaHomeEvent(import_requested = AgendaHomeEvent.ImportRequested())) }
                             }
+                        } else {
+                            null
                         },
                         skeleton = { AgendaSkeleton(chrome) },
                     ) {

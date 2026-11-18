@@ -1053,7 +1053,7 @@ fn a_hidden_calendar_re_folds_and_says_so_in_the_sheet_and_hides_no_task() {
     assert!(choice.hidden);
     assert_eq!(choice.state_label, "Hidden");
     // EVERYTHING HIDDEN IS NOT DAY ONE.
-    assert_ne!(r.empty_headline(), Some("Nothing in your calendar yet."));
+    assert_ne!(r.empty_headline(), Some("Your events and invitations, day by day."));
     // Toggled back.
     r.send(H::CalendarToggled(
         wire::agenda_home_event::CalendarToggled {
@@ -1511,11 +1511,12 @@ fn the_empties_are_four_different_screens() {
         "a window with no birthday exists within a year"
     );
     let empty = r.empty();
-    assert_eq!(empty.headline, "Nothing in your calendar yet.");
-    assert_eq!(empty.body, "The first event is one field and a time.");
-    assert_eq!(empty.action_label, "New event");
+    assert_eq!(empty.headline, "Your events and invitations, day by day.");
+    assert_eq!(empty.body, "");
+    assert_eq!(empty.action_label, "");
+    assert_eq!(empty.hint, "Or tap + to write one.");
     assert_eq!(empty.import_source, wire::ImportSource::Calendar as i32);
-    assert_eq!(r.state().import_label, "Import calendar");
+    assert_eq!(r.state().import_label, "Import from Calendar");
     // The action pushes the add sheet, on the anchor day.
     let add = r.state().new_event.clone().unwrap();
     assert_eq!(

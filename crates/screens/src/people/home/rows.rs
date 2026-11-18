@@ -16,20 +16,22 @@ const REMINDER_CHIP_DAYS: i64 = 30;
 /// "Add person".
 pub fn day_one(locale: Locale) -> wire::EmptyState {
     wire::EmptyState {
-        headline: words::empty_roster_title(locale),
-        body: words::empty_roster_body(locale),
-        action_label: words::add_person(locale),
+        headline: words::first_open(locale),
+        // The import is the card's one action where the phone holds contacts (the shell draws it
+        // from `import_source`); the plus is in the header, so no "Add person" button here.
+        hint: words::first_open_hint(locale),
         import_source: wire::ImportSource::Contacts as i32,
-        icon_key: String::new(),
+        ..wire::EmptyState::default()
     }
 }
 
-/// A CHIP WITH NOTHING IN IT over a roster that holds people: day one's words,
-/// but not day one, so it does not offer the phone's contacts.
+/// A CHIP WITH NOTHING IN IT over a roster that holds people: not first open, so its own
+/// sentence, the add and no import.
 fn chip_empty(locale: Locale) -> wire::EmptyState {
     wire::EmptyState {
-        import_source: wire::ImportSource::Unspecified as i32,
-        ..day_one(locale)
+        headline: words::empty_chip(locale),
+        action_label: words::add_person(locale),
+        ..wire::EmptyState::default()
     }
 }
 

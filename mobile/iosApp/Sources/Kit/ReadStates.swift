@@ -35,6 +35,8 @@ struct PageReadStateView<Skeleton: View, Content: View>: View {
     /// What a screen draws UNDER its empty state (People's phone-contacts import, search's Ask row);
     /// nothing elsewhere. The Compose twin is `ReadStateView(emptyExtra =)`.
     var emptyExtra: (() -> AnyView)? = nil
+    /// The phone's import, drawn as the empty state's action (inside the card).
+    var emptyAction: (() -> AnyView)? = nil
     let skeleton: () -> Skeleton
     let data: () -> Content
 
@@ -47,6 +49,7 @@ struct PageReadStateView<Skeleton: View, Content: View>: View {
         flat: Bool = false,
         stage: Bool = false,
         emptyExtra: (() -> AnyView)? = nil,
+        emptyAction: (() -> AnyView)? = nil,
         @ViewBuilder skeleton: @escaping () -> Skeleton,
         @ViewBuilder data: @escaping () -> Content
     ) {
@@ -58,6 +61,7 @@ struct PageReadStateView<Skeleton: View, Content: View>: View {
         self.flat = flat
         self.stage = stage
         self.emptyExtra = emptyExtra
+        self.emptyAction = emptyAction
         self.skeleton = skeleton
         self.data = data
     }
@@ -73,7 +77,7 @@ struct PageReadStateView<Skeleton: View, Content: View>: View {
             staged(FailureView(sentence: failure.sentence, remedy: failure.remedy, retryLabel: retryLabel, onRetry: failure.permanent ? nil : onRetry))
         case let .empty(empty):
             staged(VStack(spacing: 0) {
-                EmptyStateView(empty, onAction: onEmptyAction)
+                EmptyStateView(empty, actionSlot: emptyAction?(), onAction: onEmptyAction)
                 if let emptyExtra { emptyExtra() }
             })
         case nil:
@@ -129,6 +133,7 @@ extension PageReadStateView where Skeleton == RowSkeleton {
         onNoteAction: (() -> Void)? = nil,
         retryLabel: String = KitWords.RETRY,
         emptyExtra: (() -> AnyView)? = nil,
+        emptyAction: (() -> AnyView)? = nil,
         @ViewBuilder data: @escaping () -> Content
     ) {
         self.init(
@@ -138,6 +143,7 @@ extension PageReadStateView where Skeleton == RowSkeleton {
             onNoteAction: onNoteAction,
             retryLabel: retryLabel,
             emptyExtra: emptyExtra,
+            emptyAction: emptyAction,
             skeleton: { RowSkeleton(label: loadingLabel) },
             data: data
         )
@@ -289,12 +295,21 @@ struct EmptyStateView: View {
     /// The action's accessibility id; a screen whose action is its own thing
     /// (search's "Ask about") names it.
     var actionIdentifier: String = "kit-empty-action"
+    /// THE PHONE'S IMPORT, where the empty state names one (`import_source`): drawn in the action's
+    /// place, inside the card, so the hint lands under it. The Compose twin is `actionSlot`.
+    var actionSlot: AnyView? = nil
 
     @Environment(\.colorScheme) private var scheme
 
-    init(_ empty: Centraid_Core_V1_EmptyState, actionIdentifier: String = "kit-empty-action", onAction: (() -> Void)? = nil) {
+    init(
+        _ empty: Centraid_Core_V1_EmptyState,
+        actionIdentifier: String = "kit-empty-action",
+        actionSlot: AnyView? = nil,
+        onAction: (() -> Void)? = nil
+    ) {
         self.empty = empty
         self.actionIdentifier = actionIdentifier
+        self.actionSlot = actionSlot
         self.onAction = onAction
     }
 
@@ -330,10 +345,19 @@ struct EmptyStateView: View {
                     .foregroundStyle(Surface.body)
                     .multilineTextAlignment(.center)
             }
-            if !empty.actionLabel.isEmpty, let onAction {
+            if let actionSlot {
+                actionSlot
+            } else if !empty.actionLabel.isEmpty, let onAction {
                 KitPillButton(label: empty.actionLabel, action: onAction)
                     .accessibilityIdentifier(actionIdentifier)
                     .padding(.top, 6)
+            }
+            // THE WAY TO ADD BY HAND, under the action, on an app's first open ("Or tap + to write one.").
+            if !empty.hint.isEmpty {
+                Text(empty.hint)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+                    .multilineTextAlignment(.center)
             }
         }
         .frame(maxWidth: .infinity)

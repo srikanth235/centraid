@@ -240,7 +240,8 @@ fn day_one_is_the_empty_state_with_the_phones_contacts_and_never_ready_data() {
     let i = shell.push(routes::home(wire::PeopleDestination::People));
     let state = shell.home(i);
     let empty = empty_of(&state.page);
-    assert_eq!(empty.headline, "Add people you keep up with");
+    assert_eq!(empty.headline, "The people you know, and what you write about them.");
+    assert_eq!(empty.hint, "Or tap + to add one.");
     assert_eq!(empty.import_source, wire::ImportSource::Contacts as i32);
     assert!(state.content.is_none());
     // Touch has the same day one.

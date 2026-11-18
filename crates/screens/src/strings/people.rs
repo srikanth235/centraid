@@ -66,11 +66,9 @@ catalog! {
     plain empty_no_match_body = ("Search looks at names.", "Search looks at names.");
     plain empty_recent = ("Nothing logged yet.", "Nothing logged yet.");
     plain empty_reconnect = ("Nobody is overdue.", "Nobody is overdue.");
-    plain empty_roster_body = (
-        "Add someone, set how often to reach out, and log a touch each time you do.",
-        "Add someone, set how often to reach out, and log a touch each time you do."
-    );
-    plain empty_roster_title = ("Add people you keep up with", "Add people you keep up with");
+    plain empty_chip = ("Nobody to show.", "Nobody to show.");
+    plain first_open = ("The people you know, and what you write about them.", "The people you know, and what you write about them.");
+    plain first_open_hint = ("Or tap + to add one.", "Or tap + to add one.");
     plain empty_starred = ("Nobody is starred.", "Nobody is starred.");
     plain empty_touches = ("Nothing logged yet.", "Nothing logged yet.");
     plain empty_upcoming = ("No dates coming up.", "No dates coming up.");
@@ -128,7 +126,7 @@ catalog! {
     plain transfer_row_merged = ("Merge into someone you have", "Merge into someone you have");
     plain transfer_row_same = ("Already here", "Already here");
     plain transfer_row_proposal = ("Merges {name}", "Merges {name}");
-    plain import_contacts = ("Import contacts", "Import contacts");
+    plain import_contacts = ("Import from Contacts", "Import from Contacts");
     plain import_contacts_add_account = (
         "No contacts found. Add your Google or other account in your phone's Settings, then come back.",
         "No contacts found. Add your Google or other account in your phone's Settings, then come back."

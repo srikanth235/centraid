@@ -239,8 +239,9 @@ fn a_filter_with_nobody_says_so_and_day_one_offers_the_phones_contacts() {
     let i = begin(&mut d);
     // Day one: nobody at all.
     let empty = empty_of(&home_state(d.view(i)).page).clone();
-    assert_eq!(empty.headline, "Add people you keep up with");
-    assert_eq!(empty.action_label, "Add person");
+    assert_eq!(empty.headline, "The people you know, and what you write about them.");
+    assert_eq!(empty.hint, "Or tap + to add one.");
+    assert_eq!(empty.action_label, "");
     assert_eq!(empty.import_source, wire::ImportSource::Contacts as i32);
 
     person(&d, "Dana");
@@ -499,7 +500,8 @@ fn touch_on_an_empty_vault_is_day_one() {
     let state = home_state(d.view(i));
     assert!(state.content.is_none());
     let empty = empty_of(&state.page);
-    assert_eq!(empty.action_label, "Add person");
+    assert_eq!(empty.action_label, "");
+    assert_eq!(empty.hint, "Or tap + to add one.");
     assert_eq!(
         empty.import_source,
         wire::ImportSource::Contacts as i32,

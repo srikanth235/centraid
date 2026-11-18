@@ -109,7 +109,8 @@ struct AgendaHomeView: View {
                         loadingLabel: state.chrome.loading,
                         onRetry: { send(AgendaEvents.make { $0.refreshed = .init() }) },
                         onEmptyAction: offersImport(state) ? nil : { if state.hasNewEvent { open(state.newEvent) } },
-                        emptyExtra: { AnyView(emptyUnder(state)) }
+                        emptyExtra: { AnyView(emptyUnder(state)) },
+                        emptyAction: offersImport(state) ? { AnyView(CalendarImportButton(label: state.importLabel, identifier: "kit-empty-import", send: send)) } : nil
                     ) {
                         if case let .data(home)? = state.content {
                             homeContent(home, state: state)
@@ -264,14 +265,11 @@ struct AgendaHomeView: View {
         return false
     }
 
-    /// WHAT THE EMPTY PAGE DRAWS UNDER ITS WORDS: where the phone holds a calendar, its import is day one's
-    /// action (sent to Rust as `ImportRequested`; "Add" stays in the header), and a search that found
-    /// nothing gets the Ask row.
+    /// WHAT THE EMPTY PAGE DRAWS UNDER ITS WORDS: a search that found nothing gets the Ask row. (Where
+    /// the phone holds a calendar, its import is day one's action, drawn inside the card by `emptyAction`;
+    /// sent to Rust as `ImportRequested`, and "Add" stays in the header.)
     @ViewBuilder
     private func emptyUnder(_ state: Centraid_Core_V1_AgendaHomeState) -> some View {
-        if offersImport(state) {
-            CalendarImportButton(label: state.importLabel, identifier: "kit-empty-import", send: send)
-        }
         if state.hasSearchAskRow { SearchAskRow(ask: state.searchAskRow) }
     }
 

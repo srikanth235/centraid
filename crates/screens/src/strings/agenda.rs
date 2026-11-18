@@ -44,8 +44,8 @@ catalog! {
     plain editor_edit = ("Edit event", "Edit event");
     plain empty_day = ("Nothing on this day.", "Nothing on this day.");
     plain empty_days = ("Nothing on these days.", "Nothing on these days.");
-    plain empty_day_one_body = ("The first event is one field and a time.", "The first event is one field and a time.");
-    plain empty_day_one_title = ("Nothing in your calendar yet.", "Nothing in your calendar yet.");
+    plain first_open = ("Your events and invitations, day by day.", "Your events and invitations, day by day.");
+    plain first_open_hint = ("Or tap + to write one.", "Or tap + to write one.");
     plain empty_no_match = ("Nothing matches that.", "Nothing matches that.");
     plain empty_no_match_body = ("Try fewer words, or a different day.", "Try fewer words, or a different day.");
     plain empty_waiting = ("Nothing is waiting on you.", "Nothing is waiting on you.");
@@ -72,7 +72,7 @@ catalog! {
     plain guests_none = ("Nobody else", "Nobody else");
     plain guest_awaiting = ("awaiting", "awaiting");
     plain guest_you = ("you", "you");
-    plain import_calendar = ("Import calendar", "Import calendar");
+    plain import_calendar = ("Import from Calendar", "Import from Calendar");
     plain import_calendar_add_account = ("No calendars found. Add your Google or other account in your phone's Settings, then come back.", "No calendars found. Add your Google or other account in your phone's Settings, then come back.");
     plain import_calendar_done = ("{count} events imported", "{count} events imported");
     plain import_calendar_failed = ("The calendar did not import.", "The calendar did not import.");
