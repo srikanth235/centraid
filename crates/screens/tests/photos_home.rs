@@ -789,7 +789,8 @@ fn every_row_ends_at_the_edge_and_keeps_one_height_across_it() {
     let rows = layout::justify(&boxes, 400.0, 120.0);
     assert!(rows.len() >= 2);
     for row in &rows[..rows.len() - 1] {
-        let width: f64 = row.iter().map(|t| t.width).sum::<f64>() + layout::GAP * (row.len() as f64 - 1.0);
+        let width: f64 =
+            row.iter().map(|t| t.width).sum::<f64>() + layout::GAP * (row.len() as f64 - 1.0);
         assert!((width - 400.0).abs() < 1e-9, "{width}");
         assert!(row.windows(2).all(|w| w[0].height == w[1].height));
         // Within reach of the target: never a sliver and never a giant.
