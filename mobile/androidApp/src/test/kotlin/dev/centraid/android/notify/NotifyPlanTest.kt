@@ -24,6 +24,24 @@ class NotifyPlanTest {
         assertEquals(NotifyPlan.Gate.DENIED, NotifyPlan.afterAsk(false))
     }
 
+    @Test
+    fun anAlarmThatIsJustDueAndNotYetSoundedSurvivesAResync() {
+        // 18:15 came and the inexact alarm has not run yet; Rust's set no longer names it.
+        val due = item("task|due", at = 1_000L)
+        val plan = NotifyPlan.reconcile(emptyList(), emptyList(), listOf("task|due"), emptyList(), 1_000L + 60_000L, recorded = listOf(due))
+        assertEquals(emptyList<String>(), plan.removePending)
+        assertEquals(listOf(due), NotifyPlan.kept(emptyList(), 1_000L + 60_000L, plan.late))
+    }
+
+    @Test
+    fun anAlarmOverdueByMoreThanTheGraceIsTakenDown() {
+        val old = item("task|old", at = 1_000L)
+        val now = 1_000L + NotifyPlan.LATE_GRACE_MS + 1
+        val plan = NotifyPlan.reconcile(emptyList(), emptyList(), listOf("task|old"), emptyList(), now, recorded = listOf(old))
+        assertEquals(listOf("task|old"), plan.removePending)
+        assertEquals(emptyList<PendingNotification>(), NotifyPlan.kept(emptyList(), now, plan.late))
+    }
+
     private fun item(id: String, at: Long = 10_000L, immediate: Boolean = false, title: String = "t") =
         PendingNotification(notification_id = id, fire_at_ms = at, immediate = immediate, title = title)
 
