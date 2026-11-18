@@ -210,6 +210,30 @@ fn the_reminder_row_says_it_sounds_at_nine_for_a_date_with_no_time() {
     assert_eq!(reminder.note, "Delivered on your phone.");
 }
 
+/// THE HINT NAMES 09:00 THE WAY THE PHONE WRITES TIME: "9:00 AM" on a 12-hour phone.
+#[test]
+fn the_date_only_hint_says_nine_in_the_phones_hour_cycle() {
+    let mut d = driver();
+    d.call(wire::screen_request::Kind::Environment(wire::Environment {
+        locale: "en".to_owned(),
+        hour_cycle_12: true,
+        ..Default::default()
+    }));
+    let dated = add(
+        &d,
+        act::reminders::AddTask {
+            title: "Bins".into(),
+            due: due(&day(&d, 2)),
+            remind_before_min: Field::Is(0),
+            ..Default::default()
+        },
+    );
+    let i = open(&mut d, &dated);
+    let note = field(d.view(i), "reminder").note.clone();
+    assert!(note.contains("sounds at 9:00 AM that day"), "{note}");
+    assert!(!note.contains("09:00"), "{note}");
+}
+
 #[test]
 fn an_undated_task_opens_pickers_on_today_and_a_reminder_needs_a_due() {
     let mut d = driver();

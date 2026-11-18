@@ -1084,7 +1084,13 @@ impl Editor {
             reminders,
             // AN ALERT NEEDS A MOMENT: an all-day event never sounds one, and the row says so.
             reminder_note: if draft.all_day {
-                notify_words::all_day_event_alert(locale)
+                fill(
+                    &notify_words::all_day_event_alert(locale),
+                    &[(
+                        "time",
+                        &civil::time_for(locale, centraid_vault::alerts::DAY_ALERT_TIME, cycle),
+                    )],
+                )
             } else if draft.reminder_key == REMINDER_NONE {
                 String::new()
             } else {

@@ -1466,7 +1466,13 @@ fn fields(
         note: if !dated {
             words::reminder_needs_due(locale)
         } else if task.due_time.is_empty() {
-            notify_words::date_only_task_alert(locale)
+            fill(
+                &notify_words::date_only_task_alert(locale),
+                &[(
+                    "time",
+                    &civil::time_for(locale, centraid_vault::alerts::DAY_ALERT_TIME, cycle),
+                )],
+            )
         } else {
             // WHAT THE PHONE SAYS ABOUT ALERTS (#1188, NA1): a timed reminder always sounds at its time.
             alert.line.unwrap_or_else(|| words::reminder_note_a(locale))
