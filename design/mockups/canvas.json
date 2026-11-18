@@ -913,22 +913,6 @@
       "x": 470,
       "y": 0
     },
-    "IconConcepts.dc.html": {
-      "h": 980,
-      "page": "archive",
-      "title": "Icon round two (not chosen)",
-      "w": 1200,
-      "x": 0,
-      "y": 0
-    },
-    "IconMarks.dc.html": {
-      "h": 980,
-      "page": "archive",
-      "title": "Icon round three (Cradle chosen from here)",
-      "w": 1200,
-      "x": 1280,
-      "y": 0
-    },
     "ImportReminders.dc.html": {
       "h": 844,
       "page": "light",
@@ -2415,14 +2399,6 @@
       "title": "1 · Welcome (onboarding) · dark",
       "w": 390,
       "x": 0,
-      "y": 0
-    },
-    "WheelIcon.dc.html": {
-      "h": 1100,
-      "page": "archive",
-      "title": "The Wheel (replaced by four quarters)",
-      "w": 1200,
-      "x": 3840,
       "y": 0
     },
     "ChatDownload.dc.html": {
@@ -4065,10 +4041,7 @@
     "DesignRules.dc.html",
     "Decisions.dc.html",
     "CodeMap.dc.html",
-    "IconConcepts.dc.html",
-    "IconMarks.dc.html",
     "CradlePalettes.dc.html",
-    "WheelIcon.dc.html",
     "QuartersIcon.dc.html",
     "Backup.dc.html",
     "Welcome.dc.html",
