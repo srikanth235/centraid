@@ -359,7 +359,7 @@ fn event_title(locale: Locale, event: &wire::AgendaEvent) -> String {
 }
 
 /// The core's own today, in the device's zone: the day-context query.
-fn today_of(ctx: &Ctx) -> Option<String> {
+pub(crate) fn today_of(ctx: &Ctx) -> Option<String> {
     match read::read(
         ctx,
         load::calendar::DayContext::default(),
@@ -610,7 +610,7 @@ fn notes(ctx: &Ctx) -> Made {
 
 /// "Edited yesterday", "Edited today", else "Edited Wed 11 March"; empty for a
 /// note with no edit day. `today` is the core's day; without it the day is named.
-fn edited_line(locale: Locale, day: &str, today: Option<&str>) -> String {
+pub(crate) fn edited_line(locale: Locale, day: &str, today: Option<&str>) -> String {
     if day.is_empty() {
         return String::new();
     }

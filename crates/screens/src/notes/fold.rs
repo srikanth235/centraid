@@ -87,16 +87,15 @@ struct Parts<'a> {
     /// The words matched only in an earlier version (#1185): the row says so and opens the
     /// note's Earlier versions.
     earlier: bool,
+    /// The member's today, when it is known: the day the row names reads "today" or "yesterday".
+    today: Option<&'a str>,
 }
 
 fn note_row(locale: Locale, parts: Parts<'_>) -> wire::NotesNoteRow {
     let title = title_of(locale, parts.title, parts.preview);
+    // "Edited today" and "Edited yesterday", else the day (FirstOpenNotes): the Home tile's words.
     let edited = parts.local_day.get(..10).map_or_else(String::new, |day| {
-        format!(
-            "{} {}",
-            words::edited(locale),
-            civil::day_month(locale, day)
-        )
+        crate::shell::tiles::edited_line(locale, day, parts.today)
     });
     let meta = std::iter::once(edited)
         .chain(
@@ -185,7 +184,7 @@ pub fn about_chips(locale: Locale, cards: &[wire::NotesCard]) -> Vec<wire::Notes
 
 /// A library (or trash) row.
 #[must_use]
-pub fn row(locale: Locale, row: &wire::NotesRow) -> wire::NotesNoteRow {
+pub fn row(locale: Locale, row: &wire::NotesRow, today: Option<&str>) -> wire::NotesNoteRow {
     let local_day = if row.updated_local_day.is_empty() {
         &row.created_local_day
     } else {
@@ -206,13 +205,14 @@ pub fn row(locale: Locale, row: &wire::NotesRow) -> wire::NotesNoteRow {
             runs: Vec::new(),
             about: about_chips(locale, &row.about),
             earlier: false,
+            today,
         },
     )
 }
 
 /// A search hit: its snippet's matches are runs.
 #[must_use]
-pub fn hit(locale: Locale, hit: &wire::NotesSearchHit) -> wire::NotesNoteRow {
+pub fn hit(locale: Locale, hit: &wire::NotesSearchHit, today: Option<&str>) -> wire::NotesNoteRow {
     let local_day = if hit.updated_local_day.is_empty() {
         &hit.created_local_day
     } else {
@@ -233,6 +233,7 @@ pub fn hit(locale: Locale, hit: &wire::NotesSearchHit) -> wire::NotesNoteRow {
             runs: runs_of(&hit.snippet),
             about: Vec::new(),
             earlier: hit.in_earlier_version,
+            today,
         },
     )
 }
@@ -591,13 +592,13 @@ mod tests {
             in_earlier_version: earlier,
             ..wire::NotesSearchHit::default()
         };
-        let now = hit(Locale::En, &found(false));
+        let now = hit(Locale::En, &found(false), None);
         assert_eq!(now.meta, "Edited Wed 4 March");
         assert_eq!(
             now.route.as_ref().map(|route| route.screen.as_str()),
             Some(crate::notes::EDITOR)
         );
-        let before = hit(Locale::En, &found(true));
+        let before = hit(Locale::En, &found(true), None);
         assert_eq!(before.meta, "In an earlier version · Edited Wed 4 March");
         assert!(before.accessibility_label.contains("In an earlier version"));
         let route = before.route.as_ref().expect("a route");

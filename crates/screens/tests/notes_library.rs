@@ -840,6 +840,14 @@ fn first_open_is_a_card_over_the_starter_notes_and_the_first_note_of_the_members
         ["Link with [[", "This note is yours"],
         "the newest starter first"
     );
+    // WRITTEN TODAY, SO IT SAYS SO (FirstOpenNotes): "Edited today", not the date.
+    let metas: Vec<&str> = data
+        .sections
+        .iter()
+        .flat_map(|section| section.rows.iter())
+        .map(|row| row.meta.as_str())
+        .collect();
+    assert_eq!(metas, ["Edited today", "Edited today"]);
 
     // THE MEMBER'S OWN NOTE ends it: no card, and the section is the library's.
     arrange(

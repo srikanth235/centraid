@@ -101,6 +101,8 @@ pub(super) struct Library {
     /// while a filter leaves nothing).
     tags: Vec<wire::NotesTagFacet>,
     pub search: Search,
+    /// The member's today, read with the shelf, so a row can say "Edited today".
+    today: Option<String>,
 }
 
 impl Library {
@@ -119,6 +121,7 @@ impl Library {
             asked: String::new(),
             tags: Vec::new(),
             search: Search::default(),
+            today: None,
         }
     }
 
@@ -141,6 +144,7 @@ impl Library {
     /// Read the shelf (or search's answer); `wider` says the window grew, so a read that did not
     /// come keeps the rows already shown under the "more did not load" note.
     fn read(&mut self, ctx: &Ctx, wider: bool) {
+        self.today = crate::shell::tiles::today_of(ctx);
         if self.search.active() {
             self.read_search(ctx);
             return;
@@ -508,7 +512,7 @@ impl Library {
             .notes
             .iter()
             .filter(|row| self.shows(row))
-            .map(|row| fold::row(locale, row))
+            .map(|row| fold::row(locale, row, self.today.as_deref()))
             .collect();
         let count = rows.len();
         let window = if self.window == 0 {
@@ -586,7 +590,7 @@ impl Library {
         let rows: Vec<wire::NotesNoteRow> = found
             .hits
             .iter()
-            .map(|hit| fold::hit(locale, hit))
+            .map(|hit| fold::hit(locale, hit, self.today.as_deref()))
             .collect();
         state.results = Some(wire::NotesSearchResults {
             rows,
