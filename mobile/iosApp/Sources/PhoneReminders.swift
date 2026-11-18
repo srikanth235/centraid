@@ -98,6 +98,8 @@ enum PhoneReminders {
         switch EKEventStore.authorizationStatus(for: .reminder) {
         case .restricted: failed.restricted = true
         case .writeOnly: failed.limited = true
+        // NEVER ASKED is not a refusal: the screens keep offering the import, whose tap asks.
+        case .notDetermined: failed.reason = EffectReason.unavailable
         default: failed.denied = true
         }
         return failed

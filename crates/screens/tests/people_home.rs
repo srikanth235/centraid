@@ -652,6 +652,30 @@ fn nobody_overdue_is_no_reconnect_line() {
 /// refused the contacts: no import that fails again, and no "Or tap +" hint.
 #[test]
 fn a_phone_that_refused_its_contacts_gets_add_person_on_the_card_and_no_hint() {
+    let empty = first_open_after_failed_read(wire::EffectFailed {
+        denied: true,
+        ..Default::default()
+    });
+    assert_eq!(empty.import_source, wire::ImportSource::Unspecified as i32);
+    assert_eq!(empty.action_label, "Add person");
+    assert_eq!(empty.hint, "");
+}
+
+/// A PHONE THAT WAS NEVER ASKED IS NOT A PHONE THAT REFUSED: the silent read the first launch makes
+/// fails without a grant's state, and the card keeps the import and the hint.
+#[test]
+fn a_phone_never_asked_for_its_contacts_still_offers_the_import_and_the_hint() {
+    let empty = first_open_after_failed_read(wire::EffectFailed {
+        reason: "unavailable".to_owned(),
+        ..Default::default()
+    });
+    assert_eq!(empty.import_source, wire::ImportSource::Contacts as i32);
+    assert_eq!(empty.action_label, "");
+    assert_eq!(empty.hint, "Or tap + to add one.");
+}
+
+/// The first-open card after the phone answers a contacts read with `failed`.
+fn first_open_after_failed_read(failed: wire::EffectFailed) -> wire::EmptyState {
     let mut d = clean();
     let i = begin(&mut d);
     let empty = empty_of(&home_state(d.view(i)).page).clone();
@@ -688,12 +712,6 @@ fn a_phone_that_refused_its_contacts_gets_add_person_on_the_card_and_no_hint() {
             Some(wire::effect::Kind::ContactsRead(_))
         )
     });
-    d.answer_effect(wire::effect_result::Outcome::Failed(wire::EffectFailed {
-        denied: true,
-        ..Default::default()
-    }));
-    let empty = empty_of(&home_state(d.view(i)).page).clone();
-    assert_eq!(empty.import_source, wire::ImportSource::Unspecified as i32);
-    assert_eq!(empty.action_label, "Add person");
-    assert_eq!(empty.hint, "");
+    d.answer_effect(wire::effect_result::Outcome::Failed(failed));
+    empty_of(&home_state(d.view(i)).page).clone()
 }

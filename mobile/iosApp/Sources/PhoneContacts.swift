@@ -45,10 +45,11 @@ enum PhoneContacts {
     private static func denied() -> Centraid_Core_V1_EffectFailed {
         var failed = Centraid_Core_V1_EffectFailed()
         failed.reason = EffectReason.denied
-        if CNContactStore.authorizationStatus(for: .contacts) == .restricted {
-            failed.restricted = true
-        } else {
-            failed.denied = true
+        switch CNContactStore.authorizationStatus(for: .contacts) {
+        case .restricted: failed.restricted = true
+        // NEVER ASKED is not a refusal: the screens keep offering the import, whose tap asks.
+        case .notDetermined: failed.reason = EffectReason.unavailable
+        default: failed.denied = true
         }
         return failed
     }
