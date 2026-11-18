@@ -60,14 +60,12 @@ catalog! {
     plain edited = ("Edited", "Edited");
     plain editor_body_placeholder = ("Start writing", "Start writing");
     plain editor_title_placeholder = ("Title", "Title");
-    plain empty_all = ("No documents yet.", "No documents yet.");
     plain empty_all_action = ("Add a document", "Add a document");
     plain empty_body = ("This document is empty.", "This document is empty.");
     plain empty_filtered = ("Nothing matches these filters.", "Nothing matches these filters.");
     plain empty_folder = ("This folder is empty.", "This folder is empty.");
     plain empty_folders = ("No folders yet.", "No folders yet.");
     plain empty_folders_action = ("New folder", "New folder");
-    plain empty_recent = ("Nothing added yet.", "Nothing added yet.");
     plain empty_search = ("Nothing matches that.", "Nothing matches that.");
     plain empty_search_body = ("Try fewer words.", "Try fewer words.");
     plain empty_starred = ("Nothing starred yet.", "Nothing starred yet.");
@@ -94,6 +92,7 @@ catalog! {
     plain filter_label = ("Label", "Label");
     plain filter_modified = ("Modified", "Modified");
     plain filter_type = ("Type", "Type");
+    plain first_open = ("Documents you own, kept in your vault.", "Documents you own, kept in your vault.");
     plain folder_empty_count = ("Empty", "Empty");
     plain folder_placeholder = ("Folder name", "Folder name");
     plain followed_footer = ("Files added, changed or removed in these folders reach Docs. Stopping keeps every document.", "Files added, changed or removed in these folders reach Docs. Stopping keeps every document.");

@@ -171,9 +171,17 @@ impl Home {
         match loaded {
             Loaded::Spending(answer) if answer.empty => Some(day_one(locale)),
             Loaded::Cashflow(answer) if used_series(answer).is_empty() => Some(day_one(locale)),
-            Loaded::Activity { activity, .. } => activity.rows.is_empty().then(|| {
+            Loaded::Activity {
+                activity, accounts, ..
+            } => activity.rows.is_empty().then(|| {
                 let filtered = !self.account_id.is_empty() || !self.category_filter.is_empty();
-                activity_empty(locale, filtered)
+                // FIRST OPEN: no account at all, so nothing was ever imported (a month with nothing
+                // in it is another sentence).
+                if !filtered && accounts.on_budget.is_empty() && accounts.off_budget.is_empty() {
+                    first_open(locale)
+                } else {
+                    activity_empty(locale, filtered)
+                }
             }),
             _ => None,
         }
@@ -669,6 +677,15 @@ fn activity_empty(locale: Locale, filtered: bool) -> wire::EmptyState {
             action_label: words::import_action(locale),
             ..Default::default()
         }
+    }
+}
+
+/// FirstOpenMoney: what Money is for, and the one import.
+fn first_open(locale: Locale) -> wire::EmptyState {
+    wire::EmptyState {
+        headline: words::first_open(locale),
+        action_label: words::first_open_action(locale),
+        ..Default::default()
     }
 }
 

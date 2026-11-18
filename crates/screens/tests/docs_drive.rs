@@ -1113,3 +1113,19 @@ fn a_rename_over_a_document_that_changed_elsewhere_is_refused_and_reload_shows_i
     assert_eq!(rename.title, "Elsewhere");
     assert_eq!(rename.status_label, "Your text is in Earlier versions.");
 }
+
+#[test]
+fn first_open_on_recents_says_what_docs_is_for_with_the_add_as_its_one_action() {
+    // A FIRST VAULT holds no document, and Docs opens on Recents.
+    let mut d = Driver::first_vault(docs::runtime());
+    d.start();
+    let i = root(&d);
+    let empty = drive_empty(d.view(i));
+    assert_eq!(empty.headline, "Documents you own, kept in your vault.");
+    assert_eq!(empty.body, "");
+    assert_eq!(empty.action_label, "Add a document");
+    assert_eq!(
+        state(&d, i).empty_action,
+        wire::docs_drive_data::EmptyAction::Add as i32
+    );
+}

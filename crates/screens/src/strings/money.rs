@@ -138,6 +138,8 @@ catalog! {
         "Transactions in one .csv file, for any spreadsheet."
     );
     plain export_title = ("Export transactions", "Export transactions");
+    plain first_open = ("Your statements, sorted and searchable.", "Your statements, sorted and searchable.");
+    plain first_open_action = ("Import a statement", "Import a statement");
     plain fact_account = ("Account", "Account");
     plain fact_bank_type = ("Type", "Type");
     plain fact_bank_wrote = ("Bank wrote", "Bank wrote");

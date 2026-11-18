@@ -433,9 +433,11 @@ fn empty_of(drive: &Drive, locale: Locale, search: bool) -> (wire::EmptyState, E
             ),
             EmptyAction::None,
         ),
+        // FIRST OPEN (FirstOpenDocs): Recents is where Docs opens, and a drive with nothing in it
+        // says what it is for, with the add as the card's one action.
         Dest::Recent => (
             say(
-                words::empty_recent(locale),
+                words::first_open(locale),
                 none,
                 words::empty_all_action(locale),
             ),
@@ -460,7 +462,7 @@ fn empty_of(drive: &Drive, locale: Locale, search: bool) -> (wire::EmptyState, E
         // THE WHOLE DRIVE IS EMPTY: Docs' day one.
         _ => (
             say(
-                words::empty_all(locale),
+                words::first_open(locale),
                 none,
                 words::empty_all_action(locale),
             ),

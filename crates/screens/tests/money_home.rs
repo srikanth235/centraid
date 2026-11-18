@@ -482,3 +482,15 @@ fn moving_a_tab_reads_that_tab_and_keeps_the_month() {
     assert_eq!(state.band[1].key, "spending");
     assert!(state.band[1].current);
 }
+
+#[test]
+fn first_open_says_what_money_is_for_and_a_month_with_nothing_is_another_sentence() {
+    // A FIRST VAULT holds no account: the card is FirstOpenMoney's.
+    let mut d = Driver::first_vault(centraid_screens::money::runtime());
+    d.start();
+    let i = land_on(&mut d, wire::MoneyDestination::Activity);
+    let empty = home_empty(d.view(i));
+    assert_eq!(empty.headline, "Your statements, sorted and searchable.");
+    assert_eq!(empty.action_label, "Import a statement");
+    assert_eq!(empty.body, "");
+}
