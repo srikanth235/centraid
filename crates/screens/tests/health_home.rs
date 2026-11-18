@@ -43,6 +43,11 @@ fn nothing_connected_every_tab_is_one_sentence_and_connect_naming_the_phones_sto
     );
     assert_eq!(empty.action_label, "Turn on Apple Health");
     assert!(state.content.is_none());
+    // FirstOpenHealth: the page is the app's, titled "Health"; the band's first tab is Summary.
+    assert_eq!(
+        state.chrome.as_ref().map(|c| c.title.as_str()),
+        Some("Health")
+    );
     let band: Vec<&str> = state.band.iter().map(|tab| tab.label.as_str()).collect();
     assert_eq!(band, ["Summary", "Trends", "Workouts", "More"]);
     let more: Vec<&str> = state.more_rows.iter().map(|row| row.key.as_str()).collect();

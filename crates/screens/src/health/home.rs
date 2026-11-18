@@ -1003,7 +1003,13 @@ impl Screen for Home {
                         Vec::new()
                     },
                     chrome: Some(wire::HealthHomeChrome {
-                        title: self.title(locale),
+                        // A STORE NOT TURNED ON IS THE APP'S OWN FIRST OPEN (FirstOpenHealth): its
+                        // title is the app's, and Summary is the tab once there is something to sum.
+                        title: if self.known_connected {
+                            self.title(locale)
+                        } else {
+                            words::app_title(locale)
+                        },
                         retry: words::retry(locale),
                         home: words::home(locale),
                         more_title: words::more_title(locale),
