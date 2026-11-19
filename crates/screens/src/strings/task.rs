@@ -140,6 +140,7 @@ catalog! {
     plain repeats_yearly = ("Yearly", "Yearly");
     plain retry = ("Try again", "Try again");
     plain search_label = ("Search tasks", "Search tasks");
+    plain search_no_match_body = ("Try fewer words, or part of a title.", "Try fewer words, or part of a title.");
     plain search_placeholder = ("Search tasks", "Search tasks");
     plain section_added = ("Section added", "Section added");
     plain show_more = ("Show more", "Show more");

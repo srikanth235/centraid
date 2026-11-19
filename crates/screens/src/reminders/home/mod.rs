@@ -654,7 +654,7 @@ impl Screen for Home {
             },
             || wire::EmptyState {
                 headline: words::empty_no_match(locale),
-                body: words::empty_no_match_body(locale),
+                body: task::search_no_match_body(locale),
                 ..wire::EmptyState::default()
             },
         );

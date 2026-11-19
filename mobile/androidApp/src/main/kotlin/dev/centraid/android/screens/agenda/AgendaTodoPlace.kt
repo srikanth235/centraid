@@ -114,7 +114,10 @@ internal fun AgendaTodoPlace(
     }
     // Nothing but the Inbox row in My Lists and an invitation to speak: the day-one screen.
     if (todo.groups.isEmpty() && todo.projects.all { it.key == "inbox" } && empty != null && empty.headline.isNotEmpty()) {
+        // EmptyReminders / AndroidEmptyReminders: the smart-list tiles stand over the card, with
+        // their zero counts, and no list link under it (a new list is reached from the lists).
         Column(Modifier.fillMaxSize()) {
+            if (todo.smart_lists.isNotEmpty()) AgendaSmartLists(todo.smart_lists, actions.onOpen)
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 EmptyStateView(
                     empty,
@@ -123,13 +126,6 @@ internal fun AgendaTodoPlace(
                     } else {
                         null
                     },
-                )
-            }
-            if (empty.action_label.isEmpty() && todo.new_project_label.isNotEmpty()) {
-                KitLink(
-                    label = todo.new_project_label,
-                    onClick = openNewProject,
-                    modifier = Modifier.testTag("agenda-new-project").padding(horizontal = 8.dp),
                 )
             }
         }
