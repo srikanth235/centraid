@@ -843,10 +843,11 @@ impl EventPage {
                     },
                     wire::AgendaAction {
                         key: ACTION_CANCEL.to_owned(),
-                        // THE BOARD'S WORD, with its ellipsis: a confirmation follows.
+                        // THE BOARD'S WORD, with its ellipsis: a confirmation follows. It is an
+                        // outline like Edit; only Move to trash is red.
                         label: words::cancel_action(locale),
                         enabled: true,
-                        destructive: true,
+                        destructive: false,
                         accessibility_label: words::a11y_cancel(locale),
                         route: None,
                     },
