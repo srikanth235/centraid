@@ -68,6 +68,7 @@ catalog! {
     plain empty_reconnect = ("Nobody is overdue.", "Nobody is overdue.");
     plain empty_chip = ("Nobody to show.", "Nobody to show.");
     plain first_open = ("The people you know, and what you write about them.", "The people you know, and what you write about them.");
+    plain touch_first_open = ("Who to reconnect with, and what is coming up.", "Who to reconnect with, and what is coming up.");
     plain first_open_hint = ("Or tap + to add one.", "Or tap + to add one.");
     plain empty_starred = ("Nobody is starred.", "Nobody is starred.");
     plain empty_touches = ("Nothing logged yet.", "Nothing logged yet.");

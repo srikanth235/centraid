@@ -36,6 +36,15 @@ pub fn day_one(locale: Locale, can_import: bool) -> wire::EmptyState {
     }
 }
 
+/// TOUCH WITH NO ONE IN PEOPLE: its own words (what Touch is for), never the People card again, and
+/// the same one way in.
+pub fn touch_day_one(locale: Locale, can_import: bool) -> wire::EmptyState {
+    wire::EmptyState {
+        headline: words::touch_first_open(locale),
+        ..day_one(locale, can_import)
+    }
+}
+
 /// A CHIP WITH NOTHING IN IT over a roster that holds people: not first open, so its own
 /// sentence, the add and no import.
 fn chip_empty(locale: Locale) -> wire::EmptyState {

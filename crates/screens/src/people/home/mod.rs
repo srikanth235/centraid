@@ -397,11 +397,14 @@ impl Home {
             H::StopDismissed(_) => self.asking_stop = false,
             H::StopConfirmed(_) => return self.stop(ctx),
             H::Star(toggled) => self.star(ctx, &toggled.party_id),
+            // THE SHEET CLOSES WHEN THE IMPORT STARTS: its outcome is on the page, not behind a dimmed sheet.
             H::ImportContacts(_) => {
+                self.sheet = wire::people_home_state::Sheet::Unspecified;
                 self.undo.clear();
                 return self.contacts.import(ctx);
             }
             H::ContactsAction(_) => {
+                self.sheet = wire::people_home_state::Sheet::Unspecified;
                 self.undo.clear();
                 if self.contacts.needs_settings(ctx) {
                     // THE PHONE SAID NO: only its own Settings can say yes.
@@ -492,7 +495,7 @@ impl Home {
         if searching {
             rows::search_empty(locale)
         } else if self.destination == wire::PeopleDestination::Touch {
-            rows::day_one(locale, can_import)
+            rows::touch_day_one(locale, can_import)
         } else {
             self.held_roster.as_ref().map_or_else(
                 || rows::day_one(locale, can_import),

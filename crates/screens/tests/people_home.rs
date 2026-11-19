@@ -503,6 +503,10 @@ fn touch_on_an_empty_vault_is_day_one() {
     let state = home_state(d.view(i));
     assert!(state.content.is_none());
     let empty = empty_of(&state.page);
+    assert_eq!(
+        empty.headline,
+        "Who to reconnect with, and what is coming up."
+    );
     assert_eq!(empty.action_label, "");
     assert_eq!(empty.hint, "Or tap + to add one.");
     assert_eq!(
