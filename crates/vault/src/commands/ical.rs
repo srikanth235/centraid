@@ -95,7 +95,13 @@ pub fn compact_date(value: &str) -> Option<String> {
     if bytes[4] != b'-' || bytes[7] != b'-' {
         return None;
     }
-    Some(format!("{}{}{}", &day[..4], &day[5..7], &day[8..10]))
+    // `get`, not slicing: a multibyte character inside the ten bytes must not panic.
+    Some(format!(
+        "{}{}{}",
+        day.get(..4)?,
+        day.get(5..7)?,
+        day.get(8..10)?
+    ))
 }
 
 /// `YYYYMMDDTHHMMSS` of a wall clock.

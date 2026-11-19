@@ -38,8 +38,8 @@ pub use csv::{AmountSpec, CsvOptions, CsvProfile, SavedProfile, SignChoice, read
 pub use date::DateOrder;
 pub use ofx::{AccountRef, OfxFile, OfxStatement, StatementRefusal, read_ofx, resolve_account};
 pub use plan::{
-    ExistingTxn, ImportPlan, PlanRow, PlanTotals, RowVerdict, SIMILARITY_THRESHOLD,
-    existing_window, plan,
+    ExistingTxn, ImportPlan, MAX_COMPARISONS, PlanRow, PlanTotals, RowVerdict,
+    SIMILARITY_THRESHOLD, existing_window, plan, plan_within,
 };
 
 /// The most data rows one statement may hold (R-1099-7).

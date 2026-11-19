@@ -958,3 +958,47 @@ fn year_three_volume_reads_plans_and_replans_to_all_already_in() {
     // Byte-identical across runs.
     assert_eq!(year3(1099), accounts);
 }
+
+/// THE FUZZY PASS LOOKS AT A BOUNDED NUMBER OF PAIRS (#1202): thirty rows at one price against thirty
+/// held at that price are 900 pairs, and a budget of 100 is exactly what is spent. The count is what is
+/// asserted, never a clock, and the rows are still planned, with no proposal past the budget.
+#[test]
+fn the_fuzzy_pass_spends_no_more_pairs_than_its_budget() {
+    let mut text =
+        String::from("Details,Posting Date,Description,Amount,Type,Balance,Check or Slip #,\n");
+    for n in 0..30 {
+        text.push_str(&format!(
+            "DEBIT,01/10/2024,\"TRANSIT FARE {n}\",-4.50,DEBIT_CARD,100.00,,\n"
+        ));
+    }
+    let statement = read_csv(text.as_bytes(), &CsvOptions::new("USD")).expect("a statement");
+    let held: Vec<ExistingTxn> = (0..30)
+        .map(|n| ExistingTxn {
+            txn_id: format!("held-{n}"),
+            external_id: Some(format!("csv:{n}")),
+            posted_on: "2024-01-10".into(),
+            amount_minor: 450,
+            direction: Direction::Debit,
+            description: format!("TRANSIT FARE {n}"),
+            display_name: None,
+            void: false,
+            trashed: false,
+        })
+        .collect();
+    let plan = |budget| {
+        centraid_apps_money::import::plan_within(
+            &statement,
+            "acct-1",
+            "USD",
+            &held,
+            &[],
+            "2024-06-30",
+            budget,
+        )
+    };
+    let (_, spent) = plan(100);
+    assert_eq!(spent, 100, "the budget is spent and no more");
+    let (full, spent) = plan(1_000_000);
+    assert_eq!(spent, 900, "thirty rows against thirty held");
+    assert_eq!(full.rows.len(), 30);
+}
