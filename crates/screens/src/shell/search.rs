@@ -31,6 +31,7 @@ use super::policy;
 use super::routes;
 use super::row_routes::{self, RowRef};
 use crate::catalog::load;
+use crate::kit::civil;
 use crate::kit::read::{self, Page, Reading};
 use crate::kit::search as ask;
 use crate::screen::{Ctx, Screen};
@@ -116,11 +117,8 @@ fn date_of(term: &str) -> Option<(Option<u32>, Option<u32>, Option<u32>)> {
     (month.is_some()).then_some((year, month, day))
 }
 
-/// The workouts whose local day is the date `term` names (Health's page only).
-fn date_hits(ctx: &Ctx, term: &str) -> Vec<wire::VaultSearchHit> {
-    let Some((year, month, day)) = date_of(term) else {
-        return Vec::new();
-    };
+/// Health's recent workouts, the pool a date and a row's day are read from.
+fn recent_workouts(ctx: &Ctx) -> Vec<wire::HealthWorkoutRow> {
     let Reading::Data(workouts) = read::read(
         ctx,
         load::health::Workouts {
@@ -135,9 +133,16 @@ fn date_hits(ctx: &Ctx, term: &str) -> Vec<wire::VaultSearchHit> {
     ) else {
         return Vec::new();
     };
+    workouts.workouts
+}
+
+/// The workouts whose local day is the date `term` names (Health's page only).
+fn date_hits(workouts: &[wire::HealthWorkoutRow], term: &str) -> Vec<wire::VaultSearchHit> {
+    let Some((year, month, day)) = date_of(term) else {
+        return Vec::new();
+    };
     workouts
-        .workouts
-        .into_iter()
+        .iter()
         .filter(|workout| {
             let mut parts = workout.local_start.get(..10).unwrap_or_default().split('-');
             let (y, m, d): (Option<u32>, Option<u32>, Option<u32>) = (
@@ -152,11 +157,22 @@ fn date_hits(ctx: &Ctx, term: &str) -> Vec<wire::VaultSearchHit> {
         .map(|workout| wire::VaultSearchHit {
             app_id: "health".to_owned(),
             entity: "workout".to_owned(),
-            id: workout.activity_id,
-            title: workout.kind_label,
+            id: workout.activity_id.clone(),
+            title: workout.kind_label.clone(),
             ..wire::VaultSearchHit::default()
         })
         .collect()
+}
+
+/// A WORKOUT ROW NAMES ITS DAY (#1202): five runs read "Run / Workout" five times and could not be
+/// told apart until opened. Each hit on a workout takes the local day the workout began, from
+/// the same read the date search uses; the row's second line then says it.
+fn dated_workouts(hits: &mut [wire::VaultSearchHit], workouts: &[wire::HealthWorkoutRow]) {
+    for hit in hits.iter_mut().filter(|hit| hit.entity == "workout") {
+        if let Some(workout) = workouts.iter().find(|w| w.activity_id == hit.id) {
+            hit.subtitle_local_day = workout.local_start.get(..10).unwrap_or_default().to_owned();
+        }
+    }
 }
 
 /// The metrics whose name holds every word of `term`, as hits that open that metric.
@@ -296,9 +312,14 @@ impl Search {
                 // A metric is found by its name, which no index holds: Health's group lists it
                 // first (it is what the name asks for), then the workouts the index found.
                 let mut hits = metric_hits(ctx.locale(), self.asked());
+                let workouts = if self.scope.is_some() {
+                    recent_workouts(ctx)
+                } else {
+                    Vec::new()
+                };
                 if self.scope.is_some() {
                     // A workout is also found by its date, which the index does not hold.
-                    for dated in date_hits(ctx, self.asked()) {
+                    for dated in date_hits(&workouts, self.asked()) {
                         if !found.hits.iter().any(|hit| hit.id == dated.id) {
                             hits.push(dated);
                         }
@@ -306,6 +327,7 @@ impl Search {
                 }
                 hits.append(&mut found.hits);
                 found.hits = hits;
+                dated_workouts(&mut found.hits, &workouts);
                 if let Some(scope) = self.scope {
                     found.hits.retain(|hit| hit.app_id == scope);
                 }
@@ -428,6 +450,20 @@ fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Denied {
 }
 
 /// The kind a row is, in a word; empty for an entity this search has no word for.
+/// A workout's kind word with the day it was done, when the hit knows it: `Workout · Wed 4 Nov`.
+fn with_day(locale: Locale, kind: String, hit: &wire::VaultSearchHit) -> String {
+    if hit.entity != "workout" || hit.subtitle_local_day.trim().is_empty() {
+        return kind;
+    }
+    fill(
+        &words::home_search_kind_when(locale),
+        &[
+            ("kind", &kind),
+            ("when", &civil::short_day(locale, &hit.subtitle_local_day)),
+        ],
+    )
+}
+
 fn kind_label(locale: Locale, entity: &str) -> String {
     match entity {
         "note" => words::search_kind_note(locale),
@@ -537,7 +573,7 @@ fn fold(locale: Locale, term: &str, found: &wire::VaultSearch) -> wire::HomeSear
                     });
                     continue;
                 }
-                let kind = kind_label(locale, &hit.entity);
+                let kind = with_day(locale, kind_label(locale, &hit.entity), hit);
                 // WORDS ONLY AN EARLIER VERSION HELD: the row says so and opens that item's
                 // Earlier versions, which is where the words can be read (#1185).
                 let earlier = hit
@@ -748,6 +784,37 @@ mod tests {
         let (label, route, _, _) = screen_of("notes", "n2");
         assert!(label.is_empty());
         assert_eq!(route.as_deref(), Some(crate::notes::EDITOR));
+    }
+
+    /// FIVE RUNS MUST NOT READ AS FIVE COPIES OF ONE (#1202): each workout row names the day it was
+    /// done, so a search for "run" is five rows a member can tell apart.
+    #[test]
+    fn workouts_of_one_kind_are_told_apart_by_their_day() {
+        let workout = |id: &str, local_start: &str| wire::HealthWorkoutRow {
+            activity_id: id.to_owned(),
+            kind_label: "Run".to_owned(),
+            local_start: local_start.to_owned(),
+            ..Default::default()
+        };
+        let pool = [
+            workout("w1", "2026-11-04T07:10:00"),
+            workout("w2", "2026-11-06T07:12:00"),
+        ];
+        let mut hits = vec![
+            hit("workout", "w1", "Run", "health"),
+            hit("workout", "w2", "Run", "health"),
+        ];
+        dated_workouts(&mut hits, &pool);
+        let answer = data(hits);
+        let rows = &answer.groups[0].rows;
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].kind_label, "Workout · Wed 4 Nov");
+        assert_eq!(rows[1].kind_label, "Workout · Fri 6 Nov");
+        assert_ne!(rows[0].accessibility_label, rows[1].accessibility_label);
+        // A workout the pool does not hold keeps the plain kind.
+        let mut lone = vec![hit("workout", "w9", "Run", "health")];
+        dated_workouts(&mut lone, &pool);
+        assert_eq!(data(lone).groups[0].rows[0].kind_label, "Workout");
     }
 
     #[test]

@@ -29,6 +29,7 @@ catalog! {
     plain home_search_chat_group = ("Chats", "Chats");
     plain home_search_group = ("{name}, {n} results", "{name}, {n} results");
     plain home_search_group_one = ("{name}, 1 result", "{name}, 1 result");
+    plain home_search_kind_when = ("{kind} · {when}", "{kind} · {when}");
     plain home_search_loading = ("Searching", "Searching");
     plain home_search_no_match_body = ("Nothing in this vault matches “{term}”.", "Nothing in this vault matches “{term}”.");
     plain home_search_no_match_headline = ("No matches", "No matches");
