@@ -156,15 +156,15 @@ struct FlowChips: View {
     let spoken: (String) -> String
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(items, id: \.id) { item in
-                    KitChip(label: item.label, selected: true, spoken: spoken(item.label)) {
-                        onTap(item.id)
-                    }
+        // WRAPPING, NOT SCROLLING SIDEWAYS (#1202): a chip past the edge was cut with nothing to say so.
+        KitFlow(spacing: 6) {
+            ForEach(items, id: \.id) { item in
+                KitChip(label: item.label, selected: true, spoken: spoken(item.label)) {
+                    onTap(item.id)
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

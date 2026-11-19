@@ -21,6 +21,7 @@ struct DocsDriveView: View {
     let onHome: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// A folder is a pushed page; the drive at its tab is an app place with the band.
     private var isFolderPage: Bool {
@@ -324,8 +325,11 @@ struct DocsDriveView: View {
         _ rows: [Centraid_Core_V1_DocsRowView],
         _ state: Centraid_Core_V1_DocsDriveState
     ) -> some View {
-        LazyVGrid(
-            columns: Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .top), count: 3),
+        // THREE ACROSS, TWO FROM THE REFLOW SIZE, ONE AT ACCESSIBILITY SIZES (#1202): a tile a third
+        // of the screen wide broke every file name mid-word and cut its kind and size.
+        let across = dynamicTypeSize.isAccessibilitySize ? 1 : (dynamicTypeSize >= Theme.reflowSize ? 2 : 3)
+        return LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .top), count: across),
             spacing: 16
         ) {
             ForEach(folders, id: \.folderID) { node in
