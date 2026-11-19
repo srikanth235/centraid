@@ -732,6 +732,10 @@ struct AgendaSectionView: View {
     /// The date column's width and the gap to the rows beside it.
     private static let dateWidth: CGFloat = 44
     private static let dateGap: CGFloat = 8
+    /// THE DATE COLUMN'S OWN HEIGHT (#1202): the number over its weekday. A row that carries it
+    /// (a one-line birthday ribbon, an all-day event) stands at least this tall, or "Sun" ran into
+    /// the next day's "30".
+    @ScaledMetric(relativeTo: .caption) private var dateColumnHeight: CGFloat = 44
 
     var body: some View {
         if inList {
@@ -773,6 +777,7 @@ struct AgendaSectionView: View {
         if section.hasRibbon {
             ribbon
                 .padding(.leading, gutter)
+                .frame(minHeight: stacked ? 0 : dateColumnHeight, alignment: .topLeading)
                 .overlay(alignment: .topLeading) { if !stacked { dateColumn.padding(.top, 8) } }
                 .padding(.horizontal, margin)
                 .padding(.top, 8)
@@ -794,6 +799,7 @@ struct AgendaSectionView: View {
             case let .event(row):
                 AgendaEventRowView(row: row, open: open)
                     .padding(.leading, gutter)
+                    .frame(minHeight: lead == nil ? 0 : dateColumnHeight, alignment: .topLeading)
                     .overlay(alignment: .topLeading) { if let lead { lead.padding(.top, 8) } }
                     .padding(.horizontal, margin)
                     .todoPlainRow()
