@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -129,7 +130,7 @@ private fun BackupUnpairedPage(model: BackupHomeData, onOpen: (Route) -> Unit) {
     val unpaired = model.unpaired ?: return
     Column(
         Modifier
-            .fillMaxWidth()
+            .fillMaxSize()
             .background(Surface.page)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp, vertical = 16.dp)
@@ -218,7 +219,7 @@ private fun BackupPage(
     val batteryHeld = model.battery_sentence.isNotEmpty() && !ignoresBatteryOptimizations(context)
     Column(
         Modifier
-            .fillMaxWidth()
+            .fillMaxSize()
             .background(Surface.page)
             .imePadding()
             .verticalScroll(rememberScrollState())
