@@ -882,6 +882,9 @@ final class ScreenStore: ObservableObject {
         else { return }
         while let next = top.presentedViewController { top = next }
         let sheet = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        // THE WORDS NEVER REACH THE CLIPBOARD (#1202): this sheet carries the recovery words ("Save a
+        // copy"), so its own Copy action is left off; Notes, Files and Mail stay.
+        sheet.excludedActivityTypes = [.copyToPasteboard]
         if !share.subject.isEmpty { sheet.setValue(share.subject, forKey: "subject") }
         sheet.popoverPresentationController?.sourceView = top.view
         top.present(sheet, animated: true)

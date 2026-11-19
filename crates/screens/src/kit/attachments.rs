@@ -468,6 +468,8 @@ pub(crate) fn refusal_of(
 ) -> String {
     if let Some(sentence) = permission::refusal(locale, resource, failed) {
         sentence
+    } else if failed.reason == crate::effect_reason::STORAGE_FULL {
+        crate::strings::permission::storage_full(locale)
     } else if failed.reason == UNAVAILABLE {
         words::add_unavailable_error(locale)
     } else {

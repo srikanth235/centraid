@@ -12,6 +12,7 @@ enum EffectReason {
     static let unreadable = "unreadable"
     static let tooLarge = "too_large"
     static let unwritable = "unwritable"
+    static let storageFull = "storage_full"
     static let notWatched = "not_watched"
     static let noWindow = "no_window"
     static let unsupported = "unsupported"

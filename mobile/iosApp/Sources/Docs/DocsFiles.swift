@@ -82,8 +82,10 @@ final class DocsFiles: ObservableObject {
             DispatchQueue.global(qos: .userInitiated).async {
                 let copied = DocsFileCopies.copy(url)
                 DispatchQueue.main.async {
-                    guard let copied else { return self.fail(EffectReason.unreadable) }
-                    self.stage(copied.path, name: copied.name, mediaType: copied.mediaType)
+                    switch copied {
+                    case let .success(copy): self.stage(copy.path, name: copy.name, mediaType: copy.mediaType)
+                    case let .failure(error): self.fail(DocsFileCopies.reason(of: error))
+                    }
                 }
             }
         }
@@ -92,11 +94,14 @@ final class DocsFiles: ObservableObject {
     // MARK: The photo picker
 
     /// The picker closed with a copy this app owns (staged like an upload), or with nothing.
-    func photoChosen(_ copied: DocsFileCopies.Copied?, cancelled: Bool) {
+    func photoChosen(_ copied: Result<DocsFileCopies.Copied, Swift.Error>?, cancelled: Bool) {
         choosingPhoto = false
         if cancelled { return done() }
-        guard let copied else { return fail(EffectReason.unreadable) }
-        stage(copied.path, name: copied.name, mediaType: copied.mediaType)
+        switch copied {
+        case let .success(copy): stage(copy.path, name: copy.name, mediaType: copy.mediaType)
+        case let .failure(error): fail(DocsFileCopies.reason(of: error))
+        case nil: fail(EffectReason.unreadable)
+        }
     }
 
     /// The sheet went without a pick (a swipe down): the same as closing it.
@@ -238,7 +243,19 @@ enum DocsFileCopies {
         try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: path)
     }
 
-    static func copy(_ url: URL) -> Copied? {
+    /// WHY A COPY FAILED, as a fact for the core to word: a full phone (`NSFileWriteOutOfSpaceError`,
+    /// `ENOSPC`) is its own reason; anything else is a file that would not read.
+    static func reason(of error: Swift.Error) -> String {
+        let ns = error as NSError
+        let underlying = ns.userInfo[NSUnderlyingErrorKey] as? NSError
+        let full = [ns, underlying].compactMap { $0 }.contains {
+            ($0.domain == NSCocoaErrorDomain && $0.code == NSFileWriteOutOfSpaceError)
+                || ($0.domain == NSPOSIXErrorDomain && $0.code == Int(ENOSPC))
+        }
+        return full ? EffectReason.storageFull : EffectReason.unreadable
+    }
+
+    static func copy(_ url: URL) -> Result<Copied, Swift.Error> {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let name = url.lastPathComponent
@@ -247,11 +264,11 @@ enum DocsFileCopies {
             try FileManager.default.copyItem(at: url, to: target)
         } catch {
             try? FileManager.default.removeItem(at: target)
-            return nil
+            return .failure(error)
         }
         protect(target.path)
         let mediaType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? ""
-        return Copied(path: target.path, name: name, mediaType: mediaType)
+        return .success(Copied(path: target.path, name: name, mediaType: mediaType))
     }
 
     static func discard(_ path: String) {
@@ -322,7 +339,7 @@ struct DocsScanner: UIViewControllerRepresentable {
 /// THE SYSTEM PHOTO PICKER for exactly one image, answering once with a copy this app owns.
 struct DocsPhotoPicker: UIViewControllerRepresentable {
     /// The copy (nil when the photo would not read) and whether the member just closed the picker.
-    let onDone: (DocsFileCopies.Copied?, Bool) -> Void
+    let onDone: (Result<DocsFileCopies.Copied, Swift.Error>?, Bool) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -351,7 +368,7 @@ struct DocsPhotoPicker: UIViewControllerRepresentable {
             }
             // THE FILE IS LENT for the length of this callback: copy it before it returns.
             provider.loadFileRepresentation(forTypeIdentifier: UTType.image.identifier) { [weak self] url, _ in
-                let copied = url.flatMap { DocsFileCopies.copy($0) }
+                let copied = url.map { DocsFileCopies.copy($0) }
                 Task { @MainActor [weak self] in self?.parent.onDone(copied, false) }
             }
         }

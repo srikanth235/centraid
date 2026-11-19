@@ -9,8 +9,11 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Log
 import androidx.core.content.FileProvider
+import dev.centraid.android.kit.EffectReason
+import dev.centraid.android.kit.writeFailureReason
 import dev.centraid.android.screens.decodeUpright
 import java.io.File
+import java.io.IOException
 import java.util.UUID
 
 /**
@@ -45,10 +48,11 @@ internal object DocsIngestFiles {
     data class Copied(val path: String, val name: String, val mediaType: String)
 
     /**
-     * Copy [uri]'s stream into the cache. Null when the provider would not
-     * open it — the member's file is theirs, and a partial copy is deleted.
+     * Copy [uri]'s stream into the cache. A failure when the provider would not
+     * open it or the phone is full ([reasonOf] says which) — the member's file is
+     * theirs, and a partial copy is deleted.
      */
-    fun copy(context: Context, uri: Uri): Copied? {
+    fun copy(context: Context, uri: Uri): Result<Copied> {
         val resolver = context.contentResolver
         val name = runCatching {
             resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
@@ -65,12 +69,20 @@ internal object DocsIngestFiles {
                 file.outputStream().use { output -> input.copyTo(output) }
                 true
             } ?: false
-            if (copied) Copied(file.absolutePath, name, type) else null.also { discard(file) }
+            if (copied) {
+                Result.success(Copied(file.absolutePath, name, type))
+            } else {
+                discard(file)
+                Result.failure(IOException("unreadable"))
+            }
         } catch (why: Exception) {
             discard(file)
-            null
+            Result.failure(why)
         }
     }
+
+    /** Why a copy failed: a full phone, or a file that would not read. */
+    fun reasonOf(why: Throwable): String = why.writeFailureReason(EffectReason.UNREADABLE)
 
     /** A fresh file for the camera to write, and the `content://` URI it writes through. */
     fun scanTarget(context: Context): Pair<File, Uri> {

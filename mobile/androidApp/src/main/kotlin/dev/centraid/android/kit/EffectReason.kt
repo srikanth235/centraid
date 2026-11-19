@@ -14,6 +14,7 @@ object EffectReason {
     const val UNREADABLE = "unreadable"
     const val TOO_LARGE = "too_large"
     const val UNWRITABLE = "unwritable"
+    const val STORAGE_FULL = "storage_full"
     const val NOT_WATCHED = "not_watched"
     const val NO_WINDOW = "no_window"
     const val UNSUPPORTED = "unsupported"
