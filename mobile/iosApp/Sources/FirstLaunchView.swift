@@ -60,6 +60,13 @@ struct FirstLaunchView: View {
                         }
                     }
                     .padding(.top, 36)
+                    // THE DOORS SCROLL WITH THE PAGE AT ACCESSIBILITY SIZES (#1202): pinned, their two
+                    // large keys took the screen and left the claims no room to be read or scrolled to.
+                    if dynamicTypeSize.isAccessibilitySize {
+                        doors
+                            .padding(.top, 28)
+                            .padding(.bottom, 24)
+                    }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 32)
@@ -69,9 +76,11 @@ struct FirstLaunchView: View {
             // under the clock.
             .hardTopScrollEdge()
 
-            doors
-                .padding(.horizontal, 32)
-                .padding(.bottom, 24)
+            if !dynamicTypeSize.isAccessibilitySize {
+                doors
+                    .padding(.horizontal, 32)
+                    .padding(.bottom, 24)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(page).ignoresSafeArea())
