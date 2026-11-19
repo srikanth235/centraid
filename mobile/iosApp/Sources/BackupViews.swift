@@ -378,6 +378,18 @@ struct BackupHomeView: View {
         Rectangle().fill(Surface.line).frame(height: CentraidGeometry.hairline).padding(.leading, 56)
     }
 
+    /// A DEVICE ROW'S LINE: plain text, and at accessibility sizes one whose address stays whole.
+    @ViewBuilder
+    private func deviceText(_ text: String, rung: KitType, ink: Color) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            KitWholeTokens(text: text).kitType(rung).foregroundStyle(ink)
+        } else if rung == .row {
+            Text(text).kitType(rung).foregroundStyle(ink)
+        } else {
+            sentence(text)
+        }
+    }
+
     /// One of the screen's sentences, drawn quietly.
     @ViewBuilder
     private func sentence(_ text: String, id: String? = nil) -> some View {
@@ -430,32 +442,42 @@ struct BackupHomeView: View {
     @ViewBuilder
     private func devices(_ model: Centraid_Core_V1_BackupHomeData) -> some View {
         ForEach(model.destinations, id: \.gatewayID) { row in
-            HStack(alignment: .center, spacing: 12) {
+            // THE ADDRESS WHOLE, AND ITS LINKS UNDER IT AT ACCESSIBILITY SIZES (#1202): beside
+            // Forget the words were left a sliver, and "192.168.1.5" split mid-number.
+            let stacked = dynamicTypeSize.isAccessibilitySize
+            let layout = stacked
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+            HStack(alignment: .top, spacing: 12) {
                 KitTile(iconKey: "Monitor", size: 32)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(row.label).kitType(.row).foregroundStyle(Surface.ink)
-                    if !row.held.isEmpty { sentence(row.held) }
-                    if !row.backedUp.isEmpty { sentence(row.backedUp) }
-                    if !row.detail.isEmpty { sentence(row.detail) }
-                    ForEach(Array(row.notes.enumerated()), id: \.offset) { _, note in sentence(note) }
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(row.accessibilityLabel.isEmpty ? row.label : row.accessibilityLabel)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                // UNDO, only while this phone has deletes held there (#1191).
-                if !row.undoLabel.isEmpty {
-                    KitLink(label: row.undoLabel, dense: true, identifier: "backup-undo-\(row.gatewayID)") {
-                        send(event { $0.undoHeld = .with { $0.gatewayID = row.gatewayID } })
+                layout {
+                    VStack(alignment: .leading, spacing: 1) {
+                        deviceText(row.label, rung: .row, ink: Surface.ink)
+                        if !row.held.isEmpty { deviceText(row.held, rung: .meta, ink: Surface.meta) }
+                        if !row.backedUp.isEmpty { deviceText(row.backedUp, rung: .meta, ink: Surface.meta) }
+                        if !row.detail.isEmpty { deviceText(row.detail, rung: .meta, ink: Surface.meta) }
+                        ForEach(Array(row.notes.enumerated()), id: \.offset) { _, note in
+                            deviceText(note, rung: .meta, ink: Surface.meta)
+                        }
                     }
-                    .accessibilityLabel("\(row.undoLabel) \(row.label)")
-                }
-                // FORGET IS PLAIN AND VISIBLE, and needs no confirmation: it forgets this phone's
-                // pairing and nothing the backup device holds, and pairing again undoes it.
-                if !model.forgetLabel.isEmpty {
-                    KitLink(label: model.forgetLabel, dense: true, identifier: "backup-forget-\(row.gatewayID)") {
-                        send(event { $0.forgetDestination = .with { $0.gatewayID = row.gatewayID } })
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(row.accessibilityLabel.isEmpty ? row.label : row.accessibilityLabel)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    // UNDO, only while this phone has deletes held there (#1191).
+                    if !row.undoLabel.isEmpty {
+                        KitLink(label: row.undoLabel, dense: true, identifier: "backup-undo-\(row.gatewayID)") {
+                            send(event { $0.undoHeld = .with { $0.gatewayID = row.gatewayID } })
+                        }
+                        .accessibilityLabel("\(row.undoLabel) \(row.label)")
                     }
-                    .accessibilityLabel("\(model.forgetLabel) \(row.label)")
+                    // FORGET IS PLAIN AND VISIBLE, and needs no confirmation: it forgets this phone's
+                    // pairing and nothing the backup device holds, and pairing again undoes it.
+                    if !model.forgetLabel.isEmpty {
+                        KitLink(label: model.forgetLabel, dense: true, identifier: "backup-forget-\(row.gatewayID)") {
+                            send(event { $0.forgetDestination = .with { $0.gatewayID = row.gatewayID } })
+                        }
+                        .accessibilityLabel("\(model.forgetLabel) \(row.label)")
+                    }
                 }
             }
             .padding(.horizontal, 12)
