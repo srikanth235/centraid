@@ -968,6 +968,17 @@ mod tests {
     }
 
     #[test]
+    fn the_logbook_tile_holds_white_text_at_four_and_a_half_to_one() {
+        // Reminders draws the Logbook tile in `graphite` with white text on it.
+        let graphite = committed().list["graphite"].clone();
+        let ratio = contrast_ratio("#FFFFFF", &graphite).expect("hex pair");
+        assert!(
+            ratio >= TEXT_CONTRAST,
+            "graphite is {ratio:.2}:1 under white"
+        );
+    }
+
+    #[test]
     fn dark_text_values_reach_six_to_one_on_cards() {
         // The issue says 6:1 on cards for the lighter dark value; the validator
         // enforces 4.5:1, and this pins what the board actually delivers.
