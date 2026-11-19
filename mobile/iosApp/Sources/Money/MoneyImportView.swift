@@ -90,7 +90,11 @@ struct MoneyImportView: View {
                                 .fontWeight(.semibold)
                                 .foregroundStyle(AppAccent("money").text)
                                 .multilineTextAlignment(.trailing)
-                                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                                // 44 EACH WAY, AND THE WHOLE FRAME TAPS (#1202, S4): the audit read
+                                // "Choose file" as a hit region smaller than the target floor, the
+                                // frame being as wide as the words and only the words taking a tap.
+                                .frame(minWidth: CentraidGeometry.targetMinCoarse, minHeight: CentraidGeometry.targetMinCoarse)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("money-import-choose")
