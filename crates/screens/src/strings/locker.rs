@@ -55,7 +55,7 @@ catalog! {
     plain day_one_action = ("Add an item", "Add an item");
     plain first_check_action = ("Confirm it's you", "Confirm it's you");
     plain first_check_body = ("Locker opens with your face or your passcode, every time.", "Locker opens with your face or your passcode, every time.");
-    plain first_check_title = ("Confirm it's you", "Confirm it's you");
+    plain first_check_title = ("Your passwords and secure notes", "Your passwords and secure notes");
     plain first_item = ("Add your first item.", "Add your first item.");
     plain first_item_hint = ("A password, a card, a Wi-Fi network or a code.", "A password, a card, a Wi-Fi network or a code.");
     plain step_of = ("Step {n} of {total}", "Step {n} of {total}");
