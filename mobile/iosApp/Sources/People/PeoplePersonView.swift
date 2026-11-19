@@ -455,10 +455,18 @@ private struct PeoplePersonBody: View {
         }
     }
 
+    /// AN ADDRESS BREAKS AT ITS "@", NEVER INSIDE A WORD (#1202): beside the verb and the remove key
+    /// a long address had no break point and the card cut "example.co" / "m". A zero-width space
+    /// after the "@" is the one place it may wrap; the row reads the same aloud (its accessibility
+    /// label is the core's own).
+    private static func breakable(_ value: String) -> String {
+        value.replacingOccurrences(of: "@", with: "@\u{200B}")
+    }
+
     private func channelRow(_ channel: Centraid_Core_V1_PeopleChannelRow) -> some View {
         HStack(spacing: 0) {
             CentraidRow(
-                title: channel.value,
+                title: Self.breakable(channel.value),
                 meta: [channel.kindLabel, channel.label, channel.preferredLabel, channel.duplicateNote]
                     .filter { !$0.isEmpty }
                     .joined(separator: " · "),
