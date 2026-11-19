@@ -19,7 +19,7 @@ fn rig(with_follower: bool) -> Driver {
         .merge(imports::registry(&secrets))
         .merge(follow::registry());
     // The folder follower is a service beside the page: the page tells it which folder was picked.
-    let mut tabs = vec![("reconnect".to_owned(), follow::reconnect::route())];
+    let mut tabs = vec![("reconnect".to_owned(), follow::reconnect::route("Settings"))];
     if with_follower {
         tabs.extend(imports::roots());
     }
@@ -145,6 +145,21 @@ fn opened(with_follower: bool) -> Driver {
 
 fn keys(view: &wire::TransferView) -> Vec<String> {
     view.rows.iter().map(|row| row.key.clone()).collect()
+}
+
+/// THE BACK CONTROL NAMES THE PAGE THE RECONNECT PAGE WAS OPENED FROM (#1202), never just "Back"
+/// (which the shells would read as "Back to Back").
+#[test]
+fn the_back_control_names_the_page_it_was_opened_from() {
+    // From Settings' row: the tab's root here, as the row's route builds it.
+    let mut d = opened_on_a_new_phone();
+    assert_eq!(page(&d).back_label, "Settings");
+    // From the restore's offer, which opens it from Home.
+    let from_home = d.push("reconnect", follow::reconnect::route("Home"));
+    match &d.view(from_home).kind {
+        Some(wire::view_state::Kind::Transfer(view)) => assert_eq!(view.back_label, "Home"),
+        other => panic!("not the transfer view: {other:?}"),
+    }
 }
 
 #[test]

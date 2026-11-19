@@ -403,7 +403,9 @@ impl Screen for Service {
                 // THE RESTORED VAULT FOLLOWED STORES ON ANOTHER PHONE: the Reconnect page is
                 // offered, never run (every Connect is the member's tap).
                 if offer {
-                    return vec![Self::open(crate::follow::reconnect::route())];
+                    return vec![Self::open(crate::follow::reconnect::route(
+                        &crate::strings::home::band_home(ctx.locale()),
+                    ))];
                 }
                 Vec::new()
             }

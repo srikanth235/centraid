@@ -457,7 +457,9 @@ fn a_restore_offers_the_reconnect_page_only_when_the_vault_followed_stores() {
             matches!(
                 request.effect.as_ref().and_then(|e| e.kind.as_ref()),
                 Some(wire::effect::Kind::OpenRoute(open))
-                    if open.route.as_ref().is_some_and(|r| r.screen == "follow.reconnect")
+                    if open.route.as_ref().is_some_and(|r| r.screen == "follow.reconnect"
+                        // Opened from Home after a restore, so its back control says so (#1202).
+                        && matches!(&r.args, Some(wire::route::Args::Reconnect(a)) if a.parent == "Home"))
             )
         })
     };

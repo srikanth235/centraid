@@ -472,7 +472,9 @@ impl Settings {
                             words::settings_reconnect(locale),
                             String::new(),
                             "Backup",
-                            Some(crate::follow::reconnect::route()),
+                            Some(crate::follow::reconnect::route(&words::settings_title(
+                                locale,
+                            ))),
                             "neutral",
                             String::new(),
                         ),

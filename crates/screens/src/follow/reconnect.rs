@@ -31,7 +31,7 @@ use crate::kit::read::{self, Page, Reading};
 use crate::kit::transfer;
 use crate::people::contacts::{self, ContactsFollow};
 use crate::screen::{Ctx, Screen};
-use crate::strings::{fill, follow as words, shared};
+use crate::strings::{fill, follow as words};
 
 /// The route name of the page.
 pub const NAME: &str = "follow.reconnect";
@@ -41,13 +41,15 @@ const CALENDAR: &str = "calendar";
 const HEALTH: &str = "health";
 const FOLDER: &str = "folder:";
 
-/// The page, as a route.
+/// The page, as a route, opened from the page named `parent` (its back control names it).
 #[must_use]
-pub fn route() -> wire::Route {
+pub fn route(parent: &str) -> wire::Route {
     wire::Route {
         sheet: false,
         screen: NAME.to_owned(),
-        args: Some(wire::route::Args::Reconnect(wire::ReconnectRoute {})),
+        args: Some(wire::route::Args::Reconnect(wire::ReconnectRoute {
+            parent: parent.to_owned(),
+        })),
     }
 }
 
@@ -79,7 +81,12 @@ fn stores(ctx: &Ctx) -> Reading<Vec<wire::FollowedStore>> {
 /// The page's registry entry.
 #[must_use]
 pub fn registry() -> crate::Registry {
-    crate::Registry::default().with(NAME, |_| Some(Box::new(Reconnect::new())))
+    crate::Registry::default().with(NAME, |route| {
+        let Some(wire::route::Args::Reconnect(args)) = &route.args else {
+            return None;
+        };
+        Some(Box::new(Reconnect::new(args.parent.clone())))
+    })
 }
 
 /// A question asked of this phone, one at a time.
@@ -92,6 +99,8 @@ enum Check {
 }
 
 struct Reconnect {
+    /// The page this one was opened from: what the back control names.
+    parent: String,
     /// The read of the vault's followed stores: loading, failed, or ready (the rows are then drawn
     /// once the phone has been asked).
     page: Page<()>,
@@ -115,8 +124,9 @@ struct Reconnect {
 }
 
 impl Reconnect {
-    fn new() -> Self {
+    fn new(parent: String) -> Self {
         Self {
+            parent,
             page: Page::loading(),
             checking: false,
             stores: Vec::new(),
@@ -424,7 +434,7 @@ impl Screen for Reconnect {
             kind: Some(wire::view_state::Kind::Transfer(wire::TransferView {
                 app_id: String::new(),
                 title: words::reconnect_title(locale),
-                back_label: shared::back(locale),
+                back_label: self.parent.clone(),
                 headline: if self.ready() && rows.is_empty() {
                     words::reconnect_none(locale)
                 } else {
