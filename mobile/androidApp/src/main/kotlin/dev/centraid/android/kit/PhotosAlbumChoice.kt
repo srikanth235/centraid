@@ -55,7 +55,7 @@ public fun PhotosAlbumChoiceSheet(
     onEvent: (PhotosAlbumChoiceEvent) -> Unit,
 ) {
     val dismiss = { onEvent(PhotosAlbumChoiceEvent(dismissed = PhotosAlbumChoiceEvent.Dismissed())) }
-    SheetRoom(title = choice.title, onDismiss = dismiss) {
+    SheetRoom(title = choice.title, onDismiss = dismiss, scrolls = false) {
         Column(Modifier.fillMaxWidth().weight(1f, fill = false).testTag("album-choice-sheet")) {
             NewAlbumRow(choice) { title ->
                 onEvent(PhotosAlbumChoiceEvent(created = PhotosAlbumChoiceEvent.Created(title = title)))

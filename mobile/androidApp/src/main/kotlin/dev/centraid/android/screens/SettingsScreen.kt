@@ -22,6 +22,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -244,7 +245,7 @@ private fun SettingsRowView(row: SettingsRow, onOpen: (Route) -> Unit, onPress: 
             // (the recovery key), or the shell's colour.
             when (row.tile) {
                 "initial" -> Box(
-                    Modifier.padding(end = 12.dp).size(32.dp).clip(CircleShape).background(appAccent("").fill).clearAndSetSemantics { },
+                    Modifier.padding(end = 12.dp).size((32 * LocalDensity.current.fontScale.coerceIn(1f, 2f)).dp).clip(CircleShape).background(appAccent("").fill).clearAndSetSemantics { },
                     contentAlignment = Alignment.Center,
                 ) { Text(row.initial, style = kitTextStyle(KitType.Row), color = Color.White, fontWeight = FontWeight.Bold) }
                 "amber" -> KitTile(row.icon_key, Modifier.padding(end = 12.dp), size = 32.dp, fill = StateColor.Amber.fill)

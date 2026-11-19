@@ -156,6 +156,7 @@ public fun LinkPickerSheet(picker: LinkPicker, onEvent: (LinkEvent) -> Unit) {
         title = picker.title,
         onDismiss = { onEvent(LinkEvent(closed = LinkEvent.PickerClosed())) },
         expanded = true,
+        scrolls = false,
     ) {
         var typed by remember(picker.open_) { mutableStateOf(picker.query) }
         Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER)) {

@@ -24,6 +24,55 @@ public fun rememberLargestText(): Boolean = LocalDensity.current.fontScale >= LA
 
 private const val LARGEST_TEXT_SCALE: Float = 1.3f
 
+/**
+ * A LABEL AND ITS VALUE: side by side, the label taking the room the value leaves; at the largest
+ * text the value goes UNDER the label (#1202), so neither is left a column a few letters wide (a
+ * label broke mid-word, a figure was cut). [start] and [end] get the modifier for their slot.
+ */
+@Composable
+public fun SplitRow(
+    modifier: Modifier = Modifier,
+    gap: Dp = 8.dp,
+    start: @Composable (Modifier) -> Unit,
+    end: @Composable (Modifier) -> Unit,
+) {
+    if (rememberLargestText()) {
+        Column(modifier) {
+            start(Modifier.fillMaxWidth())
+            end(Modifier)
+        }
+    } else {
+        androidx.compose.foundation.layout.Row(
+            modifier,
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(gap),
+        ) {
+            start(Modifier.weight(1f))
+            end(Modifier)
+        }
+    }
+}
+
+/**
+ * CELLS SIDE BY SIDE, ONE UNDER THE NEXT AT THE LARGEST TEXT (#1202). Each cell gets the modifier
+ * for its slot (an equal share of the row, or the full width), so a figure keeps the room for its
+ * amount. Use for a row of equal figures or facts.
+ */
+@Composable
+public fun CellsRow(
+    modifier: Modifier = Modifier,
+    gap: Dp = 12.dp,
+    content: @Composable (cell: Modifier) -> Unit,
+) {
+    if (rememberLargestText()) {
+        Column(modifier, verticalArrangement = Arrangement.spacedBy(gap)) { content(Modifier.fillMaxWidth()) }
+    } else {
+        androidx.compose.foundation.layout.Row(modifier, horizontalArrangement = Arrangement.spacedBy(gap)) {
+            content(Modifier.weight(1f))
+        }
+    }
+}
+
 /** The largest scale a fixed grid draws at: the Android counterpart of iOS's `xxxLarge` hold (#1202). */
 private const val GRID_TEXT_SCALE: Float = 1.3f
 

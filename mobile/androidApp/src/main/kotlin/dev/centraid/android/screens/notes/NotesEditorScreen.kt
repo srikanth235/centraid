@@ -381,7 +381,7 @@ private fun TagsRow(state: NotesEditorState, onEvent: (NotesEditorEvent) -> Unit
 @Composable
 private fun LinkSheet(sheet: NotesLinkSheet, onEvent: (NotesEditorEvent) -> Unit) {
     val dismiss = { onEvent(NotesEditorEvent(link_dismissed = NotesEditorEvent.LinkDismissed())) }
-    SheetRoom(title = sheet.title, onDismiss = dismiss, status = sheet.foot) {
+    SheetRoom(title = sheet.title, onDismiss = dismiss, status = sheet.foot, scrolls = false) {
         CentraidSearchField(
             field = SearchField(open_ = true, term = sheet.term),
             placeholder = sheet.search_placeholder,
