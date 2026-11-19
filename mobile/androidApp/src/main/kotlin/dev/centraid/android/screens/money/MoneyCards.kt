@@ -358,13 +358,16 @@ private fun BarsBody(bars: MoneyBars, onPick: (Int) -> Unit) {
             if (bars.pace_bp > 0) {
                 val paceInk = Surface.meta
                 val paceLabel = bars.pace_label
+                val paceKey = rememberLargestText()
                 Column(
                     Modifier
                         .fillMaxWidth()
                         .offset(y = (ChartHeight - ChartHeight * bars.pace_bp / 10_000f) - 14.dp)
                         .clearAndSetSemantics { },
                 ) {
-                    KitText(paceLabel, KitType.Meta, paceInk, Modifier.fillMaxWidth().padding(start = 120.dp), maxLines = 1)
+                    // AT THE LARGEST TEXT THE PACE'S NAME IS A KEY UNDER THE CHART (#1202): in the plot
+                    // it drew across the bars.
+                    if (!paceKey) KitText(paceLabel, KitType.Meta, paceInk, Modifier.fillMaxWidth().padding(start = 120.dp), maxLines = 1)
                     Canvas(Modifier.fillMaxWidth().height(1.dp)) {
                         drawLine(
                             paceInk,
@@ -375,6 +378,20 @@ private fun BarsBody(bars: MoneyBars, onPick: (Int) -> Unit) {
                         )
                     }
                 }
+            }
+        }
+        if (bars.pace_bp > 0 && rememberLargestText()) {
+            Row(Modifier.clearAndSetSemantics { }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Canvas(Modifier.width(20.dp).height(1.dp)) {
+                    drawLine(
+                        Surface.meta,
+                        Offset(0f, 0f),
+                        Offset(size.width, 0f),
+                        strokeWidth = 1.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 3.dp.toPx())),
+                    )
+                }
+                KitText(bars.pace_label, KitType.Meta, Surface.meta)
             }
         }
         if (bars.caption.isNotEmpty()) {

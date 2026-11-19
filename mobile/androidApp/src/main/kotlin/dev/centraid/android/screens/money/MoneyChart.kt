@@ -25,6 +25,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.MoneyCashflowMonth
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.rememberLargestText
+import dev.centraid.android.kit.HoldGridText
 import dev.centraid.android.kit.toneInk
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
@@ -68,19 +70,22 @@ internal fun MoneyCashflowChart(months: List<MoneyCashflowMonth>, summary: Strin
             }
         }
         MoneyHairline(inset = 0.dp)
-        Row(
-            Modifier.fillMaxWidth().padding(top = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(MONTH_GAP),
-        ) {
-            months.forEach { month ->
-                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                    FitText(
-                        month.label,
-                        role = "eyebrow",
-                        ink = centraidColor(if (month.partial) "text" else "textFaint"),
-                        minScale = LABEL_MIN_SCALE,
-                        align = TextAlign.Center,
-                    )
+        // THE AXIS WORDS HOLD AT 1.3 (#1202): a column per month cannot grow with the font.
+        HoldGridText {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(MONTH_GAP),
+            ) {
+                months.forEach { month ->
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        FitText(
+                            month.label,
+                            role = "eyebrow",
+                            ink = centraidColor(if (month.partial) "text" else "textFaint"),
+                            minScale = LABEL_MIN_SCALE,
+                            align = TextAlign.Center,
+                        )
+                    }
                 }
             }
         }
@@ -108,17 +113,21 @@ private fun CashflowBar(basisPoints: Int, ink: Color, partial: Boolean) {
 /** THE CHART'S KEY: a swatch and its word, from copy the state's rows already use. */
 @Composable
 internal fun MoneyLegend(incoming: String, outgoing: String, partial: String) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = KitGeometry.GUTTER)
-            .padding(top = 8.dp)
-            .clearAndSetSemantics { },
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
+    val frame = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = KitGeometry.GUTTER)
+        .padding(top = 8.dp)
+        .clearAndSetSemantics { }
+    val items: @Composable () -> Unit = {
         LegendItem(incoming, filled = true, ink = centraidColor("textSoft"))
         LegendItem(outgoing, filled = true, ink = centraidColor("textGhost"))
         LegendItem(partial, filled = false, ink = centraidColor("textSoft"))
+    }
+    // ONE KEY PER LINE at the largest text (#1202): in a row "month not over" wrapped a word at a time.
+    if (rememberLargestText()) {
+        Column(frame, verticalArrangement = Arrangement.spacedBy(6.dp)) { items() }
+    } else {
+        Row(frame, horizontalArrangement = Arrangement.spacedBy(16.dp)) { items() }
     }
 }
 
@@ -183,7 +192,7 @@ internal fun MoneyMonthRow(month: MoneyCashflowMonth, testTag: String) {
                         month.meta,
                         style = centraidType("annotLabel"),
                         color = centraidColor("textFaint"),
-                        maxLines = 1,
+                        maxLines = if (rememberLargestText()) Int.MAX_VALUE else 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
