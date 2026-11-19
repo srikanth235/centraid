@@ -465,9 +465,9 @@ private fun DriveData(
     }
     val chrome = state.chrome
     if (state.layout == DocsDriveState.Layout.LAYOUT_GRID) {
-        // THREE TILES ACROSS, TWO AT THE LARGEST TEXT (#1202): a third of the width left a tile's name a
-        // column of three letters.
-        LazyVerticalGrid(columns = GridCells.Fixed(if (rememberLargestText()) 2 else 3), modifier = Modifier.fillMaxSize()) {
+        // THREE TILES ACROSS, ONE AT THE LARGEST TEXT (#1202): a third of the width left a tile's name a
+        // column of three letters, and two across cut the meta line.
+        LazyVerticalGrid(columns = GridCells.Fixed(if (rememberLargestText()) 1 else 3), modifier = Modifier.fillMaxSize()) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "head") { DriveHead(data) }
             if (data.label_chips.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "chips") {
@@ -611,7 +611,7 @@ private fun Tile(
             Text(title, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = 3, overflow = TextOverflow.Ellipsis)
             // THE SIZE MUST SHOW (#1202): a tile is narrow, so the parts of the meta take a line each
             // (kind, then size) instead of one line cut after the kind.
-            if (meta.isNotEmpty()) dev.centraid.android.kit.MetaLine(listOf(meta), lines = 2)
+            if (meta.isNotEmpty()) dev.centraid.android.kit.MetaLine(listOf(meta), lines = 4)
         }
     }
 }

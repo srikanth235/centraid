@@ -64,6 +64,7 @@ import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ReadStateView
@@ -356,26 +357,28 @@ private fun NoteBody(row: NotesNoteRow) {
         Modifier.fillMaxWidth().heightIn(min = KitGeometry.ROW_MIN).padding(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            KitText(
-                row.title,
-                KitType.Row,
-                Surface.ink,
-                modifier = Modifier.weight(1f),
+        // TITLES AND PREVIEWS WRAP at the largest text (#1202), the done pill under the title; one line each before that.
+        val wrap = rememberLargestText()
+        val pill: @Composable () -> Unit = {
+            Text(
+                row.check_label,
+                style = kitTextStyle(KitType.Meta).copy(fontWeight = FontWeight.SemiBold),
+                color = accent.text,
                 maxLines = 1,
+                modifier = Modifier
+                    .padding(start = if (wrap) 0.dp else 8.dp, top = if (wrap) 4.dp else 0.dp)
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(Surface.page)
+                    .padding(horizontal = 10.dp, vertical = 3.dp),
             )
-            if (row.check_label.isNotEmpty()) {
-                Text(
-                    row.check_label,
-                    style = kitTextStyle(KitType.Meta).copy(fontWeight = FontWeight.SemiBold),
-                    color = accent.text,
-                    maxLines = 1,
-                    modifier = Modifier
-                        .padding(start = 8.dp)
-                        .clip(RoundedCornerShape(percent = 50))
-                        .background(Surface.page)
-                        .padding(horizontal = 10.dp, vertical = 3.dp),
-                )
+        }
+        if (wrap) {
+            KitText(row.title, KitType.Row, Surface.ink, maxLines = 4)
+            if (row.check_label.isNotEmpty()) pill()
+        } else {
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                KitText(row.title, KitType.Row, Surface.ink, modifier = Modifier.weight(1f), maxLines = 1)
+                if (row.check_label.isNotEmpty()) pill()
             }
         }
         // A SEARCH HIT'S SNIPPET, its matches emphasised as the index marked them.
@@ -394,8 +397,8 @@ private fun NoteBody(row: NotesNoteRow) {
                 }
             }
         }
-        Text(snippet, style = kitTextStyle(KitType.Meta), color = Surface.body, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-        if (row.meta.isNotEmpty()) KitText(row.meta, KitType.Meta, Surface.meta, maxLines = 1)
+        Text(snippet, style = kitTextStyle(KitType.Meta), color = Surface.body, maxLines = if (wrap) 4 else 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        if (row.meta.isNotEmpty()) KitText(row.meta, KitType.Meta, Surface.meta, maxLines = if (wrap) 3 else 1)
         AboutChips(row.about, Modifier.padding(top = 2.dp))
     }
 }

@@ -94,7 +94,8 @@ public fun CentraidRow(
     val titleInk = if (dimmed) Surface.meta else Surface.ink
     val softInk = Surface.meta
     val line = Surface.line
-    val stackTrailing = rememberLargestText() && (trailing.isNotEmpty() || pending)
+    // A CHIP ALONE goes under the title too (#1202): beside it the subtitle was left a sliver and cut.
+    val stackTrailing = rememberLargestText() && (trailing.isNotEmpty() || pending || chips.isNotEmpty())
     val chipUnderFigure = trailing.isNotEmpty() && chips.isNotEmpty()
     // THE FIGURE with its chip and sub-label, the ends aligned to [align].
     @Composable
@@ -166,7 +167,7 @@ public fun CentraidRow(
                 } else if (metaParts.any { it.isNotEmpty() } || metaAccented.isNotEmpty()) {
                     MetaLine(metaParts, metaAccented)
                 } else if (meta.isNotEmpty()) {
-                    KitText(meta, KitType.Meta, softInk, maxLines = 2)
+                    KitText(meta, KitType.Meta, softInk, maxLines = if (rememberLargestText()) 4 else 2)
                 }
                 if (stackTrailing) {
                     chips.forEach { chip -> StatusChipView(chip, Modifier.padding(top = 4.dp)) }

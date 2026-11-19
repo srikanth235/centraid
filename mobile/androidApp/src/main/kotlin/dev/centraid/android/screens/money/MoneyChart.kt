@@ -164,7 +164,7 @@ private fun LegendItem(text: String, filled: Boolean, ink: Color) {
  * Out and Net as three columns. A month that is not over reads in the soft ink.
  */
 @Composable
-internal fun MoneyMonthRow(month: MoneyCashflowMonth, testTag: String) {
+internal fun MoneyMonthRow(month: MoneyCashflowMonth, testTag: String, labels: List<String> = emptyList()) {
     Box(
         Modifier
             .fillMaxWidth()
@@ -187,6 +187,26 @@ internal fun MoneyMonthRow(month: MoneyCashflowMonth, testTag: String) {
                     style = centraidType("body"),
                     color = centraidColor(if (month.partial) "textSoft" else "text"),
                 )
+                if (rememberLargestText()) {
+                    // THE FIGURES UNDER THE MONTH, each whole on its line with its word (#1202): three
+                    // columns left each amount a few letters wide and cut it.
+                    val words = labels.ifEmpty { listOf("", "", "") }
+                    listOf(
+                        words.getOrElse(0) { "" } to (month.incoming to "text"),
+                        words.getOrElse(1) { "" } to (month.outgoing to "text"),
+                        words.getOrElse(2) { "" } to (month.net to null),
+                    ).forEach { (word, figure) ->
+                        Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(word, style = centraidType("annotLabel"), color = centraidColor("textSoft"), modifier = Modifier.weight(1f))
+                            Text(
+                                money(figure.first),
+                                style = centraidType("annotLabel"),
+                                color = if (figure.second == null) toneInk(month.net_tone, neutral = "text") else centraidColor("text"),
+                                textAlign = TextAlign.End,
+                            )
+                        }
+                    }
+                }
                 if (month.meta.isNotEmpty()) {
                     Text(
                         month.meta,
@@ -197,9 +217,11 @@ internal fun MoneyMonthRow(month: MoneyCashflowMonth, testTag: String) {
                     )
                 }
             }
-            MoneyColumnFigure(money(month.incoming), ink = centraidColor("text"))
-            MoneyColumnFigure(money(month.outgoing), ink = centraidColor("text"))
-            MoneyColumnFigure(money(month.net), ink = toneInk(month.net_tone, neutral = "text"))
+            if (!rememberLargestText()) {
+                MoneyColumnFigure(money(month.incoming), ink = centraidColor("text"))
+                MoneyColumnFigure(money(month.outgoing), ink = centraidColor("text"))
+                MoneyColumnFigure(money(month.net), ink = toneInk(month.net_tone, neutral = "text"))
+            }
         }
     }
 }

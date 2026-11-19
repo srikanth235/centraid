@@ -410,7 +410,7 @@ private fun LazyListScope.cashflow(state: MoneyHomeState) {
                     summary = MoneyGeometry.chartSummary(series.months.map { it.accessibility_label }),
                 )
                 MoneyLegend(incoming = series.in_label, outgoing = series.out_label, partial = series.partial_label)
-                Row(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!rememberLargestText()) Row(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(Modifier.weight(1f))
                     listOf(series.in_label, series.out_label, series.net_label).forEach { label ->
                         Text(label, style = centraidType("annotLabel"), color = centraidColor("textSoft"), modifier = Modifier.width(68.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End)
@@ -420,7 +420,7 @@ private fun LazyListScope.cashflow(state: MoneyHomeState) {
         }
         // NEWEST FIRST under the chart, which runs oldest to newest.
         items(MoneyGeometry.newestFirst(series.months), key = { "m-${series.currency}-${it.month}" }) { month ->
-            MoneyMonthRow(month, testTag = "money-month-${month.month}")
+            MoneyMonthRow(month, testTag = "money-month-${month.month}", labels = listOf(series.in_label, series.out_label, series.net_label))
         }
     }
     flow.definitions.forEach { fact -> item(key = "def-${fact.label}") { FieldRow(key = fact.label, value = fact.detail) } }
