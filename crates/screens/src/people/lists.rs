@@ -298,7 +298,6 @@ impl Screen for Lists {
                         || wire::EmptyState {
                             headline: words::empty_headline(locale),
                             body: words::empty_body(locale),
-                            icon_key: "List".to_owned(),
                             ..wire::EmptyState::default()
                         },
                     )),

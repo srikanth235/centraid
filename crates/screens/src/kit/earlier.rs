@@ -753,7 +753,6 @@ impl Screen for Earlier {
                     &words::empty_body(locale),
                     &[("noun", &(self.spec.noun)(locale))],
                 ),
-                icon_key: "Clock".to_owned(),
                 ..wire::EmptyState::default()
             },
         );
