@@ -558,7 +558,8 @@ fn generate_draws_from_the_given_bytes_and_a_relock_drops_the_candidate() {
     d.answer_effect(passed(wire::Biometry::Passcode));
     let generator = home_data(&d, id).generator.expect("generate tab");
     assert_eq!(generator.output.chars().count(), 20);
-    assert!(!generator.use_label.is_empty());
+    // A Locker that holds no item offers no item to put the password on.
+    assert!(generator.use_label.is_empty() && generator.use_route.is_none());
     home_event(
         &mut d,
         id,
@@ -583,6 +584,31 @@ fn generate_draws_from_the_given_bytes_and_a_relock_drops_the_candidate() {
         k,
         wire::effect::Kind::ClipboardSet(set) if set.sensitive && set.clear_after_ms == 30_000
     )));
+}
+
+#[test]
+fn generate_offers_to_put_the_password_on_an_item_when_the_locker_holds_one() {
+    let mut d = Driver::keyed(Runtime::new(
+        Registry::default().with(
+            locker::HOME,
+            locker::home::build_with(fixed((0..=255).collect())),
+        ),
+        vec![(
+            "locker".to_owned(),
+            routes::home(wire::LockerDestination::Generate),
+        )],
+    ));
+    arrange(
+        &d,
+        centraid_screens::catalog::act::locker::AddItem {
+            title: "Bank".to_owned(),
+            password: Some("x".to_owned()),
+            ..Default::default()
+        },
+    );
+    let id = open_home(&mut d);
+    let generator = home_data(&d, id).generator.expect("generate tab");
+    assert!(!generator.use_label.is_empty() && generator.use_route.is_some());
 }
 
 /// THE HEADER'S LOCK KEY (#1173): a tap covers the Locker at once, through the same wall as More's
