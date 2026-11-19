@@ -17,6 +17,7 @@ struct MoneyHomeView: View {
     let onHome: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private func event(_ build: (inout Centraid_Core_V1_MoneyHomeEvent) -> Void) -> Centraid_Core_V1_MoneyHomeEvent {
         var event = Centraid_Core_V1_MoneyHomeEvent()
@@ -199,11 +200,18 @@ struct MoneyHomeView: View {
         }
     }
 
+    /// The empty card's action: the statement import, unless a search is open (a ternary of `nil`
+    /// and a method reference defeats the type checker in the initializer below).
+    private var emptyAction: (() -> Void)? {
+        if state.search.open { return nil }
+        return { addStatement() }
+    }
+
     private var pageContent: some View {
         PageReadStateView(
             page: state.page,
             onRetry: { send(event { $0.refreshed = .init() }) },
-            onEmptyAction: state.search.open ? nil : addStatement,
+            onEmptyAction: emptyAction,
             emptyExtra: emptyExtra
         ) {
             if state.search.open {
@@ -378,17 +386,23 @@ struct MoneyHomeView: View {
                 outgoing: series.outLabel,
                 partial: series.partialLabel
             )
-            HStack(spacing: 8) {
-                Spacer(minLength: 0)
-                ForEach([series.inLabel, series.outLabel, series.netLabel], id: \.self) { label in
-                    Text(label).kitType(.meta).foregroundStyle(Surface.meta)
-                        .frame(width: 68, alignment: .trailing)
+            if !dynamicTypeSize.isAccessibilitySize {
+                HStack(spacing: 8) {
+                    Spacer(minLength: 0)
+                    ForEach([series.inLabel, series.outLabel, series.netLabel], id: \.self) { label in
+                        Text(label).kitType(.meta).foregroundStyle(Surface.meta)
+                            .frame(width: 68, alignment: .trailing)
+                    }
                 }
+                .padding(.horizontal, CentraidGeometry.pageMargin)
             }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
             // NEWEST FIRST under the chart, which runs oldest to newest.
             ForEach(Array(series.months.reversed().enumerated()), id: \.offset) { _, month in
-                MoneyMonthRow(month: month, identifier: "money-month-\(month.month)")
+                MoneyMonthRow(
+                    month: month,
+                    identifier: "money-month-\(month.month)",
+                    labels: [series.inLabel, series.outLabel, series.netLabel]
+                )
             }
         }
         ForEach(Array(flow.definitions.enumerated()), id: \.offset) { _, fact in
