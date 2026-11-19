@@ -163,6 +163,7 @@ catalog! {
     plain import_discard = ("Discard", "Discard");
     plain import_discarded = ("Import discarded.", "Import discarded.");
     plain import_done_note = ("The file still holds every secret. Delete it when done.", "The file still holds every secret. Delete it when done.");
+    plain import_too_large = ("That file is too large to import.", "That file is too large to import.");
     plain import_failed = ("That file could not be read.", "That file could not be read.");
     plain import_failed_rows = (", {n} failed", ", {n} failed");
     plain import_file = ("A file", "A file");

@@ -25,6 +25,9 @@ const AGAIN: &str = "again";
 const IMPORT: &str = "import";
 const ADD_ONLY: &str = "add-only";
 
+/// What a pick of card files may hold, in bytes: the `cards` the import command takes.
+const VCARD_FILE_BYTES: u64 = 20 * 1024 * 1024;
+
 #[must_use]
 pub fn build_import(route: &wire::Route) -> Option<Box<dyn Screen>> {
     let Some(wire::route::Args::Transfer(args)) = &route.args else {
@@ -56,6 +59,8 @@ struct Plan {
     declined: u32,
     repeated: u32,
     proposals: Vec<String>,
+    /// Files of the pick that were not read (`BytesPicked.skipped`).
+    left_out: u32,
 }
 
 struct Transfer {
@@ -109,7 +114,21 @@ fn plan_of(output: &[u8]) -> Plan {
                     .collect()
             })
             .unwrap_or_default(),
+        left_out: 0,
     }
+}
+
+/// The row that says how many files of the pick were not read, when any were.
+fn left_out_row(locale: Locale, n: u32) -> Option<wire::TransferRow> {
+    (n > 0).then(|| {
+        row(
+            "left_out",
+            &words::transfer_row_left_out(locale),
+            &n.to_string(),
+            false,
+            "",
+        )
+    })
 }
 
 impl Transfer {
@@ -119,6 +138,9 @@ impl Transfer {
                 accept: ACCEPT.iter().map(|entry| (*entry).to_owned()).collect(),
                 multiple: true,
                 folder: false,
+                // A card file is read whole into a command: the vault takes 20 MiB of them (`person.import_vcf`).
+                max_bytes: VCARD_FILE_BYTES,
+                max_total_bytes: VCARD_FILE_BYTES,
             })),
         }]
     }
@@ -138,7 +160,10 @@ impl Transfer {
             self.undo.refuse(settled.refusal);
             return;
         }
-        self.plan = Some(plan_of(&settled.output));
+        self.plan = Some(Plan {
+            left_out: transfer::left_out(picked),
+            ..plan_of(&settled.output)
+        });
         self.stage = Stage::Planned;
     }
 
@@ -194,6 +219,7 @@ impl Transfer {
                         rows.push(row(key, &label, &value.to_string(), false, ""));
                     }
                 }
+                rows.extend(left_out_row(locale, plan.left_out));
                 rows.extend(plan.proposals.iter().map(|name| {
                     row(
                         &format!("proposal:{name}"),
@@ -229,9 +255,11 @@ impl Transfer {
                 ));
                 (rows, actions, words::transfer_import_ready(locale))
             }
-            (Stage::Planned, Some(_)) => {
-                (Vec::new(), choose, words::transfer_import_nothing(locale))
-            }
+            (Stage::Planned, Some(plan)) => (
+                left_out_row(locale, plan.left_out).into_iter().collect(),
+                choose,
+                words::transfer_import_nothing(locale),
+            ),
             (Stage::Done, Some(plan)) => (
                 Vec::new(),
                 choose,

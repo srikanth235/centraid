@@ -30,6 +30,9 @@ use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, money as words};
 
 /// Rows of each kind drawn under a statement; the rest are counted.
+/// The largest statement the import reads, in bytes: `centraid_apps_money::import::IMPORT_BYTES`.
+const STATEMENT_BYTES: u64 = 8 * 1024 * 1024;
+
 const SHOWN_ROWS: usize = 25;
 const SHOWN_NEW: usize = 10;
 /// How much of a file is read to tell an OFX file by its header.
@@ -359,6 +362,8 @@ impl Import {
                             ".ofx".to_owned(),
                             ".qfx".to_owned(),
                         ],
+                        // THE STATEMENT LIMIT (`money::import::IMPORT_BYTES`), so a larger file is never read.
+                        max_bytes: STATEMENT_BYTES,
                         ..wire::PickBytes::default()
                     })),
                 }];
@@ -857,7 +862,12 @@ impl Screen for Import {
                 match result.outcome {
                     Some(wire::effect_result::Outcome::BytesPicked(file)) => self.picked(ctx, file),
                     Some(wire::effect_result::Outcome::Failed(failure)) if !failure.cancelled => {
-                        self.undo.refuse(words::import_failed(ctx.locale()));
+                        self.undo
+                            .refuse(if failure.reason == crate::effect_reason::TOO_LARGE {
+                                words::import_too_large(ctx.locale())
+                            } else {
+                                words::import_failed(ctx.locale())
+                            });
                     }
                     _ => {}
                 }

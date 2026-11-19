@@ -8,6 +8,7 @@
 //! already has).
 
 use centraid_api_proto::core_v1 as wire;
+use centraid_vault::commands::note::BODY_BUDGET_BYTES;
 use wire::screen_event::Kind as E;
 
 use crate::catalog::act;
@@ -24,6 +25,9 @@ const FILES: &str = "files";
 const FOLDER: &str = "folder";
 const AGAIN: &str = "again";
 const IMPORT: &str = "import";
+
+/// What one pick of notes may hold, in bytes.
+const TOTAL_BYTES: u64 = 32 * 1024 * 1024;
 
 /// The `import-notes` request for the picked files: the dry run and the write say the same
 /// arrival, the picked folder's (or file's) name, so the vault records one origin for them.
@@ -77,6 +81,8 @@ struct Plan {
     notebooks: u32,
     links: u32,
     unresolved: u32,
+    /// Files of the pick that were not read (`BytesPicked.skipped`).
+    left_out: u32,
 }
 
 struct Transfer {
@@ -101,6 +107,10 @@ impl Transfer {
                 accept: ACCEPT.iter().map(|entry| (*entry).to_owned()).collect(),
                 multiple: !folder,
                 folder,
+                // A note past the body budget is not a note (`note.import`), so it is not read; and a
+                // folder of thousands is read for 32 MiB of them, not all.
+                max_bytes: BODY_BUDGET_BYTES as u64,
+                max_total_bytes: TOTAL_BYTES,
             })),
         }]
     }
@@ -129,6 +139,7 @@ impl Transfer {
             notebooks: transfer::count(&settled.output, "notebooks"),
             links: transfer::count(&settled.output, "links"),
             unresolved: transfer::count(&settled.output, "unresolved"),
+            left_out: transfer::left_out(picked),
         };
         self.stage = Stage::Planned;
         self.plan = Some(plan);
@@ -207,6 +218,11 @@ impl Transfer {
                     ),
                     ("skipped", words::transfer_row_skipped(locale), plan.skipped),
                     ("ignored", words::transfer_row_ignored(locale), plan.ignored),
+                    (
+                        "left_out",
+                        words::transfer_row_left_out(locale),
+                        plan.left_out,
+                    ),
                 ] {
                     if value > 0 {
                         rows.push(row(key, &label, &value.to_string(), false, ""));
@@ -231,8 +247,18 @@ impl Transfer {
                 ];
                 (rows, actions, words::transfer_import_ready(locale))
             }
-            (Stage::Planned, Some(_)) => (
-                Vec::new(),
+            (Stage::Planned, Some(plan)) => (
+                if plan.left_out > 0 {
+                    vec![row(
+                        "left_out",
+                        &words::transfer_row_left_out(locale),
+                        &plan.left_out.to_string(),
+                        false,
+                        "",
+                    )]
+                } else {
+                    Vec::new()
+                },
                 choose(true),
                 words::transfer_import_nothing(locale),
             ),

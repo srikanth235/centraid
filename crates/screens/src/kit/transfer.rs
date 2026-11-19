@@ -42,8 +42,8 @@ pub fn action(key: &str, label: &str, primary: bool, enabled: bool) -> wire::Tra
 }
 
 /// A file as the shells hand it back, read as text: the path below the picked folder (or the
-/// file's name) and its words. A file that is not UTF-8 is read lossily: a Markdown or vCard
-/// file with a stray byte is still the member's.
+/// file's name) and its words. A file that is not UTF-8 is read as windows-1252 (an old phone's
+/// vCard, a Windows editor's note), never lossily: every accent would be U+FFFD.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TextFile {
     pub path: String,
@@ -53,7 +53,7 @@ pub struct TextFile {
 /// The files of a pick, whether it was one file or several (`BytesPicked.files`).
 #[must_use]
 pub fn picked_files(picked: &wire::BytesPicked) -> Vec<TextFile> {
-    let lossy = |bytes: &[u8]| String::from_utf8_lossy(bytes).into_owned();
+    let lossy = centraid_vault::decode::text_of;
     if picked.files.is_empty() {
         if picked.cancelled || picked.name.is_empty() {
             return Vec::new();
@@ -71,6 +71,14 @@ pub fn picked_files(picked: &wire::BytesPicked) -> Vec<TextFile> {
             text: lossy(&file.content),
         })
         .collect()
+}
+
+/// How many files of a pick were left out (#1202): one that would not read, one over the importer's
+/// ceiling (`PickBytes.max_bytes`), one past the pick's total. The screen says so beside its counts,
+/// so an import never reads as complete when it was not.
+#[must_use]
+pub fn left_out(picked: &wire::BytesPicked) -> u32 {
+    u32::try_from(picked.skipped.len()).unwrap_or(u32::MAX)
 }
 
 /// What an import records as where its items came from: the file's name for one file, the picked

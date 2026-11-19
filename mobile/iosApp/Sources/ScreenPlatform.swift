@@ -69,6 +69,38 @@ enum OwnerCheckPerformer {
     }
 }
 
+/// THE SIZE CEILINGS OF ONE PICK (`PickBytes.max_bytes`, `max_total_bytes`; 0 is none): a file is sized
+/// from its metadata and read only when it fits, so what the core would refuse is never held.
+struct PickLimits {
+    let perFile: UInt64
+    let total: UInt64
+    private(set) var used: UInt64 = 0
+
+    init(perFile: UInt64, total: UInt64) {
+        self.perFile = perFile
+        self.total = total
+    }
+
+    enum Read {
+        case bytes(Data)
+        case tooLarge
+        case unreadable
+    }
+
+    mutating func read(_ url: URL) -> Read {
+        guard let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize.map({ UInt64($0) }) else {
+            return .unreadable
+        }
+        if perFile > 0, size > perFile { return .tooLarge }
+        if total > 0, used + size > total { return .tooLarge }
+        guard let bytes = try? Data(contentsOf: url) else { return .unreadable }
+        // A file that grew between the size and the read is held to the same ceiling.
+        if perFile > 0, UInt64(bytes.count) > perFile { return .tooLarge }
+        used += UInt64(bytes.count)
+        return .bytes(bytes)
+    }
+}
+
 #if os(iOS)
 /// `PickBytes` and `SaveFile`: the system document picker over the frontmost
 /// screen. A picked file is read in place from the picker's own URL and handed
@@ -92,6 +124,9 @@ enum FilePerformer {
             .filter { !$0.contains("/") }
             .map { ($0.hasPrefix(".") ? String($0.dropFirst()) : $0).lowercased() }
         let holder = PickerHolder { urls in
+            // THE IMPORTER'S CEILINGS (#1202): a file is sized before it is read, so a 100 MB list or a
+            // folder of thousands never sits in memory whole; what is left out is named, never dropped.
+            var limits = PickLimits(perFile: pick.maxBytes, total: pick.maxTotalBytes)
             var file = Centraid_Core_V1_BytesPicked()
             if pick.folder || pick.multiple {
                 var picked: [Centraid_Core_V1_PickedBytes] = []
@@ -99,12 +134,17 @@ enum FilePerformer {
                     let scoped = url.startAccessingSecurityScopedResource()
                     defer { if scoped { url.stopAccessingSecurityScopedResource() } }
                     if pick.folder {
-                        picked += readFolder(url, extensions: extensions)
-                    } else if let bytes = try? Data(contentsOf: url) {
-                        var one = Centraid_Core_V1_PickedBytes()
-                        one.name = url.lastPathComponent
-                        one.content = bytes
-                        picked.append(one)
+                        readFolder(url, extensions: extensions, limits: &limits, into: &picked, skipped: &file.skipped)
+                    } else {
+                        switch limits.read(url) {
+                        case let .bytes(bytes):
+                            var one = Centraid_Core_V1_PickedBytes()
+                            one.name = url.lastPathComponent
+                            one.content = bytes
+                            picked.append(one)
+                        case .tooLarge, .unreadable:
+                            file.skipped.append(url.lastPathComponent)
+                        }
                     }
                 }
                 file.files = picked
@@ -112,11 +152,17 @@ enum FilePerformer {
             } else if let url = urls.first {
                 let scoped = url.startAccessingSecurityScopedResource()
                 defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                if let bytes = try? Data(contentsOf: url) {
+                switch limits.read(url) {
+                case let .bytes(bytes):
                     file.name = url.lastPathComponent
                     file.content = bytes
-                } else {
-                    file.cancelled = true
+                case .tooLarge:
+                    done(.failed(ScreenStore.failure(EffectReason.tooLarge)))
+                    return
+                case .unreadable:
+                    // As on Android: a file that would not read is a failure the screen words, not a dismissal.
+                    done(.failed(ScreenStore.failure(EffectReason.unreadable)))
+                    return
                 }
             } else {
                 file.cancelled = true
@@ -127,27 +173,39 @@ enum FilePerformer {
     }
 
     /// Every file below `root` whose extension is among `extensions` (any, when none is named),
-    /// named by its path below `root`, `/` separated. Hidden files and folders are skipped.
-    private static func readFolder(_ root: URL, extensions: [String]) -> [Centraid_Core_V1_PickedBytes] {
+    /// named by its path below `root`, `/` separated. Hidden files and folders are skipped. A file
+    /// over a ceiling or that would not read is named in `skipped`.
+    private static func readFolder(
+        _ root: URL,
+        extensions: [String],
+        limits: inout PickLimits,
+        into out: inout [Centraid_Core_V1_PickedBytes],
+        skipped: inout [String]
+    ) {
         guard let walk = FileManager.default.enumerator(
             at: root,
             includingPropertiesForKeys: [.isRegularFileKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
-        ) else { return [] }
-        var out: [Centraid_Core_V1_PickedBytes] = []
+        ) else { return }
         let base = root.standardizedFileURL.path
+        var seen = 0
         for case let url as URL in walk {
             guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
             if !extensions.isEmpty, !extensions.contains(url.pathExtension.lowercased()) { continue }
-            guard let bytes = try? Data(contentsOf: url) else { continue }
-            var one = Centraid_Core_V1_PickedBytes()
             let path = url.standardizedFileURL.path
-            one.name = path.hasPrefix(base + "/") ? String(path.dropFirst(base.count + 1)) : url.lastPathComponent
-            one.content = bytes
-            out.append(one)
-            if out.count >= 5_000 { break }
+            let name = path.hasPrefix(base + "/") ? String(path.dropFirst(base.count + 1)) : url.lastPathComponent
+            switch limits.read(url) {
+            case let .bytes(bytes):
+                var one = Centraid_Core_V1_PickedBytes()
+                one.name = name
+                one.content = bytes
+                out.append(one)
+            case .tooLarge, .unreadable:
+                skipped.append(name)
+            }
+            seen += 1
+            if seen >= 5_000 { break }
         }
-        return out
     }
 
     /// WHAT `PickBytes.accept` MEANS TO THE PICKER: a media type or an extension (with or without
