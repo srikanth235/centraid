@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.platform.testTag
 import androidx.compose.material3.TextFieldDefaults
 import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.kitTextStyle
 import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.StateColor
@@ -216,11 +217,10 @@ private fun LightViewer(
                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // THE STAMP WRAPS BY WORD, AT MOST TWO LINES at the largest text (#1202), centred; one
-                // line before that, as the board draws it.
-                val stampLines = if (rememberLargestText()) 2 else 1
-                if (photo != null && photo.stamp_date.isNotEmpty()) KitText(photo.stamp_date, KitType.Row, Surface.ink, maxLines = stampLines)
-                if (photo != null && photo.stamp_line.isNotEmpty()) KitText(photo.stamp_line, KitType.Meta, Surface.meta, maxLines = stampLines)
+                // TWO LINES, THE DATE THEN THE TIME (#1202): each holds to its own line and shrinks before
+                // it would wrap, as iOS's does; the date never runs to three lines.
+                if (photo != null && photo.stamp_date.isNotEmpty()) StampLine(photo.stamp_date, KitType.Row, Surface.ink)
+                if (photo != null && photo.stamp_line.isNotEmpty()) StampLine(photo.stamp_line, KitType.Meta, Surface.meta)
             }
             MoreMenu(state.menu, words.more, onEvent)
         }
@@ -957,3 +957,16 @@ private fun verbEvent(verb: PhotosLightboxVerb): PhotosLightboxEvent =
 private fun drawnPath(photo: PhotosLightboxPhoto): String? =
     photo.original_path?.takeIf { it.isNotEmpty() && photo.original_embeddable }
         ?: photo.tile?.thumbnail_path?.takeIf { it.isNotEmpty() }
+
+/** ONE LINE OF THE VIEWER'S STAMP: it shrinks (to half) rather than wrap or be cut. */
+@Composable
+private fun StampLine(text: String, rung: KitType, color: Color) {
+    val style = kitTextStyle(rung)
+    androidx.compose.foundation.text.BasicText(
+        if (rung.caps) text.uppercase() else text,
+        style = style.copy(color = color, textAlign = androidx.compose.ui.text.style.TextAlign.Center),
+        maxLines = 1,
+        softWrap = false,
+        autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = style.fontSize * 0.5f, maxFontSize = style.fontSize),
+    )
+}

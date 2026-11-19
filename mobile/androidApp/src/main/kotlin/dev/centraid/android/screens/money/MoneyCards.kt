@@ -381,10 +381,11 @@ private fun BarsBody(bars: MoneyBars, onPick: (Int) -> Unit) {
             }
         }
         if (bars.pace_bp > 0 && rememberLargestText()) {
+            val paceInk = Surface.meta
             Row(Modifier.clearAndSetSemantics { }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Canvas(Modifier.width(20.dp).height(1.dp)) {
                     drawLine(
-                        Surface.meta,
+                        paceInk,
                         Offset(0f, 0f),
                         Offset(size.width, 0f),
                         strokeWidth = 1.dp.toPx(),

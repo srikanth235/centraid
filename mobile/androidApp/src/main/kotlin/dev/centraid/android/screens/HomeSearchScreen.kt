@@ -253,7 +253,7 @@ private fun HitRow(row: HomeSearchRow, onTap: () -> Unit) {
         // "Worko" and the title left a sliver.
         val stacked = rememberLargestText()
         val kind: @Composable (Modifier) -> Unit = { mod ->
-            Text(row.kind_label, style = centraidType("small"), color = centraidColor("textSoft"), maxLines = if (stacked) 2 else 1, modifier = mod)
+            Text(row.kind_label, style = centraidType("small"), color = centraidColor("textSoft"), maxLines = 2, modifier = mod)
         }
         val body: @Composable (Modifier) -> Unit = { mod ->
             Column(mod) {
