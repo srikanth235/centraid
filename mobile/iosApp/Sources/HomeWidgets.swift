@@ -196,11 +196,11 @@ private struct WidgetBody: View {
                         Text(event.title)
                             .centraidType("annotLabelOn")
                             .foregroundStyle(ink)
-                            .lineLimit(1)
+                            .kitLineLimit(1)
                         Text(event.span)
                             .centraidType("annotLabel")
                             .foregroundStyle(meta)
-                            .lineLimit(1)
+                            .kitLineLimit(1)
                     }
                 }
                 .fixedSize(horizontal: false, vertical: true)
@@ -209,7 +209,7 @@ private struct WidgetBody: View {
             Text(day.foot)
                 .centraidType("annotLabel")
                 .foregroundStyle(meta)
-                .lineLimit(1)
+                .kitLineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
@@ -235,7 +235,7 @@ private struct WidgetBody: View {
                     Text(title)
                         .centraidType("annotLabel")
                         .foregroundStyle(ink)
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                 }
             }
             Spacer(minLength: 0)
@@ -312,7 +312,7 @@ private struct WidgetBody: View {
                 Text(line2)
                     .centraidType("annotLabel")
                     .foregroundStyle(meta)
-                    .lineLimit(1)
+                    .kitLineLimit(1)
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -343,9 +343,11 @@ private struct WidgetBody: View {
                     .centraidType("annotLabelOn")
                     .foregroundStyle(accent)
                 Spacer(minLength: 0)
+                // AT THE LARGEST TEXT IT LEANS LEADING, like the name over it (#1202): a centred
+                // sentence under a leading name read as two layouts in one card.
                 invitationText
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(largestText ? .leading : .center)
+                    .frame(maxWidth: .infinity, alignment: largestText ? .leading : .center)
                 Spacer(minLength: 0)
             } else {
                 HStack(spacing: 6) {

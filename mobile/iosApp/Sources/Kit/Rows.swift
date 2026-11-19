@@ -29,6 +29,7 @@ struct CentraidRow: View {
     var onTap: (() -> Void)? = nil
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// A row the machine already folded into the kit's `ListRow`.
     init(_ row: Centraid_Core_V1_ListRow, onTap: (() -> Void)? = nil) {
@@ -96,28 +97,34 @@ struct CentraidRow: View {
             .centraidType("smallStrong")
             .monospacedDigit()
             .foregroundStyle(Theme.color(dimmed ? "textFaint" : trailingTone, scheme))
-            .kitLineLimit(1)
+            .kitLineLimit(1, wide: 2)
     }
 
     private var row: some View {
-        HStack(spacing: 12) {
+        // AT ACCESSIBILITY SIZES THE TRAILING FIGURE AND CHIPS SIT UNDER THE WORDS (#1202): beside
+        // them the words were a column of syllables ("Messa/ge") and the date was cut ("Sat 7...").
+        let stacked = dynamicTypeSize.isAccessibilitySize
+        let layout = stacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(spacing: 12))
+        return layout {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .kitType(.row)
                     .foregroundStyle(dimmed ? Surface.meta : Surface.ink)
-                    .lineLimit(2)
+                    .kitLineLimit(2, wide: 6)
                 if !meta.isEmpty || pending {
                     Text(pending ? (meta.isEmpty ? pendingLabel : "\(meta) · \(pendingLabel)") : meta)
                         .kitType(.meta)
                         .foregroundStyle(Surface.meta)
-                        .lineLimit(2)
+                        .kitLineLimit(2, wide: 6)
                 }
             }
-            Spacer(minLength: 8)
+            if !stacked { Spacer(minLength: 8) }
             // THE TRAILING COLUMN, AS THE MONEY BOARDS DRAW IT: the figure with its state chip UNDER
             // it, right-aligned; a chip alone stays beside the title's line.
             if !trailing.isEmpty, !chips.isEmpty {
-                VStack(alignment: .trailing, spacing: 4) {
+                VStack(alignment: stacked ? .leading : .trailing, spacing: 4) {
                     trailingText
                     HStack(spacing: 6) {
                         ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
