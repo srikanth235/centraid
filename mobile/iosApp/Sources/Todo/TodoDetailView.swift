@@ -25,6 +25,7 @@ struct TodoDetailView: View {
     @State private var seeded = false
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private func event(_ build: (inout Centraid_Core_V1_TodoDetailEvent) -> Void) -> Centraid_Core_V1_TodoDetailEvent {
         var event = Centraid_Core_V1_TodoDetailEvent()
@@ -248,15 +249,20 @@ struct TodoDetailView: View {
             .disabled(!field.enabled)
         } else {
             VStack(alignment: .leading, spacing: 6) {
-                HStack {
+                // THE VALUE UNDER ITS LABEL AT ACCESSIBILITY SIZES (#1202): beside "When" the date
+                // was left a narrow column and broke as "Novembe/r".
+                let keyLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                    : AnyLayout(HStackLayout())
+                keyLayout {
                     Text(field.label)
                         .centraidType("body")
                         .foregroundStyle(Theme.color(field.enabled ? "text" : "textDisabled", scheme))
-                    Spacer(minLength: 8)
+                    if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
                     Text(field.value)
                         .centraidType("body")
                         .foregroundStyle(Theme.color(field.enabled ? "textSoft" : "textDisabled", scheme))
-                        .kitLineLimit(1)
+                        .kitLineLimit(1, wide: 4)
                 }
                 if !field.choices.isEmpty {
                     // THE CHOICES WRAP (#1202): a chip row that scrolled sideways cut "Next week" and
