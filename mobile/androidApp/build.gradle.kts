@@ -34,6 +34,9 @@ android {
 
     buildFeatures { compose = true }
 
+    // Robolectric needs the app's resources (the fonts, the night palette) to draw a screen.
+    testOptions { unitTests.isIncludeAndroidResources = true }
+
     // A RELEASE BUILD IS SHRUNK AND OBFUSCATED BY R8. The libraries carry their
     // own consumer rules; what they cannot know is in `proguard-rules.pro` —
     // JNA, whose native dispatcher reaches back into Java by class and member
@@ -108,6 +111,12 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.roborazzi)
     testImplementation(libs.roborazzi.compose)
+
+    // THE ACCESSIBILITY SUITE (#1202, S4): Compose UI tests under Robolectric. The manifest artifact registers the
+    // empty activity the rule launches. (The Accessibility Test Framework cannot see inside a Compose view under
+    // Robolectric; `a11y/A11y.kt` says what asks the same questions instead.)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
 
 // THE UNIT TESTS RUN ON JDK 21. `:core` compiles with
