@@ -652,16 +652,17 @@ fn nobody_overdue_is_no_reconnect_line() {
     assert!(roster_data(d.view(i)).reconnect.is_none());
 }
 
-/// THE FIRST-OPEN CARD OFFERS ITS IMPORT WHILE THE PHONE CAN DO IT, and "Add person" once the phone
+/// THE FIRST-OPEN CARD OFFERS ITS IMPORT WHILE THE PHONE CAN DO IT, and Open Settings once the phone
 /// refused the contacts: no import that fails again, and no "Or tap +" hint.
 #[test]
-fn a_phone_that_refused_its_contacts_gets_add_person_on_the_card_and_no_hint() {
+fn a_phone_that_refused_its_contacts_gets_open_settings_on_the_card_and_no_hint() {
     let empty = first_open_after_failed_read(wire::EffectFailed {
         denied: true,
         ..Default::default()
     });
     assert_eq!(empty.import_source, wire::ImportSource::Unspecified as i32);
-    assert_eq!(empty.action_label, "Add person");
+    assert_eq!(empty.headline, "Contacts access is off.");
+    assert_eq!(empty.action_label, "Open Settings");
     assert_eq!(empty.hint, "");
 }
 
@@ -686,6 +687,16 @@ fn first_open_after_failed_read(failed: wire::EffectFailed) -> wire::EmptyState 
     assert_eq!(empty.import_source, wire::ImportSource::Contacts as i32);
     assert_eq!(empty.action_label, "");
     assert_eq!(empty.hint, "Or tap + to add one.");
+    refuse_the_import(&mut d, i, failed);
+    empty_of(&home_state(d.view(i)).page).clone()
+}
+
+/// The member taps Import and the phone answers the read with `failed`.
+fn refuse_the_import(
+    d: &mut centraid_screens::testing::Driver,
+    i: u64,
+    failed: wire::EffectFailed,
+) {
     // The member taps Import and the phone says no.
     // THE HOME HAS ASKED WHETHER THIS DEVICE FOLLOWS: it does not.
     while let Some(at) = d.effects.iter().position(|request| {
@@ -709,7 +720,7 @@ fn first_open_after_failed_read(failed: wire::EffectFailed) -> wire::EmptyState 
         );
     }
     d.effects.clear();
-    send_home(&mut d, i, H::ImportContacts(ev::ImportContactsTapped {}));
+    send_home(d, i, H::ImportContacts(ev::ImportContactsTapped {}));
     d.effects.retain(|request| {
         matches!(
             request.effect.as_ref().and_then(|e| e.kind.as_ref()),
@@ -717,5 +728,49 @@ fn first_open_after_failed_read(failed: wire::EffectFailed) -> wire::EmptyState 
         )
     });
     d.answer_effect(wire::effect_result::Outcome::Failed(failed));
-    empty_of(&home_state(d.view(i)).page).clone()
+}
+
+/// THE REFUSAL IS SAID ONCE: on the card while it is the page (no one in People yet), and on the
+/// status line when someone is there and the card is not.
+#[test]
+fn a_refusal_is_the_cards_when_it_is_on_screen_and_the_status_lines_when_it_is_not() {
+    let denied = || wire::EffectFailed {
+        denied: true,
+        ..Default::default()
+    };
+    // No one in People: the card says it and the line is silent.
+    let mut d = clean();
+    let i = begin(&mut d);
+    refuse_the_import(&mut d, i, denied());
+    let state = home_state(d.view(i));
+    assert_eq!(empty_of(&state.page).headline, "Contacts access is off.");
+    assert_eq!(
+        state
+            .status
+            .as_ref()
+            .map(|s| s.sentence.as_str())
+            .unwrap_or_default(),
+        ""
+    );
+    // The card's one action is Open Settings, sent through the one empty-acted event.
+    d.effects.clear();
+    send_home(&mut d, i, H::EmptyActed(ev::EmptyActed {}));
+    assert!(
+        d.effects.iter().any(|request| matches!(
+            request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::VaultCommand(_))
+        )),
+        "Open Settings is asked of the shell"
+    );
+
+    // Someone is in People: the card is not drawn, so the line says it.
+    let mut d = clean();
+    person(&d, "Dana Reyes");
+    let i = begin(&mut d);
+    refuse_the_import(&mut d, i, denied());
+    let state = home_state(d.view(i));
+    assert_eq!(
+        state.status.as_ref().map(|s| s.sentence.as_str()),
+        Some("Contacts access is off. Turn it on in Settings.")
+    );
 }

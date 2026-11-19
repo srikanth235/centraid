@@ -68,9 +68,11 @@ pub struct Fold<'a> {
     /// weeks begin.
     pub week_start: WeekStart,
     pub month_style: wire::AgendaMonthStyle,
-    /// The phone refused the calendar the last time an import was tried: the first-open card offers
-    /// "New event" instead of an import it cannot do.
+    /// The phone refused the calendar the last time an import was tried: the first-open card says so
+    /// with Open Settings instead of offering an import it cannot do.
     pub import_denied: bool,
+    /// ... and said so outright, so the card says it with Open Settings (RemindersRefused).
+    pub import_refused: bool,
 }
 
 /// One row on a day: an event or a task, and the key it sorts by.
@@ -101,6 +103,8 @@ enum Emptiness {
 /// A place's folded answer: the data it draws, and (instead of the data) the page's own empty
 /// state when there is nothing to draw (#1185).
 pub struct Folded {
+    /// The empty card is the refusal: it says it, so the status line does not say it again.
+    pub refusal: bool,
     pub data: wire::AgendaHomeData,
     pub empty: Option<wire::EmptyState>,
 }
@@ -372,6 +376,15 @@ pub fn events(fold: &Fold) -> Option<Folded> {
         // FIRST OPEN (FirstOpenCalendar): what Calendar is for, then the way to add by hand. The
         // import is the card's one action where the phone holds a calendar; the plus is in the
         // header, so the card holds no "New event" button of its own.
+        // A REFUSED GRANT is said on the card with Open Settings alone, as Reminders' and Photos'
+        // are (RemindersRefused): the plus in the header is the way to add by hand.
+        Emptiness::DayOne if fold.import_refused => (
+            words::refused_title(locale),
+            words::refused_body(locale),
+            words::refused_open_settings(locale),
+        ),
+        // A GRANT THE PHONE RESTRICTS OR LIMITS is another sentence (the status line's): the card
+        // offers the plus's own way in.
         Emptiness::DayOne if fold.import_denied => (
             words::first_open(locale),
             String::new(),
@@ -463,6 +476,7 @@ pub fn events(fold: &Fold) -> Option<Folded> {
         month: grids.month,
         year: grids.year,
     };
+    let refusal = empty == Emptiness::DayOne && fold.import_refused;
     // A drawn grid is the place whatever it holds (its cells say what they hold): only a list with
     // nothing to list is the page's empty state.
     let empty =
@@ -487,7 +501,11 @@ pub fn events(fold: &Fold) -> Option<Folded> {
                 ..wire::EmptyState::default()
             }
         });
-    Some(Folded { data, empty })
+    Some(Folded {
+        refusal,
+        data,
+        empty,
+    })
 }
 
 /// A search hit moved onto the occurrence the core names (`next_instance_key`,
@@ -979,6 +997,7 @@ mod tests {
             week_start: WeekStart::Monday,
             month_style: wire::AgendaMonthStyle::Grid,
             import_denied: false,
+            import_refused: false,
         })
         .unwrap()
     }
@@ -1185,6 +1204,7 @@ mod tests {
             week_start: WeekStart::Monday,
             month_style: wire::AgendaMonthStyle::Grid,
             import_denied: false,
+            import_refused: false,
         })
         .unwrap()
         .data;

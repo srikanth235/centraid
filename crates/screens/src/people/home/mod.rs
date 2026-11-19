@@ -403,6 +403,25 @@ impl Home {
                 self.undo.clear();
                 return self.contacts.import(ctx);
             }
+            // THE EMPTY CARD'S ONE ACTION: the phone's Settings after a refusal (PeopleRefused), else
+            // the add the plus also makes.
+            H::EmptyActed(_) => {
+                if rows::Access::of(&ctx.follows().report(Store::Contacts)) == rows::Access::Refused
+                {
+                    return vec![wire::Effect {
+                        kind: Some(wire::effect::Kind::VaultCommand(wire::VaultCommand {
+                            kind: Some(wire::vault_command::Kind::Open(
+                                wire::home_status::Destination::Phone as i32,
+                            )),
+                        })),
+                    }];
+                }
+                return vec![wire::Effect {
+                    kind: Some(wire::effect::Kind::OpenRoute(wire::OpenRoute {
+                        route: Some(routes::new_person()),
+                    })),
+                }];
+            }
             H::ContactsAction(_) => {
                 self.sheet = wire::people_home_state::Sheet::Unspecified;
                 self.undo.clear();
@@ -490,16 +509,17 @@ impl Home {
     /// Touch, or the roster's (day one, or the chip's own).
     fn empty_state(&self, ctx: &Ctx, searching: bool) -> wire::EmptyState {
         let locale = ctx.locale();
-        // THE PHONE REFUSED ITS CONTACTS: day one offers the add and not an import that cannot work.
-        let can_import = !ctx.follows().report(Store::Contacts).denied;
+        // THE PHONE REFUSED ITS CONTACTS: day one says so with Open Settings, or offers the add and
+        // not an import that cannot work.
+        let access = rows::Access::of(&ctx.follows().report(Store::Contacts));
         if searching {
             rows::search_empty(locale)
         } else if self.destination == wire::PeopleDestination::Touch {
-            rows::touch_day_one(locale, can_import)
+            rows::touch_day_one(locale, access)
         } else {
             self.held_roster.as_ref().map_or_else(
-                || rows::day_one(locale, can_import),
-                |roster| rows::roster_empty(locale, roster, self.chip, can_import),
+                || rows::day_one(locale, access),
+                |roster| rows::roster_empty(locale, roster, self.chip, access),
             )
         }
     }
@@ -528,10 +548,12 @@ impl Home {
         state
     }
 
-    fn status(&self, ctx: &Ctx) -> Option<wire::StatusLine> {
+    /// The status line; `refusal_card` says the empty card is already telling the member the phone
+    /// refused the contacts (with Open Settings), so the line does not say it again.
+    fn status(&self, ctx: &Ctx, refusal_card: bool) -> Option<wire::StatusLine> {
         self.undo
             .status()
-            .or_else(|| self.contacts.status().cloned())
+            .or_else(|| self.contacts.status().filter(|_| !refusal_card).cloned())
             .or_else(|| {
                 ctx.follows()
                     .report(Store::Contacts)
@@ -593,6 +615,8 @@ impl Screen for Home {
             }
             _ => self.roster.wire(locale, gate, || empty.clone()),
         };
+        let refusal_card = matches!(wired.state, Some(wire::page_state::State::Empty(_)))
+            && rows::is_refusal(locale, &empty);
         let content = if searching {
             None
         } else if self.destination == wire::PeopleDestination::Touch {
@@ -662,7 +686,7 @@ impl Screen for Home {
                 .collect()
             },
             sheet: self.sheet as i32,
-            status: self.status(ctx),
+            status: self.status(ctx, refusal_card),
             contacts: (!denied_now).then(|| self.contacts.row(ctx)),
             stop: (self.asking_stop && !denied_now).then(|| {
                 crate::kit::follow::stop_confirm(

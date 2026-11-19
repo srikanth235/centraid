@@ -46,6 +46,9 @@ catalog! {
     plain empty_days = ("Nothing on these days.", "Nothing on these days.");
     plain first_open = ("Your events and invitations, day by day.", "Your events and invitations, day by day.");
     plain first_open_hint = ("Or tap + to write one.", "Or tap + to write one.");
+    plain refused_title = ("Calendar access is off.", "Calendar access is off.");
+    plain refused_body = ("Turn it on in Settings to import your calendar.", "Turn it on in Settings to import your calendar.");
+    plain refused_open_settings = ("Open Settings", "Open Settings");
     plain empty_no_match = ("Nothing matches that.", "Nothing matches that.");
     plain empty_no_match_body = ("Try fewer words, or a different day.", "Try fewer words, or a different day.");
     plain empty_waiting = ("Nothing is waiting on you.", "Nothing is waiting on you.");

@@ -108,7 +108,12 @@ struct AgendaHomeView: View {
                         page: state.page,
                         loadingLabel: state.chrome.loading,
                         onRetry: { send(AgendaEvents.make { $0.refreshed = .init() }) },
-                        onEmptyAction: offersImport(state) ? nil : { if state.hasNewEvent { open(state.newEvent) } },
+                        // THE CARD'S ONE ACTION, when it has one, is Open Settings after a refused grant; "New event" is the header's plus.
+                        onEmptyAction: offersImport(state) ? nil : {
+                            if case let .empty(empty)? = state.page.state, !empty.actionLabel.isEmpty {
+                                send(AgendaEvents.make { $0.todoEmptyActed = .init() })
+                            }
+                        },
                         emptyExtra: { AnyView(emptyUnder(state)) },
                         emptyAction: offersImport(state) ? { AnyView(CalendarImportButton(label: state.importLabel, identifier: "kit-empty-import", send: send)) } : nil
                     ) {

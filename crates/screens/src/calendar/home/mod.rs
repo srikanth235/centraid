@@ -582,6 +582,7 @@ impl Home {
             week_start: grid::week_start_of(ctx.region()),
             month_style: self.month_style,
             import_denied: ctx.follows().report(Store::Calendar).denied,
+            import_refused: ctx.follows().report(Store::Calendar).refused(),
         })
     }
 
@@ -622,6 +623,22 @@ impl Screen for Home {
             }
             Some(E::AgendaHome(home)) => match home.kind {
                 Some(H::ImportRequested(_)) => return self.calendar.import(ctx),
+                // THE CARD'S ONE ACTION: the phone's Settings after a refusal (RemindersRefused),
+                // else the new event the plus also makes.
+                Some(H::TodoEmptyActed(_)) => {
+                    if ctx.follows().report(Store::Calendar).refused() {
+                        return vec![wire::Effect {
+                            kind: Some(wire::effect::Kind::CameraRoll(wire::CameraRoll {
+                                action: wire::camera_roll::Action::OpenSettings as i32,
+                            })),
+                        }];
+                    }
+                    return vec![wire::Effect {
+                        kind: Some(wire::effect::Kind::OpenRoute(wire::OpenRoute {
+                            route: Some(routes::editor("", "", None, &self.anchor)),
+                        })),
+                    }];
+                }
                 // THE TURN-ON ROW (the stop row's slot after a stop): the sheet is done and the
                 // phone is asked for the permission now, as the empty state's Import does.
                 Some(H::MoreRow(picked))
@@ -674,6 +691,9 @@ impl Screen for Home {
         let folded = if ready { self.data(ctx) } else { None };
         // A place with nothing to show is the page's own empty state; its data is not drawn.
         let empty_state = folded.as_ref().and_then(|folded| folded.empty.clone());
+        // THE CARD SAYS THE REFUSAL (with Open Settings) while it is on screen, and the status
+        // line stays silent so it does not say it twice or follow the member elsewhere.
+        let refusal_card = folded.as_ref().is_some_and(|folded| folded.refusal);
         // The calendars list is the More sheet's even when the place itself has nothing to show.
         let full = folded.map(|folded| folded.data);
         let mut data = full.clone().filter(|_| empty_state.is_none());
@@ -801,9 +821,12 @@ impl Screen for Home {
                             "calendar",
                         )
                     }),
+                    // A REFUSAL IS THE CARD'S TO SAY (with Open Settings), never a line that
+                    // follows the member into other places.
                     status: self
                         .calendar
                         .status()
+                        .filter(|_| !refusal_card)
                         .cloned()
                         .or_else(|| self.ops.status())
                         .or_else(|| {

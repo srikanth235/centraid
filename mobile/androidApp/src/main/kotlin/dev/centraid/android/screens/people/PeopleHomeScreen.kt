@@ -178,8 +178,8 @@ public fun PeopleHomeScreen(
             page = state.page!!,
             onRetry = { onEvent(PeopleHomeEvent(refreshed = PeopleHomeEvent.Refreshed())) },
             retryLabel = chrome?.retry.orEmpty(),
-            // AFTER A REFUSED IMPORT the card's action is "Add person" (Rust's `empty.action_label`).
-            onEmptyAction = state.add_person?.takeUnless { offersImport }?.let { route -> { onOpen(route) } },
+            // THE CARD'S ONE ACTION is Rust's to decide: Open Settings after a refused import, else Add person.
+            onEmptyAction = { onEvent(PeopleHomeEvent(empty_acted = PeopleHomeEvent.EmptyActed())) },
             emptyExtra = if (asksUnderEmpty) {
                 { SearchAskRow(search?.ask, onOpen) }
             } else {

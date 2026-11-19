@@ -1497,18 +1497,24 @@ fn to_dos_search_draws_the_containers_too() {
 // Empties, failure, change
 // ---------------------------------------------------------------------------
 
-/// THE FIRST-OPEN CARD OFFERS ITS IMPORT WHILE THE PHONE CAN DO IT, and "New event" once the phone
-/// refused the calendar: no import that fails again, and no "Or tap +" hint under the button.
+/// THE FIRST-OPEN CARD OFFERS ITS IMPORT WHILE THE PHONE CAN DO IT, and says the refusal with Open
+/// Settings once the phone refused the calendar (RemindersRefused): no import that fails again, and
+/// no "Or tap +" hint under the button.
 #[test]
-fn a_phone_that_refused_its_calendar_gets_new_event_on_the_card_and_no_hint() {
+fn a_phone_that_refused_its_calendar_gets_open_settings_on_the_card_and_no_hint() {
     // THE FIRST REFUSAL, no second tap: the shell names a no as `denied` the moment the member says it.
     let (empty, import_label) = first_open_after_failed_read(wire::EffectFailed {
         denied: true,
         ..Default::default()
     });
-    // CANNOT IMPORT: "New event" is the card's action, with no hint and no import.
+    // CANNOT IMPORT: Open Settings is the card's action, with no hint and no import.
     assert_eq!(empty.import_source, wire::ImportSource::Unspecified as i32);
-    assert_eq!(empty.action_label, "New event");
+    assert_eq!(empty.headline, "Calendar access is off.");
+    assert_eq!(
+        empty.body,
+        "Turn it on in Settings to import your calendar."
+    );
+    assert_eq!(empty.action_label, "Open Settings");
     assert_eq!(empty.hint, "");
     assert_eq!(import_label, "");
 }

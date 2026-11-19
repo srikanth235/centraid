@@ -248,7 +248,13 @@ public fun AgendaHomeScreen(
                     ReadStateView(
                         page = page,
                         onRetry = { onEvent(AgendaHomeEvent(refreshed = AgendaHomeEvent.Refreshed())) },
-                        onEmptyAction = state.new_event?.takeUnless { offersImport }?.let { route -> { onOpen(route) } },
+                        // THE CARD'S ONE ACTION, when it has one, is Open Settings after a refused grant (Rust's
+                        // `empty.action_label`); "New event" is the header's plus.
+                        onEmptyAction = if (page.empty?.action_label.orEmpty().isNotEmpty()) {
+                            { onEvent(AgendaHomeEvent(todo_empty_acted = AgendaHomeEvent.TodoEmptyActed())) }
+                        } else {
+                            null
+                        },
                         retryLabel = chrome.retry,
                         emptyAction = if (offersImport) {
                             {

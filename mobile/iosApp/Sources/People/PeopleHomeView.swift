@@ -60,7 +60,8 @@ struct PeopleHomeView: View {
                     page: state.page,
                     loadingLabel: chrome.loading,
                     onRetry: { send(PeopleEvents.home { $0.refreshed = .init() }) },
-                    onEmptyAction: offersImport ? nil : { if state.hasAddPerson { open(state.addPerson) } },
+                    // THE CARD'S ONE ACTION is Rust's to decide: Open Settings after a refused import, else Add person.
+                    onEmptyAction: offersImport ? nil : { send(PeopleEvents.home { $0.emptyActed = .init() }) },
                     emptyExtra: emptyUnder,
                     emptyAction: offersImport ? { AnyView(PeopleImportButton(label: state.chrome.importContacts, send: send)) } : nil
                 ) {

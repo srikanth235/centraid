@@ -849,7 +849,8 @@ impl CalendarFollow {
         // A GRANT THAT IS NOT THERE (off, blocked, or write-only) says so in the one permission voice,
         // and the first-open card stops offering an import it cannot do.
         let refusal = permission::refusal(locale, Resource::Calendar, failed);
-        ctx.follows().denied(Store::Calendar, refusal.is_some());
+        ctx.follows()
+            .grant(Store::Calendar, permission::State::of(failed));
         ctx.redraw_all();
         self.status = Some(plain(
             refusal.unwrap_or_else(|| words::import_calendar_failed(locale)),

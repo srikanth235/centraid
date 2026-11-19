@@ -67,6 +67,9 @@ catalog! {
     plain empty_recent = ("Nothing logged yet.", "Nothing logged yet.");
     plain empty_reconnect = ("Nobody is overdue.", "Nobody is overdue.");
     plain empty_chip = ("Nobody to show.", "Nobody to show.");
+    plain refused_title = ("Contacts access is off.", "Contacts access is off.");
+    plain refused_body = ("Turn it on in Settings to import your contacts.", "Turn it on in Settings to import your contacts.");
+    plain refused_open_settings = ("Open Settings", "Open Settings");
     plain first_open = ("The people you know, and what you write about them.", "The people you know, and what you write about them.");
     plain touch_first_open = ("Who to reconnect with, and what is coming up.", "Who to reconnect with, and what is coming up.");
     plain first_open_hint = ("Or tap + to add one.", "Or tap + to add one.");

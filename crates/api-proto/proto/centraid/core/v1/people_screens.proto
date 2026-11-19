@@ -389,6 +389,8 @@ message PeopleHomeEvent {
     MoreRowPicked more_row = 16;
     StopConfirmed stop_confirmed = 17;
     StopDismissed stop_dismissed = 18;
+    // The empty card's one action: Open Settings after a refused grant, else Add person.
+    EmptyActed empty_acted = 19;
   }
 
   // 3 was `chip`, 4 `order` and 8 `sheet_opened`: a pick in the filter menu is
@@ -419,6 +421,8 @@ message PeopleHomeEvent {
   }
 
   message StopConfirmed {}
+
+  message EmptyActed {}
 
   message StopDismissed {}
 
