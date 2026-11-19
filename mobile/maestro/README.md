@@ -26,7 +26,8 @@ Compose gets `Modifier.testTag`, SwiftUI gets `.accessibilityIdentifier`, and bo
 export ANDROID_HOME=/path/to/sdk
 mobile/scripts/android-core.sh
 cd mobile && ./gradlew -Pcentraid.android=true :androidApp:installDebug
-maestro/run-android.sh            # or: maestro/run-android.sh home onboarding
+maestro/run-android.sh            # the made-vault flows, in order (an APK with no demo assets, so first-launch sees no vault)
+mobile/scripts/demo-vault.sh android && maestro/run-android.sh --demo   # then the demo-vault flows
 
 # iOS
 cd mobile/iosApp && export CENTRAID_IOS_DEPLOYMENT_TARGET=$(cat ../ios-deployment-target)

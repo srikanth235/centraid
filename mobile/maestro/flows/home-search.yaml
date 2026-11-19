@@ -27,15 +27,22 @@ name: home-search
 - tapOn: "Done"
 - assertVisible:
     id: "home-search-group-notes"
-# The picked term comes back as a recent search once the field is emptied. (It does not outlive the
-# page: a search opened again starts with no recents, because the recents live in the page's own
-# state. Reopening is not asserted; whether it should outlive the page is the owner's call.)
+# The picked term comes back as a recent search once the field is emptied.
 - tapOn:
     id: "home-search-clear"
 - assertVisible:
     id: "home-search-recent-yours"
-# The close key goes home.
+# The close key goes home; the picked term comes back as a recent search when search is opened again.
+# OPEN FINDING (#1202): the recents live in the page's own state (`shell/search.rs`, `Search.recent`),
+# so a search opened again starts with none and this step fails on both shells until the owner rules
+# whether recents are the session's (R-CHROME-6, "this session's recent searches").
 - tapOn:
     id: "home-search-close"
 - assertVisible:
     id: "home-grid"
+- tapOn:
+    id: "home-search-open"
+- assertVisible:
+    id: "home-search-recent-yours"
+- tapOn:
+    id: "home-search-close"

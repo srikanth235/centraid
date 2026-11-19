@@ -3,7 +3,10 @@ package dev.centraid.android.kit
 import androidx.compose.foundation.background
 import dev.centraid.android.theme.centraidDark
 import androidx.compose.foundation.border
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -665,11 +668,20 @@ private fun SearchContainerLine(
     // THE PRESS IS ON THE NODE THAT CARRIES THE ID AND THE SPOKEN LABEL (#1202): `clearAndSetSemantics`
     // below drops every descendant's actions, so a click on the pill alone left the container
     // unreachable by TalkBack and by a Maestro tap on its id, which lands in the row's middle.
+    // THE PILL KEEPS ITS OWN PRESS FEEDBACK: the row takes the press and no ripple of its own, and the
+    // pill draws the indication for the same interaction source, so it looks as it did.
+    val press = remember { MutableInteractionSource() }
     Box(
         modifier
             .fillMaxWidth()
             .heightIn(min = KitGeometry.ROW_MIN)
-            .then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier)
+            .then(
+                if (onTap != null) {
+                    Modifier.clickable(interactionSource = press, indication = null, onClick = onTap)
+                } else {
+                    Modifier
+                },
+            )
             .padding(horizontal = KitGeometry.GUTTER + 2.dp, vertical = 4.dp)
             .testTag("search-container-$entity-$id")
             .clearAndSetSemantics {
@@ -683,6 +695,7 @@ private fun SearchContainerLine(
                 .clip(shape)
                 .background(Surface.card)
                 .border(KitGeometry.HAIRLINE, Surface.border, shape)
+                .indication(press, LocalIndication.current)
                 .heightIn(min = KitGeometry.ROW_MIN)
                 .padding(start = 8.dp, end = 12.dp),
             verticalAlignment = Alignment.CenterVertically,

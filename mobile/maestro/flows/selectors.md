@@ -67,13 +67,13 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `agenda-search` | Agenda | Agenda's search field once open, at the foot in the band's place; it finds events, tasks and projects: the projects whose name matched as `search-container-project-<id>` rows first (#1128, Q-1128-1), then the tasks as one group, then the event days |
 | `calendar-band-<key>` / `reminders-band-<key>` | Calendar / Reminders | one band place, keyed on the machine's key: `calendar`, `invites`, `more` (the Calendars sheet), `menu` ("More": the sheet of Calendar's own places, Trash today) in Calendar; `reminders`, `more` in Reminders; `<app>-band-home` is the home capsule. The selectors below that begin `agenda-` are the shared home view's and stay (the two apps draw one view) |
 | `agenda-list` | Agenda (Day, Schedule, Waiting, search) | the scrolling list of day sections |
-| `agenda-todo-list` | Agenda (To-do) | the To-do list: the Inbox's groups, then the projects by area, then "New project" |
+| `agenda-todo-list` | Reminders (the lists page) | the lists page's list of lists: the smart lists, then My Lists with the Inbox (`agenda-project-inbox`) and "Add List"; drawn once a task exists, so a day-zero vault has the smart lists over an empty state and no `agenda-todo-list` |
 | `agenda-task-row-<taskId>` | Agenda (Day, Schedule, To-do, Overdue, a search's task hits) | one task row; a tap opens the task, a long press offers "Move to project" |
 | `agenda-task-row-check-<taskId>` | the same | the row's round box: checks the task off in place, and the status line (`agenda-status-action`, "Undo") takes it back |
 | `agenda-task-row-file-<taskId>` | the same | the long-press menu's "Move to project" (iOS) |
 | `agenda-new-event` / `agenda-add-task` | Agenda | the header Plus: "Add" on Day, Schedule and Waiting, "Add task" on To-do (it opens the quick-add bar) |
 | `agenda-quick-add` | Agenda (To-do) | the quick-add bar's field, drawn only after `agenda-add-task`; Add is `agenda-quick-add-verb`, and appears once there are words |
-| `agenda-project-<projectId>` | Agenda (To-do) | one project row; a tap pushes the project's page (`tasks-project`) |
+| `agenda-project-<projectId>` | Reminders (the lists page) | one list row (`agenda-project-inbox` for the Inbox); a tap pushes the list's page: `tasks-list` for the Inbox, `tasks-project` for a project |
 | `agenda-new-project` | Agenda (To-do) | the foot-of-list verb that opens the new-list style sheet, whose field is `agenda-style-name` |
 | `agenda-more-<key>` | Agenda's More sheet | one row: `calendar-<id>`, `new-calendar` (opens the new-calendar sheet, #1173), `anytime`, `logbook`, `reminders`, `trash`, `import-reminders` (iOS only, below), `reads` |
 | `agenda-more-import-reminders` | Agenda's More sheet | **iOS only** (Android has no Reminders store, so its More draws no such row): opens the Import reminders option sheet (#1173) |
@@ -130,7 +130,8 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `tasks-detail-group-<key>` | a task's page | the head of one grouped card, keyed on its first field (`when`, `project`, …); the Flag switch is `tasks-field-flag` |
 | `row-action-<id>` / `row-menu-<id>` | any swipeable task row | the swipe's and the long press's Details, Flag and Delete (`details`, `flag`, `delete`) |
 | `tasks-title-field` | a task's page | the title field, the page's mark that it is open; its Done closes it |
-| `tasks-list` / `tasks-project` | Tasks pages (pushed from Agenda's More and To-do) | a list page (Anytime, Logbook, Reminders) and a project page; their back control reads "Agenda" |
+| `tasks-list` / `tasks-project` | Tasks pages (pushed from Reminders' More and lists page) | a list page (Inbox, Anytime, Logbook) and a project page; their back control reads "Back to Reminders" (`room-back`). `tasks-project` is the rows' list, drawn only while the project has rows; an empty one draws `kit-empty` and `tasks-project-edit` |
+| `room-back` | every pushed page on Android | the back chevron at the top left, spoken as "Back to <parent>" (iOS pushed pages use the navigation bar's `BackButton`) |
 | `home-search-group-chat` | Home search (iOS only) | the head of the Chats group: the member's own conversations, last among the groups, drawn only where the shell has a Chat tab ([#1097](https://github.com/srikanth235/centraid/issues/1097), R-1097-24); its rows are `home-search-row-chat.thread-<id>`, and a tap opens that thread in the Chat tab |
 | `chat-chats` | Chat | the header's round Chats key (the clock, trailing); it pushes the Chats page |
 | `chat-chats-page` | Chat | the Chats page itself: a chevron back (`chat-chats-back`), the list, the search key at the foot; the band is not drawn under it |
