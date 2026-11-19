@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.platform.testTag
 import androidx.compose.material3.TextFieldDefaults
 import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.StateColor
 import dev.centraid.android.kit.Surface
@@ -215,8 +216,11 @@ private fun LightViewer(
                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                if (photo != null && photo.stamp_date.isNotEmpty()) KitText(photo.stamp_date, KitType.Row, Surface.ink, maxLines = 1)
-                if (photo != null && photo.stamp_line.isNotEmpty()) KitText(photo.stamp_line, KitType.Meta, Surface.meta, maxLines = 1)
+                // THE STAMP WRAPS BY WORD, AT MOST TWO LINES at the largest text (#1202), centred; one
+                // line before that, as the board draws it.
+                val stampLines = if (rememberLargestText()) 2 else 1
+                if (photo != null && photo.stamp_date.isNotEmpty()) KitText(photo.stamp_date, KitType.Row, Surface.ink, maxLines = stampLines)
+                if (photo != null && photo.stamp_line.isNotEmpty()) KitText(photo.stamp_line, KitType.Meta, Surface.meta, maxLines = stampLines)
             }
             MoreMenu(state.menu, words.more, onEvent)
         }

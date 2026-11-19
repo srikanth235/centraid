@@ -40,6 +40,7 @@ import centraid.core.v1.HomeFirstLaunch
 import centraid.core.v1.HomeFirstLaunchSlide
 import dev.centraid.android.R
 import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.CentraidMark
 import dev.centraid.android.kit.centraidResource
 import dev.centraid.android.kit.tokenSp
@@ -64,6 +65,7 @@ import dev.centraid.android.theme.centraidDark
 internal fun FirstLaunchScreen(gate: HomeFirstLaunch, onMake: () -> Unit, onRestore: () -> Unit) {
     val dark = centraidDark()
     val page = centraidResource(R.color.centraid_surface_plain_page)
+    val largest = rememberLargestText()
     Column(
         Modifier
             .fillMaxSize()
@@ -105,8 +107,11 @@ internal fun FirstLaunchScreen(gate: HomeFirstLaunch, onMake: () -> Unit, onRest
                 gate.slides.forEachIndexed { index, claim -> Claim(index, claim) }
             }
             Spacer(Modifier.size(16.dp))
+            // THE DOORS SCROLL WITH THE PAGE AT THE LARGEST TEXT (#1202): pinned, their two keys took the
+            // screen and left the claims no room to be read or scrolled to.
+            if (largest) Doors(gate, onMake, onRestore, Modifier.padding(top = 12.dp), inset = 0)
         }
-        Doors(gate, onMake, onRestore)
+        if (!largest) Doors(gate, onMake, onRestore)
     }
 }
 
@@ -170,9 +175,9 @@ private fun Claim(index: Int, claim: HomeFirstLaunchSlide) {
 
 /** Teal is the shell's colour: a filled pill for the act, a quiet teal link for the way back. */
 @Composable
-private fun Doors(gate: HomeFirstLaunch, onMake: () -> Unit, onRestore: () -> Unit) {
+private fun Doors(gate: HomeFirstLaunch, onMake: () -> Unit, onRestore: () -> Unit, modifier: Modifier = Modifier, inset: Int = SIDE) {
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = SIDE.dp).padding(bottom = 24.dp),
+        modifier.fillMaxWidth().padding(horizontal = inset.dp).padding(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Box(

@@ -282,7 +282,8 @@ private fun VaultSheet(sheet: HomeVaultSheet, onEvent: (HomeEvent) -> Unit) {
                             text = vault.name,
                             style = centraidType("smallStrong"),
                             color = centraidColor("text"),
-                            maxLines = 1,
+                            // THE NAME WRAPS and is never cut at the largest text (#1202).
+                            maxLines = if (rememberLargestText()) Int.MAX_VALUE else 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                         // The same sentence the lockup draws: Rust words one
@@ -293,7 +294,7 @@ private fun VaultSheet(sheet: HomeVaultSheet, onEvent: (HomeEvent) -> Unit) {
                                 text = vault.state_line,
                                 style = centraidType("mono"),
                                 color = centraidColor("textFaint"),
-                                maxLines = 1,
+                                maxLines = if (rememberLargestText()) Int.MAX_VALUE else 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
