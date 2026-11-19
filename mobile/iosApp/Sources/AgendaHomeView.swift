@@ -718,6 +718,11 @@ struct AgendaSectionView: View {
     /// Month's list below its grid keeps the stack.
     var inList = false
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// AT ACCESSIBILITY SIZES THE DATE SITS ABOVE ITS ROWS (#1202): a 44pt gutter beside the
+    /// rows cut the day number to dots and left the times a column of letters.
+    private var stacked: Bool { dynamicTypeSize.isAccessibilitySize }
 
     /// The date column's width and the gap to the rows beside it.
     private static let dateWidth: CGFloat = 44
@@ -737,7 +742,7 @@ struct AgendaSectionView: View {
     @ViewBuilder
     private var listRows: some View {
         let margin = CentraidGeometry.pageMargin
-        let gutter = Self.dateWidth + Self.dateGap
+        let gutter = stacked ? 0 : Self.dateWidth + Self.dateGap
         VStack(alignment: .leading, spacing: 0) {
             if section.hasMonthHeading {
                 Text(section.monthHeading)
@@ -754,15 +759,21 @@ struct AgendaSectionView: View {
         }
         .id(section.day)
         .todoPlainRow()
-        if section.hasRibbon {
-            ribbon
-                .padding(.leading, gutter)
-                .overlay(alignment: .topLeading) { dateColumn.padding(.top, 8) }
+        if stacked {
+            dateColumn
                 .padding(.horizontal, margin)
                 .padding(.top, 8)
                 .todoPlainRow()
         }
-        if section.items.isEmpty && !section.hasRibbon {
+        if section.hasRibbon {
+            ribbon
+                .padding(.leading, gutter)
+                .overlay(alignment: .topLeading) { if !stacked { dateColumn.padding(.top, 8) } }
+                .padding(.horizontal, margin)
+                .padding(.top, 8)
+                .todoPlainRow()
+        }
+        if section.items.isEmpty && !section.hasRibbon && !stacked {
             // A day with nothing on it still shows its date.
             Color.clear
                 .frame(height: Self.dateWidth)
@@ -773,7 +784,7 @@ struct AgendaSectionView: View {
                 .todoPlainRow()
         }
         ForEach(Array(section.items.enumerated()), id: \.offset) { index, item in
-            let lead: AnyView? = index == 0 && !section.hasRibbon ? AnyView(dateColumn) : nil
+            let lead: AnyView? = index == 0 && !section.hasRibbon && !stacked ? AnyView(dateColumn) : nil
             switch item.kind {
             case let .event(row):
                 AgendaEventRowView(row: row, open: open)
@@ -832,7 +843,7 @@ struct AgendaSectionView: View {
             Rectangle()
                 .fill(Surface.line)
                 .frame(height: CentraidGeometry.hairline)
-            HStack(alignment: .top, spacing: Self.dateGap) {
+            dayLayout {
                 dateColumn
                 VStack(alignment: .leading, spacing: 0) {
                     if section.hasRibbon {
@@ -871,8 +882,18 @@ struct AgendaSectionView: View {
         }
     }
 
+    /// The date beside its rows, or above them at accessibility sizes.
+    private var dayLayout: AnyLayout {
+        stacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Self.dateGap))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: Self.dateGap))
+    }
+
     private var dateColumn: some View {
-        VStack(spacing: 0) {
+        let layout = stacked
+            ? AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
+            : AnyLayout(VStackLayout(spacing: 0))
+        return layout {
             Text(section.dayNumber)
                 .centraidType(section.isToday ? "title" : "smallStrong")
                 .foregroundStyle(
@@ -891,7 +912,8 @@ struct AgendaSectionView: View {
                 .centraidType("eyebrow")
                 .foregroundStyle(Theme.color(section.isPast ? "textFaint" : "textSoft", scheme))
         }
-        .frame(width: Self.dateWidth)
+        .frame(width: stacked ? nil : Self.dateWidth)
+        .frame(maxWidth: stacked ? .infinity : nil, alignment: .leading)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(section.heading)
         .accessibilityAddTraits(.isHeader)
@@ -918,29 +940,38 @@ private struct AgendaEventRowView: View {
     let row: Centraid_Core_V1_AgendaEventRow
     let open: (Centraid_Core_V1_Route) -> Void
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var rowLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
+    }
 
     var body: some View {
         // THE ROW CARRIES ITS PAGE: this occurrence, drawn under the section's day.
         Button {
             open(row.route)
         } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            // THE TIME ABOVE THE TITLE AT ACCESSIBILITY SIZES (#1202): a 52pt time column split
+            // "10:00 - 11:00" into a letter a line.
+            rowLayout {
                 Text(row.timeLabel)
                     .centraidType("annotLabel")
                     .foregroundStyle(Theme.color(row.isPast ? "textFaint" : "textSoft", scheme))
-                    .frame(width: 52, alignment: .leading)
+                    .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 52, alignment: .leading)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(row.title)
                         .centraidType("body")
                         .foregroundStyle(Theme.color(row.isPast ? "textFaint" : "text", scheme))
-                        .lineLimit(2)
+                        .kitLineLimit(2, wide: 5)
                     // A search hit whose words only an earlier version of the event held
                     // (#1185): the row says so and opens Earlier versions.
                     if !row.earlierLabel.isEmpty {
                         Text(row.earlierLabel)
                             .centraidType("annotLabel")
                             .foregroundStyle(Theme.color("textSoft", scheme))
-                            .lineLimit(1)
+                            .kitLineLimit(1)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -983,7 +1014,8 @@ private struct AgendaNowLineView: View {
             Text(now.label)
                 .centraidType("annotLabelOn")
                 .foregroundStyle(Theme.color("net", scheme))
-                .frame(width: 52, alignment: .leading)
+                .fixedSize()
+                .frame(minWidth: 52, alignment: .leading)
             Circle().fill(Theme.color("net", scheme)).frame(width: 6, height: 6)
             Rectangle().fill(Theme.color("net", scheme)).frame(height: 1)
         }

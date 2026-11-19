@@ -622,26 +622,38 @@ struct ChoiceFieldRow: View {
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         Button(action: onTap) {
-            HStack {
-                Text(key)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color(enabled ? "text" : "textDisabled", scheme))
-                Spacer(minLength: 8)
-                if !hueKey.isEmpty {
-                    Circle()
-                        .fill(Theme.color(KitHue.role(hueKey) ?? "cSlate", scheme))
-                        .frame(width: 8, height: 8)
+            // THE VALUE UNDER ITS LABEL AT ACCESSIBILITY SIZES (#1202): side by side they broke
+            // "Calendar" and "Repeats" mid-word and cut the value to its first letters.
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                : AnyLayout(HStackLayout(spacing: 0))
+            HStack(spacing: 8) {
+                layout {
+                    Text(key)
+                        .centraidType("body")
+                        .foregroundStyle(Theme.color(enabled ? "text" : "textDisabled", scheme))
+                    if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
+                    HStack(spacing: 6) {
+                        if !hueKey.isEmpty {
+                            Circle()
+                                .fill(Theme.color(KitHue.role(hueKey) ?? "cSlate", scheme))
+                                .frame(width: 8, height: 8)
+                        }
+                        Text(value)
+                            .centraidType("body")
+                            .foregroundStyle(Theme.color(enabled ? "textSoft" : "textDisabled", scheme))
+                            .kitLineLimit(1, wide: 4)
+                    }
                 }
-                Text(value)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color(enabled ? "textSoft" : "textDisabled", scheme))
-                    .kitLineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 CentraidIconView(iconKey: "ChevronRight", tint: Theme.color(enabled ? "textFaint" : "textDisabled", scheme), size: 14)
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 8 : 0)
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
             .overlay(alignment: .bottom) { KitHairline() }
             .contentShape(Rectangle())

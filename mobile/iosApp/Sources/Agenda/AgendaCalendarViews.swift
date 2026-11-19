@@ -276,6 +276,7 @@ private struct AgendaAllDayLane: View {
     let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         if !header.allDay.isEmpty {
@@ -291,7 +292,7 @@ private struct AgendaAllDayLane: View {
                     KitFlow(spacing: 8) {
                         ForEach(header.allDay, id: \.key) { chip in
                             AgendaChipView(chip: chip, send: send, open: open)
-                                .fixedSize(horizontal: true, vertical: false)
+                                .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -382,6 +383,10 @@ struct AgendaWeekStripView: View {
                 AgendaStripDayView(day: day, send: send)
             }
         }
+        // SEVEN DAYS ACROSS HOLD AT `xxxLarge` (#1202), as the band holds its labels: at the
+        // accessibility sizes a day's number is wider than a seventh of the screen, which pushed
+        // the whole Day view off both edges. Every other line on the page still scales.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .padding(.horizontal, CentraidGeometry.pageMargin / 2)
         .padding(.bottom, 8)
         .overlay(alignment: .bottom) {
@@ -513,7 +518,7 @@ struct AgendaTimeGridView: View {
                 Text(grid.allDayLabel)
                     .centraidType("annotLabel")
                     .foregroundStyle(Theme.color("textSoft", scheme))
-                    .kitLineLimit(1)
+                    .lineLimit(1)
                     .minimumScaleFactor(0.7)
                     .padding(.leading, 4)
                     .frame(width: AgendaGridMetrics.gutter, alignment: .leading)
@@ -618,7 +623,7 @@ struct AgendaTimeGridView: View {
                 let clashes = grid.hasNow && abs(Int(grid.now.minute) - Int(mark.minute)) < AgendaGridMetrics.nowClash
                 Text(mark.label)
                     .centraidType("annotLabel")
-                    .kitLineLimit(1)
+                    .lineLimit(1)
                     .minimumScaleFactor(0.7)
                     .foregroundStyle(Theme.color("textFaint", scheme))
                     .frame(width: AgendaGridMetrics.gutter, alignment: .trailing)
@@ -667,7 +672,7 @@ struct AgendaTimeGridView: View {
                 .foregroundStyle(Color.white)
                 // THE CLOCK NEVER ENDS IN AN ELLIPSIS: 13pt "08:53" is wider than the 44pt gutter
                 // less its padding, so it scales down to fit rather than truncating.
-                .kitLineLimit(1)
+                .lineLimit(1)
                 .minimumScaleFactor(0.75)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
@@ -1231,7 +1236,7 @@ private struct AgendaYearMonthView: View {
                                 .monospacedDigit()
                                 // ONE LINE: a two-digit day in a seventh of a third of the screen wrapped
                                 // ("3" over "0") and pushed the week out of its columns.
-                                .kitLineLimit(1)
+                                .lineLimit(1)
                                 .minimumScaleFactor(0.7)
                                 .foregroundStyle(day.isToday ? Theme.color("onAccent", scheme) : Theme.color("textSoft", scheme))
                                 .frame(maxWidth: .infinity, minHeight: AgendaGridMetrics.yearDay)

@@ -233,11 +233,22 @@ struct KitTile: View {
     var fill: Color? = nil
 
     @Environment(\.appAccent) private var accent
+    @ScaledMetric private var scaleBase: CGFloat = 1
+
+    init(iconKey: String, size: CGFloat = 32, fill: Color? = nil) {
+        self.iconKey = iconKey
+        self.size = size
+        self.fill = fill
+    }
+
+    /// THE TILE GROWS WITH THE TEXT BESIDE IT (#1202), up to twice its size, so a glyph is not
+    /// the one small thing in a row of large words.
+    private var side: CGFloat { size * min(scaleBase, 2) }
 
     var body: some View {
-        CentraidIconView(iconKey: iconKey, tint: .white, size: (size * 0.5).rounded())
-            .frame(width: size, height: size)
-            .background(fill ?? accent.fill, in: RoundedRectangle(cornerRadius: size * CentraidGeometry.iconChipRadiusRatio, style: .continuous))
+        CentraidIconView(iconKey: iconKey, tint: .white, size: (side * 0.5).rounded())
+            .frame(width: side, height: side)
+            .background(fill ?? accent.fill, in: RoundedRectangle(cornerRadius: side * CentraidGeometry.iconChipRadiusRatio, style: .continuous))
             .accessibilityHidden(true)
     }
 }
