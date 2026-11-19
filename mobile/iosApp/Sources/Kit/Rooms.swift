@@ -650,6 +650,10 @@ struct SheetRoom<Content: View>: View {
     /// measured height of the room, and the platform's own sheet ground on iOS 26. A list taller
     /// than the screen scrolls inside it.
     var fit: Bool = false
+    /// THE CONTENT IS A LIST (or another scroller) THAT SCROLLS ITSELF (#1202): at accessibility
+    /// sizes the room is not wrapped in a `ScrollView`, in which a `List` has no height of its own
+    /// and collapsed to nothing (the Vaults sheet drew its title over a blank sheet).
+    var scrollsItself: Bool = false
     let content: () -> Content
 
     @Environment(\.colorScheme) private var scheme
@@ -665,6 +669,7 @@ struct SheetRoom<Content: View>: View {
         outlines: [SheetOutline] = [],
         titleIdentifier: String = "",
         fit: Bool = false,
+        scrollsItself: Bool = false,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.title = title
@@ -673,6 +678,7 @@ struct SheetRoom<Content: View>: View {
         self.outlines = outlines
         self.titleIdentifier = titleIdentifier
         self.fit = fit
+        self.scrollsItself = scrollsItself
         self.content = content
     }
 
@@ -685,7 +691,7 @@ struct SheetRoom<Content: View>: View {
             .scrollBounceBehavior(.basedOnSize)
             .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { floor = $0 }
             .modifier(SheetPresentation(detents: natural > 0 ? [.height(natural + floor)] : [.medium]))
-        } else if dynamicTypeSize.isAccessibilitySize {
+        } else if dynamicTypeSize.isAccessibilitySize, !scrollsItself {
             // A SHEET TALLER THAN ITS DETENT SCROLLS AT ACCESSIBILITY SIZES (#1202): squeezed into
             // the half sheet, the title was cut to "New entry fo..." and the fields under it with it.
             ScrollView { room }

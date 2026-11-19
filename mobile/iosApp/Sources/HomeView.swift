@@ -332,7 +332,7 @@ private struct VaultSheet: View {
     var body: some View {
         // A SHEETROOM: the room owns the grabber, the title and the gutter,
         // and the roster scrolls inside it.
-        SheetRoom(title: sheet.title, titleIdentifier: "home-vault-sheet") {
+        SheetRoom(title: sheet.title, titleIdentifier: "home-vault-sheet", scrollsItself: true) {
             roster
         }
         .sheet(item: Binding(get: { forgetAsk }, set: { if $0 == nil { store.sendHome(.askDismissed(.init())) } })) { ask in
