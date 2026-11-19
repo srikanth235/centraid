@@ -196,11 +196,11 @@ private struct WidgetBody: View {
                         Text(event.title)
                             .centraidType("annotLabelOn")
                             .foregroundStyle(ink)
-                            .kitLineLimit(1)
+                            .kitLineLimit(2)
                         Text(event.span)
                             .centraidType("annotLabel")
                             .foregroundStyle(meta)
-                            .kitLineLimit(1)
+                            .kitLineLimit(2)
                     }
                 }
                 .fixedSize(horizontal: false, vertical: true)
@@ -209,7 +209,7 @@ private struct WidgetBody: View {
             Text(day.foot)
                 .centraidType("annotLabel")
                 .foregroundStyle(meta)
-                .kitLineLimit(1)
+                .kitLineLimit(2)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
@@ -235,7 +235,8 @@ private struct WidgetBody: View {
                     Text(title)
                         .centraidType("annotLabel")
                         .foregroundStyle(ink)
-                        .kitLineLimit(1)
+                        // TWO LINES, NOT ONE (#1202): a title longer than the tile was cut to "Expense the Octobe...".
+                        .kitLineLimit(2)
                 }
             }
             Spacer(minLength: 0)
@@ -274,8 +275,8 @@ private struct WidgetBody: View {
             Text(caption)
                 .centraidType(invites ? "annotLabelOn" : "annotLabel")
                 .foregroundStyle(invites ? accent : meta)
-                .lineLimit(2)
-                .minimumScaleFactor(0.7)
+                // WHOLE, THE TILE GROWS (#1202): two lines and a shrink cut a longer caption at larger sizes.
+                .fixedSize(horizontal: false, vertical: true)
                 .multilineTextAlignment(lead ? .leading : .center)
             // A SMALL TILE NAMES ITS APP (#1202, S2-7; `HomeWidgets`): "1 person" and "Connect Apple
             // Health" say what is in it, and this says whose. Locker's caption already is the name.
@@ -296,7 +297,7 @@ private struct WidgetBody: View {
     /// newest in it and a word about it. AT THE LARGEST TEXT the word about it is dropped first
     /// and the titles wrap to two lines, so no line is cut mid-word.
     private func line(title: String, next: String = "", meta line2: String) -> some View {
-        let titleLines = largestText ? 2 : 1
+        let titleLines = largestText ? 3 : 2
         return VStack(alignment: .leading, spacing: 2) {
             Text(tile.name)
                 .centraidType("annotLabelOn")
@@ -316,7 +317,7 @@ private struct WidgetBody: View {
                 Text(line2)
                     .centraidType("annotLabel")
                     .foregroundStyle(meta)
-                    .kitLineLimit(1)
+                    .kitLineLimit(2)
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)

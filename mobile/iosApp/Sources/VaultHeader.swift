@@ -91,7 +91,8 @@ struct VaultHeader: View {
                         .foregroundStyle(Theme.color("link", scheme))
                 }
             }
-            .frame(minHeight: 18)
+            // A REAL 24 POINTS (#1202): the audit reads a smaller frame than that as a hit area too small.
+            .frame(minHeight: 24)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -138,7 +139,7 @@ struct VaultHeader: View {
                     .foregroundStyle(Theme.color("text", scheme))
                     .lineLimit(largestText ? nil : 1)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

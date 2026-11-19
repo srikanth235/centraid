@@ -400,8 +400,9 @@ struct EditableFieldRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(key)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color("textSoft", scheme))
+                // THE SEMIBOLD FACE IN THE FULL INK (#1202): "Title" in the soft ink read under 4.5:1 to the audit.
+                .centraidType("annotLabelOn")
+                .foregroundStyle(Theme.color("text", scheme))
             TextField(placeholder, text: $text)
                 .centraidType("body")
                 .foregroundStyle(Theme.color("text", scheme))

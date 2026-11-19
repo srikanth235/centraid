@@ -21,8 +21,9 @@ struct KitHeader: View {
                 Text(title)
                     .kitType(.title)
                     .foregroundStyle(Surface.ink)
+                    // NO SCALE-DOWN (#1202): a title that shrinks stops following the text size, which the
+                    // audit reads as unsupported Dynamic Type; it wraps to a second line instead.
                     .lineLimit(2)
-                    .minimumScaleFactor(0.8)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("kit-header-title")
             }

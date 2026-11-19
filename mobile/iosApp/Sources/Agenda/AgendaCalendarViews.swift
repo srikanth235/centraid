@@ -447,8 +447,10 @@ private struct AgendaStripDayView: View {
         } label: {
             VStack(spacing: 0) {
                 Text(day.weekdayInitial)
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color(day.isWeekend ? "textFaint" : "textSoft", scheme))
+                    .centraidType("annotLabelOn")
+                    // THE INITIALS ARE THIN 13pt GLYPHS (#1202): the audit reads a thin stem against
+                    // its ground at under 4.5:1 in `textSoft`/`textFaint`, so they take the next ink up.
+                    .foregroundStyle(Theme.color(day.isWeekend ? "textSoft" : "text", scheme))
                 Text(day.dayNumber)
                     .centraidType(day.isSelected || day.isToday ? "smallStrong" : "small")
                     .foregroundStyle(numberInk)
@@ -481,7 +483,9 @@ private struct AgendaStripDayView: View {
     }
 
     private var numberInk: Color {
-        if day.isSelected { return Theme.color("onAccent", scheme) }
+        // WHITE ON THE ACCENT FILL IN BOTH SCHEMES (#1202): `onAccent` is near-black in dark, which on the
+        // dark fill (a fill made for white glyphs) read as "nearly passed".
+        if day.isSelected { return Color.white }
         if day.isToday { return accent.text }
         return Theme.color(day.isWeekend ? "textFaint" : "text", scheme)
     }
@@ -659,11 +663,14 @@ struct AgendaTimeGridView: View {
                     .centraidType("annotLabel")
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
-                    .foregroundStyle(Theme.color("textFaint", scheme))
+                    .foregroundStyle(Theme.color("textSoft", scheme))
                     .frame(width: AgendaGridMetrics.gutter, alignment: .trailing)
                     .padding(.trailing, 6)
                     .opacity(clashes ? 0 : 1)
                     .offset(y: y - 8)
+                    // THE HOUR MARKS ARE THE GRID'S AXIS, NOT CONTENT (#1202): every block says its own
+                    // time, so VoiceOver does not stop on twenty-four clocks.
+                    .accessibilityHidden(true)
                 Rectangle()
                     .fill(Surface.line)
                     .frame(width: max(width - AgendaGridMetrics.gutter, 0), height: CentraidGeometry.hairline)
@@ -706,8 +713,9 @@ struct AgendaTimeGridView: View {
                 .foregroundStyle(Color.white)
                 // THE CLOCK NEVER ENDS IN AN ELLIPSIS: 13pt "08:53" is wider than the 44pt gutter
                 // less its padding, so it scales down to fit rather than truncating.
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                // (#1202: it no longer scales down, which the audit reads as clipped text; it is as wide as
+                // its clock, and the pill grows leftward out of the gutter into the page margin.)
+                .fixedSize()
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
                 .background(accent.fill, in: Capsule())
@@ -722,11 +730,15 @@ struct AgendaTimeGridView: View {
                 .frame(width: max(columnWidth, 0), height: 2)
                 .offset(x: AgendaGridMetrics.gutter + CGFloat(index) * columnWidth)
         }
-        .frame(height: 0)
-        .offset(y: CGFloat(now.minute) * perMinute)
+        // 44 TALL, CENTRED ON THE MINUTE (#1202): the row was a zero-height line whose label was read
+        // as an 18pt tap target; the frame is the finger's, the drawing is where it was.
+        .frame(height: 44)
+        .offset(y: CGFloat(now.minute) * perMinute - 22)
         .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(now.accessibilityLabel)
+        // A READING, NOT A CONTROL (#1202): the audit read this label as a tap target 18pt tall.
+        .accessibilityAddTraits(.isStaticText)
         .accessibilityIdentifier("agenda-now-line")
     }
 }
@@ -757,7 +769,11 @@ private struct AgendaChipView: View {
                 Button {
                     open(chip.route)
                 } label: {
+                    // THE CHIP'S OWN 4pt OF AIR IS THE BUTTON'S (#1202): the button was the 16pt line and
+                    // the audit read it as a hit area too small; at 24 it is the chip, drawn as it was.
                     title
+                        .padding(.vertical, chipAir)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(chip.accessibilityLabel)
@@ -770,11 +786,13 @@ private struct AgendaChipView: View {
             }
         }
         .padding(.horizontal, narrow ? 3 : 6)
-        .padding(.vertical, 4)
+        .padding(.vertical, chip.hasRoute ? 0 : chipAir)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(agendaWash(chip.hueKey, scheme))
         .clipShape(RoundedRectangle(cornerRadius: Theme.radius("sm", scheme), style: .continuous))
     }
+
+    private let chipAir: CGFloat = 4
 
     @ViewBuilder
     private var title: some View {
@@ -919,7 +937,7 @@ private struct AgendaBlockView: View {
                 eventTitle(face: titleFace, ink: ink, width: width, height: height, showsDetail: showsDetail)
                 if showsDetail {
                     Text(block.detail)
-                        .centraidType("annotLabel")
+                        .centraidType("annotLabelOn")
                         .foregroundStyle(Theme.color("textSoft", scheme))
                         .lineLimit(height >= AgendaGridMetrics.metaFrom ? 2 : 1)
                 }

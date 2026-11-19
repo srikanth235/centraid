@@ -19,10 +19,10 @@
     <color name="centraid_text_meta">#A39E95</color>
     <color name="centraid_shell">#2E7268</color>
     <color name="centraid_shell_text">#7FC4B8</color>
-    <color name="centraid_app_calendar">#3077CD</color>
+    <color name="centraid_app_calendar">#2761B2</color>
     <color name="centraid_app_calendar_text">#569EF7</color>
     <color name="centraid_app_calendar_tint">#202F41</color>
-    <color name="centraid_app_calendar_tile">#3077CD</color>
+    <color name="centraid_app_calendar_tile">#2761B2</color>
     <color name="centraid_app_docs">#01819B</color>
     <color name="centraid_app_docs_text">#30A9C6</color>
     <color name="centraid_app_docs_tint">#163136</color>
