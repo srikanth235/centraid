@@ -407,6 +407,8 @@ public fun StageKey(
     destructive: Boolean = false,
     /** On the light viewer page: the page's ink and the app's text colour, not the stage's. */
     light: Boolean = false,
+    /** Fill the glyph while [on]; a glyph with a mark inside it (Info's i) is lit by its ink and plate, not filled. */
+    solid: Boolean = on,
 ) {
     // A LIT TOGGLE (the favourite) wears the app's colour, never amber: amber only means a state.
     val ink = if (enabled && on && !destructive) {
@@ -430,7 +432,7 @@ public fun StageKey(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        CentraidIcon(iconKey = iconKey, tint = ink, size = 24.dp, solid = on)
+        CentraidIcon(iconKey = iconKey, tint = ink, size = 24.dp, solid = solid)
         if (showLabel) Text(text = label, color = ink, style = centraidType("small"), maxLines = 1)
     }
 }

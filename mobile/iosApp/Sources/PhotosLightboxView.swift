@@ -456,7 +456,8 @@ struct PhotosLightboxView: View {
                     // the page's disabled ink.
                     tint: ink,
                     size: 24,
-                    solid: verb.on
+                    // INFO'S i IS DRAWN INSIDE ITS RING: filled, the ring swallows the glyph.
+                    solid: verb.on && verb.kind != .info
                 )
                 if labelled {
                     Text(verb.label)
