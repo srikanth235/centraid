@@ -194,3 +194,37 @@ fn one_person_is_their_own_card_named_for_them() {
     let none = w.ok("person.export_vcf", json!({ "person_id": "nobody" }));
     assert_eq!(none["count"], 0);
 }
+
+/// TWO CARDS OF ONE NAME IN ONE FILE ARE ONE PERSON, and the second one's number is kept (#1202):
+/// it used to be dropped with the card as "repeated".
+#[test]
+fn a_repeated_name_within_a_file_adds_its_points_to_the_first_card() {
+    let w = World::new();
+    let file = "BEGIN:VCARD\nVERSION:3.0\nFN:John Smith\nTEL:+1 555 010 0111\nEND:VCARD\nBEGIN:VCARD\nVERSION:3.0\nFN:JOHN SMITH\nTITLE:Plumber\nTEL:+1 555 010 0222\nTEL:+1 555 010 0111\nEND:VCARD\n";
+    let preview = w.ok(
+        "person.import_vcf",
+        json!({ "cards": file, "dry_run": true }),
+    );
+    let written = w.ok("person.import_vcf", json!({ "cards": file }));
+    for said in [&preview, &written] {
+        assert_eq!(
+            (
+                said["cards"].as_i64(),
+                said["added"].as_i64(),
+                said["repeated"].as_i64()
+            ),
+            (Some(2), Some(1), Some(1)),
+            "{said}"
+        );
+    }
+    assert_eq!(
+        w.count("SELECT COUNT(*) FROM entity WHERE kind = 'person' AND title = 'John Smith'"),
+        1
+    );
+    assert_eq!(
+        w.count("SELECT COUNT(*) FROM contact_point cp JOIN entity e ON e.id = cp.person_id WHERE e.title = 'John Smith'"),
+        2,
+        "both numbers, the shared one once"
+    );
+    assert_eq!(w.count("SELECT COUNT(*) FROM person p JOIN entity e ON e.id = p.id WHERE e.title = 'John Smith' AND p.role = 'Plumber'"), 1);
+}
