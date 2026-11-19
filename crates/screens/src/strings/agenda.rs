@@ -129,7 +129,7 @@ catalog! {
     plain reads_fact_leaves = ("Leaves this phone", "Leaves this phone");
     plain reads_fact_leaves_value = ("nothing", "nothing");
     plain reads_fact_reads = ("Reads", "Reads");
-    plain reads_fact_reads_value = ("events, calendars, people, reminders", "events, calendars, people, reminders");
+    plain reads_fact_reads_value = ("events, calendars, people, reminders, tasks, documents, photos", "events, calendars, people, reminders, tasks, documents, photos");
     plain reads_fact_writes = ("Writes", "Writes");
     plain reads_fact_writes_value = ("events you make", "events you make");
     plain reads_title = ("What Calendar may read", "What Calendar may read");

@@ -328,7 +328,7 @@ fn more_says_what_health_reads_and_a_chosen_type_that_read_nothing_and_stops_beh
     assert_eq!(
         facts,
         [
-            ("Reads", "daily totals and workouts"),
+            ("Reads", "daily totals and workouts, documents, photos"),
             ("Writes", "nothing to Apple Health"),
             ("Nothing read", "Sleep: see Settings › Health › Data Access"),
         ]

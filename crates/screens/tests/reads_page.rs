@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::testing::Driver;
-use centraid_screens::{docs, money, notes, people};
+use centraid_screens::{Runtime, agenda, calendar, docs, health, money, notes, people, reminders};
 
 fn reads_view(d: &mut Driver, tab: &str, route: wire::Route) -> wire::ReadsView {
     let i = d.push(tab, route);
@@ -239,4 +239,78 @@ fn each_apps_more_sheet_opens_it_first_with_the_shield() {
         ("What Docs may read", "Shield")
     );
     assert_eq!(row.route.as_ref().unwrap().screen, "docs.reads");
+}
+
+/// Calendar, Reminders and Health say it from their reads sheets (the facts of a sheet, not the
+/// kit's page), and the sheets are held against the manifests the same way.
+fn agenda_reads(route: wire::Route) -> String {
+    let mut d = Driver::with_runtime(Runtime::new(
+        agenda::registry(),
+        vec![(agenda::TAB.to_owned(), route)],
+    ));
+    d.start();
+    let i = d.navigation.as_ref().expect("navigation").tabs[0].entries[0].instance;
+    let Some(wire::view_state::Kind::AgendaHome(state)) = d.view(i).kind.clone() else {
+        panic!("not Agenda's home");
+    };
+    state
+        .chrome
+        .expect("a chrome")
+        .reads_facts
+        .iter()
+        .find(|fact| fact.label == "Reads")
+        .expect("a Reads fact")
+        .detail
+        .clone()
+}
+
+#[test]
+fn calendar_reads_events_people_reminders_tasks_documents_and_photos() {
+    let reads = agenda_reads(calendar::routes::home(wire::AgendaDestination::Schedule));
+    assert_eq!(
+        reads,
+        "events, calendars, people, reminders, tasks, documents, photos"
+    );
+    assert_reads_match_manifest(
+        &reads,
+        include_str!("../../apps/calendar/manifest.json"),
+        &["event", "occurrence"],
+        &["events", "calendars"],
+    );
+}
+
+#[test]
+fn reminders_reads_people_and_the_documents_and_photos_it_attaches() {
+    let reads = agenda_reads(reminders::routes::home());
+    assert_eq!(reads, "reminders, lists, people, documents, photos");
+    assert_reads_match_manifest(
+        &reads,
+        include_str!("../../apps/reminders/manifest.json"),
+        &["task"],
+        &["reminders", "lists"],
+    );
+}
+
+#[test]
+fn health_reads_its_totals_and_workouts_and_the_documents_and_photos_it_attaches() {
+    let mut d = Driver::with_runtime(health::runtime());
+    d.start();
+    let i = d.navigation.as_ref().expect("navigation").tabs[0].entries[0].instance;
+    let Some(wire::view_state::Kind::HealthHome(state)) = d.view(i).kind.clone() else {
+        panic!("not Health's home");
+    };
+    let reads = state
+        .reads_facts
+        .iter()
+        .find(|fact| fact.label == "Reads")
+        .expect("a Reads fact")
+        .detail
+        .clone();
+    assert_eq!(reads, "daily totals and workouts, documents, photos");
+    assert_reads_match_manifest(
+        &reads,
+        include_str!("../../apps/health/manifest.json"),
+        &["activity", "measurement", "workout"],
+        &["daily totals and workouts"],
+    );
 }

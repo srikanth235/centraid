@@ -142,7 +142,7 @@ catalog! {
     plain range_year = ("Year", "Year");
     plain read_incomplete = ("Couldn’t read this page. Try again.", "Couldn’t read this page. Try again.");
     plain reads_fact_reads = ("Reads", "Reads");
-    plain reads_fact_reads_value = ("daily totals and workouts", "daily totals and workouts");
+    plain reads_fact_reads_value = ("daily totals and workouts, documents, photos", "daily totals and workouts, documents, photos");
     plain reads_fact_writes = ("Writes", "Writes");
     plain reads_fact_writes_value = ("nothing to {store}", "nothing to {store}");
     plain reads_nothing = ("Nothing read", "Nothing read");

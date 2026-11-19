@@ -48,7 +48,7 @@ catalog! {
     plain quick_chip_spoken_repeats = ("{when}. Saves as {title}.", "{when}. Saves as {title}.");
     plain reminders_title = ("Reminders", "Reminders");
     plain search_placeholder = ("Search reminders and lists", "Search reminders and lists");
-    plain reads_reminders_reads = ("reminders, lists, people", "reminders, lists, people");
+    plain reads_reminders_reads = ("reminders, lists, people, documents, photos", "reminders, lists, people, documents, photos");
     plain reads_reminders_title = ("What Reminders may read", "What Reminders may read");
     plain reads_reminders_writes = ("reminders you make", "reminders you make");
     plain row_unflagged = ("Flag removed", "Flag removed");
