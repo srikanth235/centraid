@@ -162,10 +162,19 @@ struct PhotosLightboxView: View {
             chip(icon: "ChevronLeft", label: state.words.close, light: true, action: onClose)
                 .accessibilityIdentifier("photos.lightbox.close")
             Spacer()
+            // TWO LINES, THE DATE THEN THE TIME (#1202): each holds to its own line and shrinks
+            // before it would wrap, so at the largest text the date no longer ran to three lines.
             VStack(spacing: 2) {
-                if !stamp.0.isEmpty { Text(stamp.0).kitType(.row).fontWeight(.semibold).foregroundStyle(Surface.ink) }
-                if !stamp.1.isEmpty { Text(stamp.1).kitType(.meta).foregroundStyle(Surface.meta) }
+                if !stamp.0.isEmpty {
+                    Text(stamp.0).kitType(.row).fontWeight(.semibold).foregroundStyle(Surface.ink)
+                        .lineLimit(1).minimumScaleFactor(0.5)
+                }
+                if !stamp.1.isEmpty {
+                    Text(stamp.1).kitType(.meta).foregroundStyle(Surface.meta)
+                        .lineLimit(1).minimumScaleFactor(0.5)
+                }
             }
+            .multilineTextAlignment(.center)
             Spacer()
             moreMenu(light: true)
         }
