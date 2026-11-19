@@ -55,25 +55,37 @@ struct VaultHeader: View {
         return (VaultHue.mix(hue, over: Theme.color("bg", scheme), share: share), hue)
     }
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     private var statusLine: some View {
         Button {
             store.sendHome(.backup(.init()))
         } label: {
-            HStack(spacing: 6) {
-                if loud {
-                    Circle()
-                        .fill(Theme.color(bar.backup.tone == .urgent ? "danger" : "attention", scheme))
-                        .frame(width: 6, height: 6)
+            // TWO CLEAN LINES AT ACCESSIBILITY SIZES (#1202): the state, then its one verb under
+            // it; in one wrapping row "Not backed up yet · Pair" interleaved word by word.
+            let stacked = dynamicTypeSize.isAccessibilitySize
+            let layout = stacked
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                : AnyLayout(HStackLayout(spacing: 6))
+            layout {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    if loud {
+                        Circle()
+                            .fill(Theme.color(bar.backup.tone == .urgent ? "danger" : "attention", scheme))
+                            .frame(width: 6, height: 6)
+                    }
+                    Text(status)
+                        .centraidType("mono")
+                        .foregroundStyle(Theme.color(loud ? "text" : "textFaint", scheme))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Text(status)
-                    .centraidType("mono")
-                    .foregroundStyle(Theme.color(loud ? "text" : "textFaint", scheme))
-                    .fixedSize(horizontal: false, vertical: true)
                 // THE LINE'S ONE QUIET VERB ("Not backed up yet · Pair"): Rust's words.
                 if !bar.backup.action.isEmpty {
-                    Text("·")
-                        .centraidType("mono")
-                        .foregroundStyle(Theme.color("textFaint", scheme))
+                    if !stacked {
+                        Text("·")
+                            .centraidType("mono")
+                            .foregroundStyle(Theme.color("textFaint", scheme))
+                    }
                     Text(bar.backup.action)
                         .centraidType("mono")
                         .foregroundStyle(Theme.color("link", scheme))

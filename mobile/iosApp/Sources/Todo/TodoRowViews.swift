@@ -163,7 +163,10 @@ struct TodoRowView: View {
                                 Text(row.meta)
                                     .centraidType("annotLabel")
                                     .foregroundStyle(Theme.color("textFaint", scheme))
-                                    .lineLimit(largestText ? nil : 1)
+                                    // A NUMBER OF LINES AND NOT `nil` (#1202): `nil` left the line cut to
+                                    // "reminder Mon 16..." inside a List row.
+                                    .lineLimit(largestText ? 4 : 1)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                     }

@@ -108,6 +108,7 @@ struct TodoProjectView: View {
     let onBack: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private func event(_ build: (inout Centraid_Core_V1_TodoProjectEvent) -> Void) -> Centraid_Core_V1_TodoProjectEvent {
         var event = Centraid_Core_V1_TodoProjectEvent()
@@ -170,7 +171,12 @@ struct TodoProjectView: View {
             VStack(spacing: 0) {
                 if state.hasHead, !state.head.styleLabel.isEmpty || !state.head.renameLabel.isEmpty {
                     // THE TWO LINKS WRAP (#1202): in one row they ran together as "Edit ListRename".
-                    KitFlow(spacing: 12) {
+                    // ONE UNDER THE OTHER AT ACCESSIBILITY SIZES (#1202): side by side they still read as
+                    // one label, "Edit List Rename".
+                    let links = dynamicTypeSize.isAccessibilitySize
+                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
+                        : AnyLayout(HStackLayout(spacing: 12))
+                    links {
                         // "EDIT LIST" (#1173 wave 2): name, colour and icon in one sheet.
                         if !state.head.styleLabel.isEmpty {
                             KitLink(label: state.head.styleLabel, identifier: "tasks-project-edit") {
