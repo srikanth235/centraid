@@ -486,7 +486,7 @@ fn a_term_that_matches_nothing_says_so_and_a_clear_goes_back_to_resting() {
         })
     );
     let empty = empty_of(&search_state(d.view(i)).page).expect("an empty state");
-    assert_eq!(empty.headline, "Nothing matches zzqqxx.");
+    assert_eq!(empty.headline, "Nothing matches “zzqqxx”.");
     assert_eq!(
         empty.body,
         "Searches names, bank words, categories and memos."

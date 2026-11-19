@@ -340,7 +340,7 @@ fn a_search_rests_or_matches_nothing_as_an_empty_page_and_fails_as_a_failure() {
     failed(shell.page(i));
     shell.reads(Mode::Empty);
     shell.changed(i);
-    assert_eq!(empty(shell.page(i)).headline, "Nothing matches coffee.");
+    assert_eq!(empty(shell.page(i)).headline, "Nothing matches “coffee”.");
 }
 
 #[test]

@@ -228,7 +228,7 @@ catalog! {
     plain note_needs_one = ("1 row needs a category", "1 row needs a category");
     plain note_transfer_many = ("{n} transfers are not counted", "{n} transfers are not counted");
     plain note_transfer_one = ("1 transfer is not counted", "1 transfer is not counted");
-    plain nothing_matches = ("Nothing matches {term}.", "Nothing matches {term}.");
+    plain nothing_matches = ("Nothing matches “{term}”.", "Nothing matches “{term}”.");
     plain not_now = ("Not now", "Not now");
     plain not_spending = ("Not counted as spending", "Not counted as spending");
     plain no_answer = ("No answer came back. Try again.", "No answer came back. Try again.");
