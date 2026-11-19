@@ -146,7 +146,7 @@ private fun EarlierPhotoRow(row: PhotosEarlierRow, onOpen: (Route) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+            .heightIn(min = KitGeometry.ROW_MIN)
             .clickable { row.route?.let(onOpen) }
             .semantics(mergeDescendants = true) {
                 contentDescription = row.accessibility_label
@@ -178,7 +178,7 @@ private fun DoorRow(door: PhotosSearchDoor, onOpen: (Route) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+            .heightIn(min = KitGeometry.ROW_MIN)
             .clickable { door.route?.let(onOpen) }
             .semantics(mergeDescendants = true) {
                 contentDescription = door.accessibility_label
@@ -253,7 +253,7 @@ private fun RestingDoor(label: String, iconKey: String, onOpen: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+            .heightIn(min = KitGeometry.ROW_MIN)
             .clickable(onClick = onOpen)
             .semantics(mergeDescendants = true) {
                 contentDescription = label

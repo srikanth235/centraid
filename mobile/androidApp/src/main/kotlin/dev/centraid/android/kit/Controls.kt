@@ -153,7 +153,7 @@ public fun KitSegmented(
             Box(
                 Modifier
                     .weight(1f)
-                    .heightIn(min = 40.dp)
+                    .heightIn(min = KitGeometry.ROW_MIN)
                     .clip(chip)
                     .background(if (lit) Surface.card else androidx.compose.ui.graphics.Color.Transparent)
                     .clickable(onClick = { onSelect(key) })
@@ -454,7 +454,7 @@ public fun StageKey(
 public fun StageVerb(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, light: Boolean = false) {
     Box(
         modifier
-            .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
+            .defaultMinSize(minWidth = KitGeometry.ROW_MIN, minHeight = KitGeometry.ROW_MIN)
             .clip(controlRadius("pill"))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp)

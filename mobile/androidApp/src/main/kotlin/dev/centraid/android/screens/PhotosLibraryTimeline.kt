@@ -1,6 +1,7 @@
 package dev.centraid.android.screens
 
 import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.Surface
@@ -318,7 +319,7 @@ private fun DayHeader(
         if (selecting && toggleLabel.isNotEmpty()) {
             Box(
                 Modifier
-                    .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+                    .heightIn(min = KitGeometry.ROW_MIN)
                     .clickable(onClickLabel = spoken) { onPickDay(!allPicked) }
                     .semantics {
                         role = Role.Button

@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.SheetValue
@@ -511,6 +512,8 @@ public fun SheetRoom(
         sheetState = sheetState,
         sheetGesturesEnabled = swipeable,
         containerColor = Surface.sheet,
+        // 48 WIDE: Material's handle is a 32dp key a screen reader and a thumb both reach, below the platform's floor.
+        dragHandle = { BottomSheetDefaults.DragHandle(width = 48.dp) },
         properties = ModalBottomSheetProperties(
             securePolicy = if (secure) SecureFlagPolicy.SecureOn else SecureFlagPolicy.Inherit,
             shouldDismissOnBackPress = swipeable,
@@ -596,6 +599,7 @@ public fun SheetPage(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = Surface.sheet,
+        dragHandle = { BottomSheetDefaults.DragHandle(width = 48.dp) },
     ) {
         // A SHEET IS ITS OWN WINDOW (see [SheetRoom]): Maestro's `id:` selectors need the flag again.
         Column(

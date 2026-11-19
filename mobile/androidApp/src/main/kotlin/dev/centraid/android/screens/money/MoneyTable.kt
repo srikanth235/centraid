@@ -108,7 +108,7 @@ internal fun MoneyColumnFigure(text: String, ink: Color, strong: Boolean = false
 }
 
 private val CARD_INSET: Dp = 16.dp
-private val CATEGORY_ROW_MIN: Dp = 46.dp
+private val CATEGORY_ROW_MIN: Dp = 48.dp
 private val NEEDS_CHEVRON: Dp = 15.dp
 private const val FIGURE_MIN_SCALE: Float = 0.8f
 private const val COLUMN_MIN_SCALE: Float = 0.75f

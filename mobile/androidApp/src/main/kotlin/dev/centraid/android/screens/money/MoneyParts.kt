@@ -105,7 +105,7 @@ internal fun MoneyFigureRow(figure: MoneyFigure, modifier: Modifier = Modifier) 
     SplitRow(
         modifier
             .fillMaxWidth()
-            .heightIn(min = 44.dp)
+            .heightIn(min = KitGeometry.ROW_MIN)
             .padding(horizontal = KitGeometry.GUTTER, vertical = if (largest) 8.dp else 0.dp)
             .clearAndSetSemantics { contentDescription = spoken(figure.label, figure.amount) },
         start = { m -> KitText(figure.label, KitType.Row, Surface.body, m, maxLines = if (largest) Int.MAX_VALUE else 2) },

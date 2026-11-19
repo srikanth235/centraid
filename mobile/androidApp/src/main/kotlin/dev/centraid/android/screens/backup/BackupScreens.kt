@@ -1,6 +1,7 @@
 package dev.centraid.android.screens.backup
 
 import android.Manifest
+import dev.centraid.android.kit.KitGeometry
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -57,6 +58,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -252,7 +254,7 @@ private fun BackupPage(
                         style = centraidType("body"),
                         color = appAccent("").text,
                         modifier = Modifier
-                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+                            .heightIn(min = KitGeometry.ROW_MIN)
                             .clickable(role = Role.Button) {
                                 onEvent(BackupHomeEvent(key_prompt_answered = BackupHomeEvent.KeyPromptAnswered()))
                                 prompt.save?.let(onOpen)
@@ -264,7 +266,7 @@ private fun BackupPage(
                         style = centraidType("body"),
                         color = Surface.meta,
                         modifier = Modifier
-                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+                            .heightIn(min = KitGeometry.ROW_MIN)
                             .clickable(role = Role.Button) {
                                 onEvent(BackupHomeEvent(key_prompt_answered = BackupHomeEvent.KeyPromptAnswered()))
                             }
@@ -288,7 +290,7 @@ private fun BackupPage(
                         style = centraidType("body"),
                         color = appAccent("").text,
                         modifier = Modifier
-                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+                            .heightIn(min = KitGeometry.ROW_MIN)
                             .clickable(role = Role.Button) { onEvent(BackupHomeEvent(notify_allow = BackupHomeEvent.NotifyAllow())) }
                             .testTag("backup-notify-allow"),
                     )
@@ -297,7 +299,7 @@ private fun BackupPage(
                         style = centraidType("body"),
                         color = Surface.meta,
                         modifier = Modifier
-                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+                            .heightIn(min = KitGeometry.ROW_MIN)
                             .clickable(role = Role.Button) { onEvent(BackupHomeEvent(notify_not_now = BackupHomeEvent.NotifyNotNow())) }
                             .testTag("backup-notify-not-now"),
                     )
@@ -317,7 +319,7 @@ private fun BackupPage(
                         style = centraidType("body"),
                         color = appAccent("").text,
                         modifier = Modifier
-                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+                            .heightIn(min = KitGeometry.ROW_MIN)
                             .clickable(role = Role.Button) { onEvent(BackupHomeEvent(notify_open_settings = BackupHomeEvent.NotifyOpenSettings())) }
                             .testTag("backup-notify-settings"),
                     )
@@ -418,7 +420,7 @@ private fun BackupPage(
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 44.dp)
+                                .heightIn(min = KitGeometry.ROW_MIN)
                                 .clickable {
                                     onEvent(BackupHomeEvent(rule_chosen = BackupHomeEvent.RuleChosen(stored = choice.stored)))
                                 }
@@ -441,18 +443,23 @@ private fun BackupPage(
                 }
                 if (model.include_videos_label.isNotEmpty()) {
                     Row(
-                        Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp).testTag("backup-include-videos"),
+                        // THE WHOLE ROW IS THE SWITCH (a 52 x 32 key alone is under the 48dp floor, and a label beside a
+                        // switch is a word nobody can press).
+                        Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                            .toggleable(
+                                value = model.include_videos,
+                                role = Role.Switch,
+                                onValueChange = { onEvent(BackupHomeEvent(set_include_videos = BackupHomeEvent.SetIncludeVideos(include = it))) },
+                            )
+                            .padding(horizontal = 16.dp).testTag("backup-include-videos"),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Text(model.include_videos_label, style = centraidType("body"), color = Surface.ink, modifier = Modifier.weight(1f))
                         Switch(
                             checked = model.include_videos,
-                            onCheckedChange = {
-                                onEvent(BackupHomeEvent(set_include_videos = BackupHomeEvent.SetIncludeVideos(include = it)))
-                            },
+                            onCheckedChange = null,
                             colors = SwitchDefaults.colors(checkedTrackColor = appAccent("").fill),
-                            modifier = Modifier.semantics { contentDescription = model.include_videos_label },
                         )
                     }
                 }
@@ -491,7 +498,7 @@ private fun BackupPage(
                         Box(
                             Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
+                                .heightIn(min = KitGeometry.ROW_MIN)
                                 .clickable(role = Role.Button) {
                                     onEvent(BackupHomeEvent(set_key_sync = BackupHomeEvent.SetKeySync(on = !model.key_synced)))
                                 }

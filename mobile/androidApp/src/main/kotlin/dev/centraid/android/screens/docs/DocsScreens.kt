@@ -559,7 +559,8 @@ private fun DocumentLine(row: DocsRowView, starredWord: String, menuLabel: Strin
             accessory = {
                 // The row opens; its words are the state's accessibility label.
                 Box(Modifier.semantics { contentDescription = row.accessibility_label })
-                if (menuLabel.isNotEmpty()) IconKey("MoreVert", menuLabel, "docs-row-menu-${row.document_id}", bordered = false, onPress = onMenu)
+                // NAMED FOR ITS ROW: Rust sends one "More" for the page, and a list of identical "More" keys tells a screen reader nothing.
+                if (menuLabel.isNotEmpty()) IconKey("MoreVert", "$menuLabel, ${row.title}", "docs-row-menu-${row.document_id}", bordered = false, onPress = onMenu)
             },
         )
         if (row.snippet.isNotEmpty()) {
@@ -604,7 +605,7 @@ private fun Tile(
             CentraidIcon(iconKey.ifEmpty { "FileText" }, tint = centraidColor("textSoft"), size = 20.dp)
             Box(Modifier.weight(1f))
             if (menuLabel != null && menuLabel.isNotEmpty() && onMenu != null) {
-                IconKey("MoreVert", menuLabel, "$tag-menu", bordered = false, onPress = onMenu)
+                IconKey("MoreVert", "$menuLabel, $title", "$tag-menu", bordered = false, onPress = onMenu)
             }
         }
         Column(Modifier.clearAndSetSemantics { contentDescription = a11y.ifEmpty { title }; role = Role.Button }) {

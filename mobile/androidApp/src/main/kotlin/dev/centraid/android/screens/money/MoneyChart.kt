@@ -229,5 +229,5 @@ internal fun MoneyMonthRow(month: MoneyCashflowMonth, testTag: String, labels: L
 private val MONTH_GAP = 4.dp
 private val BAR_GAP = 2.dp
 private val SWATCH = 10.dp
-private val MONTH_ROW_MIN = 46.dp
+private val MONTH_ROW_MIN = 48.dp
 private const val LABEL_MIN_SCALE: Float = 0.7f

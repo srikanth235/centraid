@@ -11,7 +11,7 @@ internal object BandPolicy {
     const val BAND_PLATE_PAD: Int = 4
     const val BAND_TOP_GAP: Int = 8
     const val BAND_RADIUS: Int = 999
-    const val BAND_TAB_MIN_HEIGHT: Int = 46
+    const val BAND_TAB_MIN_HEIGHT: Int = 48
     const val BAND_HEIGHT: Int = BAND_TAB_MIN_HEIGHT + 2 * BAND_PLATE_PAD
     const val BAND_MARK_SIZE: Int = 22
     const val BAND_ICON_SIZE: Int = 22
