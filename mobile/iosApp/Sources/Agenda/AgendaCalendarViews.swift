@@ -42,6 +42,8 @@ enum AgendaGridMetrics {
     /// A lane this wide (a Day column, a lone event in a Week) has room for the second line.
     static let detailFromWidth: CGFloat = 96
     static let metaFrom: CGFloat = 56
+    /// A lane thinner than this cannot hold a word at the grid's type, so its title turns.
+    static let turnedBelowWidth: CGFloat = 40
     /// Month rows: the grid style's hold three chips, the list style's a day number and dots.
     static let monthRowGrid: CGFloat = 84
     static let monthRowList: CGFloat = 52
@@ -755,7 +757,7 @@ private struct AgendaChipView: View {
         Text(chip.title)
             .centraidType("annotLabel")
             .foregroundStyle(Theme.color("text", scheme))
-            .kitLineLimit(1)
+            .kitLineLimit(2, wide: 3)
             .minimumScaleFactor(narrow ? 0.7 : 1)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -779,6 +781,8 @@ private struct AgendaBlockView: View {
     @Environment(\.colorScheme) private var scheme
     @GestureState private var move: CGSize = .zero
     @GestureState private var stretch: CGFloat = 0
+    /// One line of a block's small type, which grows with the text (#1202).
+    @ScaledMetric(relativeTo: .caption) private var titleLine: CGFloat = 15
 
     private var perMinute: CGFloat { AgendaGridMetrics.hourHeight / 60 }
     private var start: Int { Int(block.startMinute) }
@@ -840,6 +844,7 @@ private struct AgendaBlockView: View {
         let roomy = width >= AgendaGridMetrics.detailFromWidth
         // A WEEK LANE IS A SLIVER: the title in the small bold face, packed to the edges.
         let titleFace = roomy ? "smallStrong" : "annotLabelOn"
+        let showsDetail = roomy && height >= AgendaGridMetrics.timeFrom && !block.detail.isEmpty
         return VStack(alignment: .leading, spacing: 0) {
             if block.isTask {
                 HStack(spacing: 4) {
@@ -856,11 +861,8 @@ private struct AgendaBlockView: View {
                 }
                 .frame(maxHeight: .infinity, alignment: .center)
             } else {
-                Text(block.title)
-                    .centraidType(titleFace)
-                    .foregroundStyle(ink)
-                    .kitLineLimit(1)
-                if roomy, height >= AgendaGridMetrics.timeFrom, !block.detail.isEmpty {
+                eventTitle(face: titleFace, ink: ink, width: width, height: height, showsDetail: showsDetail)
+                if showsDetail {
                     Text(block.detail)
                         .centraidType("annotLabel")
                         .foregroundStyle(Theme.color("textSoft", scheme))
@@ -886,6 +888,40 @@ private struct AgendaBlockView: View {
         }
         .clipShape(shape)
         .contentShape(shape)
+    }
+
+    /// THE TITLE OF AN EVENT BLOCK, WHOLE (#1202). It wraps at its words inside the block, as many
+    /// lines as the block is tall. A lane too thin for any word (two events side by side in a
+    /// Week column, about 25pt each) turns the title a quarter turn so it runs down the block's
+    /// height instead: words stay whole and readable, and far more of the name shows than a
+    /// column of single letters would.
+    @ViewBuilder
+    private func eventTitle(face: String, ink: Color, width: CGFloat, height: CGFloat, showsDetail: Bool) -> some View {
+        if width < AgendaGridMetrics.turnedBelowWidth {
+            let thickness = max(width - AgendaGridMetrics.barWidth - 4, 10)
+            let length = max(height - 8, 10)
+            Text(block.title)
+                .centraidType(face)
+                .foregroundStyle(ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(width: length, height: thickness, alignment: .leading)
+                .rotationEffect(.degrees(90))
+                .frame(width: thickness, height: length)
+        } else {
+            Text(block.title)
+                .centraidType(face)
+                .foregroundStyle(ink)
+                .lineLimit(titleLines(height: height, withDetail: showsDetail))
+                .minimumScaleFactor(0.75)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// How many lines of title the block's height holds, a line kept for the time when it shows.
+    private func titleLines(height: CGFloat, withDetail: Bool) -> Int {
+        let fits = Int(((height - 8) / titleLine).rounded(.down)) - (withDetail ? 1 : 0)
+        return min(max(fits, 1), 6)
     }
 
     /// THE FOOT'S GRIP: a drag on it moves the end.
