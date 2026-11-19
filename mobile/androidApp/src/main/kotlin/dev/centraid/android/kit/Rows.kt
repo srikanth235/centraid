@@ -24,6 +24,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +48,9 @@ import centraid.core.v1.SearchContainer
 import centraid.core.v1.StatusChip
 import dev.centraid.android.theme.centraidColor
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import dev.centraid.android.theme.centraidType
 
 /**
@@ -76,6 +81,9 @@ public fun CentraidRow(
     testTag: String = "kit-row",
     onTap: (() -> Unit)? = null,
     metaRuns: androidx.compose.ui.text.AnnotatedString? = null,
+    /** The meta as parts (see [MetaLine]); when set it replaces [meta]. [metaAccented] parts take the app's colour. */
+    metaParts: List<String> = emptyList(),
+    metaAccented: List<String> = emptyList(),
     accessory: (@Composable RowScope.() -> Unit)? = null,
 ) {
     val titleInk = if (dimmed) Surface.meta else Surface.ink
@@ -125,6 +133,8 @@ public fun CentraidRow(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                } else if (metaParts.any { it.isNotEmpty() } || metaAccented.isNotEmpty()) {
+                    MetaLine(metaParts, metaAccented)
                 } else if (meta.isNotEmpty()) {
                     KitText(meta, KitType.Meta, softInk, maxLines = 2)
                 }
@@ -163,6 +173,51 @@ public fun CentraidRow(
         }
         // THE HAIRLINE starts at the text, not at the edge.
         Spacer(Modifier.padding(start = KitGeometry.GUTTER).fillMaxWidth().height(KitGeometry.HAIRLINE).background(line))
+    }
+}
+
+/**
+ * A META LINE OF PARTS (#1202): the parts joined by a dot while they fit on one line, and one part
+ * to a line when they do not, so a separator never dangles at a line's end and a part never
+ * breaks at its own spaces ("Last / touch 30 days ago"). [accented] parts are set in the app's
+ * colour. Each part is split on its own dots, so a part Rust already joined stays a unit each.
+ */
+@Composable
+public fun MetaLine(
+    parts: List<String>,
+    accented: List<String> = emptyList(),
+    modifier: Modifier = Modifier,
+    lines: Int = 3,
+) {
+    val plain = parts.flatMap { it.split(" · ") }.filter { it.isNotEmpty() }
+    val marked = accented.filter { it.isNotEmpty() }
+    val accent = appAccent().text
+    val soft = Surface.meta
+    var stacked by remember(plain, marked) { mutableStateOf(false) }
+    val style = kitTextStyle(KitType.Meta)
+    if (!stacked) {
+        val joined = buildAnnotatedString {
+            withStyle(SpanStyle(color = soft)) { append(plain.joinToString(" · ")) }
+            marked.forEach { part ->
+                if (length > 0) withStyle(SpanStyle(color = soft)) { append(" · ") }
+                withStyle(SpanStyle(color = accent)) { append(part) }
+            }
+        }
+        Text(
+            joined,
+            style = style,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Clip,
+            onTextLayout = { if (it.hasVisualOverflow) stacked = true },
+            modifier = modifier,
+        )
+    } else {
+        Column(modifier) {
+            (plain.map { it to false } + marked.map { it to true }).take(lines).forEach { (part, accented) ->
+                Text(part, style = style, color = if (accented) accent else soft, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
     }
 }
 

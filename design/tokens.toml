@@ -185,7 +185,7 @@ mustard = "#B08505"
 violet = "#AA71E3"
 petrol = "#1399B5"
 indigo = "#6785F5"
-graphite = "#808C9A"
+graphite = "#66727F"
 raspberry = "#E55D7E"
 orchid = "#D462B2"
 
@@ -775,7 +775,7 @@ keep = [
   "#7A6AB0",
   "#7FA3C0",
   "#7FA866",
-  "#808C9A",
+  "#66727F",
   "#8D8170",
   "#8E3B52",
   "#8F7A57",

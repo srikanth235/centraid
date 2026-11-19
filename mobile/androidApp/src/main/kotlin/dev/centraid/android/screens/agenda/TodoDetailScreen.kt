@@ -56,6 +56,8 @@ import dev.centraid.android.kit.EditorRoom
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.PhoneSaysLine
@@ -204,11 +206,11 @@ private fun TodoDetailBody(
             if (head.group.isEmpty()) {
                 block.forEach { TodoFieldRow(it, onEvent) }
             } else {
-                Text(
+                KitText(
                     head.group,
-                    style = centraidType("eyebrow"),
-                    color = centraidColor("textSoft"),
-                    modifier = Modifier.padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 16.dp, bottom = 6.dp),
+                    KitType.Group,
+                    Surface.meta,
+                    Modifier.padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 16.dp, bottom = 6.dp),
                 )
                 val shape = RoundedCornerShape(CentraidScale.cardRadius.dp)
                 Column(

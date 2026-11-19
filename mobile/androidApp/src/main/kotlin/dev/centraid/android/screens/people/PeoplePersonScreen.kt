@@ -53,6 +53,8 @@ import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.IconKey
+import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.EarlierEntryCard
 import dev.centraid.android.kit.PhoneSaysLine
@@ -94,6 +96,7 @@ public fun PeoplePersonScreen(
         title = data?.name ?: state.name_hint,
         parentTitle = chrome?.back.orEmpty(),
         onBack = onBack,
+        app = "people",
         trailing = state.edit?.takeIf { data != null && !chrome?.edit.isNullOrEmpty() }?.let { route ->
             RoomAction("Pencil", chrome?.edit.orEmpty(), "people-person-edit") { onOpen(route) }
         },
@@ -154,7 +157,8 @@ private fun PersonBody(
         }
         items(person.channels, key = { "c-" + it.channel_id }) { channel ->
             CentraidRow(
-                title = channel.value_,
+                // A break may fall after a dot, an at sign or a dash, never inside a word.
+                title = channel.value_.replace(Regex("([@.\\-_])"), "$1\u200B"),
                 meta = listOf(channel.kind_label, channel.label, channel.preferred_label, channel.duplicate_note)
                     .filter { it.isNotEmpty() }
                     .joinToString(" · "),
@@ -162,19 +166,22 @@ private fun PersonBody(
                 testTag = "people-channel-${channel.channel_id}",
                 onTap = { onEvent(PeoplePersonEvent(channel = PeoplePersonEvent.ChannelTapped(channel.channel_id))) },
             ) {
+                // THE VERB IS A TEXT LINK AND REMOVE A QUIET X KEY, as on iOS: two outlined buttons (one red)
+                // took the row from the value.
                 if (channel.action_label.isNotEmpty()) {
-                    OutlineButton(
-                        channel.action_label,
-                        testTag = "people-channel-act-${channel.channel_id}",
-                        modifier = Modifier.padding(start = 8.dp),
-                    ) { onEvent(PeoplePersonEvent(channel = PeoplePersonEvent.ChannelTapped(channel.channel_id))) }
+                    KitLink(
+                        label = channel.action_label,
+                        dense = true,
+                        modifier = Modifier.testTag("people-channel-act-${channel.channel_id}"),
+                        onClick = { onEvent(PeoplePersonEvent(channel = PeoplePersonEvent.ChannelTapped(channel.channel_id))) },
+                    )
                 }
                 if (channel.remove_label.isNotEmpty()) {
-                    OutlineButton(
-                        channel.remove_label,
+                    IconKey(
+                        iconKey = "X",
+                        label = channel.remove_label,
                         testTag = "people-channel-remove-${channel.channel_id}",
-                        ink = "net",
-                        modifier = Modifier.padding(start = 8.dp),
+                        bordered = false,
                     ) {
                         onEvent(PeoplePersonEvent(remove_channel = PeoplePersonEvent.RemoveChannelTapped(channel.channel_id)))
                     }

@@ -86,7 +86,8 @@ catalog! {
     plain fact_folder = ("Folder", "Folder");
     plain fact_kind = ("Kind", "Kind");
     plain fact_labels = ("Labels", "Labels");
-    plain fact_media_type = ("Media type", "Media type");
+    plain fact_format = ("Format", "Format");
+    plain format_text = ("Text document", "Text document");
     plain fact_size = ("Size", "Size");
     plain fact_versions = ("Versions", "Versions");
     plain filter_label = ("Label", "Label");

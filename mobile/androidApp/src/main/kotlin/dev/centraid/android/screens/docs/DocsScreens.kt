@@ -605,8 +605,10 @@ private fun Tile(
             }
         }
         Column(Modifier.clearAndSetSemantics { contentDescription = a11y.ifEmpty { title }; role = Role.Button }) {
-            Text(title, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (meta.isNotEmpty()) Text(meta, style = centraidType("annotLabel"), color = centraidColor("textSoft"), maxLines = 1)
+            Text(title, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = 3, overflow = TextOverflow.Ellipsis)
+            // THE SIZE MUST SHOW (#1202): a tile is narrow, so the parts of the meta take a line each
+            // (kind, then size) instead of one line cut after the kind.
+            if (meta.isNotEmpty()) dev.centraid.android.kit.MetaLine(listOf(meta), lines = 2)
         }
     }
 }
@@ -631,6 +633,7 @@ internal fun DocsDocumentScreen(
         // RUST NAMES THE PARENT (`chrome.back`, #1047).
         parentTitle = chrome?.back.orEmpty(),
         onBack = onBack,
+        app = "docs",
         // THE HEAD'S MORE: the verbs sheet opens on Rust's say
         // (`MoreOpened` → `DocsSheet.KIND_MORE`), every action a row in it.
         trailing = if (data?.actions.orEmpty().isNotEmpty() && chrome?.more.orEmpty().isNotEmpty()) {

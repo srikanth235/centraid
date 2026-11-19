@@ -595,6 +595,8 @@ private fun Toolbar(
                     showLabel = trashed,
                     destructive = verb.destructive,
                     light = light,
+                    // INFO'S i IS DRAWN INSIDE ITS RING: filled, the ring swallows the glyph (a bare disc).
+                    solid = verb.on && verb.kind != PhotosLightboxVerb.Kind.KIND_INFO,
                     // INFO IS PRESSED WHILE ITS CARDS ARE ON THE PAGE, which is always.
                     modifier = if (light && verb.kind == PhotosLightboxVerb.Kind.KIND_INFO) {
                         Modifier.clip(CircleShape).background(Surface.fill)

@@ -32,6 +32,7 @@ import androidx.compose.ui.text.input.ImeAction
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -148,7 +149,10 @@ public fun NotesEditorScreen(
             skeleton = { RowSkeleton(rows = 4, meta = false) },
         ) {
             val note = draft ?: return@ReadStateView
-            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+            // THE WORDS SCROLL AND THE TOOLS STAY AT THE FOOT (above the keyboard when it is up), not
+            // floating under the last line wherever the text happens to end.
+            Column(Modifier.fillMaxSize()) {
+            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
                 // ABOUT, above the words (#1173): who or what the note is about; a tap opens it.
                 AboutChips(state.about, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 2.dp), onOpen)
                 // THE LINE OVER THE TITLE: the pin when pinned, then "Travel · Edited Wed 4 November".
@@ -214,21 +218,22 @@ public fun NotesEditorScreen(
                             .semantics { contentDescription = line.accessibility_label.ifEmpty { line.text } },
                     )
                 }
-                // THE TOOLS under the words: checklist and link are Rust's events.
-                if (chrome != null) {
-                    Row(
-                        Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        IconKey("ListChecks", chrome.checklist_label, "notes-tool-checklist") {
-                            send(NotesEditorEvent(checklist_requested = NotesEditorEvent.ChecklistRequested()))
-                        }
-                        IconKey("Link", chrome.link_label, "notes-tool-link") {
-                            onEvent(NotesEditorEvent(link_requested = NotesEditorEvent.LinkRequested()))
-                        }
-                        IconKey("ChevronDown", chrome.keyboard_label, "notes-tool-keyboard") { focus.clearFocus() }
+            }
+            // THE TOOLS: checklist and link are Rust's events.
+            if (chrome != null) {
+                Row(
+                    Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    IconKey("ListChecks", chrome.checklist_label, "notes-tool-checklist") {
+                        send(NotesEditorEvent(checklist_requested = NotesEditorEvent.ChecklistRequested()))
                     }
+                    IconKey("Link", chrome.link_label, "notes-tool-link") {
+                        onEvent(NotesEditorEvent(link_requested = NotesEditorEvent.LinkRequested()))
+                    }
+                    IconKey("ChevronDown", chrome.keyboard_label, "notes-tool-keyboard") { focus.clearFocus() }
                 }
+            }
             }
         }
     }
