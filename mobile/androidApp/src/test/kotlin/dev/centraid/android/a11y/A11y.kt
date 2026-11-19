@@ -35,15 +35,6 @@ internal object A11y {
         override fun toString() = "[$check] $where: $detail"
     }
 
-    /**
-     * THE ONE CONTROL LEFT UNDER THE FLOOR, NAMED AND OPEN (not a pass): the lockup's backup status line on Home
-     * (`home-backup-status`, 18dp tall) is a text door inside the vault switcher's row; making it 48 grows the
-     * lockup by about 30dp, a layout change that is owed a mockup first (AGENTS.md "Mockups first"). The same
-     * destination is the band's Backup tab (48dp), so the screen has a target that size; the line stays in
-     * `s4.json` as FAIL until the board moves.
-     */
-    val UNDER_FLOOR_BY_DESIGN = setOf("home-backup-status")
-
     /** The floor of a touch target, in dp: the platform's, wider than the design's 44. */
     const val TARGET_DP = 48f
     const val TEXT_CONTRAST = 4.5
@@ -122,8 +113,7 @@ internal object A11y {
         // `boundsInRoot` either: that is clipped to the viewport, so a row half scrolled off would read short.)
         val w = c.node.size.width / density.density
         val h = c.node.size.height / density.density
-        val tag = c.node.config.getOrNull(SemanticsProperties.TestTag)
-        if ((w + 0.5f < TARGET_DP || h + 0.5f < TARGET_DP) && tag !in UNDER_FLOOR_BY_DESIGN) {
+        if ((w + 0.5f < TARGET_DP || h + 0.5f < TARGET_DP)) {
             out += Finding("target", name(c), "${"%.1f".format(w)} x ${"%.1f".format(h)} dp, under $TARGET_DP")
         }
         if (c.label.isEmpty()) out += Finding("label", name(c), "a control with no text and no content description")

@@ -1,5 +1,8 @@
 package dev.centraid.android.kit
 
+import androidx.compose.ui.semantics.invisibleToUser
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -111,6 +114,11 @@ public fun VaultHeader(
                 // line. The backup status is a door of its own, below.
                 .semantics(mergeDescendants = true) {
                     contentDescription = bar.switch_label
+                    // THE BACKUP DOOR FOR A SCREEN READER: the 18dp line under the name is a sighted tap (Compose
+                    // widens its hit area to 48dp, nothing drawn changes); a reader gets it as this row's action.
+                    if (status.isNotEmpty()) {
+                        customActions = listOf(CustomAccessibilityAction(bar.backup_open_label) { onOpenBackup(); true })
+                    }
                 },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -151,9 +159,8 @@ public fun VaultHeader(
                         .heightIn(min = 18.dp)
                         .clickable(onClick = onOpenBackup)
                         .testTag("home-backup-status")
-                        .semantics(mergeDescendants = true) {
-                            contentDescription = bar.backup_open_label
-                        }
+                        // Reached by the row's custom action above, not as a control of its own.
+                        .semantics { invisibleToUser() }
                     val action = backup?.action.orEmpty()
                     val state: @Composable () -> Unit = {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
