@@ -11,10 +11,6 @@ use crate::strings::{Locale, fill, people as words};
 /// A reminder is a roster chip when it is at most this many days away.
 const REMINDER_CHIP_DAYS: i64 = 30;
 
-/// THE GLYPH ON PEOPLE'S EMPTY CARDS is a person, as the boards draw it (FirstOpenPeople), not the
-/// address book the app's tile wears.
-const PERSON_GLYPH: &str = "User";
-
 /// WHERE THE PHONE'S CONTACTS STAND for the cards that offer them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Access {
@@ -59,13 +55,11 @@ pub fn day_one(locale: Locale, access: Access) -> wire::EmptyState {
             headline: words::refused_title(locale),
             body: words::refused_body(locale),
             action_label: words::refused_open_settings(locale),
-            icon_key: PERSON_GLYPH.to_owned(),
             ..wire::EmptyState::default()
         },
         Access::Closed => wire::EmptyState {
             headline: words::first_open(locale),
             action_label: words::add_person(locale),
-            icon_key: PERSON_GLYPH.to_owned(),
             ..wire::EmptyState::default()
         },
         Access::Open => wire::EmptyState {
@@ -74,7 +68,6 @@ pub fn day_one(locale: Locale, access: Access) -> wire::EmptyState {
             // it from `import_source`); the plus is in the header, so no "Add person" button here.
             hint: words::first_open_hint(locale),
             import_source: wire::ImportSource::Contacts as i32,
-            icon_key: PERSON_GLYPH.to_owned(),
             ..wire::EmptyState::default()
         },
     }
@@ -98,7 +91,6 @@ fn chip_empty(locale: Locale) -> wire::EmptyState {
     wire::EmptyState {
         headline: words::empty_chip(locale),
         action_label: words::add_person(locale),
-        icon_key: PERSON_GLYPH.to_owned(),
         ..wire::EmptyState::default()
     }
 }
