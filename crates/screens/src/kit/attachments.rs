@@ -505,9 +505,10 @@ pub fn attach_request(app: &str, from: &str, to: &str) -> wire::ActRequest {
     request
 }
 
-/// The file's name as the origin keeps it, or nothing for a file the platform named none for.
+/// The file's name as the origin keeps it, or nothing for a file the platform named none for: cleaned
+/// of control and bidi characters and fitted to the 200 characters the vault takes (`kit::file_name`).
 fn arrival_label(name: &str) -> Option<String> {
-    Some(name.trim().to_owned()).filter(|name| !name.is_empty())
+    super::file_name::label_of(name)
 }
 
 /// The photograph a picked image becomes: it arrived through the picker.
