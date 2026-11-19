@@ -131,7 +131,7 @@ private struct PeoplePersonBody: View {
 
     /// A COUNT OF NOTHING IS NOT SHOWN (#1202): Rust always sends the count, and an empty head reads
     /// "Notes", never "Notes 0".
-    private static func counted(_ n: UInt32) -> UInt32? { n > 0 ? n : nil }
+    private static func shownCount(_ n: UInt32) -> UInt32? { n > 0 ? n : nil }
 
     private func openSheet(_ which: Centraid_Core_V1_PeoplePersonEvent.SheetOpened.Which) {
         send(PeopleEvents.person { $0.sheetOpened = .with { $0.which = which } })
@@ -148,7 +148,7 @@ private struct PeoplePersonBody: View {
 
                 SectionHeader(
                     title: person.channelsHead.title,
-                    count: Self.counted(person.channelsHead.count),
+                    count: Self.shownCount(person.channelsHead.count),
                     verb: person.channelsHead.verbLabel
                 ) { openSheet(.channel) }
                 if person.channels.isEmpty {
@@ -167,7 +167,7 @@ private struct PeoplePersonBody: View {
 
                 SectionHeader(
                     title: person.datesHead.title,
-                    count: Self.counted(person.datesHead.count),
+                    count: Self.shownCount(person.datesHead.count),
                     verb: person.datesHead.verbLabel
                 ) { openSheet(.date) }
                 if person.dates.isEmpty && person.facts.isEmpty {
@@ -192,7 +192,7 @@ private struct PeoplePersonBody: View {
                 }
 
                 if !person.relations.isEmpty {
-                    SectionHeader(title: person.relationsHead.title, count: Self.counted(person.relationsHead.count))
+                    SectionHeader(title: person.relationsHead.title, count: Self.shownCount(person.relationsHead.count))
                     VStack(spacing: 0) {
                         ForEach(Array(person.relations.enumerated()), id: \.offset) { _, relation in
                             CentraidRow(
@@ -231,7 +231,7 @@ private struct PeoplePersonBody: View {
 
                 SectionHeader(
                     title: person.notesHead.title,
-                    count: Self.counted(person.notesHead.count),
+                    count: Self.shownCount(person.notesHead.count),
                     verb: person.notesHead.verbLabel
                 ) { openSheet(.note) }
                 if person.notes.isEmpty {
@@ -254,7 +254,7 @@ private struct PeoplePersonBody: View {
                 if !person.isMe {
                     SectionHeader(
                         title: person.touchesHead.title,
-                        count: Self.counted(person.touchesHead.count),
+                        count: Self.shownCount(person.touchesHead.count),
                         verb: person.touchesHead.verbLabel
                     ) { openSheet(.logTouch) }
                     if person.touches.isEmpty {
