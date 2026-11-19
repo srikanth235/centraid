@@ -452,6 +452,8 @@ private struct FreeUpSpaceRow: View {
     @Environment(\.colorScheme) private var scheme
     let row: Centraid_Core_V1_PhotosFreeUpRow
     let onFree: () -> Void
+    /// The tile grows with the text (`KitTile`'s own rule), so the footnotes' inset follows it.
+    @ScaledMetric private var tileScale: CGFloat = 1
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -491,9 +493,10 @@ private struct FreeUpSpaceRow: View {
                         .foregroundStyle(Theme.color("textFaint", scheme))
                 }
             }
-            .padding(.leading, 44)
+            .padding(.leading, 32 * min(tileScale, 2) + 12)
         }
         .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+        .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .accessibilityIdentifier("photos.more.freeUp")
     }

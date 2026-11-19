@@ -78,36 +78,46 @@ struct HealthPinnedCard: View {
     let onTap: () -> Void
 
     @Environment(\.appAccent) private var accent
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// THE FIGURE FOLLOWS THE TEXT SIZE (#1202): the labels scaled while the number stayed at its
+    /// point size, so at the largest text the key number was the smallest thing on the card.
+    @ScaledMetric(relativeTo: .title3) private var scale: CGFloat = 1
 
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
+                let headLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                    : AnyLayout(HStackLayout(spacing: 6))
+                headLayout {
                     CentraidIconView(iconKey: line.iconKey, tint: accent.text, size: line.wide ? 16 : 14)
                         .accessibilityHidden(true)
                     Text(line.label)
                         .kitType(.meta)
                         .fontWeight(.semibold)
                         .foregroundStyle(accent.text)
-                        .kitLineLimit(1)
+                        .kitLineLimit(1, wide: 2)
                     if line.wide {
-                        Spacer(minLength: 8)
+                        if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
                         Text(line.whenLabel)
                             .kitType(.meta)
                             .foregroundStyle(Surface.meta)
                     }
                 }
                 if line.wide {
-                    HStack(alignment: .bottom) {
+                    let wideLayout = dynamicTypeSize.isAccessibilitySize
+                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                        : AnyLayout(HStackLayout(alignment: .bottom))
+                    wideLayout {
                         VStack(alignment: .leading, spacing: 2) {
-                            figure(size: CentraidScale.titleSize - 6, unitSize: CentraidScale.metaSize)
+                            figure(size: (CentraidScale.titleSize - 6) * scale, unitSize: CentraidScale.metaSize * scale)
                             if !line.typical.isEmpty {
                                 Text(line.typical)
                                     .kitType(.meta)
                                     .foregroundStyle(line.good ? StateColor.green.text : Surface.meta)
                             }
                         }
-                        Spacer(minLength: 8)
+                        if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
                         HealthSparkBars(points: line.sparkBp, label: line.sparkLabel)
                     }
                 } else {
@@ -122,7 +132,7 @@ struct HealthPinnedCard: View {
                                 .foregroundStyle(Surface.meta)
                         }
                     } else {
-                        figure(size: 22, unitSize: CentraidScale.metaSize)
+                        figure(size: 22 * scale, unitSize: CentraidScale.metaSize * scale)
                         Text(line.compactLine)
                             .kitType(.meta)
                             .foregroundStyle(Surface.meta)
@@ -328,10 +338,13 @@ struct HealthBarChart: View {
 
     @Environment(\.appAccent) private var accent
     @State private var scrubbed: Int?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// THE TYPICAL'S WORD HAS A GUTTER OF ITS OWN (HealthMetric): at the line's end, past the last
-    /// bar, never over it.
-    private var gutter: CGFloat { data.hasTypical_p && !data.typicalLabel.isEmpty ? 52 : 0 }
+    /// bar, never over it. At accessibility sizes a 52pt gutter held one letter of it ("t..."), so
+    /// the word sits over the line's end instead, on the chart's own width (#1202).
+    private var overLine: Bool { dynamicTypeSize.isAccessibilitySize }
+    private var gutter: CGFloat { data.hasTypical_p && !data.typicalLabel.isEmpty && !overLine ? 52 : 0 }
 
     var body: some View {
         let spacing: CGFloat = data.bars.count > 14 ? 3 : 8
@@ -365,13 +378,23 @@ struct HealthBarChart: View {
                             path.addLine(to: CGPoint(x: width, y: at))
                         }
                         .stroke(accent.text, style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
-                        Text(data.typicalLabel)
-                            .kitType(.meta)
-                            .foregroundStyle(accent.text)
-                            .kitLineLimit(1)
-                            .padding(.leading, 4)
-                            .frame(width: gutter, alignment: .leading)
-                            .offset(x: width, y: max(at - 9, 0))
+                        if overLine {
+                            Text(data.typicalLabel)
+                                .kitType(.meta)
+                                .foregroundStyle(accent.text)
+                                .padding(.horizontal, 4)
+                                .background(Surface.page.opacity(0.85))
+                                .frame(width: width, alignment: .trailing)
+                                .offset(y: max(at - 34, 0))
+                        } else {
+                            Text(data.typicalLabel)
+                                .kitType(.meta)
+                                .foregroundStyle(accent.text)
+                                .lineLimit(1)
+                                .padding(.leading, 4)
+                                .frame(width: gutter, alignment: .leading)
+                                .offset(x: width, y: max(at - 9, 0))
+                        }
                     }
                     if let index = scrubbed, data.bars.indices.contains(index), !data.bars[index].callout.isEmpty {
                         let slot = width / CGFloat(max(data.bars.count, 1))
