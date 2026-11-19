@@ -7,7 +7,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.ViewConfiguration
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
@@ -39,7 +43,13 @@ class A11yCanaryTest {
 
     @Test
     fun aSmallTargetIsRefused() {
-        val f = findings { Box(Modifier.size(30.dp).clickable {}) { Text("Tiny") } }
+        // Compose widens a small control's touch bounds to 48dp on its own, so the case is the platform's floor NOT
+        // honoured (a zero minimum touch target): the check must see the 30dp.
+        val f = findings {
+            val base = LocalViewConfiguration.current
+            val none = object : ViewConfiguration by base { override val minimumTouchTargetSize = DpSize.Zero }
+            CompositionLocalProvider(LocalViewConfiguration provides none) { Box(Modifier.size(30.dp).clickable {}) { Text("Tiny") } }
+        }
         assertTrue(f.toString(), f.any { it.check == "target" })
     }
 

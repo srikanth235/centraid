@@ -1,6 +1,5 @@
 package dev.centraid.android.screens.words
 
-import dev.centraid.android.kit.KitGeometry
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -204,7 +203,7 @@ private fun Doors(gate: HomeFirstLaunch, onMake: () -> Unit, onRestore: () -> Un
         Box(
             Modifier
                 .fillMaxWidth()
-                .defaultMinSize(minHeight = KitGeometry.ROW_MIN)
+                .defaultMinSize(minHeight = 44.dp)
                 .clickable(onClick = onRestore)
                 .semantics { role = Role.Button }
                 .testTag("first-launch-secondary"),

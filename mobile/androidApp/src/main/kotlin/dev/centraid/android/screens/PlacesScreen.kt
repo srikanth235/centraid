@@ -325,7 +325,7 @@ private fun Footer(data: PhotosPlacesData, isMap: Boolean, onOpen: (Route) -> Un
             modifier = Modifier
                 .fillMaxWidth()
                 .kitCard()
-                .heightIn(min = KitGeometry.ROW_MIN)
+                .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
                 .clickable(enabled = unplacedOpen != null) { unplacedOpen?.let(onOpen) }
                 .padding(horizontal = 14.dp)
                 .semantics(mergeDescendants = true) {

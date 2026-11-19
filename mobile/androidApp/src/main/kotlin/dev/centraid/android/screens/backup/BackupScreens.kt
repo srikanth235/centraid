@@ -1,7 +1,6 @@
 package dev.centraid.android.screens.backup
 
 import android.Manifest
-import dev.centraid.android.kit.KitGeometry
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -254,7 +253,7 @@ private fun BackupPage(
                         style = centraidType("body"),
                         color = appAccent("").text,
                         modifier = Modifier
-                            .heightIn(min = KitGeometry.ROW_MIN)
+                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
                             .clickable(role = Role.Button) {
                                 onEvent(BackupHomeEvent(key_prompt_answered = BackupHomeEvent.KeyPromptAnswered()))
                                 prompt.save?.let(onOpen)
@@ -266,7 +265,7 @@ private fun BackupPage(
                         style = centraidType("body"),
                         color = Surface.meta,
                         modifier = Modifier
-                            .heightIn(min = KitGeometry.ROW_MIN)
+                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
                             .clickable(role = Role.Button) {
                                 onEvent(BackupHomeEvent(key_prompt_answered = BackupHomeEvent.KeyPromptAnswered()))
                             }
@@ -290,7 +289,7 @@ private fun BackupPage(
                         style = centraidType("body"),
                         color = appAccent("").text,
                         modifier = Modifier
-                            .heightIn(min = KitGeometry.ROW_MIN)
+                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
                             .clickable(role = Role.Button) { onEvent(BackupHomeEvent(notify_allow = BackupHomeEvent.NotifyAllow())) }
                             .testTag("backup-notify-allow"),
                     )
@@ -299,7 +298,7 @@ private fun BackupPage(
                         style = centraidType("body"),
                         color = Surface.meta,
                         modifier = Modifier
-                            .heightIn(min = KitGeometry.ROW_MIN)
+                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
                             .clickable(role = Role.Button) { onEvent(BackupHomeEvent(notify_not_now = BackupHomeEvent.NotifyNotNow())) }
                             .testTag("backup-notify-not-now"),
                     )
@@ -319,7 +318,7 @@ private fun BackupPage(
                         style = centraidType("body"),
                         color = appAccent("").text,
                         modifier = Modifier
-                            .heightIn(min = KitGeometry.ROW_MIN)
+                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
                             .clickable(role = Role.Button) { onEvent(BackupHomeEvent(notify_open_settings = BackupHomeEvent.NotifyOpenSettings())) }
                             .testTag("backup-notify-settings"),
                     )
@@ -420,7 +419,7 @@ private fun BackupPage(
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = KitGeometry.ROW_MIN)
+                                .heightIn(min = 44.dp)
                                 .clickable {
                                     onEvent(BackupHomeEvent(rule_chosen = BackupHomeEvent.RuleChosen(stored = choice.stored)))
                                 }
@@ -443,8 +442,8 @@ private fun BackupPage(
                 }
                 if (model.include_videos_label.isNotEmpty()) {
                     Row(
-                        // THE WHOLE ROW IS THE SWITCH (a 52 x 32 key alone is under the 48dp floor, and a label beside a
-                        // switch is a word nobody can press).
+                        // THE WHOLE ROW IS THE SWITCH: a label beside a switch is a word nobody can press, and a screen
+                        // reader gets one control named by the row. Same size as before.
                         Modifier.fillMaxWidth().heightIn(min = 52.dp)
                             .toggleable(
                                 value = model.include_videos,
@@ -498,7 +497,7 @@ private fun BackupPage(
                         Box(
                             Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = KitGeometry.ROW_MIN)
+                                .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
                                 .clickable(role = Role.Button) {
                                     onEvent(BackupHomeEvent(set_key_sync = BackupHomeEvent.SetKeySync(on = !model.key_synced)))
                                 }

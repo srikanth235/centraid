@@ -187,8 +187,9 @@ private fun PayloadField(label: String, value: String, onEdit: (String) -> Unit)
         Box(
             Modifier
                 .fillMaxWidth()
+                .heightIn(min = KitGeometry.ROW_MIN)
                 .border(KitGeometry.HAIRLINE, centraidColor("lineStrong"), RoundedCornerShape(KitGeometry.RADIUS))
-                .padding(horizontal = 10.dp),
+                .padding(10.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
             BasicTextField(
@@ -207,10 +208,6 @@ private fun PayloadField(label: String, value: String, onEdit: (String) -> Unit)
                 ),
                 textStyle = centraidType("mono").copy(color = centraidColor("text")),
                 cursorBrush = SolidColor(centraidColor("text")),
-                // THE FIELD ITSELF IS THE 48dp TARGET, not the box round it: a tap in the box's padding reached nothing.
-                decorationBox = { field ->
-                    Box(Modifier.fillMaxWidth().heightIn(min = KitGeometry.ROW_MIN), contentAlignment = Alignment.CenterStart) { field() }
-                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("pair-payload")

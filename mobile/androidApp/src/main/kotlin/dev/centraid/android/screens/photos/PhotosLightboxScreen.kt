@@ -537,7 +537,7 @@ private fun MoreMenu(menu: List<PhotosLightboxVerb>, label: String, onEvent: (Ph
 private fun Chip(icon: String, label: String, light: Boolean = false, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(KitGeometry.ROW_MIN)
+            .size(CentraidGeometry.TARGET_MIN_COARSE.dp)
             .clip(CircleShape)
             .background(if (light) Surface.card else centraidColor("stageSunken"))
             .clickable(onClick = onClick)

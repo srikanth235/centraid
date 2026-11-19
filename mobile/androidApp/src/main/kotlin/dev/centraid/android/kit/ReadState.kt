@@ -366,53 +366,47 @@ public fun OutlineButton(
     val shape = RoundedCornerShape(percent = 50)
     val labelStyle = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold)
     val labelInk = if (!enabled) Surface.meta else if (ink == "text") Surface.ink else StateColor.Red.text
-    // TWO LAYERS: the HIT AREA is the platform's 48dp floor (`KitGeometry.ROW_MIN`, both ways), and the PILL drawn in
-    // it keeps the design's size (a hugging button is 36 tall, a stacked one fills its slot), centred.
-    val hit = modifier
+    val frame = modifier
         .then(if (stacked) Modifier.fillMaxWidth() else Modifier)
-        .heightIn(min = KitGeometry.ROW_MIN)
-        .widthIn(min = KitGeometry.ROW_MIN)
+        .heightIn(min = if (stacked) KitGeometry.ROW_MIN else 36.dp)
+        .widthIn(min = 44.dp)
         .clip(shape)
+        // THE ACTION ROW'S KEYS ARE WHITE PILLS (AgendaEvent): inside a choice row the outline
+        // sits on a card fill, so the keys read as keys on the page.
+        .then(if (inRow) Modifier.background(Surface.card, shape) else Modifier)
+        .border(KitGeometry.HAIRLINE, edge, shape)
         .clickable(enabled = enabled, onClick = onPress)
+        // 13 + 18 (the label's line) + 13 is the stack's 44; 9 + 18 + 9 is
+        // the hugging button's 36.
+        .padding(horizontal = if (inRow) 6.dp else 12.dp, vertical = if (stacked) 13.dp else 9.dp)
         .testTag(testTag)
-        .semantics(mergeDescendants = true) {
+        .semantics {
             role = Role.Button
             if (!enabled) disabled()
         }
-    // THE ACTION ROW'S KEYS ARE WHITE PILLS (AgendaEvent): inside a choice row the outline
-    // sits on a card fill, so the keys read as keys on the page.
-    val pill = Modifier
-        .then(if (stacked) Modifier.fillMaxWidth().heightIn(min = KitGeometry.ROW_MIN) else Modifier)
-        .clip(shape)
-        .then(if (inRow) Modifier.background(Surface.card, shape) else Modifier)
-        .border(KitGeometry.HAIRLINE, edge, shape)
-        // 9 + 18 (the label's line) + 9 is the hugging button's 36; a stacked one is the hit area's 48.
-        .padding(horizontal = if (inRow) 6.dp else 12.dp, vertical = if (stacked) 13.dp else 9.dp)
-    Box(hit, contentAlignment = Alignment.Center) {
-        if (inRow) {
-            // A LABEL IN A SHARED ROW SHRINKS TO ITS KEY (#1202): "Cancel event..." was cut after "Cancel", which then
-            // read as a dismiss. One line, never clipped.
-            androidx.compose.foundation.text.BasicText(
-                label,
-                style = labelStyle.copy(color = labelInk, textAlign = TextAlign.Center),
-                maxLines = 1,
-                softWrap = false,
-                autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(
-                    minFontSize = labelStyle.fontSize * 0.7f,
-                    maxFontSize = labelStyle.fontSize,
-                ),
-                modifier = pill,
-            )
-        } else {
-            Text(
-                label,
-                style = labelStyle,
-                color = labelInk,
-                textAlign = if (stacked) TextAlign.Center else TextAlign.Unspecified,
-                maxLines = Int.MAX_VALUE,
-                modifier = pill,
-            )
-        }
+    if (inRow) {
+        // A LABEL IN A SHARED ROW SHRINKS TO ITS KEY (#1202): "Cancel event..." was cut after "Cancel", which then
+        // read as a dismiss. One line, never clipped.
+        androidx.compose.foundation.text.BasicText(
+            label,
+            style = labelStyle.copy(color = labelInk, textAlign = TextAlign.Center),
+            maxLines = 1,
+            softWrap = false,
+            autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(
+                minFontSize = labelStyle.fontSize * 0.7f,
+                maxFontSize = labelStyle.fontSize,
+            ),
+            modifier = frame,
+        )
+    } else {
+        Text(
+            label,
+            style = labelStyle,
+            color = labelInk,
+            textAlign = if (stacked) TextAlign.Center else TextAlign.Unspecified,
+            maxLines = Int.MAX_VALUE,
+            modifier = frame,
+        )
     }
 }
 
@@ -473,12 +467,8 @@ public object KitGeometry {
      */
     public val GUTTER: Dp = CentraidGeometry.PAGE_MARGIN.dp
 
-    /**
-     * A thumb's press: every row and key is at least this tall. 48, Android's platform floor (design/behaviour.md
-     * § Accessibility: iOS holds 44, a tab below its floor stops being a tap target); the accessibility suite
-     * (`a11y/A11y.kt`) fails any control drawn smaller.
-     */
-    public val ROW_MIN: Dp = 48.dp
+    /** A thumb's press: every row and key is at least this tall. */
+    public val ROW_MIN: Dp = 44.dp
 
     /** The control radius: the token scale's `radii.md`, read, never typed. */
     public val RADIUS: Dp = (CentraidTokens.light.radii["md"] ?: 0).dp

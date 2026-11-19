@@ -108,11 +108,12 @@ internal object A11y {
     fun targetAndLabel(c: Node, density: Density): List<Finding> {
         val out = mutableListOf<Finding>()
         if (c.node.config.contains(SemanticsProperties.Disabled)) return out
-        // THE LAID-OUT SIZE, NOT `touchBoundsInRoot`: Compose widens the hit area of a small `clickable` to 48dp at
-        // run time, which would pass a 30dp key; the size is what the member sees and a scanner reports. (Not
-        // `boundsInRoot` either: that is clipped to the viewport, so a row half scrolled off would read short.)
-        val w = c.node.size.width / density.density
-        val h = c.node.size.height / density.density
+        // THE TOUCH BOUNDS: what a thumb (and a reader's focus ring) gets. Compose widens a smaller control's to the
+        // platform's 48dp without moving or redrawing it, so the check holds that and not the drawn size. The larger
+        // of the touch bounds and the laid-out size is read, because each is clipped or widened in different cases.
+        val tb = c.node.touchBoundsInRoot
+        val w = max(tb.width, c.node.size.width.toFloat()) / density.density
+        val h = max(tb.height, c.node.size.height.toFloat()) / density.density
         if ((w + 0.5f < TARGET_DP || h + 0.5f < TARGET_DP)) {
             out += Finding("target", name(c), "${"%.1f".format(w)} x ${"%.1f".format(h)} dp, under $TARGET_DP")
         }

@@ -219,7 +219,7 @@ private fun WordsCheckbox(label: String, on: Boolean, testTag: String, onToggle:
     Row(
         Modifier
             .fillMaxWidth()
-            .heightIn(min = KitGeometry.ROW_MIN)
+            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
             .toggleable(value = on, role = Role.Checkbox, onValueChange = onToggle)
             .testTag(testTag),
         verticalAlignment = Alignment.CenterVertically,
@@ -255,7 +255,7 @@ internal fun ShownWords(cells: List<WordCell>) {
                     Row(
                         Modifier
                             .weight(1f)
-                            .heightIn(min = KitGeometry.ROW_MIN)
+                            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
                             .wordsBox()
                             .padding(horizontal = 10.dp)
                             .testTag("words-word-${cell.position}")
@@ -812,7 +812,7 @@ internal fun WordsLink(label: String, testTag: String, onPress: () -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
-            .heightIn(min = KitGeometry.ROW_MIN)
+            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
             .clickable(onClick = onPress)
             .testTag(testTag)
             .semantics { role = Role.Button },
@@ -935,7 +935,7 @@ private fun WordField(
     Row(
         Modifier
             .fillMaxWidth()
-            .heightIn(min = KitGeometry.ROW_MIN)
+            .heightIn(min = CentraidGeometry.TARGET_MIN_COARSE.dp)
             .wordsBox(
                 border = when {
                     unknown -> StateColor.Red.text

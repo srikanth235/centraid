@@ -660,7 +660,7 @@ private fun rotatedFrameRatio(assetRatio: Double, degrees: Int): Double {
 private const val MASK_ALPHA: Float = 0x8C / 255f
 
 /** The coarse target floor (design/behaviour.md: 44 on touch). */
-private const val TARGET: Int = 48
+private const val TARGET: Int = 44
 
 /** One spoken step of the crop: a twentieth of the frame. */
 private const val STEP: Double = 0.05
