@@ -216,6 +216,7 @@ struct StatusChipView: View {
             // THE APP'S OWN GOOD NEWS: the accent's chip ground under the accent's text.
             Text(chip.label)
                 .kitType(.badge)
+                .kitHeld()
                 .foregroundStyle(accent.text)
                 .kitLineLimit(1)
                 .padding(.horizontal, 6)
@@ -224,6 +225,7 @@ struct StatusChipView: View {
         case .neutral, .unspecified, .UNRECOGNIZED:
             Text(chip.label)
                 .kitType(.badge)
+                .kitHeld()
                 .foregroundStyle(Surface.meta)
                 .kitLineLimit(1)
                 .padding(.horizontal, 6)
@@ -591,16 +593,25 @@ struct MetaLine: View {
         return line
     }
 
+    /// ONE PART ON ITS LINES. A part that is one word (an address, a username, "owner@example.com")
+    /// has nowhere to wrap and was cut to "owner@e..." (#1202): it shrinks to fit its line
+    /// instead, and a part of several words wraps by word.
+    @ViewBuilder
+    private func partText(_ text: String, accented: Bool) -> some View {
+        let oneWord = !text.contains(" ")
+        if accented {
+            Text(text).foregroundStyle(accent.text).kitLineLimit(1).minimumScaleFactor(oneWord ? 0.5 : 1)
+        } else {
+            Text(text).kitLineLimit(1).minimumScaleFactor(oneWord ? 0.5 : 1)
+        }
+    }
+
     var body: some View {
         ViewThatFits(in: .horizontal) {
             joined.lineLimit(1).fixedSize(horizontal: true, vertical: false)
             VStack(alignment: alignment, spacing: 0) {
                 ForEach(Array((parts.map { ($0, false) } + accented.map { ($0, true) }).prefix(lines).enumerated()), id: \.offset) { _, part in
-                    if part.1 {
-                        Text(part.0).foregroundStyle(accent.text).kitLineLimit(1)
-                    } else {
-                        Text(part.0).kitLineLimit(1)
-                    }
+                    partText(part.0, accented: part.1)
                 }
             }
         }

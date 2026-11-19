@@ -169,6 +169,7 @@ struct KitBadge: View {
     var body: some View {
         Text(label)
             .kitType(.badge)
+            .kitHeld()
             .foregroundStyle(state.text)
             .lineLimit(1)
             .padding(.horizontal, 6)
@@ -256,6 +257,18 @@ struct KitTile: View {
 // MARK: - Clamped text (#1202)
 
 extension View {
+    /// TEXT THAT HOLDS AT `xxxLarge` (#1202), for a badge or a chart's axis words. A status chip is
+    /// a capsule of capitals, and at the largest text "COMPROMISED" is wider than the row it sits
+    /// in and was cut to "COMPR..."; a chart's labels sit in a column a fixed fraction of the
+    /// card wide. Held at the size the LargeText board draws, the word is whole and still larger
+    /// than body text; the band's labels and the calendar grids hold the same way. Totals and
+    /// every figure a member reads in a row do not hold: they stay whole by wrapping or shrinking.
+    func kitHeld() -> some View {
+        dynamicTypeSize(...Theme.reflowSize)
+    }
+}
+
+extension View {
     /// A ONE-LINE CLAMP THAT OPENS AT ACCESSIBILITY TEXT SIZES. A title, a date or a meta line
     /// holds to `lines` where the row has the room, and takes up to `wide` once the text is
     /// large, so what the member reads is not cut to an ellipsis (a word dropped from the end
@@ -272,6 +285,57 @@ private struct KitLineLimit: ViewModifier {
 
     func body(content: Content) -> some View {
         content.lineLimit(dynamicTypeSize.isAccessibilitySize ? max(lines, wide) : lines)
+    }
+}
+
+// MARK: - Whole tokens (#1202)
+
+/// A SENTENCE THAT NEVER BREAKS AN ADDRESS. Words wrap as words do; a token with no space in it
+/// that carries a digit and a dot or colon (a network address, "192.168.1.5:18455") is a line of
+/// its own that shrinks to fit rather than split mid-number. The caller passes the rung's styling
+/// on the result, so it reads as one text.
+struct KitWholeTokens: View {
+    let text: String
+
+    /// A run of words, or one token that must stay whole.
+    private struct Piece: Identifiable {
+        let id: Int
+        let text: String
+        let whole: Bool
+    }
+
+    private static func isAddress(_ token: Substring) -> Bool {
+        token.contains { $0.isNumber } && token.contains { $0 == "." || $0 == ":" } && token.count >= 7
+    }
+
+    private var pieces: [Piece] {
+        var out: [Piece] = []
+        var run: [Substring] = []
+        func flush() {
+            if !run.isEmpty { out.append(Piece(id: out.count, text: run.joined(separator: " "), whole: false)); run = [] }
+        }
+        for token in text.split(separator: " ", omittingEmptySubsequences: true) {
+            if Self.isAddress(token) {
+                flush()
+                out.append(Piece(id: out.count, text: String(token), whole: true))
+            } else {
+                run.append(token)
+            }
+        }
+        flush()
+        return out
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(pieces) { piece in
+                if piece.whole {
+                    Text(piece.text).lineLimit(1).minimumScaleFactor(0.5)
+                } else {
+                    Text(piece.text).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
     }
 }
 

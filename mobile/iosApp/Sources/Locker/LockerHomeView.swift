@@ -340,7 +340,9 @@ struct LockerGeneratorView: View {
                     .centraidType("small")
                     .foregroundStyle(Theme.color("textSoft", scheme))
             }
-            HStack(spacing: 8) {
+            // GENERATE ANOTHER AND COPY STACK at accessibility sizes (#1202): side by side the first
+            // broke as "Generat / e".
+            KitReflowRow(spacing: 8) {
                 KitOutlineButton(label: generator.regenerateLabel) {
                     send(LockerHomeEvents.make { $0.generatorRegenerate = .init() })
                 }
