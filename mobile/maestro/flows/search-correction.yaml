@@ -30,7 +30,8 @@ name: search-correction
 - assertVisible: "Including results for “yours”"
 - assertVisible:
     id: "home-search-group-notes"
-- assertVisible: "This note is yours"
+# The row is one spoken element, "Note, This note is yours" on Android, so match the title at its end.
+- assertVisible: ".*This note is yours"
 # An exact term says nothing: no line over rows it did not correct.
 - eraseText: 6
 - inputText: "yours"

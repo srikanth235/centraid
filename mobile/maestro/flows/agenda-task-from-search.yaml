@@ -21,8 +21,10 @@ name: agenda-task-from-search
 - inputText: "Flow task"
 - tapOn:
     id: "agenda-quick-add-verb"
+# The status line says where it went (Reminders' root is the lists page, not the rows, #1173).
 - extendedWaitUntil:
-    visible: "Flow task"
+    visible:
+      id: "agenda-status-action"
     timeout: 5000
 - launchApp
 - tapOn:
@@ -34,7 +36,10 @@ name: agenda-task-from-search
     visible:
       id: "home-search-group-reminders"
     timeout: 5000
-- tapOn: "Flow task"
+# A hit's row is one spoken element ("Task, Flow task") and its text is also the field's, so the
+# tap names the row by its id (the first of the runs' tasks).
+- tapOn:
+    id: "home-search-row-task-.*"
 - extendedWaitUntil:
     visible:
       id: "tasks-title-field"
@@ -53,12 +58,15 @@ name: agenda-task-from-search
     id: "home-search-group-reminders"
 # Agenda's own search finds the task too, above the event days.
 - tapOn:
-    id: "home-search-cancel"
+    id: "home-search-close"
 - tapOn:
     id: "home-tile-reminders"
 - tapOn:
-    id: "agenda-search-open"
+    id: "band-search"
 - inputText: "Flow task"
 - extendedWaitUntil:
     visible: "Flow task"
     timeout: 5000
+# The field holds the same words, so the hit itself is named by its row's id.
+- assertVisible:
+    id: "agenda-task-row-.*"

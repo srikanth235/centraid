@@ -8,10 +8,11 @@
 appId: dev.centraid.Centraid
 name: home
 ---
-# A VAULT-HOLDING INSTALL, NOT A FRESH ONE: a fresh install holds no vault and
-# opens onto the first-launch deck (`first-launch.yaml`), and `clearState` here
-# would throw away the vault this flow reads. Seed one first with
-# `mobile/scripts/demo-vault.sh`, which relaunches the debug app on it.
+# A DAY-ZERO VAULT, made by `onboarding.yaml` and not yet added to (run this straight after it). A
+# fresh install holds no vault and opens onto the first-launch screen (`first-launch.yaml`), and
+# `clearState` here would throw away the vault this flow reads. The seeded demo vault is NOT this
+# flow's: its items are older than a day, so its lockup carries "Not backed up yet · Pair"
+# (`backup::line::pair_owed`, 2026-11-17), where a day-zero vault carries no status line.
 - launchApp
 # The grid is the root. Every other screen in the product is reached through it.
 - assertVisible:
