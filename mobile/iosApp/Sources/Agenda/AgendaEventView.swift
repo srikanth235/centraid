@@ -18,6 +18,7 @@ struct AgendaEventView: View {
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.openURL) private var openURL
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private func event(_ build: (inout Centraid_Core_V1_AgendaEventEvent) -> Void) -> Centraid_Core_V1_AgendaEventEvent {
         var event = Centraid_Core_V1_AgendaEventEvent()
@@ -295,6 +296,12 @@ struct AgendaEventView: View {
         .padding(CentraidGeometry.pageMargin)
     }
 
+    private func replyText(_ label: String) -> some View {
+        Text(label)
+            .centraidType("annotLabel")
+            .foregroundStyle(Theme.color("textSoft", scheme))
+    }
+
     private func followedRow(_ guest: Centraid_Core_V1_AgendaFollowedGuestRow, index: Int) -> some View {
         HStack(spacing: 10) {
             Text(guest.initial)
@@ -313,11 +320,12 @@ struct AgendaEventView: View {
                         .foregroundStyle(Theme.color("textSoft", scheme))
                         .kitLineLimit(1)
                 }
+                // THE ANSWER UNDER THE NAME AT ACCESSIBILITY SIZES (#1202): beside it, it left the
+                // name a column too narrow for one word.
+                if dynamicTypeSize.isAccessibilitySize { replyText(guest.replyLabel) }
             }
-            Spacer(minLength: 8)
-            Text(guest.replyLabel)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color("textSoft", scheme))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if !dynamicTypeSize.isAccessibilitySize { replyText(guest.replyLabel) }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .frame(minHeight: CentraidGeometry.targetMinCoarse)
@@ -334,14 +342,15 @@ struct AgendaEventView: View {
                 .foregroundStyle(Theme.color("onAccent", scheme))
                 .kitScaledSquare(28, relativeTo: .footnote)
                 .background(Circle().fill(Theme.color(KitHue.role(guest.hueKey) ?? "cSlate", scheme)))
-            Text(guest.name)
-                .centraidType("body")
-                .foregroundStyle(Theme.color("text", scheme))
-                .kitLineLimit(1)
-            Spacer(minLength: 8)
-            Text(guest.replyLabel)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color("textSoft", scheme))
+            VStack(alignment: .leading, spacing: 0) {
+                Text(guest.name)
+                    .centraidType("body")
+                    .foregroundStyle(Theme.color("text", scheme))
+                    .kitLineLimit(1)
+                if dynamicTypeSize.isAccessibilitySize { replyText(guest.replyLabel) }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if !dynamicTypeSize.isAccessibilitySize { replyText(guest.replyLabel) }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .frame(minHeight: CentraidGeometry.targetMinCoarse)
