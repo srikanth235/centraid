@@ -14,9 +14,11 @@ name: agenda-todo
     id: "home-tile-reminders"
 - tapOn:
     id: "reminders-band-reminders"
+# A day-zero vault has no list rows yet: the page is the smart lists over an empty state, and the
+# Plus is there either way (`agenda-todo-list` is drawn once a task exists).
 - extendedWaitUntil:
     visible:
-      id: "agenda-todo-list"
+      id: "agenda-add-task"
     timeout: 5000
 # The bar is not drawn until the Plus opens it.
 - assertNotVisible:
