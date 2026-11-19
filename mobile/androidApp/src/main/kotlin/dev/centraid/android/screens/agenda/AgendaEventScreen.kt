@@ -49,6 +49,7 @@ import centraid.core.v1.Route
 import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ConfirmSheet
+import dev.centraid.android.kit.CellsRow
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OutlineButton
@@ -215,12 +216,12 @@ private fun EventBody(
             Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)) {
                 Text(rsvp.question, style = centraidType("smallStrong"), color = centraidColor("textSoft"))
                 // THE BOARD'S THREE EQUAL KEYS: the answer given filled in Agenda's blue.
-                Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // THE KEYS STACK at the largest text (#1202): three across, "Going" broke as "Goin / g".
+                CellsRow(Modifier.fillMaxWidth().padding(top = 8.dp), gap = 8.dp) { cell ->
                     rsvp.choices.forEach { choice ->
                         val shape = RoundedCornerShape(percent = 50)
                         Box(
-                            Modifier
-                                .weight(1f)
+                            cell
                                 .heightIn(min = KitGeometry.ROW_MIN)
                                 .clip(shape)
                                 .background(if (choice.selected) appAccent("calendar").fill else Surface.card, shape)
@@ -236,6 +237,7 @@ private fun EventBody(
                                 choice.label,
                                 style = centraidType(if (choice.selected) "smallStrong" else "small"),
                                 color = if (choice.selected) Color.White else centraidColor(if (choice.enabled) "text" else "textFaint"),
+                                maxLines = 1,
                             )
                         }
                     }
