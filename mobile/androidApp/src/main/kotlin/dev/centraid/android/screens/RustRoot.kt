@@ -304,6 +304,9 @@ internal class RustRoot(
                 pop(top.instance)
             }
         }
+        // BACK FROM ANOTHER TAB'S ROOT (the chat, the backup) GOES HOME: only Home's root leaves the
+        // app. The tab's own pages, when it has any, pop first (the handler above).
+        BackHandler(enabled = entries.size <= 1 && tab != TAB) { select(TAB) }
         // WHAT HOME NEEDS TO BE TOLD THE PHONE DOES: its own scheme, once it is open and when it moves.
         val homeRoot = runtime.navigation.value?.tabs?.firstOrNull { it.tab == TAB }?.entries?.firstOrNull()?.instance
         LaunchedEffect(homeRoot, phoneDark) {
