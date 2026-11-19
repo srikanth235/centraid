@@ -345,7 +345,8 @@ internal fun MoneyBarsChart(bars: MoneyBars, onPick: (Int) -> Unit) {
 @Composable
 private fun BarsBody(bars: MoneyBars, onPick: (Int) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Box(Modifier.fillMaxWidth().height(ChartHeight + 22.dp)) {
+        // THE AXIS ROW KEEPS ITS ROOM at the largest text (#1202): its words (held at 1.3) were cut at the foot.
+        Box(Modifier.fillMaxWidth().height(ChartHeight + (if (rememberLargestText()) 40.dp else 22.dp))) {
             Row(
                 Modifier.fillMaxWidth().fillMaxHeight(),
                 horizontalArrangement = Arrangement.spacedBy(if (bars.bars.size > 8) 3.dp else 10.dp),
@@ -358,13 +359,16 @@ private fun BarsBody(bars: MoneyBars, onPick: (Int) -> Unit) {
             if (bars.pace_bp > 0) {
                 val paceInk = Surface.meta
                 val paceLabel = bars.pace_label
+                val paceKey = rememberLargestText()
                 Column(
                     Modifier
                         .fillMaxWidth()
                         .offset(y = (ChartHeight - ChartHeight * bars.pace_bp / 10_000f) - 14.dp)
                         .clearAndSetSemantics { },
                 ) {
-                    KitText(paceLabel, KitType.Meta, paceInk, Modifier.fillMaxWidth().padding(start = 120.dp), maxLines = 1)
+                    // AT THE LARGEST TEXT THE PACE'S NAME IS A KEY UNDER THE CHART (#1202): in the plot
+                    // it drew across the bars.
+                    if (!paceKey) KitText(paceLabel, KitType.Meta, paceInk, Modifier.fillMaxWidth().padding(start = 120.dp), maxLines = 1)
                     Canvas(Modifier.fillMaxWidth().height(1.dp)) {
                         drawLine(
                             paceInk,
@@ -375,6 +379,21 @@ private fun BarsBody(bars: MoneyBars, onPick: (Int) -> Unit) {
                         )
                     }
                 }
+            }
+        }
+        if (bars.pace_bp > 0 && rememberLargestText()) {
+            val paceInk = Surface.meta
+            Row(Modifier.clearAndSetSemantics { }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Canvas(Modifier.width(20.dp).height(1.dp)) {
+                    drawLine(
+                        paceInk,
+                        Offset(0f, 0f),
+                        Offset(size.width, 0f),
+                        strokeWidth = 1.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 3.dp.toPx())),
+                    )
+                }
+                KitText(bars.pace_label, KitType.Meta, Surface.meta)
             }
         }
         if (bars.caption.isNotEmpty()) {
@@ -436,7 +455,7 @@ private fun BarColumn(index: Int, bar: MoneyBar, modifier: Modifier, onPick: (In
             bar.label,
             KitType.Meta,
             if (bar.selected) Surface.ink else Surface.meta,
-            Modifier.height(16.dp),
+            Modifier.heightIn(min = 16.dp),
             maxLines = 1,
         )
     }

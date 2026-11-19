@@ -26,6 +26,7 @@ import centraid.core.v1.TodoListState
 import centraid.core.v1.TodoProjectEvent
 import centraid.core.v1.TodoProjectState
 import dev.centraid.android.kit.SectionHead
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.KitGeometry
@@ -149,7 +150,9 @@ internal fun TodoProjectScreen(
             // one action (Add section), so this and Rename are quiet links under it, which an empty
             // project keeps too.
             if (styleLabel.isNotEmpty() || rename.isNotEmpty()) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER / 2)) {
+                // ONE UNDER THE OTHER at the largest text (#1202): side by side they read as one label,
+                // "Edit List Rename".
+                val links: @Composable () -> Unit = {
                     if (styleLabel.isNotEmpty()) {
                         KitLink(
                             label = styleLabel,
@@ -165,6 +168,11 @@ internal fun TodoProjectScreen(
                             modifier = Modifier.testTag("tasks-rename"),
                         )
                     }
+                }
+                if (rememberLargestText()) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER / 2)) { links() }
+                } else {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER / 2)) { links() }
                 }
             }
             ReadStateView(

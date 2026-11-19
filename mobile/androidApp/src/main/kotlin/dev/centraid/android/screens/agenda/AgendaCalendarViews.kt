@@ -65,6 +65,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import centraid.core.v1.AgendaDestination
@@ -877,14 +879,30 @@ private fun GridBlock(
                 // A TASK'S TITLE IS CENTRED, ON THE RING'S LINE.
                 verticalArrangement = if (block.is_task) Arrangement.Center else Arrangement.Top,
             ) {
-                Text(
-                    block.title,
-                    style = kitTextStyle(if (days.size > 1) KitType.Badge else KitType.Meta),
-                    color = if (block.is_past) Surface.meta else Surface.ink,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (lane >= DETAIL_FROM_WIDTH && block.detail.isNotEmpty() && (block.is_task || shownHeight >= HOUR_HEIGHT * 0.6f)) {
+                // THE TITLE OF A BLOCK, WHOLE (#1202), as iOS draws it: it wraps at its words for as many
+                // lines as the block is tall; a lane too thin for any word (two events side by side in a
+                // Week column) turns the title a quarter turn so it runs down the block; a task in such a
+                // lane is its check alone, never a half-word beside it.
+                val titleStyle = kitTextStyle(if (days.size > 1) KitType.Badge else KitType.Meta)
+                val titleInk = if (block.is_past) Surface.meta else Surface.ink
+                val thin = lane < TURNED_BELOW_WIDTH
+                val showsDetail = lane >= DETAIL_FROM_WIDTH && block.detail.isNotEmpty() && (block.is_task || shownHeight >= HOUR_HEIGHT * 0.6f)
+                if (thin && block.is_task) {
+                    Unit
+                } else if (thin) {
+                    TurnedText(block.title, titleStyle, titleInk)
+                } else {
+                    val lineHeight = with(LocalDensity.current) { titleStyle.lineHeight.toDp() }
+                    val fits = ((shownHeight - 4.dp) / lineHeight).toInt() - (if (showsDetail) 1 else 0)
+                    Text(
+                        block.title,
+                        style = titleStyle,
+                        color = titleInk,
+                        maxLines = fits.coerceIn(1, 6),
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (showsDetail) {
                     Text(
                         block.detail,
                         style = kitTextStyle(KitType.Badge),
@@ -1161,4 +1179,29 @@ private fun YearMonth(month: AgendaYearMonth, modifier: Modifier, onEvent: (Agen
             }
         }
     }
+}
+
+
+/** A lane thinner than this cannot hold a word at the grid's type, so its title turns (iOS `turnedBelowWidth`). */
+private val TURNED_BELOW_WIDTH = 40.dp
+
+/** TEXT TURNED A QUARTER TURN, reading downward: one line along the height it is given, ellipsised only at its end. */
+@Composable
+private fun TurnedText(text: String, style: androidx.compose.ui.text.TextStyle, color: Color) {
+    Text(
+        text,
+        style = style,
+        color = color,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.layout { measurable, constraints ->
+            val along = if (constraints.hasBoundedHeight) constraints.maxHeight else constraints.maxWidth
+            val placeable = measurable.measure(Constraints(maxWidth = along.coerceAtLeast(0)))
+            layout(placeable.height, placeable.width) {
+                placeable.placeWithLayer((placeable.height - placeable.width) / 2, (placeable.width - placeable.height) / 2) {
+                    rotationZ = 90f
+                }
+            }
+        },
+    )
 }

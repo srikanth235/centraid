@@ -44,6 +44,9 @@ import centraid.core.v1.BackupLine
 import dev.centraid.android.R
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.KitTile
+import dev.centraid.android.kit.WholeTokensText
+import dev.centraid.android.kit.rememberLargestText
+import dev.centraid.android.kit.unitsJoined
 import dev.centraid.android.kit.StateColor
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
@@ -175,11 +178,12 @@ private fun BackupUnpairedPage(model: BackupHomeData, onOpen: (Route) -> Unit) {
                     Text(
                         androidx.compose.ui.text.buildAnnotatedString {
                             append(step.before)
-                            // A COMMAND IS ONE UNBROKEN RUN: no wrap at its hyphen or its space.
+                            // A COMMAND WRAPS ONLY AT ITS SPACES (#1202): its hyphen is a non-breaking one (display only; copy keeps
+                            // the ASCII), and a word is never split.
                             if (step.command.isNotEmpty()) {
                                 withStyle(
                                     androidx.compose.ui.text.SpanStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
-                                ) { append(step.command.replace('-', '\u2011').replace(' ', '\u00A0')) }
+                                ) { append(step.command.replace('-', '\u2011')) }
                             }
                             append(step.after)
                         },
@@ -632,12 +636,13 @@ private fun RuleMark(picked: Boolean) {
 /** One of the screen's sentences, drawn quietly. */
 @Composable
 private fun Sentence(text: String, testTag: String? = null) {
-    Text(
-        text,
-        style = centraidType("annotLabel"),
-        color = Surface.meta,
-        modifier = if (testTag == null) Modifier else Modifier.testTag(testTag),
-    )
+    val mod = if (testTag == null) Modifier else Modifier.testTag(testTag)
+    // A device's address stays whole and a number keeps its unit at the largest text (#1202).
+    if (rememberLargestText()) {
+        WholeTokensText(text, centraidType("annotLabel"), Surface.meta, mod)
+    } else {
+        Text(unitsJoined(text), style = centraidType("annotLabel"), color = Surface.meta, modifier = mod)
+    }
 }
 
 @Composable
@@ -662,22 +667,10 @@ private fun AddDevice(label: String, onAddDestination: () -> Unit) {
 @Composable
 private fun Destinations(model: BackupHomeData, onEvent: (BackupHomeEvent) -> Unit, onAddDestination: () -> Unit) {
     model.destinations.forEach { row ->
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            KitTile(iconKey = "Monitor", size = 32.dp)
-            Column(
-                Modifier.weight(1f).clearAndSetSemantics { contentDescription = row.accessibility_label.ifEmpty { row.label } },
-                verticalArrangement = Arrangement.spacedBy(1.dp),
-            ) {
-                Text(row.label, style = centraidType("body"), color = Surface.ink)
-                if (row.held.isNotEmpty()) Sentence(row.held)
-                if (row.backed_up.isNotEmpty()) Sentence(row.backed_up)
-                if (row.detail.isNotEmpty()) Sentence(row.detail)
-                row.notes.forEach { note -> Sentence(note) }
-            }
+        // THE ADDRESS WHOLE, AND ITS KEYS UNDER IT at the largest text (#1202): beside Forget the words
+        // were left a sliver and "192.168.1.5" split mid-number.
+        val stacked = rememberLargestText()
+        val keys: @Composable () -> Unit = {
             // UNDO, only while this phone has deletes held there (#1191).
             if (row.undo_label.isNotEmpty()) {
                 OutlineButton(
@@ -700,6 +693,38 @@ private fun Destinations(model: BackupHomeData, onEvent: (BackupHomeEvent) -> Un
                 }
             }
         }
+        val text: @Composable (Modifier) -> Unit = { mod ->
+            Column(
+                mod.clearAndSetSemantics { contentDescription = row.accessibility_label.ifEmpty { row.label } },
+                verticalArrangement = Arrangement.spacedBy(1.dp),
+            ) {
+                if (stacked) {
+                    WholeTokensText(row.label, centraidType("body"), Surface.ink)
+                } else {
+                    Text(row.label, style = centraidType("body"), color = Surface.ink)
+                }
+                if (row.held.isNotEmpty()) Sentence(row.held)
+                if (row.backed_up.isNotEmpty()) Sentence(row.backed_up)
+                if (row.detail.isNotEmpty()) Sentence(row.detail)
+                row.notes.forEach { note -> Sentence(note) }
+            }
+        }
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = if (stacked) Alignment.Top else Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            KitTile(iconKey = "Monitor", size = 32.dp)
+            if (stacked) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    text(Modifier.fillMaxWidth())
+                    keys()
+                }
+            } else {
+                text(Modifier.weight(1f))
+                keys()
+            }
+        }
         RowRule()
     }
     if (model.add_destination_label.isNotEmpty()) AddDevice(model.add_destination_label, onAddDestination)
@@ -720,18 +745,24 @@ private fun Apps(rows: List<BackupAppRow>) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             AppTile(appId = row.app_id, size = 32.dp)
+            // THE STATUS UNDER THE NAME at the largest text (#1202): beside it "Photos" broke as "Phot / os".
+            val stacked = rememberLargestText()
+            val status: @Composable () -> Unit = {
+                if (row.status.isNotEmpty()) {
+                    Text(
+                        unitsJoined(row.status),
+                        style = centraidType("annotLabel"),
+                        color = if (row.waiting) StateColor.Amber.text else Surface.meta,
+                    )
+                }
+            }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(row.name, style = centraidType("body"), color = Surface.ink)
                 if (row.detail.isNotEmpty()) Sentence(row.detail)
                 if (row.note.isNotEmpty()) Sentence(row.note)
+                if (stacked) status()
             }
-            if (row.status.isNotEmpty()) {
-                Text(
-                    row.status,
-                    style = centraidType("annotLabel"),
-                    color = if (row.waiting) StateColor.Amber.text else Surface.meta,
-                )
-            }
+            if (!stacked) status()
         }
         if (index < rows.size - 1) RowRule()
     }

@@ -7,7 +7,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.SolidColor
@@ -66,6 +68,8 @@ import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.StateColor
 import dev.centraid.android.kit.KitSegment
 import dev.centraid.android.kit.KitSegmented
+import dev.centraid.android.kit.rememberLargestText
+import dev.centraid.android.kit.kitTextStyle
 import dev.centraid.android.kit.KitText
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.Surface
@@ -246,23 +250,50 @@ private fun LazyListScope.spending(
     val spending = state.data_?.spending ?: return
     items(spending.bars.size, key = { "bars-$it" }) { index ->
         val bars = spending.bars[index]
-        val hero = spending.heroes.getOrNull(index) ?: spending.heroes.firstOrNull()
+        val heroData = spending.heroes.getOrNull(index) ?: spending.heroes.firstOrNull()
         Column(Modifier.fillMaxWidth().kitCard().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (bars.heading.isNotEmpty()) KitText(bars.heading, KitType.Group, Surface.meta)
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            // THE WEEK / MONTH CONTROL UNDER THE TOTAL at the largest text (#1202): beside it the amount
+            // was cut to "$2,745...." and the control to "W...". The total shrinks before it is cut.
+            val largest = rememberLargestText()
+            val hero: @Composable (Modifier) -> Unit = { mod ->
                 Column(
-                    Modifier.weight(1f).semantics(mergeDescendants = true) {}.testTag("money-hero"),
+                    mod.semantics(mergeDescendants = true) {}.testTag("money-hero"),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    KitText(hero?.spent_label.orEmpty(), KitType.Meta, Surface.meta)
-                    KitText(hero?.spent.orEmpty(), KitType.Title, Surface.ink, maxLines = 1)
+                    KitText(heroData?.spent_label.orEmpty(), KitType.Meta, Surface.meta)
+                    if (largest) {
+                        val style = kitTextStyle(KitType.Title)
+                        BasicText(
+                            heroData?.spent.orEmpty(),
+                            style = style.copy(color = Surface.ink),
+                            maxLines = 1,
+                            softWrap = false,
+                            autoSize = TextAutoSize.StepBased(minFontSize = style.fontSize * 0.4f, maxFontSize = style.fontSize),
+                        )
+                    } else {
+                        KitText(heroData?.spent.orEmpty(), KitType.Title, Surface.ink, maxLines = 1)
+                    }
                 }
+            }
+            val mode: @Composable (Modifier) -> Unit = { mod ->
                 KitSegmented(
                     segments = bars.modes.map { KitSegment(id = it.key, label = it.label, selected = it.selected) },
-                    modifier = Modifier.width(140.dp),
+                    modifier = mod,
                     testTag = "money-bars-mode",
                     onPick = { key -> onEvent(MoneyHomeEvent(bars_mode_picked = MoneyHomeEvent.BarsModePicked(key = key))) },
                 )
+            }
+            if (largest) {
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    hero(Modifier.fillMaxWidth())
+                    mode(Modifier.fillMaxWidth())
+                }
+            } else {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                    hero(Modifier.weight(1f))
+                    mode(Modifier.width(140.dp))
+                }
             }
             MoneyBarsChart(bars) { picked ->
                 onEvent(MoneyHomeEvent(bar_picked = MoneyHomeEvent.BarPicked(index = picked)))
@@ -379,7 +410,7 @@ private fun LazyListScope.cashflow(state: MoneyHomeState) {
                     summary = MoneyGeometry.chartSummary(series.months.map { it.accessibility_label }),
                 )
                 MoneyLegend(incoming = series.in_label, outgoing = series.out_label, partial = series.partial_label)
-                Row(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!rememberLargestText()) Row(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(Modifier.weight(1f))
                     listOf(series.in_label, series.out_label, series.net_label).forEach { label ->
                         Text(label, style = centraidType("annotLabel"), color = centraidColor("textSoft"), modifier = Modifier.width(68.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End)
@@ -389,7 +420,7 @@ private fun LazyListScope.cashflow(state: MoneyHomeState) {
         }
         // NEWEST FIRST under the chart, which runs oldest to newest.
         items(MoneyGeometry.newestFirst(series.months), key = { "m-${series.currency}-${it.month}" }) { month ->
-            MoneyMonthRow(month, testTag = "money-month-${month.month}")
+            MoneyMonthRow(month, testTag = "money-month-${month.month}", labels = listOf(series.in_label, series.out_label, series.net_label))
         }
     }
     flow.definitions.forEach { fact -> item(key = "def-${fact.label}") { FieldRow(key = fact.label, value = fact.detail) } }

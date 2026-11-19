@@ -73,6 +73,24 @@ public fun CellsRow(
     }
 }
 
+/**
+ * KEYS SIDE BY SIDE, STACKED AT THE LARGEST TEXT (#1202): at 1.3 and above each key takes the full
+ * width under the one before (a [ChoiceStack]), so no label breaks mid-word ("Generat / e",
+ * "Goin / g"). Below that they sit in a row with [gap] between them. The keys take no scope.
+ */
+@Composable
+public fun KeysRow(
+    modifier: Modifier = Modifier,
+    gap: Dp = 8.dp,
+    content: @Composable () -> Unit,
+) {
+    if (rememberLargestText()) {
+        ChoiceStack(modifier) { content() }
+    } else {
+        androidx.compose.foundation.layout.Row(modifier, horizontalArrangement = Arrangement.spacedBy(gap)) { content() }
+    }
+}
+
 /** The largest scale a fixed grid draws at: the Android counterpart of iOS's `xxxLarge` hold (#1202). */
 private const val GRID_TEXT_SCALE: Float = 1.3f
 

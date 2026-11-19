@@ -108,6 +108,7 @@ import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.KitChip
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.KeysRow
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.NoAutofill
 import dev.centraid.android.kit.OptionSheet
@@ -690,7 +691,8 @@ private fun LockerGeneratorBody(state: LockerGenerator, onEvent: (LockerHomeEven
                 if (state.strength.isNotEmpty()) {
                     Text(state.strength, style = centraidType("annotLabel"), color = centraidColor("textSoft"), modifier = Modifier.padding(top = 6.dp))
                 }
-                Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // GENERATE ANOTHER AND COPY STACK at the largest text (#1202): side by side the first broke mid-word.
+                KeysRow(Modifier.padding(top = 12.dp)) {
                     if (state.regenerate_label.isNotEmpty()) {
                         OutlineButton(state.regenerate_label, testTag = "locker-regenerate") {
                             onEvent(LockerHomeEvent(generator_regenerate = LockerHomeEvent.GeneratorRegenerate()))

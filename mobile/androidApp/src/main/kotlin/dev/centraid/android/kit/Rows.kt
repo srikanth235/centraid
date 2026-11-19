@@ -16,9 +16,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -92,7 +94,8 @@ public fun CentraidRow(
     val titleInk = if (dimmed) Surface.meta else Surface.ink
     val softInk = Surface.meta
     val line = Surface.line
-    val stackTrailing = rememberLargestText() && (trailing.isNotEmpty() || pending)
+    // A CHIP ALONE goes under the title too (#1202): beside it the subtitle was left a sliver and cut.
+    val stackTrailing = rememberLargestText() && (trailing.isNotEmpty() || pending || chips.isNotEmpty())
     val chipUnderFigure = trailing.isNotEmpty() && chips.isNotEmpty()
     // THE FIGURE with its chip and sub-label, the ends aligned to [align].
     @Composable
@@ -164,7 +167,7 @@ public fun CentraidRow(
                 } else if (metaParts.any { it.isNotEmpty() } || metaAccented.isNotEmpty()) {
                     MetaLine(metaParts, metaAccented)
                 } else if (meta.isNotEmpty()) {
-                    KitText(meta, KitType.Meta, softInk, maxLines = 2)
+                    KitText(meta, KitType.Meta, softInk, maxLines = if (rememberLargestText()) 4 else 2)
                 }
                 if (stackTrailing) {
                     chips.forEach { chip -> StatusChipView(chip, Modifier.padding(top = 4.dp)) }
@@ -234,7 +237,20 @@ public fun MetaLine(
     } else {
         Column(modifier) {
             (plain.map { it to false } + marked.map { it to true }).take(lines).forEach { (part, accented) ->
-                Text(part, style = style, color = if (accented) accent else soft, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // A PART IS NEVER CUT (#1202): one word (an address, a username, an email) has nowhere
+                // to wrap and shrinks to fit its line; a part of several words wraps by word.
+                val ink = if (accented) accent else soft
+                if (part.contains(' ')) {
+                    Text(part, style = style, color = ink, maxLines = 3)
+                } else {
+                    BasicText(
+                        part,
+                        style = style.copy(color = ink),
+                        maxLines = 1,
+                        softWrap = false,
+                        autoSize = TextAutoSize.StepBased(minFontSize = style.fontSize * 0.5f, maxFontSize = style.fontSize),
+                    )
+                }
             }
         }
     }
@@ -474,6 +490,9 @@ public fun EditableFieldRow(
 ) {
     val editor = rememberEditorText(value, reload)
     val text = editor.text
+    // A FIELD WRAPS at the largest text (#1202): a one-line field clipped the words at its edge. Return
+    // still finishes (or moves on) rather than adding a line.
+    val wraps = singleLine && rememberLargestText()
     Column(modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp)) {
         if (key.isNotEmpty()) Text(key, style = centraidType("eyebrow"), color = centraidColor("textSoft"))
         Box(Modifier.fillMaxWidth().heightIn(min = 36.dp), contentAlignment = Alignment.CenterStart) {
@@ -488,9 +507,13 @@ public fun EditableFieldRow(
             BasicTextField(
                 value = text.value,
                 onValueChange = { next -> if (editor.edited(next)) onEdit(next) },
-                singleLine = singleLine,
+                singleLine = singleLine && !wraps,
                 // RETURN LEAVES THE FIELD for the next one (the note's title hands focus to its body).
-                keyboardOptions = if (onNext != null) KeyboardOptions(imeAction = ImeAction.Next) else KeyboardOptions.Default,
+                keyboardOptions = when {
+                    onNext != null -> KeyboardOptions(imeAction = ImeAction.Next)
+                    wraps -> KeyboardOptions(imeAction = ImeAction.Done)
+                    else -> KeyboardOptions.Default
+                },
                 keyboardActions = KeyboardActions(onNext = { onNext?.invoke() }),
                 textStyle = centraidType(style).copy(color = centraidColor("text")),
                 cursorBrush = SolidColor(centraidColor("text")),

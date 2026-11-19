@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import centraid.core.v1.AgendaRowTile
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.KitTile
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.kitCard
@@ -97,8 +98,16 @@ internal fun AgendaTileChoiceRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             RowTile(tile)
-            Text(key, style = centraidType("body"), color = Surface.ink, modifier = Modifier.weight(1f))
-            Text(value, style = centraidType("body"), color = Surface.meta, maxLines = 1)
+            if (rememberLargestText()) {
+                // THE VALUE UNDER ITS KEY at the largest text (#1202), whole and wrapping by word.
+                Column(Modifier.weight(1f)) {
+                    Text(key, style = centraidType("body"), color = Surface.ink)
+                    Text(value, style = centraidType("body"), color = Surface.meta)
+                }
+            } else {
+                Text(key, style = centraidType("body"), color = Surface.ink, modifier = Modifier.weight(1f))
+                Text(value, style = centraidType("body"), color = Surface.meta, maxLines = 1)
+            }
             CentraidIcon(iconKey = "ChevronRight", tint = centraidColor("textFaint"), size = 14.dp)
         }
         if (divider) RowDivider(TILE_INSET)
@@ -125,8 +134,17 @@ internal fun AgendaTileWhenRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             RowTile(tile)
-            Text(key, style = centraidType("body"), color = Surface.ink, modifier = Modifier.weight(1f))
-            faces()
+            if (rememberLargestText()) {
+                // THE KEY OVER ITS TWO TAPS at the largest text (#1202).
+                Column(Modifier.weight(1f)) {
+                    Text(key, style = centraidType("body"), color = Surface.ink)
+                    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                    androidx.compose.foundation.layout.FlowRow { faces() }
+                }
+            } else {
+                Text(key, style = centraidType("body"), color = Surface.ink, modifier = Modifier.weight(1f))
+                faces()
+            }
         }
         if (divider) RowDivider(TILE_INSET)
     }
@@ -197,14 +215,22 @@ internal fun AgendaFactRow(label: String, value: String, divider: Boolean = true
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            Text(label, style = centraidType("body"), color = Surface.meta)
-            Text(
-                value,
-                style = centraidType("body"),
-                color = Surface.ink,
-                textAlign = TextAlign.End,
-                modifier = Modifier.weight(1f),
-            )
+            // THE VALUE UNDER ITS LABEL at the largest text (#1202).
+            if (rememberLargestText()) {
+                Column(Modifier.weight(1f)) {
+                    Text(label, style = centraidType("body"), color = Surface.meta)
+                    Text(value, style = centraidType("body"), color = Surface.ink)
+                }
+            } else {
+                Text(label, style = centraidType("body"), color = Surface.meta)
+                Text(
+                    value,
+                    style = centraidType("body"),
+                    color = Surface.ink,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
         if (divider) RowDivider(14.dp)
     }

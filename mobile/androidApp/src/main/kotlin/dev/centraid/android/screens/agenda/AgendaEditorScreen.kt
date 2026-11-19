@@ -64,6 +64,7 @@ import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EditorRoom
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.KitSegmented
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OptionSheet
@@ -394,8 +395,18 @@ private fun WhenRow(
             .testTag(testTag),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(key, style = centraidType("body"), color = centraidColor("textSoft"), modifier = Modifier.weight(1f))
-        faces()
+        if (rememberLargestText()) {
+            // THE KEY OVER ITS TWO TAPS at the largest text (#1202): beside them the day and the time
+            // were left a sliver.
+            Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
+                Text(key, style = centraidType("body"), color = centraidColor("textSoft"))
+                @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                androidx.compose.foundation.layout.FlowRow { faces() }
+            }
+        } else {
+            Text(key, style = centraidType("body"), color = centraidColor("textSoft"), modifier = Modifier.weight(1f))
+            faces()
+        }
     }
 }
 
@@ -405,7 +416,7 @@ private fun PickTarget(value: String, spoken: String, testTag: String, onTap: ()
         value,
         style = centraidType("body"),
         color = centraidColor("text"),
-        maxLines = 1,
+        maxLines = if (rememberLargestText()) Int.MAX_VALUE else 1,
         modifier = Modifier
             .heightIn(min = KitGeometry.ROW_MIN)
             .clickable(onClick = onTap)
