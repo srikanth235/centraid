@@ -173,7 +173,7 @@ struct DocsDocumentView: View {
                 } else if reader.format == .markdown {
                     // MARKDOWN IS READ, NOT SHOWN (#1202): headings, lists, emphasis, tables and code
                     // come out as formatted text, the way a chat answer's do, never as `#` and `-`.
-                    ChatMarkdownText(text: reader.body, spoken: ChatMarkdown.plain(reader.body))
+                    ChatMarkdownText(text: reader.body, spoken: "", reading: true)
                 } else {
                     Text(reader.body)
                         .centraidType("reading")
