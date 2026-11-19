@@ -232,6 +232,7 @@ fn files_the_shell_left_out_are_counted_beside_the_plan() {
     );
     // A pick that left out everything still says so, with nothing to import.
     tap(&mut d, i, "again");
+    tap(&mut d, i, "folder");
     d.answer_effect(wire::effect_result::Outcome::BytesPicked(
         wire::BytesPicked {
             skipped: vec!["Huge.md".to_owned()],

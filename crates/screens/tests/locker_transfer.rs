@@ -349,6 +349,15 @@ fn a_file_over_the_limit_or_unreadable_is_said_and_the_pick_carries_the_limit() 
         ("too_large", "That file is too large to import."),
         ("unreadable", "That file could not be read."),
     ] {
+        if reason != "too_large" {
+            // The first answer used up the ask: choose again.
+            d.send(
+                id,
+                E::LockerImport(wire::LockerImportEvent {
+                    kind: Some(I::Choose(wire::locker_import_event::ChooseTapped {})),
+                }),
+            );
+        }
         d.answer_effect(wire::effect_result::Outcome::Failed(wire::EffectFailed {
             reason: reason.to_owned(),
             ..Default::default()

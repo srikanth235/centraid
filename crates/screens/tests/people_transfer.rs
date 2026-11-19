@@ -178,6 +178,7 @@ fn card_files_the_shell_left_out_are_counted_beside_the_plan() {
     );
     // Everything left out: nothing to import, and the count stands alone.
     tap(&mut d, i, "again");
+    tap(&mut d, i, "files");
     d.answer_effect(wire::effect_result::Outcome::BytesPicked(
         wire::BytesPicked {
             skipped: vec!["a.vcf".to_owned(), "b.vcf".to_owned()],
