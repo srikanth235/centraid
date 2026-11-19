@@ -255,7 +255,13 @@ struct MoneyHomeView: View {
                 if !bars.heading.isEmpty {
                     Text(bars.heading).kitType(.group).foregroundStyle(Surface.meta)
                 }
-                HStack(alignment: .top) {
+                // THE WEEK / MONTH CONTROL UNDER THE TOTAL AT ACCESSIBILITY SIZES (#1202): beside it
+                // the amount was cut to "$2,745...." and the control to "W...". The total shrinks
+                // before it would ever be cut.
+                let heroLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+                    : AnyLayout(HStackLayout(alignment: .top))
+                heroLayout {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(hero?.spentLabel ?? "")
                             .kitType(.meta)
@@ -264,16 +270,17 @@ struct MoneyHomeView: View {
                             .kitType(.title)
                             .monospacedDigit()
                             .foregroundStyle(Surface.ink)
-                            .minimumScaleFactor(0.7)
+                            .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 0.4 : 0.7)
                             .lineLimit(1)
                     }
                     .accessibilityElement(children: .combine)
                     .accessibilityIdentifier("money-hero")
-                    Spacer(minLength: 8)
+                    if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
                     KitSegmented(
                         options: bars.modes.map { (key: $0.key, label: $0.label) },
                         selected: bars.modes.first(where: { $0.selected })?.key ?? "",
                         identifier: "money-bars-mode",
+                        fills: dynamicTypeSize.isAccessibilitySize,
                         onSelect: { key in send(event { $0.barsModePicked = .with { $0.key = key } }) }
                     )
                 }

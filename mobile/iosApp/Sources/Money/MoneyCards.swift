@@ -313,6 +313,7 @@ struct MoneyBarsChart: View {
     let onPick: (Int) -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private let chartHeight: CGFloat = 132
 
@@ -328,6 +329,19 @@ struct MoneyBarsChart: View {
                 if bars.paceBp > 0 {
                     pace
                 }
+            }
+            // THE PACE'S NAME IS A KEY UNDER THE CHART AT ACCESSIBILITY SIZES (#1202): at the
+            // trailing edge of the plot it drew across the bars.
+            if bars.paceBp > 0, dynamicTypeSize.isAccessibilitySize {
+                HStack(spacing: 8) {
+                    Rectangle()
+                        .stroke(Surface.meta, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                        .frame(width: 20, height: 1)
+                    Text(bars.paceLabel)
+                        .kitType(.meta)
+                        .foregroundStyle(Surface.meta)
+                }
+                .accessibilityHidden(true)
             }
             if !bars.caption.isEmpty {
                 Text(bars.caption)
@@ -370,6 +384,7 @@ struct MoneyBarsChart: View {
                 }
                 Text(bar.label)
                     .kitType(.meta)
+                    .kitHeld()
                     .fontWeight(bar.selected ? .semibold : .regular)
                     .foregroundStyle(bar.selected ? Surface.ink : Surface.meta)
                     .lineLimit(1)
@@ -389,10 +404,12 @@ struct MoneyBarsChart: View {
     /// The plan's pace: a dashed line across the chart at its height, named at the trailing edge.
     private var pace: some View {
         VStack(spacing: 2) {
-            Text(bars.paceLabel)
-                .kitType(.meta)
-                .foregroundStyle(Surface.meta)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+            if !dynamicTypeSize.isAccessibilitySize {
+                Text(bars.paceLabel)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
             Rectangle()
                 .stroke(Surface.meta, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
                 .frame(height: 1)

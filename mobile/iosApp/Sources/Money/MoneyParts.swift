@@ -535,6 +535,7 @@ struct MoneyCashflowChart: View {
                         .frame(height: plotHeight, alignment: .bottom)
                         Text(month.label)
                             .centraidType("eyebrow")
+                            .kitHeld()
                             .foregroundStyle(Theme.color(month.partial ? "text" : "textFaint", scheme))
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
@@ -572,21 +573,28 @@ struct MoneyLegend: View {
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.moneyInset) private var inset
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(spacing: 16) {
+        // ONE KEY PER LINE AT ACCESSIBILITY SIZES (#1202): in a row "month not over" wrapped under
+        // its swatch a word at a time.
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            : AnyLayout(HStackLayout(spacing: 16))
+        layout {
             item(incoming, filled: true, ink: "textSoft")
             item(outgoing, filled: true, ink: "textGhost")
             item(partial, filled: false, ink: "textSoft")
-            Spacer(minLength: 0)
+            if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 0) }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, inset)
         .padding(.top, 8)
         .accessibilityHidden(true)
     }
 
     private func item(_ text: String, filled: Bool, ink: String) -> some View {
-        HStack(spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             Group {
                 if filled {
                     RoundedRectangle(cornerRadius: Theme.radius("sm", scheme)).fill(Theme.color(ink, scheme))
