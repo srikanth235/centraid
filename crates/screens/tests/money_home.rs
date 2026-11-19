@@ -491,6 +491,6 @@ fn first_open_says_what_money_is_for_and_a_month_with_nothing_is_another_sentenc
     let i = land_on(&mut d, wire::MoneyDestination::Activity);
     let empty = home_empty(d.view(i));
     assert_eq!(empty.headline, "Your statements, sorted and searchable.");
-    assert_eq!(empty.action_label, "Import a statement");
+    assert_eq!(empty.action_label, "Import statement");
     assert_eq!(empty.body, "");
 }

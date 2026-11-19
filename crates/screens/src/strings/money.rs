@@ -88,6 +88,7 @@ catalog! {
     plain date_order_prompt = ("Which order does this file write dates in?", "Which order does this file write dates in?");
     plain days_left_many = ("{n} days left", "{n} days left");
     plain days_left_one = ("1 day left", "1 day left");
+    plain day_one_cashflow = ("Import a bank statement to see your cash flow.", "Import a bank statement to see your cash flow.");
     plain day_one = ("Import a bank statement to see this month.", "Import a bank statement to see this month.");
     plain def_balance_detail = ("Opening amount plus every row posted.", "Opening amount plus every row posted.");
     plain def_balance_label = ("Balance", "Balance");
@@ -139,7 +140,7 @@ catalog! {
     );
     plain export_title = ("Export transactions", "Export transactions");
     plain first_open = ("Your statements, sorted and searchable.", "Your statements, sorted and searchable.");
-    plain first_open_action = ("Import a statement", "Import a statement");
+    plain first_open_action = ("Import statement", "Import statement");
     plain fact_account = ("Account", "Account");
     plain fact_bank_type = ("Type", "Type");
     plain fact_bank_wrote = ("Bank wrote", "Bank wrote");

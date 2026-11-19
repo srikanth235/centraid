@@ -170,7 +170,11 @@ impl Home {
     fn nothing(&self, locale: Locale, loaded: &Loaded) -> Option<wire::EmptyState> {
         match loaded {
             Loaded::Spending(answer) if answer.empty => Some(day_one(locale)),
-            Loaded::Cashflow(answer) if used_series(answer).is_empty() => Some(day_one(locale)),
+            // CASH FLOW READS TWELVE MONTHS and has no month chip, so its card never says "this month".
+            Loaded::Cashflow(answer) if used_series(answer).is_empty() => Some(wire::EmptyState {
+                headline: words::day_one_cashflow(locale),
+                ..day_one(locale)
+            }),
             Loaded::Activity {
                 activity, accounts, ..
             } => activity.rows.is_empty().then(|| {
