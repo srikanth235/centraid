@@ -28,6 +28,23 @@ struct PairLaptopPageView: View {
 
     @Environment(\.colorScheme) private var scheme
 
+    /// The safety number's groups in rows of the given width; every group on one line, whole.
+    private func groupRows(_ rows: [[String]]) -> some View {
+        VStack(spacing: 8) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack(spacing: 16) {
+                    ForEach(Array(row.enumerated()), id: \.offset) { _, group in
+                        Text(group)
+                            .centraidType("title")
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.color("text", scheme))
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                }
+            }
+        }
+    }
+
     var body: some View {
         // THE LOOK (PairDevice, PairCheck): the words pages' frame, a round X to leave, a tinted
         // badge over a centred title, and the answers pinned at the foot, a tonal scan over the ink.
@@ -114,17 +131,13 @@ struct PairLaptopPageView: View {
                     let rows = stride(from: 0, to: state.safetyGroups.count, by: 4).map {
                         Array(state.safetyGroups[$0 ..< min($0 + 4, state.safetyGroups.count)])
                     }
-                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                        HStack(spacing: 16) {
-                            ForEach(Array(row.enumerated()), id: \.offset) { _, group in
-                                Text(group)
-                                    .centraidType("title")
-                                    .monospacedDigit()
-                                    .foregroundStyle(Theme.color("text", scheme))
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.6)
-                            }
-                        }
+                    // WRAPS, NEVER SHORTENS (#1202): four groups to a row while they fit, then
+                    // two, then one, so a group is always whole and the number can be compared
+                    // digit by digit at the largest text.
+                    ViewThatFits(in: .horizontal) {
+                        groupRows(rows)
+                        groupRows(Array(state.safetyGroups).chunked(2))
+                        groupRows(Array(state.safetyGroups).chunked(1))
                     }
                     if !state.safetyHint.isEmpty {
                         Text(state.safetyHint)
@@ -170,5 +183,12 @@ struct PairLaptopPageView: View {
             }
         }
         .onChange(of: state.finished) { _, done in if done { onDone() } }
+    }
+}
+
+private extension Array {
+    /// The elements in consecutive runs of `size`; the last run may be shorter.
+    func chunked(_ size: Int) -> [[Element]] {
+        stride(from: 0, to: count, by: size).map { Array(self[$0 ..< Swift.min($0 + size, count)]) }
     }
 }
