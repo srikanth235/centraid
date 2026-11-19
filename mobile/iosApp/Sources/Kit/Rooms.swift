@@ -654,6 +654,7 @@ struct SheetRoom<Content: View>: View {
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.appAccent) private var accent
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var natural: CGFloat = 0
     @State private var floor: CGFloat = 0
 
@@ -684,6 +685,13 @@ struct SheetRoom<Content: View>: View {
             .scrollBounceBehavior(.basedOnSize)
             .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { floor = $0 }
             .modifier(SheetPresentation(detents: natural > 0 ? [.height(natural + floor)] : [.medium]))
+        } else if dynamicTypeSize.isAccessibilitySize {
+            // A SHEET TALLER THAN ITS DETENT SCROLLS AT ACCESSIBILITY SIZES (#1202): squeezed into
+            // the half sheet, the title was cut to "New entry fo..." and the fields under it with it.
+            ScrollView { room }
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .modifier(SheetPresentation())
         } else {
             room
                 // THE ROOM FILLS ITS SHEET, top-aligned: sized to its content, it
@@ -702,6 +710,7 @@ struct SheetRoom<Content: View>: View {
                 Text(title)
                     .kitType(.section)
                     .foregroundStyle(Surface.ink)
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier(titleIdentifier.isEmpty ? "kit-sheet-title" : titleIdentifier)
                     .padding(.top, 20)
