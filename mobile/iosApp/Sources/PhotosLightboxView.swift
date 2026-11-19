@@ -259,13 +259,23 @@ struct PhotosLightboxView: View {
                 VStack(spacing: 2) {
                     let title = state.slideshow ? state.words.slideshow : photo.stampDate
                     let meta = state.slideshow ? state.slideshowMeta : photo.stampLine
-                    if !title.isEmpty { Text(title).centraidType("control") }
+                    // THE STAMP IS TWO LINES THAT SHRINK (#1202): at the largest text the date ran to
+                    // three lines beside the back key with the time centred under it.
+                    if !title.isEmpty {
+                        Text(title)
+                            .centraidType("control")
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                    }
                     if !meta.isEmpty {
                         Text(meta)
                             .centraidType("small")
                             .foregroundStyle(Theme.color("onStageSoft", scheme))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
                     }
                 }
+                .multilineTextAlignment(.center)
                 .foregroundStyle(Theme.color("onStage", scheme))
                 Spacer()
                 // THE ONE WAY OUT OF THE SLIDESHOW, named for what it does.

@@ -607,11 +607,58 @@ struct MoneyLegend: View {
 struct MoneyMonthRow: View {
     let month: Centraid_Core_V1_MoneyCashflowMonth
     let identifier: String
+    /// The In, Out and Net column words, for the stacked reading at accessibility sizes.
+    var labels: [String] = []
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.moneyInset) private var inset
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
+        if dynamicTypeSize.isAccessibilitySize, labels.count == 3 {
+            stacked
+        } else {
+            columns
+        }
+    }
+
+    /// THE THREE FIGURES UNDER THE MONTH AT ACCESSIBILITY SIZES (#1202): three 68-wide columns
+    /// beside the name cut every amount to "$0....". Each is a line of its own, its word first.
+    private var stacked: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(month.label)
+                .centraidType("body")
+                .foregroundStyle(Theme.color(month.partial ? "textSoft" : "text", scheme))
+            if !month.meta.isEmpty {
+                Text(month.meta)
+                    .centraidType("annotLabel")
+                    .foregroundStyle(Theme.color("textFaint", scheme))
+            }
+            ForEach(Array(zip(labels, [month.incoming, month.outgoing, month.net]).enumerated()), id: \.offset) { index, pair in
+                HStack(spacing: 8) {
+                    Text(pair.0)
+                        .centraidType("annotLabel")
+                        .foregroundStyle(Theme.color("textFaint", scheme))
+                    Spacer(minLength: 0)
+                    Text(MoneyWords.amount(pair.1))
+                        .centraidType("annotLabel")
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.color(index == 2 ? StatusChipView.ink(month.netTone, neutral: "text") : "text", scheme))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                }
+            }
+        }
+        .padding(.horizontal, inset)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .top) { KitHairline() }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(month.accessibilityLabel)
+        .accessibilityIdentifier(identifier)
+    }
+
+    private var columns: some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 0) {
                 Text(month.label)

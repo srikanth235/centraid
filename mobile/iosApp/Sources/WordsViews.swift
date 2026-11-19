@@ -1115,7 +1115,7 @@ struct WordsShield<Content: View>: View {
         // its own background leaves a band at the top and the foot.
         .background(Surface.page.ignoresSafeArea())
         .overlay {
-            if secure, captured || scenePhase != .active {
+            if Self.covers(secure: secure, captured: captured, active: scenePhase == .active) {
                 Theme.color("bg", scheme)
                     .ignoresSafeArea()
                     .accessibilityHidden(true)
@@ -1125,6 +1125,16 @@ struct WordsShield<Content: View>: View {
         .onReceive(NotificationCenter.default.publisher(for: UIScreen.capturedDidChangeNotification)) { note in
             captured = (note.object as? UIScreen)?.isCaptured ?? WordsShieldCapture.now
         }
+        // THE CAPTURE STATE IS READ AGAIN WHENEVER THE SCENE MOVES (#1202): the cover leaves a blank
+        // page under a live header and band (Locker read "All 6" over nothing), so a capture
+        // notification that was missed while the owner check was up must not keep it there.
+        .onChange(of: scenePhase) { _, _ in captured = WordsShieldCapture.now }
+    }
+
+    /// WHEN THE CONTENT IS COVERED: only while it is secure, and the screen is being captured or the
+    /// scene is not the active one. A page that is not secure is never covered.
+    static func covers(secure: Bool, captured: Bool, active: Bool) -> Bool {
+        secure && (captured || !active)
     }
 }
 

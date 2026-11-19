@@ -254,7 +254,11 @@ private struct WidgetBody: View {
 
     /// A GLANCE (small): the app's mark in its colour, a figure and a word.
     private func glance(figure: String, caption: String, invites: Bool = false) -> some View {
-        VStack(spacing: 2) {
+        // AT THE LARGEST TEXT EVERY TILE IS A FULL-WIDTH CARD THAT LEANS LEADING (#1202): the glances
+        // stayed centred beside the leading Calendar, Reminders, Photos, Notes and Docs cards, so
+        // the day-zero column read as two layouts.
+        let lead = largestText
+        return VStack(alignment: lead ? .leading : .center, spacing: 2) {
             if let app = CentraidCatalog.byID[tile.appID] {
                 CentraidIconView(iconKey: widgetIcon(app.iconKey), tint: accent, size: 22)
                     .accessibilityHidden(true)
@@ -272,7 +276,7 @@ private struct WidgetBody: View {
                 .foregroundStyle(invites ? accent : meta)
                 .lineLimit(2)
                 .minimumScaleFactor(0.7)
-                .multilineTextAlignment(.center)
+                .multilineTextAlignment(lead ? .leading : .center)
             // A SMALL TILE NAMES ITS APP (#1202, S2-7; `HomeWidgets`): "1 person" and "Connect Apple
             // Health" say what is in it, and this says whose. Locker's caption already is the name.
             // A caption that already is the name ("people" under 6, "Locker") is not said twice.
@@ -285,7 +289,7 @@ private struct WidgetBody: View {
                     .accessibilityHidden(true)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: lead ? .topLeading : .center)
     }
 
     /// A LINE (medium, one row): the app's name in its colour, then what is

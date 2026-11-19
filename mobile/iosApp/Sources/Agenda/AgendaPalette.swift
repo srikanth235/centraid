@@ -76,20 +76,32 @@ struct AgendaSmartListGrid: View {
             }
             ForEach(bars, id: \.key) { list in
                 Button { open(list.route) } label: {
+                    // THE WORD UNDER THE NAME AT ACCESSIBILITY SIZES (#1202): beside "Logbook" the
+                    // Logbook's "Completed" was left a column too narrow and broke as "Comp/leted".
+                    let stacked = dynamicTypeSize.isAccessibilitySize
+                    let layout = stacked
+                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                        : AnyLayout(HStackLayout(spacing: 12))
                     HStack(spacing: 12) {
                         CentraidIconView(iconKey: list.iconKey, tint: .white, size: 24)
-                        Text(list.label)
-                            .kitScaledFont(17, weight: .semibold)
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                        Spacer(minLength: 0)
-                        if !list.count.isEmpty {
-                            Text(list.count)
+                        layout {
+                            Text(list.label)
                                 .kitScaledFont(17, weight: .semibold)
                                 .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                            if !stacked { Spacer(minLength: 0) }
+                            if !list.count.isEmpty {
+                                Text(list.count)
+                                    .kitScaledFont(17, weight: .semibold)
+                                    .foregroundStyle(.white)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
+                            }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .padding(.vertical, stacked ? 12 : 0)
                     .padding(.horizontal, 16)
                     .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
                     .background(AgendaPalette.token(list.colorKey))

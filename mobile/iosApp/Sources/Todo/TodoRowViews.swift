@@ -146,8 +146,13 @@ struct TodoRowView: View {
                     }
                     // THE DUE WORDS LEAD THE SECOND LINE, so a trailing column
                     // never squeezes the title into a wrap.
+                    // ONE UNDER THE OTHER AT ACCESSIBILITY SIZES (#1202): side by side they left the date
+                    // a column too narrow, and "Yesterday" and "November" broke mid-word.
                     if !row.dueLabel.isEmpty || !row.meta.isEmpty {
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        let dueLayout = dynamicTypeSize.isAccessibilitySize
+                            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 6))
+                        dueLayout {
                             if !row.dueLabel.isEmpty {
                                 Text(row.dueLabel)
                                     .centraidType("annotLabel")

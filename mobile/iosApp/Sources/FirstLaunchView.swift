@@ -19,6 +19,7 @@ struct FirstLaunchView: View {
     let gate: Centraid_Core_V1_HomeFirstLaunch
     @ObservedObject var store: ScreenStore
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @ScaledMetric(relativeTo: .largeTitle) private var titleSize = 30
     @ScaledMetric(relativeTo: .body) private var bodySize = CentraidScale.rowSize
@@ -99,7 +100,12 @@ struct FirstLaunchView: View {
     }
 
     private func claimRow(index: Int, claim: Centraid_Core_V1_HomeFirstLaunchSlide) -> some View {
-        HStack(alignment: .top, spacing: 16) {
+        // THE TILE SITS OVER THE WORDS AT ACCESSIBILITY SIZES (#1202): beside them it left the body
+        // a column too narrow for "documents", which broke as "document/s".
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 16))
+        return layout {
             ZStack {
                 RoundedRectangle(cornerRadius: CentraidScale.cardRadius * 0.75, style: .continuous)
                     .fill(Color(CentraidAsset.shellText).opacity(scheme == .dark ? 0.18 : 0.12))
@@ -119,8 +125,9 @@ struct FirstLaunchView: View {
                     .foregroundStyle(Color(CentraidAsset.textMeta))
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: 0)
+            if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 0) }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("first-launch-claim-\(index)")
     }

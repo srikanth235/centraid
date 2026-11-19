@@ -20,6 +20,7 @@ struct BackupHomeView: View {
     /// recovery key (`key_show`).
     let open: (Centraid_Core_V1_Route) -> Void
     @State private var ruleOpen = false
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private func event(_ build: (inout Centraid_Core_V1_BackupHomeEvent) -> Void) -> Centraid_Core_V1_BackupHomeEvent {
         var event = Centraid_Core_V1_BackupHomeEvent()
@@ -43,6 +44,38 @@ struct BackupHomeView: View {
             if case let .data(data)? = state.body {
                 page(data)
             }
+        }
+    }
+
+    /// ONE STEP'S WORDS, the command set in the terminal's face. At accessibility sizes the command
+    /// is its own lines, one word to a line that shrinks to fit (#1202): inside the sentence the
+    /// hyphen was the only place a line could break, and "centraid-" was left apart from "gateway".
+    @ViewBuilder
+    private func stepText(_ step: Centraid_Core_V1_BackupPairStep) -> some View {
+        if dynamicTypeSize.isAccessibilitySize, !step.command.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(step.before.trimmingCharacters(in: .whitespaces))
+                    .kitType(.row)
+                    .foregroundStyle(Surface.ink)
+                ForEach(Array(step.command.split(separator: " ").enumerated()), id: \.offset) { _, word in
+                    Text(String(word))
+                        .font(.system(.callout, design: .monospaced))
+                        .foregroundStyle(Surface.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                }
+                if !step.after.trimmingCharacters(in: .whitespaces).isEmpty {
+                    Text(step.after.trimmingCharacters(in: .whitespaces))
+                        .kitType(.row)
+                        .foregroundStyle(Surface.ink)
+                }
+            }
+        } else {
+            (Text(step.before)
+                + Text(Self.unbroken(step.command)).font(.system(.callout, design: .monospaced))
+                + Text(step.after))
+                .kitType(.row)
+                .foregroundStyle(Surface.ink)
         }
     }
 
@@ -80,11 +113,7 @@ struct BackupHomeView: View {
                                 .kitType(.meta)
                                 .foregroundStyle(Surface.meta)
                                 .frame(width: 22)
-                            (Text(step.before)
-                                + Text(Self.unbroken(step.command)).font(.system(.callout, design: .monospaced))
-                                + Text(step.after))
-                                .kitType(.row)
-                                .foregroundStyle(Surface.ink)
+                            stepText(step)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .padding(.horizontal, 12)
@@ -370,9 +399,16 @@ struct BackupHomeView: View {
                     Text(row.name).kitType(.row).foregroundStyle(Surface.ink)
                     if !row.detail.isEmpty { sentence(row.detail) }
                     if !row.note.isEmpty { sentence(row.note) }
+                    // THE STATUS UNDER THE WORDS AT ACCESSIBILITY SIZES (#1202): beside them it was left
+                    // a column too narrow and broke as "waitin/g" and "Backe/d up".
+                    if dynamicTypeSize.isAccessibilitySize, !row.status.isEmpty {
+                        Text(row.status)
+                            .kitType(.meta)
+                            .foregroundStyle(row.waiting ? StateColor.amber.text : Surface.meta)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                if !row.status.isEmpty {
+                if !dynamicTypeSize.isAccessibilitySize, !row.status.isEmpty {
                     Text(row.status)
                         .kitType(.meta)
                         .foregroundStyle(row.waiting ? StateColor.amber.text : Surface.meta)

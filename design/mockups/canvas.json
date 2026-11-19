@@ -977,6 +977,14 @@
       "x": 2820,
       "y": 19720
     },
+    "LargeTextRows.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Largest text: values stack under their names, the safety number wraps",
+      "w": 390,
+      "x": 3290,
+      "y": 19720
+    },
     "LargeTextDark.dc.html": {
       "h": 844,
       "page": "dark",
@@ -4424,6 +4432,7 @@
     "LargeTextCalendarList.dc.html",
     "LargeTextHealth.dc.html",
     "LargeTextWeek.dc.html",
+    "LargeTextRows.dc.html",
     "SolidBand.dc.html",
     "AndroidHome.dc.html",
     "AndroidReminders.dc.html",

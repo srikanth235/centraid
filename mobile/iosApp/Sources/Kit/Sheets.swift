@@ -175,6 +175,8 @@ extension View {
     func sheetRowGroup() -> some View {
         padding(.horizontal, -12)
             .padding(.bottom, -1)
-            .clipped()
+            // CLIPPED AT THE FOOT ONLY (#1202): `.clipped()` cut the group at the title's edges, and
+            // the first letters of a row ("No location") were shaved off at the largest text.
+            .mask(Rectangle().padding(.horizontal, -24))
     }
 }

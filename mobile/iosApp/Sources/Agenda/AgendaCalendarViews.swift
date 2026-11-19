@@ -280,11 +280,16 @@ private struct AgendaAllDayLane: View {
 
     var body: some View {
         if !header.allDay.isEmpty {
-            HStack(spacing: 8) {
+            // THE LABEL OVER ITS CHIPS AT ACCESSIBILITY SIZES (#1202): in the 44-point gutter
+            // "all-day" broke as "all/-/da/y".
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                : AnyLayout(HStackLayout(spacing: 8))
+            layout {
                 Text(header.allDayLabel)
                     .centraidType("annotLabel")
                     .foregroundStyle(Theme.color("textSoft", scheme))
-                    .frame(width: AgendaGridMetrics.gutter, alignment: .leading)
+                    .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : AgendaGridMetrics.gutter, alignment: .leading)
                 // THE CHIPS WRAP (#1202): a lane that scrolled sideways hid every chip past the
                 // overdue reminders that lead it, so today's all-day event was off screen. Three
                 // rows show at once and the lane scrolls up and down past them.
@@ -489,6 +494,10 @@ struct AgendaTimeGridView: View {
                 }
                 .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
             }
+            // THE HOUR GRID HOLDS AT `xxxLarge` (#1202): its gutter, its columns and a block's height
+            // are fixed by the hour, so at the accessibility sizes the hour labels read "0...", the
+            // week's heads ran together and a block showed a clipped title.
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         }
     }
 
@@ -1048,6 +1057,10 @@ struct AgendaMonthView: View {
                 }
                 .padding(.vertical, 6)
                 .accessibilityHidden(true)
+                // SEVEN COLUMNS HOLD AT `xxxLarge` (#1202), as the week strip does: a date is wider
+                // than a seventh of the screen at the accessibility sizes and was cut in half. The
+                // list under the grid still scales.
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 VStack(spacing: 0) {
                     ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
                         HStack(spacing: 0) {
@@ -1057,6 +1070,7 @@ struct AgendaMonthView: View {
                         }
                     }
                 }
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel(month.title)
                 .accessibilityIdentifier("agenda-month-grid")

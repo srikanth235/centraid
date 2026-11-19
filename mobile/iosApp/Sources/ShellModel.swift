@@ -120,9 +120,11 @@ final class ShellModel: ObservableObject {
     func putImportLineAway(_ summary: String) { importLinePutAway = summary }
 
     /// The member moved: a settled line has been read, and goes. A running import
-    /// keeps its line, since the work it describes is not done.
+    /// keeps its line, since the work it describes is not done. A line is settled once it is not
+    /// running, `finished` or not: the member's own Import reminders is never `finished` (it is not
+    /// a made vault's step), and its "No open reminders to import" stayed over Home and every app.
     private func importLineMoved() {
-        guard let line = screens?.madeLine, line.finished, !line.summary.isEmpty else { return }
+        guard let line = screens?.madeLine, !line.running, !line.summary.isEmpty else { return }
         importLinePutAway = line.summary
     }
 

@@ -169,7 +169,8 @@ struct TodoProjectView: View {
         } content: {
             VStack(spacing: 0) {
                 if state.hasHead, !state.head.styleLabel.isEmpty || !state.head.renameLabel.isEmpty {
-                    HStack(spacing: 4) {
+                    // THE TWO LINKS WRAP (#1202): in one row they ran together as "Edit ListRename".
+                    KitFlow(spacing: 12) {
                         // "EDIT LIST" (#1173 wave 2): name, colour and icon in one sheet.
                         if !state.head.styleLabel.isEmpty {
                             KitLink(label: state.head.styleLabel, identifier: "tasks-project-edit") {
@@ -181,8 +182,8 @@ struct TodoProjectView: View {
                                 send(event { $0.rename = .init() })
                             }
                         }
-                        Spacer(minLength: 0)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, CentraidGeometry.pageMargin)
                 }
                 PageReadStateView(
