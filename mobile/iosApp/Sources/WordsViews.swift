@@ -689,11 +689,9 @@ struct WordsHead: View {
                     .accessibilityIdentifier("words-title")
             }
             if !lead.isEmpty {
-                Text(lead)
+                KitQuotedSentence(text: lead, centered: centered)
                     .kitType(.row)
                     .foregroundStyle(Surface.body)
-                    .multilineTextAlignment(centered ? .center : .leading)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
