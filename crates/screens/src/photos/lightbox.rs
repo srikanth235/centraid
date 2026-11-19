@@ -1145,6 +1145,7 @@ fn export_sentence(
         Status::Done => Ok(Some(words::photos_sent_none(locale))),
         Status::NoneHere => Err(words::photos_send_original_not_here(locale)),
         Status::LocationNotRemovable => Err(words::photos_send_not_removable(locale)),
+        Status::StorageFull => Err(crate::strings::permission::storage_full(locale)),
         Status::Failed | Status::Unspecified => {
             Err(words::photos_error_export_failed_retry(locale))
         }

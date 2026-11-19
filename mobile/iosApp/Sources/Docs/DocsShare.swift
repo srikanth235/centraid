@@ -6,7 +6,7 @@ import UIKit
 /// the system share sheet.
 enum DocsShare {
     @MainActor
-    static func present(_ share: Centraid_Core_V1_ShareFile) -> Bool {
+    static func present(_ share: Centraid_Core_V1_ShareFile) -> String? {
         let source = URL(fileURLWithPath: share.path)
         return open(name: share.name, fallback: "Document", chooserTitle: share.chooserTitle) { copy in
             try FileManager.default.copyItem(at: source, to: copy)
@@ -17,7 +17,7 @@ enum DocsShare {
     /// write the bytes to a temporary file called what the member calls it and hand that to the
     /// same share sheet. The Compose twin is `performShareBytes`.
     @MainActor
-    static func presentBytes(_ share: Centraid_Core_V1_ShareBytes) -> Bool {
+    static func presentBytes(_ share: Centraid_Core_V1_ShareBytes) -> String? {
         open(name: share.name, fallback: "Shared", chooserTitle: share.chooserTitle) { copy in
             try share.content.write(to: copy)
         }
@@ -29,7 +29,7 @@ enum DocsShare {
         fallback: String,
         chooserTitle: String,
         make: (URL) throws -> Void
-    ) -> Bool {
+    ) -> String? {
         let name = raw.replacingOccurrences(of: "/", with: "-")
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let copy = folder.appendingPathComponent(name.isEmpty ? fallback : name)
@@ -37,17 +37,17 @@ enum DocsShare {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             try make(copy)
         } catch {
-            return false
+            return EffectReason.ofWrite(error, otherwise: EffectReason.unwritable)
         }
         guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first,
               var top = scene.windows.first(where: \.isKeyWindow)?.rootViewController
-        else { return false }
+        else { return EffectReason.noWindow }
         while let next = top.presentedViewController { top = next }
         let sheet = UIActivityViewController(activityItems: [copy], applicationActivities: nil)
         if !chooserTitle.isEmpty { sheet.setValue(chooserTitle, forKey: "subject") }
         sheet.completionWithItemsHandler = { _, _, _, _ in try? FileManager.default.removeItem(at: folder) }
         sheet.popoverPresentationController?.sourceView = top.view
         top.present(sheet, animated: true)
-        return true
+        return nil
     }
 }

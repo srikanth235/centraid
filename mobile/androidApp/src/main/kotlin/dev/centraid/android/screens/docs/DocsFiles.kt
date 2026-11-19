@@ -219,7 +219,13 @@ internal class DocsPickers(
                     ),
                 )
                 is Stage.Outcome.Refused ->
-                    answer?.invoke(EffectResult(failed = EffectFailed(reason = outcome.sentence.ifEmpty { EffectReason.FAILED })))
+                    answer?.invoke(
+                        EffectResult(
+                            failed = EffectFailed(
+                                reason = if (outcome.full) EffectReason.STORAGE_FULL else outcome.sentence.ifEmpty { EffectReason.FAILED },
+                            ),
+                        ),
+                    )
             }
         }
     }

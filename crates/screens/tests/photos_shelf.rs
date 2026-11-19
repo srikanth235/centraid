@@ -791,6 +791,12 @@ fn send_a_copy_asks_how_much_place_travels_then_hands_the_pick_to_the_platform()
         "Could not remove the location from every file, so nothing was sent."
     );
     send(&mut d, shelf, ev::Kind::Download(ev::DownloadRequested {}));
+    d.answer_effect(exported(Status::StorageFull, 0, 0));
+    assert_eq!(
+        state(&d, shelf).notice,
+        "The phone is full. Free up space and try again."
+    );
+    send(&mut d, shelf, ev::Kind::Download(ev::DownloadRequested {}));
     d.answer_effect(wire::effect_result::Outcome::Failed(
         wire::EffectFailed::default(),
     ));

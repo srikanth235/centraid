@@ -161,7 +161,9 @@ final class DocsFiles: ObservableObject {
                 // are Rust's, said by the screen that asked.
                 var failed = Centraid_Core_V1_EffectFailed()
                 let sentence = error?.sentence ?? ""
-                failed.reason = sentence.isEmpty ? EffectReason.failed : sentence
+                failed.reason = error?.code == .diskFull
+                    ? EffectReason.storageFull
+                    : (sentence.isEmpty ? EffectReason.failed : sentence)
                 answer?(.failed(failed))
             }
         }
@@ -246,13 +248,7 @@ enum DocsFileCopies {
     /// WHY A COPY FAILED, as a fact for the core to word: a full phone (`NSFileWriteOutOfSpaceError`,
     /// `ENOSPC`) is its own reason; anything else is a file that would not read.
     static func reason(of error: Swift.Error) -> String {
-        let ns = error as NSError
-        let underlying = ns.userInfo[NSUnderlyingErrorKey] as? NSError
-        let full = [ns, underlying].compactMap { $0 }.contains {
-            ($0.domain == NSCocoaErrorDomain && $0.code == NSFileWriteOutOfSpaceError)
-                || ($0.domain == NSPOSIXErrorDomain && $0.code == Int(ENOSPC))
-        }
-        return full ? EffectReason.storageFull : EffectReason.unreadable
+        EffectReason.ofWrite(error, otherwise: EffectReason.unreadable)
     }
 
     static func copy(_ url: URL) -> Result<Copied, Swift.Error> {

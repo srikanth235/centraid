@@ -774,6 +774,8 @@ message OriginalsExported {
     STATUS_LOCATION_NOT_REMOVABLE = 3;
     // The platform refused the save or the copy.
     STATUS_FAILED = 4;
+    // The phone has no room for the copy (#1202). The core words it, as it does a full phone anywhere.
+    STATUS_STORAGE_FULL = 5;
   }
 }
 

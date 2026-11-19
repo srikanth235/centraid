@@ -622,6 +622,7 @@ impl Home {
             Status::Done | Status::Unspecified => missing,
             Status::NoneHere => sentences::copy_none_here(locale),
             Status::LocationNotRemovable => sentences::copy_location_not_removable(locale),
+            Status::StorageFull => crate::strings::permission::storage_full(locale),
             Status::Failed => sentences::copy_export_failed(locale),
         };
         self.status = (!sentence.is_empty()).then(|| wire::StatusLine {

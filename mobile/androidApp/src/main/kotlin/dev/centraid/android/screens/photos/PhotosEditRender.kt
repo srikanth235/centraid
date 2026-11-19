@@ -63,7 +63,7 @@ internal object PhotosEditRender {
                     Stage.stage(core, MEDIA_TYPE, size, read = Stage.slices(source))
                 }
                 when (staged) {
-                    is Stage.Outcome.Refused -> failed(staged.sentence)
+                    is Stage.Outcome.Refused -> failed(if (staged.full) EffectReason.STORAGE_FULL else staged.sentence)
                     is Stage.Outcome.Staged -> EffectResult(
                         edit_rendered = EditRendered(
                             content_hash = staged.handle.content_hash,

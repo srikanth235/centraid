@@ -45,7 +45,11 @@ enum PhotoEffects {
         guard let bytes = try? Data(contentsOf: URL(fileURLWithPath: path)) else {
             return failed(EffectReason.unreadable)
         }
-        guard case let .staged(handle) = await StageDoor.stage(core, bytes: bytes, StageDoor.Begin(mediaType: "image/jpeg")) else {
+        let stagedOutcome = await StageDoor.stage(core, bytes: bytes, StageDoor.Begin(mediaType: "image/jpeg"))
+        guard case let .staged(handle) = stagedOutcome else {
+            if case let .refused(error) = stagedOutcome, error?.code == .diskFull {
+                return failed(EffectReason.storageFull)
+            }
             return failed(EffectReason.unwritable)
         }
         var done = Centraid_Core_V1_EditRendered()

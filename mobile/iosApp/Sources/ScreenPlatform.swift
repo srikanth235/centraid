@@ -234,7 +234,7 @@ enum FilePerformer {
         do {
             try save.content.write(to: url, options: [.completeFileProtection])
         } catch {
-            done(.failed(ScreenStore.failure(EffectReason.failed)))
+            done(.failed(ScreenStore.failure(EffectReason.ofWrite(error, otherwise: EffectReason.failed))))
             return
         }
         let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
@@ -264,7 +264,7 @@ enum FilePerformer {
         } catch {
             try? manager.removeItem(at: staged)
             try? manager.removeItem(at: url)
-            done(.failed(ScreenStore.failure(EffectReason.failed)))
+            done(.failed(ScreenStore.failure(EffectReason.ofWrite(error, otherwise: EffectReason.failed))))
             return
         }
         let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)

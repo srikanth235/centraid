@@ -145,6 +145,10 @@ enum ErrorCode {
   // failed a check, or predates the schema this build reads. Nothing was restored or claimed
   // (#1188, B2, B5).
   ERROR_CODE_BACKUP_UNREADABLE = 65;
+  // THE PHONE HAS NO ROOM LEFT (#1202): a write or a staged file stopped for lack of space (ENOSPC).
+  // The core words it ("The phone is full. ..."); a shell passes the same fact as the effect
+  // reason `storage_full`.
+  ERROR_CODE_DISK_FULL = 66;
 
   // --- the #1029 gateway (#1029 §3), retired ---
   //

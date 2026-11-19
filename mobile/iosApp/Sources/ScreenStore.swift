@@ -673,16 +673,16 @@ final class ScreenStore: ObservableObject {
                 Task { @MainActor [weak self] in self?.answer(request, outcome) }
             }
         case .shareFile(let share)?:
-            if DocsShare.present(share) {
-                answer(request, done)
+            if let reason = DocsShare.present(share) {
+                answer(request, .failed(Self.failure(reason == EffectReason.storageFull ? reason : EffectReason.unreadable)))
             } else {
-                answer(request, .failed(Self.failure(EffectReason.unreadable)))
+                answer(request, done)
             }
         case .shareBytes(let share)?:
-            if DocsShare.presentBytes(share) {
-                answer(request, done)
+            if let reason = DocsShare.presentBytes(share) {
+                answer(request, .failed(Self.failure(reason == EffectReason.noWindow ? EffectReason.unwritable : reason)))
             } else {
-                answer(request, .failed(Self.failure(EffectReason.unwritable)))
+                answer(request, done)
             }
         case .followFolder?:
             DocsFollow.shared.request { [weak self] outcome in
