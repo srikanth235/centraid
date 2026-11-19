@@ -286,6 +286,20 @@ private struct Springboard: View {
             .padding(.top, 10)
             .padding(.bottom, 24)
         }
+        // THE CLOCK STAYS READABLE (#1202): the lockup scrolls with the page at the largest text, so
+        // the tiles passed under the status bar with the time drawn over their words. A strip of the
+        // page's ground the height of the status bar covers them (only when the lockup scrolls).
+        .overlay(alignment: .top) {
+            if header != nil {
+                GeometryReader { proxy in
+                    Surface.page
+                        .frame(height: proxy.safeAreaInsets.top)
+                        .offset(y: -proxy.safeAreaInsets.top)
+                }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+        }
     }
 }
 
@@ -380,7 +394,7 @@ private struct VaultSheet: View {
                                 Text(vault.stateLine)
                                     .centraidType("mono")
                                     .foregroundStyle(Theme.color("textFaint", scheme))
-                                    .lineLimit(1)
+                                    .kitLineLimit(1, wide: 3)
                             }
                         }
                         Spacer(minLength: 0)
