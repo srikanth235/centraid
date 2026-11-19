@@ -27,6 +27,12 @@ struct BackupHomeView: View {
         return event
     }
 
+    /// A COMMAND IS ONE UNBROKEN RUN: a non-breaking hyphen and spaces, so it never wraps at
+    /// "centraid-" (display only; the words are Rust's).
+    private static func unbroken(_ command: String) -> String {
+        command.replacingOccurrences(of: "-", with: "\u{2011}").replacingOccurrences(of: " ", with: "\u{00A0}")
+    }
+
     var body: some View {
         // THE READ IS THE KIT'S PAGE STATE (#1185): loading, failure with Retry, and the page under the
         // one sentence a refresh that failed leaves.
@@ -75,7 +81,7 @@ struct BackupHomeView: View {
                                 .foregroundStyle(Surface.meta)
                                 .frame(width: 22)
                             (Text(step.before)
-                                + Text(step.command).font(.system(.callout, design: .monospaced))
+                                + Text(Self.unbroken(step.command)).font(.system(.callout, design: .monospaced))
                                 + Text(step.after))
                                 .kitType(.row)
                                 .foregroundStyle(Surface.ink)
