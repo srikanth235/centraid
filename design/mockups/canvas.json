@@ -3608,6 +3608,70 @@
       "w": 412,
       "x": 470,
       "y": 76360
+    },
+    "CalendarRefused.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "11 · Calendar, access refused",
+      "w": 390,
+      "x": 940,
+      "y": 76360
+    },
+    "CalendarRefusedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "11 · Calendar, access refused · dark",
+      "w": 390,
+      "x": 940,
+      "y": 76360
+    },
+    "PeopleRefused.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "12 · People, access refused",
+      "w": 390,
+      "x": 1410,
+      "y": 76360
+    },
+    "PeopleRefusedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "12 · People, access refused · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 76360
+    },
+    "FirstOpenHealthTrends.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Health, trends, first open",
+      "w": 390,
+      "x": 3290,
+      "y": 76360
+    },
+    "FirstOpenHealthTrendsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Health, trends, first open · dark",
+      "w": 390,
+      "x": 3290,
+      "y": 76360
+    },
+    "FirstOpenHealthWorkouts.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Health, workouts, first open",
+      "w": 390,
+      "x": 3760,
+      "y": 76360
+    },
+    "FirstOpenHealthWorkoutsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Health, workouts, first open · dark",
+      "w": 390,
+      "x": 3760,
+      "y": 76360
     }
   },
   "createdOnFiles": {
@@ -4519,6 +4583,10 @@
     "FirstOpenMoneyDark.dc.html",
     "FirstOpenHealth.dc.html",
     "FirstOpenHealthDark.dc.html",
+    "FirstOpenHealthWorkouts.dc.html",
+    "FirstOpenHealthWorkoutsDark.dc.html",
+    "FirstOpenHealthTrends.dc.html",
+    "FirstOpenHealthTrendsDark.dc.html",
     "LockerFirstCheck.dc.html",
     "LockerFirstCheckDark.dc.html",
     "LockerFirstItem.dc.html",
@@ -4529,6 +4597,10 @@
     "PhotosRefusedDark.dc.html",
     "RemindersRefused.dc.html",
     "RemindersRefusedDark.dc.html",
+    "PeopleRefused.dc.html",
+    "PeopleRefusedDark.dc.html",
+    "CalendarRefused.dc.html",
+    "CalendarRefusedDark.dc.html",
     "PeopleTouchEmpty.dc.html",
     "PeopleTouchEmptyDark.dc.html",
     "CalendarInvitesEmpty.dc.html",
