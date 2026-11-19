@@ -113,8 +113,8 @@ import kotlin.math.roundToInt
 /** One hour of the grid, the only layout constant: minutes map to it, 60 to a row. */
 private val HOUR_HEIGHT: Dp = 56.dp
 
-/** The hour labels' column. */
-private val GUTTER_WIDTH: Dp = KitGeometry.ROW_MIN
+/** The hour labels' column: wide enough for "12:00 PM" with a gap before the events. */
+private val GUTTER_WIDTH: Dp = 64.dp
 
 /** The grid's whole day, in minutes (the proto counts from local midnight, 0 to 1440). */
 private const val DAY_MINUTES: Int = 1440
@@ -283,9 +283,10 @@ private fun AgendaAllDayLane(
         BoxWithConstraints(Modifier.weight(1f)) {
             val laneWidth = maxWidth
             // THE CHIPS WRAP (#1202): a lane that scrolled sideways hid every chip past the overdue
-            // reminders that lead it, so today's all-day event was off screen.
+            // reminders that lead it, so today's all-day event was off screen. The cap is whole rows
+            // (three chips and their gaps), so a row never shows as a sliver above the grid.
             FlowRow(
-                Modifier.fillMaxWidth().heightIn(max = 120.dp).verticalScroll(rememberScrollState()),
+                Modifier.fillMaxWidth().heightIn(max = KitGeometry.ROW_MIN * 3 + 16.dp).verticalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
