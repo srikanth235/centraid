@@ -219,6 +219,7 @@ private fun SettingsRowView(row: SettingsRow, onOpen: (Route) -> Unit, onPress: 
     val route = row.route
     // A row with no page behind it is still pressed (`pressable`): Rust is told which.
     val tappable = route != null || row.pressable
+    val stackValue = rememberLargestText()
     Column {
         Row(
             Modifier
@@ -263,8 +264,11 @@ private fun SettingsRowView(row: SettingsRow, onOpen: (Route) -> Unit, onPress: 
             Column(Modifier.weight(1f)) {
                 KitText(row.title, KitType.Row, if (row.tile == "add") appAccent("").text else Surface.ink)
                 if (row.meta.isNotEmpty()) Text(row.meta, style = kitTextStyle(KitType.Meta), color = Surface.meta)
+                // THE VALUE UNDER THE TITLE AT THE LARGEST TEXT (#1202): beside it, the title was left
+                // a column a few letters wide and broke mid-word ("Downl/oad").
+                if (stackValue && row.value_.isNotEmpty()) KitText(row.value_, KitType.Row, Surface.meta)
             }
-            if (row.value_.isNotEmpty()) {
+            if (!stackValue && row.value_.isNotEmpty()) {
                 KitText(row.value_, KitType.Row, Surface.meta, Modifier.padding(start = 8.dp))
             }
             // A row that MAKES something draws no chevron (the board's Make a vault).
