@@ -111,7 +111,7 @@ private struct EarlierRowView: View {
             Text("\(secret.label) · \(secret.revealed ? secret.value : secret.masked)")
                 .kitType(.meta)
                 .foregroundStyle(Surface.meta)
-                .lineLimit(1)
+                .kitLineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityLabel(secret.accessibilityLabel.isEmpty ? secret.label : secret.accessibilityLabel)
             let title = secret.revealed ? secret.concealLabel : secret.revealLabel
@@ -155,7 +155,7 @@ private struct EarlierRowView: View {
                     Text(row.value)
                         .kitType(.meta)
                         .foregroundStyle(Surface.meta)
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

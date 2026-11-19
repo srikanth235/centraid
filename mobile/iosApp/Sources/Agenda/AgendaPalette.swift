@@ -54,7 +54,7 @@ struct AgendaSmartListGrid: View {
                             Text(list.label)
                                 .kitScaledFont(17, weight: .semibold)
                                 .foregroundStyle(.white)
-                                .lineLimit(1)
+                                .kitLineLimit(1)
                                 .minimumScaleFactor(0.7)
                         }
                         .padding(14)
@@ -74,7 +74,7 @@ struct AgendaSmartListGrid: View {
                         Text(list.label)
                             .kitScaledFont(17, weight: .semibold)
                             .foregroundStyle(.white)
-                            .lineLimit(1)
+                            .kitLineLimit(1)
                             .minimumScaleFactor(0.7)
                         Spacer(minLength: 0)
                         if !list.count.isEmpty {

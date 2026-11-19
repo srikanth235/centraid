@@ -557,7 +557,7 @@ private struct PeopleRosterRowView: View {
                         Text(row.name)
                             .kitType(.row)
                             .foregroundStyle(Surface.ink)
-                            .lineLimit(1)
+                            .kitLineLimit(1)
                         meta
                             .kitType(.meta)
                             .foregroundStyle(Surface.meta)
@@ -761,7 +761,7 @@ struct PeopleAvatarView: View {
         Text(avatar.initials)
             .centraidType(size > 40 ? "title" : "annotLabelOn")
             .foregroundStyle(Theme.color("text", scheme))
-            .frame(width: size, height: size)
+            .kitScaledSquare(size, relativeTo: size > 40 ? .largeTitle : .footnote)
             .background(
                 Circle().fill(Theme.color(peopleHue(avatar.hueKey, else: "bgSunken"), scheme).opacity(0.28))
             )

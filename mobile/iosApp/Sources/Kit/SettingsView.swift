@@ -186,7 +186,7 @@ private struct SettingsRowView: View {
                 .kitType(.row)
                 .fontWeight(.bold)
                 .foregroundStyle(.white)
-                .frame(width: 32, height: 32)
+                .kitScaledSquare(32, relativeTo: .body)
                 .background(AppAccent.shell.fill, in: Circle())
                 .accessibilityHidden(true)
         case "amber":

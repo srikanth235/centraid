@@ -132,7 +132,7 @@ struct DocsLabelChips: View {
                             Text(chip.label)
                                 .centraidType("annotLabel")
                                 .foregroundStyle(chip.selected ? AppAccent("docs").text : Color(CentraidAsset.textBody))
-                                .lineLimit(1)
+                                .kitLineLimit(1)
                         }
                         .padding(.horizontal, 10)
                         .frame(minHeight: 32)
@@ -239,7 +239,7 @@ struct DocsFolderTile: View {
                 Text(node.countLabel)
                     .centraidType("annotLabel")
                     .foregroundStyle(Theme.color("textFaint", scheme))
-                    .lineLimit(1)
+                    .kitLineLimit(1)
             }
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())

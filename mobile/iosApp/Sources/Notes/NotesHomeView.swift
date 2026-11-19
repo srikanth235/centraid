@@ -472,7 +472,7 @@ struct NotesRowView: View {
                         .kitType(.row)
                         .fontWeight(.semibold)
                         .foregroundStyle(Surface.ink)
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                     Spacer(minLength: 8)
                     if !row.checkLabel.isEmpty {
                         Text(row.checkLabel)
@@ -480,18 +480,18 @@ struct NotesRowView: View {
                             .fontWeight(.semibold)
                             .monospacedDigit()
                             .foregroundStyle(accent.text)
-                            .lineLimit(1)
+                            .kitLineLimit(1)
                     }
                 }
                 snippet
                     .kitType(.meta)
                     .foregroundStyle(Surface.body)
-                    .lineLimit(1)
+                    .kitLineLimit(1)
                 if !row.meta.isEmpty {
                     Text(row.meta)
                         .kitType(.meta)
                         .foregroundStyle(Surface.meta)
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                 }
                 AboutChips(chips: row.about)
                     .padding(.top, 2)

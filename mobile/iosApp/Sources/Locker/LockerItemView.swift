@@ -304,7 +304,7 @@ struct LockerFieldRowView: View {
                             Button(action: { onVerb(verb) }) {
                                 Text(verb.label)
                                     .centraidType("smallStrong")
-                                    .lineLimit(1)
+                                    .kitLineLimit(1)
                                     .fixedSize(horizontal: true, vertical: false)
                                     .foregroundStyle(StateColor.green.text)
                                     .padding(.horizontal, 14)

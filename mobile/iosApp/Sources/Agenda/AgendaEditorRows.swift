@@ -71,7 +71,7 @@ struct AgendaTileChoiceRow: View {
                 Text(value)
                     .centraidType("body")
                     .foregroundStyle(Surface.meta)
-                    .lineLimit(1)
+                    .kitLineLimit(1)
                 CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textFaint", scheme), size: 14)
             }
             .padding(.horizontal, 14)
@@ -135,7 +135,7 @@ struct AgendaTileWhenRow<Faces: View>: View {
             Text(key)
                 .kitType(.row)
                 .foregroundStyle(Surface.ink)
-                .lineLimit(1)
+                .kitLineLimit(1)
             Spacer(minLength: 8)
             faces()
         }

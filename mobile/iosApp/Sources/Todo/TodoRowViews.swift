@@ -407,7 +407,7 @@ struct QuickAddChipView: View {
                 Text(chip.label)
                     .centraidType("smallStrong")
                     .foregroundStyle(accent.text)
-                    .lineLimit(1)
+                    .kitLineLimit(1)
                 Button(action: onDismiss) {
                     CentraidIconView(iconKey: "X", tint: accent.text, size: 14)
                         .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)

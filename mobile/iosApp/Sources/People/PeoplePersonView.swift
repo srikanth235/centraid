@@ -366,7 +366,7 @@ private struct PeoplePersonBody: View {
                             .kitType(.meta)
                             .fontWeight(action.primary ? .semibold : .regular)
                             .foregroundStyle(Surface.body)
-                            .lineLimit(1)
+                            .kitLineLimit(1)
                             .accessibilityHidden(true)
                     }
                 }

@@ -522,7 +522,7 @@ struct AgendaEditorView: View {
         // ONE LINE: the day is the short "Wed 4 Nov" and the pair sits on the board's row.
         KitLink(label: words, identifier: identifier, action: action)
             .monospacedDigit()
-            .lineLimit(1)
+            .kitLineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
             .accessibilityHint(hint)
     }

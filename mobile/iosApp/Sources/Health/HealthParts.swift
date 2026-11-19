@@ -89,7 +89,7 @@ struct HealthPinnedCard: View {
                         .kitType(.meta)
                         .fontWeight(.semibold)
                         .foregroundStyle(accent.text)
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                     if line.wide {
                         Spacer(minLength: 8)
                         Text(line.whenLabel)
@@ -241,11 +241,11 @@ struct HealthWorkoutRow: View {
                         .kitType(.row)
                         .fontWeight(.semibold)
                         .foregroundStyle(Surface.ink)
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                     Text(row.meta)
                         .kitType(.meta)
                         .foregroundStyle(Surface.meta)
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                 }
                 Spacer(minLength: 8)
                 Text(row.whenLabel)
@@ -368,7 +368,7 @@ struct HealthBarChart: View {
                         Text(data.typicalLabel)
                             .kitType(.meta)
                             .foregroundStyle(accent.text)
-                            .lineLimit(1)
+                            .kitLineLimit(1)
                             .padding(.leading, 4)
                             .frame(width: gutter, alignment: .leading)
                             .offset(x: width, y: max(at - 9, 0))
@@ -413,7 +413,7 @@ struct HealthBarChart: View {
             }
             .kitType(.meta)
             .foregroundStyle(Surface.meta)
-            .lineLimit(1)
+            .kitLineLimit(1)
             .padding(.trailing, gutter)
             .accessibilityHidden(true)
         }

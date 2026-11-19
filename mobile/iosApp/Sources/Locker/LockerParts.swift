@@ -183,7 +183,7 @@ struct LockerRowView: View {
                     Text(row.title)
                         .kitType(.row)
                         .foregroundStyle(Surface.ink)
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                     if !row.meta.isEmpty {
                         MetaLine(row.meta)
                             .kitType(.meta)

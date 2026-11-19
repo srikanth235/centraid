@@ -214,7 +214,7 @@ struct AgendaMonthChip: View {
                     Text(header.monthLabel)
                         .centraidType("smallStrong")
                         .foregroundStyle(Surface.ink)
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                 }
                 .fixedSize()
                 .frame(minHeight: CentraidGeometry.targetMinCoarse)
@@ -513,7 +513,7 @@ struct AgendaTimeGridView: View {
                 Text(grid.allDayLabel)
                     .centraidType("annotLabel")
                     .foregroundStyle(Theme.color("textSoft", scheme))
-                    .lineLimit(1)
+                    .kitLineLimit(1)
                     .minimumScaleFactor(0.7)
                     .padding(.leading, 4)
                     .frame(width: AgendaGridMetrics.gutter, alignment: .leading)
@@ -618,7 +618,7 @@ struct AgendaTimeGridView: View {
                 let clashes = grid.hasNow && abs(Int(grid.now.minute) - Int(mark.minute)) < AgendaGridMetrics.nowClash
                 Text(mark.label)
                     .centraidType("annotLabel")
-                    .lineLimit(1)
+                    .kitLineLimit(1)
                     .minimumScaleFactor(0.7)
                     .foregroundStyle(Theme.color("textFaint", scheme))
                     .frame(width: AgendaGridMetrics.gutter, alignment: .trailing)
@@ -667,7 +667,7 @@ struct AgendaTimeGridView: View {
                 .foregroundStyle(Color.white)
                 // THE CLOCK NEVER ENDS IN AN ELLIPSIS: 13pt "08:53" is wider than the 44pt gutter
                 // less its padding, so it scales down to fit rather than truncating.
-                .lineLimit(1)
+                .kitLineLimit(1)
                 .minimumScaleFactor(0.75)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
@@ -741,7 +741,7 @@ private struct AgendaChipView: View {
         Text(chip.title)
             .centraidType("annotLabel")
             .foregroundStyle(Theme.color("text", scheme))
-            .lineLimit(1)
+            .kitLineLimit(1)
             .minimumScaleFactor(narrow ? 0.7 : 1)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -832,12 +832,12 @@ private struct AgendaBlockView: View {
                     Text(block.title)
                         .centraidType(titleFace)
                         .foregroundStyle(ink)
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                     if roomy, !block.detail.isEmpty {
                         Text(block.detail)
                             .centraidType("annotLabel")
                             .foregroundStyle(Theme.color("textSoft", scheme))
-                            .lineLimit(1)
+                            .kitLineLimit(1)
                     }
                 }
                 .frame(maxHeight: .infinity, alignment: .center)
@@ -845,7 +845,7 @@ private struct AgendaBlockView: View {
                 Text(block.title)
                     .centraidType(titleFace)
                     .foregroundStyle(ink)
-                    .lineLimit(1)
+                    .kitLineLimit(1)
                 if roomy, height >= AgendaGridMetrics.timeFrom, !block.detail.isEmpty {
                     Text(block.detail)
                         .centraidType("annotLabel")
@@ -1125,7 +1125,7 @@ private struct AgendaMonthCellView: View {
                             Text(chip.title)
                                 .centraidType("annotLabel")
                                 .foregroundStyle(Theme.color(cell.inMonth ? "text" : "textFaint", scheme))
-                                .lineLimit(1)
+                                .kitLineLimit(1)
                                 .padding(.horizontal, 3)
                                 .frame(maxWidth: .infinity, minHeight: AgendaGridMetrics.monthChipHeight, alignment: .leading)
                                 .background {
@@ -1231,7 +1231,7 @@ private struct AgendaYearMonthView: View {
                                 .monospacedDigit()
                                 // ONE LINE: a two-digit day in a seventh of a third of the screen wrapped
                                 // ("3" over "0") and pushed the week out of its columns.
-                                .lineLimit(1)
+                                .kitLineLimit(1)
                                 .minimumScaleFactor(0.7)
                                 .foregroundStyle(day.isToday ? Theme.color("onAccent", scheme) : Theme.color("textSoft", scheme))
                                 .frame(maxWidth: .infinity, minHeight: AgendaGridMetrics.yearDay)

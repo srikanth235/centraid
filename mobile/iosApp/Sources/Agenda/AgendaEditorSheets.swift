@@ -126,7 +126,7 @@ struct AgendaCustomRepeatSheetView: View {
                     Text(choice.label)
                         .centraidType(choice.selected ? "smallStrong" : "small")
                         .foregroundStyle(choice.selected ? accent.text : Theme.color("textSoft", scheme))
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                         .minimumScaleFactor(0.7)
                         .frame(maxWidth: .infinity, minHeight: 40)
                         .background {
@@ -156,7 +156,7 @@ struct AgendaCustomRepeatSheetView: View {
                     Text(choice.label)
                         .centraidType(choice.selected ? "smallStrong" : "small")
                         .foregroundStyle(choice.selected ? Color.white : Theme.color("text", scheme))
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                         .minimumScaleFactor(0.6)
                         .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
                         .background(

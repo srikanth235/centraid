@@ -297,7 +297,7 @@ struct DocsDriveView: View {
                 Text(node.name)
                     .centraidType("body")
                     .foregroundStyle(Theme.color("text", scheme))
-                    .lineLimit(1)
+                    .kitLineLimit(1)
                 Spacer(minLength: 8)
                 Text(node.countLabel)
                     .centraidType("annotLabel")

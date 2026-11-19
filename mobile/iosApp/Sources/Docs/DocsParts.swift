@@ -191,7 +191,7 @@ struct DocsRowItem: View {
                             Text(row.title)
                                 .centraidType("body")
                                 .foregroundStyle(Theme.color(row.trashed ? "textFaint" : "text", scheme))
-                                .lineLimit(1)
+                                .kitLineLimit(1)
                             if row.starred {
                                 CentraidIconView(iconKey: "Star", tint: Theme.color("textSoft", scheme), size: 12)
                                     .accessibilityHidden(true)
@@ -204,13 +204,13 @@ struct DocsRowItem: View {
                             Text(row.meta)
                                 .centraidType("annotLabel")
                                 .foregroundStyle(Theme.color("textFaint", scheme))
-                                .lineLimit(1)
+                                .kitLineLimit(1)
                         }
                         if !row.labels.isEmpty {
                             Text(row.labels.map(\.label).joined(separator: " · "))
                                 .centraidType("annotLabel")
                                 .foregroundStyle(Theme.color("textSoft", scheme))
-                                .lineLimit(1)
+                                .kitLineLimit(1)
                         }
                     }
                     Spacer(minLength: 0)

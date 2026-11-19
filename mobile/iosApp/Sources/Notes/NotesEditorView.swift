@@ -272,7 +272,7 @@ struct NotesEditorView: View {
                 Text(state.meta)
                     .kitType(.meta)
                     .foregroundStyle(Surface.meta)
-                    .lineLimit(1)
+                    .kitLineLimit(1)
                     .accessibilityIdentifier("notes-editor-meta")
             }
         }
@@ -377,7 +377,7 @@ private struct NotesEditorRoom<Trailing: View, Content: View>: View {
                             .kitType(.row)
                             .fontWeight(.semibold)
                             .foregroundStyle(accent.text)
-                            .lineLimit(1)
+                            .kitLineLimit(1)
                             .fixedSize()
                             .padding(.horizontal, 8)
                             .frame(minHeight: CentraidGeometry.targetMinCoarse)
@@ -390,7 +390,7 @@ private struct NotesEditorRoom<Trailing: View, Content: View>: View {
                     Text(status)
                         .kitType(.meta)
                         .foregroundStyle(refused ? StateColor.red.text : Surface.meta)
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                         .accessibilityIdentifier("kit-autosave-status")
                         // A principal toolbar item does not redraw when only its text changes; a
                         // new identity per sentence does, so a tapped chip's "in the trash" shows.
