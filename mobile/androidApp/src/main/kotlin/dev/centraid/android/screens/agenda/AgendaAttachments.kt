@@ -37,6 +37,8 @@ import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.StatusLine
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import dev.centraid.android.theme.centraidColor
@@ -60,11 +62,12 @@ internal fun AgendaAttachmentsView(
     // The page margin around the section; one placed inside a column that pads itself turns it off.
     val gutter = if (padded) KitGeometry.GUTTER else 0.dp
     Column(Modifier.fillMaxWidth().testTag("$prefix-attachments")) {
-        Text(
+        // The board's section head: capitals, like every other section on a detail page.
+        KitText(
             section.heading,
-            style = centraidType("eyebrow"),
-            color = centraidColor("textSoft"),
-            modifier = Modifier.padding(start = gutter, end = gutter, top = 16.dp, bottom = 6.dp).semantics { heading() },
+            KitType.Group,
+            Surface.meta,
+            Modifier.padding(start = gutter, end = gutter, top = 16.dp, bottom = 6.dp).semantics { heading() },
         )
         if (section.items.isEmpty() && section.empty_label.isNotEmpty()) {
             Text(section.empty_label, style = centraidType("body"), color = centraidColor("textFaint"), modifier = Modifier.padding(horizontal = gutter))

@@ -57,7 +57,7 @@ public fun LinkSectionView(
             Surface.meta,
             Modifier.padding(start = 4.dp, top = 12.dp, bottom = 6.dp).testTag("link-section-title"),
         )
-        Column(Modifier.fillMaxWidth().kitCard()) {
+        Column(Modifier.fillMaxWidth().kitBorderedCard()) {
             section.rows.forEachIndexed { index, row ->
                 if (index > 0) LinkHairline()
                 LinkRowView(row, onEvent, onOpen)
