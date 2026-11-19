@@ -138,7 +138,14 @@ fn note_row(locale: Locale, parts: Parts<'_>) -> wire::NotesNoteRow {
         })
         .collect();
     let snippet = if runs.is_empty() {
-        unlinked(parts.preview)
+        let preview = unlinked(parts.preview);
+        // A NOTE WITH NO TITLE is named by its first line, so the line is not said twice: the
+        // snippet is what follows it.
+        if parts.title.map(str::trim).is_none_or(str::is_empty) {
+            after_title(&preview, &unlinked(&title))
+        } else {
+            preview
+        }
     } else {
         runs.iter().map(|run| run.text.as_str()).collect()
     };
@@ -245,6 +252,15 @@ pub fn hit(locale: Locale, hit: &wire::NotesSearchHit, today: Option<&str>) -> w
             today,
         },
     )
+}
+
+/// The preview after the title it lent: the leading title text goes, then the space or line break
+/// that followed it. A preview that does not start with the title is returned whole.
+fn after_title(preview: &str, title: &str) -> String {
+    let trimmed = preview.trim_start();
+    trimmed
+        .strip_prefix(title)
+        .map_or_else(|| preview.to_owned(), |rest| rest.trim().to_owned())
 }
 
 /// A text without its wiki-link brackets: `[[Name]]` reads `Name`. A highlighted span may split a
@@ -647,6 +663,41 @@ mod tests {
             .collect();
         assert_eq!(shape, [("a ", false), ("match", true), (" here", false)]);
         assert!(runs_of("no marker").is_empty());
+    }
+
+    #[test]
+    fn an_untitled_notes_preview_does_not_repeat_the_title_it_lent() {
+        let snippet = |title: Option<&str>, preview: &str| {
+            note_row(
+                Locale::En,
+                Parts {
+                    note_id: "n1",
+                    title,
+                    preview,
+                    pinned: false,
+                    local_day: "2026-11-18",
+                    notebook_names: &[],
+                    notebook_ids: &[],
+                    check_total: 0,
+                    check_done: 0,
+                    runs: Vec::new(),
+                    about: Vec::new(),
+                    earlier: false,
+                    today: Some("2026-11-18"),
+                },
+            )
+            .snippet
+        };
+        assert_eq!(
+            snippet(None, "Jake's lease ends in March\nCall the landlord"),
+            "Call the landlord"
+        );
+        assert_eq!(snippet(None, "Only a first line"), "");
+        // A note with its own title keeps its whole preview.
+        assert_eq!(
+            snippet(Some("Lease"), "Jake's lease ends in March"),
+            "Jake's lease ends in March"
+        );
     }
 
     #[test]
