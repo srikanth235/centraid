@@ -410,22 +410,34 @@ struct MoneyCategoryProgressRow: View {
     let onTap: () -> Void
 
     @Environment(\.appAccent) private var accent
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        Button(action: onTap) {
+        // THE AMOUNT UNDER THE NAME AT ACCESSIBILITY SIZES (#1202): beside it the name broke as
+        // "catego/ries" and the amount split mid-number ("$143.1/2").
+        let stacked = dynamicTypeSize.isAccessibilitySize
+        let layout = stacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(spacing: 10))
+        return Button(action: onTap) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 10) {
                     Circle().fill(docsListColor(line.colorKey)).frame(width: 10, height: 10)
-                    Text(line.label)
-                        .kitType(.row)
-                        .foregroundStyle(Surface.ink)
-                        .lineLimit(2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Text(line.spent)
-                        .kitType(.row)
-                        .fontWeight(.semibold)
-                        .monospacedDigit()
-                        .foregroundStyle(Surface.ink)
+                    layout {
+                        Text(line.label)
+                            .kitType(.row)
+                            .foregroundStyle(Surface.ink)
+                            .lineLimit(stacked ? 3 : 2)
+                            .frame(maxWidth: stacked ? nil : .infinity, alignment: .leading)
+                        Text(line.spent)
+                            .kitType(.row)
+                            .fontWeight(.semibold)
+                            .monospacedDigit()
+                            .foregroundStyle(Surface.ink)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if line.hasPlan_p {
                     GeometryReader { proxy in
@@ -463,8 +475,15 @@ struct MoneyRestRow: View {
     let identifier: String
     let onTap: () -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        Button(action: onTap) {
+        // THE AMOUNT UNDER THE NAME AT ACCESSIBILITY SIZES (#1202), as the category rows above it.
+        let stacked = dynamicTypeSize.isAccessibilitySize
+        let layout = stacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(spacing: 10))
+        return Button(action: onTap) {
             HStack(spacing: 10) {
                 if line.colorKey.isEmpty {
                     Circle()
@@ -473,17 +492,23 @@ struct MoneyRestRow: View {
                 } else {
                     Circle().fill(docsListColor(line.colorKey)).frame(width: 10, height: 10)
                 }
-                Text(line.label)
-                    .kitType(.row)
-                    .foregroundStyle(Surface.ink)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text(line.amount)
-                    .kitType(.row)
-                    .fontWeight(.semibold)
-                    .monospacedDigit()
-                    .foregroundStyle(Surface.ink)
+                layout {
+                    Text(line.label)
+                        .kitType(.row)
+                        .foregroundStyle(Surface.ink)
+                        .frame(maxWidth: stacked ? nil : .infinity, alignment: .leading)
+                    Text(line.amount)
+                        .kitType(.row)
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
+                        .foregroundStyle(Surface.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 16)
+            .padding(.vertical, stacked ? 10 : 0)
             .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
             .background(pending ? StateColor.amber.tint : Color.clear)
             .contentShape(Rectangle())
