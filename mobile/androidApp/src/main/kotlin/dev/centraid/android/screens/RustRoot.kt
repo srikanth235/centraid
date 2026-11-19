@@ -320,8 +320,14 @@ internal class RustRoot(
         // member still sees, and the sheet's own screen composes its ModalBottomSheet on top.
         val sheetOver = top.route?.sheet == true && entries.size > 1
         val shown = if (sheetOver) entries[entries.size - 2] else top
-        ShownEntry(runtime, navigation, views, shown, root, inChat, homeRoot)
-        if (sheetOver) views[top.instance]?.let { Page(runtime, it, top.instance) }
+        // THE APP A PAGE BELONGS TO tints everything it draws, its sheets included (a More sheet's
+        // marks, a link, an empty card's glyph): the screen id's prefix names it, and the shell's own
+        // places (Home, the chat, the backup) keep the shell's colour.
+        val appOfPage = shown.route?.screen?.substringBefore('.')?.takeIf { it in CHAT_SCOPES }.orEmpty()
+        CompositionLocalProvider(LocalAppAccentId provides appOfPage) {
+            ShownEntry(runtime, navigation, views, shown, root, inChat, homeRoot)
+            if (sheetOver) views[top.instance]?.let { Page(runtime, it, top.instance) }
+        }
     }
 
     /** THE ENTRY THE MEMBER SEES: Home, another tab's root over the band, or a page. */

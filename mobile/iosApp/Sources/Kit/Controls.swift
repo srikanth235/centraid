@@ -86,12 +86,15 @@ struct KitLink: View {
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.appAccent) private var accent
 
     var body: some View {
+        // A link is the app's own colour inside an app's place; the shell's links keep the link blue.
+        let ink = tint ?? (accent.appId.isEmpty ? Theme.color("link", scheme) : accent.text)
         Button(action: action) {
             Text(label)
                 .centraidType(dense ? "annotLabelOn" : "smallStrong")
-                .foregroundStyle(enabled ? (tint ?? Theme.color("link", scheme)) : Theme.color("textDisabled", scheme))
+                .foregroundStyle(enabled ? ink : Theme.color("textDisabled", scheme))
                 .frame(minHeight: CentraidGeometry.targetMinCoarse)
                 .contentShape(Rectangle())
         }

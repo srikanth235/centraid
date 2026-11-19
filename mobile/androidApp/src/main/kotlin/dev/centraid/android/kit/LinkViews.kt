@@ -178,7 +178,7 @@ public fun LinkPickerSheet(picker: LinkPicker, onEvent: (LinkEvent) -> Unit) {
                 Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 16.dp).testTag("link-picker-empty"),
             )
         } else {
-            LazyColumn(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER - 12.dp)) {
+            LazyColumn(Modifier.fillMaxWidth()) {
                 items(picker.candidates, key = { it.id }) { row ->
                     SheetRow(
                         label = row.title,

@@ -236,10 +236,16 @@ public fun KitLink(
         Text(
             label,
             style = centraidType(if (dense) "annotLabelOn" else "smallStrong"),
-            color = centraidColor(if (enabled) "link" else "textDisabled"),
+            // A LINK IS THE APP'S OWN COLOUR where an app's place states one; the shell's links keep the link ink.
+            color = if (enabled) linkInk() else centraidColor("textDisabled"),
         )
     }
 }
+
+/** The ink of a link: the accent's text colour inside an app, the kit's link ink outside one. */
+@Composable
+internal fun linkInk(): Color =
+    if (LocalAppAccentId.current.isEmpty()) centraidColor("link") else appAccent().text
 
 /**
  * A CHECK BOX: a 20dp box (`sm` radius) in a 44dp target. Off is a 1.5dp

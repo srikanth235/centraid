@@ -35,11 +35,11 @@ import dev.centraid.android.theme.centraidType
 internal fun PeopleContactsRowView(row: PeopleContactsRow, onAction: () -> Unit) {
     val accent = appAccent()
     Row(
-        Modifier.fillMaxWidth().heightIn(min = KitGeometry.ROW_MIN).padding(horizontal = 16.dp, vertical = 6.dp)
+        Modifier.fillMaxWidth().heightIn(min = KitGeometry.ROW_MIN).padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp)
             .testTag("people-contacts-row"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        KitTile("Users", Modifier.padding(end = 12.dp), size = 30.dp)
+        KitTile("Users", Modifier.padding(end = 12.dp), size = 32.dp)
         Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = row.accessibility_label }) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 KitText(row.title, KitType.Row, Surface.ink)

@@ -257,6 +257,7 @@ pub fn more_rows(
         key: MORE_READS.to_owned(),
         label: words::reads_title(locale),
         spoken: words::reads_title(locale),
+        icon_key: "Shield".to_owned(),
         ..wire::AgendaMoreRow::default()
     });
     out

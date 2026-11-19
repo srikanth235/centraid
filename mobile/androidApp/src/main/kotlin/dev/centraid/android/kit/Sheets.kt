@@ -133,7 +133,7 @@ public fun SheetRow(
                 .fillMaxWidth()
                 .heightIn(min = 52.dp)
                 .clickable(enabled = enabled, onClick = onTap)
-                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp)
                 .testTag(testTag)
                 .clearAndSetSemantics {
                     contentDescription = if (detail.isEmpty()) label else "$label, $detail"
@@ -164,7 +164,7 @@ public fun SheetRow(
             if (selected) CentraidIcon(iconKey = "Check", tint = accent.text, size = 16.dp)
         }
         if (divider) {
-            Spacer(Modifier.padding(start = if (iconKey != null || dot != null) 56.dp else 12.dp).fillMaxWidth().height(KitGeometry.HAIRLINE).background(line))
+            Spacer(Modifier.padding(start = if (iconKey != null || dot != null) KitGeometry.GUTTER + 44.dp else KitGeometry.GUTTER).fillMaxWidth().height(KitGeometry.HAIRLINE).background(line))
         }
     }
 }
@@ -194,7 +194,7 @@ public fun OptionSheet(
     status: String = "",
 ) {
     SheetRoom(title = title, onDismiss = onDismiss, status = status, expanded = true) {
-        Column(Modifier.padding(horizontal = KitGeometry.GUTTER - 12.dp)) {
+        Column {
             options.forEachIndexed { index, option ->
                 SheetRow(
                     label = option.label,
