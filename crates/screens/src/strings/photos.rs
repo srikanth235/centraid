@@ -182,7 +182,7 @@ catalog! {
     plain photos_manage_selection = ("Manage selection", "Manage selection");
     plain photos_more = ("More", "More");
     plain photos_more_foot = ("The rest of Photos is in Collections.", "The rest of Photos is in Collections.");
-    plain photos_more_title = ("More in Photos", "More in Photos");
+    plain photos_more_title = ("More", "More");
     plain photos_new_album = ("New album", "New album");
     plain photos_next = ("Next photo", "Next photo");
     plain photos_nothing_on_phone = ("Nothing of this photo is on this phone yet.", "Nothing of this photo is on this phone yet.");

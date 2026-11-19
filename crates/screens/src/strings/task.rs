@@ -88,7 +88,7 @@ catalog! {
     plain more_anytime_meta = ("no date, still yours", "no date, still yours");
     plain more_logbook_meta = ("done and won't do", "done and won't do");
     plain more_reminders_meta = ("open work with a reminder", "open work with a reminder");
-    plain more_title = ("More in Reminders", "More in Reminders");
+    plain more_title = ("More", "More");
     plain new_project_title = ("New project", "New project");
     plain next_is = ("next is", "next is");
     plain next_one_is = ("the next one is", "the next one is");

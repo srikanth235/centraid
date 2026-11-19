@@ -126,7 +126,7 @@ catalog! {
     plain more_export_meta = ("Your originals as one archive", "Your originals as one archive");
     plain more_followed = ("Followed folders", "Followed folders");
     plain more_recent = ("Recently added", "Recently added");
-    plain more_title = ("More in Docs", "More in Docs");
+    plain more_title = ("More", "More");
     plain more_trash = ("Trash", "Trash");
     plain move_title = ("Move to", "Move to");
     plain move_top = ("Top level", "Top level");
