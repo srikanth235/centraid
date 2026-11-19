@@ -262,7 +262,12 @@ struct AgendaEventView: View {
                 .foregroundStyle(Theme.color("text", scheme))
             // THE BOARD'S THREE EQUAL KEYS: Going, Maybe, Not going share the width, the
             // answer given filled in Agenda's blue, the others a plain capsule.
-            HStack(spacing: 8) {
+            // THE KEYS STACK once the text reflows (#1202): three across, "Going" and "Maybe" broke
+            // as "Goin / g" and "Mayb / e".
+            let keys = dynamicTypeSize >= Theme.reflowSize
+                ? AnyLayout(VStackLayout(spacing: 8))
+                : AnyLayout(HStackLayout(spacing: 8))
+            keys {
                 ForEach(rsvp.choices, id: \.partstat) { choice in
                     Button {
                         send(event { $0.rsvp = .with { $0.partstat = choice.partstat } })
@@ -270,6 +275,8 @@ struct AgendaEventView: View {
                         Text(choice.label)
                             .centraidType(choice.selected ? "smallStrong" : "small")
                             .foregroundStyle(choice.selected ? Color.white : Theme.color(choice.enabled ? "text" : "textDisabled", scheme))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
                             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
                             .background {
                                 if choice.selected {
