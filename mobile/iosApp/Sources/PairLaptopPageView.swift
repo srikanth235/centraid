@@ -75,8 +75,13 @@ struct PairLaptopPageView: View {
                     Text("$")
                         .foregroundStyle(Color.white.opacity(0.55))
                         .accessibilityHidden(true)
-                    Text(state.command)
+                    // A COMMAND BREAKS AT ITS SPACES, NEVER AT A HYPHEN (#1202): the display swaps
+                    // each hyphen for the non-breaking one; VoiceOver still reads the real command.
+                    Text(state.command.replacingOccurrences(of: "-", with: "\u{2011}"))
                         .foregroundStyle(Color.white)
+                        // ONE LINE THAT SHRINKS, NEVER ONE THAT BREAKS INSIDE A WORD (#1202).
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.4)
                 }
                 .centraidType("mono")
                 .padding(16)
@@ -85,7 +90,8 @@ struct PairLaptopPageView: View {
                     RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
                         .fill(Color(red: 0.11, green: 0.11, blue: 0.10))
                 )
-                .accessibilityElement(children: .combine)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(state.command)
                 .accessibilityIdentifier("pair-command")
             }
 
