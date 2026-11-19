@@ -324,10 +324,11 @@ private struct AgendaAllDayLane: View {
     private var chipLane: some View {
         ViewThatFits(in: .vertical) {
             chips
-            ScrollView(.vertical, showsIndicators: false) { chips }
+            // The foot's own room keeps the LAST chip out of the fade once the lane is scrolled to its end.
+            ScrollView(.vertical, showsIndicators: false) { chips.padding(.bottom, 28) }
                 .mask(
                     LinearGradient(
-                        stops: [.init(color: .black, location: 0.8), .init(color: .clear, location: 1)],
+                        stops: [.init(color: .black, location: 0.84), .init(color: .clear, location: 1)],
                         startPoint: .top,
                         endPoint: .bottom
                     )
@@ -377,13 +378,16 @@ private struct AgendaCheckCircle: View {
     var done = false
     let action: () -> Void
     @Environment(\.colorScheme) private var scheme
+    /// THE CIRCLE GROWS WITH THE NAME IT TICKS (#1202): a 14pt ring beside 40pt words read as a
+    /// speck drifting low and left of its text at the largest size.
+    @ScaledMetric(relativeTo: .caption) private var side: CGFloat = AgendaGridMetrics.checkSize
 
     var body: some View {
         Button(action: action) {
             Circle()
                 .strokeBorder(agendaHue(hueKey, scheme), lineWidth: 1.5)
                 .background(Circle().fill(done ? agendaHue(hueKey, scheme) : Color.clear))
-                .frame(width: AgendaGridMetrics.checkSize, height: AgendaGridMetrics.checkSize)
+                .frame(width: side, height: side)
                 .padding(10)
                 .contentShape(Circle())
         }
