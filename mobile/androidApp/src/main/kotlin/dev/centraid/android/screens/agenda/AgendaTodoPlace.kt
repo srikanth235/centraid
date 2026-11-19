@@ -177,10 +177,13 @@ internal fun AgendaTodoPlace(
                     ) {
                         val listColor = agendaListColor(project.list_color_key) ?: centraidColor("textFaint")
                         // A LIST'S OWN ICON (#1173 wave 2) replaces the dot, in the list's colour.
-                        if (project.icon_key.isNotEmpty()) {
-                            CentraidIcon(project.icon_key, tint = listColor, size = 18.dp)
-                        } else {
-                            Box(Modifier.size(12.dp).clip(CircleShape).background(listColor))
+                        // The mark sits in one 18dp slot, so an icon row's label starts where a dot row's does.
+                        Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+                            if (project.icon_key.isNotEmpty()) {
+                                CentraidIcon(project.icon_key, tint = listColor, size = 18.dp)
+                            } else {
+                                Box(Modifier.size(12.dp).clip(CircleShape).background(listColor))
+                            }
                         }
                         Text(row.title, style = centraidType("body"), color = centraidColor("text"), modifier = Modifier.weight(1f).padding(start = 12.dp))
                         Text(project.count, style = centraidType("body"), color = centraidColor("textSoft"))
