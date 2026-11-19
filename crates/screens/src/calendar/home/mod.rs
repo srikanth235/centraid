@@ -791,9 +791,9 @@ impl Screen for Home {
                         !denied && term.is_none(),
                     )),
                     chrome: Some(wire::AgendaChrome {
-                        // The menu sheet is titled for the app, the Calendars sheet for its list.
+                        // The menu sheet is titled "More", as every app's is; the Calendars sheet for its list.
                         more_title: if menu_up {
-                            words::app_title(locale)
+                            words::band_more(locale)
                         } else {
                             chrome::words_of(locale).more_title
                         },

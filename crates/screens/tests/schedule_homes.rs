@@ -1116,12 +1116,12 @@ fn more_is_rows_on_the_state_and_a_rows_key_does_the_rest() {
             .collect::<Vec<_>>(),
         ["What Calendar may read"]
     );
-    // THE HEADINGS RIDE ON THE FIRST ROW OF EACH GROUP, and only there (R-1128-6).
+    // THE SHEET'S TITLE IS "Calendars", so no row repeats it as a heading (R-1128-6).
     assert_eq!(
         rows.iter()
             .map(|row| row.section.as_str())
             .collect::<Vec<_>>(),
-        ["Calendars", "", ""]
+        ["", "", ""]
     );
     assert_eq!(
         rows.iter().map(|row| row.toggle).collect::<Vec<_>>(),

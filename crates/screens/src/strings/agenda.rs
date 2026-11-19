@@ -16,7 +16,7 @@ catalog! {
     plain block_title = ("Add a title to save.", "Add a title to save.");
     plain calendar_hidden = ("Hidden", "Hidden");
     plain calendar_shown = ("Shown", "Shown");
-    plain calendar_unnamed = ("Calendar", "Calendar");
+    plain calendar_unnamed = ("My calendar", "My calendar");
     plain cancel_event = ("Cancel event", "Cancel event");
     plain cancel_scope_body = ("Pick which events to cancel.", "Pick which events to cancel.");
     plain cancel_scope_title = ("Cancel a repeating event", "Cancel a repeating event");
@@ -107,6 +107,8 @@ catalog! {
     plain more_title = ("Calendars", "Calendars");
     plain new_event = ("New event", "New event");
     plain new_task = ("New task", "New task");
+    plain list_start_earlier = ("Start a day earlier", "Start a day earlier");
+    plain list_start_later = ("Start a day later", "Start a day later");
     plain next_day = ("Next day", "Next day");
     plain now = ("Now", "Now");
     plain no_calendar = ("No calendar", "No calendar");
@@ -124,7 +126,6 @@ catalog! {
     plain previous_day = ("Previous day", "Previous day");
     plain quick_add = ("Add", "Add");
     plain quick_discard = ("Discard", "Discard");
-    plain rail_calendars = ("Calendars", "Calendars");
     plain reads_fact_leaves = ("Leaves this phone", "Leaves this phone");
     plain reads_fact_leaves_value = ("nothing", "nothing");
     plain reads_fact_reads = ("Reads", "Reads");

@@ -41,6 +41,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -286,7 +287,15 @@ public fun EmptyStateView(
                 contentAlignment = Alignment.Center,
             ) { CentraidIcon(iconKey = glyph, tint = accent.text, size = 22.dp) }
         }
-        KitText(empty.headline, KitType.Section, Surface.ink, Modifier.semantics { heading() })
+        // CENTRED AND BALANCED, as the boards draw it: a headline that wraps shares its words
+        // between its lines, so no last word stands alone on a line of its own.
+        Text(
+            empty.headline,
+            style = kitTextStyle(KitType.Section).copy(lineBreak = LineBreak.Heading),
+            color = Surface.ink,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.semantics { heading() },
+        )
         if (empty.body.isNotEmpty()) {
             Text(empty.body, style = kitTextStyle(KitType.Row), color = Surface.body, textAlign = TextAlign.Center)
         }
