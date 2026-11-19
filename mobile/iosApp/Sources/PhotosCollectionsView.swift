@@ -290,7 +290,7 @@ private struct UtilitiesGroup: View {
             if card.hasRoute { open(card.route) }
         } label: {
             HStack(spacing: 12) {
-                CentraidIconView(iconKey: card.iconKey, tint: Theme.color("link", scheme), size: 22)
+                CentraidIconView(iconKey: card.iconKey, tint: AppAccent("photos").text, size: 22)
                     .frame(width: 26)
                 Text(card.title)
                     .centraidType("body")

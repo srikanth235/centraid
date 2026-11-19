@@ -687,6 +687,12 @@ impl Shelf {
             } else {
                 String::new()
             },
+            // A TRASH WEARS THE TRASH GLYPH (wording.md), as every app's does.
+            icon_key: if self.kind == wire::PhotosShelfKind::Trash {
+                "Trash".to_owned()
+            } else {
+                String::new()
+            },
             ..wire::EmptyState::default()
         }
     }

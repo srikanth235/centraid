@@ -41,6 +41,8 @@ import centraid.core.v1.PhotosShelfState
 import centraid.core.v1.Route
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.IconKey
+import dev.centraid.android.kit.PushedPage
+import dev.centraid.design.CentraidCatalog
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.LocalStatusActed
@@ -92,27 +94,32 @@ public fun PhotoShelfScreen(
     val chrome = state.chrome
     val select = { event: PhotosSelectionEvent -> onEvent(PhotosShelfEvent(selection = event)) }
 
+    // THE PUSHED PAGE every other shelf of the app is: the back chevron, the title inline beside it
+    // and the count under it, on the page's own ground, in Photos' colour.
+    PushedPage(
+        title = state.title,
+        parentTitle = CentraidCatalog.byId["photos"]?.name.orEmpty(),
+        onBack = onClose,
+        app = "photos",
+        meta = data?.count_label.orEmpty(),
+    ) {
     Column(
-        modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 16.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // THE TITLE AT 34 with its count under it, IN THE SAME ROW as the keys (#1173, round 9).
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                KitText(state.title, KitType.Title, Surface.ink, maxLines = 2)
-                if (!data?.count_label.isNullOrEmpty()) KitText(data?.count_label.orEmpty(), KitType.Meta, Surface.meta, maxLines = 1)
-            }
-            if (selecting) {
-                KitLink(
-                    label = chrome?.done_label.orEmpty(),
-                    onClick = { select(PhotosSelectionEvent(mode = PhotosSelectionEvent.ModeSet(selecting = false))) },
-                )
-            } else if (data != null && data.cells.isNotEmpty()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+        // THE SHELF'S VERBS in one row: Empty trash where the trash has photographs, then Select (or Done).
+        if (selecting || (data != null && data.cells.isNotEmpty())) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (selecting) {
+                    KitLink(
+                        label = chrome?.done_label.orEmpty(),
+                        onClick = { select(PhotosSelectionEvent(mode = PhotosSelectionEvent.ModeSet(selecting = false))) },
+                    )
+                } else if (data != null) {
                     val emptyTrash = data.empty_trash_label
                     if (emptyTrash != null) {
                         OutlineButton(
@@ -265,6 +272,7 @@ public fun PhotoShelfScreen(
         if (selecting && selection != null) {
             SelectionBar(state = state, onEvent = onEvent, select = select)
         }
+    }
     }
 
     state.album_choice?.takeIf { it.open_ }?.let { choice ->

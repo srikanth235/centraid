@@ -55,6 +55,7 @@ import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.ContentImage
 import dev.centraid.android.kit.KitLink
+import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.LocalBandClearance
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ReadStateView
@@ -229,7 +230,7 @@ private fun Section(title: String, toggleLabel: String, isFolded: Boolean, onFol
                 ) {
                     CentraidIcon(
                         iconKey = "ChevronDown",
-                        tint = centraidColor("link"),
+                        tint = appAccent("photos").text,
                         modifier = Modifier.rotate(turn),
                     )
                 }
@@ -341,7 +342,7 @@ private fun UtilitiesGroup(cards: List<PhotosCollectionCard>, onOpen: (Route) ->
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Box(Modifier.width(26.dp), contentAlignment = Alignment.Center) {
-                    CentraidIcon(iconKey = card.icon_key, tint = centraidColor("link"), size = 22.dp)
+                    CentraidIcon(iconKey = card.icon_key, tint = appAccent("photos").text, size = 22.dp)
                 }
                 Text(card.title, style = centraidType("body"), color = centraidColor("text"), modifier = Modifier.weight(1f))
                 if (card.count_label.isNotEmpty()) {
