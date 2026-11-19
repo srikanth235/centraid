@@ -25,7 +25,7 @@ use super::{routes, rows};
 use crate::catalog::load;
 use crate::kit::read::Page;
 use crate::kit::undo::Undo;
-use crate::kit::{export, menu, read};
+use crate::kit::{export, menu, read, reads_page};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, money as words, shared};
 
@@ -629,6 +629,13 @@ impl Home {
             retry: words::retry(locale),
             more_title: words::more_title(locale),
             more_rows: vec![
+                // WHAT MONEY MAY READ (owner, 2026-11-19), first, as Health's is.
+                more(
+                    reads_page::title(locale, &title),
+                    String::new(),
+                    "Shield",
+                    routes::reads(),
+                ),
                 more(
                     words::more_accounts(locale),
                     words::more_accounts_meta(locale),

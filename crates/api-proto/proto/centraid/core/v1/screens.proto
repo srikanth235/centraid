@@ -478,6 +478,7 @@ message ViewState {
     PairLaptopState pair_laptop = 1400;
     // ---- the kit (900-999) ----
     TrashView trash = 900;
+    ReadsView reads = 905;
     TransferView transfer = 901;
     EarlierView earlier = 903;
     EarlierPreviewView earlier_preview = 904;

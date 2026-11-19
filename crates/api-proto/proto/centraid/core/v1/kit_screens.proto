@@ -903,3 +903,26 @@ message PageNote {
   // "Try again", or empty when nothing can be done here.
   string action_label = 3;
 }
+
+// ---------------------------------------------------------------------------
+// The kit's reads page: "What <app> may read" (owner, 2026-11-19)
+// ---------------------------------------------------------------------------
+
+// ONE APP'S "WHAT <APP> MAY READ" (`<app>.reads`), drawn once by each shell from
+// `ViewState.reads`: what the app reads and what it writes, as finished words. Notes, Docs, Money and
+// People open it from their More sheet, as Calendar, Reminders and Health do.
+message ReadsView {
+  // The app this page belongs to, so the page wears its colour.
+  string app_id = 1;
+  // "What Notes may read".
+  string title = 2;
+  // The app the page was opened from, which the back control names.
+  string back_label = 3;
+  repeated ReadsFact facts = 4;
+}
+
+message ReadsFact {
+  // "Reads", "Writes".
+  string label = 1;
+  string detail = 2;
+}

@@ -39,6 +39,7 @@ pub mod export;
 pub mod fold;
 pub mod home;
 pub mod import;
+pub mod reads;
 pub mod recurring;
 pub mod rows;
 pub mod rules;
@@ -57,6 +58,8 @@ pub const RULES: &str = "money.rules";
 pub const IMPORT: &str = "money.import";
 /// The transactions in the trash (#1185).
 pub const TRASH: &str = "money.trash";
+/// "What Money may read": the kit's reads page, opened from More (owner, 2026-11-19).
+pub const READS: &str = "money.reads";
 /// Money's export of transactions as a spreadsheet file (#1185).
 pub const EXPORT: &str = "money.export";
 /// The earlier versions of a transaction (#1185).
@@ -78,6 +81,7 @@ pub fn registry() -> Registry {
         .with(RULES, rules::build)
         .with(IMPORT, import::build)
         .with(TRASH, trash::build)
+        .with(READS, reads::build)
         .with(EARLIER, earlier::build)
         .with(EXPORT, export::build)
 }
@@ -99,7 +103,8 @@ pub fn runtime() -> crate::Runtime {
 /// The routes Money's own screens hand to a shell inside a view state.
 pub mod routes {
     use super::{
-        ACCOUNTS, CATEGORIES, HOME, IMPORT, RECURRING, RULES, TARGET, TRANSACTION, TRASH, wire,
+        ACCOUNTS, CATEGORIES, HOME, IMPORT, READS, RECURRING, RULES, TARGET, TRANSACTION, TRASH,
+        wire,
     };
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
@@ -184,5 +189,11 @@ pub mod routes {
     #[must_use]
     pub fn trash() -> wire::Route {
         route(TRASH, wire::route::Args::Trash(wire::TrashRoute {}))
+    }
+
+    /// "What Money may read" (owner, 2026-11-19).
+    #[must_use]
+    pub fn reads() -> wire::Route {
+        crate::kit::reads_page::route(READS)
     }
 }

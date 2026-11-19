@@ -442,7 +442,7 @@ fn the_trash_deletes_forever_and_empties_in_the_shared_words() {
 }
 
 #[test]
-fn more_holds_the_trash_after_import() {
+fn more_holds_the_trash_after_import_and_reads_first() {
     let mut d = seeded();
     let home = home(&d);
     event(
@@ -463,6 +463,7 @@ fn more_holds_the_trash_after_import() {
     assert_eq!(
         labels,
         [
+            "What Money may read",
             "Accounts",
             "Rules",
             "Categories",

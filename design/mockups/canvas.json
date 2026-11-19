@@ -1436,18 +1436,66 @@
     "MoreMoney.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "3 · Money More, with Trash",
+      "title": "3 · Money More, with What Money may read and Trash",
       "w": 390,
       "x": 940,
       "y": 28360
     },
+    "MoreNotes.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "14 · Notes More, with What Notes may read",
+      "w": 390,
+      "x": 4250,
+      "y": 28360
+    },
+    "MoreDocs.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "15 · Docs More, with What Docs may read",
+      "w": 390,
+      "x": 4660,
+      "y": 28360
+    },
+    "ReadsPage.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "9 · What an app may read, a page of its own",
+      "w": 390,
+      "x": 4630,
+      "y": 29520
+    },
     "MoreMoneyDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "3 · Money More, with Trash · dark",
+      "title": "3 · Money More, with What Money may read and Trash · dark",
       "w": 390,
       "x": 940,
       "y": 28360
+    },
+    "MoreNotesDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "14 · Notes More, with What Notes may read · dark",
+      "w": 390,
+      "x": 4250,
+      "y": 28360
+    },
+    "MoreDocsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "15 · Docs More, with What Docs may read · dark",
+      "w": 390,
+      "x": 4660,
+      "y": 28360
+    },
+    "ReadsPageDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "9 · What an app may read, a page of its own · dark",
+      "w": 390,
+      "x": 4630,
+      "y": 29520
     },
     "NoteEditor.dc.html": {
       "h": 844,
@@ -4522,6 +4570,9 @@
     "MoreCalendar.dc.html",
     "MoreHealth.dc.html",
     "MoreMoney.dc.html",
+    "MoreNotes.dc.html",
+    "MoreDocs.dc.html",
+    "ReadsPage.dc.html",
     "UndoNotes.dc.html",
     "UndoPeople.dc.html",
     "UndoHealth.dc.html",

@@ -32,6 +32,7 @@ use crate::kit::act as kit_act;
 use crate::kit::export;
 use crate::kit::menu;
 use crate::kit::read::{self, Page};
+use crate::kit::reads_page;
 use crate::kit::search;
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
@@ -645,6 +646,15 @@ impl Screen for Home {
                 let back = words::app_title(locale);
                 let export = export::entry(locale, super::EXPORT);
                 vec![
+                    // WHAT PEOPLE MAY READ (owner, 2026-11-19), first, as Health's is; the
+                    // phone's address book is the Phone contacts row's, a different question.
+                    wire::PeopleMoreRow {
+                        key: "reads".to_owned(),
+                        label: reads_page::title(locale, &back),
+                        icon_key: "Shield".to_owned(),
+                        route: Some(routes::reads()),
+                        meta: String::new(),
+                    },
                     wire::PeopleMoreRow {
                         key: "lists".to_owned(),
                         label: crate::strings::people_lists::more_row(locale),

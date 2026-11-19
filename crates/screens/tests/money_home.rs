@@ -86,6 +86,7 @@ fn the_import_and_recurring_rows_are_routes_and_search_is_in_place() {
     assert_eq!(
         more,
         [
+            "money.reads",
             "money.accounts",
             "money.rules",
             "money.categories",

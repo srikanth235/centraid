@@ -66,6 +66,8 @@ pub const KEY_RECENT: &str = "recent";
 pub const KEY_TRASH_SHELF: &str = "trash_shelf";
 /// The More sheet's Export row (a route, so the shell pushes it).
 pub const KEY_EXPORT: &str = "export";
+/// The More sheet's "What Docs may read" row (a route, so the shell pushes it).
+pub const KEY_READS: &str = "reads";
 pub const KEY_UPLOAD: &str = "upload";
 pub const KEY_SCAN: &str = "scan";
 pub const KEY_TEXT: &str = "text";

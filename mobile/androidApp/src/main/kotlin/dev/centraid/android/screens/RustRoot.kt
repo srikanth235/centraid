@@ -41,6 +41,7 @@ import centraid.core.v1.ScreenEvent
 import dev.centraid.android.kit.AndroidHealth
 import dev.centraid.android.kit.EarlierPreviewScreen
 import dev.centraid.android.kit.EarlierScreen
+import dev.centraid.android.kit.ReadsScreen
 import dev.centraid.android.kit.TrashScreen
 import dev.centraid.android.kit.BackupCheckScreen
 import dev.centraid.android.kit.TransferScreen
@@ -500,6 +501,7 @@ internal class RustRoot(
         val detail = view.todo_detail
         val catchUp = view.todo_catch_up
         val trash = view.trash
+        val reads = view.reads
         val earlier = view.earlier
         val earlierPreview = view.earlier_preview
         val transfer = view.transfer
@@ -845,6 +847,8 @@ internal class RustRoot(
                 onEvent = { send(ScreenEvent(trash = it)) },
                 onBack = back,
             )
+            // "WHAT <APP> MAY READ" (owner, 2026-11-19): the kit's one reads page, from More.
+            reads != null -> ReadsScreen(view = reads, onBack = back)
             // EVERY RECORD'S EARLIER VERSIONS (#1185).
             earlier != null -> EarlierScreen(
                 view = earlier,

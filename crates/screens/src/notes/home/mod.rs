@@ -24,6 +24,7 @@ use crate::kit::act as kit_act;
 use crate::kit::export;
 use crate::kit::menu;
 use crate::kit::read::Page;
+use crate::kit::reads_page;
 use crate::kit::undo::Undo as Door;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, notes as words, shared};
@@ -660,6 +661,14 @@ impl Screen for Home {
                 let back = words::title(locale);
                 let export = export::entry(locale, super::EXPORT);
                 vec![
+                    // WHAT NOTES MAY READ (owner, 2026-11-19), first, as Health's is.
+                    wire::NotesMoreRow {
+                        key: "reads".to_owned(),
+                        label: reads_page::title(locale, &back),
+                        icon_key: "Shield".to_owned(),
+                        route: Some(routes::reads()),
+                        meta: String::new(),
+                    },
                     wire::NotesMoreRow {
                         key: "import".to_owned(),
                         label: words::more_import(locale),

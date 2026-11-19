@@ -34,7 +34,7 @@ Six rulings sit behind the rooms and are not re-decided per screen: trash, casin
 | Band, trailing | the search key, id `band-search` on both shells; tapped, the field takes the band's place at the foot, focused and just over the keyboard, with a ✕ that closes search and brings the band back. An app with no search draws no key | a bar under the title, a More row, a header glyph, a place in the plate |
 | Band, zoom | a view of the same things (Photos' Years · Months · All) is a segmented control in the band; away while selecting | a chip, a toggle in More, a second floating bar |
 | Band, places | two to four places, then More | a filter |
-| More | Trash, Import, Export, alternate views, "What X may read": machine rows | Search, Sort, a filter |
+| More | Trash, Import, Export, alternate views, "What X may read" (every app that reads other apps' items, first): machine rows | Search, Sort, a filter |
 
 An app has one home. Agenda was two homes of one app until round 10; Calendar (Calendar · Calendars · Invites) and Reminders (Reminders · More) are two apps with a home each, and Tasks is not an app of its own: the tasks are Reminders'.
 

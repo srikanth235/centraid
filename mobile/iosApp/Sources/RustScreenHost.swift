@@ -117,11 +117,13 @@ struct RustScreenView: View {
         case .photosHome?, .photosShelf?, .photosPicker?, .photosPlaces?, .photosLightbox?, .photosEditor?: "photos"
         case .lockerHome?, .lockerItem?, .lockerEditor?, .lockerExport?, .lockerImport?, .lockerLock?: "locker"
         case .moneyHome?, .moneyTransaction?, .moneyTarget?, .moneyRecurring?, .moneyAccounts?, .moneyRules?,
-             .moneyCategories?, .moneyImport?, .moneySearch?: "money"
+             .moneyCategories?, .moneyImport?: "money"
         case .docsDrive?, .docsDocument?, .docsEditor?: "docs"
         case .healthHome?, .healthMetric?, .healthWorkout?, .healthConnect?: "health"
         case .notesHome?, .notesEditor?: "notes"
         case .peopleHome?, .peoplePerson?, .peopleEditor?, .peopleLists?: "people"
+        // The kit's reads page wears the colour of the app it says it for.
+        case .reads(let reads)?: reads.appID
         default: ""
         }
     }
@@ -476,6 +478,9 @@ struct RustScreenView: View {
                 send: { store.send(instance, .trash($0)) },
                 onBack: pop
             )
+        // "WHAT <APP> MAY READ" (owner, 2026-11-19): the kit's one reads page, from More.
+        case .reads(let state)?:
+            CoreReadsView(state: state, onBack: pop)
         case .earlier(let state)?:
             CoreEarlierView(
                 state: state,

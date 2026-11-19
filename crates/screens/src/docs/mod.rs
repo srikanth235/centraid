@@ -41,6 +41,7 @@ pub mod editor;
 pub mod export;
 pub mod fold;
 pub mod folders;
+pub mod reads;
 pub mod rename;
 pub mod trash;
 
@@ -49,6 +50,8 @@ pub const DOCUMENT: &str = "docs.document";
 pub const EARLIER: &str = "docs.earlier";
 pub const EDITOR: &str = "docs.editor";
 pub const TRASH: &str = "docs.trash";
+/// "What Docs may read": the kit's reads page, opened from More (owner, 2026-11-19).
+pub const READS: &str = "docs.reads";
 /// Docs' export of its originals as one streamed archive (#1185).
 pub const EXPORT: &str = "docs.export";
 
@@ -61,6 +64,7 @@ pub fn registry() -> Registry {
         .with(EARLIER, earlier::build)
         .with(EDITOR, editor::build)
         .with(TRASH, trash::build)
+        .with(READS, reads::build)
         .with(EXPORT, export::build)
 }
 
@@ -92,7 +96,7 @@ pub(crate) fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Den
 
 /// The routes Docs' own screens hand to a shell inside a view state.
 pub mod routes {
-    use super::{DOCUMENT, DRIVE, EDITOR, TRASH, wire};
+    use super::{DOCUMENT, DRIVE, EDITOR, READS, TRASH, wire};
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
@@ -171,5 +175,11 @@ pub mod routes {
     #[must_use]
     pub fn trash() -> wire::Route {
         route(TRASH, wire::route::Args::Trash(wire::TrashRoute {}))
+    }
+
+    /// "What Docs may read" (owner, 2026-11-19).
+    #[must_use]
+    pub fn reads() -> wire::Route {
+        crate::kit::reads_page::route(READS)
     }
 }

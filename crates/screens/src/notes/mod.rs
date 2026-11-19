@@ -25,6 +25,7 @@ pub mod editor;
 pub mod export;
 pub mod fold;
 pub mod home;
+pub mod reads;
 pub(crate) mod rich;
 pub mod transfer;
 pub mod trash;
@@ -33,6 +34,8 @@ pub const HOME: &str = "notes.home";
 pub const EDITOR: &str = "notes.editor";
 pub const EARLIER: &str = "notes.earlier";
 pub const TRASH: &str = "notes.trash";
+/// "What Notes may read": the kit's reads page, opened from More (owner, 2026-11-19).
+pub const READS: &str = "notes.reads";
 pub const IMPORT: &str = "notes.import";
 pub const EXPORT: &str = "notes.export";
 
@@ -47,6 +50,7 @@ pub fn registry() -> Registry {
         .with(EDITOR, editor::build)
         .with(EARLIER, earlier::build)
         .with(TRASH, trash::build)
+        .with(READS, reads::build)
         .with(IMPORT, transfer::build_import)
         .with(EXPORT, export::build)
 }
@@ -82,7 +86,7 @@ pub(crate) fn denied(
 
 /// The routes Notes' own screens hand to a shell inside a view state.
 pub mod routes {
-    use super::{EDITOR, HOME, IMPORT, TRASH, wire};
+    use super::{EDITOR, HOME, IMPORT, READS, TRASH, wire};
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
@@ -209,5 +213,11 @@ pub mod routes {
     #[must_use]
     pub fn trash() -> wire::Route {
         route(TRASH, wire::route::Args::Trash(wire::TrashRoute {}))
+    }
+
+    /// "What Notes may read" (owner, 2026-11-19).
+    #[must_use]
+    pub fn reads() -> wire::Route {
+        crate::kit::reads_page::route(READS)
     }
 }

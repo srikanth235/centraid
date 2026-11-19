@@ -68,8 +68,8 @@ fn the_band_moves_in_place_and_the_tab_you_are_on_is_nothing() {
     band(&mut d, i, "more");
     assert_eq!(
         sheet_keys(state(&d, i)),
-        ["recent", "export", "trash_shelf"],
-        "More lists Recently added, Export and Trash; Followed only once a folder is followed"
+        ["reads", "recent", "export", "trash_shelf"],
+        "More lists What Docs may read, Recently added, Export and Trash; Followed only once a folder is followed"
     );
 }
 
