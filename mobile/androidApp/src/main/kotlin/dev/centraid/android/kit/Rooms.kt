@@ -37,6 +37,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.text.font.FontWeight
@@ -256,7 +257,20 @@ public fun AppPlace(
                         // THE SHELL'S LINE SITS ON THE BAND, never under it.
                         LocalShellLine.current?.invoke()
                     }
-                    Column(Modifier.fillMaxWidth().bandStrip()) {
+                    // A SCRIM under the floating pills when the content runs under them: a day's heading or the
+                    // next row's edge would otherwise show in the gaps between the pills as a stray digit or strip.
+                    val scrim = if (contentUnderBand) {
+                        Modifier.background(
+                            Brush.verticalGradient(
+                                0f to androidx.compose.ui.graphics.Color.Transparent,
+                                0.4f to Surface.page.copy(alpha = 0.92f),
+                                1f to Surface.page,
+                            ),
+                        )
+                    } else {
+                        Modifier
+                    }
+                    Column(Modifier.fillMaxWidth().then(scrim).bandStrip()) {
                         if (search != null && search.field.open_) {
                             // OPEN SEARCH TAKES THE BAND'S PLACE, and stays there while the keyboard
                             // goes (its search key) so the foot is never a blank.
