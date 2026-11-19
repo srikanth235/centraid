@@ -154,14 +154,19 @@ public fun KitText(
     modifier: Modifier = Modifier,
     maxLines: Int = Int.MAX_VALUE,
 ) {
-    Text(
-        text = if (rung.caps) text.uppercase() else text,
-        style = kitTextStyle(rung),
-        color = color,
-        modifier = modifier,
-        maxLines = maxLines,
-        overflow = TextOverflow.Ellipsis,
-    )
+    // THE WORDS OF A BADGE HOLD AT 1.3 (#1202): a capsule of capitals is wider than its row at the
+    // largest text ("COMPROMISED" was cut). The capsule's padding is dp, so only the word holds.
+    val draw: @Composable () -> Unit = {
+        Text(
+            text = if (rung.caps) text.uppercase() else text,
+            style = kitTextStyle(rung),
+            color = color,
+            modifier = modifier,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+    if (rung == KitType.Badge) HoldGridText(draw) else draw()
 }
 
 /** A white card on a card page: the card radius, no shadow, no border. */

@@ -16,9 +16,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -234,7 +236,20 @@ public fun MetaLine(
     } else {
         Column(modifier) {
             (plain.map { it to false } + marked.map { it to true }).take(lines).forEach { (part, accented) ->
-                Text(part, style = style, color = if (accented) accent else soft, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // A PART IS NEVER CUT (#1202): one word (an address, a username, an email) has nowhere
+                // to wrap and shrinks to fit its line; a part of several words wraps by word.
+                val ink = if (accented) accent else soft
+                if (part.contains(' ')) {
+                    Text(part, style = style, color = ink, maxLines = 3)
+                } else {
+                    BasicText(
+                        part,
+                        style = style.copy(color = ink),
+                        maxLines = 1,
+                        softWrap = false,
+                        autoSize = TextAutoSize.StepBased(minFontSize = style.fontSize * 0.5f, maxFontSize = style.fontSize),
+                    )
+                }
             }
         }
     }
