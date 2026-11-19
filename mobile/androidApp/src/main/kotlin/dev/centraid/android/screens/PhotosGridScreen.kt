@@ -540,7 +540,8 @@ private fun FreeUpSpaceRowView(row: PhotosFreeUpRow, onFree: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            CentraidIcon(iconKey = "Gauge", tint = centraidColor("text"))
+            // THE MARK IS THE SHEET'S OWN TILE, as Export's and Trash's are.
+            dev.centraid.android.kit.KitTile(iconKey = "Gauge")
             Column {
                 Text(text = row.title, style = centraidType("body"), color = centraidColor("text"))
                 Text(text = row.meta, style = centraidType("small"), color = centraidColor("textSoft"))
