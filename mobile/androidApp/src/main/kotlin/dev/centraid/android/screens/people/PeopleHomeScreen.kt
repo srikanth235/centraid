@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
@@ -280,7 +281,7 @@ private fun RosterList(
         LazyColumn(
             state = listState,
             modifier = Modifier.testTag("people-list"),
-            contentPadding = PaddingValues(end = if (showIndex) 22.dp else 0.dp),
+            contentPadding = PaddingValues(end = if (showIndex) 30.dp else 0.dp),
         ) {
             roster.my_card?.let { card -> item(key = "my-card") { MyCardRow(card, onOpen) } }
             roster.reconnect?.let { line ->
@@ -333,8 +334,10 @@ private fun IndexRail(letters: List<PeopleIndexLetter>, modifier: Modifier, onJu
         onJump(letters[at].section_key)
     }
     Column(
+        // THE TOUCH AREA is a 48dp-wide strip along the whole index (#1202); a touch picks the nearest
+        // letter by its height, so a finger never has to land on a 13sp glyph.
         modifier
-            .padding(end = 2.dp)
+            .width(48.dp)
             .onSizeChanged { height = it.height.coerceAtLeast(1) }
             .pointerInput(letters) { detectTapGestures { offset -> pick(offset.y) } }
             .pointerInput(letters) { detectVerticalDragGestures { change, _ -> pick(change.position.y) } }
@@ -532,10 +535,11 @@ private fun PersonRow(row: PeopleRow, onOpen: (Route) -> Unit, onEvent: (PeopleH
         Box(Modifier.weight(1f)) {
             CentraidRow(
                 title = row.name,
-                meta = listOf(row.role, row.meta).filter { it.isNotEmpty() }.joinToString(" · "),
-                chips = row.chips.map { chip ->
-                    StatusChip(label = chip.label, tone = StatusChip.Tone.fromValue(chip.tone.value) ?: StatusChip.Tone.TONE_UNSPECIFIED)
-                },
+                // A REMINDER CHIP (Overdue, Birthday) reads in the meta line in the app's colour, as on iOS;
+                // a state chip (Not yet, Owes) stays a chip.
+                metaParts = listOf(row.role, row.meta),
+                metaAccented = chipsOf(row).filter { it.isReminder() }.map { it.label },
+                chips = chipsOf(row).filterNot { it.isReminder() },
                 a11y = row.accessibility_label,
                 testTag = "people-row-${row.party_id}",
                 onTap = { row.route?.let(onOpen) },
@@ -550,6 +554,13 @@ private fun PersonRow(row: PeopleRow, onOpen: (Route) -> Unit, onEvent: (PeopleH
         ) { onEvent(PeopleHomeEvent(star = PeopleHomeEvent.StarToggled(row.party_id))) }
     }
 }
+
+private fun chipsOf(row: PeopleRow): List<StatusChip> = row.chips.map { chip ->
+    StatusChip(label = chip.label, tone = StatusChip.Tone.fromValue(chip.tone.value) ?: StatusChip.Tone.TONE_UNSPECIFIED)
+}
+
+/** A neutral chip is a reminder the roster says in words, not a state badge. */
+private fun StatusChip.isReminder(): Boolean = tone == StatusChip.Tone.TONE_NEUTRAL || tone == StatusChip.Tone.TONE_UNSPECIFIED
 
 /** The avatar: initials on the person's hue. Decorative; the row speaks the name. */
 @Composable
