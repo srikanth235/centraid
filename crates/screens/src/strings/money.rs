@@ -23,11 +23,12 @@ catalog! {
     plain account_remove_number_confirm = ("Remove", "Remove");
     plain account_remove_number_title = ("Remove the bank number?", "Remove the bank number?");
     plain action_archive = ("Archive", "Archive");
-    plain action_category = ("Set category", "Set category");
+    plain action_category = ("Set a category", "Set a category");
     plain action_merge = ("Merge into another", "Merge into another");
-    plain action_name = ("Set name", "Set name");
+    plain action_name = ("Rename", "Rename");
     plain action_restore = ("Restore", "Restore");
     plain action_unlink = ("Not a transfer", "Not a transfer");
+    plain action_with = ("Set who it was with", "Set who it was with");
     plain activity_empty = ("Nothing this month.", "Nothing this month.");
     plain add_account = ("Add account", "Add account");
     plain all_accounts = ("All accounts", "All accounts");

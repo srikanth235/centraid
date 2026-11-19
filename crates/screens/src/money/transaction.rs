@@ -657,7 +657,7 @@ impl Transaction {
         ];
         actions.push(action(
             ACTION_WITH,
-            link_words::section_with(locale),
+            words::action_with(locale),
             "Users",
             !voided,
             false,
