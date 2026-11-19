@@ -119,8 +119,9 @@ struct RoomTitle: View {
                 .lineLimit(1)
             HStack(spacing: 4) {
                 if slot.subtitle.tappable {
-                    Button(action: slot.onTap) { words }
+                    Button(action: slot.onTap) { words.modifier(SubtitleHitArea()) }
                         .buttonStyle(.plain)
+                        .padding(.vertical, -SubtitleHitArea.growth)
                         .accessibilityLabel(slot.subtitle.spoken)
                         .accessibilityIdentifier("room-subtitle")
                 } else {

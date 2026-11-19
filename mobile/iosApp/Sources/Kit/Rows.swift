@@ -607,9 +607,9 @@ struct MetaLine: View {
     private func partText(_ text: String, accented: Bool) -> some View {
         let oneWord = !text.contains(" ")
         if accented {
-            Text(text).foregroundStyle(accent.text).kitLineLimit(1).minimumScaleFactor(oneWord ? 0.5 : 1)
+            Text(text).foregroundStyle(accent.text).kitLineLimit(oneWord ? 1 : 2, wide: 3).minimumScaleFactor(oneWord ? 0.5 : 1)
         } else {
-            Text(text).kitLineLimit(1).minimumScaleFactor(oneWord ? 0.5 : 1)
+            Text(text).kitLineLimit(oneWord ? 1 : 2, wide: 3).minimumScaleFactor(oneWord ? 0.5 : 1)
         }
     }
 
