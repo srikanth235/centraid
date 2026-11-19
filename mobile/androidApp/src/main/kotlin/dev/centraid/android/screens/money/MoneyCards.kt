@@ -346,7 +346,7 @@ internal fun MoneyBarsChart(bars: MoneyBars, onPick: (Int) -> Unit) {
 private fun BarsBody(bars: MoneyBars, onPick: (Int) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         // THE AXIS ROW KEEPS ITS ROOM at the largest text (#1202): its words (held at 1.3) were cut at the foot.
-        Box(Modifier.fillMaxWidth().height(ChartHeight + (if (rememberLargestText()) 36.dp else 22.dp))) {
+        Box(Modifier.fillMaxWidth().height(ChartHeight + (if (rememberLargestText()) 46.dp else 22.dp))) {
             Row(
                 Modifier.fillMaxWidth().fillMaxHeight(),
                 horizontalArrangement = Arrangement.spacedBy(if (bars.bars.size > 8) 3.dp else 10.dp),
