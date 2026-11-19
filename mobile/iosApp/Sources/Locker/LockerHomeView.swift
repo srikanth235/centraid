@@ -101,6 +101,7 @@ struct LockerHomeView: View {
                     SheetRow(
                         iconKey: row.iconKey,
                         label: row.label,
+                        detail: row.meta,
                         identifier: "locker-more-\(row.key)",
                         onTap: { more(row) }
                     )
