@@ -127,8 +127,21 @@ fn unquote(value: &str) -> &str {
 fn front_value(front: &str, key: &str) -> Option<String> {
     front.lines().find_map(|line| {
         let (name, value) = line.split_once(':')?;
-        (name.trim().eq_ignore_ascii_case(key)).then(|| unquote(value).to_owned())
+        (name.trim().eq_ignore_ascii_case(key)).then(|| decoded(value))
     })
+}
+
+/// A front-matter value: a double-quoted JSON string (what an export writes, so a title with
+/// quotes, line breaks or backslashes comes back whole), else the plain or quoted text an
+/// Obsidian file carries.
+fn decoded(value: &str) -> String {
+    let value = value.trim();
+    if value.starts_with('"')
+        && let Ok(text) = serde_json::from_str::<String>(value)
+    {
+        return text;
+    }
+    unquote(value).to_owned()
 }
 
 /// `tags: [a, b]`, `tags: a, b` and a list of `- a` lines under `tags:`.
@@ -264,12 +277,14 @@ const RESERVED: [&str; 22] = [
 ];
 
 /// A control character, or an invisible one that reorders or hides text (the bidirectional marks,
-/// the zero-width spaces, the byte-order mark).
+/// the zero-width space, the byte-order mark). The zero-width JOINER and NON-JOINER are not among
+/// them: they are part of how a family emoji is one glyph and how Persian and Indic words are
+/// spelled, and no file system refuses them.
 fn is_unprintable(c: char) -> bool {
     c.is_control()
         || matches!(
             c,
-            '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2064}'
+            '\u{200B}' | '\u{200E}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2064}'
                 | '\u{2066}'..='\u{2069}' | '\u{FEFF}'
         )
 }
@@ -388,14 +403,25 @@ pub fn zip(entries: &[Entry]) -> Vec<u8> {
 #[must_use]
 pub fn markdown_of(title: &str, body: &str, tags: &[String]) -> String {
     let mut out = String::new();
-    if !tags.is_empty() {
-        out.push_str("---\ntags: [");
-        out.push_str(&tags.join(", "));
-        out.push_str("]\n---\n\n");
+    // The title is the file's name, and a name loses what a file system refuses and is cut short:
+    // when it would not read back as the title, the file says the title itself.
+    let named = file_stem(title) != title.trim();
+    if named || !tags.is_empty() {
+        out.push_str("---\n");
+        if named {
+            out.push_str("title: ");
+            out.push_str(&serde_json::to_string(title).unwrap_or_default());
+            out.push('\n');
+        }
+        if !tags.is_empty() {
+            out.push_str("tags: [");
+            out.push_str(&tags.join(", "));
+            out.push_str("]\n");
+        }
+        out.push_str("---\n\n");
     }
     out.push_str(body.trim_end());
     out.push('\n');
-    let _ = title;
     out
 }
 
@@ -470,6 +496,11 @@ mod tests {
         );
         assert!(bytes.windows(5).any(|w| w == b"hello"));
         assert_eq!(file_stem("a/b: c?"), "a-b- c-");
+        // A family emoji and a Persian word keep their joiners: the name is the same text.
+        let family = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}";
+        assert_eq!(file_stem(family), family);
+        let persian = "\u{645}\u{6CC}\u{200C}\u{62E}\u{648}\u{627}\u{647}\u{645}";
+        assert_eq!(file_stem(persian), persian);
         assert_eq!(file_stem("  "), "Untitled");
     }
 
@@ -514,5 +545,29 @@ mod tests {
             wide.len()
         );
         assert_eq!(file_name("  "), "Untitled");
+    }
+
+    #[test]
+    fn a_title_a_file_name_cannot_hold_is_written_in_the_file_and_read_back_whole() {
+        for title in [
+            "a/b: \"c\" <d>|e",
+            "Line\none",
+            "x".repeat(300).as_str(),
+            "plain",
+        ] {
+            let text = markdown_of(title, "Body", &[]);
+            let parsed = parse(&SourceFile {
+                path: format!("{}.md", file_stem(title)),
+                text,
+            })
+            .expect("a note");
+            assert_eq!(parsed.title, title);
+            assert_eq!(parsed.body, "Body");
+        }
+        assert_eq!(
+            markdown_of("plain", "Body", &[]),
+            "Body\n",
+            "a plain title adds nothing"
+        );
     }
 }
