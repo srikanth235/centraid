@@ -22,6 +22,7 @@ struct AgendaAttachmentsView: View {
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.appAccent) private var accent
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var margin: CGFloat { padded ? CentraidGeometry.pageMargin : 0 }
 
@@ -58,7 +59,7 @@ struct AgendaAttachmentsView: View {
                 }
                 .padding(.horizontal, margin)
             }
-            HStack(spacing: 8) {
+            KitReflowRow(spacing: 8) {
                 addButton(
                     label: section.addPhotoLabel,
                     iconKey: section.addPhotoIconKey,
@@ -73,7 +74,6 @@ struct AgendaAttachmentsView: View {
                 ) {
                     event { $0.addFile = .init() }
                 }
-                Spacer(minLength: 0)
             }
             .padding(.horizontal, margin)
             .padding(.top, 12)
@@ -123,11 +123,11 @@ struct AgendaAttachmentsView: View {
                         Text(tile.title)
                             .centraidType("body")
                             .foregroundStyle(Theme.color("text", scheme))
-                            .lineLimit(1)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
                         Text(tile.meta)
                             .centraidType("annotLabel")
                             .foregroundStyle(Theme.color("textSoft", scheme))
-                            .lineLimit(1)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
                     }
                     Spacer(minLength: 0)
                 }
@@ -182,13 +182,16 @@ struct AgendaAttachmentsView: View {
                 Text(label)
                     .centraidType("smallStrong")
                     .foregroundStyle(Theme.color(section.busy ? "textDisabled" : "text", scheme))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             // THE BOARD'S PILL: ink on a plain capsule with a hairline, not a link.
-            .padding(.horizontal, 14)
-            .frame(minHeight: CentraidGeometry.targetMinCoarse)
-            .background(Capsule().fill(Surface.card))
-            .overlay(Capsule().strokeBorder(Surface.line, lineWidth: CentraidGeometry.hairline))
-            .contentShape(Capsule())
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil, minHeight: CentraidGeometry.targetMinCoarse)
+            .background(KitPillShape().fill(Surface.card))
+            .overlay(KitPillShape().strokeBorder(Surface.line, lineWidth: CentraidGeometry.hairline))
+            .contentShape(KitPillShape())
         }
         .buttonStyle(.plain)
         .disabled(section.busy)

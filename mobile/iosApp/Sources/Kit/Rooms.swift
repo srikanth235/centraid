@@ -858,19 +858,23 @@ struct KitInkButton: View {
                 Text(label)
                     .centraidType("sheetKey")
                     .foregroundStyle(ink)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
                 .frame(maxWidth: .infinity, minHeight: sheetButtonHeight)
                 .background {
                     if !destructive {
-                        Capsule().fill(enabled ? accent.fill : Surface.fill)
+                        KitPillShape().fill(enabled ? accent.fill : Surface.fill)
                     }
                 }
                 .overlay {
                     if destructive {
-                        Capsule().strokeBorder(enabled ? StateColor.red.text : Surface.border, lineWidth: 1.5)
+                        KitPillShape().strokeBorder(enabled ? StateColor.red.text : Surface.border, lineWidth: 1.5)
                     }
                 }
-                .contentShape(Capsule())
+                .contentShape(KitPillShape())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(identifier.isEmpty ? (destructive ? "kit-destructive" : "kit-primary") : identifier)

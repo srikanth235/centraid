@@ -526,16 +526,17 @@ struct KitOutlineButton: View {
                     .kitType(.row)
                     .fontWeight(.semibold)
                     .foregroundStyle(Theme.color(ink, scheme))
-                    .lineLimit(inRow ? 1 : nil)
-                    .minimumScaleFactor(inRow ? 0.8 : 1)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.horizontal, inRow ? 8 : 16)
+            .padding(.horizontal, inRow ? 8 : 18)
+            .padding(.vertical, 8)
             .frame(maxWidth: stacked ? .infinity : nil, minHeight: CentraidGeometry.targetMinCoarse)
             // THE ACTION ROW'S KEYS ARE WHITE PILLS (AgendaEvent): inside a `KitChoiceRow` the
             // outline sits on a card fill, so the three read as keys on the page.
-            .background(inRow ? Surface.card : Color.clear, in: Capsule())
+            .background(inRow ? Surface.card : Color.clear, in: KitPillShape())
             .overlay(
-                Capsule()
+                KitPillShape()
                     .strokeBorder(
                         enabled ? (tone == "text" ? Surface.border : StateColor.red.text) : Surface.fill,
                         lineWidth: CentraidGeometry.hairline
@@ -575,12 +576,19 @@ extension EnvironmentValues {
 
 /// A SHORT SET OF ACTIONS ON ONE LINE (#1173): the event page's Open in Maps, Edit and Cancel.
 /// Every button takes an equal share of the width, in the stack's full-width look, with 10
-/// between them.
+/// between them; at an accessibility text size they stack.
 struct KitChoiceRow<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        HStack(spacing: 10) {
+        // AT ACCESSIBILITY SIZES THE KEYS STACK, full width, one under another (#1202): three
+        // words side by side broke mid-word ("Mov/e to/tras/h").
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 10))
+            : AnyLayout(HStackLayout(spacing: 10))
+        layout {
             content()
         }
         .frame(maxWidth: .infinity)
@@ -605,5 +613,26 @@ struct KitChoiceStack<Content: View>: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .environment(\.inChoiceStack, true)
+    }
+}
+
+/// A ROW OF KEYS THAT STACKS AT ACCESSIBILITY TEXT SIZES (#1202): Share, Move to trash and the
+/// like sit side by side while they fit, and one under another, each the full width, once the text
+/// is large enough that a word would break across lines. The keys keep their own look (no white
+/// pill), unlike `KitChoiceRow`.
+struct KitReflowRow<Content: View>: View {
+    var spacing: CGFloat = 12
+    @ViewBuilder let content: () -> Content
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        let stacked = dynamicTypeSize.isAccessibilitySize
+        let layout = stacked ? AnyLayout(VStackLayout(spacing: spacing)) : AnyLayout(HStackLayout(spacing: spacing))
+        layout {
+            content()
+        }
+        .frame(maxWidth: stacked ? .infinity : nil, alignment: .leading)
+        .environment(\.inChoiceStack, stacked)
     }
 }
