@@ -24,6 +24,7 @@ package centraid.core.v1;
 import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
 import "centraid/core/v1/route.proto";
+import "centraid/core/v1/shell_search_screens.proto";
 
 // ---------------------------------------------------------------------------
 // The shared parts.
@@ -181,6 +182,9 @@ message HealthHomeState {
   PageState page = 18;
   // Where the empty state's Connect goes (nothing connected).
   optional Route connect = 19;
+  // THE BAND'S SEARCH (owner, 2026-11-19): a field at the foot, in place, as in every app; its
+  // answer replaces the tab's content and the header's filter and the range chips.
+  HealthSearchField search = 20;
 
   enum Sheet {
     SHEET_UNSPECIFIED = 0;
@@ -213,7 +217,27 @@ message HealthHomeChrome {
   // by name; workouts by kind, date, place or note). EMPTY while nothing is connected or the
   // read is denied.
   string search_placeholder = 9;
-  optional Route search_route = 10;
+  // 10 was `search_route`: the search key pushed `health.search`. Health searches in place now, as
+  // the other apps do (owner, 2026-11-19).
+  reserved 10;
+  reserved "search_route";
+  // The close key's words.
+  string search_close = 11;
+}
+
+// The search field and its answer: metrics found by name, workouts by kind, date, place or note,
+// in Health's own group, and the Ask row scoped to Health.
+message HealthSearchField {
+  bool open = 1;
+  string term = 2;
+  // The answer for `term` while the page is ready; unset when nothing matched, failed or was
+  // refused (the page says which), while nothing is typed and while the field is closed. Its
+  // `corrected` line and Ask row are the field's.
+  optional HomeSearchData results = 3;
+  // What the field does while nothing is typed; empty once there is a term.
+  string hint = 4;
+  // The Ask row for a term that matched nothing (an answer with matches carries it in `results`).
+  optional SearchAsk ask = 5;
 }
 
 message HealthHomeData {
@@ -320,6 +344,10 @@ message HealthHomeEvent {
     // The header's filter menu: a pick, or its Clear row (every kind).
     FilterMenuPicked filter_menu_picked = 9;
     FilterMenuCleared filter_menu_cleared = 10;
+    // ---- the band's search ----
+    SearchOpened search_opened = 11;
+    SearchTermChanged search_term = 12;
+    SearchClosed search_closed = 13;
   }
   reserved 4;
   reserved "kind_picked";
@@ -344,6 +372,14 @@ message HealthHomeEvent {
   }
 
   message StopConfirmed {}
+
+  message SearchOpened {}
+
+  message SearchTermChanged {
+    string term = 1;
+  }
+
+  message SearchClosed {}
 }
 
 // ---------------------------------------------------------------------------

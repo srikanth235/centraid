@@ -129,7 +129,7 @@ internal fun HomeSearchScreen(
                     onEvent(HomeSearchEvent(suggestion = HomeSearchEvent.SuggestionPicked(term = term)))
                 }
             } else {
-                state.data_?.let { found -> Groups(found, onEvent, onOpen) }
+                state.data_?.let { found -> SearchGroups(found, { onEvent(HomeSearchEvent(committed = HomeSearchEvent.Committed())) }, onOpen) }
             }
         }
         // THE FIELD IS AT THE FOOT, the glass pill and its close key; the close key clears the
@@ -177,15 +177,19 @@ private fun Resting(resting: HomeSearchResting, onPick: (String) -> Unit) {
     }
 }
 
+/**
+ * THE ANSWER AS GROUPS, one per app, then the Ask row. Home's search and Health's in-place search
+ * draw it; [onCommit] is what acting on a row does first (Home remembers the term).
+ */
 @Composable
-private fun Groups(
+internal fun SearchGroups(
     data: HomeSearchData,
-    onEvent: (HomeSearchEvent) -> Unit,
+    onCommit: () -> Unit,
     onOpen: (Route) -> Unit,
 ) {
     // ACTING ON THE ANSWER remembers the term, then opens the page the row carried.
     val open: (Route?) -> Unit = { route ->
-        onEvent(HomeSearchEvent(committed = HomeSearchEvent.Committed()))
+        onCommit()
         route?.let(onOpen)
     }
     LazyColumn(Modifier.fillMaxSize()) {

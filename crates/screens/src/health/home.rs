@@ -38,6 +38,7 @@ use crate::kit::export;
 use crate::kit::menu;
 use crate::kit::read::{self, Page, Reading};
 use crate::screen::{Ctx, Screen};
+use crate::shell::search::Search;
 use crate::strings::{Locale, fill, health as words, shared};
 
 /// Workouts asked for per page, and the most one window holds (the core's page
@@ -90,6 +91,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         status: None,
         known_connected: false,
         recheck: false,
+        search: Find::default(),
     }))
 }
 
@@ -121,6 +123,68 @@ struct Home {
     /// The vault just became connected while this phone's habit says it is not
     /// (Connect kept a new one): read the habit again so a pass can run.
     recheck: bool,
+    /// The band's search field and its answer; open, it replaces the tab's content.
+    search: Find,
+}
+
+/// THE BAND'S SEARCH, IN PLACE (owner, 2026-11-19): the vault's index asked in Health's own scope
+/// (metrics by name, workouts by kind, date, place or note) by the shared search engine.
+struct Find {
+    open: bool,
+    engine: Search,
+}
+
+impl Default for Find {
+    fn default() -> Self {
+        Self {
+            open: false,
+            engine: Search::health(),
+        }
+    }
+}
+
+impl Find {
+    fn opened(&mut self) {
+        self.open = true;
+    }
+
+    fn typed(&mut self, ctx: &Ctx, term: String) {
+        self.open = true;
+        self.engine.typed(term, ctx);
+    }
+
+    fn closed(&mut self) {
+        *self = Self::default();
+    }
+
+    fn reload(&mut self, ctx: &Ctx) {
+        if self.open && self.engine.active() {
+            self.engine.refresh(ctx);
+        }
+    }
+
+    /// The field's state: the typed term and, once the read is ready, the answer; while nothing
+    /// is typed, the hint.
+    fn field(&self, locale: Locale) -> wire::HealthSearchField {
+        let mut field = wire::HealthSearchField {
+            open: self.open,
+            ..wire::HealthSearchField::default()
+        };
+        if !self.open {
+            return field;
+        }
+        field.term = self.engine.term().to_owned();
+        if self.engine.active() {
+            // A TERM THAT MATCHED NOTHING still offers the Ask row, under the page's empty sentence.
+            match self.engine.answer(locale) {
+                Some(found) if found.groups.is_empty() => field.ask = found.ask,
+                found => field.results = found,
+            }
+        } else {
+            field.hint = words::search_resting(locale);
+        }
+        field
+    }
 }
 
 impl Home {
@@ -149,6 +213,7 @@ impl Home {
         };
         let held = std::mem::replace(&mut self.page, Page::loading());
         self.page = held.after(reading, ctx.locale(), |loaded| self.is_empty(ctx, loaded));
+        self.search.reload(ctx);
     }
 
     /// What the tab asks: the tab, the trends range and the workouts kind. A different question
@@ -960,6 +1025,9 @@ impl Screen for Home {
                 Some(H::SheetClosed(_)) => self.sheet = Sheet::None,
                 Some(H::More(more)) => self.more(&more.key),
                 Some(H::Stop(_)) => effects.extend(self.stop(ctx)),
+                Some(H::SearchOpened(_)) => self.search.opened(),
+                Some(H::SearchTerm(typed)) => self.search.typed(ctx, typed.term),
+                Some(H::SearchClosed(_)) => self.search.closed(),
                 None => {}
             },
             Some(other) => {
@@ -988,20 +1056,34 @@ impl Screen for Home {
         };
         let connected = loaded.is_some_and(|loaded| loaded.today.connected);
         let store = Store::of(ctx).name(locale);
+        // OVER AN OPEN SEARCH the tab's content, the filter and the range chips give way to the
+        // answer, and the page's read is the search's.
+        let searching = drawing && connected && self.search.open;
         let content = self
             .page
             .data()
+            .filter(|_| !searching)
             .map(|loaded| Content::Data(Box::new(self.data(ctx, loaded))));
+        let page = if searching {
+            self.search.engine.wire_page(locale)
+        } else {
+            self.page.wire(
+                locale,
+                |denial| denied(locale, denial),
+                || self.empty_state(ctx),
+            )
+        };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::HealthHome(Box::new(
                 wire::HealthHomeState {
                     destination: self.destination as i32,
                     content,
-                    page: Some(self.page.wire(
-                        locale,
-                        |denial| denied(locale, denial),
-                        || self.empty_state(ctx),
-                    )),
+                    page: Some(page),
+                    search: Some(if searching {
+                        self.search.field(locale)
+                    } else {
+                        wire::HealthSearchField::default()
+                    }),
                     connect: Some(routes::connect(&words::app_title(locale))),
                     sheet: self.sheet as i32,
                     band: if drawing {
@@ -1029,10 +1111,11 @@ impl Screen for Home {
                         } else {
                             String::new()
                         },
-                        search_route: (drawing && connected).then(super::routes::search),
+                        search_close: shared::kit_close_search(locale),
                     }),
                     filter_menu: if drawing
                         && connected
+                        && !searching
                         && self.destination == wire::HealthDestination::Workouts
                     {
                         loaded.and_then(|loaded| self.filter_menu(ctx, loaded))
@@ -1041,6 +1124,7 @@ impl Screen for Home {
                     },
                     segments: if drawing
                         && connected
+                        && !searching
                         && self.destination == wire::HealthDestination::Trends
                     {
                         self.segments(locale)

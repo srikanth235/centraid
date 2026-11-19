@@ -15,7 +15,7 @@
 //!
 //! The Ask row under an answer hands the term to the assistant by a route, scoped
 //! to every app (Home's search asks across all of them). An app's own search that runs on this
-//! screen (Health's) asks in its own scope, as every other app's search does (#1185).
+//! engine (Health's, in place on its home) asks in its own scope, as every other app's search does (#1185).
 //!
 //! ## Recent
 //!
@@ -39,7 +39,7 @@ use crate::strings::{Locale, fill, home as words, shared};
 /// How many recent terms are kept.
 pub const RECENT_MAX: usize = 4;
 
-struct Search {
+pub(crate) struct Search {
     term: String,
     recent: Vec<String>,
     /// No term: the resting page, which reads nothing.
@@ -49,7 +49,7 @@ struct Search {
     /// The term `page` answers: another term is another question, so the last term's hits are
     /// never shown for it.
     answered: String,
-    /// The one app this search answers for (`health.search`), or none for Home's.
+    /// The one app this search answers for (Health's, in place), or none for Home's.
     scope: Option<&'static str>,
 }
 
@@ -57,13 +57,6 @@ struct Search {
 #[must_use]
 pub fn build(_route: &wire::Route) -> Option<Box<dyn Screen>> {
     Some(Box::new(Search::over(None)))
-}
-
-/// The registry factory for Health's search page (#1173, item 11): the same search with the
-/// Health group alone, and the metrics found by name.
-#[must_use]
-pub fn build_health(_route: &wire::Route) -> Option<Box<dyn Screen>> {
-    Some(Box::new(Search::over(Some("health"))))
 }
 
 /// The month a word names (`nov`, `November`), 1 to 12.
@@ -207,6 +200,66 @@ impl Search {
         self.term.trim()
     }
 
+    /// Health's search, which runs in place on its home (owner, 2026-11-19).
+    pub(crate) fn health() -> Self {
+        Self::over(Some("health"))
+    }
+
+    /// Is a term being answered? A resting search reads nothing.
+    pub(crate) fn active(&self) -> bool {
+        !self.resting
+    }
+
+    /// The trimmed term asked.
+    pub(crate) fn term(&self) -> &str {
+        self.asked()
+    }
+
+    /// The member typed: another term is another question.
+    pub(crate) fn typed(&mut self, term: String, ctx: &Ctx) {
+        self.set_term(term, ctx);
+    }
+
+    /// Read the term again (the data changed).
+    pub(crate) fn refresh(&mut self, ctx: &Ctx) {
+        self.reload(ctx);
+    }
+
+    /// The answer as the page draws it, once the read is ready.
+    pub(crate) fn answer(&self, locale: Locale) -> Option<wire::HomeSearchData> {
+        if self.resting {
+            return None;
+        }
+        self.page.data().map(|found| self.folded(locale, found))
+    }
+
+    /// THE READ over this search: a resting search is ready (it reads nothing), a term that
+    /// matched nothing is the page's own empty state with the answer kept for the Ask row, and a
+    /// failure or the gate is the search's own.
+    pub(crate) fn wire_page(&self, locale: Locale) -> wire::PageState {
+        if self.resting {
+            return Page::<()>::Ready {
+                data: (),
+                note: None,
+            }
+            .wire(
+                locale,
+                |_| wire::Denied::default(),
+                wire::EmptyState::default,
+            );
+        }
+        let nothing = self
+            .page
+            .data()
+            .is_some_and(|found| self.folded(locale, found).groups.is_empty());
+        self.page.wire_keeping(
+            locale,
+            |denial| denied(locale, denial),
+            nothing,
+            || no_match(locale, self.asked(), self.scope),
+        )
+    }
+
     /// The answer as the page draws it. The Ask is scoped to the app whose search this is; Home's
     /// stays unscoped.
     fn folded(&self, locale: Locale, found: &wire::VaultSearch) -> wire::HomeSearchData {
@@ -336,33 +389,11 @@ impl Screen for Search {
                 .data()
                 .map(|found| Content::Data(Box::new(self.folded(locale, found))))
         };
-        let nothing = !self.resting
-            && self
-                .page
-                .data()
-                .is_some_and(|found| self.folded(locale, found).groups.is_empty());
-        let page = if self.resting {
-            Page::<()>::Ready {
-                data: (),
-                note: None,
-            }
-            .wire(
-                locale,
-                |_| wire::Denied::default(),
-                wire::EmptyState::default,
-            )
-        } else {
-            self.page.wire_keeping(
-                locale,
-                |denial| denied(locale, denial),
-                nothing,
-                || no_match(locale, self.asked()),
-            )
-        };
+        let page = self.wire_page(locale);
         wire::ViewState {
             kind: Some(wire::view_state::Kind::HomeSearch(Box::new(
                 wire::HomeSearchState {
-                    chrome: Some(chrome(locale, self.scope)),
+                    chrome: Some(chrome(locale)),
                     term: self.term.clone(),
                     content,
                     page: Some(page),
@@ -374,16 +405,10 @@ impl Screen for Search {
     }
 }
 
-fn chrome(locale: Locale, scope: Option<&str>) -> wire::HomeSearchChrome {
+fn chrome(locale: Locale) -> wire::HomeSearchChrome {
     wire::HomeSearchChrome {
-        placeholder: match scope {
-            Some("health") => words::health_search_placeholder(locale),
-            _ => words::home_search_placeholder(locale),
-        },
-        scope_label: match scope {
-            Some(app) => app_label(locale, app),
-            None => words::home_search_scope_label(locale),
-        },
+        placeholder: words::home_search_placeholder(locale),
+        scope_label: words::home_search_scope_label(locale),
         cancel: shared::kit_cancel(locale),
         close_label: shared::kit_close_search(locale),
         loading: words::home_search_loading(locale),
@@ -583,10 +608,14 @@ fn fold(locale: Locale, term: &str, found: &wire::VaultSearch) -> wire::HomeSear
 }
 
 /// What a term that matched nothing says: the page's own empty state.
-fn no_match(locale: Locale, term: &str) -> wire::EmptyState {
+fn no_match(locale: Locale, term: &str, scope: Option<&str>) -> wire::EmptyState {
+    let body = match scope {
+        Some("health") => crate::strings::health::search_nothing(locale),
+        _ => words::home_search_no_match_body(locale),
+    };
     wire::EmptyState {
         headline: words::home_search_no_match_headline(locale),
-        body: fill(&words::home_search_no_match_body(locale), &[("term", term)]),
+        body: fill(&body, &[("term", term)]),
         ..Default::default()
     }
 }
@@ -766,7 +795,7 @@ mod tests {
         assert_eq!(answer.groups[0].app_id, "notes");
         let only = data(vec![hit("thing", "c1", "Cabin planning", "nowhere")]);
         assert!(only.groups.is_empty());
-        assert_eq!(no_match(Locale::En, "cabin").headline, "No matches");
+        assert_eq!(no_match(Locale::En, "cabin", None).headline, "No matches");
     }
 
     #[test]
@@ -817,7 +846,7 @@ mod tests {
         assert_eq!(ask.question, "Find cabin");
         assert_eq!(answer.ask_route, Some(super::routes::ask("Find cabin", "")));
         assert_eq!(
-            no_match(Locale::En, "cabin").body,
+            no_match(Locale::En, "cabin", None).body,
             "Nothing in this vault matches “cabin”."
         );
     }

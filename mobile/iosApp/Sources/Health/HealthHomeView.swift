@@ -24,78 +24,163 @@ struct HealthHomeView: View {
     }
 
     var body: some View {
-        let state = state
         let chrome = state.chrome
-        // A refused read draws the gate with no band and no search: reading the state to choose
-        // the header's pieces is a layout call, the shared view still draws the gate.
-        let isRefused: Bool = { if case .refused? = state.page.state { return true } else { return false } }()
         AppPlace(
             app: "health",
             title: chrome.title,
             trailing: nil,
-            // A DOOR, NOT A FIELD (R-CHROME-2, #1173): Health's search is a page of its own,
-            // reached from the band's search key; the field is never open here.
-            search: isRefused || chrome.searchPlaceholder.isEmpty ? nil : SearchSlot(
-                field: KitSearchField(),
-                placeholder: chrome.searchPlaceholder,
-                onOpen: { open(chrome.searchRoute) },
-                onTerm: { _ in },
-                onClose: {}
-            ),
+            // THE BAND'S SEARCH KEY opens the field in place (R-CHROME-2): its term and answer are Rust's.
+            search: isRefused || chrome.searchPlaceholder.isEmpty ? nil : searchSlot,
             filter: filter,
             subtitle: subtitle,
             showsBand: !isRefused && !state.band.isEmpty
         ) {
-            AppBand(
-                app: "health",
-                tabs: state.band.map { tab in
-                    BandView(
-                        label: tab.label,
-                        event: Data(tab.key.utf8),
-                        iconKey: tab.iconKey,
-                        selected: tab.current,
-                        key: tab.key
-                    )
-                },
-                onSelect: { picked in
-                    let key = String(decoding: picked, as: UTF8.self)
-                    send(event { $0.band = .with { $0.key = key } })
-                },
-                onHome: onHome
-            )
+            band
         } content: {
-            VStack(spacing: 0) {
-                // THE RANGE CHIPS stay above the page whether it is ready or empty (Trends), so
-                // an empty period can be left.
-                if !state.segments.isEmpty {
-                    segments(state.segments)
-                        .padding(.horizontal, CentraidGeometry.pageMargin)
-                        .padding(.top, 8)
-                        .padding(.bottom, 8)
-                }
-                PageReadStateView(
-                    page: state.page,
-                    onRetry: { send(event { $0.refreshed = .init() }) },
-                    // NOT CONNECTED (the page's empty state): its one action pushes Connect.
-                    onEmptyAction: { open(state.connect) }
-                ) {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            page(state.data, state: state)
-                        }
-                        .padding(.horizontal, CentraidGeometry.pageMargin)
-                        .padding(.top, 8)
-                        .padding(.bottom, 24)
-                    }
-                    .refreshable { send(event { $0.refreshed = .init() }) }
-                    .accessibilityIdentifier("health-home-list")
-                }
-                StatusLineView(status: state.status, identifier: "health-status-action")
-            }
+            pageContent
         }
-        .sheet(isPresented: healthSheetBinding(sheetIsOpen(state)) { send(event { $0.sheetClosed = .init() }) }) {
+        .sheet(isPresented: sheetBinding) {
             sheetContent(state)
         }
+    }
+
+    // The body's parts live apart: one expression holding all of them was more than the Swift
+    // type checker could solve ("failed to produce diagnostic").
+
+    /// A refused read draws the gate with no band and no search: reading the state to choose the
+    /// header's pieces is a layout call, the shared view still draws the gate.
+    private var isRefused: Bool {
+        if case .refused? = state.page.state { return true }
+        return false
+    }
+
+    private var sheetBinding: Binding<Bool> {
+        healthSheetBinding(sheetIsOpen(state)) { send(event { $0.sheetClosed = .init() }) }
+    }
+
+    private var band: AppBand {
+        AppBand(
+            app: "health",
+            tabs: state.band.map { tab in
+                BandView(
+                    label: tab.label,
+                    event: Data(tab.key.utf8),
+                    iconKey: tab.iconKey,
+                    selected: tab.current,
+                    key: tab.key
+                )
+            },
+            onSelect: { picked in
+                let key = String(decoding: picked, as: UTF8.self)
+                send(event { $0.band = .with { $0.key = key } })
+            },
+            onHome: onHome
+        )
+    }
+
+    /// A term that found nothing still offers the Ask row under the empty sentence.
+    private func emptyExtra() -> AnyView {
+        if state.search.open, state.search.hasAsk {
+            return AnyView(SearchAskRow(ask: state.search.ask))
+        }
+        return AnyView(EmptyView())
+    }
+
+    @ViewBuilder
+    private var homeList: some View {
+        if state.search.open {
+            searchResults
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    page(state.data, state: state)
+                }
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
+            }
+            .refreshable { send(event { $0.refreshed = .init() }) }
+            .accessibilityIdentifier("health-home-list")
+        }
+    }
+
+    private var pageContent: some View {
+        VStack(spacing: 0) {
+            // THE RANGE CHIPS stay above the page whether it is ready or empty (Trends), so
+            // an empty period can be left.
+            if !state.segments.isEmpty {
+                segments(state.segments)
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .padding(.top, 8)
+                    .padding(.bottom, 8)
+            }
+            PageReadStateView(
+                page: state.page,
+                onRetry: { send(event { $0.refreshed = .init() }) },
+                // NOT CONNECTED (the page's empty state): its one action pushes Connect.
+                onEmptyAction: connectAction,
+                emptyExtra: emptyExtra
+            ) {
+                homeList
+            }
+            StatusLineView(status: state.status, identifier: "health-status-action")
+        }
+    }
+
+    /// The empty state's one action (Connect); an open search has none of its own.
+    private var connectAction: (() -> Void)? {
+        state.search.open ? nil : { open(state.connect) }
+    }
+
+    /// The field as Rust holds it: open or closed, and the term typed so far.
+    private var searchSlot: SearchSlot {
+        var field = KitSearchField()
+        field.open = state.search.open
+        field.term = state.search.term
+        return SearchSlot(
+            field: field,
+            placeholder: state.chrome.searchPlaceholder,
+            closeLabel: state.chrome.searchClose,
+            onOpen: { send(event { $0.searchOpened = .init() }) },
+            onTerm: { term in send(event { $0.searchTerm = .with { $0.term = term } }) },
+            onClose: { send(event { $0.searchClosed = .init() }) }
+        )
+    }
+
+    /// THE ANSWER over an open search: the hint while nothing is typed, then Health's group
+    /// (metrics by name, workouts; each routes to its page) and the Ask row.
+    private var searchResults: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                if state.search.hasResults {
+                    let found = state.search.results
+                    if !found.corrected.isEmpty {
+                        Text(found.corrected)
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.meta)
+                            .padding(.horizontal, CentraidGeometry.pageMargin + 2)
+                            .padding(.top, 8)
+                    }
+                    ForEach(found.groups, id: \.appID) { group in
+                        GroupHeader(group: group)
+                        ForEach(group.rows, id: \.id) { row in
+                            HitRow(row: row, appId: group.appID) { if row.hasRoute { open(row.route) } }
+                        }
+                    }
+                    if found.hasAsk { SearchAskRow(ask: found.ask) }
+                } else if !state.search.hint.isEmpty {
+                    Text(state.search.hint)
+                        .kitType(.meta)
+                        .foregroundStyle(Surface.meta)
+                        .padding(.horizontal, CentraidGeometry.pageMargin + 2)
+                        .padding(.top, 8)
+                        .accessibilityIdentifier("health-search-hint")
+                }
+            }
+            .padding(.bottom, 16)
+        }
+        .scrollDismissesKeyboard(.immediately)
+        .accessibilityIdentifier("health-search-results")
     }
 
     /// THE SUMMARY'S SUBTITLE: the day and where it was read from, Rust's words, plain.

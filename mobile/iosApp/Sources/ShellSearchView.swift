@@ -172,7 +172,7 @@ private struct RestingView: View {
 }
 
 /// One app's head (#1173): its name in the app's own colour, its count at the far edge in meta.
-private struct GroupHeader: View {
+struct GroupHeader: View {
     let group: Centraid_Core_V1_HomeSearchGroup
 
     var body: some View {
@@ -197,8 +197,8 @@ private struct GroupHeader: View {
     }
 }
 
-/// One hit (#1173): the app's glyph on a tile in its colour, the title, and the kind under it.
-private struct HitRow: View {
+/// One hit (#1173; Health's in-place search draws it too): the app's glyph on a tile in its colour, the title, and the kind under it.
+struct HitRow: View {
     let row: Centraid_Core_V1_HomeSearchRow
     let appId: String
     let onTap: () -> Void

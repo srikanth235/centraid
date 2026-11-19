@@ -153,6 +153,8 @@ catalog! {
     plain reads_refused_value = ("{type}: change it in Health Connect", "{type}: change it in Health Connect");
     plain reads_title = ("What Health may read", "What Health may read");
     plain retry = ("Try again", "Try again");
+    plain search_nothing = ("Nothing in Health matches “{term}”.", "Nothing in Health matches “{term}”.");
+    plain search_resting = ("Search by metric, workout kind or date.", "Search by metric, workout kind or date.");
     plain section_this_week = ("This week", "This week");
     plain show_more = ("Show more", "Show more");
     plain span_hours = ("{h} h {m} min", "{h} h {m} min");

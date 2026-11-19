@@ -53,7 +53,6 @@ pub const HOME: &str = "health.home";
 pub const METRIC: &str = "health.metric";
 pub const WORKOUT: &str = "health.workout";
 pub const CONNECT: &str = "health.connect";
-pub const SEARCH: &str = "health.search";
 /// The workouts in the trash (#1185).
 pub const TRASH: &str = "health.trash";
 /// The earlier versions of a workout (#1185).
@@ -75,7 +74,6 @@ pub fn registry() -> Registry {
         .with(TRASH, trash::build)
         .with(EARLIER, earlier::build)
         .with(EXPORT, export::build)
-        .with(SEARCH, crate::shell::search::build_health)
         .merge(glance::registry())
 }
 
@@ -272,15 +270,6 @@ pub mod routes {
             wire::route::Args::HealthHome(wire::HealthHomeRoute {
                 destination: destination as i32,
             }),
-        )
-    }
-
-    /// Health's search page: the same search as Home's, over Health alone.
-    #[must_use]
-    pub fn search() -> wire::Route {
-        route(
-            super::SEARCH,
-            wire::route::Args::HomeSearch(wire::HomeSearchRoute {}),
         )
     }
 
