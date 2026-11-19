@@ -968,6 +968,17 @@ mod tests {
     }
 
     #[test]
+    fn the_today_and_scheduled_tiles_hold_white_text_at_four_and_a_half_to_one() {
+        // Reminders draws the Today tile in `blue` and the Scheduled tile in `raspberry`,
+        // each with white text on it.
+        for name in ["blue", "raspberry"] {
+            let fill = committed().list[name].clone();
+            let ratio = contrast_ratio("#FFFFFF", &fill).expect("hex pair");
+            assert!(ratio >= TEXT_CONTRAST, "{name} is {ratio:.2}:1 under white");
+        }
+    }
+
+    #[test]
     fn the_logbook_tile_holds_white_text_at_four_and_a_half_to_one() {
         // Reminders draws the Logbook tile in `graphite` with white text on it.
         let graphite = committed().list["graphite"].clone();
