@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -62,6 +63,7 @@ import dev.centraid.android.theme.centraidType
  * gateway's terminal; NEEDS_WORDS: the door to the words (`words_label`, the
  * intent `WordsTapped`). [onDone] pops the page once Rust says it is `finished`.
  */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun PairLaptopPage(
     state: PairLaptopState,
@@ -119,14 +121,17 @@ internal fun PairLaptopPage(
                         modifier = Modifier.clearAndSetSemantics { },
                     )
                 }
-                state.safety_groups.chunked(4).forEach { row ->
-                    Row(
-                        Modifier.clearAndSetSemantics { },
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        row.forEach { group ->
-                            Text(group, style = centraidType("title"), color = centraidColor("text"), maxLines = 1)
-                        }
+                // WRAPS, NEVER SHORTENS (#1202): up to four groups to a row (PairCheck), and a flow
+                // that moves whole groups to the next row when the width runs out, so at the largest
+                // text every group is whole and the number can be compared digit by digit.
+                FlowRow(
+                    Modifier.clearAndSetSemantics { },
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    maxItemsInEachRow = 4,
+                ) {
+                    state.safety_groups.forEach { group ->
+                        Text(group, style = centraidType("title"), color = centraidColor("text"), softWrap = false)
                     }
                 }
             }
