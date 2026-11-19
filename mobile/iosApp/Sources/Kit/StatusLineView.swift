@@ -186,7 +186,7 @@ struct ProgressStatusLine: View {
                         content
                         ScrollView { content }
                     }
-                    .frame(maxHeight: 220)
+                    .frame(maxHeight: 150)
                 } else {
                     content
                 }
