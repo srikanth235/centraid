@@ -140,3 +140,56 @@ fn an_export_saves_a_vcf_through_the_os_save_sheet() {
             .is_some_and(|s| s.sentence == "Export saved")
     );
 }
+
+/// THE PICK CARRIES THE VCARD CEILING and files a shell left out are said (#1202).
+#[test]
+fn card_files_the_shell_left_out_are_counted_beside_the_plan() {
+    let mut d = driver();
+    let i = d.push("people", routes::import("People"));
+    d.effects.clear();
+    tap(&mut d, i, "files");
+    let Some(wire::effect::Kind::PickBytes(pick)) = d
+        .effects
+        .last()
+        .and_then(|e| e.effect.as_ref())
+        .and_then(|e| e.kind.clone())
+    else {
+        panic!("a pick was asked for");
+    };
+    assert_eq!(pick.max_bytes, 20 * 1024 * 1024);
+    d.answer_effect(wire::effect_result::Outcome::BytesPicked(
+        wire::BytesPicked {
+            files: vec![wire::PickedBytes {
+                name: "people.vcf".to_owned(),
+                content: FILE.as_bytes().to_vec(),
+                ..Default::default()
+            }],
+            skipped: vec!["huge.vcf".to_owned()],
+            ..Default::default()
+        },
+    ));
+    let view = state(d.view(i)).clone();
+    assert!(
+        view.rows
+            .iter()
+            .any(|r| r.key == "left_out" && r.value == "1"),
+        "{:?}",
+        view.rows
+    );
+    // Everything left out: nothing to import, and the count stands alone.
+    tap(&mut d, i, "again");
+    d.answer_effect(wire::effect_result::Outcome::BytesPicked(
+        wire::BytesPicked {
+            skipped: vec!["a.vcf".to_owned(), "b.vcf".to_owned()],
+            ..Default::default()
+        },
+    ));
+    let view = state(d.view(i)).clone();
+    assert_eq!(
+        view.rows
+            .iter()
+            .map(|r| (r.key.as_str(), r.value.as_str()))
+            .collect::<Vec<_>>(),
+        [("left_out", "2")]
+    );
+}
