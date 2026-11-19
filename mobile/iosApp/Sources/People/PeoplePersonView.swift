@@ -338,9 +338,17 @@ private struct PeoplePersonBody: View {
     @ViewBuilder
     private var heroActions: some View {
         if !person.hero.isEmpty {
-            HStack(alignment: .top, spacing: 14) {
+            // AT THE LARGEST TEXT THE KEYS STACK, key then its word (#1202): four columns left each
+            // word a few letters ("mes...", "log t...").
+            let across = largestText
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                : AnyLayout(HStackLayout(alignment: .top, spacing: 14))
+            across {
                 ForEach(person.hero, id: \.key) { action in
-                    VStack(spacing: 4) {
+                    let perKey = largestText
+                        ? AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+                        : AnyLayout(VStackLayout(spacing: 4))
+                    perKey {
                         Button {
                             send(PeopleEvents.person { $0.hero = .with { $0.key = action.key } })
                         } label: {
@@ -371,7 +379,8 @@ private struct PeoplePersonBody: View {
                     }
                 }
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: largestText ? .leading : .center)
+            .padding(.horizontal, largestText ? CentraidGeometry.pageMargin : 0)
             .padding(.bottom, 8)
         }
     }

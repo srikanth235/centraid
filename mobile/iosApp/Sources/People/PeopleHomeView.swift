@@ -477,10 +477,16 @@ private struct PeopleReconnectLine: View {
 
     @Environment(\.appAccent) private var accent
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
+        // THE TOUCH VERB UNDER THE SENTENCE AT ACCESSIBILITY SIZES (#1202): beside it the
+        // sentence was a column too narrow for "reconnect".
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 12))
         Button(action: onTap) {
-            HStack(spacing: 12) {
+            layout {
                 CentraidIconView(iconKey: "Activity", tint: accent.text, size: 20)
                 Text(line.text)
                     .kitType(.row)
@@ -533,6 +539,7 @@ private struct PeopleRosterRowView: View {
     let open: (Centraid_Core_V1_Route) -> Void
 
     @Environment(\.appAccent) private var accent
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private func isReminder(_ chip: Centraid_Core_V1_StatusChip) -> Bool {
         switch chip.tone {
@@ -551,7 +558,12 @@ private struct PeopleRosterRowView: View {
     var body: some View {
         HStack(spacing: 0) {
             Button { open(row.route) } label: {
-                HStack(spacing: 12) {
+                // AT ACCESSIBILITY SIZES THE AVATAR SITS ABOVE THE WORDS (#1202): the scaled
+                // avatar beside them left a few letters of the name.
+                let rowLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                    : AnyLayout(HStackLayout(spacing: 12))
+                rowLayout {
                     PeopleAvatarView(avatar: row.avatar, size: 40)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(row.name)
@@ -562,7 +574,7 @@ private struct PeopleRosterRowView: View {
                             .kitType(.meta)
                             .foregroundStyle(Surface.meta)
                     }
-                    Spacer(minLength: 8)
+                    if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
                     ForEach(Array(row.chips.filter { !isReminder($0) }.enumerated()), id: \.offset) { _, chip in
                         StatusChipView(chip)
                     }

@@ -604,11 +604,25 @@ struct WordsFrame<Content: View, Footer: View>: View {
     @ViewBuilder let content: () -> Content
     @ViewBuilder let footer: () -> Footer
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// THE ANSWERS SCROLL WITH THE PAGE AT ACCESSIBILITY SIZES (#1202): pinned, three full-width
+    /// keys took most of the screen and left a sliver for the words, so the sentence was cut mid-line
+    /// and "Pair" and the code field could not be reached. Under the content they are always
+    /// reachable by scrolling.
+    private var footerScrolls: Bool { dynamicTypeSize.isAccessibilitySize }
+
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     content()
+                    if footerScrolls {
+                        VStack(spacing: 12) {
+                            footer()
+                        }
+                        .padding(.top, 8)
+                    }
                 }
                 .padding(.horizontal, CentraidGeometry.pageMargin)
                 .padding(.top, 12)
@@ -640,11 +654,13 @@ struct WordsFrame<Content: View, Footer: View>: View {
             }
             .hardTopScrollEdge()
             .scrollDismissesKeyboard(dismissesKeyboard ? .interactively : .automatic)
-            VStack(spacing: 12) {
-                footer()
+            if !footerScrolls {
+                VStack(spacing: 12) {
+                    footer()
+                }
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.vertical, 12)
             }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.vertical, 12)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Surface.page.ignoresSafeArea())

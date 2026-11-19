@@ -44,7 +44,7 @@ struct PairLaptopPageView: View {
                     tint: AppAccent.shell.text,
                     size: 28
                 )
-                .frame(width: 64, height: 64)
+                .kitScaledSquare(64, relativeTo: .title)
                 .background(AppAccent.shell.fill.opacity(0.14), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme), style: .continuous))
                 .accessibilityHidden(true)
                 WordsHead(title: state.title, lead: state.body, centered: true)
