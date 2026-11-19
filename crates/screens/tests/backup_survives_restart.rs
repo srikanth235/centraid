@@ -211,3 +211,96 @@ fn a_paired_phone_is_still_paired_and_still_backs_up_after_the_process_dies() {
     assert_eq!(deleted.len(), 1, "{:?}", forgotten.writes);
     assert!(deleted[0].starts_with(&format!("gateway-token.{identity}.")));
 }
+
+#[test]
+fn work_queued_before_the_process_dies_is_still_queued_and_goes_out_after_the_restart() {
+    let gateway = gateway();
+    let dir = scratch();
+    let id = lay_down(&dir, "a", "Home");
+    let mut phone = launched(&dir, &id, FakeShell::default());
+    let core = phone.shelf.core_of(&id).expect("the vault is open");
+    pair(&mut phone, &gateway.payload());
+    let first = drain(&core);
+    assert!(first.confirmed_parts > 0, "{first:?}");
+
+    // A note is written and the process dies before any backup carried it.
+    core.command(
+        "note.create",
+        &serde_json::json!({"title": "Queued", "body": "Written before the process died."}),
+        "queued-before-the-restart",
+    )
+    .expect("a note is written");
+    let shell = phone.shell.clone();
+    drop(core);
+    drop(phone);
+
+    // The relaunched phone is still paired and still owes that note: the next backup sends it.
+    let phone = launched(&dir, &id, shell);
+    let core = phone.shelf.core_of(&id).expect("the vault is open");
+    assert!(!waiting_to_pair_again(&core));
+    let after = drain(&core);
+    assert!(after.confirmed_parts > 0, "{after:?}");
+    // And nothing is left owed: a further pass has nothing new to send.
+    let again = drain(&core);
+    assert_eq!(again.confirmed_parts, 0, "{again:?}");
+}
+
+#[test]
+fn after_the_first_backup_the_same_phone_shows_its_24_words() {
+    let gateway = gateway();
+    let dir = scratch();
+    let id = lay_down(&dir, "a", "Home");
+    let mut phone = launched(&dir, &id, FakeShell::default());
+    // The words this phone made: kept on the device beside the seed the vault opened with.
+    let mut words = vec!["abandon"; 23];
+    words.push("art");
+    phone.shell.device.insert(
+        centraid_screens::custody::secrets::LOCAL_WORDS.to_owned(),
+        words.join(" "),
+    );
+    phone.driver.serve(&mut phone.shell);
+    let core = phone.shelf.core_of(&id).expect("the vault is open");
+    pair(&mut phone, &gateway.payload());
+    let first = drain(&core);
+    assert!(first.confirmed_parts > 0, "{first:?}");
+
+    // THE MEMBER OPENS THE WORDS from the same running phone, after the first backup.
+    let page = phone
+        .driver
+        .push("home", centraid_screens::custody::routes::show());
+    phone.driver.serve(&mut phone.shell);
+    // The screen asked for the owner check; other effects of the launch and the pairing may be
+    // waiting in front of it, and the shell answers the one that was asked.
+    let at = phone
+        .driver
+        .effects
+        .iter()
+        .position(|request| {
+            request.instance == page
+                && matches!(
+                    request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+                    Some(wire::effect::Kind::OwnerCheck(_))
+                )
+        })
+        .expect("the words page asks the owner check");
+    let asked = phone.driver.effects.remove(at);
+    phone.driver.effects.insert(0, asked);
+    phone
+        .driver
+        .answer_effect(wire::effect_result::Outcome::OwnerChecked(
+            wire::OwnerChecked {
+                available: true,
+                biometry: wire::Biometry::Face as i32,
+                outcome: wire::owner_checked::Outcome::Succeeded as i32,
+            },
+        ));
+    phone.driver.serve(&mut phone.shell);
+    let Some(wire::view_state::Kind::WordsShow(state)) = &phone.driver.view(page).kind else {
+        panic!("not words.show: {:?}", phone.driver.view(page).kind);
+    };
+    assert_eq!(state.phase, wire::words_show_state::Phase::Show as i32);
+    assert!(state.secure);
+    assert_eq!(state.words.len(), 24);
+    assert_eq!(state.words[0].word, "abandon");
+    assert_eq!(state.words[23].word, "art");
+}

@@ -181,6 +181,50 @@ fn a_reminder_is_held_done_from_its_button_undone_and_deleted() {
 }
 
 #[test]
+fn a_timed_reminder_is_scheduled_for_its_time_and_an_early_reminder_adds_a_second_alert() {
+    let (mut d, service, _shell) = rig();
+    clear_tasks(&d);
+    let tomorrow = day(&d, 1);
+    let at_time = |lead: i64, title: &str| act::reminders::AddTask {
+        title: title.to_owned(),
+        due: Field::Is(format!("{tomorrow}T09:00")),
+        remind_before_min: Field::Is(lead),
+        ..Default::default()
+    };
+    // No early reminder: one alert, at the time itself.
+    add(&d, at_time(0, "On time"));
+    changed(&mut d, service);
+    let set = latest(&d);
+    assert_eq!(set.all.len(), 1, "{:?}", set.all);
+    assert_eq!(set.all[0].fire_local, format!("{tomorrow}T09:00"));
+    assert!(set.all[0].fire_at_ms > 0);
+
+    // An early reminder ADDS an earlier alert: the one at the time stays.
+    clear_tasks(&d);
+    add(&d, at_time(15, "Ahead"));
+    changed(&mut d, service);
+    let set = latest(&d);
+    let mut fires: Vec<&str> = set.all.iter().map(|n| n.fire_local.as_str()).collect();
+    fires.sort_unstable();
+    assert_eq!(
+        fires,
+        [
+            format!("{tomorrow}T08:45").as_str(),
+            format!("{tomorrow}T09:00").as_str()
+        ],
+        "{:?}",
+        set.all
+    );
+    let early = set.all.iter().find(|n| n.fire_local.ends_with("08:45"));
+    let late = set.all.iter().find(|n| n.fire_local.ends_with("09:00"));
+    assert_eq!(
+        late.map(|n| n.fire_at_ms - early.map_or(0, |e| e.fire_at_ms)),
+        Some(15 * 60 * 1000),
+        "the two alerts are fifteen minutes apart"
+    );
+}
+
+#[test]
 fn tomorrow_and_snooze_move_a_task_and_undo_puts_it_back() {
     let (mut d, service, mut shell) = rig();
     clear_tasks(&d);
