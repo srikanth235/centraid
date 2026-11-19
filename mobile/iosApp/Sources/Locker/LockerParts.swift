@@ -174,8 +174,22 @@ struct LockerRowView: View {
     let onTap: () -> Void
 
     @Environment(\.appAccent) private var accent
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// THE BADGES AND THE STAR (#1202): at the end of the row while it has the room, under the
+    /// words at accessibility sizes, where beside them they cut the name to a few letters.
+    private var marks: some View {
+        HStack(spacing: 8) {
+            ForEach(Array(row.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
+            if row.starred {
+                // THE STAR WEARS THE APP'S COLOUR: amber only ever means a state.
+                CentraidIconView(iconKey: "Star", tint: accent.text, size: 14)
+            }
+        }
+    }
 
     var body: some View {
+        let stacked = dynamicTypeSize.isAccessibilitySize
         Button(action: onTap) {
             HStack(spacing: 12) {
                 LockerTypeChip(letters: row.typeChip)
@@ -189,12 +203,12 @@ struct LockerRowView: View {
                             .kitType(.meta)
                             .foregroundStyle(Surface.meta)
                     }
+                    if stacked, !row.chips.isEmpty || row.starred { marks.padding(.top, 2) }
                 }
-                Spacer(minLength: 8)
-                ForEach(Array(row.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
-                if row.starred {
-                    // THE STAR WEARS THE APP'S COLOUR: amber only ever means a state.
-                    CentraidIconView(iconKey: "Star", tint: accent.text, size: 14)
+                .frame(maxWidth: stacked ? .infinity : nil, alignment: .leading)
+                if !stacked {
+                    Spacer(minLength: 8)
+                    marks
                 }
             }
             .padding(.horizontal, 14)
@@ -223,7 +237,7 @@ struct LockerTypeChip: View {
         Text(letters)
             .kitType(side > 40 ? .title : .badge)
             .foregroundStyle(Color.white)
-            .frame(width: side, height: side)
+            .kitScaledSquare(side, relativeTo: side > 40 ? .largeTitle : .caption2)
             .background(accent.fill, in: RoundedRectangle(cornerRadius: side * CentraidGeometry.iconChipRadiusRatio, style: .continuous))
             .accessibilityHidden(true)
     }
@@ -401,7 +415,7 @@ struct LockerHeroTile: View {
         Text(letter)
             .kitType(.title)
             .foregroundStyle(Color.white)
-            .frame(width: side, height: side)
+            .kitScaledSquare(side, relativeTo: .largeTitle)
             .background(Surface.tile, in: RoundedRectangle(cornerRadius: side * CentraidGeometry.iconChipRadiusRatio, style: .continuous))
             .accessibilityHidden(true)
     }

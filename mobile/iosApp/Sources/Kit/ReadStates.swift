@@ -118,7 +118,13 @@ struct PageReadStateView<Skeleton: View, Content: View>: View {
                 .padding(CentraidGeometry.pageMargin)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            view
+            // A CARD TALLER THAN THE PAGE SCROLLS (#1202): at the largest text the empty card and
+            // its action ran past the screen, with nothing to reach them. It scrolls only when it
+            // has to, so a card that fits is laid out as it always was.
+            ViewThatFits(in: .vertical) {
+                view
+                ScrollView { view }.scrollBounceBehavior(.basedOnSize)
+            }
         }
     }
 }
@@ -323,14 +329,16 @@ struct EmptyStateView: View {
     }
 
     @Environment(\.appAccent) private var accent
+    @ScaledMetric(relativeTo: .title2) private var glyphSize: CGFloat = 22
+    @ScaledMetric(relativeTo: .title2) private var plateSize: CGFloat = 52
 
     /// THE EMPTY STATE PATTERN (#1173): a card on the page with the app's glyph on a wash of its
     /// colour, the one sentence, the reason, and at most one action as the app's pill.
     var body: some View {
         VStack(spacing: 10) {
             if let glyph = empty.iconKey.isEmpty ? CentraidCatalog.byID[accent.appId]?.iconKey : empty.iconKey {
-                CentraidIconView(iconKey: glyph, tint: accent.text, size: 22)
-                    .frame(width: 52, height: 52)
+                CentraidIconView(iconKey: glyph, tint: accent.text, size: min(glyphSize, 44))
+                    .frame(width: min(plateSize, 104), height: min(plateSize, 104))
                     .background(accent.wash(dark: scheme == .dark), in: Circle())
                     .padding(.bottom, 4)
                     .accessibilityHidden(true)
@@ -339,11 +347,13 @@ struct EmptyStateView: View {
                 .kitType(.section)
                 .foregroundStyle(Surface.ink)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             if !empty.body.isEmpty {
                 Text(empty.body)
                     .kitType(.row)
                     .foregroundStyle(Surface.body)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if let actionSlot {
                 actionSlot
@@ -358,6 +368,7 @@ struct EmptyStateView: View {
                     .kitType(.meta)
                     .foregroundStyle(Surface.meta)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity)

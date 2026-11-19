@@ -27,7 +27,14 @@ struct AgendaSmartListGrid: View {
     let lists: [Centraid_Core_V1_AgendaSmartList]
     let open: (Centraid_Core_V1_Route) -> Void
 
-    private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// ONE COLUMN FROM THE REFLOW SIZE UP (#1202): two tiles across left "Scheduled" a word too
+    /// wide for its tile, cut to "Schedul..." at the largest text.
+    private var columns: [GridItem] {
+        let across = dynamicTypeSize >= Theme.reflowSize ? 1 : 2
+        return Array(repeating: GridItem(.flexible(), spacing: 10), count: across)
+    }
 
     /// THE BOARD'S SHAPE (`AndroidReminders`): the counted lists are tiles in two columns, and
     /// Completed (the Logbook, which shows no count) is one bar across both, so its word is on one
@@ -55,7 +62,7 @@ struct AgendaSmartListGrid: View {
                                 .kitScaledFont(17, weight: .semibold)
                                 .foregroundStyle(.white)
                                 .kitLineLimit(1)
-                                .minimumScaleFactor(0.7)
+                                .minimumScaleFactor(dynamicTypeSize >= Theme.reflowSize ? 1 : 0.7)
                         }
                         .padding(14)
                         .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
@@ -75,7 +82,7 @@ struct AgendaSmartListGrid: View {
                             .kitScaledFont(17, weight: .semibold)
                             .foregroundStyle(.white)
                             .kitLineLimit(1)
-                            .minimumScaleFactor(0.7)
+                            .minimumScaleFactor(dynamicTypeSize >= Theme.reflowSize ? 1 : 0.7)
                         Spacer(minLength: 0)
                         if !list.count.isEmpty {
                             Text(list.count)
