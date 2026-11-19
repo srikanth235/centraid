@@ -650,9 +650,10 @@ struct SheetRoom<Content: View>: View {
     /// measured height of the room, and the platform's own sheet ground on iOS 26. A list taller
     /// than the screen scrolls inside it.
     var fit: Bool = false
-    /// THE CONTENT IS A LIST (or another scroller) THAT SCROLLS ITSELF (#1202): at accessibility
-    /// sizes the room is not wrapped in a `ScrollView`, in which a `List` has no height of its own
-    /// and collapsed to nothing (the Vaults sheet drew its title over a blank sheet).
+    /// THE CONTENT IS A LIST OR A SCROLL VIEW THAT SCROLLS ITSELF (#1202): at accessibility sizes the
+    /// room is not wrapped in a `ScrollView` of its own, in which a `List` has no height and
+    /// collapsed to nothing (the Vaults sheet drew its title over a blank sheet). A sheet that
+    /// holds a list says so here; one that holds only fields and rows does not.
     var scrollsItself: Bool = false
     let content: () -> Content
 
