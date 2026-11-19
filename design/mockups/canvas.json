@@ -977,6 +977,14 @@
       "x": 2820,
       "y": 19720
     },
+    "LargeTextControls.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "8 · Largest text: controls stack, chart words hold, status and addresses stay whole",
+      "w": 390,
+      "x": 3760,
+      "y": 19720
+    },
     "LargeTextRows.dc.html": {
       "h": 844,
       "page": "light",
@@ -4433,6 +4441,7 @@
     "LargeTextHealth.dc.html",
     "LargeTextWeek.dc.html",
     "LargeTextRows.dc.html",
+    "LargeTextControls.dc.html",
     "SolidBand.dc.html",
     "AndroidHome.dc.html",
     "AndroidReminders.dc.html",
