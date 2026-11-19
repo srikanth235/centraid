@@ -804,11 +804,19 @@ impl Home {
             return None;
         }
         match self.destination {
-            D::Generate => Some(C::Data(Box::new(wire::LockerHomeData {
-                status_line: words::items_status(locale),
-                generator: Some(self.generator.view(locale)),
-                ..wire::LockerHomeData::default()
-            }))),
+            D::Generate => {
+                let mut generator = self.generator.view(locale);
+                // "PUT IT ON AN ITEM" IS FOR A LOCKER THAT HOLDS ONE: with none, it would go nowhere.
+                if self.holds_none == Some(true) {
+                    generator.use_label = String::new();
+                    generator.use_route = None;
+                }
+                Some(C::Data(Box::new(wire::LockerHomeData {
+                    status_line: words::items_status(locale),
+                    generator: Some(generator),
+                    ..wire::LockerHomeData::default()
+                })))
+            }
             D::Review => self
                 .review
                 .data()
@@ -963,7 +971,7 @@ impl Home {
             retry: words::retry(locale),
             more_title: words::more_title(locale),
             // THE HANDOFF'S MORE ROWS, in its order, as far as the phone has
-            // them: Import, Trash and Export — then what the phone adds, the
+            // them: Import, Export and Trash (Trash last, as in every app) — then what the phone adds, the
             // facts and the Lock. There is no Access history (#1146): the
             // Locker keeps no log to show.
             more_rows: vec![
@@ -975,18 +983,18 @@ impl Home {
                     Some(routes::import(&parent)),
                 ),
                 more(
-                    "trash",
-                    kit_words::trash_entry(locale),
-                    kit_words::trash_entry_meta(locale),
-                    "Trash",
-                    Some(routes::trash()),
-                ),
-                more(
                     "export",
                     words::more_export(locale),
                     words::more_export_meta(locale),
                     "Share",
                     Some(routes::export(&parent)),
+                ),
+                more(
+                    "trash",
+                    kit_words::trash_entry(locale),
+                    kit_words::trash_entry_meta(locale),
+                    "Trash",
+                    Some(routes::trash()),
                 ),
                 more(
                     "facts",
