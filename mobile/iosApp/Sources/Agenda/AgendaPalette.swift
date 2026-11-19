@@ -61,8 +61,8 @@ struct AgendaSmartListGrid: View {
                             Text(list.label)
                                 .kitScaledFont(17, weight: .semibold)
                                 .foregroundStyle(.white)
-                                .kitLineLimit(1)
-                                .minimumScaleFactor(dynamicTypeSize >= Theme.reflowSize ? 1 : 0.7)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
                         }
                         .padding(14)
                         .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
@@ -81,8 +81,8 @@ struct AgendaSmartListGrid: View {
                         Text(list.label)
                             .kitScaledFont(17, weight: .semibold)
                             .foregroundStyle(.white)
-                            .kitLineLimit(1)
-                            .minimumScaleFactor(dynamicTypeSize >= Theme.reflowSize ? 1 : 0.7)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
                         Spacer(minLength: 0)
                         if !list.count.isEmpty {
                             Text(list.count)

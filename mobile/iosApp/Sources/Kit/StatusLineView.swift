@@ -110,10 +110,15 @@ struct ProgressStatusLine: View {
     var leadingTint: Color = StateColor.green.text
 
     @Environment(\.appAccent) private var accent
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         if !sentence.isEmpty {
-            VStack(alignment: .leading, spacing: 4) {
+            // AT ACCESSIBILITY SIZES THE VERB DROPS UNDER THE SENTENCE, and a line taller than 220
+            // scrolls inside its pill (#1202): the import's three-line "No open reminders to import"
+            // covered the card under the tiles and the page behind it could not be scrolled.
+            let stacked = dynamicTypeSize.isAccessibilitySize
+            let content = VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 10) {
                     if !leadingIcon.isEmpty {
                         CentraidIconView(iconKey: leadingIcon, tint: leadingTint, size: 18)
@@ -123,8 +128,9 @@ struct ProgressStatusLine: View {
                         .kitType(.row)
                         .foregroundStyle(refused ? StateColor.red.text : Surface.ink)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, stacked ? 8 : 0)
                         .accessibilityIdentifier("\(identifier)-sentence")
-                    if !actionLabel.isEmpty {
+                    if !actionLabel.isEmpty, !stacked {
                         Button(action: onAct) {
                             Text(actionLabel)
                                 .kitType(.row)
@@ -160,6 +166,29 @@ struct ProgressStatusLine: View {
                     }
                     .frame(height: 3)
                     .accessibilityHidden(true)
+                }
+                if !actionLabel.isEmpty, stacked {
+                    Button(action: onAct) {
+                        Text(actionLabel)
+                            .kitType(.row)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(accent.text)
+                            .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("\(identifier)-action")
+                }
+            }
+            Group {
+                if stacked {
+                    ViewThatFits(in: .vertical) {
+                        content
+                        ScrollView { content }
+                    }
+                    .frame(maxHeight: 220)
+                } else {
+                    content
                 }
             }
             .modifier(KitStatusPill())
