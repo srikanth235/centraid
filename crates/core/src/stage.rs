@@ -9,13 +9,24 @@
 //! different function's value under the vault's name. So the shell moves bytes
 //! and the core names them.
 //!
-//! ## Three frames, because the C ABI takes one buffer
+//! ## Four frames, because the C ABI takes one buffer
 //!
 //! | Frame | Carries | Answers |
 //! |---|---|---|
 //! | `begin` | the media type, the declared size, where the bytes live, a derivative's parent and tier | a `staging_id` and the chunk ceiling |
 //! | `chunk` | `staging_id`, `seq`, `payload` | bytes received so far |
 //! | `end` | `staging_id` | `{content_hash, byte_size, already_held}` |
+//! | `abort` | `staging_id` | nothing; the session and its partial bytes are gone |
+//!
+//! ## A session never outlives its sender (#1202)
+//!
+//! Four sessions may be open, so one that is never closed would, after four,
+//! refuse every later stage until the process restarted. Three things close a
+//! session: `end`, a `chunk` the core refuses (any refusal, not only a failed
+//! write), and `abort`, which a shell sends when its own read broke or its
+//! task was cancelled between frames. A shell that could not send even that (a
+//! killed task) is covered by the third: a session idle for
+//! [`IDLE_LIMIT`] is reaped when the next `begin` finds the table full.
 //!
 //! ## Where the bytes go: never into memory (#1080 ruling 6)
 //!
@@ -67,6 +78,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_media::sealed::{
@@ -88,6 +100,11 @@ pub const MAX_CHUNK_BYTES: usize = 512 * 1024;
 /// Four, because a roll import is sequential, and every open session holds a
 /// file and, for a library item, its sealed parts so far.
 pub const MAX_OPEN_SESSIONS: usize = 4;
+
+/// How long a session may sit without a frame before the next `begin` may
+/// reap it. Ten minutes: a 100 MB file on a slow cloud provider still sends a
+/// chunk well inside it, and a session past it has lost its sender.
+pub const IDLE_LIMIT: Duration = Duration::from_secs(10 * 60);
 
 /// The tiers a shell may stage a derivative as.
 pub const TIERS: [&str; 3] = ["thumb", "preview", "poster"];
@@ -220,6 +237,8 @@ struct Session {
     /// or its declared size. Another session's room is the budget less these,
     /// so two streams at once cannot each fill the same room.
     reserved: u64,
+    /// When the last frame for this session arrived.
+    touched: Instant,
 }
 
 /// Every open staging session on one core.
@@ -314,8 +333,25 @@ impl Staging {
     /// a fifth open session; [`CoreError::Unavailable`] for owned bytes on a
     /// core with no content store.
     pub fn begin(&self, begin: &wire::StageBegin, doors: Doors) -> Result<wire::StageBegun> {
+        self.begin_at(begin, doors, Instant::now())
+    }
+
+    /// [`Self::begin`] at a given instant, so a test names the idle time
+    /// instead of waiting for it.
+    fn begin_at(
+        &self,
+        begin: &wire::StageBegin,
+        doors: Doors,
+        now: Instant,
+    ) -> Result<wire::StageBegun> {
         let (library, derivative) = source_of(begin)?;
         let mut sessions = self.lock_sessions()?;
+        if sessions.len() >= MAX_OPEN_SESSIONS {
+            // A FULL TABLE REAPS THE SESSIONS NOBODY IS FEEDING: dropping one
+            // closes its writer and removes its partial bytes.
+            sessions
+                .retain(|_, session| now.saturating_duration_since(session.touched) < IDLE_LIMIT);
+        }
         if sessions.len() >= MAX_OPEN_SESSIONS {
             return Err(invalid(format!(
                 "{MAX_OPEN_SESSIONS} staging sessions are already open"
@@ -415,6 +451,7 @@ impl Staging {
                 received: 0,
                 holding,
                 reserved,
+                touched: now,
             },
         );
         Ok(wire::StageBegun {
@@ -432,9 +469,22 @@ impl Staging {
     /// that refused a write is closed.
     pub fn chunk(&self, staging_id: &str, seq: u64, payload: &[u8]) -> Result<wire::StageChunked> {
         let mut sessions = self.lock_sessions()?;
-        let session = sessions
-            .get_mut(staging_id)
-            .ok_or_else(|| unknown_session(staging_id))?;
+        let answer = {
+            let session = sessions
+                .get_mut(staging_id)
+                .ok_or_else(|| unknown_session(staging_id))?;
+            Self::take(session, seq, payload)
+        };
+        if answer.is_err() {
+            // ANY REFUSAL CLOSES THE SESSION (#1202): the shell ends a stage
+            // where it was refused and there is no resume, so keeping it would
+            // only hold one of four places and a partial file.
+            sessions.remove(staging_id);
+        }
+        answer
+    }
+
+    fn take(session: &mut Session, seq: u64, payload: &[u8]) -> Result<wire::StageChunked> {
         if seq != session.next_seq {
             return Err(invalid(format!(
                 "chunk {seq} arrived where {} was expected",
@@ -486,13 +536,20 @@ impl Staging {
                 Ok(())
             }
         };
-        if let Err(error) = written {
-            sessions.remove(staging_id);
-            return Err(error);
-        }
+        written?;
+        session.touched = Instant::now();
         session.received = after;
         session.next_seq += 1;
         Ok(wire::StageChunked { received: after })
+    }
+
+    /// Drop a session and its partial bytes: the shell's read broke, or its
+    /// task was cancelled, after `begin`. An unknown id is not an error, since
+    /// the core may already have closed the session on a refused chunk.
+    pub fn abort(&self, staging_id: &str) {
+        if let Ok(mut sessions) = self.sessions.lock() {
+            sessions.remove(staging_id);
+        }
     }
 
     /// Close the session and hand back what it produced.
@@ -715,6 +772,88 @@ mod tests {
             .begin(&owned("image/png", 50), rig.doors(None))
             .expect("begun");
         assert!(staging.chunk(&begun.staging_id, 0, &payload(100)).is_err());
+    }
+
+    /// A SESSION THAT FAILED IS CLOSED (#1202): four stages that each broke
+    /// (a chunk out of order, one over the ceiling, one past the declared size)
+    /// must leave the fifth its place.
+    #[test]
+    fn four_failed_stages_do_not_block_the_fifth() {
+        let rig = rig();
+        let staging = Staging::default();
+        for round in 0..MAX_OPEN_SESSIONS {
+            let begun = staging
+                .begin(&owned("image/png", 100), rig.doors(None))
+                .expect("begun");
+            let refused = match round % 3 {
+                0 => staging.chunk(&begun.staging_id, 5, &payload(10)),
+                1 => staging.chunk(&begun.staging_id, 0, &payload(MAX_CHUNK_BYTES + 1)),
+                _ => staging.chunk(&begun.staging_id, 0, &payload(101)),
+            };
+            assert!(refused.is_err());
+        }
+        assert_eq!(staging.open(), 0, "a refused chunk closes its session");
+        let begun = staging
+            .begin(&owned("image/png", 4), rig.doors(None))
+            .expect("the fifth stage is taken");
+        staging
+            .chunk(&begun.staging_id, 0, &payload(4))
+            .expect("chunked");
+        staging.end(&begun.staging_id).expect("ended");
+    }
+
+    /// A SHELL THAT BROKE BETWEEN FRAMES SENDS `abort`, and the place is free.
+    #[test]
+    fn an_aborted_session_frees_its_place_and_an_unknown_one_is_no_error() {
+        let rig = rig();
+        let staging = Staging::default();
+        let ids: Vec<String> = (0..MAX_OPEN_SESSIONS)
+            .map(|_| {
+                staging
+                    .begin(&owned("image/png", 100), rig.doors(None))
+                    .expect("begun")
+                    .staging_id
+            })
+            .collect();
+        assert!(
+            staging
+                .begin(&owned("image/png", 1), rig.doors(None))
+                .is_err()
+        );
+        for id in &ids {
+            staging.abort(id);
+        }
+        staging.abort("stage-999");
+        assert_eq!(staging.open(), 0);
+        staging
+            .begin(&owned("image/png", 1), rig.doors(None))
+            .expect("the place is free");
+    }
+
+    /// A SENDER THAT DIED WITHOUT AN ABORT LOSES ITS PLACE, but only once the
+    /// table is full and the session has sat idle past the limit.
+    #[test]
+    fn an_idle_session_is_reaped_when_the_table_is_full() {
+        let rig = rig();
+        let staging = Staging::default();
+        let start = Instant::now();
+        for _ in 0..MAX_OPEN_SESSIONS {
+            staging
+                .begin_at(&owned("image/png", 100), rig.doors(None), start)
+                .expect("begun");
+        }
+        let soon = start + IDLE_LIMIT - Duration::from_secs(1);
+        assert!(
+            staging
+                .begin_at(&owned("image/png", 1), rig.doors(None), soon)
+                .is_err(),
+            "a session still inside the limit keeps its place"
+        );
+        let later = start + IDLE_LIMIT;
+        staging
+            .begin_at(&owned("image/png", 1), rig.doors(None), later)
+            .expect("the idle sessions are reaped");
+        assert_eq!(staging.open(), 1);
     }
 
     /// A TRANSPOSED FRAME NAMES THE FRAME.

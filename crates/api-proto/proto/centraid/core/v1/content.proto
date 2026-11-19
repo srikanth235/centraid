@@ -125,6 +125,9 @@ message StageRequest {
     StageBegin begin = 1;
     StageChunk chunk = 2;
     StageEnd end = 3;
+    // The shell's read broke or its task was cancelled after `begin`: the
+    // session and its partial bytes are dropped.
+    StageAbort abort = 4;
   }
 }
 
@@ -193,13 +196,21 @@ message StageEnd {
   string staging_id = 1;
 }
 
+message StageAbort {
+  string staging_id = 1;
+}
+
 message StageResponse {
   oneof kind {
     StageBegun begun = 1;
     StageChunked chunked = 2;
     StageHandle handle = 3;
+    StageAborted aborted = 4;
   }
 }
+
+// An abort has nothing to answer; the session is gone either way.
+message StageAborted {}
 
 message StageBegun {
   string staging_id = 1;
