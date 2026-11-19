@@ -372,7 +372,8 @@ private fun Glance(tile: HomeTile, figure: String, caption: String, modifier: Mo
         )
         // A SMALL TILE NAMES ITS APP (#1202, S2-7; `HomeWidgets`): "1 person" and "Connect Health
         // Connect" say what is in it, and this says whose. Locker's caption already is the name.
-        if (tile.name.isNotEmpty() && caption != tile.name) {
+        // A caption that already is the name ("people" under 6, "Locker") is not said twice.
+        if (tile.name.isNotEmpty() && !caption.equals(tile.name, ignoreCase = true)) {
             WText(tile.name, meta(), type = "eyebrow", maxLines = 1, align = TextAlign.Center)
         }
     }

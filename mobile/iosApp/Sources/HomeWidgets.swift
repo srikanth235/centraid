@@ -275,7 +275,8 @@ private struct WidgetBody: View {
                 .multilineTextAlignment(.center)
             // A SMALL TILE NAMES ITS APP (#1202, S2-7; `HomeWidgets`): "1 person" and "Connect Apple
             // Health" say what is in it, and this says whose. Locker's caption already is the name.
-            if !tile.name.isEmpty, caption != tile.name {
+            // A caption that already is the name ("people" under 6, "Locker") is not said twice.
+            if !tile.name.isEmpty, caption.caseInsensitiveCompare(tile.name) != .orderedSame {
                 Text(tile.name)
                     .centraidType("annotLabel")
                     .foregroundStyle(meta)
