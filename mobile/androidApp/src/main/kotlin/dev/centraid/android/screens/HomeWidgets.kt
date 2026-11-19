@@ -339,10 +339,14 @@ private fun RemindersWidget(tile: HomeTile, owed: centraid.core.v1.HomeTileBody.
 /** A GLANCE (small): the app's mark in its colour, a figure and a word. */
 @Composable
 private fun Glance(tile: HomeTile, figure: String, caption: String, modifier: Modifier, invites: Boolean = false) {
+    // AT THE LARGEST TEXT EVERY TILE IS A FULL-WIDTH CARD THAT LEANS LEADING (#1202): the glances
+    // stayed centred beside the leading cards, so the column read as two layouts.
+    val lead = rememberLargestText()
+    val textAlign = if (lead) TextAlign.Start else TextAlign.Center
     Column(
         modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp, if (lead) Alignment.Top else Alignment.CenterVertically),
+        horizontalAlignment = if (lead) Alignment.Start else Alignment.CenterHorizontally,
     ) {
         CentraidCatalog.byId[tile.app_id]?.let { app ->
             CentraidIcon(iconKey = widgetIcon(tile.app_id, app.iconKey), tint = appAccent(tile.app_id).text, size = 22.dp)
@@ -350,7 +354,7 @@ private fun Glance(tile: HomeTile, figure: String, caption: String, modifier: Mo
         if (figure.isNotEmpty()) {
             BasicText(
                 figure,
-                style = centraidType("annotLabel").copy(color = ink(), fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center),
+                style = centraidType("annotLabel").copy(color = ink(), fontWeight = FontWeight.SemiBold, textAlign = textAlign),
                 maxLines = 1,
                 softWrap = false,
                 autoSize = TextAutoSize.StepBased(
@@ -368,13 +372,13 @@ private fun Glance(tile: HomeTile, figure: String, caption: String, modifier: Mo
             minLines = 2,
             // AN INVITATION IS NEVER CUT ("Turn on Health Connect" is three short words wide): it may take a third line.
             maxLines = if (invites) 3 else 2,
-            align = TextAlign.Center,
+            align = textAlign,
         )
         // A SMALL TILE NAMES ITS APP (#1202, S2-7; `HomeWidgets`): "1 person" and "Connect Health
         // Connect" say what is in it, and this says whose. Locker's caption already is the name.
         // A caption that already is the name ("people" under 6, "Locker") is not said twice.
         if (tile.name.isNotEmpty() && !caption.equals(tile.name, ignoreCase = true)) {
-            WText(tile.name, meta(), type = "eyebrow", maxLines = 1, align = TextAlign.Center)
+            WText(tile.name, meta(), type = "eyebrow", maxLines = 1, align = textAlign)
         }
     }
 }

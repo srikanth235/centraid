@@ -85,6 +85,7 @@ import dev.centraid.android.kit.EditorRoom
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.OutlineButton
@@ -464,7 +465,9 @@ private fun DriveData(
     }
     val chrome = state.chrome
     if (state.layout == DocsDriveState.Layout.LAYOUT_GRID) {
-        LazyVerticalGrid(columns = GridCells.Fixed(3), modifier = Modifier.fillMaxSize()) {
+        // THREE TILES ACROSS, TWO AT THE LARGEST TEXT (#1202): a third of the width left a tile's name a
+        // column of three letters.
+        LazyVerticalGrid(columns = GridCells.Fixed(if (rememberLargestText()) 2 else 3), modifier = Modifier.fillMaxSize()) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "head") { DriveHead(data) }
             if (data.label_chips.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "chips") {

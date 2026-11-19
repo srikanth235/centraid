@@ -38,6 +38,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,6 +92,31 @@ public fun CentraidRow(
     val titleInk = if (dimmed) Surface.meta else Surface.ink
     val softInk = Surface.meta
     val line = Surface.line
+    val stackTrailing = rememberLargestText() && (trailing.isNotEmpty() || pending)
+    val chipUnderFigure = trailing.isNotEmpty() && chips.isNotEmpty()
+    // THE FIGURE with its chip and sub-label, the ends aligned to [align].
+    @Composable
+    fun ColumnScope.TrailingFigure(align: Alignment.Horizontal) {
+        if (trailing.isNotEmpty()) {
+            val figureInk = if (dimmed) titleInk else toneInk(trailingTone, neutral = "text")
+            Text(
+                trailing,
+                style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+                color = figureInk,
+                textAlign = if (align == Alignment.End) TextAlign.End else TextAlign.Start,
+                maxLines = if (stackTrailing) 2 else 1,
+            )
+        }
+        if (chipUnderFigure && !stackTrailing) {
+            Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                chips.forEach { chip -> StatusChipView(chip) }
+            }
+        }
+        val note = if (pending) pendingLabel else trailingNote
+        if (note.isNotEmpty()) {
+            KitText(note, KitType.Meta, softInk, Modifier, maxLines = if (stackTrailing) 2 else 1)
+        }
+    }
     Column(modifier.fillMaxWidth()) {
         Row(
             Modifier
@@ -140,35 +166,24 @@ public fun CentraidRow(
                 } else if (meta.isNotEmpty()) {
                     KitText(meta, KitType.Meta, softInk, maxLines = 2)
                 }
+                if (stackTrailing) {
+                    chips.forEach { chip -> StatusChipView(chip, Modifier.padding(top = 4.dp)) }
+                    Column(Modifier.padding(top = 2.dp), horizontalAlignment = Alignment.Start) {
+                        TrailingFigure(Alignment.Start)
+                    }
+                }
             }
             // THE MONEY BOARDS' TRAILING COLUMN: a figure with its state chip UNDER it; a chip
-            // alone stays beside the title.
-            val chipUnderFigure = trailing.isNotEmpty() && chips.isNotEmpty()
-            if (!chipUnderFigure) {
+            // alone stays beside the title. AT THE LARGEST TEXT the whole column goes under the
+            // title (#1202), so the figure keeps its width: beside it the title was left a few
+            // letters wide and the figure was cut.
+            if (!chipUnderFigure && !stackTrailing) {
                 chips.forEach { chip -> StatusChipView(chip, Modifier.padding(start = 8.dp)) }
             }
-            if (trailing.isNotEmpty() || pending) {
+            if (!stackTrailing && (trailing.isNotEmpty() || pending)) {
                 // THE FIGURE: right-aligned, with its sub-label under it.
                 Column(Modifier.padding(start = 8.dp), horizontalAlignment = Alignment.End) {
-                    if (trailing.isNotEmpty()) {
-                        val figureInk = if (dimmed) titleInk else toneInk(trailingTone, neutral = "text")
-                        Text(
-                            trailing,
-                            style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
-                            color = figureInk,
-                            textAlign = TextAlign.End,
-                            maxLines = 1,
-                        )
-                    }
-                    if (chipUnderFigure) {
-                        Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            chips.forEach { chip -> StatusChipView(chip) }
-                        }
-                    }
-                    val note = if (pending) pendingLabel else trailingNote
-                    if (note.isNotEmpty()) {
-                        KitText(note, KitType.Meta, softInk, Modifier, maxLines = 1)
-                    }
+                    TrailingFigure(Alignment.End)
                 }
             }
             accessory?.invoke(this)
@@ -300,25 +315,25 @@ public fun SectionHeader(
     sentenceCase: Boolean = false,
     onVerb: (() -> Unit)? = null,
 ) {
-    Row(
-        modifier
-            .fillMaxWidth()
-            .padding(start = KitGeometry.GUTTER, end = 8.dp, top = 20.dp, bottom = 4.dp)
-            .testTag("kit-section"),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        val count = head.count
-        val title = if (count != null) "${head.title} · $count" else head.title
+    // THE VERB UNDER THE TITLE AT THE LARGEST TEXT (#1202): beside it, a long title was left a
+    // column a few letters wide.
+    val stacked = rememberLargestText() && head.verb_label.isNotEmpty() && onVerb != null
+    val titleAt = Modifier.semantics { heading() }
+    val count = head.count
+    val title = if (count != null) "${head.title} · $count" else head.title
+    val titleView: @Composable (Modifier) -> Unit = { m ->
         if (sentenceCase) {
             Text(
                 title,
                 style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
                 color = Surface.meta,
-                modifier = Modifier.weight(1f).semantics { heading() },
+                modifier = m.then(titleAt),
             )
         } else {
-            KitText(title, KitType.Group, Surface.meta, Modifier.weight(1f).semantics { heading() })
+            KitText(title, KitType.Group, Surface.meta, m.then(titleAt))
         }
+    }
+    val verbView: @Composable () -> Unit = {
         if (head.verb_label.isNotEmpty() && onVerb != null) {
             Text(
                 head.verb_label,
@@ -331,6 +346,21 @@ public fun SectionHeader(
                     .padding(horizontal = 8.dp, vertical = 9.dp)
                     .semantics { role = Role.Button },
             )
+        }
+    }
+    val frame = modifier
+        .fillMaxWidth()
+        .padding(start = KitGeometry.GUTTER, end = 8.dp, top = 20.dp, bottom = 4.dp)
+        .testTag("kit-section")
+    if (stacked) {
+        Column(frame) {
+            titleView(Modifier)
+            verbView()
+        }
+    } else {
+        Row(frame, verticalAlignment = Alignment.CenterVertically) {
+            titleView(Modifier.weight(1f))
+            verbView()
         }
     }
 }

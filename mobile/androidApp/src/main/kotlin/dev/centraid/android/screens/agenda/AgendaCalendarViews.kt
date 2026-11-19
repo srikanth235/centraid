@@ -84,6 +84,7 @@ import centraid.core.v1.AgendaYearGrid
 import centraid.core.v1.AgendaYearMonth
 import centraid.core.v1.Route
 import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.HoldGridText
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitType
@@ -91,6 +92,7 @@ import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.hueColor
 import dev.centraid.android.kit.kitTextStyle
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.screens.daySection
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
@@ -271,16 +273,14 @@ private fun AgendaAllDayLane(
     onCheck: (String) -> Unit,
 ) {
     if (header.all_day.isEmpty()) return
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
-            .testTag("agenda-all-day-lane"),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(header.all_day_label, style = kitTextStyle(KitType.Badge), color = Surface.meta, modifier = Modifier.width(GUTTER_WIDTH))
-        BoxWithConstraints(Modifier.weight(1f)) {
+    // THE LABEL OVER ITS CHIPS AT THE LARGEST TEXT (#1202): in the gutter's width "all-day" broke
+    // mid-word. Beside the chips otherwise.
+    val stacked = rememberLargestText()
+    val label: @Composable (Modifier) -> Unit = { m ->
+        Text(header.all_day_label, style = kitTextStyle(KitType.Badge), color = Surface.meta, modifier = m)
+    }
+    val chips: @Composable (Modifier) -> Unit = { m ->
+        BoxWithConstraints(m) {
             val laneWidth = maxWidth
             // THE CHIPS WRAP (#1202): a lane that scrolled sideways hid every chip past the overdue
             // reminders that lead it, so today's all-day event was off screen. The cap is whole rows
@@ -297,6 +297,30 @@ private fun AgendaAllDayLane(
                     )
                 }
             }
+        }
+    }
+    if (stacked) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
+                .testTag("agenda-all-day-lane"),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            label(Modifier)
+            chips(Modifier.fillMaxWidth())
+        }
+    } else {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
+                .testTag("agenda-all-day-lane"),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            label(Modifier.width(GUTTER_WIDTH))
+            chips(Modifier.weight(1f))
         }
     }
     Box(Modifier.fillMaxWidth().height(KitGeometry.HAIRLINE).background(Surface.line))
@@ -340,7 +364,7 @@ internal fun AgendaTimeView(
     onCheck: (String) -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
-        if (strip != null) AgendaWeekStripView(strip, onEvent)
+        if (strip != null) HoldGridText { AgendaWeekStripView(strip, onEvent) }
         if (header != null) AgendaAllDayLane(header, onOpen, onCheck)
         val several = grid.days.size > 1
         Column(
@@ -353,9 +377,14 @@ internal fun AgendaTimeView(
                 }
                 .testTag("agenda-time-grid"),
         ) {
-            if (several) WeekHeadings(grid)
-            if (grid.days.any { it.all_day.isNotEmpty() }) AllDayStrip(grid, onEvent, onOpen, onCheck)
-            HourGrid(grid, onEvent, onOpen, onCheck, Modifier.weight(1f))
+            // THE HOUR GRID HOLDS ITS TEXT (#1202): its gutter, its columns and a block's height are
+            // fixed by the hour, so at the largest text the hour labels clipped, the week's heads ran
+            // together and a block showed a clipped title.
+            HoldGridText {
+                if (several) WeekHeadings(grid)
+                if (grid.days.any { it.all_day.isNotEmpty() }) AllDayStrip(grid, onEvent, onOpen, onCheck)
+                HourGrid(grid, onEvent, onOpen, onCheck, Modifier.weight(1f))
+            }
         }
     }
 }
@@ -937,22 +966,25 @@ internal fun AgendaMonthView(
             },
     ) {
         item(key = "month-grid") {
-            Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER).testTag("agenda-month-grid")) {
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    month.weekday_labels.forEach { label ->
-                        Text(
-                            label,
-                            style = kitTextStyle(KitType.Badge),
-                            color = Surface.meta,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 1,
-                            textAlign = TextAlign.Center,
-                        )
+            // SEVEN COLUMNS HOLD THEIR TEXT (#1202), as the week strip does; the list under the grid scales.
+            HoldGridText {
+                Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER).testTag("agenda-month-grid")) {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        month.weekday_labels.forEach { label ->
+                            Text(
+                                label,
+                                style = kitTextStyle(KitType.Badge),
+                                color = Surface.meta,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
                     }
-                }
-                month.cells.chunked(7).forEach { week ->
-                    Row(Modifier.fillMaxWidth()) {
-                        week.forEach { cell -> MonthCell(cell, grid, Modifier.weight(1f), onEvent) }
+                    month.cells.chunked(7).forEach { week ->
+                        Row(Modifier.fillMaxWidth()) {
+                            week.forEach { cell -> MonthCell(cell, grid, Modifier.weight(1f), onEvent) }
+                        }
                     }
                 }
             }
@@ -1057,6 +1089,11 @@ private fun MonthCell(cell: AgendaMonthCell, grid: Boolean, modifier: Modifier, 
 
 @Composable
 internal fun AgendaYearView(year: AgendaYearGrid, onEvent: (AgendaHomeEvent) -> Unit) {
+    HoldGridText { YearBody(year, onEvent) }
+}
+
+@Composable
+private fun YearBody(year: AgendaYearGrid, onEvent: (AgendaHomeEvent) -> Unit) {
     Column(
         Modifier
             .fillMaxSize()

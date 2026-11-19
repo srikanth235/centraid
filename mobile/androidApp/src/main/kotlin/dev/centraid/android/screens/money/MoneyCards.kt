@@ -47,6 +47,8 @@ import centraid.core.v1.MoneyRestLine
 import centraid.core.v1.MoneyRow
 import centraid.core.v1.StatusChip
 import androidx.compose.foundation.layout.defaultMinSize
+import dev.centraid.android.kit.HoldGridText
+import dev.centraid.android.kit.SplitRow
 import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.KitGeometry
@@ -336,6 +338,12 @@ private val ChartHeight = 132.dp
  */
 @Composable
 internal fun MoneyBarsChart(bars: MoneyBars, onPick: (Int) -> Unit) {
+    // THE BARS' AXIS HOLDS ITS TEXT (#1202): a column per month cannot grow with the font.
+    HoldGridText { BarsBody(bars, onPick) }
+}
+
+@Composable
+private fun BarsBody(bars: MoneyBars, onPick: (Int) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Box(Modifier.fillMaxWidth().height(ChartHeight + 22.dp)) {
             Row(
@@ -449,10 +457,14 @@ internal fun MoneyCategoryProgressRow(line: MoneyCategoryLine, onTap: () -> Unit
             },
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        val largest = rememberLargestText()
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(Modifier.size(10.dp).clip(CircleShape).background(docsListColor(line.color_key)))
-            KitText(line.label, KitType.Row, Surface.ink, Modifier.weight(1f), maxLines = 2)
-            KitText(line.spent, KitType.Row, Surface.ink, maxLines = 1)
+            SplitRow(
+                Modifier.weight(1f),
+                start = { m -> KitText(line.label, KitType.Row, Surface.ink, m, maxLines = if (largest) Int.MAX_VALUE else 2) },
+                end = { m -> KitText(line.spent, KitType.Row, Surface.ink, m, maxLines = if (largest) Int.MAX_VALUE else 1) },
+            )
         }
         if (line.has_plan) {
             val fill = if (line.over) StateColor.Red.fill else docsListColor(line.color_key)
@@ -460,7 +472,7 @@ internal fun MoneyCategoryProgressRow(line: MoneyCategoryLine, onTap: () -> Unit
                 Box(Modifier.fillMaxHeight().fillMaxWidth(line.progress_bp.coerceIn(0, 10_000) / 10_000f).background(fill))
             }
         }
-        KitText(line.caption, KitType.Meta, if (line.over) StateColor.Red.text else Surface.meta, maxLines = 2)
+        KitText(line.caption, KitType.Meta, if (line.over) StateColor.Red.text else Surface.meta, maxLines = if (rememberLargestText()) Int.MAX_VALUE else 2)
     }
 }
 
@@ -490,8 +502,12 @@ internal fun MoneyRestRow(line: MoneyRestLine, pending: Boolean, testTag: String
         } else {
             Box(Modifier.size(10.dp).clip(CircleShape).background(docsListColor(line.color_key)))
         }
-        KitText(line.label, KitType.Row, Surface.ink, Modifier.weight(1f), maxLines = 1)
-        KitText(line.amount, KitType.Row, Surface.ink, maxLines = 1)
+        val largest = rememberLargestText()
+        SplitRow(
+            Modifier.weight(1f).padding(vertical = if (largest) 8.dp else 0.dp),
+            start = { m -> KitText(line.label, KitType.Row, Surface.ink, m, maxLines = if (largest) Int.MAX_VALUE else 1) },
+            end = { m -> KitText(line.amount, KitType.Row, Surface.ink, m, maxLines = if (largest) Int.MAX_VALUE else 1) },
+        )
     }
 }
 
@@ -506,19 +522,27 @@ internal fun MoneyPageCard(content: @Composable () -> Unit) {
 /** The figures of a summary side by side on one card, each a label over its value. */
 @Composable
 internal fun MoneyFigureCard(figures: List<centraid.core.v1.MoneyFigure>) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).kitCard().padding(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        figures.forEach { figure ->
-            Column(
-                Modifier.weight(1f).clearAndSetSemantics { contentDescription = spoken(figure.label, figure.amount) },
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                KitText(figure.label, KitType.Meta, Surface.meta, maxLines = 3)
-                KitText(figure.amount, KitType.Row, moneyInk(figure.positive, figure.tone), maxLines = 1)
-            }
+    // ONE FIGURE UNDER THE NEXT AT THE LARGEST TEXT (#1202): side by side each was a column too
+    // narrow for its amount.
+    val largest = rememberLargestText()
+    val frame = Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).kitCard().padding(16.dp)
+    @Composable
+    fun Cell(figure: centraid.core.v1.MoneyFigure, modifier: Modifier) {
+        Column(
+            modifier.clearAndSetSemantics { contentDescription = spoken(figure.label, figure.amount) },
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            KitText(figure.label, KitType.Meta, Surface.meta, maxLines = if (largest) Int.MAX_VALUE else 3)
+            KitText(figure.amount, KitType.Row, moneyInk(figure.positive, figure.tone), maxLines = if (largest) Int.MAX_VALUE else 1)
+        }
+    }
+    if (largest) {
+        Column(frame, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            figures.forEach { Cell(it, Modifier.fillMaxWidth()) }
+        }
+    } else {
+        Row(frame, horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+            figures.forEach { Cell(it, Modifier.weight(1f)) }
         }
     }
 }

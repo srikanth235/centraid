@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.SheetValue
@@ -491,8 +493,14 @@ public fun SheetRoom(
     expanded: Boolean = false,
     /** A pill in the title row (a large sheet's Done), drawn quiet while it is not enabled. */
     headerAction: SheetPrimary? = null,
+    /**
+     * Whether the sheet scrolls when its content is taller than the screen at the largest text
+     * (#1202). A sheet whose own content is a lazy list scrolls itself and says false.
+     */
+    scrolls: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val scrolled = scrolls && rememberLargestText()
     val canLeave by rememberUpdatedState(swipeable)
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = expanded,
@@ -513,6 +521,7 @@ public fun SheetRoom(
         // Q-1128-2) does not reach it: the sheet sets it again for Maestro's `id:` selectors.
         Column(
             modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 16.dp)
+                .then(if (scrolled) Modifier.verticalScroll(rememberScrollState()) else Modifier)
                 .semantics { testTagsAsResourceId = true }
                 .testTag("sheet-room"),
         ) {

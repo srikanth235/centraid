@@ -565,14 +565,16 @@ private fun StatusChip.isReminder(): Boolean = tone == StatusChip.Tone.TONE_NEUT
 /** The avatar: initials on the person's hue. Decorative; the row speaks the name. */
 @Composable
 internal fun Avatar(avatar: PeopleAvatar?, size: Int = 32) {
+    // THE DISC GROWS WITH THE TEXT IN IT (#1202): at font scale 2.0 two initials clipped in 32dp.
+    val side = (size * LocalDensity.current.fontScale.coerceIn(1f, 2f)).dp
     Box(
         Modifier
-            .size(size.dp)
+            .size(side)
             .clip(CircleShape)
             .background(hueColor(avatar?.hue_key.orEmpty()))
             .clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
     ) {
-        Text(avatar?.initials.orEmpty(), style = centraidType("smallStrong"), color = centraidColor("onAccent"))
+        Text(avatar?.initials.orEmpty(), style = centraidType("smallStrong"), color = centraidColor("onAccent"), maxLines = 1, softWrap = false)
     }
 }

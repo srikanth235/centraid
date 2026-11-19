@@ -54,6 +54,7 @@ import dev.centraid.android.R
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.screens.decodeUpright
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
@@ -171,10 +172,11 @@ internal fun DocsDocTile(
                     .padding(horizontal = 4.dp, vertical = 1.dp),
             )
         }
-        Text(row.title, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+        val lines = if (rememberLargestText()) 4 else 2
+        Text(row.title, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = lines, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             if (row.dot_color_key.isNotEmpty()) DocsDot(row.dot_color_key, 6.dp)
-            Text(row.meta, style = centraidType("annotLabel"), color = centraidColor("textSoft"), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(row.meta, style = centraidType("annotLabel"), color = centraidColor("textSoft"), maxLines = if (lines > 2) 2 else 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -206,8 +208,9 @@ internal fun DocsFolderTile(folder: DocsFolderNode, modifier: Modifier = Modifie
         Box(Modifier.width(96.dp).height(120.dp), contentAlignment = Alignment.Center) {
             CentraidIcon("Folder", tint = appAccent("docs").fill, size = 56.dp)
         }
-        Text(folder.name, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
-        Text(folder.count_label, style = centraidType("annotLabel"), color = centraidColor("textSoft"), maxLines = 1)
+        val lines = if (rememberLargestText()) 4 else 2
+        Text(folder.name, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = lines, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+        Text(folder.count_label, style = centraidType("annotLabel"), color = centraidColor("textSoft"), maxLines = if (lines > 2) 2 else 1)
     }
 }
 
