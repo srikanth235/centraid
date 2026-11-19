@@ -21,10 +21,12 @@ Compose gets `Modifier.testTag`, SwiftUI gets `.accessibilityIdentifier`, and bo
 ## Running it, when there is a device
 
 ```sh
-# Android
+# Android: the Rust core first (the APK carries a copied .so), then the build, then the flows.
+# The flows name the iOS bundle id, so run-android.sh stages a copy with Android's `dev.centraid`.
 export ANDROID_HOME=/path/to/sdk
+mobile/scripts/android-core.sh
 cd mobile && ./gradlew -Pcentraid.android=true :androidApp:installDebug
-maestro test maestro/flows
+maestro/run-android.sh            # or: maestro/run-android.sh home onboarding
 
 # iOS
 cd mobile/iosApp && export CENTRAID_IOS_DEPLOYMENT_TARGET=$(cat ../ios-deployment-target)
