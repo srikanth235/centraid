@@ -251,7 +251,7 @@ impl Rig {
 }
 
 fn banner_of(roll: &Roll, empty: bool) -> Option<wire::PhotosHomeImportBanner> {
-    roll.banner(Locale::En, empty)
+    roll.banner(Locale::En, empty, false)
 }
 
 // ---------------------------------------------------------------------------
@@ -718,6 +718,26 @@ fn import_now_over_an_emptied_library_asks_the_camera_roll_for_a_pass_and_the_sh
 }
 
 #[test]
+fn an_empty_library_before_the_first_ask_is_the_card_with_allow_as_its_button() {
+    use wire::photos_home_import_banner::Remedy;
+    let mut r = rig();
+    r.clear_library();
+    r.send(H::Permission(wire::PhotosPermissionChanged {
+        permission: Perm::NotAsked as i32,
+    }));
+    let empty = r.library_empty();
+    assert_eq!(empty.headline, "No photos on this phone yet.");
+    assert_eq!(empty.action_label, "Allow photo access");
+    // The card is the ask: no small link above it.
+    assert!(r.state().import_banner.is_none());
+    // Both shells send Settings from the card; before any ask it is the prompt, and no effect.
+    let update = r.send(H::Remedy(wire::PhotosBannerRemedy {
+        remedy: Remedy::Settings as i32,
+    }));
+    assert!(update.effects.is_empty(), "{:?}", update.effects);
+}
+
+#[test]
 fn an_empty_library_behind_a_refused_grant_is_the_card_with_open_settings_alone() {
     let mut r = rig();
     r.clear_library();
@@ -750,6 +770,10 @@ fn the_platforms_own_pages_are_effects_the_shell_performs_and_the_prompt_is_the_
         remedy: Remedy::Ask as i32,
     }));
     assert!(update.effects.is_empty(), "{:?}", update.effects);
+    // Settings is a refused grant's page; the card's button asks where nothing was asked yet.
+    r.send(H::Permission(wire::PhotosPermissionChanged {
+        permission: Perm::Denied as i32,
+    }));
     for (remedy, action) in [
         (Remedy::Settings, Action::OpenSettings),
         (Remedy::ManageSelection, Action::ManageSelection),
