@@ -55,7 +55,7 @@ public fun LinkSectionView(
             section.title,
             KitType.Group,
             Surface.meta,
-            Modifier.padding(start = 4.dp, top = 12.dp, bottom = 6.dp).testTag("link-section-title"),
+            Modifier.padding(top = 12.dp, bottom = 6.dp).testTag("link-section-title"),
         )
         Column(Modifier.fillMaxWidth().kitBorderedCard()) {
             section.rows.forEachIndexed { index, row ->

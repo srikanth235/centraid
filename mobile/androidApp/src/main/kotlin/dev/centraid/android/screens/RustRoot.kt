@@ -387,7 +387,9 @@ internal class RustRoot(
         }
         if (top.instance == root.instance) {
             // ANOTHER TAB'S ROOT (the chat, the backup), over the band: a place Rust owns, drawn like Home's.
-            androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
+            // THE PAGE'S OWN GROUND UNDER THE BAND (#1202): without it the window's white showed as a seam
+            // under the content on the light Backup page.
+            androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().background(dev.centraid.android.kit.Surface.page)) {
                 Box(Modifier.weight(1f)) { Page(runtime, view, top.instance) }
                 Band(navigation?.band, ::select)
             }

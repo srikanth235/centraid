@@ -59,7 +59,7 @@ internal fun PeopleContactsRowView(row: PeopleContactsRow, onAction: () -> Unit)
         Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = row.accessibility_label }) {
             // THE STATE WRAPS AS A WORD (#1202): beside the title "Off" stacked O/f/f.
             @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-            androidx.compose.foundation.layout.FlowRow(verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center) {
+            androidx.compose.foundation.layout.FlowRow(itemVerticalAlignment = Alignment.CenterVertically) {
                 KitText(row.title, KitType.Row, Surface.ink)
                 KitText(
                     row.state_label,

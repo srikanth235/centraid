@@ -176,7 +176,15 @@ internal fun DocsDocTile(
         Text(row.title, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = lines, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             if (row.dot_color_key.isNotEmpty()) DocsDot(row.dot_color_key, 6.dp)
-            Text(row.meta, style = centraidType("annotLabel"), color = centraidColor("textSoft"), maxLines = if (lines > 2) 2 else 1, overflow = TextOverflow.Ellipsis)
+            // THE SIZE MUST SHOW (#1202): the meta wraps by word to three lines instead of one line cut after the kind.
+            Text(
+                dev.centraid.android.kit.unitsJoined(row.meta),
+                style = centraidType("annotLabel"),
+                color = centraidColor("textSoft"),
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }

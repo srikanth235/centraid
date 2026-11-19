@@ -90,6 +90,8 @@ internal fun FirstLaunchScreen(gate: HomeFirstLaunch, onMake: () -> Unit, onRest
                     .testTag("first-launch-title"),
                 color = centraidResource(R.color.centraid_text_ink),
                 fontSize = TITLE_SP.sp,
+                // A LINE BOX THAT GROWS WITH THE TEXT (#1202): at 2.0 the two lines of "Welcome to Centraid" touched.
+                lineHeight = (TITLE_SP * 1.2f).sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
             )

@@ -364,31 +364,50 @@ public fun OutlineButton(
         else -> StateColor.Red.text
     }
     val shape = RoundedCornerShape(percent = 50)
-    Text(
-        label,
-        style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
-        color = if (!enabled) Surface.meta else if (ink == "text") Surface.ink else StateColor.Red.text,
-        textAlign = if (stacked) TextAlign.Center else TextAlign.Unspecified,
-        maxLines = if (inRow) 1 else Int.MAX_VALUE,
-        modifier = modifier
-            .then(if (stacked) Modifier.fillMaxWidth() else Modifier)
-            .heightIn(min = if (stacked) KitGeometry.ROW_MIN else 36.dp)
-            .widthIn(min = 44.dp)
-            .clip(shape)
-            // THE ACTION ROW'S KEYS ARE WHITE PILLS (AgendaEvent): inside a choice row the outline
-            // sits on a card fill, so the keys read as keys on the page.
-            .then(if (inRow) Modifier.background(Surface.card, shape) else Modifier)
-            .border(KitGeometry.HAIRLINE, edge, shape)
-            .clickable(enabled = enabled, onClick = onPress)
-            // 13 + 18 (the label's line) + 13 is the stack's 44; 9 + 18 + 9 is
-            // the hugging button's 36.
-            .padding(horizontal = if (inRow) 6.dp else 12.dp, vertical = if (stacked) 13.dp else 9.dp)
-            .testTag(testTag)
-            .semantics {
-                role = Role.Button
-                if (!enabled) disabled()
-            },
-    )
+    val labelStyle = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold)
+    val labelInk = if (!enabled) Surface.meta else if (ink == "text") Surface.ink else StateColor.Red.text
+    val frame = modifier
+        .then(if (stacked) Modifier.fillMaxWidth() else Modifier)
+        .heightIn(min = if (stacked) KitGeometry.ROW_MIN else 36.dp)
+        .widthIn(min = 44.dp)
+        .clip(shape)
+        // THE ACTION ROW'S KEYS ARE WHITE PILLS (AgendaEvent): inside a choice row the outline
+        // sits on a card fill, so the keys read as keys on the page.
+        .then(if (inRow) Modifier.background(Surface.card, shape) else Modifier)
+        .border(KitGeometry.HAIRLINE, edge, shape)
+        .clickable(enabled = enabled, onClick = onPress)
+        // 13 + 18 (the label's line) + 13 is the stack's 44; 9 + 18 + 9 is
+        // the hugging button's 36.
+        .padding(horizontal = if (inRow) 6.dp else 12.dp, vertical = if (stacked) 13.dp else 9.dp)
+        .testTag(testTag)
+        .semantics {
+            role = Role.Button
+            if (!enabled) disabled()
+        }
+    if (inRow) {
+        // A LABEL IN A SHARED ROW SHRINKS TO ITS KEY (#1202): "Cancel event..." was cut after "Cancel", which then
+        // read as a dismiss. One line, never clipped.
+        androidx.compose.foundation.text.BasicText(
+            label,
+            style = labelStyle.copy(color = labelInk, textAlign = TextAlign.Center),
+            maxLines = 1,
+            softWrap = false,
+            autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(
+                minFontSize = labelStyle.fontSize * 0.7f,
+                maxFontSize = labelStyle.fontSize,
+            ),
+            modifier = frame,
+        )
+    } else {
+        Text(
+            label,
+            style = labelStyle,
+            color = labelInk,
+            textAlign = if (stacked) TextAlign.Center else TextAlign.Unspecified,
+            maxLines = Int.MAX_VALUE,
+            modifier = frame,
+        )
+    }
 }
 
 /**
