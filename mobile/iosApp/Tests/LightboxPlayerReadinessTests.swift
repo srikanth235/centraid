@@ -18,7 +18,7 @@ final class LightboxPlayerReadinessTests: XCTestCase {
         let observation = model.$duration.filter { $0 > 0 }.first().sink { _ in loaded.fulfill() }
         defer { observation.cancel(); model.pause() }
         let result = await XCTWaiter.fulfillment(of: [loaded], timeout: 5)
-        XCTAssertEqual(result, .completed)
+        XCTAssertEqual(result, .completed, "the length never arrived: \(model.failure ?? "no failure reported")")
         XCTAssertEqual(model.duration, 1, accuracy: 0.01)
         XCTAssertEqual(model.position, 0)
         XCTAssertEqual(model.player.rate, 0)

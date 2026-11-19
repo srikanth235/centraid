@@ -381,3 +381,27 @@ fn dismissing_the_file_picker_does_not_claim_a_read_failed() {
     }));
     assert!(imp(d.view(i)).status.is_none());
 }
+
+/// A STATEMENT OVER THE LIMIT IS NEVER READ, and the member is told why (#1202).
+#[test]
+fn the_pick_carries_the_statement_limit_and_a_too_large_file_says_so() {
+    let (mut d, i) = opened();
+    d.effects.clear();
+    event(&mut d, i, iev(ie::Kind::Choose(ie::ChooseTapped {})));
+    let Some(wire::effect::Kind::PickBytes(pick)) = d
+        .effects
+        .last()
+        .and_then(|e| e.effect.as_ref())
+        .and_then(|e| e.kind.clone())
+    else {
+        panic!("a pick was asked for");
+    };
+    assert_eq!(pick.max_bytes, 8 * 1024 * 1024);
+    d.answer_effect(wire::effect_result::Outcome::Failed(wire::EffectFailed {
+        reason: "too_large".to_owned(),
+        ..Default::default()
+    }));
+    let status = imp(d.view(i)).status.as_ref().expect("said");
+    assert!(status.refused);
+    assert_eq!(status.sentence, "That file is too large to import.");
+}

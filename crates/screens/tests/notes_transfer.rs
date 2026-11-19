@@ -191,3 +191,61 @@ fn an_export_saves_an_archive_through_the_os_save_sheet() {
     );
     let _ = before;
 }
+
+/// THE PICK CARRIES THE IMPORTER'S CEILINGS and the files a shell left out are said (#1202): a note
+/// past the body budget is never read, and a pick that left files out never reads as complete.
+#[test]
+fn files_the_shell_left_out_are_counted_beside_the_plan() {
+    let mut d = driver();
+    let i = d.push("notes", routes::import("Notes"));
+    d.effects.clear();
+    tap(&mut d, i, "folder");
+    let Some(wire::effect::Kind::PickBytes(pick)) = d
+        .effects
+        .last()
+        .and_then(|e| e.effect.as_ref())
+        .and_then(|e| e.kind.clone())
+    else {
+        panic!("a folder pick was asked for");
+    };
+    assert_eq!(pick.max_bytes, 64 * 1024);
+    assert!(pick.max_total_bytes > pick.max_bytes);
+    let note = wire::PickedBytes {
+        name: "Trip/Paris.md".to_owned(),
+        content: b"Stay at the hotel".to_vec(),
+        ..Default::default()
+    };
+    d.answer_effect(wire::effect_result::Outcome::BytesPicked(
+        wire::BytesPicked {
+            files: vec![note],
+            skipped: vec!["Huge.md".to_owned(), "Locked.md".to_owned()],
+            ..Default::default()
+        },
+    ));
+    let view = state(d.view(i)).clone();
+    assert!(
+        view.rows
+            .iter()
+            .any(|r| r.key == "left_out" && r.value == "2"),
+        "{:?}",
+        view.rows
+    );
+    // A pick that left out everything still says so, with nothing to import.
+    tap(&mut d, i, "again");
+    tap(&mut d, i, "folder");
+    d.answer_effect(wire::effect_result::Outcome::BytesPicked(
+        wire::BytesPicked {
+            skipped: vec!["Huge.md".to_owned()],
+            ..Default::default()
+        },
+    ));
+    let view = state(d.view(i)).clone();
+    assert_eq!(view.headline, "No notes in that choice");
+    assert_eq!(
+        view.rows
+            .iter()
+            .map(|r| (r.key.as_str(), r.value.as_str()))
+            .collect::<Vec<_>>(),
+        [("left_out", "1")]
+    );
+}
