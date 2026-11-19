@@ -379,6 +379,7 @@ internal fun MoneyTransactionScreen(
         title = chrome?.title.orEmpty(),
         parentTitle = chrome?.back_label.orEmpty(),
         onBack = onBack,
+        app = "money",
         statusLine = {
             // "{title} moved to trash" with Undo over the removed page (#1185), and a refusal's sentence.
             StatusLine(state.status, actTag = "money-status-action") {
@@ -680,7 +681,7 @@ private fun TargetCarryCard(target: centraid.core.v1.MoneyTargetData, carry: Boo
 @Composable
 internal fun MoneyRecurringScreen(state: MoneyRecurringState, onEvent: (MoneyRecurringEvent) -> Unit, onBack: () -> Unit) {
     val chrome = state.chrome
-    PushedPage(title = chrome?.title.orEmpty(), parentTitle = chrome?.back_label.orEmpty(), onBack = onBack) {
+    PushedPage(title = chrome?.title.orEmpty(), parentTitle = chrome?.back_label.orEmpty(), onBack = onBack, app = "money") {
         ReadStateView(
             page = state.page!!,
             onRetry = { onEvent(MoneyRecurringEvent(refreshed = MoneyRecurringEvent.Refreshed())) },
@@ -725,7 +726,7 @@ internal fun MoneySearchScreen(
     onBack: () -> Unit,
 ) {
     val chrome = state.chrome
-    PushedPage(title = chrome?.title.orEmpty(), parentTitle = chrome?.back_label.orEmpty(), onBack = onBack) {
+    PushedPage(title = chrome?.title.orEmpty(), parentTitle = chrome?.back_label.orEmpty(), onBack = onBack, app = "money") {
         androidx.compose.foundation.layout.Column {
             // THE BODY TAKES THE HEIGHT the field at the foot does not (R-CHROME-2). The resting page and a
             // term that matched nothing are the page's empty state; the second keeps the Ask row under it.

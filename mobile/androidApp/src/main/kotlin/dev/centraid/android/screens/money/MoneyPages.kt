@@ -83,6 +83,7 @@ internal fun MoneyImportScreen(
         title = chrome?.title.orEmpty(),
         parentTitle = chrome?.back_label.orEmpty(),
         onBack = onBack,
+        app = "money",
         statusLine = { StatusLine(state.status) },
     ) {
         ReadStateView(
