@@ -238,9 +238,13 @@ struct HealthWorkoutRow: View {
 
     @Environment(\.appAccent) private var accent
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        Button(action: onTap) {
+        // THE DATE UNDER THE NAME AT ACCESSIBILITY SIZES (#1202): beside it the title was left a
+        // column a few letters wide and broke as "After/noon" and "Nigh/t".
+        let stacked = dynamicTypeSize.isAccessibilitySize
+        return Button(action: onTap) {
             HStack(spacing: 14) {
                 CentraidIconView(iconKey: row.iconKey, tint: accent.text, size: 20)
                     .frame(width: 40, height: 40)
@@ -251,17 +255,26 @@ struct HealthWorkoutRow: View {
                         .kitType(.row)
                         .fontWeight(.semibold)
                         .foregroundStyle(Surface.ink)
-                        .kitLineLimit(1)
+                        .kitLineLimit(1, wide: 4)
                     Text(row.meta)
                         .kitType(.meta)
                         .foregroundStyle(Surface.meta)
-                        .kitLineLimit(1)
+                        .kitLineLimit(1, wide: 4)
+                    if stacked {
+                        Text(row.whenLabel)
+                            .kitType(.meta)
+                            .monospacedDigit()
+                            .foregroundStyle(Surface.meta)
+                    }
                 }
-                Spacer(minLength: 8)
-                Text(row.whenLabel)
-                    .kitType(.meta)
-                    .monospacedDigit()
-                    .foregroundStyle(Surface.meta)
+                .frame(maxWidth: stacked ? .infinity : nil, alignment: .leading)
+                if !stacked {
+                    Spacer(minLength: 8)
+                    Text(row.whenLabel)
+                        .kitType(.meta)
+                        .monospacedDigit()
+                        .foregroundStyle(Surface.meta)
+                }
                 CentraidIconView(iconKey: "ChevronRight", tint: Surface.meta, size: 16)
                     .accessibilityHidden(true)
             }

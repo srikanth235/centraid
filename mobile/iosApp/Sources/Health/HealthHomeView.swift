@@ -16,6 +16,7 @@ struct HealthHomeView: View {
     let onHome: () -> Void
 
     private let accent = AppAccent("health")
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private func event(_ build: (inout Centraid_Core_V1_HealthHomeEvent) -> Void) -> Centraid_Core_V1_HealthHomeEvent {
         var event = Centraid_Core_V1_HealthHomeEvent()
@@ -215,17 +216,28 @@ struct HealthHomeView: View {
     private func trendRow(_ row: Centraid_Core_V1_HealthTrendRow) -> some View {
         Button { open(row.route) } label: {
             HealthCard {
-                HStack(spacing: 14) {
+                // THE LINE UNDER THE FIGURES AT ACCESSIBILITY SIZES (#1202): beside them the figure
+                // was left a column too narrow and "8,600" split as "8,60/0".
+                let stacked = dynamicTypeSize.isAccessibilitySize
+                let layout = stacked
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+                    : AnyLayout(HStackLayout(spacing: 14))
+                layout {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(row.label)
                             .kitType(.row)
                             .fontWeight(.semibold)
                             .foregroundStyle(accent.text)
-                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        let figureLayout = stacked
+                            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
+                            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 4))
+                        figureLayout {
                             Text(row.value)
                                 .monospacedDigit()
                                 .kitScaledFont(22, weight: .bold)
                                 .foregroundStyle(Surface.ink)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.5)
                             Text(row.unit)
                                 .kitType(.meta)
                                 .foregroundStyle(Surface.meta)
@@ -236,7 +248,7 @@ struct HealthHomeView: View {
                                 .foregroundStyle(Surface.meta)
                         }
                     }
-                    Spacer(minLength: 0)
+                    if !stacked { Spacer(minLength: 0) }
                     HealthSparkline(points: row.pointsBp, average: row.averageBp)
                 }
             }
