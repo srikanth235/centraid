@@ -528,7 +528,8 @@ private fun AppBandTabView(
     modifier: Modifier = Modifier,
     locked: Boolean = false,
 ) {
-    val ink = if (locked) centraidColor("textDisabled") else if (selected) Surface.ink else Surface.meta
+    // A LOCKED PLATE is pressable and dimmed, but legible in both schemes (the faint ink, never the disabled one).
+    val ink = if (locked) centraidColor("textFaint") else if (selected) Surface.ink else Surface.meta
     Column(
         modifier
             .fillMaxHeight()

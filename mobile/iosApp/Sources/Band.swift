@@ -397,7 +397,8 @@ private struct AppBandTab: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        let ink = locked ? Theme.color("textDisabled", scheme) : (selected ? Surface.ink : Surface.meta)
+        // A locked plate is pressable and dimmed, but legible in both schemes (the faint ink, never the disabled one).
+        let ink = locked ? Theme.color("textFaint", scheme) : (selected ? Surface.ink : Surface.meta)
         Button(action: onPress) {
             VStack(spacing: BandMetrics.labelGap) {
                 CentraidIconView(
