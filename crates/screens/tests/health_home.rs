@@ -66,6 +66,28 @@ fn nothing_connected_every_tab_is_one_sentence_and_connect_naming_the_phones_sto
     );
 }
 
+/// EACH TAB SAYS WHAT IT WILL HOLD before anything is connected (FirstOpenHealthTrends,
+/// FirstOpenHealthWorkouts), with the same one action: the three tabs are never one card.
+#[test]
+fn nothing_connected_each_tab_says_what_it_will_hold() {
+    let mut d = driver();
+    let i = root(&d);
+    let headline = |d: &centraid_screens::testing::Driver| {
+        let state = home_state(d.view(i));
+        let empty = empty_of(state);
+        assert_eq!(empty.action_label, "Turn on Apple Health");
+        empty.headline.clone()
+    };
+    let today = headline(&d);
+    band(&mut d, i, "trends");
+    let trends = headline(&d);
+    band(&mut d, i, "workouts");
+    let workouts = headline(&d);
+    assert_eq!(today, "Steps, sleep and workouts, read from Apple Health.");
+    assert_eq!(trends, "Your week and month, read from Apple Health.");
+    assert_eq!(workouts, "Your workouts, read from Apple Health.");
+}
+
 #[test]
 fn the_phones_store_is_its_os_health_connect_on_android() {
     let d = driver_on("android", "en-GB");

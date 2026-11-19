@@ -248,8 +248,15 @@ impl Home {
         let locale = ctx.locale();
         if !self.known_connected {
             let store = Store::of(ctx).name(locale);
+            // EACH TAB SAYS WHAT IT WILL HOLD (FirstOpenHealth, FirstOpenHealthTrends and
+            // FirstOpenHealthWorkouts), with the one action they share.
+            let sentence = match self.destination {
+                wire::HealthDestination::Trends => words::connect_empty_trends(locale),
+                wire::HealthDestination::Workouts => words::connect_empty_workouts(locale),
+                _ => words::connect_empty(locale),
+            };
             return wire::EmptyState {
-                headline: fill(&words::connect_empty(locale), &[("store", &store)]),
+                headline: fill(&sentence, &[("store", &store)]),
                 // FirstOpenHealth: "Turn on Apple Health", the same words as the More row.
                 action_label: crate::kit::follow::turn_on_row(locale, &store),
                 ..Default::default()

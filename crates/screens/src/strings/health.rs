@@ -50,6 +50,8 @@ catalog! {
     plain connect_depth_note = ("Health starts with a year of days and 90 days of workouts.", "Health starts with a year of days and 90 days of workouts.");
     plain connect_empty = ("Steps, sleep and workouts, read from {store}.", "Steps, sleep and workouts, read from {store}.");
     plain connect_background_why = ("Health is read while Centraid is closed so new figures arrive.", "Health is read while Centraid is closed so new figures arrive.");
+    plain connect_empty_trends = ("Your week and month, read from {store}.", "Your week and month, read from {store}.");
+    plain connect_empty_workouts = ("Your workouts, read from {store}.", "Your workouts, read from {store}.");
     plain connect_failed = ("{store} didn’t answer. Try again.", "{store} didn’t answer. Try again.");
     plain connect_headline = ("Your daily totals, kept with you", "Your daily totals, kept with you");
     plain connect_install = ("Get Health Connect from Google Play, then connect again.", "Get Health Connect from Google Play, then connect again.");
