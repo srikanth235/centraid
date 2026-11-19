@@ -25,7 +25,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -155,6 +158,15 @@ public fun AgendaHomeScreen(
     // THE SHARED HEADER (Day, Week and Reminders) stands in the key row; Reminders keeps its title under it.
     val header = state.calendar_header?.takeIf { it.shown }
     val plusShown = state.add_label.isNotEmpty() && (!plusOpensBar || state.quick_add?.shown == true)
+    // A SENTENCE IS PUT AWAY WHEN THE MEMBER LEAVES THE PLACE IT WAS ABOUT (#1202): the import's "No calendars
+    // found" outlived a tab tap. The sentence in view at the change is the one hidden; a new one shows.
+    val sentenceNow = state.status?.sentence.orEmpty()
+    var putAway by remember { mutableStateOf("") }
+    var placeSeen by remember { mutableStateOf(state.destination) }
+    if (placeSeen != state.destination) {
+        placeSeen = state.destination
+        putAway = sentenceNow
+    }
     Box(Modifier.fillMaxSize().testTag("agenda-home")) {
         AppPlace(
             app = state.app_key,
@@ -288,7 +300,7 @@ public fun AgendaHomeScreen(
                 // THE ASK ROW closes a search's answer (#1097); the state holds one only while it is drawn.
                 SearchAskRow(state.search_ask_row, onOpen)
                 // THE TASK WRITE'S STATUS LINE ("Task done", Undo) docks under whichever place's list.
-                StatusLine(state.status, actTag = "agenda-status-action") {
+                StatusLine(state.status.takeIf { sentenceNow != putAway }, actTag = "agenda-status-action") {
                     onEvent(AgendaHomeEvent(status_acted = AgendaHomeEvent.StatusActed()))
                 }
                 // THE PLUS OPENED THE BAR (To-do only): the keyboard-attached quick add, focus from `focused`.

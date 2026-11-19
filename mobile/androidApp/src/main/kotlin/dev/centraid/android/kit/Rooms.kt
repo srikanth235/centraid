@@ -723,13 +723,16 @@ public fun StatusLine(status: String, modifier: Modifier = Modifier) {
 @Composable
 public fun Modifier.kitStatusPill(): Modifier {
     // THE BOARDS DRAW THE LINE AS A PILL (StatusLine, FirstImports): fully round.
-    val shape = RoundedCornerShape(50)
+    // AT THE LARGEST TEXT IT IS A BANNER (#1202): a sentence of four lines in a fully round pill was an oval that
+    // clipped its first and last letters; a rounded rectangle wraps it cleanly.
+    val largest = rememberLargestText()
+    val shape = if (largest) RoundedCornerShape(CentraidScale.cardRadius.dp) else RoundedCornerShape(50)
     return padding(vertical = 4.dp)
         .heightIn(min = KitGeometry.ROW_MIN)
         .clip(shape)
         .background(Surface.card)
         .border(KitGeometry.HAIRLINE, Surface.border, shape)
-        .padding(start = 16.dp, end = 6.dp, top = 10.dp, bottom = 10.dp)
+        .padding(start = 16.dp, end = if (largest) 16.dp else 6.dp, top = 10.dp, bottom = 10.dp)
 }
 
 /**
