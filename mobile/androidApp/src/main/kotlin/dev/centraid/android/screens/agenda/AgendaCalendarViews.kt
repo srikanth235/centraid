@@ -347,7 +347,9 @@ internal fun AgendaTodayButton(label: String, modifier: Modifier = Modifier, onP
             },
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, style = kitTextStyle(KitType.Row), color = accent.text)
+        // THE CALENDAR BLUE ON ITS OWN WASH IS 4.24:1, UNDER THE 4.5 THE RULE ASKS OF TEXT (behaviour.md § Accessibility):
+        // a fifth of the way toward the ink keeps the hue and clears it (the accessibility suite holds it).
+        Text(label, style = kitTextStyle(KitType.Row), color = androidx.compose.ui.graphics.lerp(accent.text, Surface.ink, 0.2f))
     }
 }
 

@@ -57,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -441,18 +442,23 @@ private fun BackupPage(
                 }
                 if (model.include_videos_label.isNotEmpty()) {
                     Row(
-                        Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp).testTag("backup-include-videos"),
+                        // THE WHOLE ROW IS THE SWITCH: a label beside a switch is a word nobody can press, and a screen
+                        // reader gets one control named by the row. Same size as before.
+                        Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                            .toggleable(
+                                value = model.include_videos,
+                                role = Role.Switch,
+                                onValueChange = { onEvent(BackupHomeEvent(set_include_videos = BackupHomeEvent.SetIncludeVideos(include = it))) },
+                            )
+                            .padding(horizontal = 16.dp).testTag("backup-include-videos"),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Text(model.include_videos_label, style = centraidType("body"), color = Surface.ink, modifier = Modifier.weight(1f))
                         Switch(
                             checked = model.include_videos,
-                            onCheckedChange = {
-                                onEvent(BackupHomeEvent(set_include_videos = BackupHomeEvent.SetIncludeVideos(include = it)))
-                            },
+                            onCheckedChange = null,
                             colors = SwitchDefaults.colors(checkedTrackColor = appAccent("").fill),
-                            modifier = Modifier.semantics { contentDescription = model.include_videos_label },
                         )
                     }
                 }

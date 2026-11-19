@@ -28,7 +28,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.invisibleToUser
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
@@ -112,7 +115,13 @@ public fun KitSwipeRow(
                             action.onPress()
                         }
                         .testTag("row-action-${action.id}")
-                        .semantics { role = Role.Button },
+                        // BEHIND THE ROW, NOT ON IT: while the row is shut these keys are covered, so a screen reader
+                        // would land on a button nobody can see (and read the same word once per row). Its actions are
+                        // the row's own custom actions below, and the row's long press is the same menu.
+                        .semantics {
+                            role = Role.Button
+                            if (offset.value > -1f) invisibleToUser()
+                        },
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(action.label, style = kitTextStyle(KitType.Meta), color = Color.White, maxLines = 1)
@@ -123,6 +132,8 @@ public fun KitSwipeRow(
             Modifier
                 .offset { IntOffset(offset.value.roundToInt(), 0) }
                 .background(Surface.card)
+                // EVERY ACTION BY NAME FOR A SCREEN READER: the swipe is a gesture it does not make.
+                .semantics { customActions = actions.map { action -> CustomAccessibilityAction(action.label) { action.onPress(); true } } }
                 .draggable(
                     orientation = Orientation.Horizontal,
                     enabled = swipeActions.isNotEmpty(),
