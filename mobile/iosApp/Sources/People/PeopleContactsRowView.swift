@@ -31,7 +31,7 @@ struct PeopleContactsRowView: View {
                         .foregroundStyle(row.state == .denied ? StateColor.red.text : accent.text)
                 }
                 if !row.detail.isEmpty {
-                    Text(row.detail).kitType(.meta).foregroundStyle(Surface.meta).kitLineLimit(2, wide: 6)
+                    Text(row.detail.dotSafe).kitType(.meta).foregroundStyle(Surface.meta).kitLineLimit(2, wide: 6)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -19,6 +19,9 @@ struct AgendaAttachmentsView: View {
     let send: (Centraid_Core_V1_AgendaAttachmentEvent) -> Void
     /// The page margin around the section; one placed inside a column that pads itself turns it off.
     var padded = true
+    /// An empty section's words sit inside the card, as Linked to's do (People's person page), not as a
+    /// plain line under the head.
+    var emptyInCard = false
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.appAccent) private var accent
@@ -36,7 +39,15 @@ struct AgendaAttachmentsView: View {
         VStack(alignment: .leading, spacing: 0) {
             SectionHeader(title: section.heading)
                 .accessibilityIdentifier(headIdentifier)
-            if section.items.isEmpty, !section.emptyLabel.isEmpty {
+            if section.items.isEmpty, !section.emptyLabel.isEmpty, emptyInCard {
+                Text(section.emptyLabel)
+                    .kitType(.row)
+                    .foregroundStyle(Surface.meta)
+                    .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .background(Surface.card, in: RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+                    .padding(.horizontal, margin)
+            } else if section.items.isEmpty, !section.emptyLabel.isEmpty {
                 Text(section.emptyLabel)
                     .centraidType("body")
                     .foregroundStyle(Theme.color("textSoft", scheme))

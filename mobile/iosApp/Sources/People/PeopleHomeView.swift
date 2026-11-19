@@ -238,7 +238,7 @@ struct PeopleListsView: View {
                                 let listID = row.listID
                                 CentraidRow(
                                     title: row.name,
-                                    meta: row.meta,
+                                    meta: row.meta.dotSafe,
                                     accessibility: row.accessibilityLabel,
                                     identifier: "people-list-row-\(listID)"
                                 ) { send(PeopleEvents.lists { $0.rowTapped = .with { $0.listID = listID } }) }
@@ -631,7 +631,7 @@ private struct PeopleTouchList: View {
                             .padding(.leading, CentraidGeometry.pageMargin)
                         CentraidRow(
                             title: card.name,
-                            meta: [card.role, card.detail].filter { !$0.isEmpty }.joined(separator: " · "),
+                            meta: [card.role, card.detail].filter { !$0.isEmpty }.joined(separator: " · ").dotSafe,
                             accessibility: card.accessibilityLabel,
                             identifier: "people-reconnect-\(card.partyID)",
                             onTap: { open(card.route) }
@@ -653,7 +653,7 @@ private struct PeopleTouchList: View {
                             .padding(.leading, CentraidGeometry.pageMargin)
                         CentraidRow(
                             title: row.name,
-                            meta: [row.label, row.dayLabel].filter { !$0.isEmpty }.joined(separator: " · "),
+                            meta: [row.label, row.dayLabel].filter { !$0.isEmpty }.joined(separator: " · ").dotSafe,
                             trailing: row.whenLabel,
                             accessibility: row.accessibilityLabel,
                             identifier: "people-upcoming-\(row.dateID)",
@@ -671,7 +671,7 @@ private struct PeopleTouchList: View {
                             .padding(.leading, CentraidGeometry.pageMargin)
                         CentraidRow(
                             title: row.name,
-                            meta: [row.kindLabel, row.text].filter { !$0.isEmpty }.joined(separator: " · "),
+                            meta: [row.kindLabel, row.text].filter { !$0.isEmpty }.joined(separator: " · ").dotSafe,
                             trailing: row.whenLabel,
                             accessibility: row.accessibilityLabel,
                             identifier: "people-recent-\(row.interactionID)",
@@ -837,4 +837,10 @@ struct PeopleStatusLine: View {
 /// `Theme.color` traps on an unknown role and an avatar must never crash.
 func peopleHue(_ role: String, else fallback: String) -> String {
     KitHue.role(role) ?? fallback
+}
+
+extension String {
+    /// A WRAPPED META LINE NEVER STARTS WITH "·" (#1202): the separator keeps to the part before it
+    /// (a no-break space ahead of the dot), so a break falls after the dot, never before it.
+    var dotSafe: String { replacingOccurrences(of: " · ", with: "\u{00A0}· ") }
 }
