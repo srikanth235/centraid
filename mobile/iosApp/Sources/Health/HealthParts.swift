@@ -111,10 +111,22 @@ struct HealthPinnedCard: View {
                         HealthSparkBars(points: line.sparkBp, label: line.sparkLabel)
                     }
                 } else {
-                    figure(size: 22, unitSize: CentraidScale.metaSize)
-                    Text(line.compactLine)
-                        .kitType(.meta)
-                        .foregroundStyle(Surface.meta)
+                    // NO VALUE YET says so in the figure's place, in the wide cards' words ("Nothing yet today").
+                    if line.value.isEmpty {
+                        Text(line.whenLabel)
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.meta)
+                        if !line.typical.isEmpty {
+                            Text(line.typical)
+                                .kitType(.meta)
+                                .foregroundStyle(Surface.meta)
+                        }
+                    } else {
+                        figure(size: 22, unitSize: CentraidScale.metaSize)
+                        Text(line.compactLine)
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.meta)
+                    }
                 }
             }
             .padding(.horizontal, 14)

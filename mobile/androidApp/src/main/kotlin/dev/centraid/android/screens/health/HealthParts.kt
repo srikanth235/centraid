@@ -197,8 +197,14 @@ internal fun HealthPinnedCard(line: HealthMetricLine, tag: String, onTap: () -> 
                 HealthSparkBars(line.spark_bp, line.spark_label)
             }
         } else {
-            HealthFigureText(line.value_, line.unit, 22)
-            KitText(line.typical.ifEmpty { line.when_label }, KitType.Meta, Surface.meta)
+            // NO VALUE YET says so in the figure's place, in the wide cards' words ("Nothing yet today").
+            if (line.value_.isEmpty()) {
+                KitText(line.when_label, KitType.Meta, Surface.meta)
+                if (line.typical.isNotEmpty()) KitText(line.typical, KitType.Meta, Surface.meta)
+            } else {
+                HealthFigureText(line.value_, line.unit, 22)
+                KitText(line.typical.ifEmpty { line.when_label }, KitType.Meta, Surface.meta)
+            }
         }
     }
 }
