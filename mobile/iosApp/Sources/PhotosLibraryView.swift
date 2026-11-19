@@ -269,7 +269,11 @@ struct LibraryTimelineRows: View {
                     Text(month.title)
                         .kitType(.section)
                         .foregroundStyle(Surface.ink)
-                        .kitLineLimit(1, wide: 2)
+                        // ONE LINE THAT SHRINKS, NEVER ONE THAT TRUNCATES (#1202): the row's height is
+                        // exact (the sweep walks it), so a second line cannot be given room, and
+                        // "November 2026" read "November 2..." at the largest text.
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
                         .padding(.top, 12)
                         .padding(.horizontal, CentraidGeometry.pageMargin)
                         .frame(maxWidth: .infinity, minHeight: monthRow, maxHeight: monthRow, alignment: .leading)
