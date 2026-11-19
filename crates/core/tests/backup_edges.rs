@@ -320,6 +320,64 @@ fn a_gateway_that_goes_away_mid_pass_is_blamed_and_the_next_pass_finishes() {
     );
 }
 
+/// **A GATEWAY RESTARTED MID-UPLOAD** (#1202, S11). The process, not the cable: the gateway stops
+/// while a part is part-way up, starts again over the same data directory, and the phone's next
+/// pass finishes. It leaves no duplicate and no corrupt object: every stored file is whole (its
+/// BLAKE3 is a recorded digest), there is one file per recorded name, nothing is staged and
+/// nothing the ledger confirmed is sent again.
+#[test]
+fn a_gateway_restarted_mid_upload_resumes_with_no_duplicate_or_corrupt_object() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    drain(&phone, at_home());
+    originals(&phone, "a film the restart interrupted", 5, 1 << 20);
+
+    gateway.cable().cut_after(2 * (1 << 20) + (1 << 19));
+    let cut = drain(&phone, quietly());
+    assert_eq!(cut.stopped, wire::DrainStop::Unreachable as i32, "{cut:?}");
+    assert!((1..5).contains(&cut.confirmed_parts), "{cut:?}");
+
+    let gateway = gateway.restart();
+    let held_before = gateway.held(&vault_id());
+    let resumed = drain(&phone, quietly());
+    assert_eq!(
+        resumed.stopped,
+        wire::DrainStop::Empty as i32,
+        "{resumed:?}"
+    );
+    assert_eq!(
+        u64::from(resumed.confirmed_parts - snapshot_parts_after(&gateway, &phone, &held_before)),
+        5 - u64::from(cut.confirmed_parts),
+        "nothing acknowledged before the restart is sent again"
+    );
+    let backed = status(&phone);
+    assert_eq!(backed.content_confirmed, backed.content_total);
+    assert!(backed.waiting.is_empty(), "{:?}", backed.waiting);
+
+    let records = gateway.objects(&vault_id());
+    let digests: std::collections::BTreeSet<[u8; 32]> =
+        records.iter().map(|r| *r.digest.as_bytes()).collect();
+    let (mut stored, mut staged) = (Vec::new(), 0);
+    for (path, bytes) in gateway.files() {
+        let text = path.to_string_lossy();
+        if text.contains("/incoming/") {
+            staged += 1;
+        } else if text.contains("/objects/") {
+            stored.push(*blake3::hash(&bytes).as_bytes());
+        }
+    }
+    assert_eq!(staged, 0, "no half-sent part is left staged");
+    assert_eq!(stored.len(), records.len(), "one file per recorded object");
+    assert!(
+        stored.iter().all(|digest| digests.contains(digest)),
+        "every stored file is whole: its digest is a recorded one"
+    );
+    let unique: std::collections::BTreeSet<_> = stored.iter().collect();
+    assert_eq!(unique.len(), stored.len(), "no object is stored twice");
+}
+
 /// **A GATEWAY THAT GOES AWAY WHILE A PASS ASKS IT A QUESTION** (#1080, B1).
 /// The pass reached the gateway and was asking it `exists` when it went.
 /// That is the same gateway out of reach as one that stops mid-upload: an
