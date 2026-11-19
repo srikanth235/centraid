@@ -172,7 +172,14 @@ pub fn toolbar(
     today: &str,
     shown: bool,
 ) -> wire::AgendaToolbar {
-    if !shown || anchor.is_empty() || today.is_empty() || has_calendar_header(destination) {
+    // INVITES HAS NO WINDOW: it lists what waits on the member, whatever the day, so it draws no
+    // day bar (no "From <date>", no arrows, no Today key).
+    if !shown
+        || anchor.is_empty()
+        || today.is_empty()
+        || has_calendar_header(destination)
+        || destination == Dest::Waiting
+    {
         return wire::AgendaToolbar::default();
     }
     // THE PERIOD'S OWN WORDS: a month or a year, and today is in it when the

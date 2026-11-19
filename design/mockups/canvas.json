@@ -3497,6 +3497,54 @@
       "x": 1800,
       "y": 75360
     },
+    "PeopleTouchEmpty.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "10 · People, Touch with no one yet",
+      "w": 390,
+      "x": 2190,
+      "y": 75360
+    },
+    "PeopleTouchEmptyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "10 · People, Touch with no one yet · dark",
+      "w": 390,
+      "x": 2190,
+      "y": 75360
+    },
+    "CalendarInvitesEmpty.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "10 · Calendar, Invites with nothing waiting",
+      "w": 390,
+      "x": 2610,
+      "y": 75360
+    },
+    "CalendarInvitesEmptyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "10 · Calendar, Invites with nothing waiting · dark",
+      "w": 390,
+      "x": 2610,
+      "y": 75360
+    },
+    "NotesJournalEmpty.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "10 · Notes, Journal with no entries",
+      "w": 390,
+      "x": 3030,
+      "y": 75360
+    },
+    "NotesJournalEmptyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "10 · Notes, Journal with no entries · dark",
+      "w": 390,
+      "x": 3030,
+      "y": 75360
+    },
     "BackupUnpaired.dc.html": {
       "h": 844,
       "page": "light",
@@ -4481,6 +4529,12 @@
     "PhotosRefusedDark.dc.html",
     "RemindersRefused.dc.html",
     "RemindersRefusedDark.dc.html",
+    "PeopleTouchEmpty.dc.html",
+    "PeopleTouchEmptyDark.dc.html",
+    "CalendarInvitesEmpty.dc.html",
+    "CalendarInvitesEmptyDark.dc.html",
+    "NotesJournalEmpty.dc.html",
+    "NotesJournalEmptyDark.dc.html",
     "BackupUnpaired.dc.html",
     "BackupUnpairedDark.dc.html",
     "HomeBackupDayTwo.dc.html",

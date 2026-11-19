@@ -175,10 +175,22 @@ impl Home {
 
     fn refresh(&mut self, ctx: &Ctx) {
         self.read_stored(ctx);
+        let was_today = self.today.clone();
         let before = std::mem::take(&mut self.held);
         // A refresh that failed keeps what was shown, under its note.
         if !self.read(ctx) {
             self.held.keep_unread(before);
+        }
+        // A SURFACE ON TODAY FOLLOWS TODAY past midnight: "From Wednesday 18 November" on the 19th
+        // is a window the member never chose.
+        if !was_today.is_empty()
+            && !self.today.is_empty()
+            && self.today != was_today
+            && self.anchor == was_today
+        {
+            self.anchor = self.today.clone();
+            self.held = Held::default();
+            self.read(ctx);
         }
     }
 

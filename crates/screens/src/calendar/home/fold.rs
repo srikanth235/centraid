@@ -399,7 +399,9 @@ pub fn events(fold: &Fold) -> Option<Folded> {
     let offer_import = fold.term.is_none()
         && fold.hidden.is_empty()
         && upcoming.events.is_empty()
-        && !fold.import_denied;
+        && !fold.import_denied
+        // INVITES' EMPTY CARD has its own words and nothing to import: an import offers events.
+        && fold.destination != Dest::Waiting;
 
     let data = wire::AgendaHomeData {
         today: today.to_owned(),
