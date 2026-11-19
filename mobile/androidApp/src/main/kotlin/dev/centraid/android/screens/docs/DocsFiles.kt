@@ -13,7 +13,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
@@ -30,8 +29,10 @@ import dev.centraid.android.kit.effectAttempt
 import dev.centraid.android.session.Stage
 import dev.centraid.core.CentraidCore
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -41,6 +42,32 @@ import kotlinx.coroutines.withContext
  * (the drive tells `imports.files` itself).
  */
 internal class DocsFiles(val core: () -> CentraidCore?)
+
+/**
+ * WHAT OUTLIVES THE ACTIVITY (#1202): the answer Rust is waiting for, and the scope its copy and
+ * stage run in. A rotation, a font-scale or locale change recreates the activity (and so
+ * [DocsPickers]) while the system picker or camera is in front; the picker's result is then
+ * delivered to the new instance, which must still be able to answer the effect Rust asked, or its
+ * ingest stays in `Picking` and the Add sheet is dead until the app is killed. The scope is
+ * process-wide too, so a copy or stage in progress is not cancelled with the old composition.
+ */
+internal object DocsHold {
+    /** The answer to the one `PickFile` or `FollowFolder` out at a time; null when none is. */
+    @Volatile
+    internal var answer: ((EffectResult) -> Unit)? = null
+
+    internal val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    private val swept = AtomicBoolean(false)
+
+    /**
+     * Delete what an earlier process left in the cache (a copy or scan a kill orphaned), once per
+     * process and before any ingest of this one can have started.
+     */
+    fun sweepOnce(context: Context) {
+        if (swept.compareAndSet(false, true)) scope.launch(Dispatchers.IO) { DocsIngestFiles.sweep(context) }
+    }
+}
 
 /**
  * THE PLATFORM'S HALF OF `PickFile`, `FollowFolder` AND `StopFollowing` (#1047 R-1047-Q4,
@@ -56,7 +83,11 @@ internal class DocsPickers(
     private val files: DocsFiles,
     private val scope: CoroutineScope,
 ) {
-    private var answer: ((EffectResult) -> Unit)? = null
+    private var answer: ((EffectResult) -> Unit)?
+        get() = DocsHold.answer
+        set(value) {
+            DocsHold.answer = value
+        }
     internal var upload: ManagedActivityResultLauncher<Array<String>, Uri?>? = null
     internal var scan: ManagedActivityResultLauncher<Uri, Boolean>? = null
     internal var cameraGrant: ManagedActivityResultLauncher<String, Boolean>? = null
@@ -120,6 +151,8 @@ internal class DocsPickers(
     /** The picker returned [uri]: the stream is copied into the cache off the main thread, then staged. */
     fun uploaded(uri: Uri?) {
         if (uri == null) return done()
+        // NOBODY WAITS (the process was restarted behind the picker): there is nothing to copy for.
+        if (answer == null) return
         scope.launch {
             val copied = withContext(Dispatchers.IO) { DocsIngestFiles.copy(context, uri) }
             if (copied == null) fail(EffectReason.UNREADABLE) else stage(copied.path, copied.name, mediaTypeOf(copied.name, copied.mediaType))
@@ -130,7 +163,7 @@ internal class DocsPickers(
     fun scanned(taken: Boolean, saved: String) {
         val photo = saved.takeIf { it.isNotEmpty() }?.let(::File)
         setScanTarget("")
-        if (!taken || photo == null) {
+        if (!taken || photo == null || answer == null) {
             photo?.let(DocsIngestFiles::discard)
             return done()
         }
@@ -251,8 +284,8 @@ internal class DocsPickers(
 @Composable
 internal fun rememberDocsPickers(files: DocsFiles): DocsPickers {
     val context = LocalContext.current.applicationContext
-    val scope = rememberCoroutineScope()
-    val pickers = remember(files) { DocsPickers(context, files, scope) }
+    DocsHold.sweepOnce(context)
+    val pickers = remember(files) { DocsPickers(context, files, DocsHold.scope) }
     // The camera's target survives the activity being recreated behind it.
     var target by rememberSaveable { mutableStateOf("") }
     pickers.setScanTarget = { target = it }

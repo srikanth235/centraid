@@ -30,6 +30,12 @@ final class DocsFiles: ObservableObject {
     /// The photo library's picker is up (`KIND_PHOTO`, images only).
     @Published var choosingPhoto = false
 
+    /// A LAUNCH SWEEPS WHAT A KILL LEFT (#1202): a copy waits in the temporary directory only for the
+    /// stage that follows it, so one found at launch belongs to a stage that never finished.
+    private init() {
+        Task.detached(priority: .utility) { DocsFileCopies.sweep() }
+    }
+
     /// The core the copy is staged into, given with the ask.
     private var core: (any ScreenCore)?
 
@@ -121,7 +127,11 @@ final class DocsFiles: ObservableObject {
     // MARK: Staging
 
     private func stage(_ path: String, name: String, mediaType: String) {
-        guard let core else { return fail(EffectReason.unavailable) }
+        // THE COPY IS THIS APP'S, so it goes on every path: a plaintext duplicate of the member's file.
+        guard let core else {
+            DocsFileCopies.discard(path)
+            return fail(EffectReason.unavailable)
+        }
         let answer = answer
         self.answer = nil
         Task {
@@ -141,10 +151,12 @@ final class DocsFiles: ObservableObject {
                 picked.name = name
                 picked.mediaType = mediaType
                 answer?(.filePicked(picked))
-            case .refused:
-                // The sentence is Rust's: a refusal is said by the screen that asked.
+            case let .refused(error):
+                // The core's own sentence rides as the reason, as on Android; the words the member reads
+                // are Rust's, said by the screen that asked.
                 var failed = Centraid_Core_V1_EffectFailed()
-                failed.reason = EffectReason.failed
+                let sentence = error?.sentence ?? ""
+                failed.reason = sentence.isEmpty ? EffectReason.failed : sentence
                 answer?(.failed(failed))
             }
         }
@@ -191,7 +203,11 @@ struct DocsFilesRoot: View {
 }
 
 /// Where a picked or scanned file waits for the stage: this app's own temporary
-/// directory, under a name nothing else will pick. A copy is deleted once staged.
+/// directory, under a name nothing else will pick (a UUID, never the member's file
+/// name: a legal 255-byte name plus a prefix does not fit a path component). A
+/// copy is deleted once staged, and at launch if a kill left it; it is written
+/// under complete file protection, being a plaintext duplicate of the member's
+/// document.
 enum DocsFileCopies {
     struct Copied {
         let path: String
@@ -201,20 +217,39 @@ enum DocsFileCopies {
 
     static var directory: URL {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("docs-ingest", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(
+            at: dir,
+            withIntermediateDirectories: true,
+            attributes: [.protectionKey: FileProtectionType.complete]
+        )
         return dir
+    }
+
+    /// Delete every copy an earlier launch left behind.
+    nonisolated static func sweep() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("docs-ingest", isDirectory: true)
+        let left = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        for name in left {
+            try? FileManager.default.removeItem(at: folder.appendingPathComponent(name))
+        }
+    }
+
+    private static func protect(_ path: String) {
+        try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: path)
     }
 
     static func copy(_ url: URL) -> Copied? {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let name = url.lastPathComponent
-        let target = directory.appendingPathComponent("\(UUID().uuidString)-\(name)")
+        let target = directory.appendingPathComponent(UUID().uuidString)
         do {
             try FileManager.default.copyItem(at: url, to: target)
         } catch {
+            try? FileManager.default.removeItem(at: target)
             return nil
         }
+        protect(target.path)
         let mediaType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? ""
         return Copied(path: target.path, name: name, mediaType: mediaType)
     }
@@ -233,7 +268,9 @@ enum DocsFileCopies {
         }
         guard document.pageCount > 0 else { return nil }
         let target = directory.appendingPathComponent("\(UUID().uuidString).pdf")
-        return document.write(to: target) ? target.path : nil
+        guard document.write(to: target) else { return nil }
+        protect(target.path)
+        return target.path
     }
 }
 
