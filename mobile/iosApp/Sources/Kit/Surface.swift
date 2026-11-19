@@ -284,7 +284,7 @@ private struct KitLineLimit: ViewModifier {
     let wide: Int
 
     func body(content: Content) -> some View {
-        content.lineLimit(dynamicTypeSize.isAccessibilitySize ? max(lines, wide) : lines)
+        content.lineLimit(dynamicTypeSize >= .xLarge ? nil : lines)
     }
 }
 
@@ -493,23 +493,68 @@ extension View {
 }
 
 private struct KitScaledFont: ViewModifier {
-    @ScaledMetric private var scaled: CGFloat
+    let size: CGFloat
     let weight: Font.Weight
 
-    init(size: CGFloat, weight: Font.Weight) {
-        let style: Font.TextStyle =
+    func body(content: Content) -> some View {
+        content.kitSystemFont(size, weight: weight)
+    }
+}
+
+// MARK: - System face that carries a text style (#1202)
+
+extension Font {
+    /// A SYSTEM-FACE SIZE THAT THE ACCESSIBILITY AUDIT READS AS DYNAMIC TYPE. `.system(size:)` has no
+    /// text style, so the audit reports it as unsupported however it is scaled; `UIFontMetrics` on the
+    /// nearest text style makes the font a scaled one. The size handed in is the member's, already
+    /// capped by the root (and by `kitHeld` where a badge holds), so the hold still holds.
+    static func kitScaled(_ size: CGFloat, weight: Font.Weight = .regular, at category: DynamicTypeSize) -> Font {
+        let style: UIFont.TextStyle =
             switch size {
+            case ..<12: .caption2
             case ..<14: .footnote
+            case ..<16: .subheadline
             case ..<18.5: .body
+            case ..<21: .title3
             case ..<25: .title2
-            case ..<32: .title
+            case ..<30: .title1
             default: .largeTitle
             }
-        _scaled = ScaledMetric(wrappedValue: size, relativeTo: style)
-        self.weight = weight
+        let traits = UITraitCollection(preferredContentSizeCategory: min(category, Theme.textSizeCap).contentSizeCategory)
+        let base = UIFont.systemFont(ofSize: size, weight: UIFont.Weight(weight))
+        return Font(UIFontMetrics(forTextStyle: style).scaledFont(for: base, compatibleWith: traits))
     }
+}
+
+extension UIFont.Weight {
+    init(_ weight: Font.Weight) {
+        switch weight {
+        case .ultraLight: self = .ultraLight
+        case .thin: self = .thin
+        case .light: self = .light
+        case .medium: self = .medium
+        case .semibold: self = .semibold
+        case .bold: self = .bold
+        case .heavy: self = .heavy
+        case .black: self = .black
+        default: self = .regular
+        }
+    }
+}
+
+extension View {
+    /// `Font.kitScaled`, reading the text size from the environment.
+    func kitSystemFont(_ size: CGFloat, weight: Font.Weight = .regular) -> some View {
+        modifier(KitSystemFont(size: size, weight: weight))
+    }
+}
+
+private struct KitSystemFont: ViewModifier {
+    @Environment(\.dynamicTypeSize) private var category
+    let size: CGFloat
+    let weight: Font.Weight
 
     func body(content: Content) -> some View {
-        content.font(.system(size: scaled, weight: weight))
+        content.font(.kitScaled(size, weight: weight, at: category))
     }
 }

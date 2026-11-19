@@ -471,7 +471,7 @@ struct NotesRowView: View {
                         .kitType(.row)
                         .fontWeight(.semibold)
                         .foregroundStyle(Surface.ink)
-                        .kitLineLimit(1)
+                        .kitLineLimit(2)
                     Spacer(minLength: 8)
                     if !row.checkLabel.isEmpty {
                         Text(row.checkLabel)
@@ -486,6 +486,7 @@ struct NotesRowView: View {
                     .kitType(.meta)
                     .foregroundStyle(Surface.body)
                     .kitLineLimit(1)
+                    .accessibilityIdentifier("notes-row-preview")
                 if !row.meta.isEmpty {
                     Text(row.meta)
                         .kitType(.meta)

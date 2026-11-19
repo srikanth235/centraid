@@ -128,6 +128,7 @@ struct RoomTitle: View {
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(slot.subtitle.spoken)
                         .accessibilityIdentifier("room-subtitle")
+                        .accessibilityAddTraits(.isStaticText)
                 }
                 if slot.subtitle.clearable {
                     Button(action: slot.onClear) {

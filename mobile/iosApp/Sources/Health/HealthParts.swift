@@ -80,8 +80,9 @@ struct HealthPinnedCard: View {
     @Environment(\.appAccent) private var accent
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// THE FIGURE FOLLOWS THE TEXT SIZE (#1202): the labels scaled while the number stayed at its
-    /// point size, so at the largest text the key number was the smallest thing on the card.
-    @ScaledMetric(relativeTo: .title3) private var scale: CGFloat = 1
+    /// point size, so at the largest text the key number was the smallest thing on the card. It is
+    /// a system face on a text style (`Font.kitScaled`), which is what the audit reads as scaling.
+    private let scale: CGFloat = 1
 
     var body: some View {
         Button(action: onTap) {
@@ -154,10 +155,10 @@ struct HealthPinnedCard: View {
 
     private func figure(size: CGFloat, unitSize: CGFloat) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Self.runs(line.value, size: size, unitSize: unitSize)
+            Self.runs(line.value, size: size, unitSize: unitSize, at: dynamicTypeSize)
             if !line.unit.isEmpty {
                 Text(line.unit)
-                    .font(.system(size: unitSize))
+                    .font(.kitScaled(unitSize, at: dynamicTypeSize))
                     .foregroundStyle(Surface.meta)
             }
         }
@@ -165,15 +166,15 @@ struct HealthPinnedCard: View {
 
     /// A FIGURE THAT CARRIES ITS OWN UNITS ("7 h 12 min", the core's words): the numbers in the
     /// figure's weight, every run of letters in the small meta unit, as the board draws it.
-    static func runs(_ value: String, size: CGFloat, unitSize: CGFloat) -> Text {
+    static func runs(_ value: String, size: CGFloat, unitSize: CGFloat, at category: DynamicTypeSize) -> Text {
         var text = Text("")
         var run = ""
         var isUnit = false
         func flush() {
             guard !run.isEmpty else { return }
             text = text + (isUnit
-                ? Text(run).font(.system(size: unitSize)).foregroundColor(Surface.meta)
-                : Text(run).font(.system(size: size, weight: .bold)).foregroundColor(Surface.ink))
+                ? Text(run).font(.kitScaled(unitSize, at: category)).foregroundColor(Surface.meta)
+                : Text(run).font(.kitScaled(size, weight: .bold, at: category)).foregroundColor(Surface.ink))
             run = ""
         }
         for ch in value {
@@ -200,6 +201,7 @@ struct HealthHighlightCard: View {
 
     @Environment(\.appAccent) private var accent
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         Button(action: onTap) {
@@ -208,7 +210,7 @@ struct HealthHighlightCard: View {
                     .frame(width: 32, height: 32)
                     .background(Circle().fill(accent.wash(dark: scheme == .dark)))
                     .accessibilityHidden(true)
-                (Text(highlight.lead) + Text(highlight.emphasis).font(.system(size: CentraidScale.rowSize, weight: .bold)) + Text(highlight.tail))
+                (Text(highlight.lead) + Text(highlight.emphasis).font(.kitScaled(CentraidScale.rowSize, weight: .bold, at: dynamicTypeSize)) + Text(highlight.tail))
                     .kitType(.row)
                     .foregroundStyle(Surface.ink)
                     .multilineTextAlignment(.leading)

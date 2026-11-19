@@ -54,6 +54,7 @@ struct KitHeader: View {
                 words(slot)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(slot.subtitle.spoken)
+                    .accessibilityAddTraits(.isStaticText)
                     .accessibilityIdentifier("room-subtitle")
             }
             if slot.subtitle.clearable {
