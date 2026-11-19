@@ -94,6 +94,7 @@ import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.hueColor
 import dev.centraid.android.kit.kitTextStyle
+import dev.centraid.android.kit.menuTestIds
 import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.screens.daySection
 import dev.centraid.android.theme.LocalCentraidTokens
@@ -243,6 +244,7 @@ internal fun AgendaLayoutKey(header: AgendaCalendarHeader, onEvent: (AgendaHomeE
         DropdownMenu(
             expanded = open,
             onDismissRequest = { open = false },
+            modifier = Modifier.menuTestIds(),
             containerColor = Surface.card,
             shape = RoundedCornerShape(CentraidScale.cardRadius.dp),
         ) {

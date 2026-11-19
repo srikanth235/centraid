@@ -152,7 +152,7 @@ public fun KitSwipeRow(
                 ),
         ) {
             content()
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = Surface.card) {
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, modifier = Modifier.menuTestIds(), containerColor = Surface.card) {
                 actions.forEach { action ->
                     DropdownMenuItem(
                         text = {

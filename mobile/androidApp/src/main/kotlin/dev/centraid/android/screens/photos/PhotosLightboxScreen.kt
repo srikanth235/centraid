@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.material3.TextFieldDefaults
 import dev.centraid.android.kit.KitText
 import dev.centraid.android.kit.kitTextStyle
+import dev.centraid.android.kit.menuTestIds
 import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.StateColor
@@ -506,7 +507,7 @@ private fun MoreMenu(menu: List<PhotosLightboxVerb>, label: String, onEvent: (Ph
     var open by remember { mutableStateOf(false) }
     Box {
         Chip(icon = "more", label = label, light = true) { open = true }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Surface.card) {
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.menuTestIds(), containerColor = Surface.card) {
             menu.forEach { verb ->
                 DropdownMenuItem(
                     text = {

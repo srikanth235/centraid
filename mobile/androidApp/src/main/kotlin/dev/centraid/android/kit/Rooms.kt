@@ -121,6 +121,13 @@ public data class RoomSearch(
 public val LocalBandClearance: ProvidableCompositionLocal<Dp> = compositionLocalOf { 0.dp }
 
 /**
+ * A MENU'S POPUP IS ITS OWN WINDOW, so the root's `testTagsAsResourceId` (MainActivity, Q-1128-2) does
+ * not reach it, any more than it reaches a sheet's: a `DropdownMenu` that tags its items passes this
+ * as its `modifier`, and Maestro's `id:` selectors find them (`agenda-view-day`, `row-menu-*`, …).
+ */
+public fun Modifier.menuTestIds(): Modifier = this.semantics { testTagsAsResourceId = true }
+
+/**
  * THE BOTTOM PADDING OF A SCROLLER UNDER THE BAND: the band's clearance and, beyond it, the same
  * breathing room the SwiftUI shell leaves (`BandPolicy.FOOT_MARGIN`).
  */

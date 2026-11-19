@@ -662,10 +662,14 @@ private fun SearchContainerLine(
     // A matched container is one pill above the rows (#1173): its glyph in the app's colour, the
     // kind in meta, then its name.
     val shape = RoundedCornerShape(percent = 50)
+    // THE PRESS IS ON THE NODE THAT CARRIES THE ID AND THE SPOKEN LABEL (#1202): `clearAndSetSemantics`
+    // below drops every descendant's actions, so a click on the pill alone left the container
+    // unreachable by TalkBack and by a Maestro tap on its id, which lands in the row's middle.
     Box(
         modifier
             .fillMaxWidth()
             .heightIn(min = KitGeometry.ROW_MIN)
+            .then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier)
             .padding(horizontal = KitGeometry.GUTTER + 2.dp, vertical = 4.dp)
             .testTag("search-container-$entity-$id")
             .clearAndSetSemantics {
@@ -679,7 +683,6 @@ private fun SearchContainerLine(
                 .clip(shape)
                 .background(Surface.card)
                 .border(KitGeometry.HAIRLINE, Surface.border, shape)
-                .then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier)
                 .heightIn(min = KitGeometry.ROW_MIN)
                 .padding(start = 8.dp, end = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
