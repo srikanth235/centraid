@@ -321,8 +321,9 @@ internal fun LockerHomeScreen(
                     onClear = { onEvent(LockerHomeEvent(filter_menu_cleared = FilterMenuCleared())) },
                 )
             },
-            // THE OPEN LINE IS SAID ONCE: on the first run the page's own note draws it, under the title.
-            status = if (generating || (data?.steps ?: 0) > 0) "" else data?.status_line.orEmpty(),
+            // THE OPEN LINE IS SAID ONCE, as the page's own note under the title (the first run's and the
+            // landing's, as on iOS): never again as a pill over the band.
+            status = "",
             statusLine = state.status?.let { line ->
                 { StatusLine(line) }
             },
