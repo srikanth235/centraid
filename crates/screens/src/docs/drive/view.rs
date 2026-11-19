@@ -505,8 +505,12 @@ fn head_meta(drive: &Drive, locale: Locale) -> String {
         (Some(rail), Dest::Folders) if drive.folder_id.is_empty() => rail.unfiled_count,
         _ => rows,
     };
-    // RECENTS says what it is: documents changed lately, and how many there are.
+    // RECENTS says what it is: documents changed lately, and how many there are. With none, the
+    // empty card has the words (FirstOpenDocs) and the line says nothing.
     if drive.destination == Dest::All && drive.folder_id.is_empty() && !search {
+        if count == 0 {
+            return String::new();
+        }
         return words::recents_subtitle(locale, u64::from(count));
     }
     fold::count_label(locale, count)
