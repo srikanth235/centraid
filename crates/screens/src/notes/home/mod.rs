@@ -610,7 +610,14 @@ impl Screen for Home {
         let locale = ctx.locale();
         // The read is the page; the data is the place that is showing, when the page is ready
         // (and not over an open search, whose rows are `search`).
-        let (page, content) = match self.place {
+        // SEARCH IS THE BAND'S KEY IN EVERY PLACE (NotesJournalEmpty): an open search answers over
+        // Notebooks and Journal too, with the library's own page and results.
+        let place = if self.library.search.open {
+            wire::NotesPlace::Notes
+        } else {
+            self.place
+        };
+        let (page, content) = match place {
             wire::NotesPlace::Notebooks => (
                 self.notebooks.wire(locale),
                 self.notebooks
@@ -646,7 +653,7 @@ impl Screen for Home {
             chrome: Some(Self::chrome(locale, self.place)),
             content,
             page: Some(page),
-            search: notes_place.then(|| self.library.search_state(locale)),
+            search: Some(self.library.search_state(locale)),
             more_rows: if denied_now {
                 Vec::new()
             } else {

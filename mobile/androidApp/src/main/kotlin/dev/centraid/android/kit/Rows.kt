@@ -84,6 +84,8 @@ public fun CentraidRow(
     /** The meta as parts (see [MetaLine]); when set it replaces [meta]. [metaAccented] parts take the app's colour. */
     metaParts: List<String> = emptyList(),
     metaAccented: List<String> = emptyList(),
+    /** The hairline under the row; a row that stands on a tile of its own has none, so the tile's corner is whole. */
+    hairline: Boolean = true,
     accessory: (@Composable RowScope.() -> Unit)? = null,
 ) {
     val titleInk = if (dimmed) Surface.meta else Surface.ink
@@ -172,7 +174,9 @@ public fun CentraidRow(
             accessory?.invoke(this)
         }
         // THE HAIRLINE starts at the text, not at the edge.
-        Spacer(Modifier.padding(start = KitGeometry.GUTTER).fillMaxWidth().height(KitGeometry.HAIRLINE).background(line))
+        if (hairline) {
+            Spacer(Modifier.padding(start = KitGeometry.GUTTER).fillMaxWidth().height(KitGeometry.HAIRLINE).background(line))
+        }
     }
 }
 

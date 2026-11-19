@@ -24,7 +24,6 @@ struct NotesHomeView: View {
         return false
     }
 
-    private var isNotesPlace: Bool { state.place == .notes || state.place == .unspecified }
 
     var body: some View {
         let chrome = state.chrome
@@ -32,7 +31,7 @@ struct NotesHomeView: View {
             app: "notes",
             title: state.title,
             trailing: addAction,
-            search: isNotesPlace && !denied ? searchSlot : nil,
+            search: !denied ? searchSlot : nil,
             filter: filter,
             subtitle: subtitle,
             showsBand: !denied && !state.band.isEmpty
@@ -61,7 +60,7 @@ struct NotesHomeView: View {
                 }
                 // THE ASK ROW closes an answer that matched nothing too (#1097): with matches it
                 // rides at the foot of the results, so only an answer with none draws it here.
-                if isNotesPlace, state.search.open, !state.search.hasResults, state.search.hasAsk {
+                if state.search.open, !state.search.hasResults, state.search.hasAsk {
                     SearchAskRow(ask: state.search.ask)
                 }
                 StatusLineView(status: state.status, identifier: "notes-status-action")
@@ -191,7 +190,7 @@ struct NotesHomeView: View {
 
     @ViewBuilder
     private var placeContent: some View {
-        if isNotesPlace, state.search.open {
+        if state.search.open {
             searchResults
         } else {
             switch state.content {

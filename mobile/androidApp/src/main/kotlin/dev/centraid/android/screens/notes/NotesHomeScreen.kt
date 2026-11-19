@@ -99,7 +99,6 @@ public fun NotesHomeScreen(
     onHome: () -> Unit,
 ) {
     val chrome = state.chrome
-    val notesPlace = state.place != NotesPlace.NOTES_PLACE_NOTEBOOKS && state.place != NotesPlace.NOTES_PLACE_JOURNAL
     val search = state.search
     // The gate hides the header's actions (Rust left the band and More empty); nothing else is read here.
     val denied = state.page?.refused
@@ -118,7 +117,7 @@ public fun NotesHomeScreen(
                 RoomAction("Plus", chrome?.new_note.orEmpty(), "notes-new") { onOpen(route) }
             }
         },
-        search = if (notesPlace && search != null && denied == null) {
+        search = if (search != null && denied == null) {
             RoomSearch(
                 field = SearchField(open_ = search.open_, term = search.term, corrected = search.corrected, corrected_label = search.corrected),
                 placeholder = chrome?.search_placeholder.orEmpty(),
@@ -151,7 +150,7 @@ public fun NotesHomeScreen(
         statusLine = { StatusLine(state.status) },
         band = if (state.band.isEmpty()) null else ({ NotesBand(state.band, { key -> onEvent(NotesHomeEvent(band = NotesHomeEvent.BandPicked(key))) }, onHome) }),
     ) {
-        val searching = notesPlace && search?.open_ == true
+        val searching = search?.open_ == true
         Column(Modifier.fillMaxSize()) {
             ReadStateView(
                 page = state.page!!,
@@ -412,6 +411,7 @@ private fun NotebooksList(data: NotesNotebooksData, state: NotesHomeState, onEve
                 a11y = row.accessibility_label,
                 testTag = "notes-notebook-${row.id}",
                 onTap = { onEvent(NotesHomeEvent(notebook_picked = NotesHomeEvent.NotebookPicked(row.id))) },
+                hairline = false,
             ) {
                 if (row.manageable) {
                     IconKey(
@@ -455,6 +455,7 @@ private fun JournalList(
                         a11y = row.accessibility_label,
                         testTag = "notes-entry-${row.note_id}",
                         onTap = { row.route?.let(onOpen) },
+                        hairline = false,
                     )
                 }
             }
