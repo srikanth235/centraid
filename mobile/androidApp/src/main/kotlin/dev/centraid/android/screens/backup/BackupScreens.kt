@@ -178,11 +178,12 @@ private fun BackupUnpairedPage(model: BackupHomeData, onOpen: (Route) -> Unit) {
                     Text(
                         androidx.compose.ui.text.buildAnnotatedString {
                             append(step.before)
-                            // A COMMAND IS ONE UNBROKEN RUN: no wrap at its hyphen or its space.
+                            // A COMMAND WRAPS ONLY AT ITS SPACES (#1202): its hyphen is a non-breaking one (display only; copy keeps
+                            // the ASCII), and a word is never split.
                             if (step.command.isNotEmpty()) {
                                 withStyle(
                                     androidx.compose.ui.text.SpanStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
-                                ) { append(step.command.replace('-', '\u2011').replace(' ', '\u00A0')) }
+                                ) { append(step.command.replace('-', '\u2011')) }
                             }
                             append(step.after)
                         },

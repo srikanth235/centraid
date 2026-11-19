@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -267,16 +268,16 @@ private fun VaultSheet(sheet: HomeVaultSheet, onEvent: (HomeEvent) -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text(
-                        text = vault.initial,
-                        style = centraidType("smallStrong"),
-                        color = centraidColor("text"),
-                        modifier = Modifier
-                            .size(30.dp)
+                    // THE AVATAR GROWS WITH ITS LETTER (#1202): a fixed 30dp square cut the letter to its top half.
+                    Box(
+                        Modifier
+                            .size((30 * LocalDensity.current.fontScale.coerceIn(1f, 2f)).dp)
                             .clip(controlShape())
-                            .background(centraidColor("bgSunken"))
-                            .padding(top = 6.dp),
-                    )
+                            .background(centraidColor("bgSunken")),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(text = vault.initial, style = centraidType("smallStrong"), color = centraidColor("text"))
+                    }
                     Column(Modifier.weight(1f)) {
                         Text(
                             text = vault.name,

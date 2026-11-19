@@ -489,6 +489,9 @@ public fun EditableFieldRow(
 ) {
     val editor = rememberEditorText(value, reload)
     val text = editor.text
+    // A FIELD WRAPS at the largest text (#1202): a one-line field clipped the words at its edge. Return
+    // still finishes (or moves on) rather than adding a line.
+    val wraps = singleLine && rememberLargestText()
     Column(modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp)) {
         if (key.isNotEmpty()) Text(key, style = centraidType("eyebrow"), color = centraidColor("textSoft"))
         Box(Modifier.fillMaxWidth().heightIn(min = 36.dp), contentAlignment = Alignment.CenterStart) {
@@ -503,9 +506,13 @@ public fun EditableFieldRow(
             BasicTextField(
                 value = text.value,
                 onValueChange = { next -> if (editor.edited(next)) onEdit(next) },
-                singleLine = singleLine,
+                singleLine = singleLine && !wraps,
                 // RETURN LEAVES THE FIELD for the next one (the note's title hands focus to its body).
-                keyboardOptions = if (onNext != null) KeyboardOptions(imeAction = ImeAction.Next) else KeyboardOptions.Default,
+                keyboardOptions = when {
+                    onNext != null -> KeyboardOptions(imeAction = ImeAction.Next)
+                    wraps -> KeyboardOptions(imeAction = ImeAction.Done)
+                    else -> KeyboardOptions.Default
+                },
                 keyboardActions = KeyboardActions(onNext = { onNext?.invoke() }),
                 textStyle = centraidType(style).copy(color = centraidColor("text")),
                 cursorBrush = SolidColor(centraidColor("text")),

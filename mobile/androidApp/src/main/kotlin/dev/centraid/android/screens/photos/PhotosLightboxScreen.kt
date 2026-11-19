@@ -770,7 +770,8 @@ private fun InfoCards(
                 value = caption,
                 onValueChange = { caption = it },
                 placeholder = { Text(words.caption_placeholder) },
-                singleLine = true,
+                // THE CAPTION WRAPS at the largest text (#1202); Done still commits it.
+                singleLine = !rememberLargestText(),
                 colors = fieldColors,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { commitCaption() }),

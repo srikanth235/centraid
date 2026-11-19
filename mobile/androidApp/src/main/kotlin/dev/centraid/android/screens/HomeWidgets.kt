@@ -302,8 +302,9 @@ private fun AgendaWidget(tile: HomeTile, day: centraid.core.v1.HomeTileBody.Agen
                         .background(appAccent(tile.app_id).fill),
                 )
                 Column {
-                    WText(event.title, ink(), strong = true)
-                    WText(event.span, meta())
+                    val lines = if (rememberLargestText()) 4 else 1
+                    WText(event.title, ink(), strong = true, maxLines = lines)
+                    WText(event.span, meta(), maxLines = lines)
                 }
             }
         }
@@ -328,7 +329,8 @@ private fun RemindersWidget(tile: HomeTile, owed: centraid.core.v1.HomeTileBody.
         owed.titles.forEach { title ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box(Modifier.size(12.dp).border(1.4.dp, meta(), CircleShape))
-                WText(title, ink())
+                // A TITLE WRAPS BY WORD at the largest text (#1202); it is never cut to an ellipsis.
+                WText(title, ink(), maxLines = if (rememberLargestText()) 4 else 1)
             }
         }
         Spacer(Modifier.weight(1f))

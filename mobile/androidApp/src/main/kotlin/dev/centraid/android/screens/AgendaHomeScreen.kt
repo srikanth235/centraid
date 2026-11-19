@@ -68,6 +68,7 @@ import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.screens.agenda.agendaListColor
 import dev.centraid.android.screens.agenda.gridHue
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.KitStepper
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RoomSearch
@@ -662,14 +663,20 @@ private fun EventRow(row: AgendaEventRow, onOpen: (Route) -> Unit) {
                 .clip(RoundedCornerShape((LocalCentraidTokens.current.radii["xs"] ?: 0).dp))
                 .background(gridHue(row.calendar_hue_key)),
         )
-        Text(
-            row.time_label,
-            style = centraidType("annotLabel"),
-            color = timeInk,
-            maxLines = 2,
-            modifier = Modifier.width(60.dp).padding(start = 8.dp),
-        )
+        // THE TIME OVER THE TITLE at the largest text (#1202): in a fixed 60dp column "10:30" broke as
+        // "10:3 / 0".
+        val stackedTime = rememberLargestText()
+        if (!stackedTime) {
+            Text(
+                row.time_label,
+                style = centraidType("annotLabel"),
+                color = timeInk,
+                maxLines = 2,
+                modifier = Modifier.width(60.dp).padding(start = 8.dp),
+            )
+        }
         Column(Modifier.weight(1f).padding(start = 8.dp)) {
+            if (stackedTime) Text(row.time_label, style = centraidType("annotLabel"), color = timeInk)
             Text(
                 row.title,
                 style = centraidType("body"),
