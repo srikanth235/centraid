@@ -281,10 +281,17 @@ struct SectionHeader: View {
         .buttonStyle(.plain)
     }
 
+    /// A CAPITALS HEAD KEEPS ITS WORD GAP (#1202): the face's space is narrow in capitals, so
+    /// "1 GUEST" and "ATTACHMENTS · 1" ran together. An en space is a visible gap and still a
+    /// place to break; a sentence-case head keeps its ordinary space.
+    private func spaced(_ title: String) -> String {
+        sentenceCase ? title : title.replacingOccurrences(of: " ", with: "\u{2002}")
+    }
+
     /// THE TITLE AND ITS COUNT AS ONE WRAPPING RUN (#1202): two views side by side in a narrow
     /// column interleaved their letters ("CHANNE 2 LS"). One `Text` breaks at a word, title first.
     private var titleAndCount: some View {
-        let words = head.count.map { "\(head.title) \($0)" } ?? head.title
+        let words = head.count.map { "\(spaced(head.title)) \($0)" } ?? spaced(head.title)
         return Text(words)
             .kitType(sentenceCase ? .row : .group)
             .fontWeight(sentenceCase ? .semibold : nil)
@@ -303,7 +310,7 @@ struct SectionHeader: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(head.title)
+                    Text(spaced(head.title))
                         .kitType(sentenceCase ? .row : .group)
                         .fontWeight(sentenceCase ? .semibold : nil)
                         .foregroundStyle(Surface.meta)
