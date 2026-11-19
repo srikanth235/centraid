@@ -259,11 +259,17 @@ struct LockerFieldRowView: View {
     let onVerb: (Centraid_Core_V1_LockerVerb) -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         // THE BOARD'S ROW: the label over the value on the left, the verbs on the trailing edge of
-        // the same row (Copy, Hide, Open), so a field is one compact line, not a stack.
-        HStack(alignment: .center, spacing: 12) {
+        // the same row (Copy, Hide, Open), so a field is one compact line, not a stack. AT
+        // ACCESSIBILITY SIZES THE VERBS DROP UNDER THE VALUE (#1202): beside it the label was a
+        // column one letter wide and "Open" and "Copy" broke mid-word.
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+        layout {
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.label)
                     .kitType(.meta)
@@ -297,14 +303,14 @@ struct LockerFieldRowView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if !row.verbs.isEmpty {
-                HStack(spacing: 12) {
+                KitFlow(spacing: 12) {
                     ForEach(row.verbs, id: \.key) { verb in
                         if verb.pill {
                             // THE CODE CARD'S COPY: a green pill, as the board draws it.
                             Button(action: { onVerb(verb) }) {
                                 Text(verb.label)
                                     .centraidType("smallStrong")
-                                    .lineLimit(1)
+                                    .kitLineLimit(1)
                                     .fixedSize(horizontal: true, vertical: false)
                                     .foregroundStyle(StateColor.green.text)
                                     .padding(.horizontal, 14)

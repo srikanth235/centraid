@@ -189,7 +189,7 @@ struct TodoDetailView: View {
                 // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the foot actions.
                 EarlierEntryRow(entry: state.hasEarlier ? state.earlier : nil, open: open)
                 OriginLineView(line: state.hasOrigin ? state.origin : nil)
-                HStack(spacing: 12) {
+                KitReflowRow(spacing: 12) {
                     if !detail.shareLabel.isEmpty {
                         KitOutlineButton(label: detail.shareLabel) { send(event { $0.shareRequested = .init() }) }
                             .accessibilityIdentifier("tasks-share")
@@ -256,7 +256,7 @@ struct TodoDetailView: View {
                     Text(field.value)
                         .centraidType("body")
                         .foregroundStyle(Theme.color(field.enabled ? "textSoft" : "textDisabled", scheme))
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                 }
                 if !field.choices.isEmpty {
                     // THE CHOICES WRAP (#1202): a chip row that scrolled sideways cut "Next week" and

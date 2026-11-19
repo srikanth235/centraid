@@ -36,31 +36,36 @@ struct KitIconKey: View {
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.isEnabled) private var enabled
+    /// THE KEY GROWS WITH THE TEXT (#1202), to at most 1.75 times: Home's search and settings keys
+    /// stayed their small size beside text at the largest setting.
+    @ScaledMetric(relativeTo: .body) private var scaleBase: CGFloat = 1
+
+    private var factor: CGFloat { min(scaleBase, 1.75) }
 
     var body: some View {
         Button(action: action) {
             ZStack {
                 if glass {
                     Color.clear
-                        .frame(width: 40, height: 40)
+                        .frame(width: 40 * factor, height: 40 * factor)
                         .bandGround(Circle(), solid: "bg", interactive: true)
                 } else if framed && round {
                     Circle()
                         .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 36 * factor, height: 36 * factor)
                 } else if framed {
                     RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
                         .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 36 * factor, height: 36 * factor)
                 }
                 CentraidIconView(
                     iconKey: iconKey,
                     tint: Theme.color(enabled ? tint : Self.disabledToken, scheme),
-                    size: 18,
+                    size: 18 * factor,
                     solid: solid
                 )
             }
-            .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
+            .frame(width: CentraidGeometry.targetMinCoarse * factor, height: CentraidGeometry.targetMinCoarse * factor)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

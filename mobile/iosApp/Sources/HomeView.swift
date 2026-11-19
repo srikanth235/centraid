@@ -364,7 +364,7 @@ private struct VaultSheet: View {
                         Text(vault.initial)
                             .centraidType("smallStrong")
                             .foregroundStyle(Theme.color("text", scheme))
-                            .frame(width: 30, height: 30)
+                            .kitScaledSquare(30, relativeTo: .footnote)
                             .background(
                                 Theme.color("bgSunken", scheme),
                                 in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme))

@@ -23,6 +23,10 @@ struct FirstLaunchView: View {
     @ScaledMetric(relativeTo: .largeTitle) private var titleSize = 30
     @ScaledMetric(relativeTo: .body) private var bodySize = CentraidScale.rowSize
     @ScaledMetric(relativeTo: .callout) private var detailSize = 15
+    /// THE PRIMARY'S LABEL AND THE CLAIMS' TILES FOLLOW THE TEXT SIZE (#1202): the label stayed
+    /// at 17 in a pill while the words around it grew, and the tiles stayed 40.
+    @ScaledMetric(relativeTo: .body) private var primarySize = 17
+    @ScaledMetric(relativeTo: .body) private var claimTile = 40
 
     /// The icon in each claim's tile, in the order Rust lists the claims: apps,
     /// assistant, backups.
@@ -60,6 +64,9 @@ struct FirstLaunchView: View {
                 .padding(.horizontal, 32)
             }
             .scrollBounceBehavior(.basedOnSize)
+            // THE CONTENT STOPS AT THE STATUS BAR (#1202): scrolled, the first claim's icon ran
+            // under the clock.
+            .hardTopScrollEdge()
 
             doors
                 .padding(.horizontal, 32)
@@ -99,9 +106,9 @@ struct FirstLaunchView: View {
                 CentraidIconView(
                     iconKey: Self.claimIcons[min(index, Self.claimIcons.count - 1)],
                     tint: Color(CentraidAsset.shellText),
-                    size: 20, strokeWidth: 2)
+                    size: claimTile / 2, strokeWidth: 2)
             }
-            .frame(width: 40, height: 40)
+            .frame(width: claimTile, height: claimTile)
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(claim.title)
@@ -124,10 +131,14 @@ struct FirstLaunchView: View {
         VStack(spacing: 10) {
             Button { store.sendHome(.make(.init())) } label: {
                 Text(gate.makeLabel)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: primarySize, weight: .semibold))
                     .foregroundStyle(Color.white)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
                     .frame(maxWidth: .infinity, minHeight: 52)
-                    .background(Capsule().fill(Color(CentraidAsset.shell)))
+                    .background(KitPillShape().fill(Color(CentraidAsset.shell)))
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("first-launch-primary")

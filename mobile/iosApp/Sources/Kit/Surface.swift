@@ -177,6 +177,23 @@ struct KitBadge: View {
     }
 }
 
+/// THE PILL'S OUTLINE: a capsule while the label is on one line, and a rounded key with a bounded
+/// corner once it wraps. A true capsule's radius is half its height, so a two-line label at the
+/// largest text sits against the curve with no room inside it (#1202); capping the radius keeps
+/// the words inside the straight edge.
+struct KitPillShape: InsettableShape {
+    var inset: CGFloat = 0
+
+    func path(in rect: CGRect) -> Path {
+        RoundedRectangle(cornerRadius: min(rect.height / 2, 26), style: .continuous)
+            .path(in: rect.insetBy(dx: inset, dy: inset))
+    }
+
+    func inset(by amount: CGFloat) -> KitPillShape {
+        KitPillShape(inset: inset + amount)
+    }
+}
+
 /// A PILL THAT HUGS ITS LABEL, in the app's fill under a white label: an empty state's one
 /// action, a permission's "Allow". The full-width one is `KitInkButton`.
 struct KitPillButton: View {
@@ -191,13 +208,18 @@ struct KitPillButton: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 if !iconKey.isEmpty { CentraidIconView(iconKey: iconKey, tint: .white, size: 16) }
-                Text(label).kitType(.row).fontWeight(.semibold)
+                Text(label)
+                    .kitType(.row)
+                    .fontWeight(.semibold)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .foregroundStyle(enabled ? Color.white : Surface.meta)
             .padding(.horizontal, 20)
+            .padding(.vertical, 8)
             .frame(minHeight: CentraidGeometry.targetMinCoarse)
-            .background(enabled ? accent.fill : Surface.fill, in: Capsule())
-            .contentShape(Capsule())
+            .background(enabled ? accent.fill : Surface.fill, in: KitPillShape())
+            .contentShape(KitPillShape())
         }
         .buttonStyle(.plain)
     }
@@ -211,12 +233,72 @@ struct KitTile: View {
     var fill: Color? = nil
 
     @Environment(\.appAccent) private var accent
+    @ScaledMetric private var scaleBase: CGFloat = 1
+
+    init(iconKey: String, size: CGFloat = 32, fill: Color? = nil) {
+        self.iconKey = iconKey
+        self.size = size
+        self.fill = fill
+    }
+
+    /// THE TILE GROWS WITH THE TEXT BESIDE IT (#1202), up to twice its size, so a glyph is not
+    /// the one small thing in a row of large words.
+    private var side: CGFloat { size * min(scaleBase, 2) }
 
     var body: some View {
-        CentraidIconView(iconKey: iconKey, tint: .white, size: (size * 0.5).rounded())
-            .frame(width: size, height: size)
-            .background(fill ?? accent.fill, in: RoundedRectangle(cornerRadius: size * CentraidGeometry.iconChipRadiusRatio, style: .continuous))
+        CentraidIconView(iconKey: iconKey, tint: .white, size: (side * 0.5).rounded())
+            .frame(width: side, height: side)
+            .background(fill ?? accent.fill, in: RoundedRectangle(cornerRadius: side * CentraidGeometry.iconChipRadiusRatio, style: .continuous))
             .accessibilityHidden(true)
+    }
+}
+
+// MARK: - Clamped text (#1202)
+
+extension View {
+    /// A ONE-LINE CLAMP THAT OPENS AT ACCESSIBILITY TEXT SIZES. A title, a date or a meta line
+    /// holds to `lines` where the row has the room, and takes up to `wide` once the text is
+    /// large, so what the member reads is not cut to an ellipsis (a word dropped from the end
+    /// of a name is a word lost). The row grows with its text; a fixed height is a bug.
+    func kitLineLimit(_ lines: Int = 1, wide: Int = 3) -> some View {
+        modifier(KitLineLimit(lines: lines, wide: wide))
+    }
+}
+
+private struct KitLineLimit: ViewModifier {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let lines: Int
+    let wide: Int
+
+    func body(content: Content) -> some View {
+        content.lineLimit(dynamicTypeSize.isAccessibilitySize ? max(lines, wide) : lines)
+    }
+}
+
+// MARK: - Scaled tiles (#1202)
+
+extension View {
+    /// A SQUARE THAT GROWS WITH THE TEXT IT HOLDS. An initial tile or avatar at a fixed size is
+    /// cut to a sliver of its letter at the largest text; sized as a `@ScaledMetric` relative to
+    /// the text style the letter follows, the tile and the letter grow together. The letter
+    /// still shrinks (never past half) rather than clip, should a long one come.
+    func kitScaledSquare(_ side: CGFloat, relativeTo style: Font.TextStyle = .body) -> some View {
+        modifier(KitScaledSquare(side: side, style: style))
+    }
+}
+
+private struct KitScaledSquare: ViewModifier {
+    @ScaledMetric private var scaled: CGFloat
+
+    init(side: CGFloat, style: Font.TextStyle) {
+        _scaled = ScaledMetric(wrappedValue: side, relativeTo: style)
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+            .frame(width: scaled, height: scaled)
     }
 }
 

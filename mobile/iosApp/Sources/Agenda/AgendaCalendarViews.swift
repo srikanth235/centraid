@@ -214,7 +214,7 @@ struct AgendaMonthChip: View {
                     Text(header.monthLabel)
                         .centraidType("smallStrong")
                         .foregroundStyle(Surface.ink)
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                 }
                 .fixedSize()
                 .frame(minHeight: CentraidGeometry.targetMinCoarse)
@@ -276,6 +276,7 @@ private struct AgendaAllDayLane: View {
     let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         if !header.allDay.isEmpty {
@@ -291,7 +292,7 @@ private struct AgendaAllDayLane: View {
                     KitFlow(spacing: 8) {
                         ForEach(header.allDay, id: \.key) { chip in
                             AgendaChipView(chip: chip, send: send, open: open)
-                                .fixedSize(horizontal: true, vertical: false)
+                                .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -382,6 +383,10 @@ struct AgendaWeekStripView: View {
                 AgendaStripDayView(day: day, send: send)
             }
         }
+        // SEVEN DAYS ACROSS HOLD AT `xxxLarge` (#1202), as the band holds its labels: at the
+        // accessibility sizes a day's number is wider than a seventh of the screen, which pushed
+        // the whole Day view off both edges. Every other line on the page still scales.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .padding(.horizontal, CentraidGeometry.pageMargin / 2)
         .padding(.bottom, 8)
         .overlay(alignment: .bottom) {
@@ -741,7 +746,7 @@ private struct AgendaChipView: View {
         Text(chip.title)
             .centraidType("annotLabel")
             .foregroundStyle(Theme.color("text", scheme))
-            .lineLimit(1)
+            .kitLineLimit(1)
             .minimumScaleFactor(narrow ? 0.7 : 1)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -832,12 +837,12 @@ private struct AgendaBlockView: View {
                     Text(block.title)
                         .centraidType(titleFace)
                         .foregroundStyle(ink)
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                     if roomy, !block.detail.isEmpty {
                         Text(block.detail)
                             .centraidType("annotLabel")
                             .foregroundStyle(Theme.color("textSoft", scheme))
-                            .lineLimit(1)
+                            .kitLineLimit(1)
                     }
                 }
                 .frame(maxHeight: .infinity, alignment: .center)
@@ -845,7 +850,7 @@ private struct AgendaBlockView: View {
                 Text(block.title)
                     .centraidType(titleFace)
                     .foregroundStyle(ink)
-                    .lineLimit(1)
+                    .kitLineLimit(1)
                 if roomy, height >= AgendaGridMetrics.timeFrom, !block.detail.isEmpty {
                     Text(block.detail)
                         .centraidType("annotLabel")
@@ -1125,7 +1130,7 @@ private struct AgendaMonthCellView: View {
                             Text(chip.title)
                                 .centraidType("annotLabel")
                                 .foregroundStyle(Theme.color(cell.inMonth ? "text" : "textFaint", scheme))
-                                .lineLimit(1)
+                                .kitLineLimit(1)
                                 .padding(.horizontal, 3)
                                 .frame(maxWidth: .infinity, minHeight: AgendaGridMetrics.monthChipHeight, alignment: .leading)
                                 .background {

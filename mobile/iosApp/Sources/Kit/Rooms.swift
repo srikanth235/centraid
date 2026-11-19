@@ -838,6 +838,7 @@ struct KitInkButton: View {
 
     @Environment(\.isEnabled) private var enabled
     @Environment(\.appAccent) private var accent
+    @ScaledMetric(relativeTo: .body) private var glyph: CGFloat = 20
 
     /// THE ONE FILLED ELEMENT (#1173): a full-width pill in the app's fill under a white label;
     /// a destructive one is the outlined state-red pill at the same width. Disabled is still
@@ -852,25 +853,29 @@ struct KitInkButton: View {
             // `sheetKey` IS THE BOARD'S 16/600: `.fontWeight` does not reach a custom face.
             HStack(spacing: 10) {
                 if !iconKey.isEmpty {
-                    CentraidIconView(iconKey: iconKey, tint: ink, size: 20)
+                    CentraidIconView(iconKey: iconKey, tint: ink, size: min(glyph, 40))
                         .accessibilityHidden(true)
                 }
                 Text(label)
                     .centraidType("sheetKey")
                     .foregroundStyle(ink)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
                 .frame(maxWidth: .infinity, minHeight: sheetButtonHeight)
                 .background {
                     if !destructive {
-                        Capsule().fill(enabled ? accent.fill : Surface.fill)
+                        KitPillShape().fill(enabled ? accent.fill : Surface.fill)
                     }
                 }
                 .overlay {
                     if destructive {
-                        Capsule().strokeBorder(enabled ? StateColor.red.text : Surface.border, lineWidth: 1.5)
+                        KitPillShape().strokeBorder(enabled ? StateColor.red.text : Surface.border, lineWidth: 1.5)
                     }
                 }
-                .contentShape(Capsule())
+                .contentShape(KitPillShape())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(identifier.isEmpty ? (destructive ? "kit-destructive" : "kit-primary") : identifier)

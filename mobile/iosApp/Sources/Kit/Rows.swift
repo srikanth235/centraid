@@ -29,6 +29,7 @@ struct CentraidRow: View {
     var onTap: (() -> Void)? = nil
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// A row the machine already folded into the kit's `ListRow`.
     init(_ row: Centraid_Core_V1_ListRow, onTap: (() -> Void)? = nil) {
@@ -96,28 +97,34 @@ struct CentraidRow: View {
             .centraidType("smallStrong")
             .monospacedDigit()
             .foregroundStyle(Theme.color(dimmed ? "textFaint" : trailingTone, scheme))
-            .lineLimit(1)
+            .kitLineLimit(1, wide: 2)
     }
 
     private var row: some View {
-        HStack(spacing: 12) {
+        // AT ACCESSIBILITY SIZES THE TRAILING FIGURE AND CHIPS SIT UNDER THE WORDS (#1202): beside
+        // them the words were a column of syllables ("Messa/ge") and the date was cut ("Sat 7...").
+        let stacked = dynamicTypeSize.isAccessibilitySize
+        let layout = stacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(spacing: 12))
+        return layout {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .kitType(.row)
                     .foregroundStyle(dimmed ? Surface.meta : Surface.ink)
-                    .lineLimit(2)
+                    .kitLineLimit(2, wide: 6)
                 if !meta.isEmpty || pending {
                     Text(pending ? (meta.isEmpty ? pendingLabel : "\(meta) · \(pendingLabel)") : meta)
                         .kitType(.meta)
                         .foregroundStyle(Surface.meta)
-                        .lineLimit(2)
+                        .kitLineLimit(2, wide: 6)
                 }
             }
-            Spacer(minLength: 8)
+            if !stacked { Spacer(minLength: 8) }
             // THE TRAILING COLUMN, AS THE MONEY BOARDS DRAW IT: the figure with its state chip UNDER
             // it, right-aligned; a chip alone stays beside the title's line.
             if !trailing.isEmpty, !chips.isEmpty {
-                VStack(alignment: .trailing, spacing: 4) {
+                VStack(alignment: stacked ? .leading : .trailing, spacing: 4) {
                     trailingText
                     HStack(spacing: 6) {
                         ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
@@ -210,7 +217,7 @@ struct StatusChipView: View {
             Text(chip.label)
                 .kitType(.badge)
                 .foregroundStyle(accent.text)
-                .lineLimit(1)
+                .kitLineLimit(1)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
                 .background(accent.tint ?? accent.wash(dark: scheme == .dark), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -218,7 +225,7 @@ struct StatusChipView: View {
             Text(chip.label)
                 .kitType(.badge)
                 .foregroundStyle(Surface.meta)
-                .lineLimit(1)
+                .kitLineLimit(1)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
                 .background(Surface.fill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -257,29 +264,56 @@ struct SectionHeader: View {
         self.init(KitSectionHead(title: title, count: count, verbLabel: verb), sentenceCase: sentenceCase, onVerb: onVerb)
     }
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var verb: some View {
+        Button(action: onVerb ?? {}) {
+            Text(head.verbLabel)
+                .kitType(.meta)
+                .fontWeight(.semibold)
+                .foregroundStyle(accent.text)
+                .multilineTextAlignment(.leading)
+                .frame(minHeight: CentraidGeometry.targetMinFine)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// THE TITLE AND ITS COUNT AS ONE WRAPPING RUN (#1202): two views side by side in a narrow
+    /// column interleaved their letters ("CHANNE 2 LS"). One `Text` breaks at a word, title first.
+    private var titleAndCount: some View {
+        let words = head.count.map { "\(head.title) \($0)" } ?? head.title
+        return Text(words)
+            .kitType(sentenceCase ? .row : .group)
+            .fontWeight(sentenceCase ? .semibold : nil)
+            .foregroundStyle(Surface.meta)
+            .multilineTextAlignment(.leading)
+            .accessibilityAddTraits(.isHeader)
+    }
+
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(head.title)
-                .kitType(sentenceCase ? .row : .group)
-                .fontWeight(sentenceCase ? .semibold : nil)
-                .foregroundStyle(Surface.meta)
-                .accessibilityAddTraits(.isHeader)
-            if let count = head.count {
-                Text("\(count)")
-                    .kitType(sentenceCase ? .meta : .group)
-                    .foregroundStyle(Surface.meta)
-            }
-            Spacer(minLength: 0)
-            if !head.verbLabel.isEmpty, let onVerb {
-                Button(action: onVerb) {
-                    Text(head.verbLabel)
-                        .kitType(.meta)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(accent.text)
-                        .frame(minHeight: CentraidGeometry.targetMinFine)
-                        .contentShape(Rectangle())
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 0) {
+                    titleAndCount
+                    if !head.verbLabel.isEmpty, onVerb != nil { verb }
                 }
-                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(head.title)
+                        .kitType(sentenceCase ? .row : .group)
+                        .fontWeight(sentenceCase ? .semibold : nil)
+                        .foregroundStyle(Surface.meta)
+                        .accessibilityAddTraits(.isHeader)
+                    if let count = head.count {
+                        Text("\(count)")
+                            .kitType(sentenceCase ? .meta : .group)
+                            .foregroundStyle(Surface.meta)
+                    }
+                    Spacer(minLength: 0)
+                    if !head.verbLabel.isEmpty, onVerb != nil { verb }
+                }
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -385,26 +419,38 @@ struct ChoiceFieldRow: View {
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         Button(action: onTap) {
-            HStack {
-                Text(key)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color(enabled ? "text" : "textDisabled", scheme))
-                Spacer(minLength: 8)
-                if !hueKey.isEmpty {
-                    Circle()
-                        .fill(Theme.color(KitHue.role(hueKey) ?? "cSlate", scheme))
-                        .frame(width: 8, height: 8)
+            // THE VALUE UNDER ITS LABEL AT ACCESSIBILITY SIZES (#1202): side by side they broke
+            // "Calendar" and "Repeats" mid-word and cut the value to its first letters.
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                : AnyLayout(HStackLayout(spacing: 0))
+            HStack(spacing: 8) {
+                layout {
+                    Text(key)
+                        .centraidType("body")
+                        .foregroundStyle(Theme.color(enabled ? "text" : "textDisabled", scheme))
+                    if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
+                    HStack(spacing: 6) {
+                        if !hueKey.isEmpty {
+                            Circle()
+                                .fill(Theme.color(KitHue.role(hueKey) ?? "cSlate", scheme))
+                                .frame(width: 8, height: 8)
+                        }
+                        Text(value)
+                            .centraidType("body")
+                            .foregroundStyle(Theme.color(enabled ? "textSoft" : "textDisabled", scheme))
+                            .kitLineLimit(1, wide: 4)
+                    }
                 }
-                Text(value)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color(enabled ? "textSoft" : "textDisabled", scheme))
-                    .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 CentraidIconView(iconKey: "ChevronRight", tint: Theme.color(enabled ? "textFaint" : "textDisabled", scheme), size: 14)
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 8 : 0)
             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
             .overlay(alignment: .bottom) { KitHairline() }
             .contentShape(Rectangle())
@@ -468,11 +514,11 @@ struct SearchContainerRow: View {
                 Text(container.kindLabel)
                     .kitType(.meta)
                     .foregroundStyle(Surface.meta)
-                    .lineLimit(1)
+                    .kitLineLimit(1)
                 Text(container.title)
                     .kitType(.row)
                     .foregroundStyle(Surface.ink)
-                    .lineLimit(1)
+                    .kitLineLimit(1)
                     .truncationMode(.tail)
             }
             .padding(.leading, 8)
@@ -551,9 +597,9 @@ struct MetaLine: View {
             VStack(alignment: alignment, spacing: 0) {
                 ForEach(Array((parts.map { ($0, false) } + accented.map { ($0, true) }).prefix(lines).enumerated()), id: \.offset) { _, part in
                     if part.1 {
-                        Text(part.0).foregroundStyle(accent.text).lineLimit(1)
+                        Text(part.0).foregroundStyle(accent.text).kitLineLimit(1)
                     } else {
-                        Text(part.0).lineLimit(1)
+                        Text(part.0).kitLineLimit(1)
                     }
                 }
             }

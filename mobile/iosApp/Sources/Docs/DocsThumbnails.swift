@@ -122,35 +122,49 @@ struct DocsLabelChips: View {
     let chips: [Centraid_Core_V1_DocsLabelChip]
     let onPick: (String) -> Void
 
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(chips, id: \.tagID) { chip in
-                    Button { onPick(chip.label) } label: {
-                        HStack(spacing: 6) {
-                            DocsDot(colorKey: chip.colorKey)
-                            Text(chip.label)
-                                .centraidType("annotLabel")
-                                .foregroundStyle(chip.selected ? AppAccent("docs").text : Color(CentraidAsset.textBody))
-                                .lineLimit(1)
-                        }
-                        .padding(.horizontal, 10)
-                        .frame(minHeight: 32)
-                        .background(
-                            Capsule().fill(chip.selected
-                                ? AppAccent("docs").fill.opacity(0.16)
-                                : Color(CentraidAsset.surfaceLine))
-                        )
-                        .contentShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(chip.label)
-                    .accessibilityAddTraits(chip.selected ? [.isButton, .isSelected] : .isButton)
-                    .accessibilityIdentifier("docs-label-chip-\(chip.label)")
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @ViewBuilder
+    private var chipViews: some View {
+        ForEach(chips, id: \.tagID) { chip in
+            Button { onPick(chip.label) } label: {
+                HStack(spacing: 6) {
+                    DocsDot(colorKey: chip.colorKey)
+                    Text(chip.label)
+                        .centraidType("annotLabel")
+                        .foregroundStyle(chip.selected ? AppAccent("docs").text : Color(CentraidAsset.textBody))
+                        .kitLineLimit(1)
                 }
+                .padding(.horizontal, 10)
+                .frame(minHeight: 32)
+                .background(
+                    Capsule().fill(chip.selected
+                        ? AppAccent("docs").fill.opacity(0.16)
+                        : Color(CentraidAsset.surfaceLine))
+                )
+                .contentShape(Capsule())
             }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.vertical, 4)
+            .buttonStyle(.plain)
+            .accessibilityLabel(chip.label)
+            .accessibilityAddTraits(chip.selected ? [.isButton, .isSelected] : .isButton)
+            .accessibilityIdentifier("docs-label-chip-\(chip.label)")
+        }
+    }
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            // THE CHIPS WRAP AT ACCESSIBILITY SIZES (#1202): a row that scrolled sideways ran a
+            // chip ("receipts") off the edge with nothing to say there was more.
+            KitFlow(spacing: 8) { chipViews }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.vertical, 4)
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) { chipViews }
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .padding(.vertical, 4)
+            }
         }
     }
 }
@@ -239,7 +253,7 @@ struct DocsFolderTile: View {
                 Text(node.countLabel)
                     .centraidType("annotLabel")
                     .foregroundStyle(Theme.color("textFaint", scheme))
-                    .lineLimit(1)
+                    .kitLineLimit(1)
             }
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())

@@ -59,19 +59,27 @@ struct AgendaTileChoiceRow: View {
     let onTap: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         Button(action: onTap) {
+            // THE VALUE UNDER ITS LABEL AT ACCESSIBILITY SIZES (#1202), the chevron still at the end.
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                : AnyLayout(HStackLayout(spacing: 8))
             HStack(spacing: 12) {
                 AgendaRowTileView(tile: tile)
-                Text(key)
-                    .kitType(.row)
-                    .foregroundStyle(Surface.ink)
-                Spacer(minLength: 8)
-                Text(value)
-                    .centraidType("body")
-                    .foregroundStyle(Surface.meta)
-                    .lineLimit(1)
+                layout {
+                    Text(key)
+                        .kitType(.row)
+                        .foregroundStyle(Surface.ink)
+                    if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
+                    Text(value)
+                        .centraidType("body")
+                        .foregroundStyle(Surface.meta)
+                        .kitLineLimit(1, wide: 4)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textFaint", scheme), size: 14)
             }
             .padding(.horizontal, 14)
@@ -96,9 +104,15 @@ struct AgendaTileFieldRow: View {
     var divider = true
     let onEdit: (String) -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(spacing: 12))
         HStack(spacing: 12) {
             AgendaRowTileView(tile: tile)
+            layout {
             Text(key)
                 .kitType(.row)
                 .foregroundStyle(Surface.ink)
@@ -112,6 +126,7 @@ struct AgendaTileFieldRow: View {
                 .onChange(of: text) { _, typed in onEdit(typed) }
                 .accessibilityLabel(key)
                 .modifier(OptionalIdentifier(identifier: identifier))
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 7)
@@ -129,15 +144,23 @@ struct AgendaTileWhenRow<Faces: View>: View {
     var divider = true
     @ViewBuilder let faces: () -> Faces
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(spacing: 8))
         HStack(spacing: 12) {
             AgendaRowTileView(tile: tile)
-            Text(key)
-                .kitType(.row)
-                .foregroundStyle(Surface.ink)
-                .lineLimit(1)
-            Spacer(minLength: 8)
-            faces()
+            layout {
+                Text(key)
+                    .kitType(.row)
+                    .foregroundStyle(Surface.ink)
+                    .kitLineLimit(1)
+                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
+                faces()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 7)
@@ -154,17 +177,24 @@ struct AgendaFactRow: View {
     let value: String
     var divider = true
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 16) {
+        // THE VALUE UNDER ITS LABEL AT ACCESSIBILITY SIZES (#1202): "Calendar" broke mid-word.
+        let stacked = dynamicTypeSize.isAccessibilitySize
+        let layout = stacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 16))
+        layout {
             Text(label)
                 .centraidType("body")
                 .foregroundStyle(Surface.meta)
-                .fixedSize(horizontal: true, vertical: false)
-            Spacer(minLength: 0)
+                .fixedSize(horizontal: !stacked, vertical: true)
+            if !stacked { Spacer(minLength: 0) }
             Text(value)
                 .centraidType("body")
                 .foregroundStyle(Surface.ink)
-                .multilineTextAlignment(.trailing)
+                .multilineTextAlignment(stacked ? .leading : .trailing)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)

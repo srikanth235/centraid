@@ -32,6 +32,7 @@ struct AgendaEditorView: View {
     @State private var picking: CivilPick? = nil
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private func event(_ build: (inout Centraid_Core_V1_AgendaEditorEvent) -> Void) -> Centraid_Core_V1_AgendaEditorEvent {
         var event = Centraid_Core_V1_AgendaEditorEvent()
@@ -397,7 +398,7 @@ struct AgendaEditorView: View {
             Text(editor.priorityLabel.isEmpty ? chrome.fieldPriority : editor.priorityLabel)
                 .centraidType("annotLabel")
                 .foregroundStyle(Theme.color("textSoft", scheme))
-            HStack(spacing: 6) {
+            KitFlow(spacing: 6) {
                 ForEach(editor.priorities, id: \.key) { choice in
                     KitChip(
                         label: choice.label,
@@ -408,7 +409,6 @@ struct AgendaEditorView: View {
                         send(event { $0.priority = .with { $0.key = choice.key } })
                     }
                 }
-                Spacer(minLength: 0)
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
@@ -467,7 +467,10 @@ struct AgendaEditorView: View {
         tile: Centraid_Core_V1_AgendaRowTile? = nil,
         onPick: @escaping (String, String) -> Void
     ) -> some View {
-        let faces = HStack(spacing: 12) {
+        let faceLayout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
+            : AnyLayout(HStackLayout(spacing: 12))
+        let faces = faceLayout {
             pickerFace(dayLabel, hint: chrome.pickDate, identifier: "\(identifier)-day") {
                 picking = CivilPick(id: "\(identifier)-day", title: chrome.pickDate, time: false, day: day, clock: time) { d, _ in onPick(d, time) }
             }
@@ -522,8 +525,8 @@ struct AgendaEditorView: View {
         // ONE LINE: the day is the short "Wed 4 Nov" and the pair sits on the board's row.
         KitLink(label: words, identifier: identifier, action: action)
             .monospacedDigit()
-            .lineLimit(1)
-            .fixedSize(horizontal: true, vertical: false)
+            .kitLineLimit(1)
+            .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
             .accessibilityHint(hint)
     }
 

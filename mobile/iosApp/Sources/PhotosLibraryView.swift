@@ -236,6 +236,10 @@ struct LibraryTimelineRows: View {
 
     @State private var sweep: Bool?
     @State private var swept: String?
+    /// THE HEADERS' ROWS GROW WITH THEIR TEXT (#1202): a fixed 46 and 34 held a month and a day
+    /// the height of the default text, so at the largest size the month ran over the day label.
+    @ScaledMetric(relativeTo: .title3) private var monthRow = LibraryMetrics.monthRow
+    @ScaledMetric(relativeTo: .footnote) private var dayRow = LibraryMetrics.dayRow
 
     /// The rows grouped under their month: a month row opens a section.
     private var sections: [(month: Centraid_Core_V1_PhotosTimelineRow?, rows: [Centraid_Core_V1_PhotosTimelineRow])] {
@@ -265,10 +269,10 @@ struct LibraryTimelineRows: View {
                     Text(month.title)
                         .kitType(.section)
                         .foregroundStyle(Surface.ink)
-                        .lineLimit(1)
+                        .kitLineLimit(1, wide: 2)
                         .padding(.top, 12)
                         .padding(.horizontal, CentraidGeometry.pageMargin)
-                        .frame(maxWidth: .infinity, minHeight: LibraryMetrics.monthRow, maxHeight: LibraryMetrics.monthRow, alignment: .leading)
+                        .frame(maxWidth: .infinity, minHeight: monthRow, maxHeight: monthRow, alignment: .leading)
                         .background(Surface.page)
                         .accessibilityAddTraits(.isHeader)
                 }
@@ -332,7 +336,7 @@ struct LibraryTimelineRows: View {
                 .kitType(.meta)
                 .fontWeight(.semibold)
                 .foregroundStyle(Surface.meta)
-                .lineLimit(1)
+                .kitLineLimit(1, wide: 2)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
             if selecting, !row.toggleLabel.isEmpty {
@@ -350,7 +354,7 @@ struct LibraryTimelineRows: View {
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
-        .frame(height: LibraryMetrics.dayRow)
+        .frame(height: dayRow)
     }
 
     private func sweepGesture(from rowID: String) -> some Gesture {
@@ -377,8 +381,8 @@ struct LibraryTimelineRows: View {
     /// A row's height in the flow, EXACTLY as drawn.
     private func height(_ row: Centraid_Core_V1_PhotosTimelineRow) -> CGFloat {
         switch row.kind {
-        case .month: return LibraryMetrics.monthRow
-        case .day: return LibraryMetrics.dayRow
+        case .month: return monthRow
+        case .day: return dayRow
         default: return CGFloat(row.packed.first?.height ?? 0) + PhotoTileMetrics.gap
         }
     }

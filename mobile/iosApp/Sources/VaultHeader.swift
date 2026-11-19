@@ -105,7 +105,7 @@ struct VaultHeader: View {
             Text(vault.initial)
                 .centraidType("smallStrong")
                 .foregroundStyle(mark.ink)
-                .frame(width: 30, height: 30)
+                .kitScaledSquare(30, relativeTo: .footnote)
                 // A static control rung, not `iconChipRadius` — that
                 // ratio is for app chips.
                 .background(mark.ground, in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))

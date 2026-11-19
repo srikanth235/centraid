@@ -12,14 +12,22 @@ struct StatusLineView: View {
 
     @Environment(\.appAccent) private var accent
     @Environment(\.statusActed) private var statusActed
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         if !status.sentence.isEmpty {
-            HStack(spacing: 8) {
+            // AT ACCESSIBILITY SIZES THE VERB DROPS UNDER THE SENTENCE (#1202), and a line taller
+            // than a third of the screen scrolls inside its pill, so it never covers the page:
+            // it had grown to three lines over a card, with the page unreachable behind it.
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
+                : AnyLayout(HStackLayout(spacing: 8))
+            let line = layout {
                 Text(status.sentence)
                     .kitType(.row)
                     .foregroundStyle(status.refused ? StateColor.red.text : Surface.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 8 : 0)
                 if !status.actionLabel.isEmpty {
                     Button(action: { (onAct ?? statusActed)() }) {
                         Text(status.actionLabel)
@@ -34,6 +42,16 @@ struct StatusLineView: View {
                 }
             }
             // NO IDENTIFIER ON THE CONTAINER: one set here replaces the verb's.
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    ViewThatFits(in: .vertical) {
+                        line
+                        ScrollView { line }.frame(maxHeight: 220)
+                    }
+                } else {
+                    line
+                }
+            }
             .modifier(KitStatusPill())
             .padding(.horizontal, CentraidGeometry.pageMargin)
         }
@@ -60,7 +78,9 @@ struct KitStatusPill: ViewModifier {
     func body(content: Content) -> some View {
         // THE BOARDS DRAW THE LINE AS A PILL (StatusLine, FirstImports): fully round, so a
         // second line of words rounds with it.
-        let shape = Capsule()
+        // A SECOND LINE ROUNDS WITH IT, BUT A THIRD DOES NOT BECOME A CAPSULE (#1202): the radius
+        // is bounded, so the words of a tall line keep their room.
+        let shape = KitPillShape()
         content
             .padding(.leading, 16)
             .padding(.trailing, 6)
@@ -90,10 +110,15 @@ struct ProgressStatusLine: View {
     var leadingTint: Color = StateColor.green.text
 
     @Environment(\.appAccent) private var accent
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         if !sentence.isEmpty {
-            VStack(alignment: .leading, spacing: 4) {
+            // AT ACCESSIBILITY SIZES THE VERB DROPS UNDER THE SENTENCE, and a line taller than 220
+            // scrolls inside its pill (#1202): the import's three-line "No open reminders to import"
+            // covered the card under the tiles and the page behind it could not be scrolled.
+            let stacked = dynamicTypeSize.isAccessibilitySize
+            let content = VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 10) {
                     if !leadingIcon.isEmpty {
                         CentraidIconView(iconKey: leadingIcon, tint: leadingTint, size: 18)
@@ -103,8 +128,9 @@ struct ProgressStatusLine: View {
                         .kitType(.row)
                         .foregroundStyle(refused ? StateColor.red.text : Surface.ink)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, stacked ? 8 : 0)
                         .accessibilityIdentifier("\(identifier)-sentence")
-                    if !actionLabel.isEmpty {
+                    if !actionLabel.isEmpty, !stacked {
                         Button(action: onAct) {
                             Text(actionLabel)
                                 .kitType(.row)
@@ -140,6 +166,29 @@ struct ProgressStatusLine: View {
                     }
                     .frame(height: 3)
                     .accessibilityHidden(true)
+                }
+                if !actionLabel.isEmpty, stacked {
+                    Button(action: onAct) {
+                        Text(actionLabel)
+                            .kitType(.row)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(accent.text)
+                            .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("\(identifier)-action")
+                }
+            }
+            Group {
+                if stacked {
+                    ViewThatFits(in: .vertical) {
+                        content
+                        ScrollView { content }
+                    }
+                    .frame(maxHeight: 220)
+                } else {
+                    content
                 }
             }
             .modifier(KitStatusPill())

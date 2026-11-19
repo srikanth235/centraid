@@ -272,7 +272,7 @@ struct NotesEditorView: View {
                 Text(state.meta)
                     .kitType(.meta)
                     .foregroundStyle(Surface.meta)
-                    .lineLimit(1)
+                    .kitLineLimit(1)
                     .accessibilityIdentifier("notes-editor-meta")
             }
         }
@@ -377,7 +377,7 @@ private struct NotesEditorRoom<Trailing: View, Content: View>: View {
                             .kitType(.row)
                             .fontWeight(.semibold)
                             .foregroundStyle(accent.text)
-                            .lineLimit(1)
+                            .kitLineLimit(1)
                             .fixedSize()
                             .padding(.horizontal, 8)
                             .frame(minHeight: CentraidGeometry.targetMinCoarse)
@@ -390,7 +390,7 @@ private struct NotesEditorRoom<Trailing: View, Content: View>: View {
                     Text(status)
                         .kitType(.meta)
                         .foregroundStyle(refused ? StateColor.red.text : Surface.meta)
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                         .accessibilityIdentifier("kit-autosave-status")
                         // A principal toolbar item does not redraw when only its text changes; a
                         // new identity per sentence does, so a tapped chip's "in the trash" shows.
@@ -473,16 +473,26 @@ struct KitFlow: Layout {
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let laid = arrange(bounds.width, subviews)
-        for (subview, point) in zip(subviews, laid.points) {
-            subview.place(at: CGPoint(x: bounds.minX + point.x, y: bounds.minY + point.y), proposal: .unspecified)
+        for ((subview, point), size) in zip(zip(subviews, laid.points), laid.sizes) {
+            subview.place(
+                at: CGPoint(x: bounds.minX + point.x, y: bounds.minY + point.y),
+                proposal: ProposedViewSize(width: size.width, height: size.height)
+            )
         }
     }
 
-    private func arrange(_ width: CGFloat, _ subviews: Subviews) -> (size: CGSize, points: [CGPoint]) {
+    /// EACH ITEM IS MEASURED AT THE ROW'S WIDTH AT MOST (#1202): an item whose one line is wider
+    /// than the container wraps inside it, instead of pushing the whole flow past the screen.
+    private func arrange(_ width: CGFloat, _ subviews: Subviews) -> (size: CGSize, points: [CGPoint], sizes: [CGSize]) {
         var points: [CGPoint] = []
+        var sizes: [CGSize] = []
         var x: CGFloat = 0, y: CGFloat = 0, row: CGFloat = 0, widest: CGFloat = 0
         for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
+            var size = subview.sizeThatFits(.unspecified)
+            if width > 0, size.width > width {
+                size = subview.sizeThatFits(ProposedViewSize(width: width, height: nil))
+            }
+            sizes.append(size)
             if x > 0, x + size.width > width {
                 x = 0
                 y += row + spacing
@@ -493,7 +503,7 @@ struct KitFlow: Layout {
             row = max(row, size.height)
             widest = max(widest, x - spacing)
         }
-        return (CGSize(width: widest, height: y + row), points)
+        return (CGSize(width: widest, height: y + row), points, sizes)
     }
 }
 

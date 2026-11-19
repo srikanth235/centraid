@@ -32,7 +32,7 @@ struct KitHeader: View {
                 Text(meta)
                     .kitType(.meta)
                     .foregroundStyle(Surface.meta)
-                    .lineLimit(1)
+                    .kitLineLimit(1)
                     .accessibilityIdentifier("kit-header-meta")
             }
         }
@@ -74,7 +74,7 @@ struct KitHeader: View {
             Text(slot.subtitle.label)
                 .kitType(.meta)
                 .foregroundStyle(Surface.meta)
-                .lineLimit(1)
+                .kitLineLimit(1)
             if slot.subtitle.tappable {
                 CentraidIconView(iconKey: "ChevronDown", tint: Surface.meta, size: 12)
             }
