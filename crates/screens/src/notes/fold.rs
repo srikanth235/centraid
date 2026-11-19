@@ -129,16 +129,27 @@ fn note_row(locale: Locale, parts: Parts<'_>) -> wire::NotesNoteRow {
     .collect::<Vec<_>>()
     .join(", ");
     // A LINK READS AS ITS TEXT in a row's preview and in a search hit: "Priya Nair", never "[[Priya Nair]]".
+    let marks = link_marks(&if parts.runs.is_empty() {
+        parts.preview.to_owned()
+    } else {
+        parts
+            .runs
+            .iter()
+            .map(|run| run.text.as_str())
+            .collect::<String>()
+    });
+    let mut at = 0;
     let runs: Vec<wire::NotesTextRun> = parts
         .runs
         .into_iter()
-        .map(|run| wire::NotesTextRun {
-            text: unlinked(&run.text),
-            ..run
+        .map(|run| {
+            let text = unlinked(&run.text, &marks, at);
+            at += run.text.len();
+            wire::NotesTextRun { text, ..run }
         })
         .collect();
     let snippet = if runs.is_empty() {
-        unlinked(parts.preview)
+        unlinked(parts.preview, &marks, 0)
     } else {
         runs.iter().map(|run| run.text.as_str()).collect()
     };
@@ -247,10 +258,30 @@ pub fn hit(locale: Locale, hit: &wire::NotesSearchHit, today: Option<&str>) -> w
     )
 }
 
-/// A text without its wiki-link brackets: `[[Name]]` reads `Name`. A highlighted span may split a
-/// pair, so this takes each bracket pair out of any run on its own.
-fn unlinked(text: &str) -> String {
-    text.replace("[[", "").replace("]]", "")
+/// Which bytes of `full` are the brackets of a whole link: `[[Name]]` is a pair, and a lone `[[`
+/// (the starter note says "Type [[ in a note") is text and stays.
+fn link_marks(full: &str) -> Vec<bool> {
+    let mut marks = vec![false; full.len()];
+    let mut from = 0;
+    while let Some(open) = full[from..].find("[[").map(|at| at + from) {
+        let Some(close) = full[open + 2..].find("]]").map(|at| at + open + 2) else {
+            break;
+        };
+        for at in [open, open + 1, close, close + 1] {
+            marks[at] = true;
+        }
+        from = close + 2;
+    }
+    marks
+}
+
+/// `text` (which starts at byte `at` of the whole) without the brackets `marks` names: `[[Name]]`
+/// reads `Name`. A highlighted span may split a pair, so this goes by the whole's offsets.
+fn unlinked(text: &str, marks: &[bool], at: usize) -> String {
+    text.char_indices()
+        .filter(|(i, _)| !marks.get(at + i).copied().unwrap_or(false))
+        .map(|(_, c)| c)
+        .collect()
 }
 
 /// `⟦match⟧` spans as runs. No marker: no runs (the preview is drawn).

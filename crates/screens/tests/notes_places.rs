@@ -434,10 +434,7 @@ fn the_empty_journal_is_one_sentence() {
     let i = home(&mut d, wire::NotesPlace::Journal);
     let empty = empty_of(d.view(i)).clone();
     assert_eq!(empty.headline, "No journal entries yet");
-    assert_eq!(
-        empty.body,
-        "Entries you write about people in People appear here."
-    );
+    assert_eq!(empty.body, "A mood and a few lines about your day.");
     assert!(home_state(d.view(i)).content.is_none());
 }
 

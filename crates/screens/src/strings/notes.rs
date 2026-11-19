@@ -53,8 +53,8 @@ catalog! {
     plain item_checked = ("Item checked", "Item checked");
     plain item_unchecked = ("Item unchecked", "Item unchecked");
     plain journal_empty_body = (
-        "Entries you write about people in People appear here.",
-        "Entries you write about people in People appear here."
+        "A mood and a few lines about your day.",
+        "A mood and a few lines about your day."
     );
     plain journal_empty_headline = ("No journal entries yet", "No journal entries yet");
     plain journal_line = ("Entry (required)", "Entry (required)");
