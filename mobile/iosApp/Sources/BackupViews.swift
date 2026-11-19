@@ -382,7 +382,7 @@ struct BackupHomeView: View {
     @ViewBuilder
     private func deviceText(_ text: String, rung: KitType, ink: Color) -> some View {
         if dynamicTypeSize.isAccessibilitySize {
-            KitWholeTokens(text: text).kitType(rung).foregroundStyle(ink)
+            KitWholeTokens(text: Self.unitsJoined(text)).kitType(rung).foregroundStyle(ink)
         } else if rung == .row {
             Text(text).kitType(rung).foregroundStyle(ink)
         } else {
@@ -390,10 +390,20 @@ struct BackupHomeView: View {
         }
     }
 
+    /// A NUMBER AND ITS UNIT STAY ON ONE LINE (#1202): "928 KB" broke as "928 / KB" at the largest text.
+    /// Display only; the words are Rust's.
+    private static func unitsJoined(_ text: String) -> String {
+        text.replacingOccurrences(
+            of: #"(\d) (bytes|KB|MB|GB|TB)\b"#,
+            with: "$1\u{00A0}$2",
+            options: .regularExpression
+        )
+    }
+
     /// One of the screen's sentences, drawn quietly.
     @ViewBuilder
     private func sentence(_ text: String, id: String? = nil) -> some View {
-        let drawn = Text(text)
+        let drawn = Text(Self.unitsJoined(text))
             .kitType(.meta)
             .foregroundStyle(Surface.meta)
             .fixedSize(horizontal: false, vertical: true)
