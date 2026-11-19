@@ -500,3 +500,153 @@ fn a_repeating_all_day_event_sounds_each_day_at_nine_and_a_skipped_day_is_passed
     );
     assert_eq!(w.rows()[0].fire_key, "2026-01-02T09:00");
 }
+
+// ---------------------------------------------------------------------------------------------
+// DST AND ZONES (#1202, S12): a zoned alert is an instant that follows its zone's offset; a
+// floating or all-day one is a wall-clock key that no zone changes. No alert is skipped or
+// doubled by a clock change, and no assertion is on a duration: only on keys and counts.
+// ---------------------------------------------------------------------------------------------
+
+impl World {
+    fn at(&self, iso: &str) {
+        let at: jiff::Timestamp = iso.parse().expect("an instant");
+        self.scratch.clock.set_ms(at.as_millisecond());
+    }
+
+    /// A daily zoned event written when the clock reads `now`, so its next row is the one after.
+    fn zoned_daily(&self, now: &str, zone: &str, starts: &str) {
+        self.at(now);
+        self.event(json!({
+            "starts": starts, "zone": zone, "rule": "FREQ=DAILY", "reminders": [0],
+        }));
+    }
+
+    /// Every firing from the clock on, taken one at a time: the key, then advance past it.
+    fn firings(&self, count: usize) -> Vec<String> {
+        let mut keys = Vec::new();
+        for _ in 0..count {
+            let rows = self.rows();
+            assert_eq!(rows.len(), 1, "one next firing, never two: {rows:?}");
+            let key = rows[0].fire_key.clone();
+            // The clock passes the firing, so the next advance moves the row on.
+            let instant = key.parse::<jiff::Timestamp>().expect("a fixed key");
+            self.scratch.clock.set_ms(instant.as_millisecond() + 1_000);
+            assert_eq!(self.scratch.vault.advance_alerts().expect("advance"), 1);
+            keys.push(key);
+        }
+        keys
+    }
+}
+
+#[test]
+fn a_zoned_alert_follows_its_zones_offset_through_the_spring_forward() {
+    let w = World::new();
+    w.zoned_daily(
+        "2026-03-06T15:00:00Z",
+        "America/New_York",
+        "2026-03-05T09:00",
+    );
+    assert_eq!(
+        w.firings(4),
+        [
+            "2026-03-07T14:00:00.000Z",
+            // The clocks sprang forward on the 8th: 09:00 is 13:00Z from then, one alert a day.
+            "2026-03-08T13:00:00.000Z",
+            "2026-03-09T13:00:00.000Z",
+            "2026-03-10T13:00:00.000Z",
+        ]
+    );
+}
+
+#[test]
+fn an_alert_in_the_spring_gap_moves_forward_once_and_the_next_day_is_back_on_its_clock() {
+    let w = World::new();
+    w.zoned_daily(
+        "2026-03-06T12:00:00Z",
+        "America/New_York",
+        "2026-03-05T02:30",
+    );
+    assert_eq!(
+        w.firings(3),
+        [
+            "2026-03-07T07:30:00.000Z",
+            // 02:30 does not exist on the 8th: it sounds at 03:30 EDT, once.
+            "2026-03-08T07:30:00.000Z",
+            "2026-03-09T06:30:00.000Z",
+        ]
+    );
+}
+
+#[test]
+fn an_alert_in_the_fall_back_fold_sounds_once_at_the_earlier_instant() {
+    let w = World::new();
+    w.zoned_daily(
+        "2026-10-30T12:00:00Z",
+        "America/New_York",
+        "2026-10-29T01:30",
+    );
+    assert_eq!(
+        w.firings(3),
+        [
+            "2026-10-31T05:30:00.000Z",
+            // 01:30 happens twice on 1 November: the earlier (EDT) only.
+            "2026-11-01T05:30:00.000Z",
+            "2026-11-02T06:30:00.000Z",
+        ]
+    );
+}
+
+#[test]
+fn an_all_day_alert_stays_on_its_date_through_both_changes_and_a_floating_one_on_its_wall_clock() {
+    let w = World::new();
+    w.at("2026-03-06T12:00:00Z");
+    w.ok(
+        "event.propose",
+        json!({ "title": "Bins", "timing": "all-day", "starts": "2026-03-06", "ends": "2026-03-07",
+                "rule": "FREQ=DAILY", "reminders": [0] }),
+    );
+    let mut keys = Vec::new();
+    for _ in 0..4 {
+        let rows = w.rows();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].timing, Timing::Floating, "a date is not an instant");
+        keys.push(rows[0].fire_key.clone());
+        // A floating key is read on the phone's clock, so the vault only moves it on by day.
+        w.scratch.clock.advance_days(1);
+        assert_eq!(w.scratch.vault.advance_alerts().expect("advance"), 1);
+    }
+    assert_eq!(
+        keys,
+        [
+            "2026-03-07T09:00",
+            "2026-03-08T09:00",
+            "2026-03-09T09:00",
+            "2026-03-10T09:00"
+        ]
+    );
+    // A wall-clock task keeps its key whatever zone the phone is in: the key names no zone.
+    w.ok(
+        "task.add",
+        json!({ "title": "Walk", "due": "2026-11-01T01:30", "remind_before_min": 0 }),
+    );
+    let walk = w
+        .rows()
+        .into_iter()
+        .find(|r| r.timing == Timing::Floating && r.fire_key.starts_with("2026-11-01"))
+        .expect("the floating row");
+    assert_eq!(walk.fire_key, "2026-11-01T01:30");
+}
+
+#[test]
+fn the_same_wall_time_is_a_different_instant_in_each_zone_and_travel_changes_nothing_stored() {
+    let w = World::new();
+    w.event(json!({ "starts": "2026-03-10T09:00", "zone": "America/New_York", "reminders": [0] }));
+    w.event(json!({ "starts": "2026-03-10T09:00", "zone": "Asia/Kolkata", "reminders": [0] }));
+    let mut keys: Vec<String> = w.rows().into_iter().map(|r| r.fire_key).collect();
+    keys.sort();
+    assert_eq!(
+        keys,
+        ["2026-03-10T03:30:00.000Z", "2026-03-10T13:00:00.000Z"],
+        "09:00 in Kolkata is 03:30Z and in New York (EDT) 13:00Z; the phone's zone is not an input"
+    );
+}
