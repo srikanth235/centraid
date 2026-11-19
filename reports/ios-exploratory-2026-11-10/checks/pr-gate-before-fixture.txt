@@ -1,0 +1,53 @@
+xtask gate — profile pr
+  ok    fmt                 4.0s  cargo fmt --all --check
+  ok    clippy             43.6s  cargo clippy --workspace --all-targets -- -D warnings
+  FAIL  test             1182.0s  `cargo nextest run --workspace` exited 100 — error: test run failed · artifact: target/xtask/pr/test
+  ok    restore-drill      23.1s  back a vault up, lose it with its ledger and spool, and restore it row for row; then lose the PHONE, restore from 24 words across the real gateway, and freeze the old one
+        ok      sql-confinement — 835 file(s) scanned, clean (166 in the allowed crates, 24 in the rule runner)
+        ok      abi-five-symbols — 11 file(s) scanned, clean
+        ok      no-listening-socket — 1000 file(s) scanned, clean (24 in the rule runner, 1 named in the listener allowlist)
+        ok      commonmain-no-platform-import — 5 file(s) scanned, clean
+        ok      no-kmp-shared — 480 file(s) scanned, clean
+        ok      no-command-request — 52 file(s) scanned, clean
+        ok      native-accessibility — 331 file(s) scanned, clean
+        ok      no-tasks-namespace — 353 file(s) scanned, clean
+        ok      native-spells-no-screen-id — 297 file(s) scanned, clean (69 registered screen id(s))
+        ok      native-names-no-command — 307 file(s) scanned, clean (113 registered command(s))
+        ok      screens-per-app-layout — 147 file(s) scanned, clean
+        ok      healthkit-read-only — 146 file(s) scanned, clean
+        ok      health-connect-read-only — 175 file(s) scanned, clean
+        ok      walker-platform-law — 297 file(s) scanned, clean
+        ok      first-launch-asks-nothing — 2 file(s) scanned, clean
+        ok      native-shell-parity — 332 file(s) scanned, clean (5297 item(s) in 26 proto file(s), 126 in the register)
+  ok    rules               2.1s  16 rule(s) applied, 0 pending their subject
+  ok    doc-links           0.2s  every link resolves — 115 markdown file(s), 378 relative link(s), 55 anchor(s); not read: 
+  ok    ledgers             0.1s  2 ledger(s) hold against d8daadc4
+  ok    buf                 2.5s  buf lint + breaking against 1 base(s): main, 0 tags in window (no `v*` tag exists yet for v1)
+  ok    deny                1.8s  cargo deny --all-features --config deny.toml check
+  ok    ci-policy           0.5s  13 YAML file(s) under .github, every action SHA-pinned + actionlint
+  ok    release-build     190.1s  cargo build --workspace --release
+  ok    ts-static          13.9s  bun run check
+  ok    design              0.8s  design/tokens.toml regenerates every committed design file unchanged
+  ok    lockfile            0.0s  bun.lock + Cargo.lock clean (TLS-only sources, every registry package pinned by content)
+  ok    fault-door         34.9s  cargo test --workspace --features centraid-core-ffi/debug-fault --test contract a_real_panic_inside_call_poisons_the_handle_through_the_abi
+
+  step              seconds
+  fmt                   4.0
+  clippy               43.6
+  test               1182.0
+  restore-drill        23.1
+  rules                 2.1
+  doc-links             0.2
+  ledgers               0.1
+  buf                   2.5
+  deny                  1.8
+  ci-policy             0.5
+  release-build       190.1
+  ts-static            13.9
+  design                0.8
+  lockfile              0.0
+  fault-door           34.9
+  TOTAL              1499.6
+
+gate pr: FAIL — test
+  test: `cargo nextest run --workspace` exited 100 — error: test run failed · artifact: target/xtask/pr/test

@@ -1,0 +1,69 @@
+Window: "c1173-review", App: Device Hub.
+0 standard window c1173-review – iOS 26.5, ID: com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, Secondary Actions: Raise
+	1 split group
+		2 split group com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, SidebarNavigationSplitView
+			3 scroll area
+				4 list Sidebar
+					5 row (selectable) Description: Available, Value: Expanded
+					6 row (selected) Description: iphone.gen3, Value: c1173-review
+26.5
+Simulator
+					7 row (selectable) Description: ipad, Value: iPad Pro 13-inch (M5)
+26.5
+Simulator
+					8 row (selectable) Description: Iphone, Value: iPhone 17e
+26.5
+Simulator
+			9 search text field (settable) Search
+				10 button Search
+			11 splitter (disabled, settable, float) 248
+			12 container
+				13 container
+					14 button Description: Demo vault. Switch vault, ID: home-vault-switch, Secondary Actions: Cancel
+					15 button Description: Not backed up. Pair a backup device., ID: home-backup-status, Secondary Actions: Cancel
+					16 button Description: Search everything, ID: home-search-open, Secondary Actions: Cancel
+					17 button Description: Settings, ID: home-settings-open, Secondary Actions: Cancel
+					18 button Description: Open Calendar, 9 on your plate, ID: home-tile-calendar, Secondary Actions: Cancel
+					19 button Description: Open Reminders, 9 due, ID: home-tile-reminders, Secondary Actions: Cancel
+					20 button Description: Open Photos, 47 photos, ID: home-tile-photos, Secondary Actions: Cancel
+					21 button Description: Open Money, ID: home-tile-money, Secondary Actions: Cancel
+					22 button Description: Open Health, Nothing yet today, ID: home-tile-health, Secondary Actions: Cancel
+					23 button Description: Open People, 7 people, ID: home-tile-people, Secondary Actions: Cancel
+					24 button Description: Open Locker, 7 items, ID: home-tile-locker, Secondary Actions: Cancel
+					25 button Description: Open Notes, 15 notes, ID: home-tile-notes, Secondary Actions: Cancel
+					26 button Description: Open Docs, 7 documents, ID: home-tile-docs, Secondary Actions: Cancel
+					27 button (selected) Description: Home, current place, ID: home-band-home, Secondary Actions: Cancel
+					28 button Description: Chat, ID: home-band-chat, Secondary Actions: Cancel
+					29 button Description: Backup and recovery key, ID: home-band-backup, Secondary Actions: Cancel
+				30 button Description: Home, ID: app.grid.3x3
+				31 button Description: Screenshot, ID: camera.viewfinder
+				32 button Description: Record, ID: record.circle
+				33 button Rotate Right
+	34 toolbar
+		35 menu button Add, Help: Add Device, ID: plus
+		36 toggle button Description: Filter, Help: Sort and Filter, Value: off
+		37 button Description: Hide Sidebar, Secondary Actions: Increment, Decrement, Delete, Cancel
+		38 toggle button Description: Capture Keyboard, Value: off
+		39 toggle button (disabled) Description: Resize mode, Help: Enter resize mode, Value: off
+		40 radio button Description: Zoom Out, Value: 0, ID: minus.magnifyingglass
+		41 radio button Description: arrowtriangles.up.right.down.left.magnifyingglass, Help: Zoom to Fit, Value: 1
+		42 radio button Description: Zoom To Actual Size, Help: Physical Size, Value: 0, ID: 1.magnifyingglass
+		43 radio button Description: Zoom In, Value: 0, ID: plus.magnifyingglass
+		44 button Description: Switch to compact window, Secondary Actions: Increment, Decrement, Delete, Cancel, Move previous, Move next, Remove from toolbar
+		45 menu button More, Help: More Actions, ID: ellipsis
+		46 radio button Description: Edit, Help: Settings, Value: 0, ID: slider.horizontal.3
+		47 radio button Description: text.document, Help: Reports, Value: 0
+		48 radio button Description: Info, Value: 0, ID: info
+	49 close button
+	50 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	51 minimize button
+	52 text c1173-review iOS 26.5
+53 menu bar
+	54 Device Hub
+	55 File
+	56 Edit
+	57 View
+	58 Device
+	59 Controls
+	60 Window
+	61 Help

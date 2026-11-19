@@ -1,0 +1,76 @@
+Window: "c1173-review", App: Device Hub.
+0 standard window c1173-review – iOS 26.5, ID: com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, Secondary Actions: Raise
+	1 split group
+		2 split group com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, SidebarNavigationSplitView
+			3 scroll area
+				4 list Sidebar
+					5 row (selectable) Description: Available, Value: Expanded
+					6 row (selected) Description: iphone.gen3, Value: c1173-review
+26.5
+Simulator
+					7 row (selectable) Description: ipad, Value: iPad Pro 13-inch (M5)
+26.5
+Simulator
+					8 row (selectable) Description: Iphone, Value: iPhone 17e
+26.5
+Simulator
+			9 search text field (settable) Search
+				10 button Search
+			11 splitter (disabled, settable, float) 248
+			12 container
+				13 container
+					14 heading Description: THIS WEEK, Secondary Actions: Cancel
+					15 button Description: Afternoon run, 6.4 km · 37 min, Sun, ID: health-workout-01a1c01c-deb9-7e68-9a5e-a69bc466ccd4, Secondary Actions: Cancel
+					16 button Description: Night strength, 44 min, Sat, ID: health-workout-01a1c01c-deb9-7e68-8e7a-c3b25bbebdb6, Secondary Actions: Cancel
+					17 button Description: Afternoon run, 8.9 km · 51 min, Thu, ID: health-workout-01a1c01c-deb9-7e68-b6be-13c326205433, Secondary Actions: Cancel
+					18 heading Description: NOVEMBER, Secondary Actions: Cancel
+					19 button Description: Night walk, 5.1 km · 1 h 01 min, 3 Nov, ID: health-workout-01a1c01c-deb9-7e68-b642-12481faca1b6, Secondary Actions: Cancel
+					20 heading Description: OCTOBER, Secondary Actions: Cancel
+					21 button Description: Afternoon ride, 24.3 km · 1 h 13 min, 31 Oct, ID: health-workout-01a1c01c-deba-7e68-b227-ee7eafccb560, Secondary Actions: Cancel
+					22 button Description: Afternoon run, 5.3 km · 32 min, 28 Oct, ID: health-workout-01a1c01c-deba-7e68-a57f-91b81df4cd1c, Secondary Actions: Cancel
+					23 button Description: Night strength, 49 min, 23 Oct, ID: health-workout-01a1c01c-deba-7e68-a246-0d2aa37cf386, Secondary Actions: Cancel
+					24 button Description: Afternoon run, 7.7 km · 46 min, 16 Oct, ID: health-workout-01a1c01c-deba-7e68-b634-729ab6d6a346, Secondary Actions: Cancel
+					25 button Description: Afternoon walk, 6.8 km · 1 h 19 min, 7 Oct, ID: health-workout-01a1c01c-deba-7e68-9713-ded3c6639438, Secondary Actions: Cancel
+					26 heading Description: SEPTEMBER, Secondary Actions: Cancel
+					27 button Description: Afternoon ride, 31.2 km · 1 h 34 min, 23 Sep, ID: health-workout-01a1c01c-deba-7e68-b08f-ff258d22cde5, Secondary Actions: Cancel
+					28 heading Description: AUGUST, Secondary Actions: Cancel
+					29 button Description: Afternoon run, 6.9 km · 40 min, 30 Aug, ID: health-workout-01a1c01c-debb-7e68-a1f6-280f1505a7c7, Secondary Actions: Cancel
+					30 button Description: Night strength, 39 min, 5 Aug, ID: health-workout-01a1c01c-debb-7e68-afaa-598c213cdeba, Secondary Actions: Cancel
+					31 button Description: Home, ID: health-band-home, Secondary Actions: Cancel
+					32 button Description: Summary, ID: health-band-today, Secondary Actions: Cancel
+					33 button Description: Trends, ID: health-band-trends, Secondary Actions: Cancel
+					34 button (selected) Description: Workouts, current place, ID: health-band-workouts, Secondary Actions: Cancel
+					35 button Description: More, ID: health-band-more, Secondary Actions: Cancel
+					36 button Description: Search Health, ID: band-search, Secondary Actions: Cancel
+				37 button Description: Home, ID: app.grid.3x3
+				38 button Description: Screenshot, ID: camera.viewfinder
+				39 button Description: Record, ID: record.circle
+				40 button Rotate Right
+	41 toolbar
+		42 menu button Add, Help: Add Device, ID: plus
+		43 toggle button Description: Filter, Help: Sort and Filter, Value: off
+		44 button Description: Hide Sidebar, Secondary Actions: Increment, Decrement, Delete, Cancel
+		45 toggle button Description: Capture Keyboard, Value: off
+		46 toggle button (disabled) Description: Resize mode, Help: Enter resize mode, Value: off
+		47 radio button Description: Zoom Out, Value: 0, ID: minus.magnifyingglass
+		48 radio button Description: arrowtriangles.up.right.down.left.magnifyingglass, Help: Zoom to Fit, Value: 1
+		49 radio button Description: Zoom To Actual Size, Help: Physical Size, Value: 0, ID: 1.magnifyingglass
+		50 radio button Description: Zoom In, Value: 0, ID: plus.magnifyingglass
+		51 button Description: Switch to compact window, Secondary Actions: Increment, Decrement, Delete, Cancel, Move previous, Move next, Remove from toolbar
+		52 menu button More, Help: More Actions, ID: ellipsis
+		53 radio button Description: Edit, Help: Settings, Value: 0, ID: slider.horizontal.3
+		54 radio button Description: text.document, Help: Reports, Value: 0
+		55 radio button Description: Info, Value: 0, ID: info
+	56 close button
+	57 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	58 minimize button
+	59 text c1173-review iOS 26.5
+60 menu bar
+	61 Device Hub
+	62 File
+	63 Edit
+	64 View
+	65 Device
+	66 Controls
+	67 Window
+	68 Help

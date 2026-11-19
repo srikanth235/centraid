@@ -1,0 +1,71 @@
+Window: "c1173-review", App: Device Hub.
+0 standard window c1173-review – iOS 26.5, ID: com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, Secondary Actions: Raise
+	1 split group
+		2 split group com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, SidebarNavigationSplitView
+			3 scroll area
+				4 list Sidebar
+					5 row (selectable) Description: Available, Value: Expanded
+					6 row (selected) Description: iphone.gen3, Value: c1173-review
+26.5
+Simulator
+					7 row (selectable) Description: ipad, Value: iPad Pro 13-inch (M5)
+26.5
+Simulator
+					8 row (selectable) Description: Iphone, Value: iPhone 17e
+26.5
+Simulator
+			9 search text field (settable) Search
+				10 button Search
+			11 splitter (disabled, settable, float) 248
+			12 container
+				13 container
+					14 button Description: Close, ID: photos.lightbox.close, Secondary Actions: Cancel
+					15 text Description: 7 November 2026, Secondary Actions: Cancel
+					16 text Description: 10:00, Secondary Actions: Cancel
+					17 pop up button Description: More, ID: photos.lightbox.more, Secondary Actions: Cancel
+					18 text Description: Preview no longer on this phone, Secondary Actions: Cancel
+					19 button Description: Play, Secondary Actions: Cancel
+					20 slider (settable, float) Description: Position, Value: nan, Details: 0:00 of 0:00, Secondary Actions: Cancel
+					21 text Description: 0:00 / 0:00, Secondary Actions: Cancel
+					22 element Description: Tahoe shoreline pan, ID: photos.lightbox.stage.01a1c01c-daf9-7e68-958a-7628faa98727, Secondary Actions: Cancel
+					23 button Description: Previous photo, Secondary Actions: Cancel
+					24 button Description: Send a copy, ID: photos.lightbox.share, Secondary Actions: Cancel
+					25 button Description: Favorite, ID: photos.lightbox.Star, Secondary Actions: Cancel
+					26 button Description: Info, ID: photos.lightbox.info, Secondary Actions: Cancel
+					27 button (disabled) Description: Edit, Help: Crop and rotate work on photos only., ID: photos.lightbox.Pencil, Secondary Actions: Cancel
+					28 button Description: Archive, ID: photos.lightbox.Archive, Secondary Actions: Cancel
+					29 button Description: Trash, ID: photos.lightbox.trash, Secondary Actions: Cancel
+					30 button Description: Next photo, Secondary Actions: Cancel
+					31 text Description: Crop and rotate work on photos only., Secondary Actions: Cancel
+				32 button Description: Home, ID: app.grid.3x3
+				33 button Description: Screenshot, ID: camera.viewfinder
+				34 button Description: Record, ID: record.circle
+				35 button Rotate Right
+	36 toolbar
+		37 menu button Add, Help: Add Device, ID: plus
+		38 toggle button Description: Filter, Help: Sort and Filter, Value: off
+		39 button Description: Hide Sidebar, Secondary Actions: Increment, Decrement, Delete, Cancel
+		40 toggle button Description: Capture Keyboard, Value: off
+		41 toggle button (disabled) Description: Resize mode, Help: Enter resize mode, Value: off
+		42 radio button Description: Zoom Out, Value: 0, ID: minus.magnifyingglass
+		43 radio button Description: arrowtriangles.up.right.down.left.magnifyingglass, Help: Zoom to Fit, Value: 1
+		44 radio button Description: Zoom To Actual Size, Help: Physical Size, Value: 0, ID: 1.magnifyingglass
+		45 radio button Description: Zoom In, Value: 0, ID: plus.magnifyingglass
+		46 button Description: Switch to compact window, Secondary Actions: Increment, Decrement, Delete, Cancel, Move previous, Move next, Remove from toolbar
+		47 menu button More, Help: More Actions, ID: ellipsis
+		48 radio button Description: Edit, Help: Settings, Value: 0, ID: slider.horizontal.3
+		49 radio button Description: text.document, Help: Reports, Value: 0
+		50 radio button Description: Info, Value: 0, ID: info
+	51 close button
+	52 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	53 minimize button
+	54 text c1173-review iOS 26.5
+55 menu bar
+	56 Device Hub
+	57 File
+	58 Edit
+	59 View
+	60 Device
+	61 Controls
+	62 Window
+	63 Help

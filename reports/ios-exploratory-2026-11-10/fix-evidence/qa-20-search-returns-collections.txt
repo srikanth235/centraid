@@ -1,0 +1,72 @@
+Window: "c1173-review", App: Device Hub.
+0 standard window c1173-review – iOS 26.5, ID: com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, Secondary Actions: Raise
+	1 split group
+		2 split group com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, SidebarNavigationSplitView
+			3 scroll area
+				4 list Sidebar
+					5 row (selectable) Description: Available, Value: Expanded
+					6 row (selected) Description: iphone.gen3, Value: c1173-review
+26.5
+Simulator
+					7 row (selectable) Description: ipad, Value: iPad Pro 13-inch (M5)
+26.5
+Simulator
+					8 row (selectable) Description: Iphone, Value: iPhone 17e
+26.5
+Simulator
+			9 search text field (settable) Search
+				10 button Search
+			11 splitter (disabled, settable, float) 248
+			12 container
+				13 container
+					14 button Description: Collapse all, ID: photos.collections.fold-all, Secondary Actions: Cancel
+					15 heading Description: Pinned, Secondary Actions: Cancel
+					16 button Description: Hide Pinned, Secondary Actions: Cancel
+					17 button Description: Favorites, 7 photos, ID: photos.collections.shelf, Secondary Actions: Cancel
+					18 button Description: Videos, 1 photo, ID: photos.collections.shelf, Secondary Actions: Cancel
+					19 button Description: Places, 14, ID: photos.collections.shelf, Secondary Actions: Cancel
+					20 heading Description: Albums, Secondary Actions: Cancel
+					21 button Description: Hide Albums, Secondary Actions: Cancel
+					22 button Description: Lisbon, 6 photos, ID: photos.collections.shelf, Secondary Actions: Cancel, Delete album
+					23 button Description: Tahoe scouting, 4 photos, ID: photos.collections.shelf, Secondary Actions: Cancel, Delete album
+					24 heading Description: Utilities, Secondary Actions: Cancel
+					25 button Description: Hide Utilities, Secondary Actions: Cancel
+					26 button Description: Archive, Empty, ID: photos.collections.door, Secondary Actions: Cancel
+					27 button Description: Trash, Empty, ID: photos.collections.door, Secondary Actions: Cancel
+					28 button Description: Home, ID: photos-band-home, Secondary Actions: Cancel
+					29 button Description: Library, ID: photos-band-library, Secondary Actions: Cancel
+					30 button (selected) Description: Collections, current place, ID: photos-band-collections, Secondary Actions: Cancel
+					31 button Description: More, ID: photos-band-more, Secondary Actions: Cancel
+					32 button Description: Search photos, places, albums, ID: band-search, Secondary Actions: Cancel
+				33 button Description: Home, ID: app.grid.3x3
+				34 button Description: Screenshot, ID: camera.viewfinder
+				35 button Description: Record, ID: record.circle
+				36 button Rotate Right
+	37 toolbar
+		38 menu button Add, Help: Add Device, ID: plus
+		39 toggle button Description: Filter, Help: Sort and Filter, Value: off
+		40 button Description: Hide Sidebar, Secondary Actions: Increment, Decrement, Delete, Cancel
+		41 toggle button Description: Capture Keyboard, Value: off
+		42 toggle button (disabled) Description: Resize mode, Help: Enter resize mode, Value: off
+		43 radio button Description: Zoom Out, Value: 0, ID: minus.magnifyingglass
+		44 radio button Description: arrowtriangles.up.right.down.left.magnifyingglass, Help: Zoom to Fit, Value: 1
+		45 radio button Description: Zoom To Actual Size, Help: Physical Size, Value: 0, ID: 1.magnifyingglass
+		46 radio button Description: Zoom In, Value: 0, ID: plus.magnifyingglass
+		47 button Description: Switch to compact window, Secondary Actions: Increment, Decrement, Delete, Cancel, Move previous, Move next, Remove from toolbar
+		48 menu button More, Help: More Actions, ID: ellipsis
+		49 radio button Description: Edit, Help: Settings, Value: 0, ID: slider.horizontal.3
+		50 radio button Description: text.document, Help: Reports, Value: 0
+		51 radio button Description: Info, Value: 0, ID: info
+	52 close button
+	53 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	54 minimize button
+	55 text c1173-review iOS 26.5
+56 menu bar
+	57 Device Hub
+	58 File
+	59 Edit
+	60 View
+	61 Device
+	62 Controls
+	63 Window
+	64 Help

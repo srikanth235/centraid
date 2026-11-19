@@ -1,0 +1,76 @@
+Window: "c1173-review", App: Device Hub.
+0 standard window c1173-review – iOS 26.5, ID: com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, Secondary Actions: Raise
+	1 split group
+		2 split group com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, SidebarNavigationSplitView
+			3 scroll area
+				4 list Sidebar
+					5 row (selectable) Description: Available, Value: Expanded
+					6 row (selected) Description: iphone.gen3, Value: c1173-review
+26.5
+Simulator
+					7 row (selectable) Description: ipad, Value: iPad Pro 13-inch (M5)
+26.5
+Simulator
+					8 row (selectable) Description: Iphone, Value: iPhone 17e
+26.5
+Simulator
+			9 search text field (settable) Search
+				10 button Search
+			11 splitter (disabled, settable, float) 248
+			12 container
+				13 container
+					14 heading Description: Find the QA travel checklist, Demo vault · on this phone, ID: chat, Secondary Actions: Cancel
+					15 button Description: Chats, ID: chat, Secondary Actions: Cancel
+					16 button Description: New chat, ID: chat, Secondary Actions: Cancel
+					17 element Description: You said: Find the QA travel checklist, ID: chat-message-user, Secondary Actions: Cancel
+					18 element ID: chat-message-answer, Secondary Actions: Cancel, Description: Centraid said: I could not settle this in 6 steps; the last thing that failed: error: edit needs field: value lines. document editable fields: name. Which did you mean?
+					19 button Description: QA travel checklist, Today · 09:34, Docs, ID: chat-card-0, Secondary Actions: Cancel
+					20 button Description: Travel, Docs, ID: chat-card-1, Secondary Actions: Cancel
+					21 button Description: Travel, Notes, ID: chat-card-2, Secondary Actions: Cancel
+					22 button Description: Lake house checklist, Yesterday · 11:41, Notes, ID: chat-card-3, Secondary Actions: Cancel
+					23 button Description: Travel Visa, Locker, ID: chat-card-4, Secondary Actions: Cancel
+					24 button Description: Copy, ID: chat-copy, Secondary Actions: Cancel
+					25 button Description: Try again, ID: chat-retry, Secondary Actions: Cancel
+					26 button Description: Find the QA travel checklist, ID: chat-suggestion-0, Secondary Actions: Cancel
+					27 button Description: What documents changed lately?, ID: chat-suggestion-1, Secondary Actions: Cancel
+					28 button Description: What folders do I have?, ID: chat-suggestion-2, Secondary Actions: Cancel
+					29 pop up button Description: Attach, ID: chat, Secondary Actions: Cancel
+					30 Group (settable) Value: Ask your vault, ID: chat, Secondary Actions: Cancel
+					31 pop up button Description: Chat scope, Docs, ID: chat, Secondary Actions: Cancel
+					32 button (disabled) Description: Send, ID: chat, Secondary Actions: Cancel
+					33 button Description: Home, ID: home-band-home, Secondary Actions: Cancel
+					34 button (selected) Description: Chat, current place, ID: home-band-chat, Secondary Actions: Cancel
+					35 button Description: Backup and recovery key, ID: home-band-backup, Secondary Actions: Cancel
+					36 element Secondary Actions: Cancel
+				37 button Description: Home, ID: app.grid.3x3
+				38 button Description: Screenshot, ID: camera.viewfinder
+				39 button Description: Record, ID: record.circle
+				40 button Rotate Right
+	41 toolbar
+		42 menu button Add, Help: Add Device, ID: plus
+		43 toggle button Description: Filter, Help: Sort and Filter, Value: off
+		44 button Description: Hide Sidebar, Secondary Actions: Increment, Decrement, Delete, Cancel
+		45 toggle button Description: Capture Keyboard, Value: off
+		46 toggle button (disabled) Description: Resize mode, Help: Enter resize mode, Value: off
+		47 radio button Description: Zoom Out, Value: 0, ID: minus.magnifyingglass
+		48 radio button Description: arrowtriangles.up.right.down.left.magnifyingglass, Help: Zoom to Fit, Value: 1
+		49 radio button Description: Zoom To Actual Size, Help: Physical Size, Value: 0, ID: 1.magnifyingglass
+		50 radio button Description: Zoom In, Value: 0, ID: plus.magnifyingglass
+		51 button Description: Switch to compact window, Secondary Actions: Increment, Decrement, Delete, Cancel, Move previous, Move next, Remove from toolbar
+		52 menu button More, Help: More Actions, ID: ellipsis
+		53 radio button Description: Edit, Help: Settings, Value: 0, ID: slider.horizontal.3
+		54 radio button Description: text.document, Help: Reports, Value: 0
+		55 radio button Description: Info, Value: 0, ID: info
+	56 close button
+	57 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	58 minimize button
+	59 text c1173-review iOS 26.5
+60 menu bar
+	61 Device Hub
+	62 File
+	63 Edit
+	64 View
+	65 Device
+	66 Controls
+	67 Window
+	68 Help

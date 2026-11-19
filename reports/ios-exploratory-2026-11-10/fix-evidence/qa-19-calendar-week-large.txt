@@ -1,0 +1,149 @@
+Window: "c1173-review", App: Device Hub.
+0 standard window c1173-review – iOS 26.5, ID: com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, Secondary Actions: Raise
+	1 split group
+		2 split group com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, SidebarNavigationSplitView
+			3 scroll area
+				4 list Sidebar
+					5 row (selectable) Expanded
+					6 row (selected) c1173-review
+26.5
+Simulator
+					7 row (selectable) iPad Pro 13-inch (M5)
+26.5
+Simulator
+					8 row (selectable) iPhone 17e
+26.5
+Simulator
+			9 search text field (settable) Search
+				10 button Search
+			11 splitter (settable, float) 248
+			12 container
+				13 container
+					14 button Description: Monday 9 November, 8 events, ID: agenda-strip-day-2026-11-09, Secondary Actions: Cancel, Next week, Previous week
+					15 button (selected) Description: Tuesday 10 November, 3 events, ID: agenda-strip-day-2026-11-10, Secondary Actions: Cancel, Next week, Previous week
+					16 button Description: Wednesday 11 November, 1 event, ID: agenda-strip-day-2026-11-11, Secondary Actions: Cancel, Next week, Previous week
+					17 button Description: Thursday 12 November, 2 events, ID: agenda-strip-day-2026-11-12, Secondary Actions: Cancel, Next week, Previous week
+					18 button Description: Friday 13 November, 3 events, ID: agenda-strip-day-2026-11-13, Secondary Actions: Cancel, Next week, Previous week
+					19 button Description: Saturday 14 November, 3 events, ID: agenda-strip-day-2026-11-14, Secondary Actions: Cancel, Next week, Previous week
+					20 button Description: Sunday 15 November, 1 event, ID: agenda-strip-day-2026-11-15, Secondary Actions: Cancel, Next week, Previous week
+					21 text Description: Monday 9 November, Secondary Actions: Cancel
+					22 text Description: Tuesday 10 November, Secondary Actions: Cancel
+					23 text Description: Wednesday 11 November, Secondary Actions: Cancel
+					24 text Description: Thursday 12 November, Secondary Actions: Cancel
+					25 text Description: Friday 13 November, Secondary Actions: Cancel
+					26 text Description: Saturday 14 November, Secondary Actions: Cancel
+					27 text Description: Sunday 15 November, Secondary Actions: Cancel
+					28 text Description: all-day, Secondary Actions: Cancel
+					29 button Description: Company offsite, All day, ID: agenda-grid-chip-event:01a1c01c-de81-7e68-a48c-a44e0db99685, Secondary Actions: Cancel
+					30 button Description: QA buy oat milk, ID: agenda-grid-chip-check-01a1c4b7-8988-77e1-bf08-3f2079302e89, Secondary Actions: Cancel
+					31 button Description: QA buy oat milk, ID: agenda-grid-chip-task:01a1c4b7-8988-77e1-bf08-3f2079302e89, Secondary Actions: Cancel
+					32 button Description: Tahoe long weekend, All day, ID: agenda-grid-chip-event:01a1c01c-de82-7e68-99ff-970ccfba5e51, Secondary Actions: Cancel
+					33 button Description: Tahoe long weekend, All day, ID: agenda-grid-chip-event:01a1c01c-de82-7e68-99ff-970ccfba5e51, Secondary Actions: Cancel
+					34 button Description: Tahoe long weekend, All day, ID: agenda-grid-chip-event:01a1c01c-de82-7e68-99ff-970ccfba5e51, Secondary Actions: Cancel
+					35 text Description: 00:00, Secondary Actions: Cancel, Next week, Previous week
+					36 text Description: 01:00, Secondary Actions: Cancel, Next week, Previous week
+					37 text Description: 02:00, Secondary Actions: Cancel, Next week, Previous week
+					38 text Description: 03:00, Secondary Actions: Cancel, Next week, Previous week
+					39 text Description: 04:00, Secondary Actions: Cancel, Next week, Previous week
+					40 text Description: 05:00, Secondary Actions: Cancel, Next week, Previous week
+					41 text Description: 06:00, Secondary Actions: Cancel, Next week, Previous week
+					42 text Description: 07:00, Secondary Actions: Cancel, Next week, Previous week
+					43 button (settable, unknown) Description: Change end time, ID: agenda-grid-block-resize-2026-11-10|01a1c01c-de68-7e68-949d-2ed825c695ae:2026-11-10T06:30:00, Secondary Actions: Cancel, Next week, Previous week
+					44 button Description: Morning run, 06:30 to 07:15, Help: Move, ID: agenda-grid-block-2026-11-10|01a1c01c-de68-7e68-949d-2ed825c695ae:2026-11-10T06:30:00, Secondary Actions: Cancel, Next week, Previous week
+					45 text Description: 08:00, Secondary Actions: Cancel, Next week, Previous week
+					46 text Description: 09:00, Secondary Actions: Cancel, Next week, Previous week
+					47 button Description: Book the Tahoe cabin, 09:00 to 09:30, Help: Move, ID: agenda-grid-block-2026-11-12|01a1c01c-de74-7e68-8d61-485089ff726b, Secondary Actions: Cancel, Next week, Previous week
+					48 button (settable, unknown) Description: Change end time, ID: agenda-grid-block-resize-2026-11-12|01a1c01c-de74-7e68-8d61-485089ff726b, Secondary Actions: Cancel, Next week, Previous week
+					49 text Description: 10:00, Secondary Actions: Cancel, Next week, Previous week
+					50 button Description: Design review, 10:00 to 11:00, Help: Move, ID: agenda-grid-block-2026-11-09|01a1c01c-de77-7e68-be88-b8f36041018a, Secondary Actions: Cancel, Next week, Previous week
+					51 button (settable, unknown) Description: Change end time, ID: agenda-grid-block-resize-2026-11-09|01a1c01c-de77-7e68-be88-b8f36041018a, Secondary Actions: Cancel, Next week, Previous week
+					52 button Description: Team standup, 10:30 to 11:00, Help: Move, ID: agenda-grid-block-2026-11-09|01a1c01c-de77-7e68-a9a9-104e283f51b5, Secondary Actions: Cancel, Next week, Previous week
+					53 button (settable, unknown) Description: Change end time, ID: agenda-grid-block-resize-2026-11-09|01a1c01c-de77-7e68-a9a9-104e283f51b5, Secondary Actions: Cancel, Next week, Previous week
+					54 text Description: 11:00, Secondary Actions: Cancel, Next week, Previous week
+					55 button Description: Cabin walkthrough with Alpine Rentals, 11:00 to 12:00, Help: Move, ID: agenda-grid-block-2026-11-14|01a1c01c-de7e-7e68-8969-e93860667972, Secondary Actions: Cancel, Next week, Previous week
+					56 button (settable, unknown) Description: Change end time, ID: agenda-grid-block-resize-2026-11-14|01a1c01c-de7e-7e68-8969-e93860667972, Secondary Actions: Cancel, Next week, Previous week
+					57 text Description: 12:00, Secondary Actions: Cancel, Next week, Previous week
+					58 text Description: 13:00, Secondary Actions: Cancel, Next week, Previous week
+					59 button Description: Lunch with Chris, 12:30 to 13:30, ID: agenda-grid-block-2026-11-09|01a1c01c-de78-7e68-a0de-f509e2d20aa9, Secondary Actions: Cancel, Next week, Previous week
+					60 button Description: Gym, 12:45 to 13:15, Help: Move, ID: agenda-grid-block-2026-11-09|01a1c01c-de78-7e68-b5bf-63ed5372e5a7, Secondary Actions: Cancel, Next week, Previous week
+					61 button (settable, unknown) Description: Change end time, ID: agenda-grid-block-resize-2026-11-09|01a1c01c-de78-7e68-b5bf-63ed5372e5a7, Secondary Actions: Cancel, Next week, Previous week
+					62 text Description: 14:00, Secondary Actions: Cancel, Next week, Previous week
+					63 text Description: 15:00, Secondary Actions: Cancel, Next week, Previous week
+					64 button Description: Focus block, 14:00 to 16:00, Help: Move, ID: agenda-grid-block-2026-11-09|01a1c01c-de79-7e68-97a9-04f31f012c51, Secondary Actions: Cancel, Next week, Previous week
+					65 button Description: Pick up the dry cleaning, 14:30, ID: agenda-grid-block-check-01a1c01c-de56-7e68-a11e-f08a48be6420, Secondary Actions: Cancel, Next week, Previous week
+					66 button Description: Pick up the dry cleaning, 14:30, ID: agenda-grid-block-2026-11-09|task:01a1c01c-de56-7e68-a11e-f08a48be6420, Secondary Actions: Cancel, Next week, Previous week
+					67 button Description: Send the design review notes, 14:30, ID: agenda-grid-block-check-01a1c01c-de62-7e68-b122-64bf32071a07, Secondary Actions: Cancel, Next week, Previous week
+					68 button Description: Send the design review notes, 14:30, ID: agenda-grid-block-2026-11-09|task:01a1c01c-de62-7e68-b122-64bf32071a07, Secondary Actions: Cancel, Next week, Previous week
+					69 button Description: Sprint planning, 14:00 to 15:00, Help: Move, ID: agenda-grid-block-2026-11-10|01a1c01c-de7a-7e68-b107-7b322c2bf63b, Secondary Actions: Cancel, Next week, Previous week
+					70 button (settable, unknown) Description: Change end time, ID: agenda-grid-block-resize-2026-11-10|01a1c01c-de7a-7e68-b107-7b322c2bf63b, Secondary Actions: Cancel, Next week, Previous week
+					71 button Description: Sync with Priya, 15:00 to 15:30, ID: agenda-grid-block-2026-11-09|01a1c01c-de79-7e68-847d-d74c88429f36, Secondary Actions: Cancel, Next week, Previous week
+					72 button Description: 1:1 with Jake, 14:30 to 15:15, ID: agenda-grid-block-2026-11-10|01a1c01c-de7b-7e68-9996-63a4574275d1, Secondary Actions: Cancel, Next week, Previous week
+					73 button Description: Book dentist appointment, 14:30, ID: agenda-grid-block-check-01a1c01c-de55-7e68-8431-42d1e30d62c6, Secondary Actions: Cancel, Next week, Previous week
+					74 button Description: Book dentist appointment, 14:30, ID: agenda-grid-block-2026-11-10|task:01a1c01c-de55-7e68-8431-42d1e30d62c6, Secondary Actions: Cancel, Next week, Previous week
+					75 button Description: Pick up the prescription, 14:30, ID: agenda-grid-block-check-01a1c01c-de67-7e68-bb5a-935317ceabc1, Secondary Actions: Cancel, Next week, Previous week
+					76 button Description: Pick up the prescription, 14:30, ID: agenda-grid-block-2026-11-10|task:01a1c01c-de67-7e68-bb5a-935317ceabc1, Secondary Actions: Cancel, Next week, Previous week
+					77 button Description: Prep the Friday demo, 14:30, ID: agenda-grid-block-check-01a1c01c-de64-7e68-9835-7c3309c516af, Secondary Actions: Cancel, Next week, Previous week
+					78 button Description: Prep the Friday demo, 14:30, ID: agenda-grid-block-2026-11-11|task:01a1c01c-de64-7e68-9835-7c3309c516af, Secondary Actions: Cancel, Next week, Previous week
+					79 button Description: Book the Tahoe cabin, 14:30, ID: agenda-grid-block-check-01a1c01c-de5c-7e68-afd8-f1b1de63847b, Secondary Actions: Cancel, Next week, Previous week
+					80 button Description: Book the Tahoe cabin, 14:30, ID: agenda-grid-block-2026-11-12|task:01a1c01c-de5c-7e68-afd8-f1b1de63847b, Secondary Actions: Cancel, Next week, Previous week
+					81 button Description: Book the offsite room, 14:30, ID: agenda-grid-block-check-01a1c01c-de63-7e68-b880-366599f30234, Secondary Actions: Cancel, Next week, Previous week
+					82 button Description: Book the offsite room, 14:30, ID: agenda-grid-block-2026-11-13|task:01a1c01c-de63-7e68-b880-366599f30234, Secondary Actions: Cancel, Next week, Previous week
+					83 button Description: Buy lift tickets online, 14:30, ID: agenda-grid-block-check-01a1c01c-de59-7e68-8d36-e47f399442de, Secondary Actions: Cancel, Next week, Previous week
+					84 button Description: Buy lift tickets online, 14:30, ID: agenda-grid-block-2026-11-14|task:01a1c01c-de59-7e68-8d36-e47f399442de, Secondary Actions: Cancel, Next week, Previous week
+					85 button Description: Descale the kettle, 14:30, ID: agenda-grid-block-check-01a1c01c-de61-7e68-ab10-bbc7383d23a4, Secondary Actions: Cancel, Next week, Previous week
+					86 button Description: Descale the kettle, 14:30, ID: agenda-grid-block-2026-11-15|task:01a1c01c-de61-7e68-ab10-bbc7383d23a4, Secondary Actions: Cancel, Next week, Previous week
+					87 button (settable, unknown) Description: Change end time, ID: agenda-grid-block-resize-2026-11-09|01a1c01c-de79-7e68-97a9-04f31f012c51, Secondary Actions: Cancel, Next week, Previous week
+					88 button Description: Chris's design crit, 15:00 to 16:00, ID: agenda-grid-block-2026-11-15|01a1c01c-de7e-7e68-93ae-e51334b1a761, Secondary Actions: Cancel, Next week, Previous week
+					89 element Description: Now, 16:12, ID: agenda-now-line, Secondary Actions: Cancel, Next week, Previous week
+					90 button Description: Cabin check-in, 16:00 to 17:00, Help: Move, ID: agenda-grid-block-2026-11-14|01a1c01c-de7d-7e68-9b79-17d3f1d3a945, Secondary Actions: Cancel, Next week, Previous week
+					91 button (settable, unknown) Description: Change end time, ID: agenda-grid-block-resize-2026-11-14|01a1c01c-de7d-7e68-9b79-17d3f1d3a945, Secondary Actions: Cancel, Next week, Previous week
+					92 text Description: 17:00, Secondary Actions: Cancel, Next week, Previous week
+					93 button Description: Pick up the dry cleaning, 17:00 to 17:30, Help: Move, ID: agenda-grid-block-2026-11-09|01a1c01c-de68-7e68-8f98-f5c44a114eaf, Secondary Actions: Cancel, Next week, Previous week
+					94 button (settable, unknown) Description: Change end time, ID: agenda-grid-block-resize-2026-11-09|01a1c01c-de68-7e68-8f98-f5c44a114eaf, Secondary Actions: Cancel, Next week, Previous week
+					95 text Description: 18:00, Secondary Actions: Cancel, Next week, Previous week
+					96 text Description: 19:00, Secondary Actions: Cancel, Next week, Previous week
+					97 button Description: Climbing with Priya, 18:00 to 19:30, ID: agenda-grid-block-2026-11-13|01a1c01c-de7b-7e68-b343-34f4b544a90b, Secondary Actions: Cancel, Next week, Previous week
+					98 button Description: Dinner with Maya, 19:00 to 21:00, ID: agenda-grid-block-2026-11-11|01a1c01c-de69-7e68-8d76-497e9a99f921, Secondary Actions: Cancel, Next week, Previous week
+					99 button Description: Board games, 18:30 to 20:00, Help: Move, ID: agenda-grid-block-2026-11-13|01a1c01c-de7c-7e68-8659-352dfa78dcdc, Secondary Actions: Cancel, Next week, Previous week
+					100 button (settable, unknown) Description: Change end time, ID: agenda-grid-block-resize-2026-11-13|01a1c01c-de7c-7e68-8659-352dfa78dcdc, Secondary Actions: Cancel, Next week, Previous week
+					101 text Description: 20:00, Secondary Actions: Cancel, Next week, Previous week
+					102 text Description: 21:00, Secondary Actions: Cancel, Next week, Previous week
+					103 text Description: 22:00, Secondary Actions: Cancel, Next week, Previous week
+					104 text Description: 23:00, Secondary Actions: Cancel, Next week, Previous week
+					105 button Description: Home, ID: calendar-band-home, Secondary Actions: Cancel
+					106 button (selected) Description: Calendar, current place, ID: calendar-band-calendar, Secondary Actions: Cancel
+					107 button Description: Calendars, ID: calendar-band-more, Secondary Actions: Cancel
+					108 button Description: Invites, ID: calendar-band-invites, Secondary Actions: Cancel
+					109 button Description: Search events, ID: band-search, Secondary Actions: Cancel
+				110 button app.grid.3x3
+				111 button camera.viewfinder
+				112 button record.circle
+				113 button
+	114 toolbar
+		115 menu button Add, Help: Add Device, ID: plus
+		116 toggle button Help: Sort and Filter, Value: off
+		117 button Description: Hide Sidebar, Secondary Actions: Increment, Decrement, Delete, Cancel
+		118 toggle button Help: Capture Keyboard, Value: off
+		119 toggle button (disabled) Help: Enter resize mode, Value: off
+		120 radio button Description: Zoom Out, Value: 0, ID: minus.magnifyingglass
+		121 radio button Description: arrowtriangles.up.right.down.left.magnifyingglass, Help: Zoom to Fit, Value: 1
+		122 radio button Description: Zoom To Actual Size, Help: Physical Size, Value: 0, ID: 1.magnifyingglass
+		123 radio button Description: Zoom In, Value: 0, ID: plus.magnifyingglass
+		124 button Description: Switch to compact window, Secondary Actions: Increment, Decrement, Delete, Cancel, Move previous, Move next, Remove from toolbar
+		125 menu button More, Help: More Actions, ID: ellipsis
+		126 radio button Description: Edit, Help: Settings, Value: 0, ID: slider.horizontal.3
+		127 radio button Description: text.document, Help: Reports, Value: 0
+		128 radio button Description: Info, Value: 0, ID: info
+	129 close button
+	130 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	131 minimize button
+	132 text c1173-review iOS 26.5
+133 menu bar
+	134 Device Hub
+	135 File
+	136 Edit
+	137 View
+	138 Device
+	139 Controls
+	140 Window
+	141 Help

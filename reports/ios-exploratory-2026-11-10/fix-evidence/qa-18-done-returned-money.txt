@@ -1,0 +1,90 @@
+Window: "c1173-review", App: Device Hub.
+0 standard window c1173-review – iOS 26.5, ID: com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, Secondary Actions: Raise
+	1 split group
+		2 split group com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, SidebarNavigationSplitView
+			3 scroll area
+				4 list Sidebar
+					5 row (selectable) Description: Available, Value: Expanded
+					6 row (selected) Description: iphone.gen3, Value: c1173-review
+26.5
+Simulator
+					7 row (selectable) Description: ipad, Value: iPad Pro 13-inch (M5)
+26.5
+Simulator
+					8 row (selectable) Description: Iphone, Value: iPhone 17e
+26.5
+Simulator
+			9 search text field (settable) Search
+				10 button Search
+			11 splitter (disabled, settable, float) 248
+			12 container
+				13 container
+					14 button Description: Month, November 2026, ID: room-subtitle, Secondary Actions: Cancel
+					15 element ID: money-hero, Secondary Actions: Cancel, Description: Spent in November, $1,876.26, 170% of plan, day 10 of 30, Planned $1,100.00 · Left -$776.26, 20 days left
+					16 element Description: In, $2,140.00, Secondary Actions: Cancel
+					17 element Description: Out, $1,876.26, Secondary Actions: Cancel
+					18 element Description: Net, +$263.74, Secondary Actions: Cancel
+					19 button Description: 1 row needs a category, ID: money-needs-category, Secondary Actions: Cancel
+					20 heading Description: Yesterday, Secondary Actions: Cancel
+					21 text Description: Yesterday, -$5.75, Secondary Actions: Cancel
+					22 button Description: STARBUCKS STORE 12345, Yesterday, Dining out, Dining out · Everyday, -$5.75, ID: money-row-01a1c01c-de89-7e68-9735-ad2a8d8ff3b8, Secondary Actions: Cancel
+					23 heading Description: Sun 8 November, Secondary Actions: Cancel
+					24 text Description: Sun 8 November, -$51.00, Secondary Actions: Cancel
+					25 button Description: WHOLE FOODS MKT #10234, Sun 8 November, Groceries, Groceries · Everyday, -$51.00, ID: money-row-01a1c01c-de89-7e68-952a-b79c74afa8cc, Secondary Actions: Cancel
+					26 heading Description: Sat 7 November, Secondary Actions: Cancel
+					27 text Description: Sat 7 November, -$42.00, Secondary Actions: Cancel
+					28 button Description: SHELL OIL 574441, Sat 7 November, Fuel, Fuel · Visa, -$42.00, ID: money-row-01a1c01c-de97-7e68-a112-3a73906b24e2, Secondary Actions: Cancel
+					29 heading Description: Fri 6 November, Secondary Actions: Cancel
+					30 text Description: Fri 6 November, +$2,134.00, Secondary Actions: Cancel
+					31 button Description: PAYROLL SIERRA DESIGN CO, Fri 6 November, Pay, Pay · Everyday, $2,140.00, ID: money-row-01a1c01c-de89-7e68-9fef-040022a84334, Secondary Actions: Cancel
+					32 button Description: STARBUCKS STORE 12345, Fri 6 November, Dining out, Dining out · Everyday, -$6.00, ID: money-row-01a1c01c-de89-7e68-9f92-950a84552874, Secondary Actions: Cancel
+					33 heading Description: Thu 5 November, Secondary Actions: Cancel
+					34 text Description: Thu 5 November, -$1,650.00, Secondary Actions: Cancel
+					35 button ID: money-row-01a1c01c-de89-7e68-9a9a-5119a09f5922, Secondary Actions: Cancel, Description: RENT PAYMENT ALPINE PROPERTIES, Thu 5 November, Rent or mortgage, Rent or mortgage · Everyday, -$1,650.00
+					36 heading Description: Wed 4 November, Secondary Actions: Cancel
+					37 text Description: Wed 4 November, -$39.00, Secondary Actions: Cancel
+					38 button Description: SQ *CORNER BISTRO, Wed 4 November, Dining out, Dining out · Visa, -$38.00, ID: money-row-01a1c01c-de97-7e68-82b4-c1af85b9f405, Secondary Actions: Cancel
+					39 button Description: MONTHLY SERVICE FEE, Wed 4 November, Rainy day, -$1.00, ID: money-row-01a1c01c-de94-7e68-b29c-89bcdb7cfda2, Secondary Actions: Cancel
+					40 heading Description: Tue 3 November, Secondary Actions: Cancel
+					41 text Description: Tue 3 November, -$82.51, Secondary Actions: Cancel
+					42 button Description: STARBUCKS STORE 12345, Tue 3 November, Dining out, Dining out · Everyday, -$6.25, ID: money-row-01a1c01c-de89-7e68-ba26-bc70be546fb2, Secondary Actions: Cancel
+					43 button Description: NETFLIX.COM, Tue 3 November, Subscriptions, Subscriptions · Everyday, -$15.49, ID: money-row-01a1c01c-de89-7e68-a5d3-e5224c0f5bf6, Secondary Actions: Cancel
+					44 button Description: WHOLE FOODS MKT #10234, Tue 3 November, Groceries, Groceries · Everyday, -$60.77, ID: money-row-01a1c01c-de89-7e68-9def-44ca0b1f4d9e, Secondary Actions: Cancel
+					45 button Description: Home, ID: money-band-home, Secondary Actions: Cancel
+					46 button (selected) Description: Activity, current place, ID: money-band-activity, Secondary Actions: Cancel
+					47 button Description: Spending, ID: money-band-spending, Secondary Actions: Cancel
+					48 button Description: Cash flow, ID: money-band-cashflow, Secondary Actions: Cancel
+					49 button Description: More, ID: money-band-more, Secondary Actions: Cancel
+					50 button Description: Search transactions, ID: band-search, Secondary Actions: Cancel
+				51 button Description: Home, ID: app.grid.3x3
+				52 button Description: Screenshot, ID: camera.viewfinder
+				53 button Description: Record, ID: record.circle
+				54 button Rotate Right
+	55 toolbar
+		56 menu button Add, Help: Add Device, ID: plus
+		57 toggle button Description: Filter, Help: Sort and Filter, Value: off
+		58 button Description: Hide Sidebar, Secondary Actions: Increment, Decrement, Delete, Cancel
+		59 toggle button Description: Capture Keyboard, Value: off
+		60 toggle button (disabled) Description: Resize mode, Help: Enter resize mode, Value: off
+		61 radio button Description: Zoom Out, Value: 0, ID: minus.magnifyingglass
+		62 radio button Description: arrowtriangles.up.right.down.left.magnifyingglass, Help: Zoom to Fit, Value: 1
+		63 radio button Description: Zoom To Actual Size, Help: Physical Size, Value: 0, ID: 1.magnifyingglass
+		64 radio button Description: Zoom In, Value: 0, ID: plus.magnifyingglass
+		65 button Description: Switch to compact window, Secondary Actions: Increment, Decrement, Delete, Cancel, Move previous, Move next, Remove from toolbar
+		66 menu button More, Help: More Actions, ID: ellipsis
+		67 radio button Description: Edit, Help: Settings, Value: 0, ID: slider.horizontal.3
+		68 radio button Description: text.document, Help: Reports, Value: 0
+		69 radio button Description: Info, Value: 0, ID: info
+	70 close button
+	71 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	72 minimize button
+	73 text c1173-review iOS 26.5
+74 menu bar
+	75 Device Hub
+	76 File
+	77 Edit
+	78 View
+	79 Device
+	80 Controls
+	81 Window
+	82 Help

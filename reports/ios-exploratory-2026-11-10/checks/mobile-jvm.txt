@@ -1,0 +1,8 @@
+xtask gate — profile mobile-jvm
+  ok    mobile-jvm         85.8s  design/tokens.toml regenerates every committed design file unchanged
+
+  step              seconds
+  mobile-jvm           85.8
+  TOTAL                85.8
+
+gate mobile-jvm: PASS

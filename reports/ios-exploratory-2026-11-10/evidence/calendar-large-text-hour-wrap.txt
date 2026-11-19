@@ -1,0 +1,114 @@
+Window: "c1173-review", App: Device Hub.
+0 standard window c1173-review – iOS 26.5, ID: com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, Secondary Actions: Raise
+	1 split group
+		2 split group com.apple.dt.DeviceKit.DeviceManagementWindow-AppWindow-1, SidebarNavigationSplitView
+			3 scroll area
+				4 list Sidebar
+					5 row (selectable) Description: Available, Value: Expanded
+					6 row (selected) Description: iphone.gen3, Value: c1173-review
+26.5
+Simulator
+					7 row (selectable) Description: ipad, Value: iPad Pro 13-inch (M5)
+26.5
+Simulator
+					8 row (selectable) Description: Iphone, Value: iPhone 17e
+26.5
+Simulator
+			9 search text field (settable) Search
+				10 button Search
+			11 splitter (disabled, settable, float) 248
+			12 container
+				13 container
+					14 button Description: Monday 9 November, 8 events, ID: agenda-strip-day-2026-11-09, Secondary Actions: Cancel, Next week, Previous week
+					15 button (selected) Description: Tuesday 10 November, 3 events, ID: agenda-strip-day-2026-11-10, Secondary Actions: Cancel, Next week, Previous week
+					16 button Description: Wednesday 11 November, 1 event, ID: agenda-strip-day-2026-11-11, Secondary Actions: Cancel, Next week, Previous week
+					17 button Description: Thursday 12 November, 2 events, ID: agenda-strip-day-2026-11-12, Secondary Actions: Cancel, Next week, Previous week
+					18 button Description: Friday 13 November, 3 events, ID: agenda-strip-day-2026-11-13, Secondary Actions: Cancel, Next week, Previous week
+					19 button Description: Saturday 14 November, 3 events, ID: agenda-strip-day-2026-11-14, Secondary Actions: Cancel, Next week, Previous week
+					20 button Description: Sunday 15 November, 1 event, ID: agenda-strip-day-2026-11-15, Secondary Actions: Cancel, Next week, Previous week
+					21 text Description: all-day, Secondary Actions: Cancel
+					22 button Description: Expense the October train pass, Overdue, 7 days ago, ID: agenda-grid-chip-check-01a1c01c-de64-7e68-b518-3d441a04f552, Secondary Actions: Cancel
+					23 button Description: Expense the October train pass, Overdue, 7 days ago, ID: agenda-grid-chip-task:overdue:01a1c01c-de64-7e68-b518-3d441a04f552, Secondary Actions: Cancel
+					24 button Description: Renew the car registration, Overdue, 6 days ago, ID: agenda-grid-chip-check-01a1c01c-de66-7e68-af69-5360a9daf251, Secondary Actions: Cancel
+					25 button Description: Renew the car registration, Overdue, 6 days ago, ID: agenda-grid-chip-task:overdue:01a1c01c-de66-7e68-af69-5360a9daf251, Secondary Actions: Cancel
+					26 button Description: Replace the hallway bulb, Overdue, 4 days ago, ID: agenda-grid-chip-check-01a1c01c-de5f-7e68-b112-ad68a9cb61c0, Secondary Actions: Cancel
+					27 button Description: Replace the hallway bulb, Overdue, 4 days ago, ID: agenda-grid-chip-task:overdue:01a1c01c-de5f-7e68-b112-ad68a9cb61c0, Secondary Actions: Cancel
+					28 button Description: Rotate the tires before the drive, Overdue, 3 days ago, ID: agenda-grid-chip-check-01a1c01c-de55-7e68-80b2-4c5a83c7805a, Secondary Actions: Cancel
+					29 button Description: Rotate the tires before the drive, Overdue, 3 days ago, ID: agenda-grid-chip-task:overdue:01a1c01c-de55-7e68-80b2-4c5a83c7805a, Secondary Actions: Cancel
+					30 button Description: Ask the landlord about the heater, Overdue, 2 days ago, ID: agenda-grid-chip-check-01a1c01c-de60-7e68-a7e7-7280ad90604d, Secondary Actions: Cancel
+					31 button Description: Ask the landlord about the heater, Overdue, 2 days ago, ID: agenda-grid-chip-task:overdue:01a1c01c-de60-7e68-a7e7-7280ad90604d, Secondary Actions: Cancel
+					32 button Description: Pick up the dry cleaning, Overdue, Yesterday, ID: agenda-grid-chip-check-01a1c01c-de56-7e68-a11e-f08a48be6420, Secondary Actions: Cancel
+					33 button Description: Pick up the dry cleaning, Overdue, Yesterday, ID: agenda-grid-chip-task:overdue:01a1c01c-de56-7e68-a11e-f08a48be6420, Secondary Actions: Cancel
+					34 button Description: Send the design review notes, Overdue, Yesterday, ID: agenda-grid-chip-check-01a1c01c-de62-7e68-b122-64bf32071a07, Secondary Actions: Cancel
+					35 button Description: Send the design review notes, Overdue, Yesterday, ID: agenda-grid-chip-task:overdue:01a1c01c-de62-7e68-b122-64bf32071a07, Secondary Actions: Cancel
+					36 text Description: 00:00, Secondary Actions: Cancel, Next week, Previous week
+					37 text Description: 01:00, Secondary Actions: Cancel, Next week, Previous week
+					38 text Description: 02:00, Secondary Actions: Cancel, Next week, Previous week
+					39 text Description: 03:00, Secondary Actions: Cancel, Next week, Previous week
+					40 text Description: 04:00, Secondary Actions: Cancel, Next week, Previous week
+					41 text Description: 05:00, Secondary Actions: Cancel, Next week, Previous week
+					42 text Description: 06:00, Secondary Actions: Cancel, Next week, Previous week
+					43 text Description: 07:00, Secondary Actions: Cancel, Next week, Previous week
+					44 button Description: Change end time, ID: agenda-grid-block-resize-2026-11-10|01a1c01c-de68-7e68-949d-2ed825c695ae:2026-11-10T06:30:00, Secondary Actions: Cancel, Next week, Previous week
+					45 button Description: Morning run, 06:30 to 07:15, Help: Move, ID: agenda-grid-block-2026-11-10|01a1c01c-de68-7e68-949d-2ed825c695ae:2026-11-10T06:30:00, Secondary Actions: Cancel, Next week, Previous week
+					46 text Description: 08:00, Secondary Actions: Cancel, Next week, Previous week
+					47 text Description: 09:00, Secondary Actions: Cancel, Next week, Previous week
+					48 text Description: 10:00, Secondary Actions: Cancel, Next week, Previous week
+					49 text Description: 11:00, Secondary Actions: Cancel, Next week, Previous week
+					50 text Description: 12:00, Secondary Actions: Cancel, Next week, Previous week
+					51 text Description: 13:00, Secondary Actions: Cancel, Next week, Previous week
+					52 text Description: 14:00, Secondary Actions: Cancel, Next week, Previous week
+					53 button Description: Sprint planning, 14:00 to 15:00, Help: Move, ID: agenda-grid-block-2026-11-10|01a1c01c-de7a-7e68-b107-7b322c2bf63b, Secondary Actions: Cancel, Next week, Previous week
+					54 button Description: Change end time, ID: agenda-grid-block-resize-2026-11-10|01a1c01c-de7a-7e68-b107-7b322c2bf63b, Secondary Actions: Cancel, Next week, Previous week
+					55 text Description: 15:00, Secondary Actions: Cancel, Next week, Previous week
+					56 button Description: 1:1 with Jake, 14:30 to 15:15, ID: agenda-grid-block-2026-11-10|01a1c01c-de7b-7e68-9996-63a4574275d1, Secondary Actions: Cancel, Next week, Previous week
+					57 button Description: Book dentist appointment, 14:30, ID: agenda-grid-block-check-01a1c01c-de55-7e68-8431-42d1e30d62c6, Secondary Actions: Cancel, Next week, Previous week
+					58 button Description: Book dentist appointment, 14:30, ID: agenda-grid-block-2026-11-10|task:01a1c01c-de55-7e68-8431-42d1e30d62c6, Secondary Actions: Cancel, Next week, Previous week
+					59 button Description: Pick up the prescription, 14:30, ID: agenda-grid-block-check-01a1c01c-de67-7e68-bb5a-935317ceabc1, Secondary Actions: Cancel, Next week, Previous week
+					60 button Description: Pick up the prescription, 14:30, ID: agenda-grid-block-2026-11-10|task:01a1c01c-de67-7e68-bb5a-935317ceabc1, Secondary Actions: Cancel, Next week, Previous week
+					61 element Description: Now, 15:17, ID: agenda-now-line, Secondary Actions: Cancel, Next week, Previous week
+					62 text Description: 16:00, Secondary Actions: Cancel, Next week, Previous week
+					63 text Description: 17:00, Secondary Actions: Cancel, Next week, Previous week
+					64 text Description: 18:00, Secondary Actions: Cancel, Next week, Previous week
+					65 text Description: 19:00, Secondary Actions: Cancel, Next week, Previous week
+					66 text Description: 20:00, Secondary Actions: Cancel, Next week, Previous week
+					67 text Description: 21:00, Secondary Actions: Cancel, Next week, Previous week
+					68 text Description: 22:00, Secondary Actions: Cancel, Next week, Previous week
+					69 text Description: 23:00, Secondary Actions: Cancel, Next week, Previous week
+					70 button Description: Home, ID: calendar-band-home, Secondary Actions: Cancel
+					71 button (selected) Description: Calendar, current place, ID: calendar-band-calendar, Secondary Actions: Cancel
+					72 button Description: Calendars, ID: calendar-band-more, Secondary Actions: Cancel
+					73 button Description: Invites, ID: calendar-band-invites, Secondary Actions: Cancel
+					74 button Description: Search events and tasks, ID: band-search, Secondary Actions: Cancel
+				75 button Description: Home, ID: app.grid.3x3
+				76 button Description: Screenshot, ID: camera.viewfinder
+				77 button Description: Record, ID: record.circle
+				78 button Rotate Right
+	79 toolbar
+		80 menu button Add, Help: Add Device, ID: plus
+		81 toggle button Description: Filter, Help: Sort and Filter, Value: off
+		82 button Description: Hide Sidebar, Secondary Actions: Increment, Decrement, Delete, Cancel
+		83 toggle button Description: Capture Keyboard, Value: off
+		84 toggle button (disabled) Description: Resize mode, Help: Enter resize mode, Value: off
+		85 radio button Description: Zoom Out, Value: 0, ID: minus.magnifyingglass
+		86 radio button Description: arrowtriangles.up.right.down.left.magnifyingglass, Help: Zoom to Fit, Value: 1
+		87 radio button Description: Zoom To Actual Size, Help: Physical Size, Value: 0, ID: 1.magnifyingglass
+		88 radio button Description: Zoom In, Value: 0, ID: plus.magnifyingglass
+		89 button Description: Switch to compact window, Secondary Actions: Increment, Decrement, Delete, Cancel, Move previous, Move next, Remove from toolbar
+		90 menu button More, Help: More Actions, ID: ellipsis
+		91 radio button Description: Edit, Help: Settings, Value: 0, ID: slider.horizontal.3
+		92 radio button Description: text.document, Help: Reports, Value: 0
+		93 radio button Description: Info, Value: 0, ID: info
+	94 close button
+	95 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	96 minimize button
+	97 text c1173-review iOS 26.5
+98 menu bar
+	99 Device Hub
+	100 File
+	101 Edit
+	102 View
+	103 Device
+	104 Controls
+	105 Window
+	106 Help
