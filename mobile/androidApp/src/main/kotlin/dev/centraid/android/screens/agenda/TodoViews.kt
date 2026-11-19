@@ -43,7 +43,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -158,31 +161,26 @@ internal fun TodoRowView(
                 )
                 val line = listOf(row.due_label, row.meta).filter { it.isNotEmpty() }
                 if (line.isNotEmpty()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (row.due_label.isNotEmpty()) {
-                            Text(
-                                row.due_label,
-                                style = centraidType("annotLabel"),
-                                color = if (row.overdue) {
-                                    agendaTokenColor("stateRedText") ?: centraidColor("warning")
-                                } else {
-                                    centraidColor("textSoft")
-                                },
-                                maxLines = 1,
-                            )
-                        }
-                        if (row.meta.isNotEmpty()) {
-                            Text(
-                                (if (row.due_label.isNotEmpty()) " · " else "") + row.meta,
-                                style = centraidType("annotLabel"),
-                                color = centraidColor("textSoft"),
-                                maxLines = if (rememberLargestText()) Int.MAX_VALUE else 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
+                    // ONE WRAPPING LINE: the due word, then the meta, so a long reminder line wraps at a
+                    // word and never cuts mid-time with an ellipsis.
+                    val overdueInk = agendaTokenColor("stateRedText") ?: centraidColor("warning")
+                    val soft = centraidColor("textSoft")
+                    val dueInk = if (row.overdue) overdueInk else soft
+                    Text(
+                        buildAnnotatedString {
+                            if (row.due_label.isNotEmpty()) withStyle(SpanStyle(color = dueInk)) { append(row.due_label) }
+                            if (row.meta.isNotEmpty()) {
+                                withStyle(SpanStyle(color = soft)) { append((if (row.due_label.isNotEmpty()) " · " else "") + row.meta) }
+                            }
+                        },
+                        style = centraidType("annotLabel"),
+                        maxLines = if (rememberLargestText()) Int.MAX_VALUE else 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
+            // THE TRAILING MARKS sit in fixed slots, right-aligned, so the priority, the flag and the list
+            // dot line up from one row to the next whether or not a row has them all.
             if (row.priority_label.isNotEmpty()) {
                 Text(
                     row.priority_label,
@@ -191,26 +189,21 @@ internal fun TodoRowView(
                     modifier = Modifier.padding(start = 6.dp),
                 )
             }
-            if (row.flagged) {
-                CentraidIcon(
-                    "Flag",
-                    tint = agendaTokenColor("stateAmberText") ?: centraidColor("warning"),
-                    size = 14.dp,
-                    modifier = Modifier.padding(start = 6.dp).clearAndSetSemantics { },
-                )
+            Box(Modifier.padding(start = 6.dp).width(14.dp), contentAlignment = Alignment.Center) {
+                if (row.flagged) {
+                    CentraidIcon(
+                        "Flag",
+                        tint = agendaTokenColor("stateAmberText") ?: centraidColor("warning"),
+                        size = 14.dp,
+                        modifier = Modifier.clearAndSetSemantics { },
+                    )
+                }
             }
             // THE LIST'S COLOUR (#1173): one of the eight, a dot after the title.
             val listColor = agendaListColor(row.list_color_key)
-            if (listColor != null) {
-                Box(Modifier.padding(start = 8.dp).size(6.dp).clip(CircleShape).background(listColor))
-            } else if (row.project_hue_key.isNotEmpty()) {
-                Box(
-                    Modifier
-                        .padding(start = 8.dp)
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(hueColor(row.project_hue_key)),
-                )
+                ?: row.project_hue_key.takeIf { it.isNotEmpty() }?.let { hueColor(it) }
+            Box(Modifier.padding(start = 8.dp).width(6.dp), contentAlignment = Alignment.Center) {
+                if (listColor != null) Box(Modifier.size(6.dp).clip(CircleShape).background(listColor))
             }
         }
     }
