@@ -210,27 +210,58 @@ struct MoneyChoiceField: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.moneyInset) private var inset
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         Button(action: onTap) {
-            HStack {
-                Text(key)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color("text", scheme))
-                Spacer(minLength: 8)
-                Text(value)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-                    .lineLimit(1)
-                CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textFaint", scheme), size: 14)
-            }
-            .padding(.horizontal, inset)
-            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
-            .overlay(alignment: .bottom) { KitHairline() }
-            .contentShape(Rectangle())
+            rowContent
+                .padding(.horizontal, inset)
+                .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 10 : 0)
+                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
+                .overlay(alignment: .bottom) { KitHairline() }
+                .contentShape(Rectangle())
         }
         .buttonStyle(KitRowPress())
         .accessibilityElement(children: .combine)
         .modifier(MoneyIdentifier(identifier: identifier))
+    }
+
+    /// THE VALUE IS NEVER CUT (#1202): beside its name while the row has the room, under it
+    /// (wrapping, whole) once the text is large.
+    @ViewBuilder private var rowContent: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            HStack(alignment: .center, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    keyText
+                    valueText.fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                chevron
+            }
+        } else {
+            HStack {
+                keyText
+                Spacer(minLength: 8)
+                valueText.lineLimit(1)
+                chevron
+            }
+        }
+    }
+
+    private var keyText: some View {
+        Text(key)
+            .centraidType("body")
+            .foregroundStyle(Theme.color("text", scheme))
+    }
+
+    private var valueText: some View {
+        Text(value)
+            .centraidType("body")
+            .foregroundStyle(Theme.color("textSoft", scheme))
+    }
+
+    private var chevron: some View {
+        CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textFaint", scheme), size: 14)
     }
 }
 

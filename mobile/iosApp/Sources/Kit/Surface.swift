@@ -339,6 +339,75 @@ struct KitWholeTokens: View {
     }
 }
 
+/// A SENTENCE THAT HOLDS A QUOTED COMMAND WHOLE (#1202). Words wrap as words do; what sits between
+/// a pair of quotes ("centraid-gateway pair") is a line of its own that shrinks to fit, with its
+/// hyphens drawn non-breaking, so the command never breaks at a hyphen or inside a word. Display
+/// only: a screen reader says the original sentence.
+struct KitQuotedSentence: View {
+    let text: String
+    var centered = false
+
+    private struct Piece: Identifiable {
+        let id: Int
+        let text: String
+        let quoted: Bool
+    }
+
+    private var pieces: [Piece] {
+        var out: [Piece] = []
+        var run = ""
+        var quote = ""
+        var opening = ""
+        var inside = false
+        func flush() {
+            let trimmed = run.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty { out.append(Piece(id: out.count, text: trimmed, quoted: false)) }
+            run = ""
+        }
+        for character in text {
+            if !inside, character == "\u{201C}" || character == "\"" {
+                inside = true
+                opening = String(character)
+                quote = ""
+            } else if inside, character == "\u{201D}" || character == "\"" {
+                let closing = String(character)
+                inside = false
+                if quote.contains("-") {
+                    // A hyphenated quote is a command or a name: its own line, whole.
+                    flush()
+                    let words = quote.replacingOccurrences(of: "-", with: "\u{2011}")
+                    out.append(Piece(id: out.count, text: opening + words + closing, quoted: true))
+                } else {
+                    run += opening + quote + closing
+                }
+                quote = ""
+            } else if inside {
+                quote.append(character)
+            } else {
+                run.append(character)
+            }
+        }
+        if inside { run += opening + quote }
+        flush()
+        return out
+    }
+
+    var body: some View {
+        VStack(alignment: centered ? .center : .leading, spacing: 0) {
+            ForEach(pieces) { piece in
+                if piece.quoted {
+                    Text(piece.text).lineLimit(1).minimumScaleFactor(0.5)
+                } else {
+                    Text(piece.text).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .multilineTextAlignment(centered ? .center : .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(text)
+    }
+}
+
 // MARK: - Scaled tiles (#1202)
 
 extension View {
