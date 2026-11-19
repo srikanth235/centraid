@@ -122,9 +122,7 @@ struct MoneyHomeView: View {
             app: "money",
             title: chrome.title,
             // THE HEADER'S ONE ACTION is the app's create verb (R-CHROME-1).
-            trailing: chrome.addLabel.isEmpty
-                ? nil
-                : RoomAction(iconKey: "Plus", label: chrome.addLabel, identifier: "money-add", action: addStatement),
+            trailing: headerAction,
             // THE BAND'S SEARCH KEY opens the field in place (R-CHROME-2): its term and answer are Rust's.
             search: isDenied || chrome.searchPlaceholder.isEmpty ? nil : searchSlot,
             // THE HEADER'S FILTER BUTTON is account and category, no sort (R-CHROME-3); the month
@@ -133,67 +131,92 @@ struct MoneyHomeView: View {
             subtitle: subtitle,
             showsBand: !isDenied && !state.band.isEmpty
         ) {
-            AppBand(
-                app: "money",
-                tabs: state.band.map { tab in
-                    BandView(
-                        label: tab.label,
-                        event: Data(tab.key.utf8),
-                        iconKey: tab.iconKey,
-                        selected: tab.current,
-                        key: tab.key
-                    )
-                },
-                onSelect: { picked in
-                    let key = String(decoding: picked, as: UTF8.self)
-                    send(event { $0.band = .with { $0.key = key } })
-                },
-                onHome: onHome
-            )
+            band
         } content: {
-            PageReadStateView(
-                page: state.page,
-                onRetry: { send(event { $0.refreshed = .init() }) },
-                onEmptyAction: state.search.open ? nil : addStatement,
-                emptyExtra: {
-                    // A term that found nothing still offers the Ask row under the empty sentence.
-                    if state.search.open, state.search.hasAsk {
-                        return AnyView(SearchAskRow(ask: state.search.ask))
-                    }
-                    return AnyView(EmptyView())
-                }
-            ) {
-                if state.search.open {
-                    searchResults
-                } else if case let .data(home)? = state.content {
-                ScrollView {
-                    // SPENDING AND CASH FLOW ARE BOUNDED AND EAGER; ACTIVITY IS THE
-                    // LONG LIST AND STAYS LAZY. A `LazyVStack` here drew the
-                    // Spending page with its "In" row missing and a blank band in
-                    // its place (a figure row among sibling `ForEach(…, id:
-                    // \.offset)` blocks), so only the page that can hold hundreds
-                    // of rows pays for laziness.
-                    if state.destination == .activity {
-                        LazyVStack(alignment: .leading, spacing: 0) { page(home, state: state) }
-                            .padding(.bottom, 16)
-                    } else {
-                        VStack(alignment: .leading, spacing: 0) { page(home, state: state) }
-                            .padding(.bottom, 16)
-                    }
-                }
-                .refreshable { send(event { $0.refreshed = .init() }) }
-                .accessibilityIdentifier("money-home-list")
-            }
-            }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                MoneyStatusFoot(
-                    status: MoneyWords.line(state.hasStatus ? state.status : nil),
-                    identifier: "money-home-status"
-                )
-            }
+            pageContent
         }
         .sheet(isPresented: sheetBinding) {
             sheetContent(state, home: state.loaded)
+        }
+    }
+
+    // The body's parts live apart: one expression holding all of them was more than the Swift
+    // type checker could solve ("failed to produce diagnostic").
+    private var headerAction: RoomAction? {
+        let label = state.chrome.addLabel
+        if label.isEmpty { return nil }
+        return RoomAction(iconKey: "Plus", label: label, identifier: "money-add", action: addStatement)
+    }
+
+    private var band: AppBand {
+        AppBand(
+            app: "money",
+            tabs: state.band.map { tab in
+                BandView(
+                    label: tab.label,
+                    event: Data(tab.key.utf8),
+                    iconKey: tab.iconKey,
+                    selected: tab.current,
+                    key: tab.key
+                )
+            },
+            onSelect: { picked in
+                let key = String(decoding: picked, as: UTF8.self)
+                send(event { $0.band = .with { $0.key = key } })
+            },
+            onHome: onHome
+        )
+    }
+
+    /// A term that found nothing still offers the Ask row under the empty sentence.
+    private func emptyExtra() -> AnyView {
+        if state.search.open, state.search.hasAsk {
+            return AnyView(SearchAskRow(ask: state.search.ask))
+        }
+        return AnyView(EmptyView())
+    }
+
+    @ViewBuilder
+    private var homeList: some View {
+        if case let .data(home)? = state.content {
+            ScrollView {
+                // SPENDING AND CASH FLOW ARE BOUNDED AND EAGER; ACTIVITY IS THE
+                // LONG LIST AND STAYS LAZY. A `LazyVStack` here drew the
+                // Spending page with its "In" row missing and a blank band in
+                // its place (a figure row among sibling `ForEach(…, id:
+                // \.offset)` blocks), so only the page that can hold hundreds
+                // of rows pays for laziness.
+                if state.destination == .activity {
+                    LazyVStack(alignment: .leading, spacing: 0) { page(home, state: state) }
+                        .padding(.bottom, 16)
+                } else {
+                    VStack(alignment: .leading, spacing: 0) { page(home, state: state) }
+                        .padding(.bottom, 16)
+                }
+            }
+            .refreshable { send(event { $0.refreshed = .init() }) }
+            .accessibilityIdentifier("money-home-list")
+        }
+    }
+
+    private var pageContent: some View {
+        PageReadStateView(
+            page: state.page,
+            onRetry: { send(event { $0.refreshed = .init() }) },
+            onEmptyAction: state.search.open ? nil : addStatement,
+            emptyExtra: emptyExtra
+        ) {
+            if state.search.open {
+                searchResults
+            } else {
+                homeList
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            MoneyStatusFoot(
+                status: MoneyWords.line(state.hasStatus ? state.status : nil),
+                identifier: "money-home-status"
+            )
         }
     }
 
