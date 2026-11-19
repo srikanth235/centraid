@@ -937,12 +937,92 @@
       "x": 0,
       "y": 19720
     },
+    "LargeTextActions.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Largest text: action keys stack",
+      "w": 390,
+      "x": 940,
+      "y": 19720
+    },
+    "LargeTextDocs.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · Largest text: Docs in one column",
+      "w": 390,
+      "x": 1410,
+      "y": 19720
+    },
+    "LargeTextCalendarList.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Largest text: Calendar List, date above rows",
+      "w": 390,
+      "x": 1880,
+      "y": 19720
+    },
+    "LargeTextHealth.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Largest text: Health range picker scrolls",
+      "w": 390,
+      "x": 2350,
+      "y": 19720
+    },
+    "LargeTextWeek.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Largest text: week strip held at xxxLarge",
+      "w": 390,
+      "x": 2820,
+      "y": 19720
+    },
     "LargeTextDark.dc.html": {
       "h": 844,
       "page": "dark",
       "title": "1 · Largest text size · dark",
       "w": 390,
       "x": 0,
+      "y": 19720
+    },
+    "LargeTextActionsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Largest text: action keys stack · dark",
+      "w": 390,
+      "x": 940,
+      "y": 19720
+    },
+    "LargeTextDocsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · Largest text: Docs in one column · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 19720
+    },
+    "LargeTextCalendarListDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Largest text: Calendar List, date above rows · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 19720
+    },
+    "LargeTextHealthDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Largest text: Health range picker scrolls · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 19720
+    },
+    "LargeTextWeekDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Largest text: week strip held at xxxLarge · dark",
+      "w": 390,
+      "x": 2820,
       "y": 19720
     },
     "List.dc.html": {
@@ -4291,6 +4371,11 @@
     "BackupFailed.dc.html",
     "StatusLine.dc.html",
     "LargeText.dc.html",
+    "LargeTextActions.dc.html",
+    "LargeTextDocs.dc.html",
+    "LargeTextCalendarList.dc.html",
+    "LargeTextHealth.dc.html",
+    "LargeTextWeek.dc.html",
     "SolidBand.dc.html",
     "AndroidHome.dc.html",
     "AndroidReminders.dc.html",
@@ -4394,6 +4479,11 @@
     "BackupFailedDark.dc.html",
     "StatusLineDark.dc.html",
     "LargeTextDark.dc.html",
+    "LargeTextActionsDark.dc.html",
+    "LargeTextDocsDark.dc.html",
+    "LargeTextCalendarListDark.dc.html",
+    "LargeTextHealthDark.dc.html",
+    "LargeTextWeekDark.dc.html",
     "SolidBandDark.dc.html",
     "AndroidHomeDark.dc.html",
     "AndroidRemindersDark.dc.html",
