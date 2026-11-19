@@ -48,6 +48,8 @@ import centraid.core.v1.MoneyHero
 import centraid.core.v1.MoneyRow
 import dev.centraid.android.kit.KitText
 import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.SplitRow
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.StateColor
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.CentraidRow
@@ -99,17 +101,16 @@ internal fun MoneyNote(text: String, ink: String = "textSoft") {
 /** A label beside its figure, inked by the figure's own tone. */
 @Composable
 internal fun MoneyFigureRow(figure: MoneyFigure, modifier: Modifier = Modifier) {
-    Row(
+    val largest = rememberLargestText()
+    SplitRow(
         modifier
             .fillMaxWidth()
             .heightIn(min = 44.dp)
-            .padding(horizontal = KitGeometry.GUTTER)
+            .padding(horizontal = KitGeometry.GUTTER, vertical = if (largest) 8.dp else 0.dp)
             .clearAndSetSemantics { contentDescription = spoken(figure.label, figure.amount) },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        KitText(figure.label, KitType.Row, Surface.body, Modifier.weight(1f), maxLines = 2)
-        KitText(figure.amount, KitType.Row, moneyInk(figure.positive, figure.tone), maxLines = 1)
-    }
+        start = { m -> KitText(figure.label, KitType.Row, Surface.body, m, maxLines = if (largest) Int.MAX_VALUE else 2) },
+        end = { m -> KitText(figure.amount, KitType.Row, moneyInk(figure.positive, figure.tone), m, maxLines = if (largest) Int.MAX_VALUE else 1) },
+    )
 }
 
 /** A switch row: the state's label and whether it is on. The toggle is an event the screen forwards. */
