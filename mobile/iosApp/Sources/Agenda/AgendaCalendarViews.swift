@@ -42,6 +42,8 @@ enum AgendaGridMetrics {
     /// A lane this wide (a Day column, a lone event in a Week) has room for the second line.
     static let detailFromWidth: CGFloat = 96
     static let metaFrom: CGFloat = 56
+    /// A task in a lane thinner than `detailFromWidth` stands at least this tall.
+    static let thinTaskHeight: CGFloat = 80
     /// A lane thinner than this cannot hold a word at the grid's type, so its title turns.
     static let turnedBelowWidth: CGFloat = 40
     /// Month rows: the grid style's hold three chips, the list style's a day number and dots.
@@ -293,19 +295,8 @@ private struct AgendaAllDayLane: View {
                     .foregroundStyle(Theme.color("textSoft", scheme))
                     .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : AgendaGridMetrics.gutter, alignment: .leading)
                 // THE CHIPS WRAP (#1202): a lane that scrolled sideways hid every chip past the
-                // overdue reminders that lead it, so today's all-day event was off screen. Three
-                // rows show at once and the lane scrolls up and down past them.
-                ScrollView(.vertical, showsIndicators: false) {
-                    KitFlow(spacing: 8) {
-                        ForEach(header.allDay, id: \.key) { chip in
-                            AgendaChipView(chip: chip, send: send, open: open)
-                                .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(maxHeight: 120)
-                .fixedSize(horizontal: false, vertical: true)
+                // overdue reminders that lead it, so today's all-day event was off screen.
+                chipLane
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .padding(.vertical, 8)
@@ -315,6 +306,34 @@ private struct AgendaAllDayLane: View {
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("agenda-all-day-lane")
         }
+    }
+
+    private var chips: some View {
+        KitFlow(spacing: 8) {
+            ForEach(header.allDay, id: \.key) { chip in
+                AgendaChipView(chip: chip, send: send, open: open)
+                    .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// THE CHIPS, NEVER CUT AT THE FOOT (#1202). They show whole while they fit the cap; past it
+    /// the lane scrolls and its foot fades, so a half-drawn chip reads as "more below" and not as a
+    /// clipped one.
+    private var chipLane: some View {
+        ViewThatFits(in: .vertical) {
+            chips
+            ScrollView(.vertical, showsIndicators: false) { chips }
+                .mask(
+                    LinearGradient(
+                        stops: [.init(color: .black, location: 0.8), .init(color: .clear, location: 1)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+        }
+        .frame(maxHeight: 168)
     }
 }
 
@@ -753,13 +772,32 @@ private struct AgendaChipView: View {
         .clipShape(RoundedRectangle(cornerRadius: Theme.radius("sm", scheme), style: .continuous))
     }
 
+    @ViewBuilder
     private var title: some View {
-        Text(chip.title)
-            .centraidType("annotLabel")
-            .foregroundStyle(Theme.color("text", scheme))
-            .kitLineLimit(2, wide: 3)
-            .minimumScaleFactor(narrow ? 0.7 : 1)
+        if narrow {
+            // WORDS FLOW, EACH WHOLE (#1202): a Week column is about 45pt of text, so a word too wide
+            // for it shrinks to fit instead of breaking ("Comp/any", "weeke/nd"). The row grows
+            // with the lines.
+            KitFlow(spacing: 3) {
+                ForEach(Array(chip.title.split(separator: " ").enumerated()), id: \.offset) { _, word in
+                    Text(String(word))
+                        .centraidType("annotLabel")
+                        .foregroundStyle(Theme.color("text", scheme))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.45)
+                }
+            }
             .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            // A CHIP'S NAME WRAPS WHOLE (#1202): the row grows with it, so a long name is more
+            // lines and never "Tahoe long we...".
+            Text(chip.title)
+                .centraidType("annotLabel")
+                .foregroundStyle(Theme.color("text", scheme))
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 
@@ -794,7 +832,11 @@ private struct AgendaBlockView: View {
         let laneWidth = columnWidth / lanes
         let placed = placement(move)
         let newEnd = resizedEnd(stretch)
-        let height = max(CGFloat(newEnd - placed.start), 15) * perMinute
+        let timed = max(CGFloat(newEnd - placed.start), 15) * perMinute
+        // A TASK IN A THIN LANE IS TALL ENOUGH FOR ITS NAME (#1202): it has no length of its own, and
+        // at 17pt the title was "J5...". The check circle sits over the title, which wraps whole below it.
+        let thinTask = block.isTask && laneWidth < AgendaGridMetrics.detailFromWidth
+        let height = thinTask ? max(timed, AgendaGridMetrics.thinTaskHeight) : timed
         // THE HOUR LABELS' GUTTER comes first: the columns start after it.
         let x = AgendaGridMetrics.gutter + CGFloat(placed.index) * columnWidth + laneWidth * CGFloat(block.column)
         let dragging = move != .zero || stretch != 0
@@ -819,8 +861,9 @@ private struct AgendaBlockView: View {
                     ) {
                         if block.readOnly, block.hasRoute { open(block.route) } else { send(AgendaCalendarEvents.taskChecked(block.taskID)) }
                     }
-                    // CENTRED ON THE TITLE'S LINE (the title is centred in the block too).
-                    .frame(height: height)
+                    // CENTRED ON THE TITLE'S LINE (the title is centred in the block too); over the
+                    // title in a thin lane.
+                    .frame(height: thinTask ? AgendaGridMetrics.checkSize + 6 : height)
                     .padding(.leading, laneWidth >= AgendaGridMetrics.detailFromWidth ? 6 : 3)
                     .allowsHitTesting(true)
                 }
@@ -846,7 +889,15 @@ private struct AgendaBlockView: View {
         let titleFace = roomy ? "smallStrong" : "annotLabelOn"
         let showsDetail = roomy && height >= AgendaGridMetrics.timeFrom && !block.detail.isEmpty
         return VStack(alignment: .leading, spacing: 0) {
-            if block.isTask {
+            if block.isTask, !roomy {
+                Text(block.title)
+                    .centraidType(titleFace)
+                    .foregroundStyle(ink)
+                    .lineLimit(3)
+                    .minimumScaleFactor(0.6)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, AgendaGridMetrics.checkSize + 8)
+            } else if block.isTask {
                 HStack(spacing: 4) {
                     Text(block.title)
                         .centraidType(titleFace)
@@ -870,7 +921,7 @@ private struct AgendaBlockView: View {
                 }
             }
         }
-        .padding(.leading, block.isTask ? (roomy ? 28 : 21) : AgendaGridMetrics.barWidth + (roomy ? 6 : 3))
+        .padding(.leading, block.isTask ? (roomy ? 28 : 4) : AgendaGridMetrics.barWidth + (roomy ? 6 : 3))
         .padding(.trailing, roomy ? 4 : 1)
         .padding(.top, block.isTask ? 0 : 4)
         .frame(width: width, height: height, alignment: .topLeading)
@@ -904,7 +955,7 @@ private struct AgendaBlockView: View {
                 .centraidType(face)
                 .foregroundStyle(ink)
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .minimumScaleFactor(0.5)
                 .frame(width: length, height: thickness, alignment: .leading)
                 .rotationEffect(.degrees(90))
                 .frame(width: thickness, height: length)
