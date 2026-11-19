@@ -66,12 +66,13 @@ fn a_category_row_opens_its_target_for_the_month_in_view() {
 }
 
 #[test]
-fn the_header_search_and_recurring_rows_are_routes() {
+fn the_import_and_recurring_rows_are_routes_and_search_is_in_place() {
     let mut d = driver();
     let i = land_on(&mut d, wire::MoneyDestination::Spending);
     let chrome = home_state(d.view(i)).chrome.as_ref().unwrap();
     assert_eq!(chrome.import_route.as_ref().unwrap().screen, "money.import");
-    assert_eq!(chrome.search_route.as_ref().unwrap().screen, "money.search");
+    // SEARCH IS NO ROUTE: the band key opens a field in place (owner, 2026-11-19).
+    assert_eq!(chrome.search_placeholder, "Search transactions");
     let spending = home_data(d.view(i)).spending.as_ref().unwrap();
     assert_eq!(
         spending.recurring_route.as_ref().unwrap().screen,

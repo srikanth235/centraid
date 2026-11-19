@@ -78,7 +78,6 @@ import dev.centraid.android.screens.money.MoneyHomeScreen
 import dev.centraid.android.screens.money.MoneyImportScreen
 import dev.centraid.android.screens.money.MoneyRecurringScreen
 import dev.centraid.android.screens.money.MoneyRulesScreen
-import dev.centraid.android.screens.money.MoneySearchScreen
 import dev.centraid.android.screens.money.MoneyTargetScreen
 import dev.centraid.android.screens.money.MoneyTransactionScreen
 import dev.centraid.android.screens.notes.NotesEditorScreen
@@ -518,7 +517,6 @@ internal class RustRoot(
         val moneyRules = view.money_rules
         val moneyCategories = view.money_categories
         val moneyImport = view.money_import
-        val moneySearch = view.money_search
         val drive = view.docs_drive
         val doc = view.docs_document
         val docEditor = view.docs_editor
@@ -712,12 +710,6 @@ internal class RustRoot(
             moneyImport != null -> MoneyImportScreen(
                 state = moneyImport,
                 onEvent = { send(ScreenEvent(money_import = it)) },
-                onOpen = open,
-                onBack = back,
-            )
-            moneySearch != null -> MoneySearchScreen(
-                state = moneySearch,
-                onEvent = { send(ScreenEvent(money_search = it)) },
                 onOpen = open,
                 onBack = back,
             )

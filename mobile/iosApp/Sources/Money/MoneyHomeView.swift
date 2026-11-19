@@ -7,8 +7,9 @@ import SwiftUI
 /// events. `AppPlace` owns the header, the search door and the band;
 /// `PageReadStateView` owns loading, failure and the denied gate (no band while
 /// denied). The header's Plus is the app's create verb: rows enter by import.
-/// Search is a door (R-CHROME-2): the bar never opens in place, it pushes the
-/// search page. Where each intent leads is Rust's (`crates/screens`).
+/// Search is the band's key, in place like every app's (owner, 2026-11-19): the field takes the
+/// band's place at the foot and its answer replaces the tab. Where each intent leads is Rust's
+/// (`crates/screens`).
 struct MoneyHomeView: View {
     let state: Centraid_Core_V1_MoneyHomeState
     let send: (Centraid_Core_V1_MoneyHomeEvent) -> Void
@@ -58,6 +59,62 @@ struct MoneyHomeView: View {
         return false
     }
 
+    /// The field as Rust holds it: open or closed, the term typed so far and the corrected line.
+    private var searchSlot: SearchSlot {
+        var field = KitSearchField()
+        field.open = state.search.open
+        field.term = state.search.term
+        field.corrected = state.search.corrected
+        // Rust's `corrected` here is the finished sentence, so the field says it as it is.
+        field.correctedLabel = state.search.corrected
+        return SearchSlot(
+            field: field,
+            placeholder: state.chrome.searchPlaceholder,
+            closeLabel: state.chrome.searchClose,
+            onOpen: { send(event { $0.searchOpened = .init() }) },
+            onTerm: { term in send(event { $0.searchTerm = .with { $0.term = term } }) },
+            onClose: { send(event { $0.searchClosed = .init() }) }
+        )
+    }
+
+    /// THE ANSWER over an open search: the hint while nothing is typed, then the count, the lines
+    /// (each routes to its transaction) and the Ask row.
+    private var searchResults: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                if state.search.hasResults {
+                    let found = state.search.results
+                    if !found.hint.isEmpty {
+                        Text(found.hint)
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.meta)
+                            .padding(.horizontal, 4)
+                    }
+                    if !found.countLabel.isEmpty {
+                        Text(found.countLabel)
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.meta)
+                            .padding(.horizontal, 4)
+                            .accessibilityIdentifier("money-search-count")
+                    }
+                    if !found.rows.isEmpty {
+                        MoneyCardStack {
+                            ForEach(Array(found.rows.enumerated()), id: \.offset) { index, row in
+                                if index > 0 { KitHairline(inset: 64) }
+                                MoneyTxnRow(row: row) { open(row.route) }
+                            }
+                        }
+                    }
+                }
+                if state.search.hasAsk { SearchAskRow(ask: state.search.ask) }
+            }
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.top, 8)
+            .padding(.bottom, 16)
+        }
+        .accessibilityIdentifier("money-search-results")
+    }
+
     var body: some View {
         let chrome = state.chrome
         let sheetBinding = moneySheetBinding(sheetIsOpen(state)) { send(event { $0.sheetClosed = .init() }) }
@@ -68,15 +125,8 @@ struct MoneyHomeView: View {
             trailing: chrome.addLabel.isEmpty
                 ? nil
                 : RoomAction(iconKey: "Plus", label: chrome.addLabel, identifier: "money-add", action: addStatement),
-            // A DOOR, NOT A FIELD (R-CHROME-2): the band's key pushes the search page; the field is
-            // never open here.
-            search: isDenied || chrome.searchPlaceholder.isEmpty ? nil : SearchSlot(
-                field: KitSearchField(),
-                placeholder: chrome.searchPlaceholder,
-                onOpen: { open(chrome.searchRoute) },
-                onTerm: { _ in },
-                onClose: {}
-            ),
+            // THE BAND'S SEARCH KEY opens the field in place (R-CHROME-2): its term and answer are Rust's.
+            search: isDenied || chrome.searchPlaceholder.isEmpty ? nil : searchSlot,
             // THE HEADER'S FILTER BUTTON is account and category, no sort (R-CHROME-3); the month
             // stays under the title and opens its sheet.
             filter: filter,
@@ -104,9 +154,18 @@ struct MoneyHomeView: View {
             PageReadStateView(
                 page: state.page,
                 onRetry: { send(event { $0.refreshed = .init() }) },
-                onEmptyAction: addStatement
+                onEmptyAction: state.search.open ? nil : addStatement,
+                emptyExtra: {
+                    // A term that found nothing still offers the Ask row under the empty sentence.
+                    if state.search.open, state.search.hasAsk {
+                        return AnyView(SearchAskRow(ask: state.search.ask))
+                    }
+                    return AnyView(EmptyView())
+                }
             ) {
-                if case let .data(home)? = state.content {
+                if state.search.open {
+                    searchResults
+                } else if case let .data(home)? = state.content {
                 ScrollView {
                     // SPENDING AND CASH FLOW ARE BOUNDED AND EAGER; ACTIVITY IS THE
                     // LONG LIST AND STAYS LAZY. A `LazyVStack` here drew the

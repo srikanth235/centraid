@@ -294,7 +294,6 @@ catalog! {
     plain search_not_searched = ("Searches names, bank words, categories and memos.", "Searches names, bank words, categories and memos.");
     plain search_placeholder = ("Search transactions", "Search transactions");
     plain search_resting = ("Search by name, bank words or category.", "Search by name, bank words or category.");
-    plain search_title = ("Search", "Search");
     plain seen_times = ("Seen {n} times", "Seen {n} times");
     plain seen_times_short = ("seen {n} times", "seen {n} times");
     plain sign_label = ("Money out is", "Money out is");

@@ -5,7 +5,7 @@
 //
 // A row that opens a page carries the `Route` to push, so a shell never names a
 // screen. Arms in `Route.args`, `ScreenEvent.kind` and `ViewState.kind` are in
-// Money's range, 500-599: home 500, transaction 501, target 502, search 503,
+// Money's range, 500-599: home 500, transaction 501, target 502, (503 was search, now in place),
 // recurring 504, accounts 505, categories 506, rules 507, import 508.
 
 syntax = "proto3";
@@ -166,8 +166,33 @@ message MoneyHomeState {
     reserved 4, 5;
     reserved "SHEET_ACCOUNT", "SHEET_CATEGORY";
   }
-  // THE READ: loading, failed, refused, empty, or ready, with a note when a re-read failed.
+  // THE READ: loading, failed, refused, empty, or ready, with a note when a re-read failed. Over an
+  // open search it is the search's read.
   PageState page = 18;
+  // THE BAND'S SEARCH (owner, 2026-11-19): a field at the foot, in place, as in every app; its answer
+  // replaces the page's content and the header's filter and month.
+  MoneySearchField search = 19;
+}
+
+// The search field and its answer.
+message MoneySearchField {
+  bool open = 1;
+  string term = 2;
+  // The finished line "Including results for “x”" when the core corrected a typo; empty otherwise.
+  string corrected = 3;
+  // The answer for `term` while the page is ready; unset when nothing matched, failed or was
+  // refused (the page says which), and while the field is closed.
+  optional MoneySearchResults results = 4;
+  // The Ask row, for an answer that came, with matches or none.
+  optional SearchAsk ask = 5;
+}
+
+message MoneySearchResults {
+  repeated MoneyRow rows = 1;
+  // "12 matches", "50 of 212 matches"; empty with no rows.
+  string count_label = 2;
+  // What the field does while nothing is typed; empty once there is a term.
+  string hint = 3;
 }
 
 message MoneyBandTab {
@@ -193,8 +218,8 @@ message MoneyHomeChrome {
   string retry = 3;
   string more_title = 4;
   repeated MoneyMoreRow more_rows = 5;
-  // The search bar under the title. It never opens in place: a tap pushes
-  // `search_route`.
+  // The band's search key and the field it opens in place (`MoneyHomeState.search`): the
+  // placeholder, and the close key's words.
   string search_placeholder = 6;
   // 7 and 8 were the month stepper's labels: the month under the title, which
   // opens the month sheet, is the one way to change month.
@@ -206,9 +231,13 @@ message MoneyHomeChrome {
   reserved 10, 11;
   reserved "account_sheet_title", "category_sheet_title";
   string close_label = 12;
-  // Where the Plus and the day-one action go, and where the search bar goes.
+  // Where the Plus and the day-one action go.
   Route import_route = 13;
-  Route search_route = 14;
+  // 14 was `search_route`: the search key pushed `money.search`. Money searches in place now, as
+  // the other apps do (owner, 2026-11-19).
+  reserved 14;
+  reserved "search_route";
+  string search_close = 15;
 }
 
 message MoneyHomeData {
@@ -450,6 +479,10 @@ message MoneyHomeEvent {
     // ---- The header's filter menu ----
     FilterMenuPicked filter_menu_picked = 32;
     FilterMenuCleared filter_menu_cleared = 33;
+    // ---- the band's search ----
+    SearchOpened search_opened = 37;
+    SearchTermChanged search_term = 38;
+    SearchClosed search_closed = 39;
   }
   // 6 was `chip` (a chip's tap: the month's is `month_tapped`, the account's and
   // the category's are `filter_menu_picked`) and 7 was `account_picked`.
@@ -468,6 +501,14 @@ message MoneyHomeEvent {
   }
 
   message MonthTapped {}
+
+  message SearchOpened {}
+
+  message SearchTermChanged {
+    string term = 1;
+  }
+
+  message SearchClosed {}
 
   // `week` or `day`.
   message BarsModePicked {
@@ -767,61 +808,6 @@ message MoneyRecurringEvent {
   oneof kind {
     Refreshed refreshed = 2;
   }
-
-  message Refreshed {}
-}
-
-// ---------------------------------------------------------------------------
-// money.search
-// ---------------------------------------------------------------------------
-
-message MoneySearchState {
-  // 2, 3 and 4 were `loading`, `failure` and `denied`: the read is `page` (#1185).
-  reserved 2, 3, 4;
-  reserved "loading", "failure", "denied";
-  // Set when the page is ready.
-  oneof content {
-    MoneySearchData data = 5;
-  }
-  // 6 was `resting`: the resting page is the page's own empty state (#1185).
-  reserved 6;
-  reserved "resting";
-  MoneyPageChrome chrome = 7;
-  string placeholder = 8;
-  string clear_label = 9;
-  // What the member has typed.
-  string term = 10;
-  // THE READ: loading, failed, refused, empty, or ready, with a note when a re-read failed.
-  PageState page = 11;
-}
-
-message MoneySearchData {
-  repeated MoneyRow rows = 1;
-  // "12 matches", "50 of 212 matches"; empty with no rows.
-  string count_label = 2;
-  // 3 was `empty`: a term that matched nothing is the page's own empty state (#1185).
-  reserved 3;
-  reserved "empty";
-  // The spelling the index searched for instead, when it corrected the term.
-  string corrected = 4;
-  // THE ASK (the owner's ruling: Ask in every search): hands the term to the
-  // assistant, scoped to Money. Offered on a match and on none.
-  optional SearchAsk ask = 5;
-}
-
-message MoneySearchEvent {
-  oneof kind {
-    // The failure state's retry, and pull to refresh: read again.
-    Refreshed refreshed = 30;
-    TermChanged term = 2;
-    Cleared cleared = 3;
-  }
-
-  message TermChanged {
-    string term = 1;
-  }
-
-  message Cleared {}
 
   message Refreshed {}
 }

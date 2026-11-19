@@ -1,7 +1,7 @@
 //! MONEY'S SCREENS (#1135): spending, activity and cash flow, one transaction,
 //! the accounts, the categories, the rules, a category's target, recurring
-//! charges, search and the statement import. Every decision a person sees is
-//! made here; SwiftUI and Compose draw [`wire::ViewState`]. Every amount, its
+//! charges, and the statement import; search is the band's field on the home, in place. Every
+//! decision a person sees is made here; SwiftUI and Compose draw [`wire::ViewState`]. Every amount, its
 //! sign and its currency come from [`crate::kit::money`], and nothing here adds
 //! two amounts: the core's answers carry every figure, per currency.
 //!
@@ -10,7 +10,6 @@
 //! | Activity (home) · Spending · Cash flow, with More | [`HOME`] | [`home`] |
 //! | One transaction | [`TRANSACTION`] | [`transaction`] |
 //! | A category's plan for a month | [`TARGET`] | [`target`] |
-//! | Search | [`SEARCH`] | [`search`] |
 //! | Recurring charges | [`RECURRING`] | [`recurring`] |
 //! | Accounts | [`ACCOUNTS`] | [`accounts`] |
 //! | Categories | [`CATEGORIES`] | [`categories`] |
@@ -43,7 +42,7 @@ pub mod import;
 pub mod recurring;
 pub mod rows;
 pub mod rules;
-pub mod search;
+mod search;
 pub mod target;
 pub mod transaction;
 pub mod trash;
@@ -51,7 +50,6 @@ pub mod trash;
 pub const HOME: &str = "money.home";
 pub const TRANSACTION: &str = "money.transaction";
 pub const TARGET: &str = "money.target";
-pub const SEARCH: &str = "money.search";
 pub const RECURRING: &str = "money.recurring";
 pub const ACCOUNTS: &str = "money.accounts";
 pub const CATEGORIES: &str = "money.categories";
@@ -74,7 +72,6 @@ pub fn registry() -> Registry {
         .with(HOME, home::build)
         .with(TRANSACTION, transaction::build)
         .with(TARGET, target::build)
-        .with(SEARCH, search::build)
         .with(RECURRING, recurring::build)
         .with(ACCOUNTS, accounts::build)
         .with(CATEGORIES, categories::build)
@@ -102,8 +99,7 @@ pub fn runtime() -> crate::Runtime {
 /// The routes Money's own screens hand to a shell inside a view state.
 pub mod routes {
     use super::{
-        ACCOUNTS, CATEGORIES, HOME, IMPORT, RECURRING, RULES, SEARCH, TARGET, TRANSACTION, TRASH,
-        wire,
+        ACCOUNTS, CATEGORIES, HOME, IMPORT, RECURRING, RULES, TARGET, TRANSACTION, TRASH, wire,
     };
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
@@ -157,11 +153,6 @@ pub mod routes {
         // A SHEET over Money, as the board draws it, not a page on the stack.
         sheet.sheet = true;
         sheet
-    }
-
-    #[must_use]
-    pub fn search(parent: &str) -> wire::Route {
-        route(SEARCH, wire::route::Args::MoneySearch(page(parent)))
     }
 
     #[must_use]

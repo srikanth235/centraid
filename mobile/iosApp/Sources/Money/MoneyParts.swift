@@ -96,14 +96,6 @@ extension Centraid_Core_V1_MoneyCategoriesState {
     }
 }
 
-extension Centraid_Core_V1_MoneySearchState {
-    /// The data, once the read has landed (the page's own state draws loading, failure, the gate and empty).
-    var loaded: Centraid_Core_V1_MoneySearchData? {
-        if case let .data(data)? = content { return data }
-        return nil
-    }
-}
-
 // MARK: - A sheet's binding
 
 /// READ from the state, WRITTEN as an event: a swiped-away sheet tells the

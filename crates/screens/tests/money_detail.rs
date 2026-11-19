@@ -1,4 +1,4 @@
-//! One transaction, a category's target, recurring charges and search. Ports of
+//! One transaction, a category's target, recurring charges and the home's in-place search. Ports of
 //! the matching cases of `MoneyScreensSpec`, through the door a shell uses.
 
 mod money_support;
@@ -7,7 +7,7 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_screens::catalog::act;
 use centraid_screens::money::routes;
 use money_support::*;
-use wire::money_search_event as se;
+use wire::money_home_event as he;
 use wire::money_target_event as tg;
 use wire::money_transaction_event as te;
 use wire::money_transaction_state::Sheet;
@@ -279,7 +279,6 @@ fn a_target_is_a_sheet_over_money_and_the_pages_beside_it_are_not() {
     let route = a_category(&d);
     // THE ROUTE SAYS HOW IT OPENS: the shells never name the screen to know.
     assert!(route.sheet);
-    assert!(!routes::search("Money").sheet);
     assert!(!routes::recurring("Money").sheet);
     assert!(!routes::home(wire::MoneyDestination::Unspecified).sheet);
 }
@@ -418,13 +417,10 @@ fn recurring_charges_are_rows_with_a_cadence_and_a_state() {
     }
 }
 
-// --- search ------------------------------------------------------------------
+// --- search, in place on the home (owner, 2026-11-19) ------------------------
 
-fn search_state(v: &wire::ViewState) -> &wire::MoneySearchState {
-    match &v.kind {
-        Some(wire::view_state::Kind::MoneySearch(s)) => s,
-        other => panic!("not search: {other:?}"),
-    }
+fn search_of(v: &wire::ViewState) -> &wire::MoneySearchField {
+    home_state(v).search.as_ref().expect("a search field")
 }
 
 /// The empty state of a page, when the page is empty.
@@ -435,49 +431,65 @@ fn empty_of(page: &Option<wire::PageState>) -> Option<&wire::EmptyState> {
     }
 }
 
-fn search_event(kind: se::Kind) -> wire::screen_event::Kind {
-    wire::screen_event::Kind::MoneySearch(wire::MoneySearchEvent { kind: Some(kind) })
+fn open_search(d: &mut centraid_screens::testing::Driver, i: u64) {
+    event(
+        d,
+        i,
+        home_event(he::Kind::SearchOpened(he::SearchOpened {})),
+    );
 }
 
-#[test]
-fn search_rests_until_there_is_a_term_and_reads_nothing_for_a_blank_one() {
-    let mut d = driver();
-    let i = push(&mut d, routes::search("Money"));
-    let state = search_state(d.view(i));
-    assert_eq!(
-        empty_of(&state.page)
-            .expect("the resting page is empty")
-            .headline,
-        "Search by name, bank words or category."
-    );
-    assert!(state.content.is_none());
+fn type_term(d: &mut centraid_screens::testing::Driver, i: u64, term: &str) {
     event(
-        &mut d,
+        d,
         i,
-        search_event(se::Kind::Term(se::TermChanged { term: "   ".into() })),
-    );
-    assert!(search_state(d.view(i)).content.is_none());
-}
-
-#[test]
-fn a_term_that_matches_nothing_says_so_and_a_clear_goes_back_to_resting() {
-    let mut d = driver();
-    let i = push(&mut d, routes::search("Money"));
-    event(
-        &mut d,
-        i,
-        search_event(se::Kind::Term(se::TermChanged {
-            term: "zzqqxx".into(),
+        home_event(he::Kind::SearchTerm(he::SearchTermChanged {
+            term: term.into(),
         })),
     );
-    let Some(wire::money_search_state::Content::Data(data)) =
-        search_state(d.view(i)).content.clone()
-    else {
-        panic!("no search data");
-    };
+}
+
+#[test]
+fn the_search_key_opens_a_field_in_place_that_rests_until_there_is_a_term() {
+    let mut d = driver();
+    let i = land_on(&mut d, wire::MoneyDestination::Activity);
+    // THE KEY IS A PLACEHOLDER AND A CLOSE LABEL, never a route: Money searches in place.
+    let chrome = home_state(d.view(i)).chrome.as_ref().unwrap();
+    assert_eq!(chrome.search_placeholder, "Search transactions");
+    assert_eq!(chrome.search_close, "Close search");
+    assert!(!search_of(d.view(i)).open);
+    assert!(home_state(d.view(i)).content.is_some());
+    open_search(&mut d, i);
+    let state = home_state(d.view(i));
+    let field = state.search.as_ref().unwrap();
+    assert!(field.open && field.term.is_empty());
+    // THE TAB, THE FILTER AND THE MONTH GIVE WAY; the hint says what the field does.
+    assert!(state.content.is_none() && state.filter_menu.is_none() && state.subtitle.is_none());
+    assert_eq!(
+        field.results.as_ref().map(|r| r.hint.as_str()),
+        Some("Search by name, bank words or category.")
+    );
+    type_term(&mut d, i, "   ");
+    assert!(search_of(d.view(i)).ask.is_none());
+    // CLOSING BRINGS THE TAB BACK.
+    event(
+        &mut d,
+        i,
+        home_event(he::Kind::SearchClosed(he::SearchClosed {})),
+    );
+    let state = home_state(d.view(i));
+    assert!(!state.search.as_ref().unwrap().open && state.content.is_some());
+}
+
+#[test]
+fn a_term_that_matches_nothing_says_so_with_the_term_quoted_and_a_close_goes_back() {
+    let mut d = driver();
+    let i = land_on(&mut d, wire::MoneyDestination::Activity);
+    open_search(&mut d, i);
+    type_term(&mut d, i, "zzqqxx");
     // THE ASK IS OFFERED ON NO MATCH TOO: the term goes to the assistant, scoped to Money.
     assert_eq!(
-        data.ask,
+        search_of(d.view(i)).ask,
         Some(wire::SearchAsk {
             label: "Ask about “zzqqxx”".into(),
             question: "Find zzqqxx".into(),
@@ -485,45 +497,48 @@ fn a_term_that_matches_nothing_says_so_and_a_clear_goes_back_to_resting() {
             route: Some(centraid_screens::chat::routes::ask("Find zzqqxx", "money")),
         })
     );
-    let empty = empty_of(&search_state(d.view(i)).page).expect("an empty state");
+    assert!(search_of(d.view(i)).results.is_none());
+    let empty = empty_of(&home_state(d.view(i)).page).expect("an empty state");
     assert_eq!(empty.headline, "Nothing matches “zzqqxx”.");
     assert_eq!(
         empty.body,
         "Searches names, bank words, categories and memos."
     );
-    event(&mut d, i, search_event(se::Kind::Cleared(se::Cleared {})));
-    let state = search_state(d.view(i));
-    assert!(empty_of(&state.page).is_some() && state.content.is_none() && state.term.is_empty());
-}
-
-#[test]
-fn a_term_that_matches_lists_rows_with_the_day_and_a_route() {
-    let mut d = driver();
-    let i = push(&mut d, routes::search("Money"));
     event(
         &mut d,
         i,
-        search_event(se::Kind::Term(se::TermChanged {
-            term: "rent".into(),
-        })),
+        home_event(he::Kind::SearchClosed(he::SearchClosed {})),
     );
-    let Some(wire::money_search_state::Content::Data(data)) =
-        search_state(d.view(i)).content.clone()
-    else {
-        panic!("no search data");
-    };
+    let state = home_state(d.view(i));
+    assert!(empty_of(&home_state(d.view(i)).page).is_none() && state.content.is_some());
+    assert!(!state.search.as_ref().unwrap().open && state.search.as_ref().unwrap().term.is_empty());
+}
+
+#[test]
+fn a_term_that_matches_lists_rows_with_the_day_and_a_route_back_to_money() {
+    let mut d = driver();
+    let i = land_on(&mut d, wire::MoneyDestination::Activity);
+    open_search(&mut d, i);
+    type_term(&mut d, i, "rent");
+    let field = search_of(d.view(i)).clone();
     // THE ASK IS OFFERED BESIDE THE MATCHES TOO, with the term as typed.
-    assert_eq!(data.ask.as_ref().map(|a| a.scope.as_str()), Some("money"));
+    assert_eq!(field.ask.as_ref().map(|a| a.scope.as_str()), Some("money"));
     assert_eq!(
-        data.ask.as_ref().map(|a| a.question.as_str()),
+        field.ask.as_ref().map(|a| a.question.as_str()),
         Some("Find rent")
     );
-    if data.rows.is_empty() {
+    let Some(results) = field.results else {
         return; // the example scenario may not hold the word; the empty case is pinned above
-    }
-    assert!(!data.count_label.is_empty());
-    for row in &data.rows {
-        assert_eq!(row.route.as_ref().unwrap().screen, "money.transaction");
+    };
+    assert!(!results.count_label.is_empty());
+    for row in &results.rows {
+        let route = row.route.as_ref().unwrap();
+        assert_eq!(route.screen, "money.transaction");
+        // A HIT BACKS OUT TO MONEY, not to a page called Search.
+        let Some(wire::route::Args::MoneyTransaction(args)) = &route.args else {
+            panic!("a transaction route");
+        };
+        assert_eq!(args.parent, "Money");
     }
 }
 

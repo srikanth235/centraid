@@ -238,6 +238,9 @@ message ScreenEvent {
   // 404 was `locker.access`'s event, gone with the Locker's access history (#1146).
   reserved 404;
   reserved "locker_access";
+  // 503 was `money.search`: Money searches in place (owner, 2026-11-19).
+  reserved 503;
+  reserved "money_search";
   // 806 and 807 were Photos' Duplicates and its review, retired (#1146 D5).
   reserved 806, 807;
   reserved "photos_duplicates", "photos_duplicate_review";
@@ -309,7 +312,6 @@ message ScreenEvent {
     MoneyHomeEvent money_home = 500;
     MoneyTransactionEvent money_transaction = 501;
     MoneyTargetEvent money_target = 502;
-    MoneySearchEvent money_search = 503;
     MoneyRecurringEvent money_recurring = 504;
     MoneyAccountsEvent money_accounts = 505;
     MoneyCategoriesEvent money_categories = 506;
@@ -409,6 +411,9 @@ message ViewState {
   // 403 was `locker.access`'s state, gone with the Locker's access history (#1146).
   reserved 403;
   reserved "locker_access";
+  // 503 was `money.search`: Money searches in place (owner, 2026-11-19).
+  reserved 503;
+  reserved "money_search";
   // 806 and 807 were Photos' Duplicates and its review, retired (#1146 D5).
   reserved 806, 807;
   reserved "photos_duplicates", "photos_duplicate_review";
@@ -448,7 +453,6 @@ message ViewState {
     MoneyHomeState money_home = 500;
     MoneyTransactionState money_transaction = 501;
     MoneyTargetState money_target = 502;
-    MoneySearchState money_search = 503;
     MoneyRecurringState money_recurring = 504;
     MoneyAccountsState money_accounts = 505;
     MoneyCategoriesState money_categories = 506;

@@ -202,7 +202,6 @@ impl<'a> Shell<'a> {
             Some(K::MoneyHome(state)) => state.page.as_ref(),
             Some(K::MoneyTransaction(state)) => state.page.as_ref(),
             Some(K::MoneyTarget(state)) => state.page.as_ref(),
-            Some(K::MoneySearch(state)) => state.page.as_ref(),
             Some(K::MoneyRecurring(state)) => state.page.as_ref(),
             Some(K::MoneyAccounts(state)) => state.page.as_ref(),
             Some(K::MoneyCategories(state)) => state.page.as_ref(),
@@ -305,11 +304,6 @@ fn apps() -> Vec<App> {
                     list("money cash flow", r::home(wire::MoneyDestination::Cashflow)),
                     screen("money transaction", r::transaction("x", "Money")),
                     screen("money target", r::target("2026-10", "x", "USD")),
-                    // A search at rest reads nothing until a term is typed.
-                    Screen {
-                        reads: false,
-                        ..screen("money search", r::search("Money"))
-                    },
                     list("money recurring", r::recurring("Money")),
                     list("money accounts", r::accounts("Money")),
                     list("money categories", r::categories("Money")),

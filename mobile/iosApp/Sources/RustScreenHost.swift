@@ -371,13 +371,6 @@ struct RustScreenView: View {
                 open: open,
                 onBack: pop
             )
-        case .moneySearch(let state)?:
-            MoneySearchView(
-                state: state,
-                send: { store.send(instance, .moneySearch($0)) },
-                open: open,
-                onBack: pop
-            )
         case .docsDrive(let state)?:
             DocsDriveView(
                 state: state,

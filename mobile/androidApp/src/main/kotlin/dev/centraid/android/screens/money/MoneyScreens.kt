@@ -45,8 +45,6 @@ import centraid.core.v1.MoneyHomeEvent
 import centraid.core.v1.MoneyHomeState
 import centraid.core.v1.MoneyRecurringEvent
 import centraid.core.v1.MoneyRecurringState
-import centraid.core.v1.MoneySearchEvent
-import centraid.core.v1.MoneySearchState
 import centraid.core.v1.MoneyTargetEvent
 import centraid.core.v1.MoneyTargetState
 import centraid.core.v1.MoneyTransactionEvent
@@ -56,7 +54,6 @@ import centraid.core.v1.Route
 import dev.centraid.android.kit.AppBand
 import dev.centraid.android.kit.AppBandTab
 import dev.centraid.android.kit.AppPlace
-import dev.centraid.android.kit.BandSearchField
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.ChoiceStack
 import dev.centraid.android.kit.EarlierEntryCard
@@ -113,14 +110,16 @@ internal fun MoneyHomeScreen(
         trailing = chrome?.add_label?.takeIf { it.isNotEmpty() }?.let { label ->
             RoomAction("Plus", label, "money-add") { addStatement() }
         },
-        // A DOOR, NOT A FIELD (R-CHROME-2): Money's search is a page of its own.
+        // THE BAND'S SEARCH KEY opens the field in place (R-CHROME-2): its term and answer are Rust's.
         search = chrome?.search_placeholder?.takeIf { it.isNotEmpty() && state.page?.refused == null }?.let { placeholder ->
+            val field = state.search
             RoomSearch(
-                field = SearchField(),
+                field = SearchField(open_ = field?.open_ == true, term = field?.term.orEmpty(), corrected = field?.corrected.orEmpty(), corrected_label = field?.corrected.orEmpty()),
                 placeholder = placeholder,
-                onTerm = {},
-                onClose = {},
-                onOpen = { chrome?.search_route?.let(onOpen) },
+                closeLabel = chrome?.search_close.orEmpty(),
+                onTerm = { term -> onEvent(MoneyHomeEvent(search_term = MoneyHomeEvent.SearchTermChanged(term = term))) },
+                onClose = { onEvent(MoneyHomeEvent(search_closed = MoneyHomeEvent.SearchClosed())) },
+                onOpen = { onEvent(MoneyHomeEvent(search_opened = MoneyHomeEvent.SearchOpened())) },
             )
         },
         // THE HEADER'S FILTER BUTTON is account and category, no sort (R-CHROME-3): Rust's menu, a
@@ -156,9 +155,44 @@ internal fun MoneyHomeScreen(
         ReadStateView(
             page = state.page!!,
             onRetry = { onEvent(MoneyHomeEvent(refreshed = MoneyHomeEvent.Refreshed())) },
-            onEmptyAction = addStatement,
+            onEmptyAction = if (state.search?.open_ == true) null else addStatement,
             retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
+            // A term that found nothing still offers the Ask row under the empty sentence.
+            emptyExtra = { state.search?.ask?.takeIf { state.search?.open_ == true }?.let { ask -> SearchAskRow(ask, onOpen) } },
         ) {
+            val found = state.search
+            if (found?.open_ == true) {
+                // THE ANSWER over an open search: the hint while nothing is typed, then the count,
+                // the lines (each routes to its transaction) and the Ask row.
+                LazyColumn(
+                    modifier = Modifier.testTag("money-search-results"),
+                    contentPadding = PaddingValues(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    val results = found.results
+                    if (results != null && results.hint.isNotEmpty()) {
+                        item(key = "hint") { KitText(results.hint, KitType.Meta, Surface.meta, Modifier.padding(horizontal = 4.dp)) }
+                    }
+                    if (results != null && results.count_label.isNotEmpty()) {
+                        item(key = "count") {
+                            KitText(results.count_label, KitType.Meta, Surface.meta, Modifier.padding(horizontal = 4.dp).testTag("money-search-count"))
+                        }
+                    }
+                    if (results != null && results.rows.isNotEmpty()) {
+                        item(key = "rows") {
+                            MoneyCardStack {
+                                results.rows.forEachIndexed { index, row ->
+                                    if (index > 0) MoneyHairline(inset = 64.dp)
+                                    MoneyTxnRow(row) { row.route?.let(onOpen) }
+                                }
+                            }
+                        }
+                    }
+                    // THE ASK ROW closes the answer (#1097).
+                    found.ask?.let { ask -> item(key = "ask") { SearchAskRow(ask, onOpen) } }
+                }
+                return@ReadStateView
+            }
             val home = state.data_ ?: return@ReadStateView
             if (state.destination == MoneyHomeState.Destination.DESTINATION_CASHFLOW) {
                 LazyColumn { cashflow(state) }
@@ -714,60 +748,3 @@ internal fun MoneyRecurringScreen(state: MoneyRecurringState, onEvent: (MoneyRec
     }
 }
 
-// ---------------------------------------------------------------------------
-// money.search
-// ---------------------------------------------------------------------------
-
-@Composable
-internal fun MoneySearchScreen(
-    state: MoneySearchState,
-    onEvent: (MoneySearchEvent) -> Unit,
-    onOpen: (Route) -> Unit,
-    onBack: () -> Unit,
-) {
-    val chrome = state.chrome
-    PushedPage(title = chrome?.title.orEmpty(), parentTitle = chrome?.back_label.orEmpty(), onBack = onBack, app = "money") {
-        androidx.compose.foundation.layout.Column {
-            // THE BODY TAKES THE HEIGHT the field at the foot does not (R-CHROME-2). The resting page and a
-            // term that matched nothing are the page's empty state; the second keeps the Ask row under it.
-            ReadStateView(
-                page = state.page!!,
-                onRetry = { onEvent(MoneySearchEvent(refreshed = MoneySearchEvent.Refreshed())) },
-                retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
-                modifier = Modifier.weight(1f),
-                emptyExtra = { state.data_?.ask?.let { ask -> SearchAskRow(ask, onOpen) } },
-            ) {
-                val search = state.data_ ?: return@ReadStateView
-                LazyColumn(
-                    contentPadding = PaddingValues(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    item(key = "count") {
-                        KitText(search.count_label, KitType.Meta, Surface.meta, Modifier.padding(horizontal = 4.dp).testTag("money-search-count"))
-                    }
-                    item(key = "rows") {
-                        MoneyCardStack {
-                            search.rows.forEachIndexed { index, row ->
-                                if (index > 0) MoneyHairline(inset = 64.dp)
-                                MoneyTxnRow(row) { row.route?.let(onOpen) }
-                            }
-                        }
-                    }
-                    // THE ASK ROW closes the answer (#1097).
-                    item(key = "ask") { SearchAskRow(search.ask, onOpen) }
-                }
-            }
-            // THE FIELD IS AT THE FOOT, over the keyboard, like every app's search (R-CHROME-2); its
-            // close only clears the query, so it keeps the keyboard.
-            BandSearchField(
-                field = SearchField(open_ = true, term = state.term),
-                placeholder = state.placeholder,
-                onTerm = { onEvent(MoneySearchEvent(term = MoneySearchEvent.TermChanged(term = it))) },
-                onClose = { onEvent(MoneySearchEvent(cleared = MoneySearchEvent.Cleared())) },
-                closeLabel = state.clear_label.ifEmpty { KitWords.CLOSE_SEARCH },
-                testTag = "money-search",
-                keepsFocusOnClose = true,
-            )
-        }
-    }
-}

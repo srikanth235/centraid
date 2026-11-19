@@ -1308,7 +1308,7 @@
     "MoneySearch.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "7 · Search",
+      "title": "7 · Money search, in place",
       "w": 390,
       "x": 2820,
       "y": 10440
@@ -1316,7 +1316,7 @@
     "MoneySearchDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "7 · Search · dark",
+      "title": "7 · Money search, in place · dark",
       "w": 390,
       "x": 2820,
       "y": 10440

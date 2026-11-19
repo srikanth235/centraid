@@ -28,6 +28,10 @@ message Route {
   // table (#1146).
   reserved 403;
   reserved "locker_access";
+  // 503 was `money.search`, a page the search key pushed: Money searches in place now, as the
+  // other apps do (owner, 2026-11-19).
+  reserved 503;
+  reserved "money_search";
   // 806 and 807 were Photos' Duplicates and its review, retired (#1146 D5).
   reserved 806, 807;
   reserved "photos_duplicates", "photos_duplicate_review";
@@ -67,7 +71,6 @@ message Route {
     MoneyHomeRoute money_home = 500;
     MoneyTransactionRoute money_transaction = 501;
     MoneyTargetRoute money_target = 502;
-    MoneyPageRoute money_search = 503;
     MoneyPageRoute money_recurring = 504;
     MoneyPageRoute money_accounts = 505;
     MoneyPageRoute money_categories = 506;
@@ -622,7 +625,7 @@ message MoneyTargetRoute {
 }
 
 // The pages that take no argument but the title of the page they were pushed
-// from (search, recurring, accounts, categories, rules, import).
+// from (recurring, accounts, categories, rules, import).
 message MoneyPageRoute {
   string parent = 1;
 }
