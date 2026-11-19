@@ -283,7 +283,16 @@ pub fn reminder_part(
         // THE ROW SAYS A MOMENT ONCE (#1202): the due label already carries the day and the time,
         // so a reminder that sounds at the due moment is the bare word, and one on the due's own
         // day names only its clock.
-        // An overdue due says "5 days ago", so its reminder keeps the full date.
+        // An overdue due says "5 days ago", so its reminder keeps the full date; one due yesterday
+        // already says "Yesterday", so its reminder names only the clock.
+        let yesterday = task.overdue && task.days_from_today == Some(-1);
+        if remind_day == task.due_day && yesterday {
+            return Some(format!(
+                "{} {}",
+                words::reminder(locale),
+                civil::clock_for(locale, &task.remind_at_local, cycle)
+            ));
+        }
         if remind_day == task.due_day && !task.overdue {
             let remind_time = task.remind_at_local.get(11..16).unwrap_or_default();
             if !task.due_time.is_empty() && task.due_time.get(..5) == Some(remind_time) {
@@ -594,5 +603,29 @@ mod cycle_tests {
         };
         assert_eq!(said(HourCycle::H24), "09:00");
         assert_eq!(said(HourCycle::H12), "9:00 AM");
+    }
+
+    #[test]
+    fn an_overdue_reminder_says_yesterday_once() {
+        let task = |days: i32, due: &str| wire::AgendaTask {
+            due_day: due.to_owned(),
+            overdue: true,
+            days_from_today: Some(days),
+            remind_at_local: format!("{due}T14:30"),
+            ..Default::default()
+        };
+        let ctx_today = "2026-11-19";
+        let yesterday = task(-1, "2026-11-18");
+        assert_eq!(
+            reminder_part(Locale::En, &yesterday, ctx_today, HourCycle::H24).as_deref(),
+            Some("reminder 14:30"),
+            "the due label already says Yesterday"
+        );
+        let older = task(-7, "2026-11-12");
+        assert_eq!(
+            reminder_part(Locale::En, &older, ctx_today, HourCycle::H24).as_deref(),
+            Some("reminder Thu 12 November 14:30"),
+            "an older overdue keeps its full date"
+        );
     }
 }
