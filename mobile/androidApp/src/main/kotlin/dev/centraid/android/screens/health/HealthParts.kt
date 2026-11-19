@@ -92,6 +92,14 @@ internal fun HealthNote(text: String) {
 @Composable
 internal fun HealthSection(title: String, note: String = "") {
     if (title.isEmpty()) return
+    // THE NOTE UNDER THE TITLE at the largest text (#1202): beside it "Pinned" broke as "Pinne / d".
+    if (rememberLargestText()) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER + 4.dp, vertical = 8.dp)) {
+            KitText(title, KitType.Section, Surface.ink)
+            if (note.isNotEmpty()) KitText(note, KitType.Meta, Surface.meta)
+        }
+        return
+    }
     Row(
         Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER + 4.dp, vertical = 8.dp),
         verticalAlignment = Alignment.Bottom,
