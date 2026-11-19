@@ -239,6 +239,17 @@ internal class RustRoot(
         val made = madeRoot?.let { views[it]?.imports_made }
         var closed by remember { mutableStateOf("") }
         val sentence = made?.summary.orEmpty().takeIf { it != closed }.orEmpty()
+        // THE MEMBER'S NEXT MOVE PUTS A SETTLED LINE AWAY (#1202, as iOS `importLineMoved`): a move is
+        // a different place or page on the stack the member is in. A line is settled once it is not
+        // running, finished or not (an import with no made vault never finishes), so it cannot stay
+        // over Home and every app. A running import keeps its line.
+        val place = activeTab() to navigation?.tabs?.firstOrNull { it.tab == activeTab() }?.entries?.lastOrNull()?.instance
+        val settled = made?.summary.orEmpty().takeIf { made?.running == false }.orEmpty()
+        var lastPlace by remember { mutableStateOf(place) }
+        LaunchedEffect(place) {
+            if (place != lastPlace && settled.isNotEmpty()) closed = settled
+            lastPlace = place
+        }
         val line: (@Composable () -> Unit)? = if (sentence.isEmpty()) {
             null
         } else {
