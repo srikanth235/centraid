@@ -111,6 +111,16 @@ internal object DocsIngestFiles {
     }
 
     /**
+     * Delete every copy and scan an earlier process left in the cache. Called once at the start of a
+     * process, before any ingest of its own: nothing here is wanted past the ingest that made it.
+     */
+    fun sweep(context: Context) {
+        for (name in listOf(INGEST_DIR, SCAN_DIR)) {
+            File(context.cacheDir, name).listFiles()?.forEach(::discard)
+        }
+    }
+
+    /**
      * Delete a file this object made. One that will not go stays under
      * `cacheDir`, which the OS clears, so a failure is logged and never thrown:
      * nothing here outlives an ingest by design, and a cache file by accident.

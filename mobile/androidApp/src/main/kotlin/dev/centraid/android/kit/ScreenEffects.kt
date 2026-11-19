@@ -125,10 +125,11 @@ internal fun HostScreenEffects(
                         effectAttempt { performExportOriginals(context, session.core, effect.export_originals!!) }
                             .getOrElse { failed(EffectReason.FAILED) }
                     effect.pick_bytes != null && effect.pick_bytes!!.folder ->
-                        pickFolder(context, pickingFolder.ask { folderPicker.launch(null) }, effect.pick_bytes!!.accept)
+                        pickFolder(context, pickingFolder.ask { folderPicker.launch(null) }, effect.pick_bytes!!.accept, limitsOf(effect.pick_bytes!!))
                     effect.pick_bytes != null && effect.pick_bytes!!.multiple ->
-                        pickMany(context, pickingMany.ask { manyPicker.launch(pickerTypes(effect.pick_bytes!!.accept)) })
-                    effect.pick_bytes != null -> pickBytes(context, picking.ask { picker.launch(pickerTypes(effect.pick_bytes!!.accept)) })
+                        pickMany(context, pickingMany.ask { manyPicker.launch(pickerTypes(effect.pick_bytes!!.accept)) }, limitsOf(effect.pick_bytes!!))
+                    effect.pick_bytes != null ->
+                        pickBytes(context, picking.ask { picker.launch(pickerTypes(effect.pick_bytes!!.accept)) }, limitsOf(effect.pick_bytes!!))
                     effect.save_file != null -> {
                         val file = effect.save_file!!
                         saveFile(context, file, saving.ask { saver.launch(file.name) })
@@ -206,8 +207,13 @@ private class Ask<T> {
     }
 }
 
-/** `PickBytes`: the chosen document's bytes, handed to Rust and kept nowhere here; a dismissal is a cancel. */
-private suspend fun pickBytes(context: Context, uri: android.net.Uri?): EffectResult {
+private fun limitsOf(pick: centraid.core.v1.PickBytes) = PickLimits(perFile = pick.max_bytes, total = pick.max_total_bytes)
+
+/**
+ * `PickBytes`: the chosen document's bytes, handed to Rust and kept nowhere here; a dismissal is a cancel.
+ * A file over the importer's ceiling is not read: it answers `too_large`.
+ */
+private suspend fun pickBytes(context: Context, uri: android.net.Uri?, limits: PickLimits): EffectResult {
     uri ?: return EffectResult(bytes_picked = BytesPicked(cancelled = true))
     return withContext(Dispatchers.IO) {
         runCatching {
@@ -215,8 +221,12 @@ private suspend fun pickBytes(context: Context, uri: android.net.Uri?): EffectRe
             val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
                 if (cursor.moveToFirst()) cursor.getString(0) else null
             }.orEmpty()
-            val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: error("unreadable")
-            EffectResult(bytes_picked = BytesPicked(name = name, media_type = resolver.getType(uri).orEmpty(), content = bytes.toByteString()))
+            when (val read = limits.read(context, uri)) {
+                is PickLimits.Read.Bytes ->
+                    EffectResult(bytes_picked = BytesPicked(name = name, media_type = resolver.getType(uri).orEmpty(), content = read.bytes.toByteString()))
+                PickLimits.Read.TooLarge -> failed(EffectReason.TOO_LARGE)
+                PickLimits.Read.Unreadable -> failed(EffectReason.UNREADABLE)
+            }
         }.getOrElse { failed(EffectReason.UNREADABLE) }
     }
 }

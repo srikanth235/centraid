@@ -33,6 +33,7 @@ pub mod chat;
 pub mod clock;
 pub mod commands;
 pub mod custody;
+pub mod decode;
 pub mod error;
 pub mod file;
 pub mod first_item;

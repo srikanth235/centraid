@@ -1921,9 +1921,14 @@ impl HandleState {
             Some(S::End(end)) => wire::stage_response::Kind::Handle(
                 self.record_staged(self.staging.end(&end.staging_id)?)?,
             ),
+            Some(S::Abort(abort)) => {
+                self.staging.abort(&abort.staging_id);
+                wire::stage_response::Kind::Aborted(wire::StageAborted {})
+            }
             None => {
                 return Err(CoreError::InvalidRequest {
-                    detail: "a staging request carries one of begin, chunk or end".to_owned(),
+                    detail: "a staging request carries one of begin, chunk, end or abort"
+                        .to_owned(),
                 });
             }
         };

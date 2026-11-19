@@ -213,13 +213,34 @@ enum ChatMarkdown {
 
 /// THE ANSWER'S TEXT as its blocks, in the chat's body type: paragraphs, list
 /// items with a marker column and a hanging indent, headings in the strong
-/// weight. One accessibility element carrying the words and no markers.
+/// weight. In a chat answer it is one accessibility element carrying the words
+/// and no markers; as a document's reader (`reading`) it is the member's own text:
+/// selectable and copyable, each block its own element, headings with the heading
+/// trait.
 struct ChatMarkdownText: View {
     let text: String
     var streaming: Bool = false
     /// The label a screen reader speaks, `Centraid said: …`, built from the
     /// words and not the markers.
     let spoken: String
+    /// A document the member reads (Docs), not an answer: text selection on, one element per block.
+    var reading: Bool = false
+
+    /// THE PARSE, KEPT (#1202): the blocks of one text are parsed once, however often the body is
+    /// evaluated (a type size, a scheme, a parent's state).
+    @State private var parsed = Parsed()
+
+    final class Parsed {
+        private var key: (text: String, streaming: Bool)?
+        private var blocks: [ChatMarkdown.Block] = []
+
+        func blocks(of text: String, streaming: Bool) -> [ChatMarkdown.Block] {
+            if let key, key.text == text, key.streaming == streaming { return blocks }
+            blocks = ChatMarkdown.blocks(text, streaming: streaming)
+            key = (text, streaming)
+            return blocks
+        }
+    }
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dynamicTypeSize) private var size
@@ -251,7 +272,7 @@ struct ChatMarkdownText: View {
     }
 
     var body: some View {
-        let blocks = ChatMarkdown.blocks(text, streaming: streaming)
+        let blocks = parsed.blocks(of: text, streaming: streaming)
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 switch block {
@@ -265,6 +286,7 @@ struct ChatMarkdownText: View {
                         .chatType("body")
                         .foregroundStyle(Theme.color("text", scheme))
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityAddTraits(.isHeader)
                 case let .item(marker, content):
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(marker)
@@ -325,7 +347,23 @@ struct ChatMarkdownText: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(spoken)
+        .modifier(Reading(reading: reading, spoken: spoken))
+    }
+
+    /// What differs between an answer and a document: the member's own text can be selected and
+    /// walked block by block; an answer is spoken whole.
+    private struct Reading: ViewModifier {
+        let reading: Bool
+        let spoken: String
+
+        func body(content: Content) -> some View {
+            if reading {
+                content.textSelection(.enabled)
+            } else {
+                content
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(spoken)
+            }
+        }
     }
 }

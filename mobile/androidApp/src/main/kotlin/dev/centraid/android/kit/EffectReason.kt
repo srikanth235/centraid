@@ -12,6 +12,7 @@ object EffectReason {
     const val DENIED = "denied"
     const val UNAVAILABLE = "unavailable"
     const val UNREADABLE = "unreadable"
+    const val TOO_LARGE = "too_large"
     const val UNWRITABLE = "unwritable"
     const val NOT_WATCHED = "not_watched"
     const val NO_WINDOW = "no_window"

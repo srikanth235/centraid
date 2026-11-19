@@ -31,7 +31,7 @@
 //! note: Notes shows it in the Journal. A note about anything else is the member's note,
 //! and a link may name it.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 
 use rusqlite::OptionalExtension;
 
@@ -367,35 +367,56 @@ fn source_files(ctx: &CommandCtx<'_, '_>) -> Vec<SourceFile> {
         .collect()
 }
 
-/// Whether a live note already has these words under this title.
-fn already_there(ctx: &CommandCtx<'_, '_>, parsed: &Parsed) -> Result<bool> {
-    let held: i64 = ctx.connection().query_row(
-        "SELECT COUNT(*) FROM entity e JOIN note n ON n.id = e.id
-          WHERE e.kind = 'note' AND e.deleted_at IS NULL
-            AND lower(e.title) = lower(?1) AND n.body = ?2",
-        rusqlite::params![parsed.title, parsed.body],
-        |row| row.get(0),
+/// The live notes among `wanted` titles that already hold these words, as `(title, body)` with the
+/// title folded as SQLite's `lower` does (ASCII). ONE SCAN of the vault's notes per command, not one
+/// per imported note (#1202): only a note whose title an imported one carries is kept, so what is
+/// held is bounded by the import, not the vault.
+fn notes_held(
+    ctx: &CommandCtx<'_, '_>,
+    wanted: &BTreeSet<String>,
+) -> Result<HashSet<(String, String)>> {
+    let mut held = HashSet::new();
+    if wanted.is_empty() {
+        return Ok(held);
+    }
+    let mut live = ctx.connection().prepare_cached(
+        "SELECT lower(e.title), n.body FROM entity e JOIN note n ON n.id = e.id
+          WHERE e.kind = 'note' AND e.deleted_at IS NULL",
     )?;
-    Ok(held > 0)
+    let mut rows = live.query([])?;
+    while let Some(row) = rows.next()? {
+        let title: String = row.get(0)?;
+        if wanted.contains(&title) {
+            held.insert((title, row.get(1)?));
+        }
+    }
+    Ok(held)
 }
 
-/// Whether a title names something a link may be made to: a live thing already in the vault.
-fn names_something(ctx: &CommandCtx<'_, '_>, title: &str) -> Result<bool> {
+/// Which of the `wanted` titles (folded as SQLite's `lower` does, ASCII) name something a link may
+/// be made to: a live thing already in the vault. One scan per command, keeping only the matches.
+fn linkable_titles(ctx: &CommandCtx<'_, '_>, wanted: &BTreeSet<String>) -> Result<HashSet<String>> {
+    let mut named = HashSet::new();
+    if wanted.is_empty() {
+        return Ok(named);
+    }
     let linkable = LINKABLE
         .iter()
         .filter(|kind| kind.is_link_end())
         .map(|kind| format!("'{}'", kind.as_str()))
         .collect::<Vec<_>>()
         .join(", ");
-    let held: i64 = ctx.connection().query_row(
-        &format!(
-            "SELECT COUNT(*) FROM entity WHERE kind IN ({linkable}) AND deleted_at IS NULL
-                AND lower(title) = lower(?1)"
-        ),
-        [title],
-        |row| row.get(0),
-    )?;
-    Ok(held > 0)
+    let mut live = ctx.connection().prepare(&format!(
+        "SELECT lower(title) FROM entity WHERE kind IN ({linkable}) AND deleted_at IS NULL"
+    ))?;
+    let mut rows = live.query([])?;
+    while let Some(row) = rows.next()? {
+        let title: String = row.get(0)?;
+        if wanted.contains(&title) {
+            named.insert(title);
+        }
+    }
+    Ok(named)
 }
 
 /// A name safe as a file name (the export's stem).
@@ -447,13 +468,21 @@ fn import(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         .filter_map(portable::parse)
         .collect();
     let ignored = total - parsed.len();
+    // THE VAULT IS READ ONCE, and a file's twin is found by hash (the old per-note queries were a
+    // table scan each, and the twin check was quadratic): the work is bounded by construction.
+    let held = notes_held(
+        ctx,
+        &parsed
+            .iter()
+            .map(|note| note.title.to_ascii_lowercase())
+            .collect(),
+    )?;
     let mut fresh: Vec<Parsed> = Vec::new();
+    let mut seen: HashSet<(String, String)> = HashSet::new();
     let mut skipped = 0_usize;
     for note in parsed {
-        let twin = fresh
-            .iter()
-            .any(|seen| seen.title.eq_ignore_ascii_case(&note.title) && seen.body == note.body);
-        if twin || already_there(ctx, &note)? {
+        let key = (note.title.to_ascii_lowercase(), note.body.clone());
+        if held.contains(&key) || !seen.insert(key) {
             skipped += 1;
         } else {
             fresh.push(note);
@@ -470,9 +499,23 @@ fn import(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let imported_titles: BTreeSet<String> =
         fresh.iter().map(|note| note.title.to_lowercase()).collect();
     let (mut links, mut unresolved) = (0_usize, 0_usize);
-    for note in &fresh {
-        for title in wikilink_titles(&note.body) {
-            if imported_titles.contains(&title.to_lowercase()) || names_something(ctx, &title)? {
+    let linked: Vec<Vec<String>> = fresh
+        .iter()
+        .map(|note| wikilink_titles(&note.body))
+        .collect();
+    let named = linkable_titles(
+        ctx,
+        &linked
+            .iter()
+            .flatten()
+            .map(|title| title.to_ascii_lowercase())
+            .collect(),
+    )?;
+    for titles in &linked {
+        for title in titles {
+            if imported_titles.contains(&title.to_lowercase())
+                || named.contains(&title.to_ascii_lowercase())
+            {
                 links += 1;
             } else {
                 unresolved += 1;

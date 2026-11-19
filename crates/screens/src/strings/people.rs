@@ -127,6 +127,7 @@ catalog! {
     plain transfer_import_ready = ("Ready to import", "Ready to import");
     plain transfer_import_title = ("Import people", "Import people");
     plain transfer_row_added = ("New people", "New people");
+    plain transfer_row_left_out = ("Files not read", "Files not read");
     plain transfer_row_merged = ("Merge into someone you have", "Merge into someone you have");
     plain transfer_row_same = ("Already here", "Already here");
     plain transfer_row_proposal = ("Merges {name}", "Merges {name}");

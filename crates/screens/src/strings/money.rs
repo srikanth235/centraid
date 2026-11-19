@@ -165,6 +165,7 @@ catalog! {
     plain import_discard = ("Start over", "Start over");
     plain import_done = ("Imported {rows}", "Imported {rows}");
     plain import_done_note = ("Your rows are in.", "Your rows are in.");
+    plain import_too_large = ("That file is too large to import.", "That file is too large to import.");
     plain import_failed = ("Couldn’t import this file. Try again.", "Couldn’t import this file. Try again.");
     plain import_file = ("File", "File");
     plain import_file_note = ("CSV, OFX or QFX from your bank.", "CSV, OFX or QFX from your bank.");

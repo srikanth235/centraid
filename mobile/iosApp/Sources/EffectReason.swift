@@ -10,6 +10,7 @@ enum EffectReason {
     static let denied = "denied"
     static let unavailable = "unavailable"
     static let unreadable = "unreadable"
+    static let tooLarge = "too_large"
     static let unwritable = "unwritable"
     static let notWatched = "not_watched"
     static let noWindow = "no_window"

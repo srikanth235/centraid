@@ -7,6 +7,16 @@
 //! else ORG), a birthday (BDAY, with or without a year) and contact points (TEL, EMAIL, ADR,
 //! URL). Everything else a card carries (photos, notes, X- properties) is left where it was:
 //! this is an import of people, not a copy of an address book.
+//!
+//! **Version 2.1's QUOTED-PRINTABLE is read** (#1202): the phones and old books that write
+//! `FN;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:=E3=81=82` and wrap a long value with a trailing
+//! `=`. A property so encoded is unfolded at its soft breaks, decoded to bytes, and read in the
+//! charset it names (UTF-8 when it names none, windows-1252 when the bytes are not that).
+
+use crate::decode;
+
+/// The most contact points one card keeps: a card with a million `TEL` lines is not a person.
+pub const MAX_POINTS: usize = 50;
 
 /// One contact point of a card.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,20 +36,85 @@ pub struct Card {
     pub points: Vec<Point>,
 }
 
+/// Whether a line's property carries `ENCODING=QUOTED-PRINTABLE` (or the 2.1 bare form).
+fn is_quoted_printable(line: &str) -> bool {
+    line.split_once(':')
+        .is_some_and(|(head, _)| head.to_ascii_uppercase().contains("QUOTED-PRINTABLE"))
+}
+
 /// Lines with their folds undone: a line that starts with a space or a tab continues the
-/// one before it.
+/// one before it, and a quoted-printable line that ends in `=` continues on the next line, the
+/// `=` dropped.
 fn unfold(text: &str) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
+    let mut soft = false;
     for raw in text.replace("\r\n", "\n").replace('\r', "\n").split('\n') {
-        if let Some(rest) = raw.strip_prefix([' ', '\t'])
+        if soft && let Some(last) = lines.last_mut() {
+            last.push_str(raw);
+        } else if let Some(rest) = raw.strip_prefix([' ', '\t'])
             && let Some(last) = lines.last_mut()
         {
             last.push_str(rest);
         } else {
             lines.push(raw.to_owned());
         }
+        soft = false;
+        if let Some(last) = lines.last_mut()
+            && last.ends_with('=')
+            && is_quoted_printable(last)
+        {
+            last.pop();
+            soft = true;
+        }
     }
     lines
+}
+
+/// A quoted-printable value as bytes: `=XX` is a byte, anything else stands for itself.
+fn quoted_printable(value: &str) -> Vec<u8> {
+    let bytes = value.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut at = 0;
+    while at < bytes.len() {
+        let hex = |byte: u8| {
+            char::from(byte)
+                .to_digit(16)
+                .and_then(|d| u8::try_from(d).ok())
+        };
+        if bytes[at] == b'='
+            && at + 2 < bytes.len()
+            && let (Some(high), Some(low)) = (hex(bytes[at + 1]), hex(bytes[at + 2]))
+        {
+            out.push(high * 16 + low);
+            at += 3;
+        } else {
+            out.push(bytes[at]);
+            at += 1;
+        }
+    }
+    out
+}
+
+/// The `CHARSET=` parameter of a property, if it names one.
+fn charset_of(params: &[String]) -> Option<&str> {
+    params.iter().find_map(|param| {
+        let (name, value) = param.split_once('=')?;
+        name.trim().eq_ignore_ascii_case("CHARSET").then_some(value)
+    })
+}
+
+/// A property's value as text: quoted-printable decoded and read in its charset when the
+/// property says so, else as it is.
+fn value_of(params: &[String], value: &str) -> String {
+    let encoded = params.iter().any(|param| {
+        let upper = param.trim().to_ascii_uppercase();
+        upper == "QUOTED-PRINTABLE" || upper == "ENCODING=QUOTED-PRINTABLE"
+    });
+    if encoded {
+        decode::text_in(&quoted_printable(value), charset_of(params))
+    } else {
+        value.to_owned()
+    }
 }
 
 fn unescape(value: &str) -> String {
@@ -107,6 +182,13 @@ pub fn birthday_of(raw: &str) -> Option<String> {
 fn label_of(params: &[String]) -> Option<String> {
     params
         .iter()
+        // How the value is written is not what the point is (`CHARSET=UTF-8`, `ENCODING=...`).
+        .filter(|param| {
+            let name = param.split_once('=').map_or("", |(name, _)| name.trim());
+            !["CHARSET", "ENCODING", "LANGUAGE", "VALUE"]
+                .iter()
+                .any(|skip| name.eq_ignore_ascii_case(skip))
+        })
         .flat_map(|param| {
             let value = param.split_once('=').map_or(param.as_str(), |(_, v)| v);
             value.split(',').map(str::to_owned).collect::<Vec<_>>()
@@ -116,7 +198,14 @@ fn label_of(params: &[String]) -> Option<String> {
             !label.is_empty()
                 && !matches!(
                     label.as_str(),
-                    "pref" | "internet" | "voice" | "type" | "text"
+                    "pref"
+                        | "internet"
+                        | "voice"
+                        | "type"
+                        | "text"
+                        | "quoted-printable"
+                        | "base64"
+                        | "8bit"
                 )
         })
 }
@@ -156,6 +245,7 @@ pub fn parse(text: &str) -> Vec<Card> {
                         .unwrap_or_default();
                 }
                 card.role = title.take().or(org.take()).filter(|r| !r.trim().is_empty());
+                card.points.truncate(MAX_POINTS);
                 if !card.name.trim().is_empty() {
                     cards.push(card);
                 }
@@ -177,7 +267,8 @@ pub fn parse(text: &str) -> Vec<Card> {
             .unwrap_or_default()
             .to_ascii_uppercase();
         let params: Vec<String> = head_parts.map(str::to_owned).collect();
-        let value = value.trim();
+        let decoded = value_of(&params, value);
+        let value = decoded.trim();
         if value.is_empty() {
             continue;
         }
@@ -369,5 +460,40 @@ mod tests {
         let text = write(&long);
         assert!(text.lines().all(|line| line.len() <= 76));
         assert_eq!(parse(&text)[0].name, long.name);
+    }
+
+    #[test]
+    fn a_2_1_card_in_quoted_printable_is_decoded() {
+        let text = "BEGIN:VCARD\r\nVERSION:2.1\r\nN;ENCODING=QUOTED-PRINTABLE:=C3=89milie;Dupont;;;\r\nFN;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:=E3=81=82=E3=81=84=\r\n=E3=81=86\r\nTEL;CELL:+33 6 12 34 56 78\r\nADR;HOME;CHARSET=ISO-8859-1;ENCODING=QUOTED-PRINTABLE:;;3 rue de l'=C9glise;Lyon;;69001;France\r\nEND:VCARD\r\nBEGIN:VCARD\r\nVERSION:2.1\r\nN;ENCODING=QUOTED-PRINTABLE:Dupont;=C9milie;;;\r\nEND:VCARD\r\n";
+        let cards = parse(text);
+        assert_eq!(cards.len(), 2);
+        assert_eq!(
+            cards[0].name, "あいう",
+            "FN wins over N, and its soft break is joined"
+        );
+        assert_eq!(cards[0].points[0].label.as_deref(), Some("cell"));
+        assert_eq!(
+            cards[0].points[1].value,
+            "3 rue de l'Église, Lyon, 69001, France"
+        );
+        assert_eq!(
+            cards[0].points[1].label.as_deref(),
+            Some("home"),
+            "CHARSET and ENCODING are not the point's label"
+        );
+        assert_eq!(
+            cards[1].name, "Émilie Dupont",
+            "invalid UTF-8 falls back to windows-1252"
+        );
+    }
+
+    #[test]
+    fn a_card_with_more_points_than_a_person_has_keeps_the_first_fifty() {
+        let mut text = String::from("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Many\r\n");
+        for n in 0..500 {
+            text.push_str(&format!("TEL:+1 555 {n:04}\r\n"));
+        }
+        text.push_str("END:VCARD\r\n");
+        assert_eq!(parse(&text)[0].points.len(), MAX_POINTS);
     }
 }

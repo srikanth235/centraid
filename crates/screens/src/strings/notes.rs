@@ -175,6 +175,7 @@ catalog! {
     plain transfer_import_ready = ("Ready to import", "Ready to import");
     plain transfer_import_title = ("Import notes", "Import notes");
     plain transfer_row_ignored = ("Not notes", "Not notes");
+    plain transfer_row_left_out = ("Files not read", "Files not read");
     plain transfer_row_links = ("Links", "Links");
     plain transfer_row_notebooks = ("Notebooks", "Notebooks");
     plain transfer_row_notes = ("Notes", "Notes");

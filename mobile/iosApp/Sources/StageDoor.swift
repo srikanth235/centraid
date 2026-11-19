@@ -4,12 +4,14 @@ import SwiftProtobuf
 /// THE STAGE DOOR, STREAMED (#1025 S5; #1080 ruling 6; #1135): bytes go in,
 /// the core names them.
 ///
-/// Three frames: `begin` declares the media type, the length (0 when the
+/// Four frames: `begin` declares the media type, the length (0 when the
 /// platform does not know it before the read) and where the bytes live;
 /// `chunk` is numbered from zero and sized by the core's own ceiling
 /// (`StageBegun.chunk_bytes`, never this shell's guess); `end` answers the
-/// handle. A BLAKE3 is the vault's identity and no Apple API computes one, so
-/// the shell never names its own bytes. A refusal ends the stage where it
+/// handle; `abort` drops the session when this shell's own read broke or its
+/// task was cancelled after `begin`, so a failed stage never holds one of the
+/// core's four places. A BLAKE3 is the vault's identity and no Apple API
+/// computes one, so the shell never names its own bytes. A refusal ends the stage where it
 /// happened; there is no resume, and the core's `already_held` makes a retry
 /// cheap. On the front core a stage goes to the vault in front.
 enum StageDoor {
@@ -59,6 +61,7 @@ enum StageDoor {
             do {
                 slice = try await read(chunkBytes)
             } catch {
+                await abort(core, begun.stagingID)
                 return .refused(nil)
             }
             if slice.isEmpty { break }
@@ -66,7 +69,11 @@ enum StageDoor {
             chunk.stagingID = begun.stagingID
             chunk.seq = seq
             chunk.payload = slice
-            if case let .failure(refusal) = await send(core, .chunk(chunk)) { return .refused(refusal.error) }
+            if case let .failure(refusal) = await send(core, .chunk(chunk)) {
+                // The core closes a session it refused a chunk of; this covers a call that never reached it.
+                await abort(core, begun.stagingID)
+                return .refused(refusal.error)
+            }
             seq += 1
         }
         var end = Centraid_Core_V1_StageEnd()
@@ -107,6 +114,13 @@ enum StageDoor {
             defer { offset = end }
             return bytes.subdata(in: offset ..< end)
         }
+    }
+
+    /// Drop a session this shell will not finish. The core answers nothing and forgives an unknown id.
+    private static func abort(_ core: any ScreenCore, _ stagingID: String) async {
+        var frame = Centraid_Core_V1_StageAbort()
+        frame.stagingID = stagingID
+        _ = await send(core, .abort(frame))
     }
 
     /// A `Result`'s failure must be an `Error`, and `nil` (no refusal on the wire) is a failure too.

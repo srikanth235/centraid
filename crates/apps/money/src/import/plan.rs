@@ -155,37 +155,70 @@ fn bigrams(text: &str) -> HashMap<(char, char), usize> {
     counts
 }
 
+/// A description normalised once, with its bigram counts, so comparing it against many others
+/// costs no allocation (#1202): a statement of thousands of rows at one price is compared pair by pair.
+struct Described {
+    norm: String,
+    bigrams: HashMap<(char, char), usize>,
+    /// The sum of `bigrams`' counts.
+    total: usize,
+}
+
+impl Described {
+    fn new(text: &str) -> Self {
+        let norm = rules::normalise(text);
+        let bigrams = bigrams(&norm);
+        let total = bigrams.values().sum();
+        Self {
+            norm,
+            bigrams,
+            total,
+        }
+    }
+
+    /// How alike two descriptions are, 0..=1: one containing the other (at least four characters)
+    /// is 1; otherwise the Dice coefficient of their character bigrams.
+    fn similarity(&self, other: &Self) -> f64 {
+        if self.norm.is_empty() || other.norm.is_empty() {
+            return 0.0;
+        }
+        let (short, long) = if self.norm.len() <= other.norm.len() {
+            (&self.norm, &other.norm)
+        } else {
+            (&other.norm, &self.norm)
+        };
+        if short.chars().count() >= 4 && long.contains(short.as_str()) {
+            return 1.0;
+        }
+        let total = self.total + other.total;
+        if total == 0 {
+            return 0.0;
+        }
+        let shared: usize = self
+            .bigrams
+            .iter()
+            .map(|(pair, count)| (*count).min(other.bigrams.get(pair).copied().unwrap_or(0)))
+            .sum();
+        #[allow(clippy::cast_precision_loss)]
+        {
+            2.0 * shared as f64 / total as f64
+        }
+    }
+}
+
 /// How alike two descriptions are, 0..=1: one containing the other (at least
 /// four characters) is 1; otherwise the Dice coefficient of their character
 /// bigrams.
 #[must_use]
 pub fn similarity(left: &str, right: &str) -> f64 {
-    let (a, b) = (rules::normalise(left), rules::normalise(right));
-    if a.is_empty() || b.is_empty() {
-        return 0.0;
-    }
-    let (short, long) = if a.len() <= b.len() {
-        (&a, &b)
-    } else {
-        (&b, &a)
-    };
-    if short.chars().count() >= 4 && long.contains(short.as_str()) {
-        return 1.0;
-    }
-    let (left, right) = (bigrams(&a), bigrams(&b));
-    let total: usize = left.values().sum::<usize>() + right.values().sum::<usize>();
-    if total == 0 {
-        return 0.0;
-    }
-    let shared: usize = left
-        .iter()
-        .map(|(pair, count)| (*count).min(right.get(pair).copied().unwrap_or(0)))
-        .sum();
-    #[allow(clippy::cast_precision_loss)]
-    {
-        2.0 * shared as f64 / total as f64
-    }
+    Described::new(left).similarity(&Described::new(right))
 }
+
+/// The most row pairs one plan looks at (#1202). A statement of thousands of rows at one
+/// price (a fare, a parking charge) against a vault holding thousands at that price is millions of
+/// pairs, each a bigram walk; past the budget the remaining rows are left without a proposal, which
+/// costs the member a possible double count they can see in the plan, never a stalled import.
+pub const MAX_COMPARISONS: usize = 500_000;
 
 /// Two rows that both carry a bank's own, different `FITID` are two
 /// transactions.
@@ -204,6 +237,30 @@ pub fn plan(
     rules: &[Rule],
     today: &str,
 ) -> ImportPlan {
+    plan_within(
+        statement,
+        account_id,
+        currency,
+        existing,
+        rules,
+        today,
+        MAX_COMPARISONS,
+    )
+    .0
+}
+
+/// [`plan`] with its comparison budget named, answering how many description comparisons it made:
+/// what a test asserts on instead of a clock.
+#[must_use]
+pub fn plan_within(
+    statement: &Statement,
+    account_id: &str,
+    currency: &str,
+    existing: &[ExistingTxn],
+    rules: &[Rule],
+    today: &str,
+    budget: usize,
+) -> (ImportPlan, usize) {
     let mut totals = PlanTotals {
         currency: currency.to_owned(),
         ..PlanTotals::default()
@@ -265,6 +322,9 @@ pub fn plan(
         }
     }
     let mut candidates: Vec<(f64, i64, usize, usize, usize)> = Vec::new();
+    // EACH DESCRIPTION IS NORMALISED AND BIGRAMMED ONCE, however many rows it is compared with.
+    let mut existing_described: HashMap<usize, Described> = HashMap::new();
+    let mut comparisons = 0_usize;
     for (position, plan_row) in rows.iter().enumerate() {
         let (RowVerdict::New, Some(row)) = (&plan_row.verdict, &plan_row.row) else {
             continue;
@@ -272,11 +332,17 @@ pub fn plan(
         let Some(day) = civil::day_number_of(&row.posted_on) else {
             continue;
         };
+        let described = Described::new(&row.description);
         for &at in index
             .get(&(row.direction, row.amount_minor))
             .into_iter()
             .flatten()
         {
+            // EVERY PAIR LOOKED AT COUNTS, so the whole loop is bounded, not only its similarity calls.
+            if comparisons >= budget {
+                break;
+            }
+            comparisons += 1;
             let other = &existing[at];
             let Some(other_day) = civil::day_number_of(&other.posted_on) else {
                 continue;
@@ -285,7 +351,10 @@ pub fn plan(
             if gap > FUZZY_DAYS || distinct_fitids(&row.external_id, other.external_id.as_deref()) {
                 continue;
             }
-            let alike = similarity(&row.description, &other.description);
+            let alike = existing_described
+                .entry(at)
+                .or_insert_with(|| Described::new(&other.description))
+                .similarity(&described);
             if alike >= SIMILARITY_THRESHOLD {
                 candidates.push((alike, gap, plan_row.line, position, at));
             }
@@ -338,14 +407,15 @@ pub fn plan(
             totals.last_day = Some(day.clone());
         }
     }
-    ImportPlan {
+    let made = ImportPlan {
         rows,
         totals,
         question: statement.question.clone(),
         checkpoint: statement.checkpoint.clone(),
         warnings: statement.warnings.clone(),
         profile: statement.profile.clone(),
-    }
+    };
+    (made, comparisons)
 }
 
 #[cfg(test)]
@@ -358,5 +428,18 @@ mod tests {
         assert!(similarity("AMAZON MKTPLACE PMTS", "AMAZON MKTPLACE") >= SIMILARITY_THRESHOLD);
         assert!(similarity("SHELL OIL", "TIM HORTONS") < 0.3);
         assert!(similarity("", "X") < f64::EPSILON);
+    }
+
+    #[test]
+    fn described_text_scores_as_the_strings_do() {
+        for (a, b) in [
+            ("STARBUCKS", "Starbucks #1234 Seattle"),
+            ("SHELL OIL", "TIM HORTONS"),
+            ("PARKING 5TH ST", "PARKING 6TH ST"),
+        ] {
+            let (left, right) = (Described::new(a), Described::new(b));
+            assert!((left.similarity(&right) - similarity(a, b)).abs() < f64::EPSILON);
+            assert!((left.similarity(&right) - right.similarity(&left)).abs() < f64::EPSILON);
+        }
     }
 }
