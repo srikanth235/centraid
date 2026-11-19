@@ -122,7 +122,7 @@ fn health_search_finds_a_metric_by_its_name_a_workout_by_its_kind_and_nothing_el
                 .groups
                 .iter()
                 .flat_map(|group| group.rows.iter())
-                .any(|row| row.kind_label == "Workout"),
+                .any(|row| row.kind_label.starts_with("Workout · ")),
             "{term} finds the run"
         );
     }
@@ -139,7 +139,7 @@ fn health_search_finds_a_metric_by_its_name_a_workout_by_its_kind_and_nothing_el
             .groups
             .iter()
             .flat_map(|group| group.rows.iter())
-            .any(|row| row.kind_label == "Workout"
+            .any(|row| row.kind_label.starts_with("Workout")
                 && row.route.as_ref().unwrap().screen == "health.workout"),
         "{found:?}"
     );

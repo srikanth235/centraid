@@ -961,14 +961,15 @@ fn year_three_volume_reads_plans_and_replans_to_all_already_in() {
 
 /// THE FUZZY PASS LOOKS AT A BOUNDED NUMBER OF PAIRS (#1202): thirty rows at one price against thirty
 /// held at that price are 900 pairs, and a budget of 100 is exactly what is spent. The count is what is
-/// asserted, never a clock, and the rows are still planned, with no proposal past the budget.
+/// asserted, never a clock. The day is the 25th so the date order is not ambiguous (a day under 13 would
+/// make the reader ask which order, and a question statement has no rows), and the rows are still planned, with no proposal past the budget.
 #[test]
 fn the_fuzzy_pass_spends_no_more_pairs_than_its_budget() {
     let mut text =
         String::from("Details,Posting Date,Description,Amount,Type,Balance,Check or Slip #,\n");
     for n in 0..30 {
         text.push_str(&format!(
-            "DEBIT,01/10/2024,\"TRANSIT FARE {n}\",-4.50,DEBIT_CARD,100.00,,\n"
+            "DEBIT,01/25/2024,\"TRANSIT FARE {n}\",-4.50,DEBIT_CARD,100.00,,\n"
         ));
     }
     let statement = read_csv(text.as_bytes(), &CsvOptions::new("USD")).expect("a statement");
@@ -976,7 +977,7 @@ fn the_fuzzy_pass_spends_no_more_pairs_than_its_budget() {
         .map(|n| ExistingTxn {
             txn_id: format!("held-{n}"),
             external_id: Some(format!("csv:{n}")),
-            posted_on: "2024-01-10".into(),
+            posted_on: "2024-01-25".into(),
             amount_minor: 450,
             direction: Direction::Debit,
             description: format!("TRANSIT FARE {n}"),
