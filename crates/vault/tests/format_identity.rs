@@ -218,3 +218,41 @@ fn open_of_a_damaged_vault_is_a_typed_error() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// THE SCHEMA THE RELEASE AT `99cc70d8f` WROTE (#1202 upgrade case). The ladder was frozen at that
+/// release: its digest below is `format::SCHEMA_DIGEST` as that commit carried it. A file the
+/// release wrote has this schema at `user_version = 1`, so while the ladder's head is still rung 1
+/// the current code must found exactly it, and once a rung two is appended this test must climb
+/// from rung 1 instead of being edited: the constant never moves.
+const RELEASE_99CC70D8F_SCHEMA_DIGEST: &str =
+    "ca48de87ac6e7fcce60254324970b81254bccf984b03b812f2a4379b9d1357ad";
+
+#[test]
+fn a_vault_the_release_wrote_opens_on_this_code_and_keeps_what_it_held() {
+    let dir = centraid_ontology::scratch::scratch_dir().join("release-upgrade");
+    std::fs::create_dir_all(&dir).expect("a directory");
+    let file = dir.join("vault.db");
+    // The release's file: its schema, at its rung, with a founded vault in it.
+    let vault = Vault::create(&file).expect("a vault");
+    vault.found("Release", "Ada").expect("founded");
+    vault.finish().expect("closes");
+    let plain = rusqlite::Connection::open(&file).expect("opens as a plain file");
+    let version: i64 = plain
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .expect("a version");
+    assert_eq!(version, 1, "the release wrote rung one");
+    assert_eq!(
+        centraid_vault::format::schema_digest(&plain).expect("a digest"),
+        RELEASE_99CC70D8F_SCHEMA_DIGEST,
+        "the schema the release wrote is not the schema this code founds: a rung was edited, not appended"
+    );
+    drop(plain);
+    // Today's code opens it, migrates it to the head (a no-op while the head is the release's
+    // rung) and still holds what the release put there.
+    let reopened = Vault::open(&file).expect("the release's file opens");
+    let name: String = reopened
+        .read(|c| Ok(c.query_row("SELECT name FROM vault", [], |r| r.get(0))?))
+        .expect("reads");
+    assert_eq!(name, "Release");
+    let _ = std::fs::remove_dir_all(&dir);
+}

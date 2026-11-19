@@ -211,3 +211,36 @@ fn a_paired_phone_is_still_paired_and_still_backs_up_after_the_process_dies() {
     assert_eq!(deleted.len(), 1, "{:?}", forgotten.writes);
     assert!(deleted[0].starts_with(&format!("gateway-token.{identity}.")));
 }
+
+#[test]
+fn work_queued_before_the_process_dies_is_still_queued_and_goes_out_after_the_restart() {
+    let gateway = gateway();
+    let dir = scratch();
+    let id = lay_down(&dir, "a", "Home");
+    let mut phone = launched(&dir, &id, FakeShell::default());
+    let core = phone.shelf.core_of(&id).expect("the vault is open");
+    pair(&mut phone, &gateway.payload());
+    let first = drain(&core);
+    assert!(first.confirmed_parts > 0, "{first:?}");
+
+    // A note is written and the process dies before any backup carried it.
+    core.command(
+        "note.create",
+        &serde_json::json!({"title": "Queued", "body": "Written before the process died."}),
+        "queued-before-the-restart",
+    )
+    .expect("a note is written");
+    let shell = phone.shell.clone();
+    drop(core);
+    drop(phone);
+
+    // The relaunched phone is still paired and still owes that note: the next backup sends it.
+    let phone = launched(&dir, &id, shell);
+    let core = phone.shelf.core_of(&id).expect("the vault is open");
+    assert!(!waiting_to_pair_again(&core));
+    let after = drain(&core);
+    assert!(after.confirmed_parts > 0, "{after:?}");
+    // And nothing is left owed: a further pass has nothing new to send.
+    let again = drain(&core);
+    assert_eq!(again.confirmed_parts, 0, "{again:?}");
+}
