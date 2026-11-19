@@ -27,6 +27,7 @@ catalog! {
     plain files_not_asked = ("Centraid needs access to your files.", "Centraid needs access to your files.");
     plain files_refused = ("File access is off. Turn it on in Settings.", "File access is off. Turn it on in Settings.");
     plain files_restricted = ("This phone does not allow file access.", "This phone does not allow file access.");
+    plain storage_full = ("The phone is full. Free up space and try again.", "The phone is full. Free up space and try again.");
     plain photos_limited = ("Centraid imports the photos you selected.", "Centraid imports the photos you selected.");
     plain calendar_limited = ("Centraid needs full calendar access, not only adding events. Turn it on in Settings.", "Centraid needs full calendar access, not only adding events. Turn it on in Settings.");
     plain contacts_limited = ("Centraid sees only the contacts you chose. Allow all contacts in Settings to bring in everyone.", "Centraid sees only the contacts you chose. Allow all contacts in Settings to bring in everyone.");

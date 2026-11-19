@@ -58,6 +58,8 @@ internal fun AgendaAttachmentsView(
     onEvent: (AgendaAttachmentEvent) -> Unit,
     onOpen: (Route) -> Unit,
     padded: Boolean = true,
+    /** An empty section's words sit inside the card, as Linked to's do, not as a plain line under the head. */
+    emptyInCard: Boolean = false,
 ) {
     // The page margin around the section; one placed inside a column that pads itself turns it off.
     val gutter = if (padded) KitGeometry.GUTTER else 0.dp
@@ -69,7 +71,20 @@ internal fun AgendaAttachmentsView(
             Surface.meta,
             Modifier.padding(start = gutter, end = gutter, top = 16.dp, bottom = 6.dp).semantics { heading() },
         )
-        if (section.items.isEmpty() && section.empty_label.isNotEmpty()) {
+        if (section.items.isEmpty() && section.empty_label.isNotEmpty() && emptyInCard) {
+            KitText(
+                section.empty_label,
+                KitType.Row,
+                Surface.meta,
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = gutter)
+                    .clip(RoundedCornerShape(CentraidScale.cardRadius.dp))
+                    .background(Surface.card)
+                    .heightIn(min = 48.dp)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+            )
+        } else if (section.items.isEmpty() && section.empty_label.isNotEmpty()) {
             Text(section.empty_label, style = centraidType("body"), color = centraidColor("textFaint"), modifier = Modifier.padding(horizontal = gutter))
         }
         // THE BOARD'S CARD: the attachments in one rounded plate.

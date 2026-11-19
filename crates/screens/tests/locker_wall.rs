@@ -821,7 +821,7 @@ fn over_a_vault_with_no_item_the_wall_is_the_first_check_and_its_button_is_the_a
     assert_eq!(wall.phase, wire::locker_wall::Phase::Locked as i32);
     assert_eq!((wall.step, wall.steps), (1, 2));
     assert_eq!(wall.step_label, "Step 1 of 2");
-    assert_eq!(wall.title, "Confirm it's you");
+    assert_eq!(wall.title, "Your passwords and secure notes");
     assert_eq!(
         wall.body,
         "Locker opens with your face or your passcode, every time."
@@ -843,7 +843,7 @@ fn over_a_vault_with_no_item_the_wall_is_the_first_check_and_its_button_is_the_a
     let wall = wall_of(&d, id).expect("still a wall");
     assert_eq!(wall.phase, wire::locker_wall::Phase::Locked as i32);
     assert_eq!(wall.step_label, "Step 1 of 2");
-    assert_eq!(wall.title, "Confirm it's you");
+    assert_eq!(wall.title, "Your passwords and secure notes");
     assert_eq!(wall.unlock_label, "Confirm it's you");
     assert_eq!(wall.notice, "");
 }

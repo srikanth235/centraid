@@ -155,7 +155,10 @@ internal class DocsPickers(
         if (answer == null) return
         scope.launch {
             val copied = withContext(Dispatchers.IO) { DocsIngestFiles.copy(context, uri) }
-            if (copied == null) fail(EffectReason.UNREADABLE) else stage(copied.path, copied.name, mediaTypeOf(copied.name, copied.mediaType))
+            copied.fold(
+                { stage(it.path, it.name, mediaTypeOf(it.name, it.mediaType)) },
+                { fail(DocsIngestFiles.reasonOf(it)) },
+            )
         }
     }
 
@@ -216,7 +219,13 @@ internal class DocsPickers(
                     ),
                 )
                 is Stage.Outcome.Refused ->
-                    answer?.invoke(EffectResult(failed = EffectFailed(reason = outcome.sentence.ifEmpty { EffectReason.FAILED })))
+                    answer?.invoke(
+                        EffectResult(
+                            failed = EffectFailed(
+                                reason = if (outcome.full) EffectReason.STORAGE_FULL else outcome.sentence.ifEmpty { EffectReason.FAILED },
+                            ),
+                        ),
+                    )
             }
         }
     }

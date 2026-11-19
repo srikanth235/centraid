@@ -327,6 +327,26 @@ fn a_refusal_is_a_failure_with_try_again_a_held_file_refiles_none_repicks() {
 }
 
 #[test]
+fn a_full_phone_says_so_in_the_core_words_not_that_a_file_failed() {
+    let mut d = driver();
+    let i = root(&d);
+    add(&mut d, i, "upload");
+    result(
+        &mut d,
+        i,
+        O::Failed(wire::EffectFailed {
+            reason: centraid_screens::effect_reason::STORAGE_FULL.to_owned(),
+            ..Default::default()
+        }),
+    );
+    assert_eq!(ingest(&d, i).phase, Phase::Failed as i32);
+    assert_eq!(
+        ingest(&d, i).status_label,
+        "The phone is full. Free up space and try again."
+    );
+}
+
+#[test]
 fn a_file_that_could_not_be_read_does_not_wedge_the_next_upload() {
     let mut d = driver();
     let i = root(&d);

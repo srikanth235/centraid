@@ -223,7 +223,7 @@ public fun PeopleHomeScreen(
                 SheetRow(
                     label = row.label,
                     iconKey = row.icon_key,
-                    detail = row.meta,
+                    detail = row.meta.dotSafe(),
                     testTag = "people-more-${row.key}",
                     onTap = {
                         val route = row.route
@@ -467,7 +467,7 @@ private fun LazyListScope.touch(
     items(touch.reconnect, key = { "r-" + it.party_id }) { card ->
         CentraidRow(
             title = card.name,
-            meta = listOf(card.role, card.detail).filter { it.isNotEmpty() }.joinToString(" · "),
+            meta = listOf(card.role, card.detail).filter { it.isNotEmpty() }.joinToString(" · ").dotSafe(),
             hueKey = card.avatar?.hue_key.orEmpty(),
             a11y = card.accessibility_label,
             testTag = "people-reconnect-${card.party_id}",
@@ -489,7 +489,7 @@ private fun LazyListScope.touch(
     items(touch.upcoming, key = { "u-" + it.date_id }) { row ->
         CentraidRow(
             title = row.name,
-            meta = listOf(row.label, row.day_label).filter { it.isNotEmpty() }.joinToString(" · "),
+            meta = listOf(row.label, row.day_label).filter { it.isNotEmpty() }.joinToString(" · ").dotSafe(),
             trailing = row.when_label,
             hueKey = row.avatar?.hue_key.orEmpty(),
             a11y = row.accessibility_label,
@@ -504,7 +504,7 @@ private fun LazyListScope.touch(
     items(touch.recent, key = { "t-" + it.interaction_id }) { row ->
         CentraidRow(
             title = row.name,
-            meta = listOf(row.kind_label, row.text).filter { it.isNotEmpty() }.joinToString(" · "),
+            meta = listOf(row.kind_label, row.text).filter { it.isNotEmpty() }.joinToString(" · ").dotSafe(),
             trailing = row.when_label,
             hueKey = row.avatar?.hue_key.orEmpty(),
             a11y = row.accessibility_label,
@@ -578,3 +578,9 @@ internal fun Avatar(avatar: PeopleAvatar?, size: Int = 32) {
         Text(avatar?.initials.orEmpty(), style = centraidType("smallStrong"), color = centraidColor("onAccent"), maxLines = 1, softWrap = false)
     }
 }
+
+/**
+ * A WRAPPED META LINE NEVER STARTS WITH "·" (#1202): the separator keeps to the part before it (a
+ * no-break space ahead of the dot), so a break falls after the dot, never before it.
+ */
+internal fun String.dotSafe(): String = replace(" · ", "\u00A0· ")

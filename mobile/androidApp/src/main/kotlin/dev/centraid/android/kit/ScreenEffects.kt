@@ -242,7 +242,7 @@ private suspend fun saveFile(context: Context, file: centraid.core.v1.SaveFile, 
             throw cancelled
         } catch (error: Exception) {
             Log.w("Centraid", "the saved file was not written: $error")
-            failed(EffectReason.UNWRITABLE)
+            failed(error.writeFailureReason(EffectReason.UNWRITABLE))
         }
     }
 }
@@ -265,7 +265,7 @@ private suspend fun saveFilePath(file: centraid.core.v1.SaveFilePath, uri: andro
         } catch (error: Exception) {
             // LOGGED, NOT SWALLOWED: a save that leaves 0 bytes must say why.
             Log.w("Centraid", "the export was not written: $error")
-            failed(EffectReason.UNWRITABLE)
+            failed(error.writeFailureReason(EffectReason.UNWRITABLE))
         }
     }
 }

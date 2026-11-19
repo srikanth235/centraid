@@ -324,6 +324,10 @@ internal class ShellEffects(
             effect.open_url != null -> start(Intent(Intent.ACTION_VIEW, Uri.parse(effect.open_url!!.url)))
             effect.open_map != null ->
                 start(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=" + Uri.encode(effect.open_map!!.query))))
+            // THIS SHEET CARRIES THE RECOVERY WORDS (#1202). Android's chooser owns its Copy button and
+            // offers no way to remove it or to mark what it copies sensitive (`EXTRA_EXCLUDE_COMPONENTS`
+            // drops apps, not the chooser's own actions); the clip this shell sets itself is marked
+            // sensitive above, and the words are never put on the clipboard by the core.
             effect.share != null -> {
                 val share = effect.share!!
                 val send = Intent(Intent.ACTION_SEND).apply {

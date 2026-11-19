@@ -1,6 +1,7 @@
 package dev.centraid.android.session
 
 import centraid.core.v1.Envelope
+import centraid.core.v1.ErrorCode
 import centraid.core.v1.Request
 import centraid.core.v1.StageAbort
 import centraid.core.v1.StageBegin
@@ -10,6 +11,7 @@ import centraid.core.v1.StageHandle
 import centraid.core.v1.StageRequest
 import centraid.core.v1.StageSource
 import dev.centraid.core.CentraidCore
+import dev.centraid.core.CoreFailure
 import dev.centraid.core.CoreOutcome
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
@@ -36,7 +38,7 @@ internal object Stage {
     sealed interface Outcome {
         data class Staged(val handle: StageHandle) : Outcome
 
-        data class Refused(val sentence: String) : Outcome
+        data class Refused(val sentence: String, val full: Boolean = false) : Outcome
     }
 
     /**
@@ -62,7 +64,7 @@ internal object Stage {
             tier = tier,
         )
         val begun = when (val answer = core.send(StageRequest(begin = begin))) {
-            is CoreOutcome.Failed -> return Outcome.Refused(answer.failure.sentence)
+            is CoreOutcome.Failed -> return Outcome.Refused(answer.failure.sentence, answer.failure.diskFull())
             is CoreOutcome.Answered -> answer.value.response?.stage?.begun
         } ?: return Outcome.Refused("")
         val chunkBytes = begun.chunk_bytes.toInt().coerceAtLeast(1)
@@ -74,14 +76,14 @@ internal object Stage {
                 if (slice.isEmpty()) break
                 val chunk = StageChunk(staging_id = begun.staging_id, seq = seq, payload = slice.toByteString())
                 when (val answer = core.send(StageRequest(chunk = chunk))) {
-                    is CoreOutcome.Failed -> return Outcome.Refused(answer.failure.sentence)
+                    is CoreOutcome.Failed -> return Outcome.Refused(answer.failure.sentence, answer.failure.diskFull())
                     is CoreOutcome.Answered -> Unit
                 }
                 seq += 1
             }
             finished = true
             val handle = when (val answer = core.send(StageRequest(end = StageEnd(staging_id = begun.staging_id)))) {
-                is CoreOutcome.Failed -> return Outcome.Refused(answer.failure.sentence)
+                is CoreOutcome.Failed -> return Outcome.Refused(answer.failure.sentence, answer.failure.diskFull())
                 is CoreOutcome.Answered -> answer.value.response?.stage?.handle
             } ?: return Outcome.Refused("")
             return Outcome.Staged(handle)
@@ -115,3 +117,6 @@ internal object Stage {
 
     private suspend fun CentraidCore.send(request: StageRequest) = call(Envelope(request = Request(stage = request)))
 }
+
+/** The core refused because the phone is full (`ERROR_CODE_DISK_FULL`): a fact the shell passes on, worded by Rust. */
+private fun CoreFailure.diskFull(): Boolean = (this as? CoreFailure.Refused)?.code == ErrorCode.ERROR_CODE_DISK_FULL.value

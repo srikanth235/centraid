@@ -68,7 +68,7 @@ internal fun PeopleContactsRowView(row: PeopleContactsRow, onAction: () -> Unit)
                     modifier = Modifier.padding(start = 6.dp),
                 )
             }
-            if (row.detail.isNotEmpty()) KitText(row.detail, KitType.Meta, Surface.meta, maxLines = if (stackedAction) 6 else 2)
+            if (row.detail.isNotEmpty()) KitText(row.detail.dotSafe(), KitType.Meta, Surface.meta, maxLines = if (stackedAction) 6 else 2)
             if (stackedAction) action()
         }
         if (!stackedAction) action()

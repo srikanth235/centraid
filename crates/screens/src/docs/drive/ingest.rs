@@ -25,12 +25,13 @@ use wire::docs_ingest_view::Phase;
 
 use crate::catalog::act;
 use crate::docs::routes;
+use crate::effect_reason::STORAGE_FULL;
 use crate::kit::act as kit_act;
 use crate::kit::file_name;
 use crate::kit::permission::{self, Resource};
 use crate::kit::undo::Undo;
 use crate::screen::Ctx;
-use crate::strings::{Locale, docs as words, fill};
+use crate::strings::{Locale, docs as words, fill, permission as permission_words};
 
 const PERMILLE: u64 = 1000;
 const OCTET_STREAM: &str = "application/octet-stream";
@@ -352,6 +353,8 @@ fn refusal_of(locale: Locale, kind: Kind, failed: &wire::EffectFailed) -> String
     };
     if let Some(sentence) = permission::refusal(locale, resource, failed) {
         sentence
+    } else if failed.reason == STORAGE_FULL {
+        permission_words::storage_full(locale)
     } else if failed.reason == UNAVAILABLE {
         words::ingest_no_picker(locale)
     } else {

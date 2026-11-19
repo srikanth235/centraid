@@ -41,6 +41,7 @@ enum ShelfCopyExport {
         core: any ScreenCore
     ) async -> Centraid_Core_V1_EffectResult.OneOf_Outcome {
         let (originals, missing) = await locate(export.photoIds, core: core)
+        let full = FullPhone()
         func exported(
             _ status: Centraid_Core_V1_OriginalsExported.Status,
             handed: Int = 0
@@ -54,8 +55,8 @@ enum ShelfCopyExport {
         guard !originals.isEmpty else { return exported(.noneHere) }
         switch export.mode {
         case .send:
-            guard let files = await prepare(originals, keepLocation: export.keepLocation, export: export) else {
-                return exported(.locationNotRemovable)
+            guard let files = await prepare(originals, keepLocation: export.keepLocation, export: export, full: full) else {
+                return exported(full.seen ? .storageFull : .locationNotRemovable)
             }
             let handoff = await withCheckedContinuation { (done: CheckedContinuation<Handoff, Never>) in
                 Task { @MainActor in present(files) { done.resume(returning: $0) } }
@@ -66,8 +67,8 @@ enum ShelfCopyExport {
             case .failed: return exported(.failed)
             }
         case .save:
-            let saved = await saveToLibrary(originals, export: export)
-            return saved < 0 ? exported(.failed) : exported(.done, handed: saved)
+            let saved = await saveToLibrary(originals, export: export, full: full)
+            return saved < 0 ? exported(full.seen ? .storageFull : .failed) : exported(.done, handed: saved)
         default:
             var failed = Centraid_Core_V1_EffectFailed()
             failed.reason = EffectReason.unsupported
@@ -141,7 +142,8 @@ enum ShelfCopyExport {
     private static func prepare(
         _ originals: [LocatedOriginal],
         keepLocation: Bool,
-        export: Centraid_Core_V1_ExportOriginals
+        export: Centraid_Core_V1_ExportOriginals,
+        full: FullPhone
     ) async -> [URL]? {
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("copies", isDirectory: true)
@@ -159,7 +161,10 @@ enum ShelfCopyExport {
             } else {
                 copied = copyImageWithoutLocation(from: source, to: target)
             }
-            guard copied else { return nil }
+            guard copied else {
+                full.seen = FullPhone.lacksRoom(for: source)
+                return nil
+            }
             files.append(target)
         }
         return files
@@ -216,10 +221,10 @@ enum ShelfCopyExport {
 
     /// Into this device's photo library. The count saved, or -1 when the
     /// library refused (no access, or the write failed).
-    private static func saveToLibrary(_ originals: [LocatedOriginal], export: Centraid_Core_V1_ExportOriginals) async -> Int {
+    private static func saveToLibrary(_ originals: [LocatedOriginal], export: Centraid_Core_V1_ExportOriginals, full: FullPhone) async -> Int {
         let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
         guard status == .authorized || status == .limited else { return -1 }
-        guard let files = await prepare(originals, keepLocation: true, export: export) else { return -1 }
+        guard let files = await prepare(originals, keepLocation: true, export: export, full: full) else { return -1 }
         defer { files.forEach { try? FileManager.default.removeItem(at: $0) } }
         do {
             try await PHPhotoLibrary.shared().performChanges {
@@ -230,6 +235,7 @@ enum ShelfCopyExport {
             }
             return files.count
         } catch {
+            full.seen = EffectReason.ofWrite(error, otherwise: EffectReason.failed) == EffectReason.storageFull
             return -1
         }
     }
@@ -252,5 +258,20 @@ enum ShelfCopyExport {
         var top = root
         while let presented = top?.presentedViewController { top = presented }
         return top
+    }
+}
+
+/// WHETHER AN EXPORT STOPPED FOR LACK OF SPACE: the shell's fact, worded by Rust (`STATUS_STORAGE_FULL`).
+private final class FullPhone: @unchecked Sendable {
+    var seen = false
+
+    /// A copy that failed with less room free than the file needs.
+    static func lacksRoom(for source: URL) -> Bool {
+        let free = try? FileManager.default.temporaryDirectory
+            .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+            .volumeAvailableCapacityForImportantUsage
+        let size = (try? source.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
+        guard let free, let size else { return false }
+        return free < Int64(size)
     }
 }

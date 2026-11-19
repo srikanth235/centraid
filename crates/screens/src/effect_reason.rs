@@ -16,6 +16,9 @@ pub const UNREADABLE: &str = "unreadable";
 pub const TOO_LARGE: &str = "too_large";
 /// The store or file was there but could not be written.
 pub const UNWRITABLE: &str = "unwritable";
+/// The phone has no room left: a copy or a stage could not be written because the storage is full
+/// (`ENOSPC`, `NSFileWriteOutOfSpaceError`). The core words it ("The phone is full").
+pub const STORAGE_FULL: &str = "storage_full";
 /// The phone store was asked for but this shell does not watch it.
 pub const NOT_WATCHED: &str = "not_watched";
 /// No window or screen was up to perform the effect over.
