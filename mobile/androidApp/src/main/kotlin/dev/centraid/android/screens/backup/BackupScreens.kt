@@ -745,18 +745,24 @@ private fun Apps(rows: List<BackupAppRow>) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             AppTile(appId = row.app_id, size = 32.dp)
+            // THE STATUS UNDER THE NAME at the largest text (#1202): beside it "Photos" broke as "Phot / os".
+            val stacked = rememberLargestText()
+            val status: @Composable () -> Unit = {
+                if (row.status.isNotEmpty()) {
+                    Text(
+                        unitsJoined(row.status),
+                        style = centraidType("annotLabel"),
+                        color = if (row.waiting) StateColor.Amber.text else Surface.meta,
+                    )
+                }
+            }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(row.name, style = centraidType("body"), color = Surface.ink)
                 if (row.detail.isNotEmpty()) Sentence(row.detail)
                 if (row.note.isNotEmpty()) Sentence(row.note)
+                if (stacked) status()
             }
-            if (row.status.isNotEmpty()) {
-                Text(
-                    row.status,
-                    style = centraidType("annotLabel"),
-                    color = if (row.waiting) StateColor.Amber.text else Surface.meta,
-                )
-            }
+            if (!stacked) status()
         }
         if (index < rows.size - 1) RowRule()
     }
