@@ -130,8 +130,14 @@ private const val MIN_BLOCK_MINUTES: Int = 15
 /** The foot a resize drag takes hold of. */
 private val RESIZE_HANDLE: Dp = 14.dp
 
-/** Minutes either side of the now line inside which an hour label is not drawn. */
-private const val NOW_CLASH_MINUTES = 16
+/**
+ * Minutes around the now line inside which an hour label is not drawn. The pill hangs 9dp above the
+ * line and is about 19dp tall, and a label hangs about 15dp below its hour, so they meet from 11
+ * minutes before the hour to 26 minutes after it (at 56dp an hour); a symmetric 16 left the last ten
+ * minutes of that overlapping the label.
+ */
+private const val NOW_CLASH_BEFORE_MINUTES = 11
+private const val NOW_CLASH_AFTER_MINUTES = 26
 
 /** A lane this wide has room for a block's second line. */
 private val DETAIL_FROM_WIDTH: Dp = 96.dp
@@ -634,7 +640,8 @@ private fun HourGrid(
             val now = grid.now
             grid.hours.forEach { mark ->
                 // THE NOW PILL HIDES THE HOUR IT SITS ON.
-                if (now == null || kotlin.math.abs(now.minute - mark.minute) >= NOW_CLASH_MINUTES) {
+                val sinceHour = now?.let { it.minute - mark.minute }
+                if (sinceHour == null || sinceHour <= -NOW_CLASH_BEFORE_MINUTES || sinceHour >= NOW_CLASH_AFTER_MINUTES) {
                     Text(
                         mark.label,
                         style = kitTextStyle(KitType.Badge),
