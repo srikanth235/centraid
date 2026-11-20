@@ -31,9 +31,14 @@ struct AgendaSmartListGrid: View {
 
     /// ONE COLUMN FROM THE REFLOW SIZE UP (#1202): two tiles across left "Scheduled" a word too
     /// wide for its tile, cut to "Schedul..." at the largest text.
-    private var columns: [GridItem] {
-        let across = dynamicTypeSize >= Theme.reflowSize ? 1 : 2
-        return Array(repeating: GridItem(.flexible(), spacing: 10), count: across)
+    private var across: Int { dynamicTypeSize >= Theme.reflowSize ? 1 : 2 }
+
+    /// The tiles, `across` to a row. NOT A LAZY GRID (#1202): this view is a row of the page's
+    /// `List`, a lazy grid sizes itself from the part of the scroll view that is on screen, and a
+    /// row is sized from its content, so with the quick-add bar's keyboard up the two chased each
+    /// other through a text-size change until UIKit trapped. Five tiles need no laziness.
+    private var tileRows: [[Centraid_Core_V1_AgendaSmartList]] {
+        stride(from: 0, to: tiles.count, by: across).map { Array(tiles[$0..<min($0 + across, tiles.count)]) }
     }
 
     /// THE BOARD'S SHAPE (`AndroidReminders`): the counted lists are tiles in two columns, and
@@ -44,34 +49,38 @@ struct AgendaSmartListGrid: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            LazyVGrid(columns: columns, spacing: 10) {
-                ForEach(tiles, id: \.key) { list in
-                    Button { open(list.route) } label: {
-                        VStack(alignment: .leading) {
-                            HStack(alignment: .top) {
-                                CentraidIconView(iconKey: list.iconKey, tint: .white, size: 26)
-                                Spacer(minLength: 0)
-                                if !list.count.isEmpty {
-                                    Text(list.count)
-                                        .kitScaledFont(28, weight: .bold)
-                                        .foregroundStyle(.white)
+            ForEach(Array(tileRows.enumerated()), id: \.offset) { _, rowTiles in
+                HStack(spacing: 10) {
+                    ForEach(rowTiles, id: \.key) { list in
+                        Button { open(list.route) } label: {
+                            VStack(alignment: .leading) {
+                                HStack(alignment: .top) {
+                                    CentraidIconView(iconKey: list.iconKey, tint: .white, size: 26)
+                                    Spacer(minLength: 0)
+                                    if !list.count.isEmpty {
+                                        Text(list.count)
+                                            .kitScaledFont(28, weight: .bold)
+                                            .foregroundStyle(.white)
+                                    }
                                 }
+                                Spacer(minLength: 0)
+                                Text(list.label)
+                                    .kitScaledFont(17, weight: .semibold)
+                                    .foregroundStyle(.white)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
                             }
-                            Spacer(minLength: 0)
-                            Text(list.label)
-                                .kitScaledFont(17, weight: .semibold)
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.7)
+                            .padding(14)
+                            .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
+                            .background(AgendaPalette.token(list.colorKey))
+                            .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
                         }
-                        .padding(14)
-                        .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
-                        .background(AgendaPalette.token(list.colorKey))
-                        .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(list.accessibilityLabel)
+                        .accessibilityIdentifier("agenda-smart-\(list.key)")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(list.accessibilityLabel)
-                    .accessibilityIdentifier("agenda-smart-\(list.key)")
+                    // AN ODD TILE KEEPS ITS COLUMN'S WIDTH, as it did in the grid.
+                    if rowTiles.count < across { Color.clear.frame(maxWidth: .infinity, maxHeight: 0) }
                 }
             }
             ForEach(bars, id: \.key) { list in

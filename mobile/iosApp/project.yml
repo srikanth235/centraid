@@ -424,3 +424,21 @@ targets:
     dependencies:
       - target: Centraid
       - package: SwiftProtobuf
+
+  # THE ACCESSIBILITY AUDIT, AS A UI TEST (#1202, slice S4).
+  #
+  # `performAccessibilityAudit()` over Home, every app root and each root's main
+  # sheet, in light, dark and the largest text size, plus the VoiceOver reading
+  # order of four flows. It drives the built app on the demo vault
+  # (`mobile/scripts/verify-ios.sh` seeds it and hands the seed through
+  # `TEST_RUNNER_CENTRAID_DEV_SEED`); a launch without a vault stops at once.
+  CentraidUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+    sources:
+      - path: UITests
+    dependencies:
+      - target: Centraid

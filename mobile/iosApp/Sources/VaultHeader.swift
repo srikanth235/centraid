@@ -91,8 +91,9 @@ struct VaultHeader: View {
                         .foregroundStyle(Theme.color("link", scheme))
                 }
             }
-            .frame(minHeight: 18)
-            .contentShape(Rectangle())
+            // 44 POINTS TO TOUCH, THE LINE'S OWN 24 TO LOOK AT (#1202): the iOS hit floor.
+            .frame(minHeight: 24)
+            .hitArea()
         }
         .buttonStyle(.plain)
         // THE BACKUP TAB ITSELF IS PLAIN TEXT, not a dimmed control: the status
@@ -138,8 +139,8 @@ struct VaultHeader: View {
                     .foregroundStyle(Theme.color("text", scheme))
                     .lineLimit(largestText ? nil : 1)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
+                    .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+                    .hitArea()
             }
             .buttonStyle(.plain)
             .accessibilityLabel(bar.switchLabel)

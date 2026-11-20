@@ -400,8 +400,9 @@ struct EditableFieldRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(key)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color("textSoft", scheme))
+                // THE SEMIBOLD FACE IN THE FULL INK (#1202): "Title" in the soft ink read under 4.5:1 to the audit.
+                .centraidType("annotLabelOn")
+                .foregroundStyle(Theme.color("text", scheme))
             TextField(placeholder, text: $text)
                 .centraidType("body")
                 .foregroundStyle(Theme.color("text", scheme))
@@ -607,9 +608,9 @@ struct MetaLine: View {
     private func partText(_ text: String, accented: Bool) -> some View {
         let oneWord = !text.contains(" ")
         if accented {
-            Text(text).foregroundStyle(accent.text).kitLineLimit(1).minimumScaleFactor(oneWord ? 0.5 : 1)
+            Text(text).foregroundStyle(accent.text).kitLineLimit(oneWord ? 1 : 2, wide: 3).minimumScaleFactor(oneWord ? 0.5 : 1)
         } else {
-            Text(text).kitLineLimit(1).minimumScaleFactor(oneWord ? 0.5 : 1)
+            Text(text).kitLineLimit(oneWord ? 1 : 2, wide: 3).minimumScaleFactor(oneWord ? 0.5 : 1)
         }
     }
 

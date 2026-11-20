@@ -109,6 +109,8 @@ struct SheetRow: View {
                     // THE MARK IS A SMALL TILE in the app's fill with a white glyph; a
                     // destructive row's is the state's red.
                     KitTile(iconKey: iconKey, size: 32, fill: destructive ? StateColor.red.fill : nil)
+                        // THE MARK IS DECORATION (#1202): the row's words say what it does.
+                        .accessibilityHidden(true)
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(label)

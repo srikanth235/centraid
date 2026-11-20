@@ -387,6 +387,7 @@ private struct PeopleSectionLetter: View {
             .padding(.bottom, 4)
             .background(Surface.page)
             .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("people-section-letter")
     }
 }
 
@@ -400,6 +401,21 @@ private struct PeopleIndexRail: View {
     @State private var current: String?
     @ScaledMetric(relativeTo: .caption2) private var cell: CGFloat = 18
 
+    /// THE LETTER A SCREEN READER IS ON: the one the member last touched or stepped to.
+    private var spoken: Centraid_Core_V1_PeopleIndexLetter? {
+        letters.first(where: { $0.letter == current }) ?? letters.first
+    }
+
+    /// Steps to the next (or previous) letter that has people, and jumps to its section.
+    private func step(_ direction: AccessibilityAdjustmentDirection) {
+        guard let at = letters.firstIndex(where: { $0.letter == spoken?.letter }) else { return }
+        let next: [Centraid_Core_V1_PeopleIndexLetter] = direction == .increment
+            ? Array(letters[(at + 1)...]) : Array(letters[..<at].reversed())
+        guard let letter = next.first(where: { $0.hasRows_p }) ?? next.first else { return }
+        current = letter.letter
+        jump(letter.sectionKey)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             ForEach(letters, id: \.letter) { letter in
@@ -409,10 +425,7 @@ private struct PeopleIndexRail: View {
                     .fontWeight(.semibold)
                     .foregroundStyle(letter.hasRows_p ? accent.text : Surface.meta)
                     .frame(width: 28, height: cell)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(letter.accessibilityLabel)
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityAction { jump(letter.sectionKey) }
+                    .accessibilityHidden(true)
             }
         }
         // THE TOUCH AREA IS A 44 PT-WIDE STRIP along the whole index, and a touch picks the nearest
@@ -431,6 +444,13 @@ private struct PeopleIndexRail: View {
                 .onEnded { _ in current = nil }
         )
         .padding(.trailing, 2)
+        // ONE ADJUSTABLE STOP, NOT A STOP PER LETTER (#1202): twenty-seven 28 x 18 pt letters are
+        // each too small to hit, and a screen reader that stepped through them would take
+        // twenty-seven swipes to cross the list. The strip is one element, a swipe up or down moves
+        // to the next letter, and it says which letter it is on, as the system's own index does.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spoken?.accessibilityLabel ?? "")
+        .accessibilityAdjustableAction(step)
         .accessibilityIdentifier("people-index")
     }
 }
@@ -571,9 +591,11 @@ private struct PeopleRosterRowView: View {
                             .kitType(.row)
                             .foregroundStyle(Surface.ink)
                             .kitLineLimit(1)
+                            .accessibilityIdentifier("people-row-name")
                         meta
                             .kitType(.meta)
                             .foregroundStyle(Surface.meta)
+                            .accessibilityIdentifier("people-row-meta")
                     }
                     if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
                     ForEach(Array(row.chips.filter { !isReminder($0) }.enumerated()), id: \.offset) { _, chip in
@@ -774,6 +796,7 @@ struct PeopleAvatarView: View {
         Text(avatar.initials)
             .centraidType(size > 40 ? "title" : "annotLabelOn")
             .foregroundStyle(Theme.color("text", scheme))
+            .accessibilityIdentifier("people-avatar-initials")
             .kitScaledSquare(size, relativeTo: size > 40 ? .largeTitle : .footnote)
             .background(
                 Circle().fill(Theme.color(peopleHue(avatar.hueKey, else: "bgSunken"), scheme).opacity(0.28))

@@ -384,6 +384,7 @@ private struct NotesEditorRoom<Trailing: View, Content: View>: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityShowsLargeContentViewer { Text(closeLabel) }
                     .accessibilityIdentifier("kit-editor-close")
                 }
                 ToolbarItem(placement: .principal) {
@@ -391,6 +392,7 @@ private struct NotesEditorRoom<Trailing: View, Content: View>: View {
                         .kitType(.meta)
                         .foregroundStyle(refused ? StateColor.red.text : Surface.meta)
                         .kitLineLimit(1)
+                        .accessibilityShowsLargeContentViewer { Text(status) }
                         .accessibilityIdentifier("kit-autosave-status")
                         // A principal toolbar item does not redraw when only its text changes; a
                         // new identity per sentence does, so a tapped chip's "in the trash" shows.
