@@ -64,8 +64,6 @@ struct Ctx {
     profile: Profile,
     today: Date,
     history: i64,
-    /// What an amount of the pools (priced in dollars) comes to in the member's currency: rupees are about eighty to one.
-    fx: f64,
 }
 
 impl Ctx {
@@ -164,7 +162,6 @@ pub(crate) fn build(spec: WorldSpec, settings: Settings) -> World {
         profile,
         today,
         history: i64::from(settings.history_days),
-        fx: if persona.currency == "INR" { 80.0 } else { 1.0 },
     };
     let epoch = format!("{}T09:00", ctx.ago(ctx.history + 2));
 
@@ -675,6 +672,34 @@ fn first_of_window(ctx: &Ctx) -> Date {
         .unwrap_or(ctx.today)
 }
 
+/// What an amount of the pools (priced in dollars) comes to in `currency`, at a round rate.
+fn fx(currency: &str) -> f64 {
+    match currency {
+        "INR" => 85.0,
+        "EUR" => 0.92,
+        "GBP" => 0.79,
+        "AED" => 3.67,
+        "SGD" => 1.35,
+        _ => 1.0,
+    }
+}
+
+/// A foreign account's currency: one of the others, the common ones likelier.
+fn foreign_currency(rng: &mut Rng, base: &str) -> String {
+    let pool: Vec<(&str, u32)> = [
+        ("USD", 4),
+        ("EUR", 3),
+        ("GBP", 2),
+        ("AED", 2),
+        ("SGD", 2),
+        ("INR", 2),
+    ]
+    .into_iter()
+    .filter(|(c, _)| *c != base)
+    .collect();
+    rng.weighted(&pool).to_string()
+}
+
 struct Account {
     key: String,
     name: String,
@@ -691,8 +716,10 @@ struct Line<'a> {
     amount: f64,
 }
 
-#[derive(Default)]
 struct Ledger {
+    /// Each account's currency by key, and the vault's: only base-currency spending sizes budgets.
+    currencies: std::collections::BTreeMap<String, String>,
+    base: String,
     rows: Vec<Value>,
     /// Outflow per `(month, category)`, what the budgets are sized from.
     spent: std::collections::BTreeMap<(String, String), f64>,
@@ -704,8 +731,13 @@ impl Ledger {
     /// Add a line and return its key.
     fn push(&mut self, ctx: &mut Ctx, month: &str, line: &Line<'_>) -> String {
         let key = format!("x{}", self.rows.len());
-        let amount = (line.amount * ctx.fx).round();
-        let amount = if ctx.fx == 1.0 { line.amount } else { amount };
+        let currency = self.currencies.get(line.account).map_or("", String::as_str);
+        // rupees are whole; the others keep their cents
+        let amount = if currency == "INR" {
+            (line.amount * fx(currency)).round()
+        } else {
+            line.amount * fx(currency)
+        };
         let mut name = line.merchant.to_owned();
         if ctx.rng.chance(ctx.settings.near_duplicates * 0.5) {
             name = if let Some((_, spelt)) = self.spellings.iter().find(|(m, _)| m == line.merchant)
@@ -725,7 +757,7 @@ impl Ledger {
         });
         if let Some(category) = line.category.filter(|_| ctx.rng.chance(0.88)) {
             row["category"] = json!(category);
-            if amount < 0.0 {
+            if amount < 0.0 && currency == self.base {
                 *self
                     .spent
                     .entry((month.to_owned(), category.to_owned()))
@@ -746,22 +778,20 @@ impl Ledger {
 fn money(ctx: &mut Ctx, root: &Rng, persona: &Persona) -> Vec<(String, Value)> {
     ctx.rng = root.fork("money");
     let mut wanted: Vec<usize> = vec![0, 1];
-    if ctx.rng.chance(0.7) {
-        wanted.push(2);
+    for (pick, odds) in [(2, 0.7), (3, 0.4), (4, 0.25), (5, 0.15)] {
+        if ctx.rng.chance(odds) {
+            wanted.push(pick);
+        }
     }
-    if ctx.rng.chance(0.4) {
-        wanted.push(3);
-    }
+    // the first two accounts (the one paid into and the savings pot it transfers to) are in the
+    // vault's currency; of the rest, each is likelier foreign than not, and a world with any
+    // has at least one
     let mut accounts: Vec<Account> = Vec::new();
     for (index, pick) in wanted.into_iter().enumerate() {
         let (name, kind) = pools::ACCOUNTS[pick];
-        let currency = if kind == "credit_card" && ctx.rng.chance(0.25) {
-            if persona.currency == "EUR" {
-                "GBP"
-            } else {
-                "EUR"
-            }
-            .to_owned()
+        let foreign = index >= 2 && ctx.rng.chance(0.55);
+        let currency = if foreign {
+            foreign_currency(&mut ctx.rng, &persona.currency)
         } else {
             persona.currency.clone()
         };
@@ -771,6 +801,9 @@ fn money(ctx: &mut Ctx, root: &Rng, persona: &Persona) -> Vec<(String, Value)> {
             kind: kind.to_owned(),
             currency,
         });
+    }
+    if accounts.len() > 2 && accounts.iter().all(|a| a.currency == persona.currency) {
+        accounts[2].currency = foreign_currency(&mut ctx.rng, &persona.currency);
     }
     let account_rows: Vec<Value> = accounts
         .iter()
@@ -790,7 +823,16 @@ fn money(ctx: &mut Ctx, root: &Rng, persona: &Persona) -> Vec<(String, Value)> {
         .collect();
     let window_start = first_of_window(ctx).max(ctx.ago(ctx.history));
     let profile = ctx.profile;
-    let mut ledger = Ledger::default();
+    let mut ledger = Ledger {
+        currencies: accounts
+            .iter()
+            .map(|a| (a.key.clone(), a.currency.clone()))
+            .collect(),
+        base: persona.currency.clone(),
+        rows: Vec::new(),
+        spent: std::collections::BTreeMap::new(),
+        spellings: Vec::new(),
+    };
     let mut transfers: Vec<Value> = Vec::new();
     let mut month = window_start.first_of_month();
     while month <= ctx.today {
@@ -1115,4 +1157,73 @@ fn links(
         }
     }
     rows
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use crate::settings::Split;
+    use crate::world::{World, plan_sized};
+
+    fn worlds() -> Vec<World> {
+        plan_sized(7, |split| if split == Split::Train { 40 } else { 0 })
+            .into_iter()
+            .map(World::generate)
+            .collect()
+    }
+
+    #[test]
+    fn worlds_mix_currencies_with_the_vaults_own_the_common_one() {
+        let (mut bases, mut foreign_worlds, mut foreign_seen) = (BTreeMap::new(), 0, Vec::new());
+        for world in worlds() {
+            let base = world.persona.currency.clone();
+            *bases.entry(base.clone()).or_insert(0) += 1;
+            let Some(accounts) = world.doc["accounts"].as_array() else {
+                continue;
+            };
+            let currency_of = |key: &str| {
+                accounts
+                    .iter()
+                    .find(|a| a["key"] == key)
+                    .and_then(|a| a["currency"].as_str())
+                    .unwrap_or(&base)
+                    .to_owned()
+            };
+            let foreign: Vec<String> = accounts
+                .iter()
+                .filter_map(|a| a["currency"].as_str().map(str::to_owned))
+                .collect();
+            // an account in the vault's own currency states none
+            assert!(foreign.iter().all(|c| *c != base), "{}", world.id());
+            assert!(foreign.len() <= 3, "{}", world.id());
+            foreign_worlds += usize::from(!foreign.is_empty());
+            foreign_seen.extend(foreign);
+            // a transaction is in its account's currency, and a budget in the vault's
+            let mut seen_foreign_row = false;
+            for t in world.doc["transactions"].as_array().into_iter().flatten() {
+                let currency = currency_of(t["account"].as_str().expect("account"));
+                let amount = t["amount"].as_f64().expect("amount");
+                if currency == "INR" {
+                    assert_eq!(amount, amount.round(), "rupees are whole: {t}");
+                }
+                seen_foreign_row |= currency != base;
+            }
+            assert_eq!(
+                seen_foreign_row,
+                accounts
+                    .iter()
+                    .any(|a| a["currency"].is_string() && a["kind"] != "savings"),
+                "{}",
+                world.id()
+            );
+        }
+        let most = bases.iter().max_by_key(|(_, n)| **n).expect("a base").0;
+        assert_eq!(most, "INR", "{bases:?}");
+        assert!(bases.len() >= 4, "{bases:?}");
+        assert!(foreign_worlds >= 20, "{foreign_worlds}");
+        foreign_seen.sort();
+        foreign_seen.dedup();
+        assert!(foreign_seen.len() >= 4, "{foreign_seen:?}");
+    }
 }

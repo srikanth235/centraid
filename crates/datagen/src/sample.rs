@@ -445,6 +445,10 @@ impl<'a> Sampler<'a> {
                 break;
             }
             let Some(v) = row.num(field) else { continue };
+            // a threshold reads in the vault's currency: a row in another passes none
+            if *field == "amount" && row.text("currency").is_some_and(|c| c != self.facts.base) {
+                continue;
+            }
             let (cmp, bound) = if v < 0.0 {
                 (Cmp::Le, -nice_down(-v))
             } else if rng.chance(0.5) {
