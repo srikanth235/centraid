@@ -251,3 +251,32 @@ fn the_home_search_and_ask_routes_are_the_shells_values() {
         ("Find x", "notes")
     );
 }
+
+fn commit(d: &mut Driver, i: u64, term: &str) {
+    type_term(d, i, term);
+    say(d, i, S::Committed(wire::home_search_event::Committed {}));
+}
+
+#[test]
+fn a_recent_search_is_still_there_when_search_is_closed_and_opened_again() {
+    let (mut d, i) = opened();
+    commit(&mut d, i, "tahoe");
+    commit(&mut d, i, "alpha");
+    d.pop("home", i);
+    let again = d.push("home", shell::routes::search());
+    let Some(wire::home_search_state::Content::Resting(resting)) = state(&d, again).content else {
+        panic!("not resting");
+    };
+    assert_eq!(resting.suggestions_label, "Recent");
+    assert_eq!(resting.suggestions, ["alpha", "tahoe"]);
+    assert_eq!(state(&d, again).recent, ["alpha", "tahoe"]);
+}
+
+#[test]
+fn a_fresh_core_has_no_recent_searches() {
+    let (mut d, i) = opened();
+    commit(&mut d, i, "tahoe");
+    let (fresh, j) = opened();
+    assert!(state(&fresh, j).recent.is_empty());
+    assert!(state(&d, i).recent == ["tahoe"]);
+}

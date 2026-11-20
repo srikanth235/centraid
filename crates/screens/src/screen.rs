@@ -114,6 +114,7 @@ pub struct Ctx<'a> {
     done: RefCell<Done>,
     follows: Follows,
     alerts: crate::kit::permission::AlertBoard,
+    recents: crate::kit::search::Recents,
     /// The line a page that just closed handed down to this screen, until it takes it.
     handed_in: RefCell<Option<Handed>>,
 }
@@ -132,6 +133,7 @@ impl<'a> Ctx<'a> {
             done: RefCell::new(Done::default()),
             follows: Follows::default(),
             alerts: crate::kit::permission::AlertBoard::default(),
+            recents: crate::kit::search::Recents::default(),
             handed_in: RefCell::new(None),
         }
     }
@@ -175,6 +177,19 @@ impl<'a> Ctx<'a> {
     pub(crate) fn with_alerts(mut self, alerts: crate::kit::permission::AlertBoard) -> Self {
         self.alerts = alerts;
         self
+    }
+
+    /// This context over the runtime's one list of recent searches (`kit::search::Recents`).
+    #[must_use]
+    pub(crate) fn with_recents(mut self, recents: crate::kit::search::Recents) -> Self {
+        self.recents = recents;
+        self
+    }
+
+    /// The recent searches, kept for the runtime's life (ruling 24, #1202).
+    #[must_use]
+    pub fn recents(&self) -> &crate::kit::search::Recents {
+        &self.recents
     }
 
     /// What the phone last said about alerts, shared by every screen (#1188, NA1).
