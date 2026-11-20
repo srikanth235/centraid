@@ -160,7 +160,7 @@ fn pre_new_account(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         ));
     }
     if let Some(currency) = ctx.optional_str("currency")
-        && currency.trim().len() != 3
+        && currency_code(currency).is_none()
     {
         return Ok(Some(
             "A currency is a three-letter code like USD.".to_owned(),
@@ -747,7 +747,7 @@ fn pre_plan(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         return Ok(Some("There is no such category.".to_owned()));
     }
     if let Some(currency) = ctx.optional_str("currency")
-        && currency.trim().len() != 3
+        && currency_code(currency).is_none()
     {
         return Ok(Some(
             "A currency is a three-letter code like USD.".to_owned(),

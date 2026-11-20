@@ -249,3 +249,44 @@ fn an_account_changes_currency_only_while_it_has_no_transactions() {
     // Saying the currency it already has is no change.
     world.ok("account.edit", json!({ "id": id, "currency": "EUR" }));
 }
+
+#[test]
+fn a_currency_is_three_letters_wherever_money_names_one() {
+    let world = World::new();
+    for bad in ["U$D", "US", "1ND", "EURO"] {
+        assert!(
+            world
+                .refused(
+                    "account.add",
+                    json!({ "title": "Bad", "type": "cash", "currency": bad })
+                )
+                .contains("three-letter"),
+            "{bad}"
+        );
+    }
+    let food = world.ok("category.add", json!({ "title": "Zebra food" }))["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    assert!(
+        world
+            .refused(
+                "budget.set",
+                json!({ "month": "2026-03", "category_id": food, "amount_minor": 100, "currency": "12A" })
+            )
+            .contains("three-letter")
+    );
+    world.ok(
+        "budget.set",
+        json!({ "month": "2026-03", "category_id": food, "amount_minor": 100, "currency": "inr" }),
+    );
+    assert_eq!(
+        world
+            .text(
+                "SELECT currency FROM budget WHERE category_id = ?1",
+                &[&food]
+            )
+            .as_deref(),
+        Some("INR")
+    );
+}
