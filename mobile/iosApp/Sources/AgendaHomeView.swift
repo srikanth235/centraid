@@ -60,7 +60,10 @@ struct AgendaHomeView: View {
                     showsTitle: !header.title.isEmpty
                 )
             },
-            showsBand: !denied && !state.band.isEmpty && !quickAddTyping
+            // A bar Rust has put away holds no keyboard, whatever the field last said: its view went with
+            // the focus, so the callback that clears `quickAddTyping` never came (the band stayed away
+            // after a task was added and the bar closed, #1202).
+            showsBand: !denied && !state.band.isEmpty && !(quickAddTyping && state.quickAdd.shown && state.quickAdd.drawn)
         ) {
             AppBand(
                 app: state.appKey,

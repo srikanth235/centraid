@@ -512,18 +512,22 @@ struct PushedPage<Trailing: View, Content: View>: View {
                     .accessibilityLabel(KitWords.backTo(parent: parentTitle))
                     .accessibilityIdentifier("kit-pushed-back")
                 }
-                if let titleColor {
-                    // THE TITLE IN THE PAGE'S OWN COLOUR, still inline in the top row.
+                if titleColor != nil || titleIdentifier != nil {
+                    // THE TITLE IN THE PAGE'S OWN COLOUR (ink when it has none, so a page that names its title
+                    // by id, the Inbox's `tasks-list-title`, draws it on both shells), still inline in the top row.
                     ToolbarItem(placement: .principal) {
                         HStack(spacing: 6) {
-                            if !titleIcon.isEmpty { CentraidIconView(iconKey: titleIcon, tint: titleColor, size: 20) }
+                            if !titleIcon.isEmpty { CentraidIconView(iconKey: titleIcon, tint: titleColor ?? Surface.ink, size: 20) }
                             Text(title)
                                 .kitType(.section)
-                                .foregroundStyle(titleColor)
+                                .foregroundStyle(titleColor ?? Surface.ink)
                                 .lineLimit(1)
                                 .accessibilityAddTraits(.isHeader)
-                                .accessibilityIdentifier(titleIdentifier ?? "kit-header-title")
                         }
+                        // THE ID IS ON THE ROW, not the text: a toolbar item drops an id set on a view inside it
+                        // (the flows' `tasks-list-title` found nothing on iOS, #1202).
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier(titleIdentifier ?? "kit-header-title")
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) { trailing() }
