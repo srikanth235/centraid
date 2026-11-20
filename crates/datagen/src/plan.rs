@@ -244,6 +244,10 @@ impl std::ops::Drop for Live {
             file.push(suffix);
             let _ = std::fs::remove_file(file);
         }
+        // The vault keeps attachment bytes beside its file; a copy's store goes with it.
+        let mut blobs = self.vault.as_os_str().to_os_string();
+        blobs.push(".blobs");
+        let _ = std::fs::remove_dir_all(blobs);
     }
 }
 
@@ -373,6 +377,9 @@ impl<'a> WorldRun<'a> {
             file.push(suffix);
             let _ = std::fs::remove_file(file);
         }
+        let mut blobs = vault.as_os_str().to_os_string();
+        blobs.push(".blobs");
+        let _ = std::fs::remove_dir_all(blobs);
         let kept = out_turns.len();
         let record = (kept > 0).then(|| {
             let mut tags: Vec<String> = scenario.tags.clone();
