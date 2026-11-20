@@ -70,10 +70,12 @@ struct MachineTextEditor: View {
     @State private var typed = ""
     @State private var echoes = TypedText(initial: "")
     @FocusState private var focused: Bool
+    @Environment(\.wordsReveal) private var reveal
 
     var body: some View {
         TextEditor(text: $typed)
             .focused($focused)
+            .onChange(of: focused) { _, now in if now { reveal() } }
             .scrollContentBackground(.hidden)
             .overlay(alignment: .topLeading) {
                 if typed.isEmpty, !placeholder.isEmpty {

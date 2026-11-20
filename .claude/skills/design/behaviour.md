@@ -107,6 +107,7 @@ Search says what it searched for, and offers the assistant when it found nothing
 Width belongs to the control, not to the call: there is no per-call width switch. Rulings that hold for every control:
 
 - **Chrome and floating controls.** Headers and tab bars are the platform's own, glass on iOS. Floating controls (the app band, its round keys, the search field, the Photos selection bar) take each platform's native look: Liquid Glass on iOS 26 (system material before it, paper under Reduce Transparency or Increase Contrast), a solid tonal pill on Android. Content stays paper. Parity between shells is the same behaviour, words and selector ids, not the same pixels. One row height of 44, page margin of 18, text follows the system size within a cap, text in a fixed-height box is clamped never clipped.
+- **The keyboard never covers a focused field.** A page that scrolls and pins its answers at the foot (the words pages: Pair, Restore, Recovery key) rides the keyboard with the footer above it, and the field the member is in is scrolled into the middle of what is left, so neither the keys nor the footer's buttons sit over it (`WordsFrame` on iOS, `revealWhenFocused` on Android). The round X that leaves such a page carries its id on the button itself.
 
 - **Destructive** confirms through `ConfirmSheet`, never an alert or a confirmation dialog.
 - **Disabled** is drawn on the leaf, never a faded container, and a disabled verb is still drawn so the member sees what becomes possible.
