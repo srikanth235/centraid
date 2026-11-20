@@ -76,18 +76,9 @@ name: onboarding
       id: "kit-empty"
     timeout: 10000
 - assertNotVisible: "See an example"
-# Back: the navigation bar's on iOS (`back` is Android's system key only).
-- runFlow:
-    when:
-      platform: iOS
-    commands:
-      - tapOn:
-          id: "BackButton"
-- runFlow:
-    when:
-      platform: Android
-    commands:
-      - back
+# Back to Home: an app root has no back chevron (#1173); the band's Home capsule is the way, on both shells.
+- tapOn:
+    id: "docs-band-home"
 
 # PEOPLE OFFERS THE PHONE'S CONTACTS in place of its add, at the point of use.
 - scrollUntilVisible:
@@ -95,7 +86,10 @@ name: onboarding
       id: "home-tile-people"
 - tapOn:
     id: "home-tile-people"
+# A phone that was never asked offers "Import from Contacts" (`kit-empty-import`); one whose grant is
+# DENIED, as this flow's is, cannot be asked again, so it says so and offers Settings (`kit-empty-action`,
+# "Contacts access is off", #1186). Either way no system prompt lands on the member.
 - extendedWaitUntil:
     visible:
-      id: "kit-empty-import"
+      id: "kit-empty-(import|action)"
     timeout: 10000

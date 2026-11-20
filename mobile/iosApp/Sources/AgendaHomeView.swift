@@ -60,7 +60,10 @@ struct AgendaHomeView: View {
                     showsTitle: !header.title.isEmpty
                 )
             },
-            showsBand: !denied && !state.band.isEmpty && !quickAddTyping,
+            // A bar Rust has put away holds no keyboard, whatever the field last said: its view went with
+            // the focus, so the callback that clears `quickAddTyping` never came (the band stayed away
+            // after a task was added and the bar closed, #1202).
+            showsBand: !denied && !state.band.isEmpty && !(quickAddTyping && state.quickAdd.shown && state.quickAdd.drawn),
             // THE CALENDAR'S GRIDS (Day, Week, Month, Year) KEEP THE FULL WIDTH (ruling 27); the lists stand in the readable column.
             readable: !isCalendarGrid(state)
         ) {
@@ -701,11 +704,8 @@ private struct AgendaTodoList: View {
                     }
                 }
                 if !todo.newProjectLabel.isEmpty {
-                    HStack {
-                        KitLink(label: todo.addListLabel.isEmpty ? todo.newProjectLabel : todo.addListLabel, identifier: "agenda-new-project") {
-                            send(AgendaEvents.make { $0.sheetOpened = .with { $0.sheet = .newProject } })
-                        }
-                        Spacer(minLength: 0)
+                    KitLink(label: todo.addListLabel.isEmpty ? todo.newProjectLabel : todo.addListLabel, identifier: "agenda-new-project", fillsRow: true) {
+                        send(AgendaEvents.make { $0.sheetOpened = .with { $0.sheet = .newProject } })
                     }
                     .padding(.horizontal, CentraidGeometry.pageMargin)
                     .padding(.top, 12)

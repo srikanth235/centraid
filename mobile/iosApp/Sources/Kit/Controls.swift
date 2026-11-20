@@ -87,6 +87,9 @@ struct KitLink: View {
     /// A link that wears the surrounding page's colour (the words pages' teal) instead of the link blue.
     var tint: Color? = nil
     var identifier: String = ""
+    /// The link's whole row is its hit area (a link alone on a row: a tap anywhere along it, which is
+    /// also where the row's one accessibility element is activated).
+    var fillsRow: Bool = false
     let action: () -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -100,7 +103,7 @@ struct KitLink: View {
             Text(label)
                 .centraidType(dense ? "annotLabelOn" : "smallStrong")
                 .foregroundStyle(enabled ? ink : Theme.color("textDisabled", scheme))
-                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                .frame(maxWidth: fillsRow ? .infinity : nil, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

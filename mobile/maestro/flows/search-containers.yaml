@@ -28,7 +28,18 @@ name: search-containers
       - tapOn:
           id: "agenda-style-name"
       - inputText: "Orchard"
-      - hideKeyboard
+      # iOS's keyboard has a Done key that only puts the keyboard away (Maestro's hideKeyboard finds no
+      # dismiss action on it); Android hides it with hideKeyboard.
+      - runFlow:
+          when:
+            platform: iOS
+          commands:
+            - pressKey: Enter
+      - runFlow:
+          when:
+            platform: Android
+          commands:
+            - hideKeyboard
       - tapOn:
           id: "agenda-style-submit"
 # A list's row is one spoken element ("Orchard, 0 tasks"), so the name is matched at its start.

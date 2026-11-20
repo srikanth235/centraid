@@ -39,7 +39,22 @@ name: agenda-todo
     visible:
       id: "agenda-status-action"
     timeout: 5000
-- hideKeyboard
+# Maestro's hideKeyboard needs a dismiss key the iOS keyboard does not have; its blue key (Return on an
+# empty bar) closes the quick-add bar and puts the keyboard away, so iOS presses it.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - pressKey: Enter
+- scrollUntilVisible:
+    element:
+      id: "agenda-project-inbox"
+    direction: DOWN
 - tapOn:
     id: "agenda-project-inbox"
 - extendedWaitUntil:
@@ -70,7 +85,7 @@ name: agenda-todo
       platform: iOS
     commands:
       - tapOn:
-          id: "BackButton"
+          id: "kit-pushed-back"
 - runFlow:
     when:
       platform: Android
