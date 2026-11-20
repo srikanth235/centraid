@@ -36,6 +36,25 @@ struct SearchCircle: View {
 /// editing (the row then moves into the band's slot); focus is a binding both
 /// ways, so SwiftUI can raise the keyboard and the keyboard's own dismissal
 /// reaches SwiftUI.
+/// WHERE THE KEYBOARD IS, as the system last said (empty while it is away). The window's
+/// `keyboardLayoutGuide` reads empty until something is pinned to it.
+@MainActor
+final class KeyboardFrame {
+    static let shared = KeyboardFrame()
+    private(set) var frame = CGRect.zero
+
+    private init() {
+        let center = NotificationCenter.default
+        center.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { note in
+            let end = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect) ?? .zero
+            MainActor.assumeIsolated { KeyboardFrame.shared.frame = end }
+        }
+        center.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { KeyboardFrame.shared.frame = .zero }
+        }
+    }
+}
+
 struct BareSearchField: UIViewRepresentable {
     @Binding var text: String
     @Binding var focused: Bool
@@ -48,6 +67,7 @@ struct BareSearchField: UIViewRepresentable {
     var onSubmit: (() -> Void)? = nil
 
     func makeUIView(context: Context) -> UITextField {
+        _ = KeyboardFrame.shared
         let field = UITextField()
         field.font = font
         field.textColor = color
@@ -99,8 +119,23 @@ struct BareSearchField: UIViewRepresentable {
 
         @objc func changed(_ field: UITextField) { parent.text = field.text ?? "" }
 
+        // A FIELD UNDER ITS OWN KEYBOARD IS ASKED AGAIN (#1202). A page opened from the results (a note
+        // from Home's search) hands the field its first responder back while it closes, mid-transition,
+        // and the page never hears the keyboard arrive: the keyboard is up and the field, riding it,
+        // stays where it rests, beneath the keys with its close key. Once the transition has settled,
+        // a field the keyboard covers gives the keyboard up and takes it again, which the page does hear.
         func textFieldDidBeginEditing(_ field: UITextField) {
             if !parent.focused { parent.focused = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak field] in
+                guard let field, field.isFirstResponder, let window = field.window else { return }
+                let keys = MainActor.assumeIsolated { KeyboardFrame.shared.frame }
+                let mine = field.convert(field.bounds, to: window)
+                guard keys.height > 0, mine.maxY > keys.minY + 1 else { return }
+                UIView.performWithoutAnimation {
+                    field.resignFirstResponder()
+                    field.becomeFirstResponder()
+                }
+            }
         }
 
         func textFieldDidEndEditing(_ field: UITextField) {
@@ -347,6 +382,7 @@ struct BandSearchField: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear search")
+                .accessibilityIdentifier("\(identifier)-clear")
             }
         }
         .padding(.leading, BandMetrics.searchGlyphLead)

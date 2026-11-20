@@ -131,7 +131,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `row-action-<id>` / `row-menu-<id>` | any swipeable task row | the swipe's and the long press's Details, Flag and Delete (`details`, `flag`, `delete`) |
 | `tasks-title-field` | a task's page | the title field, the page's mark that it is open; its Done closes it |
 | `tasks-list` / `tasks-project` | Tasks pages (pushed from Reminders' More and lists page) | a list page (Inbox, Anytime, Logbook) and a project page; their back control reads "Back to Reminders" (`room-back`). `tasks-project` is the rows' list, drawn only while the project has rows; an empty one draws `kit-empty` and `tasks-project-edit` |
-| `room-back` | every pushed page on Android | the back chevron at the top left, spoken as "Back to <parent>" (iOS pushed pages use the navigation bar's `BackButton`) |
+| `room-back` | every pushed page on Android | the back chevron at the top left, spoken as "Back to <parent>" (iOS pushed pages use `kit-pushed-back`) |
 | `home-search-group-chat` | Home search (iOS only) | the head of the Chats group: the member's own conversations, last among the groups, drawn only where the shell has a Chat tab ([#1097](https://github.com/srikanth235/centraid/issues/1097), R-1097-24); its rows are `home-search-row-chat.thread-<id>`, and a tap opens that thread in the Chat tab |
 | `chat-chats` | Chat | the header's round Chats key (the clock, trailing); it pushes the Chats page |
 | `chat-chats-page` | Chat | the Chats page itself: a chevron back (`chat-chats-back`), the list, the search key at the foot; the band is not drawn under it |
@@ -208,8 +208,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `health-action-trash`, `health-status-action` | a workout | "Move to trash" under the figures (`HealthWorkoutData.trash_label`; no confirm), and the status line's Undo after it (`HealthWorkoutEvent.status_acted`); the page stays on the gone card (#1185) |
 | `money-action-trash`, `money-status-action` | a transaction | the action row "Move to trash" (`MoneyTransactionEvent.action`, key `trash`; no confirm; it replaced `void`), and the status line's Undo after it (`MoneyTransactionEvent.status_acted`); the page stays on the gone card (#1185) |
 | `health-connect-page`, `health-choice-<key>`, `health-connect`, `health-connect-status` | Connect | the page, one type's switch, the one Ink button ("Connect to Apple Health"), the status line |
-| `kit-pushed-back` | any pushed page (iOS) | the kit's back control, named for the parent |
-| `BackButton` | any pushed page (iOS) | the navigation bar's back — UIKit's own id; Maestro's `back` is Android's system key and does nothing on iOS |
+| `kit-pushed-back` | any pushed page (iOS) | the kit's back chevron, named for the parent (the system's `BackButton` is hidden); Maestro's `back` is Android's system key and does nothing on iOS |
 
 Home, its Settings and vault sheets, the Backup screen, the welcome screen and Chat set tags; the Backup screen's ids are written in both shells and selected by no flow yet. The iOS shell runs on a simulator against the real `HomeMachine` through `HomeBridge`, so the iOS half of each id renders; the Android half is compiled and unobserved, because no machine here has an Android emulator.
 

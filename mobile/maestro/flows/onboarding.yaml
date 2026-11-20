@@ -76,13 +76,13 @@ name: onboarding
       id: "kit-empty"
     timeout: 10000
 - assertNotVisible: "See an example"
-# Back: the navigation bar's on iOS (`back` is Android's system key only).
+# Back: the kit's chevron on iOS (`back` is Android's system key only).
 - runFlow:
     when:
       platform: iOS
     commands:
       - tapOn:
-          id: "BackButton"
+          id: "kit-pushed-back"
 - runFlow:
     when:
       platform: Android

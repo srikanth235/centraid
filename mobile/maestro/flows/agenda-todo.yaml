@@ -70,7 +70,7 @@ name: agenda-todo
       platform: iOS
     commands:
       - tapOn:
-          id: "BackButton"
+          id: "kit-pushed-back"
 - runFlow:
     when:
       platform: Android
