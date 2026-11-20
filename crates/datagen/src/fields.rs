@@ -20,6 +20,15 @@ pub const VERBS: [&str; 2] = ["create", "edit"];
 /// Fields an `edit` handles as a command of its own, not as a column of the kind's edit (`plan_edit` in the runtime).
 const SPECIAL_EDITS: &[(&str, &str)] = &[("task", "status"), ("note", "pinned"), ("list", "area")];
 
+/// The money pairs the runtime sets, as `(verb, kind, field)`: `("edit", "budget", "amount")`. A money pair left out of
+/// this list is not live (no tool sets it); one in it is live when the sampler also draws a value for it
+/// (`sample::draws_field`). Add a pair here and to the sampler together, as the runtime serves it.
+const MONEY_LIVE: &[(&str, &str, &str)] = &[];
+
+fn money_live(verb: &str, kind: &str, field: &str) -> bool {
+    MONEY_LIVE.contains(&(verb, kind, field))
+}
+
 /// Fields that name a row by `#n`: a create that sets one needs a `find` ahead of it, which no draw makes.
 const ROW_ARGS: &[(&str, &str)] = &[
     ("task", "list"),
@@ -95,7 +104,10 @@ pub fn pairs(catalog: &Catalog, grid: &Grid) -> BTreeMap<String, Live> {
         for field in edit_fields {
             let state = match edit_cell {
                 Some(Live::Live) => {
-                    if matches!(field_type(field), Some(FieldType::Money | FieldType::Date)) {
+                    let money = matches!(field_type(field), Some(FieldType::Money));
+                    if (money && !money_live("edit", &kind.name, field))
+                        || matches!(field_type(field), Some(FieldType::Date))
+                    {
                         Live::NotLive(format!("the runtime answers `{field} cannot be edited`"))
                     } else if kind.name == "daily figure" {
                         Live::NotLive(
