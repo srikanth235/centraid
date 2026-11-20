@@ -55,6 +55,10 @@ xcodebuild -project Centraid.xcodeproj -scheme Centraid \
 # A CLEAN INSTALL FIRST: the unit tests launched the app, and whichever vault it
 # opened is the one it would open again, so the demo vault would be placed beside
 # a foreground vault that is not it.
+# The unit-test run can leave a standing simulator shutting down: wait it out, then boot it.
+while xcrun simctl list devices | grep "$simulator" | grep -q 'Shutting Down'; do sleep 2; done
+xcrun simctl boot "$simulator" 2>/dev/null || true
+xcrun simctl bootstatus "$simulator" -b >/dev/null
 xcrun simctl terminate "$simulator" dev.centraid.Centraid || true
 xcrun simctl uninstall "$simulator" dev.centraid.Centraid || true
 xcrun simctl install "$simulator" "$artifacts/app-derived-data/Build/Products/Debug-iphonesimulator/Centraid.app"

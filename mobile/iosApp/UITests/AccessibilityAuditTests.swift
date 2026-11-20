@@ -90,9 +90,12 @@ final class AccessibilityAuditTests: XCTestCase {
     @MainActor private func tour(mode: String, appearance: XCUIDevice.Appearance, textSize: String?) throws {
         XCUIDevice.shared.appearance = appearance
         let app = launch(textSize: textSize)
-        audit(app, mode: mode, screen: "Home") {}
+        // `CENTRAID_UI_ONLY` (comma-separated screen names) narrows a run to those roots, to iterate on one
+        // screen; unset, the whole tour runs, which is what the gate does.
+        let only = ProcessInfo.processInfo.environment["CENTRAID_UI_ONLY"].flatMap { $0.isEmpty ? nil : $0 }.map { Set($0.split(separator: ",").map(String.init)) }
+        if only == nil { audit(app, mode: mode, screen: "Home") {} }
 
-        for root in Self.roots {
+        for root in Self.roots where only?.contains(root.name) ?? true {
             try open(app, tile: root.tile)
             // A TAP THAT OPENED NOTHING must not file Home's issues under this screen's name.
             let grid = app.el("home-grid")
@@ -116,6 +119,7 @@ final class AccessibilityAuditTests: XCTestCase {
             try goHome(app)
         }
 
+        if only != nil { XCUIDevice.shared.appearance = .light; settle(mode: mode); return }
         // LOCKER, UP TO ITS WALL: the wall is what a member sees first.
         try open(app, tile: "home-tile-locker")
         var wall = app.el("locker-wall").waitForExistence(timeout: 15)
@@ -481,11 +485,24 @@ final class AccessibilityAuditTests: XCTestCase {
         var underBar = false
         /// Only an element under the floating band (its frame reaches into the strip the band's glass covers).
         var underBand = false
-        func matches(screen: String, type: XCUIAccessibilityAuditType, id: String, label: String, frame: CGRect, in screenFrame: CGRect, barTop: CGFloat?, underBand under: Bool) -> Bool {
+        /// Only an element that starts above the foot of the Calendar's all-day lane (its fade included, 32pt): the hour grid scrolls
+        /// under that lane's wash, so what sits there is covered, not shown.
+        var underLane = false
+        /// The element's identifier starts with this (a family of ids that end in a key).
+        var idPrefix: String? = nil
+        /// The element's identifier matches this expression (a few ids of one kind).
+        var idRegex: String? = nil
+        /// The audit's own description of the element (its class, for a system view).
+        var detail: String? = nil
+        func matches(screen: String, type: XCUIAccessibilityAuditType, id: String, label: String, frame: CGRect, in screenFrame: CGRect, barTop: CGFloat?, underBand under: Bool, laneBottom: CGFloat?, detail text: String) -> Bool {
             (!underBand || under)
+                && (self.detail.map { text.range(of: $0, options: .regularExpression) != nil } ?? true)
                 && (self.screen.map { exactScreen ? $0 == screen : ($0 == screen || screen.hasPrefix($0 + " ")) } ?? true)
                 && self.type == type
                 && (self.id.map { $0 == id } ?? true)
+                && (idPrefix.map { id.hasPrefix($0) } ?? true)
+                && (idRegex.map { id.range(of: $0, options: .regularExpression) != nil } ?? true)
+                && (!underLane || (laneBottom.map { frame.minY < $0 + 32 } ?? false))
                 && (self.label.map { label.range(of: $0, options: .regularExpression) != nil } ?? true)
                 && (self.frame.map { $0(frame, screenFrame) } ?? true)
                 && (!underBar || (barTop.map { frame.maxY > $0 } ?? false))
@@ -542,11 +559,33 @@ final class AccessibilityAuditTests: XCTestCase {
         // CALENDAR, THE MONTH CHIP: a bar item too (the Day and Week bar's leading key, "November"; its frame grew
         // 96 -> 111 pt across the whole range).
         Exemption(screen: "Calendar", type: .dynamicType, id: "", label: "^(January|February|March|April|May|June|July|August|September|October|November|December)$"),
+        // CALENDAR, A BLOCK'S TITLE AND TIME: the hour grid holds at `xxxLarge` by design (behaviour.md,
+        // Accessibility: "like the calendar's seven-day grids"; AgendaCalendarViews: "THE HOUR GRID HOLDS"),
+        // and a block's words are inside it, so the audit reads them as partly scaling. They do grow to
+        // `xxxLarge`: s4-proof/calendar-block-default.png and calendar-block-xxxl.png.
+        Exemption(screen: "Calendar", type: .dynamicType, id: "agenda-grid-block-title", label: nil),
+        Exemption(screen: "Calendar", type: .dynamicType, id: "agenda-grid-block-detail", label: nil),
+        // CALENDAR, THE HOUR GRID UNDER THE ALL-DAY LANE: the grid scrolls beneath the lane's chips, which are
+        // drawn over it, so a block's title or time that sits there is covered (its ink is read against the
+        // chips' wash). The same words pass once scrolled into the grid: s4-proof/calendar-lane-covers-grid.png.
+        Exemption(screen: "Calendar", type: .contrast, id: "agenda-grid-block-title", label: nil, underLane: true),
+        Exemption(screen: "Calendar", type: .contrast, id: "agenda-grid-block-detail", label: nil, underLane: true),
+        // CALENDAR, THE FOOT GRIP OF A MOVABLE BLOCK: a drag on the foot moves the block's end, over a 16pt
+        // strip of the block's own foot. It is not a control to aim at: the block is the target, and VoiceOver
+        // adjusts the end through the grip's adjustable action (`agenda-grid-block-resize-*`, "Change end time").
+        Exemption(screen: "Calendar", type: .hitRegion, id: nil, label: "^Change end time$", idPrefix: "agenda-grid-block-resize-"),
+        // CALENDAR, TEXT PEEKING FROM UNDER THE BAND: the hour grid runs under the band's glass, and a label cut
+        // by it (the "18:00" mark half-drawn at the foot) is text the audit finds with no element.
+        // Proof: s4-proof/calendar-lane-covers-grid.png, foot of the page.
+        Exemption(screen: "Calendar", type: .elementDetection, id: "", label: "^$", frame: { f, _ in f == .zero }, underBand: true),
+        // SYSTEM KEYBOARD: the QuickType suggestion cells are the keyboard's own views (`TUIPredictionViewCell`),
+        // not ours; they have no label to give. Proof: s4-proof/reminders-add-keyboard.png.
+        Exemption(screen: "Reminders Add", type: .sufficientElementDescription, id: "", label: "^$", detail: "TUIPredictionViewCell"),
         // HOME, THE EYEBROW: the 11pt weekday over the date is the caption2 face, which the system holds at the
         // same point size across its first four text sizes (11, 11, 11, 11, then 15), so a step-by-step
         // comparison reads it as partly fixed.
         Exemption(screen: "Home", type: .dynamicType, id: "", label: "^(MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY|SUNDAY)$"),
-    ] + docsNotesHealthExemptions + moneyPeopleExemptions
+    ] + docsNotesHealthExemptions + moneyPeopleExemptions + sheetExemptions + underBandExemptions
 
     /// DOCS, NOTES AND HEALTH (#1202, S4 a11y-2): per element, each with its reason, each proved by
     /// taking the cause away in a throwaway run.
@@ -582,10 +621,6 @@ final class AccessibilityAuditTests: XCTestCase {
         // band over the page), and the audit reads the glass and the blur as the text's ground. These
         // are the elements that reach into the band's zone (the bottom 120 pt) or lie below the screen. Every
         // other element of the page is audited, and the same rows pass when scrolled clear of the band.
-        Exemption(screen: "Money", type: .contrast, id: nil, label: nil, frame: { f, s in f.maxY > s.maxY - 120 }, exactScreen: true),
-        Exemption(screen: "People", type: .contrast, id: nil, label: nil, frame: { f, s in f.maxY > s.maxY - 120 }, exactScreen: true),
-        Exemption(screen: "Photos", type: .contrast, id: nil, label: nil, frame: { f, s in f.maxY > s.maxY - 120 }, exactScreen: true),
-        Exemption(screen: "Reminders", type: .contrast, id: nil, label: nil, frame: { f, s in f.maxY > s.maxY - 120 }, exactScreen: true),
         // REMINDERS ADD: the quick-add bar and its keys sit over the foot of the page (the page is
         // clipped at the bar), so whatever the page has down there ("My Lists", the lower tiles at the
         // largest sizes) is in the hierarchy and under the bar's plate, not on screen as drawn.
@@ -597,7 +632,6 @@ final class AccessibilityAuditTests: XCTestCase {
         // scaling type. The rows below the header are matched by position; the band and the header
         // are audited. NEEDS THE OWNER'S RULING: an eager roster would clear these and costs the
         // laziness a long contact list wants.
-        Exemption(screen: "People", type: .dynamicType, id: "", label: nil, frame: { f, _ in f.minY > 150 }, exactScreen: true),
         Exemption(screen: "Reminders", type: .dynamicType, id: nil, label: "^(My Lists|Add List)$", exactScreen: true),
         // PEOPLE: the state badge's word holds its size (behaviour.md: the words inside a badge hold).
         Exemption(screen: "People", type: .dynamicType, id: "", label: "^[A-Z][A-Z ]{2,}$", exactScreen: true),
@@ -628,9 +662,6 @@ final class AccessibilityAuditTests: XCTestCase {
         //    the sheet is still painted but a modal presentation takes it out of accessibility, and
         //    the audit finds its words without an element. There is one such per word on the page
         //    behind; the sheet's own words are all elements.
-        Exemption(screen: "Money More", type: .contrast, id: nil, label: nil, exactScreen: true),
-        Exemption(screen: "People More", type: .contrast, id: nil, label: nil, exactScreen: true),
-        Exemption(screen: "Reminders More", type: .contrast, id: nil, label: nil, exactScreen: true),
         Exemption(screen: "Money More", type: .elementDetection, id: "", label: "^$", frame: { f, _ in f == .zero }, exactScreen: true),
         Exemption(screen: "People More", type: .elementDetection, id: "", label: "^$", frame: { f, _ in f == .zero }, exactScreen: true),
         Exemption(screen: "Reminders More", type: .elementDetection, id: "", label: "^$", frame: { f, _ in f == .zero }, exactScreen: true),
@@ -641,6 +672,81 @@ final class AccessibilityAuditTests: XCTestCase {
         // PHOTOS: a video's length is white text drawn on the picture itself (a bright green clip
         // in the demo vault); its ground is the member's photograph, not a surface of ours.
         Exemption(screen: "Photos", type: .contrast, id: "", label: "^\\d{1,2}:\\d{2}(:\\d{2})?$"),
+    ]
+
+
+    /// THE MORE AND ADD SHEETS (owner ruling 26, 20 November): the sheets stay compact Liquid Glass and turn
+    /// opaque under Reduce Transparency or Increase Contrast. A flag that remains is excused one ELEMENT at a
+    /// time, by its words and the audit type, and each is proved whole and legible by a screenshot of the
+    /// sheet (`s4-proof/`, named in the entry): over the glass the audit samples the blurred page behind the
+    /// sheet as the ground (contrast), reads the row's frame as clipped when the sweep grows the text under a
+    /// sheet that is still one fitting height (textClipped; at the accessibility sizes the sheet scrolls and
+    /// the same words are whole, `accessibility-xxxl-*` boards), and finds the page's words behind the sheet
+    /// with no element (elementDetection, frame zero). No whole screen is excused.
+    private static let sheetExemptions: [Exemption] = [
+        // CALENDAR MORE. Proof: light-Calendar-More.png, dark-Calendar-More.png, accessibility-xxxl-Calendar-More.png.
+        Exemption(screen: "Calendar More", type: .contrast, id: nil, label: "^(Calendar|Family|New Calendar|What Calendar may read|Work)$", exactScreen: true),
+        Exemption(screen: "Calendar More", type: .textClipped, id: nil, label: "^(Calendar|Family|New Calendar|What Calendar may read|Work)$", exactScreen: true),
+        // REMINDERS MORE. Proof: light-Reminders-More.png, dark-Reminders-More.png, accessibility-xxxl-Reminders-More.png.
+        Exemption(screen: "Reminders More", type: .contrast, id: nil, label: "^(30 days, then erased|Anytime|Export|Turn on Phone reminders|What Reminders may read|done and won't do|no date, still yours|open work with a reminder)$", exactScreen: true),
+        Exemption(screen: "Reminders More", type: .textClipped, id: nil, label: "^(30 days, then erased|Anytime|Export|Turn on Phone reminders|What Reminders may read|done and won't do|no date, still yours|open work with a reminder)$", exactScreen: true),
+        // NOTES MORE. Proof: light-Notes-More.png, dark-Notes-More.png, accessibility-xxxl-Notes-More.png.
+        Exemption(screen: "Notes More", type: .contrast, id: nil, label: "^(30 days, then erased|Export|Import|What Notes may read)$", exactScreen: true),
+        Exemption(screen: "Notes More", type: .textClipped, id: nil, label: "^(30 days, then erased|Export|Import|What Notes may read)$", exactScreen: true),
+        // PEOPLE MORE. Proof: light-People-More.png, dark-People-More.png, accessibility-xxxl-People-More.png.
+        Exemption(screen: "People More", type: .contrast, id: nil, label: "^(30 days, then erased|Export|Import|Lists|Phone contacts|What People may read)$", exactScreen: true),
+        Exemption(screen: "People More", type: .textClipped, id: nil, label: "^(30 days, then erased|Export|Import|Lists|Phone contacts|What People may read)$", exactScreen: true),
+        // DOCS MORE. Proof: light-Docs-More.png, dark-Docs-More.png, accessibility-xxxl-Docs-More.png.
+        Exemption(screen: "Docs More", type: .contrast, id: nil, label: "^(30 days, then erased|Recently added|What Docs may read|Your originals as one archive)$", exactScreen: true),
+        Exemption(screen: "Docs More", type: .elementDetection, id: "", label: "^$", frame: { f, _ in f == .zero }, exactScreen: true),
+        Exemption(screen: "Docs More", type: .textClipped, id: nil, label: "^(30 days, then erased|Recently added|What Docs may read|Your originals as one archive)$", exactScreen: true),
+        // DOCS ADD. Proof: light-Docs-Add.png, dark-Docs-Add.png, accessibility-xxxl-Docs-Add.png.
+        Exemption(screen: "Docs Add", type: .contrast, id: nil, label: "^(Add to Docs|Follow a folder|New folder|New text document|Scan a document|Upload a file)$", exactScreen: true),
+        Exemption(screen: "Docs Add", type: .elementDetection, id: "", label: "^$", frame: { f, _ in f == .zero }, exactScreen: true),
+        Exemption(screen: "Docs Add", type: .textClipped, id: nil, label: "^(Add to Docs|Follow a folder|New folder|New text document|Scan a document|Upload a file)$", exactScreen: true),
+        // HEALTH MORE. Proof: light-Health-More.png, dark-Health-More.png, accessibility-xxxl-Health-More.png.
+        Exemption(screen: "Health More", type: .contrast, id: nil, label: "^(30 days, then erased|Choose what to read|Daily totals and workouts as a spreadsheet|Stop reading Apple Health|What Health may read)$", exactScreen: true),
+        Exemption(screen: "Health More", type: .textClipped, id: nil, label: "^(30 days, then erased|Choose what to read|Daily totals and workouts as a spreadsheet|Stop reading Apple Health|What Health may read)$", exactScreen: true),
+        Exemption(screen: "Health More", type: .elementDetection, id: "", label: "^$", frame: { f, _ in f == .zero }, exactScreen: true),
+        // MONEY MORE. Proof: light-Money-More.png, dark-Money-More.png, accessibility-xxxl-Money-More.png.
+        Exemption(screen: "Money More", type: .contrast, id: nil, label: "^(30 days, then erased|Balances and statement checks|CSV, OFX or QFX|Groups and categories|Import statement|Name and file rows|Transactions as a spreadsheet|What Money may read)$", exactScreen: true),
+        Exemption(screen: "Money More", type: .textClipped, id: nil, label: "^(30 days, then erased|Balances and statement checks|CSV, OFX or QFX|Groups and categories|Import statement|Name and file rows|Transactions as a spreadsheet|What Money may read)$", exactScreen: true),
+    ]
+
+    /// WHAT SCROLLS UNDER THE BAND, BY ELEMENT (#1202). The band floats over the page as glass and the page
+    /// scrolls beneath it, so the last rows of a page sit under the glass and the audit reads the glass and
+    /// the blur as their ground. Each entry names the element (the words it carries, or its id), the screen it
+    /// is on and that it lies under the band (`underBand`); every other element of the page is audited, and
+    /// the same words pass once scrolled clear of the band. Proof for all of them: the page's screenshots
+    /// (`light-<Screen>.png`, `accessibility-xxxl-<Screen>.png`), which show the words whole at the page's
+    /// foot beneath the band's glass.
+    private static let underBandExemptions: [Exemption] = [
+        // HOME's none. NOTES: a note row's meta line and its two-line preview, at the page's foot.
+        Exemption(screen: "Notes", type: .contrast, id: "", label: "^(Edited .* · .*|Jake's lease ends in March.*)$", exactScreen: true, underBand: true),
+        Exemption(screen: "Notes", type: .contrast, id: "notes-row-preview", label: nil, exactScreen: true, underBand: true),
+        // REMINDERS: the "Completed" smart list's title, at the foot at the largest size.
+        Exemption(screen: "Reminders", type: .contrast, id: "", label: "^Completed$", exactScreen: true, underBand: true),
+        // PEOPLE: a roster row's name, role line, initials, at the foot.
+        Exemption(screen: "People", type: .contrast, id: nil, label: nil, exactScreen: true, underBand: true, idRegex: "^people-(row-name|row-meta|avatar-initials|section-letter)$"),
+        // DOCS: a tile's badge and title, at the foot at the largest size.
+        Exemption(screen: "Docs", type: .contrast, id: nil, label: nil, exactScreen: true, underBand: true, idRegex: "^docs-tile-(badge|text)$"),
+        // MONEY: the Net card's label and value, a transaction's date head, initial, payee, category and amount.
+        Exemption(screen: "Money", type: .contrast, id: "", label: "^(Net|[+-]\\$[0-9,.]+|(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]* [0-9]{1,2} [A-Z][a-z]+|[A-Z]|[A-Z0-9 ]{6,}|[A-Z][a-z]+( out)? · [A-Za-z ]+)$", exactScreen: true, underBand: true),
+        // HEALTH: the Sleep card's title at the foot.
+        Exemption(screen: "Health", type: .contrast, id: "", label: "^Sleep$", exactScreen: true, underBand: true),
+        // PHOTOS: a day's date head at the foot.
+        Exemption(screen: "Photos", type: .contrast, id: "", label: "^[A-Z][a-z]{2}, [A-Z][a-z]{2} [0-9]{1,2}$", exactScreen: true, underBand: true),
+        // REMINDERS ADD: the page's words behind the quick-add bar's plate (no element: the audit finds them in the pixels).
+        Exemption(screen: "Reminders Add", type: .contrast, id: "", label: "^$", frame: { f, _ in f == .zero }, exactScreen: true),
+        // PEOPLE, THE ROSTER'S RECYCLED ROWS: the roster is a `LazyVStack` and the audit's text-size sweep loses a row
+        // it has scrolled away from. The rows do scale: accessibility-xxxl-People.png shows a roster row at the
+        // largest size, name and role whole, and the same rows in light-People.png.
+        Exemption(screen: "People", type: .dynamicType, id: nil, label: nil, exactScreen: true, idRegex: "^people-(row-name|row-meta|avatar-initials|section-letter)$"),
+        Exemption(screen: "People", type: .textClipped, id: nil, label: nil, exactScreen: true, idRegex: "^people-(row-name|row-meta)$"),
+        // DOCS: the words inside a document's own thumbnail (a picture of the document), found with no element.
+        // Proof: light-Docs.png, the tiles' pictures.
+        Exemption(screen: "Docs", type: .elementDetection, id: "", label: "^$", frame: { f, _ in f == .zero }, exactScreen: true),
+        Exemption(screen: "Docs", type: .dynamicType, id: "", label: "^$", frame: { f, _ in f == .zero }, exactScreen: true),
     ]
 
     private static func typeName(_ type: XCUIAccessibilityAuditType) -> String {
@@ -661,6 +767,12 @@ final class AccessibilityAuditTests: XCTestCase {
         _ = app.wait(for: .runningForeground, timeout: 5)
         Thread.sleep(forTimeInterval: 1)
         clearSystemAlerts(app)
+        // PROOF ON REQUEST: `CENTRAID_UI_PROOF_DIR` (a directory) takes a screenshot of each audited
+        // screen, as the audit finds it, for the exemptions that cite one. Unset, nothing is written.
+        if let dir = ProcessInfo.processInfo.environment["CENTRAID_UI_PROOF_DIR"] {
+            let name = "\(mode)-\(screen)".replacingOccurrences(of: " ", with: "-")
+            try? app.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: "\(dir)/\(name).png"))
+        }
         var issues = 0
         for attempt in 0..<5 {
             issues = 0
@@ -671,11 +783,15 @@ final class AccessibilityAuditTests: XCTestCase {
                     print("A11Y-ISSUE|\(mode)|\(screen)|\(issue.auditType.rawValue)|\(issue.compactDescription)|id=\(id)|label=\(label)|type=\(issue.element?.elementType.rawValue ?? 0)|frame=\(issue.element?.frame ?? .zero)|\(issue.detailedDescription)")
                     let frame = issue.element?.frame ?? .zero
                     let under = (issue.element?.frame).map { $0.height > 0 && $0.maxY > app.frame.height - 96 } ?? true // no element: the audit could not place it, and the only unplaced contrast reads are of the blurred page under the band
-                    let bar = app.el("agenda-quick-tool-date")
-                    let barTop: CGFloat? = bar.exists ? bar.frame.minY - 8 : nil
-                    if Self.exemptions.contains(where: { $0.matches(screen: screen, type: issue.auditType, id: id, label: label, frame: frame, in: app.frame, barTop: barTop, underBand: under) }) {
+                    // The anchors are looked up only where an exemption reads them: each lookup is a query of the app.
+                    var barTop: CGFloat?
+                    if screen.hasPrefix("Reminders Add") { let bar = app.el("agenda-quick-tool-date"); barTop = bar.exists ? bar.frame.minY - 8 : nil }
+                    var laneBottom: CGFloat?
+                    if screen == "Calendar" { let lane = app.el("agenda-all-day-lane"); laneBottom = lane.exists ? lane.frame.maxY : nil }
+                    if Self.exemptions.contains(where: { $0.matches(screen: screen, type: issue.auditType, id: id, label: label, frame: frame, in: app.frame, barTop: barTop, underBand: under, laneBottom: laneBottom, detail: issue.detailedDescription) }) {
                         return true
                     }
+                    print("A11Y-OPEN|\(mode)|\(screen)|\(issue.auditType.rawValue)|id=\(id)|label=\(label)|frame=\(issue.element?.frame ?? .zero)|\(issue.detailedDescription)")
                     issues += 1
                     self.found["\(mode)|\(screen)|\(Self.typeName(issue.auditType))", default: 0] += 1
                     // Handled here: whether the count is acceptable is `settle`'s to say.
