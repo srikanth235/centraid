@@ -90,7 +90,7 @@ dark_text = "#7FC4B8"
 # dark).
 [app.calendar]
 light = "#266FC4"
-dark_fill = "#3077CD"
+dark_fill = "#2761B2"
 dark_text = "#569EF7"
 tint = "#EEF3FA"
 dark_tint = "#202F41"
@@ -659,7 +659,7 @@ colors = [
   { light = "#1F4A36", text = "#A2D8BF" },
   { light = "#1F4A45", text = "#7FC4B8", fill = "#2E7268", line = "#7FC4B8" },
   { light = "#087668", text = "#4FD1BE", fill = "#12806F", line = "#4FD1BE" },
-  { light = "#266FC4", text = "#569EF7", fill = "#3077CD", line = "#569EF7" },
+  { light = "#266FC4", text = "#569EF7", fill = "#2761B2", line = "#569EF7" },
   { light = "#27388B", text = "#7C97F4", fill = "#536EDC", line = "#7C97F4" },
   { light = "#2B7B51", text = "#62D092", fill = "#2F8556", line = "#62D092" },
   { light = "#2D4BA8", text = "#9DB0F0" },

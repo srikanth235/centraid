@@ -116,14 +116,21 @@ struct AgendaTileFieldRow: View {
             Text(key)
                 .kitType(.row)
                 .foregroundStyle(Surface.ink)
-            TextField(placeholder, text: $text)
+            // A VERTICAL FIELD (#1202): a one-line field is a fixed 22pt box the audit reads as clipping at
+            // larger text; this one wraps a long address. Return would add a line, so it is taken out.
+            TextField(placeholder, text: $text, axis: .vertical)
+                .lineLimit(1...4)
+                .frame(minHeight: CentraidGeometry.targetMinCoarse)
                 .centraidType("body")
                 .multilineTextAlignment(.trailing)
                 .foregroundStyle(Surface.meta)
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .onChange(of: text) { _, typed in onEdit(typed) }
+                .onChange(of: text) { _, typed in
+                    if typed.contains("\n") { text = typed.replacingOccurrences(of: "\n", with: "") }
+                    onEdit(text)
+                }
                 .accessibilityLabel(key)
                 .modifier(OptionalIdentifier(identifier: identifier))
             }
