@@ -15,7 +15,7 @@ use crate::grid::{Cell, Grid, Live, cell_of};
 use crate::intent::{Intent, Outcome, Scenario, TurnIntent};
 use crate::labels;
 use crate::messages::{Job, no_sealed, writer_prompt};
-use crate::plan::{Solution, WorldRun, call_xml};
+use crate::plan::{Solution, WorldRun};
 use crate::rng::Rng;
 use crate::run::draws;
 use crate::sample::{Aim, Room, Sampler, Search};
@@ -122,15 +122,22 @@ fn the_pairs_come_from_the_runtime_and_the_not_live_ones_say_why() {
         "edit/workout/moving",
         "edit/task/status",
         "edit/list/area",
+        "create/account/opening",
+        "create/account/opening_on",
+        "create/account/currency",
+        "edit/account/opening",
+        "edit/account/opening_on",
+        "edit/transaction/amount",
+        "edit/budget/amount",
+        "edit/budget/carry",
     ] {
         assert!(live.contains(&must.to_owned()), "{must} is not live");
     }
     // a pair the runtime refuses or ignores is not live, and says so
     for (label, why) in [
-        ("edit/transaction/amount", "cannot be edited"),
-        ("edit/account/opening", "cannot be edited"),
-        ("create/account/opening", "money field"),
         ("create/transaction/amount", "money field"),
+        ("create/budget/amount", "money field"),
+        ("edit/account/currency", "draws no value"),
         ("create/task/list", "`#n`"),
         ("create/workout/end", "reads no"),
         ("edit/daily figure/value", "Health store"),
@@ -140,10 +147,10 @@ fn the_pairs_come_from_the_runtime_and_the_not_live_ones_say_why() {
             other => panic!("{label}: {other:?}"),
         }
     }
-    // no money field is live for either tool
+    // the money pairs that are live are the runtime's own: no line and no plan is created in chat
     assert!(
         live.iter()
-            .all(|l| !l.ends_with("/amount") && !l.ends_with("/opening"))
+            .all(|l| !l.starts_with("create/transaction/") && !l.starts_with("create/budget/"))
     );
 }
 
@@ -444,73 +451,139 @@ fn a_measurement_is_made_and_changed_through_the_runtime_and_the_brief_says_its_
 
 // ------------------------------------------------------------------ A2: money
 
-#[test]
-fn no_money_amount_is_live_because_the_runtime_drops_or_refuses_it() {
+/// Solve a session drawn for the pair `label` and hand back its reference calls.
+fn solved_pair(label: &str) -> (Scenario, Vec<(String, Value)>) {
     let catalog = catalog();
     let grid = Grid::build(&catalog);
-    let world = worlds(Split::Train, 1).remove(0);
-    let scratch = tempfile::tempdir().expect("scratch");
-    let mut run = WorldRun::seed(&world, &catalog, scratch.path()).expect("seeds");
-    let call = |live: &mut crate::plan::Live, tool: &str, args: &[(&str, &str)]| {
-        let mut map = serde_json::Map::new();
-        for (k, v) in args {
-            map.insert((*k).to_owned(), Value::String((*v).to_owned()));
+    let (verb, kind, field) = fields::split(label).expect("a label");
+    let cell = Cell::new(verb, kind, verb);
+    let aim = aim_field(field);
+    for (i, world) in worlds(Split::Train, 6).iter().enumerate() {
+        let Some(scenario) = drawn(&catalog, &grid, world, &cell, &aim, &format!("{label}:{i}"))
+        else {
+            continue;
+        };
+        let scratch = tempfile::tempdir().expect("scratch");
+        let mut run = WorldRun::seed(world, &catalog, scratch.path()).expect("seeds");
+        let solution = solve(&mut run, &scenario);
+        if solution.kept == scenario.turns.len() {
+            return (scenario, calls(&solution));
         }
-        live.session.call_text(&call_xml(tool, &map))
-    };
-    // a new account is made without its opening balance: the runtime drops the argument
-    let mut live = run.open().expect("opens");
-    live.session.user("new account");
-    let made = call(
-        &mut live,
-        "create",
-        &[
-            ("kind", "account"),
-            ("args", "name: Rainy day\ntype: savings\nopening: 500"),
-        ],
-    );
-    assert_eq!(
-        made["effect"]["normalized"][0]["rule"], "create_arg_dropped",
-        "{made}"
-    );
-    assert_eq!(
-        made["effect"]["diff"]["rows"][0]["fields"]["opening"][1]["amount"],
-        0.0
-    );
-    // a transaction is not created in chat
-    let mut live = run.open().expect("opens");
-    live.session.user("new transaction");
-    let made = call(
-        &mut live,
-        "create",
-        &[
-            ("kind", "transaction"),
-            ("args", "name: Coffee\namount: -4"),
-        ],
-    );
-    assert!(
-        made["effect"]["error"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("create needs the kind")
-    );
-    // a money field is not edited
-    let mut live = run.open().expect("opens");
-    live.session.user("change it");
-    let found = call(&mut live, "find", &[("kind", "account")]);
-    assert!(found["effect"]["result"].is_string());
-    let edited = call(
-        &mut live,
-        "edit",
-        &[("rows", "#1"), ("args", "opening: 900")],
-    );
-    assert!(edited["effect"].get("error").is_some(), "{edited}");
-    // so none is a live pair, and no sampler draws one
-    let live = fields::live_labels(&catalog, &grid);
-    assert!(
-        live.iter()
-            .all(|l| !l.ends_with("/amount") && !l.ends_with("/opening"))
-    );
+    }
+    panic!("{label}: no world solves a draw");
+}
+
+#[test]
+fn a_money_amount_is_set_in_the_currency_of_its_row_through_the_runtime() {
+    for (label, arg) in [
+        ("create/account/opening", "opening: "),
+        ("edit/account/opening", "opening: "),
+        ("edit/transaction/amount", "amount: "),
+        ("edit/budget/amount", "amount: "),
+    ] {
+        let (scenario, calls) = solved_pair(label);
+        let (_, args) = calls
+            .iter()
+            .find(|(tool, _)| tool == label.split('/').next().unwrap_or_default())
+            .unwrap_or_else(|| panic!("{label}: no call in {calls:?}"));
+        let text = arg_lines(args);
+        assert!(text.contains(arg), "{label}: {text}");
+        // an amount in the row's own currency is the number alone, as the runtime reads it
+        assert!(
+            !text
+                .lines()
+                .any(|l| l.starts_with(arg)
+                    && l[arg.len()..].chars().any(|c| c.is_ascii_alphabetic())),
+            "{label}: {text}"
+        );
+        // the brief names the currency of the thing, not always the vault's
+        let catalog = catalog();
+        let brief = Briefer {
+            catalog: &catalog,
+            today: jiff::civil::date(2026, 9, 28),
+            currency: "ZZZ",
+        }
+        .turn(
+            scenario
+                .turns
+                .iter()
+                .find(|t| fields::of_turn(t).contains(&label.to_owned()))
+                .expect("a turn that sets the pair"),
+            0,
+        );
+        let currency = brief.money.expect("the turn gives an amount");
+        assert_ne!(
+            currency, "ZZZ",
+            "{label}: the brief names the vault's currency"
+        );
+    }
+    // the rest of the money pairs are drawn and solved too
+    for label in [
+        "create/account/opening_on",
+        "create/account/currency",
+        "edit/account/opening_on",
+        "edit/budget/carry",
+    ] {
+        solved_pair(label);
+    }
+    // an opening balance carries its day
+    let (_, calls) = solved_pair("edit/account/opening");
+    let (_, args) = calls.iter().find(|(t, _)| t == "edit").expect("an edit");
+    assert!(arg_lines(args).contains("opening_on: "), "{args}");
+}
+
+#[test]
+fn an_amount_in_another_currency_is_refused_and_the_turn_declines() {
+    let catalog = catalog();
+    let grid = Grid::build(&catalog);
+    let mut seen: BTreeSet<&str> = BTreeSet::new();
+    for kind in ["transaction", "account"] {
+        let cell = Cell::new("edit", kind, "edit");
+        for (i, world) in worlds(Split::Train, 6).iter().enumerate() {
+            let facts = Facts::of(world, &catalog);
+            let sampler = Sampler::new(world, &facts, &catalog, &grid);
+            let scratch = tempfile::tempdir().expect("scratch");
+            let mut run = WorldRun::seed(world, &catalog, scratch.path()).expect("seeds");
+            for attempt in 0..120 {
+                let mut rng = Rng::new(9).fork(&format!("{kind}:{i}:{attempt}"));
+                let Some(scenario) = sampler.session_aim(
+                    "proof",
+                    &cell,
+                    &Aim::default(),
+                    &Room::default(),
+                    1,
+                    &mut rng,
+                ) else {
+                    continue;
+                };
+                let Some((at, turn)) = scenario.turns.iter().enumerate().find(|(_, t)| {
+                    t.outcome == Outcome::Decline && matches!(t.intent, Intent::Edit { .. })
+                }) else {
+                    continue;
+                };
+                let solution = solve(&mut run, &scenario);
+                if solution.kept != scenario.turns.len() {
+                    continue;
+                }
+                let record = solution.record.expect("a record");
+                let refs = record["turns"][at]["ref"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default();
+                let tools: Vec<&str> = refs.iter().filter_map(|c| c["tool"].as_str()).collect();
+                assert_eq!(tools.last(), Some(&"decline"), "{tools:?}");
+                assert!(refs.iter().any(|c| c["tool"] == "edit" && c["bad"] == true));
+                assert!(fields::of_turn(turn).is_empty(), "a refusal sets no pair");
+                seen.insert(if kind == "transaction" {
+                    "line"
+                } else {
+                    "account"
+                });
+                break;
+            }
+        }
+    }
+    assert_eq!(seen.len(), 2, "refusals drawn and solved: {seen:?}");
 }
 
 // ------------------------------------------------------------------ A2: the options of `find`
@@ -1638,11 +1711,37 @@ fn the_think_of_a_call_that_says_more_compiles_back_to_the_call() {
     let made = traced_as(
         "write",
         "do",
-        &[("verb", "complete"), ("rows", "#1"), ("more", "true")],
+        &[("verb", "complete"), ("rows", "#22"), ("more", "true")],
         "complete Call Esme and add a note called Gift ideas",
         "",
         &["#1 task \"Call Esme\""],
     )
     .unwrap_or_else(|why| panic!("do: {why:?}"));
     assert_eq!(made.call.tool, "do");
+}
+
+#[test]
+fn a_line_is_moved_to_an_earlier_day_through_the_runtime() {
+    let catalog = catalog();
+    let grid = Grid::build(&catalog);
+    let cell = Cell::new("do", "transaction", "reschedule");
+    assert_eq!(grid.cells.get(&cell), Some(&Live::Live));
+    let world = worlds(Split::Train, 1).remove(0);
+    let scenario =
+        drawn(&catalog, &grid, &world, &cell, &Aim::default(), "line-day").expect("a draw");
+    let scratch = tempfile::tempdir().expect("scratch");
+    let mut run = WorldRun::seed(&world, &catalog, scratch.path()).expect("seeds");
+    let solution = solve(&mut run, &scenario);
+    assert_eq!(
+        solution.kept,
+        scenario.turns.len(),
+        "{:?}",
+        solution.dropped
+    );
+    let (_, args) = calls(&solution)
+        .into_iter()
+        .find(|(tool, args)| tool == "do" && args["verb"] == "reschedule")
+        .expect("a reschedule");
+    // a line is posted on a day that has passed
+    assert!(arg_lines(&args).contains("\"rel\":-"), "{args}");
 }

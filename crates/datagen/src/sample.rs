@@ -49,6 +49,10 @@ impl Facet {
 /// An opener whose draw of 0..100 is at least this is a repair: the runtime refuses its first call and the model repairs it.
 const REPAIR_FROM: usize = 84;
 
+/// An edit of a line or an account whose draw (0..100) is in the six from this is an amount the runtime refuses for its
+/// currency: a share of what would be a repair turn.
+const REFUSE_FROM: usize = 84;
+
 /// A follow-up that can be a repair is one with this chance (percent).
 const REPAIR_FOLLOW_UP: usize = 14;
 
@@ -204,12 +208,17 @@ pub fn draws_field(verb: &str, kind: &str, field: &str) -> bool {
             field,
             "climb" | "distance" | "energy" | "heart_rate" | "moving" | "date"
         ),
-        ("create", "account") => field == "type",
+        ("create", "account") => matches!(field, "type" | "opening" | "opening_on" | "currency"),
         ("edit", "person") => matches!(field, "cadence" | "met" | "nickname" | "role"),
         ("edit", "event") => matches!(field, "description" | "duration"),
         ("edit", "task") => matches!(field, "description" | "effort" | "priority" | "status"),
         ("edit", "note") => matches!(field, "body" | "pinned"),
         ("edit", "list") => field == "area",
+        // an account's opening balance is said with its day, a line's amount keeps its account's currency, a plan's amount
+        // and whether it carries over (`edit/account/currency` is not drawn: only an account with no lines changes it)
+        ("edit", "account") => matches!(field, "opening" | "opening_on"),
+        ("edit", "transaction") => field == "amount",
+        ("edit", "budget") => matches!(field, "amount" | "carry"),
         ("edit", "locker item") => matches!(
             field,
             "card_number" | "cvv" | "notes" | "code" | "password" | "url" | "username"
@@ -1538,8 +1547,16 @@ impl<'a> Sampler<'a> {
             "star" => r.fields.get("starred") == Some(&F::B(false)),
             "unstar" => r.fields.get("starred") == Some(&F::B(true)),
             "unlink" => self.transfer_leg(&r.key),
+            "reschedule" if kind == "transaction" => r.text("status") == Some("posted"),
             _ => true,
         }
+    }
+
+    /// The day a `reschedule` moves a row to, `lo` to `hi` days off today: ahead for an event or a task, behind for a
+    /// line, which is posted on a day that has passed.
+    fn reschedule_rel(kind: &str, lo: i64, hi: i64, rng: &mut Rng) -> i64 {
+        let days = rng.range(lo, hi);
+        if kind == "transaction" { -days } else { days }
     }
 
     /// How many rows the sampler's world holds against a normal one (`Settings::scale`).
@@ -1686,7 +1703,7 @@ impl<'a> Sampler<'a> {
         };
         let arg = match verb {
             "reschedule" => {
-                let rel = rng.range(1, 21);
+                let rel = Self::reschedule_rel(kind, 1, 21, rng);
                 VerbArg::When(Period::Day { rel }.when())
             }
             "log" => VerbArg::Choice((*rng.pick(LOG_CHOICES)).to_owned()),
@@ -1795,6 +1812,40 @@ impl<'a> Sampler<'a> {
         }
     }
 
+    /// The currency a money row is in: a line's, an account's or a plan's own, else the vault's.
+    fn currency_of(&self, row: &Row) -> String {
+        row.text("currency")
+            .map_or_else(|| self.facts.base.clone(), str::to_owned)
+    }
+
+    /// An amount a member could say for something now worth `have` (its size, unsigned; `0` when it has none) in
+    /// `currency`: a round figure that is not `have`. `floor` is a typical figure in dollars, scaled to the currency.
+    fn money_amount(&self, have: f64, currency: &str, floor: f64, rng: &mut Rng) -> f64 {
+        let have = have.abs();
+        let base = if have >= 1.0 {
+            have
+        } else {
+            floor * crate::generate::fx(currency)
+        };
+        for _ in 0..16 {
+            let factor = *rng.pick(&[0.4, 0.6, 0.8, 1.25, 1.5, 2.0, 3.0]);
+            let amount = nice_down(base * factor);
+            if (amount - have).abs() > 0.5 {
+                return amount;
+            }
+        }
+        nice_up(base * 4.0)
+    }
+
+    /// A currency other than `not`, for an amount the runtime refuses.
+    fn other_currency(&self, not: &str, rng: &mut Rng) -> String {
+        let pool: Vec<&str> = ["USD", "EUR", "GBP", "INR", "AED", "SGD"]
+            .into_iter()
+            .filter(|c| *c != not)
+            .collect();
+        (*rng.pick(&pool)).to_owned()
+    }
+
     /// A new value for `field` of `kind`: never the one the row has. `row` is `None` for a row the session just made
     /// (`made_type` is its Locker type), `avoid` the name it was made with.
     fn edit_value(
@@ -1861,6 +1912,34 @@ impl<'a> Sampler<'a> {
                     differs(pools::BODIES, None, rng)?
                 }
             }
+            ("account", "opening") => {
+                let row = row?;
+                let currency = self.currency_of(row);
+                Val::Money {
+                    amount: self.money_amount(0.0, &currency, 1500.0, rng),
+                    currency,
+                    named: false,
+                }
+            }
+            ("account", "opening_on") => Val::When(
+                Period::Day {
+                    rel: -rng.range(10, 120),
+                }
+                .when(),
+            ),
+            ("transaction" | "budget", "amount") => {
+                let row = row?;
+                let currency = self.currency_of(row);
+                let have = row.num("amount").unwrap_or(0.0);
+                Val::Money {
+                    amount: self.money_amount(have, &currency, 60.0, rng),
+                    currency,
+                    named: false,
+                }
+            }
+            ("budget", "carry") => {
+                Val::Flag(!row?.fields.get("carry").is_some_and(|c| *c == F::B(true)))
+            }
             ("workout", "moving") => number(10, 150, 60, rng),
             ("workout", "distance") => number(1, 40, 500, rng),
             ("workout", "energy") => number(5, 120, 10, rng),
@@ -1917,6 +1996,13 @@ impl<'a> Sampler<'a> {
         if matches!(kind, "workout" | "daily figure") {
             return self.synced_edit(kind, rng);
         }
+        if focus.is_none()
+            && (REFUSE_FROM..REFUSE_FROM + 6).contains(&roll)
+            && !nickname
+            && let Some(turn) = self.money_refusal(kind, rng)
+        {
+            return Some(turn);
+        }
         let live = fields::live_fields(self.catalog, self.grid, "edit", kind);
         let field = match focus {
             Some(f) => live.iter().find(|l| *l == f)?.clone(),
@@ -1957,6 +2043,15 @@ impl<'a> Sampler<'a> {
                 }
             }
         }
+        // an opening balance is as of a day: the runtime refuses one without it
+        if changes.iter().any(|c| c.field == "opening")
+            && !changes.iter().any(|c| c.field == "opening_on")
+        {
+            changes.push(Change {
+                field: "opening_on".into(),
+                value: self.edit_value(kind, "opening_on", Some(row), None, "", rng)?,
+            });
+        }
         Some(self.turn(
             Intent::Edit { target, changes },
             reference,
@@ -1965,6 +2060,68 @@ impl<'a> Sampler<'a> {
             } else {
                 Outcome::Done
             },
+            None,
+        ))
+    }
+
+    /// An edit the runtime refuses because the amount is not in the currency of the thing it is set on: a line is in its
+    /// account's currency, an account's opening balance is in the account's, and an account with lines keeps its currency
+    /// (the owner's ruling: the runtime never converts). The turn ends on a decline `out_of_scope`.
+    fn money_refusal(&self, kind: &str, rng: &mut Rng) -> Option<TurnIntent> {
+        if !matches!(kind, "transaction" | "account") {
+            return None;
+        }
+        let rows: Vec<&Row> = self
+            .live_rows(kind)
+            .into_iter()
+            .filter(|r| kind == "account" || r.text("status") == Some("posted"))
+            .collect();
+        if rows.is_empty() {
+            return None;
+        }
+        let row = rows[rng.below(rows.len())];
+        let (target, reference) = self.target_for(row, rng, false)?;
+        let currency = self.currency_of(row);
+        let other = self.other_currency(&currency, rng);
+        let has_lines =
+            kind == "account"
+                && self.facts.rows.iter().any(|r| {
+                    r.kind == "transaction" && r.text("account") == Some(row.name.as_str())
+                });
+        let changes = if kind == "transaction" {
+            vec![Change {
+                field: "amount".into(),
+                value: Val::Money {
+                    amount: self.money_amount(0.0, &other, 40.0, rng),
+                    currency: other,
+                    named: true,
+                },
+            }]
+        } else if has_lines && rng.chance(0.5) {
+            vec![Change {
+                field: "currency".into(),
+                value: Val::Text(other),
+            }]
+        } else {
+            vec![
+                Change {
+                    field: "opening".into(),
+                    value: Val::Money {
+                        amount: self.money_amount(0.0, &other, 1500.0, rng),
+                        currency: other,
+                        named: true,
+                    },
+                },
+                Change {
+                    field: "opening_on".into(),
+                    value: self.edit_value(kind, "opening_on", Some(row), None, "", rng)?,
+                },
+            ]
+        };
+        Some(self.turn(
+            Intent::Edit { target, changes },
+            reference,
+            Outcome::Decline,
             None,
         ))
     }
@@ -2132,7 +2289,27 @@ impl<'a> Sampler<'a> {
                     _ => put("notes", pick(typed.notes, rng)),
                 }
             }
-            "account" => put("type", Val::Text(made_type.unwrap_or("checking").into())),
+            "account" => {
+                put("type", Val::Text(made_type.unwrap_or("checking").into()));
+                // the currency an account is in (the vault's when it names none), and what it opened with, as of a day
+                let foreign =
+                    want("currency", 0.2, rng).then(|| self.other_currency(&self.facts.base, rng));
+                let currency = foreign.clone().unwrap_or_else(|| self.facts.base.clone());
+                if let Some(code) = foreign {
+                    put("currency", Val::Text(code));
+                }
+                if want("opening", 0.5, rng) || focus == Some("opening_on") {
+                    put(
+                        "opening",
+                        Val::Money {
+                            amount: self.money_amount(0.0, &currency, 1500.0, rng),
+                            currency,
+                            named: false,
+                        },
+                    );
+                    put("opening_on", day(-rng.range(10, 120)));
+                }
+            }
             "workout" => {
                 put(
                     "date",
@@ -2481,9 +2658,13 @@ impl<'a> Sampler<'a> {
             Intent::Write {
                 arg: VerbArg::When(when),
                 verb,
-                ..
+                target,
             } if verb == "reschedule" => {
-                let rel = rng.range(22, 40);
+                let kind = match target {
+                    Target::Name { kind, .. } | Target::Turn { kind, .. } => kind.as_str(),
+                    Target::Select { sel } => sel.kind.as_str(),
+                };
+                let rel = Self::reschedule_rel(kind, 22, 40, rng);
                 *when = Period::Day { rel }.when();
                 true
             }
@@ -3012,7 +3193,7 @@ impl<'a> Sampler<'a> {
                         let arg = match verb.as_str() {
                             "reschedule" => VerbArg::When(
                                 Period::Day {
-                                    rel: rng.range(1, 21),
+                                    rel: Self::reschedule_rel(&kind, 1, 21, rng),
                                 }
                                 .when(),
                             ),

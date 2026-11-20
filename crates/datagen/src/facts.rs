@@ -305,7 +305,13 @@ impl Facts {
             rows.push(put("locker item", r, None, fields, None));
         }
         for r in list("accounts") {
-            let fields = add(vec![("type", t(s(r, "kind")))]);
+            let fields = add(vec![
+                ("type", t(s(r, "kind"))),
+                (
+                    "currency",
+                    Some(F::T(account_currency(s(r, "key").unwrap_or_default()))),
+                ),
+            ]);
             rows.push(put("account", r, None, fields, None));
         }
         for r in list("transactions") {
@@ -396,6 +402,10 @@ impl Facts {
                 (
                     "currency",
                     Some(F::T(s(doc, "currency").unwrap_or("USD").to_uppercase())),
+                ),
+                (
+                    "carry",
+                    Some(F::B(r.get("carry") == Some(&Value::Bool(true)))),
                 ),
             ]);
             let title = titles.get(cat).cloned().unwrap_or_else(|| cat.to_owned());

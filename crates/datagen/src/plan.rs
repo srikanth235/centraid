@@ -687,14 +687,23 @@ impl<'a> WorldRun<'a> {
             }
             Intent::Edit { target, changes } => {
                 let (mut steps, rows, want, kind) = self.resolve(target, left)?;
-                steps.push(step(
+                let mut edit = step(
                     "edit",
                     vec![("rows", rows), ("args", change_lines(changes))],
-                ));
-                let check = if turn.outcome == Outcome::Decline {
+                );
+                // a followed store states its rows, and the runtime ends the turn itself on the refusal; an amount in the
+                // wrong currency is an error the model answers with a decline
+                let said_no = turn.outcome == Outcome::Decline;
+                let synced = matches!(kind.as_str(), "workout" | "daily figure");
+                edit.bad = said_no && !synced;
+                steps.push(edit);
+                let check = if !said_no {
+                    Check::Write(want.clone())
+                } else if synced {
                     Check::Refused
                 } else {
-                    Check::Write(want.clone())
+                    steps.push(step("decline", vec![("reason", "out_of_scope".to_owned())]));
+                    Check::Decline("out_of_scope".to_owned())
                 };
                 Ok(Plan {
                     steps,
@@ -1201,6 +1210,10 @@ impl<'a> WorldRun<'a> {
         }
         if let Some(at) = created.iter().position(|c| c == id) {
             return format!("+{}", at + 1);
+        }
+        // a plan is one row of a category and a month, its id `category:<leaf>:<month>`: the world's key for it
+        if let Some(plan) = id.strip_prefix("category:") {
+            return format!("budget:{plan}");
         }
         id.to_owned()
     }

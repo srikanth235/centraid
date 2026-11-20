@@ -673,7 +673,7 @@ fn first_of_window(ctx: &Ctx) -> Date {
 }
 
 /// What an amount of the pools (priced in dollars) comes to in `currency`, at a round rate.
-fn fx(currency: &str) -> f64 {
+pub(crate) fn fx(currency: &str) -> f64 {
     match currency {
         "INR" => 85.0,
         "EUR" => 0.92,

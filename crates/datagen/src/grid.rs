@@ -138,7 +138,8 @@ fn do_support(kind: &str, verb: &str) -> Result<(), &'static str> {
             "archiving changes no field the diff can show (`no field changed`), so a gold effect would be empty",
         ),
         ("star" | "unstar", "person" | "note" | "document" | "photo" | "locker item") => Ok(()),
-        ("reschedule", "event" | "task") => Ok(()),
+        // a line's day is what an import read: the member corrects it to an earlier day (`txn.correct`)
+        ("reschedule", "event" | "task" | "transaction") => Ok(()),
         ("cancel", "event" | "task") => Ok(()),
         ("complete" | "reopen", "task") => Ok(()),
         ("restore", "album") => {

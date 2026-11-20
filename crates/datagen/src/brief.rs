@@ -371,8 +371,21 @@ impl Briefer<'_> {
             ),
             Val::Flag(b) => if *b { "yes" } else { "no" }.to_owned(),
             Val::When(json) => self.when_json(json),
+            // an amount is in the currency of the thing it is set on, which is not always the vault's
+            Val::Money {
+                amount, currency, ..
+            } => format!(
+                "{}{MONEY_MARK}{currency}, so say the amount in that currency)",
+                number(*amount)
+            ),
         };
-        format!("{} to {value}", change.field.replace('_', " "))
+        // the day an opening balance is as of is not a field people name: it is the day the balance was true
+        let field = if change.field == "opening_on" {
+            "the day the opening balance is as of".to_owned()
+        } else {
+            change.field.replace('_', " ")
+        };
+        format!("{field} to {value}")
     }
 
     fn when_json(&self, json: &str) -> String {
@@ -394,7 +407,13 @@ impl Briefer<'_> {
         let mut spans = Vec::new();
         let mut typed = Vec::new();
         let ask = self.ask(&turn.intent, turn, &mut spans, &mut typed);
-        let money = ask.contains(MONEY_MARK).then(|| self.currency.to_owned());
+        // the currency the message must name: the one the first amount of the ask is in
+        let money = ask.split_once(MONEY_MARK).map(|(_, rest)| {
+            rest.split(|c: char| !c.is_ascii_alphabetic())
+                .next()
+                .unwrap_or_default()
+                .to_owned()
+        });
         TurnBrief {
             ask,
             money,

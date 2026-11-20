@@ -22,8 +22,14 @@ const SPECIAL_EDITS: &[(&str, &str)] = &[("task", "status"), ("note", "pinned"),
 
 /// The money pairs the runtime sets, as `(verb, kind, field)`: `("edit", "budget", "amount")`. A money pair left out of
 /// this list is not live (no tool sets it); one in it is live when the sampler also draws a value for it
-/// (`sample::draws_field`). Add a pair here and to the sampler together, as the runtime serves it.
-const MONEY_LIVE: &[(&str, &str, &str)] = &[];
+/// (`sample::draws_field`). Add a pair here and to the sampler together, as the runtime serves it. A transaction is
+/// never created in chat, and its amount keeps its account's currency.
+const MONEY_LIVE: &[(&str, &str, &str)] = &[
+    ("create", "account", "opening"),
+    ("edit", "account", "opening"),
+    ("edit", "budget", "amount"),
+    ("edit", "transaction", "amount"),
+];
 
 fn money_live(verb: &str, kind: &str, field: &str) -> bool {
     MONEY_LIVE.contains(&(verb, kind, field))
@@ -66,7 +72,13 @@ pub fn pairs(catalog: &Catalog, grid: &Grid) -> BTreeMap<String, Live> {
         for field in meta::create_args(meta_kind) {
             let state = match create_cell {
                 Some(Live::Live) => {
-                    if ROW_ARGS.contains(&(kind.name.as_str(), field)) {
+                    if matches!(field_type(field), Some(FieldType::Money))
+                        && !money_live("create", &kind.name, field)
+                    {
+                        Live::NotLive(
+                            "no create sets a money field of this kind: a transaction is not created in chat".into(),
+                        )
+                    } else if ROW_ARGS.contains(&(kind.name.as_str(), field)) {
                         Live::NotLive(
                             "it names another row by `#n`; no draw puts a `find` ahead of the create".into(),
                         )
@@ -85,7 +97,7 @@ pub fn pairs(catalog: &Catalog, grid: &Grid) -> BTreeMap<String, Live> {
             };
             out.insert(label("create", &kind.name, field), state);
         }
-        // money fields are not create args: the runtime drops them (`opening` of an account), a transaction is not created
+        // a transaction is not created in chat, so none of its money fields is a create arg
         // edit
         let edit_cell = grid.cells.get(&Cell::new("edit", &kind.name, "edit"));
         let mut edit_fields: Vec<&str> = Vec::new();
@@ -125,24 +137,18 @@ pub fn pairs(catalog: &Catalog, grid: &Grid) -> BTreeMap<String, Live> {
             out.insert(label("edit", &kind.name, field), state);
         }
     }
-    // a money amount is set by no tool: a transaction and a budget are not created in chat, the runtime drops the opening
-    // balance of a new account and refuses to edit a money field, so these pairs are listed as the gap they are
+    // the money pairs the runtime does not set are listed as the gap they are: a transaction and a budget are not created in
+    // chat, and an edit of one of them that the runtime serves is in `MONEY_LIVE`
     for kind in &catalog.kinds {
         for field in kind.fields.iter().filter(|f| f.ty == "money") {
             out.entry(label("create", &kind.name, &field.name))
                 .or_insert_with(|| {
                     Live::NotLive(
-                        "no create sets a money field: the runtime drops it (`create_arg_dropped`) or creates no such kind"
-                            .into(),
+                        "no create sets this money field: a transaction and a budget are not created in chat".into(),
                     )
                 });
             out.entry(label("edit", &kind.name, &field.name))
-                .or_insert_with(|| {
-                    Live::NotLive(format!(
-                        "the runtime answers `{} cannot be edited`",
-                        field.name
-                    ))
-                });
+                .or_insert_with(|| Live::NotLive(format!("no edit sets {}", field.name)));
         }
     }
     out

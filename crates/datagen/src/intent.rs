@@ -552,12 +552,26 @@ pub enum Val {
     Flag(bool),
     /// A date expression, as `when` writes it.
     When(String),
+    /// An amount of money in `currency` (an ISO code): the currency of the thing it is set on, never converted. The call
+    /// carries the code (`40 USD`) only when `named`: an amount the runtime refuses because its row is in another
+    /// currency; one in the row's own currency is said as the number alone, as the runtime reads it.
+    Money {
+        amount: f64,
+        currency: String,
+        named: bool,
+    },
 }
 
 impl Val {
     #[must_use]
     pub fn render(&self) -> String {
         match self {
+            Self::Money {
+                amount,
+                currency,
+                named: true,
+            } => format!("{} {currency}", number(*amount)),
+            Self::Money { amount, .. } => number(*amount),
             Self::Text(text) => text.clone(),
             Self::Num(n) => number(*n),
             Self::Flag(true) => "yes".to_owned(),

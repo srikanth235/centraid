@@ -354,7 +354,7 @@ pub fn expected(catalog: &Catalog, turn: &TurnIntent, today: Date) -> Expected {
                 _ => {}
             }
             for c in changes {
-                if let Val::Num(n) = c.value {
+                if let Val::Num(n) | Val::Money { amount: n, .. } = c.value {
                     numbers.push(n);
                 }
                 if let (Target::Name { kind, .. } | Target::Turn { kind, .. }, Val::Text(t)) =
@@ -373,7 +373,7 @@ pub fn expected(catalog: &Catalog, turn: &TurnIntent, today: Date) -> Expected {
                 _ => None,
             });
             for c in fields {
-                if let Val::Num(n) = c.value {
+                if let Val::Num(n) | Val::Money { amount: n, .. } = c.value {
                     numbers.push(n);
                 }
                 if let Val::Text(t) = &c.value
