@@ -68,6 +68,12 @@ pub fn facts(row: &Row, today: Date) -> Vec<String> {
     if let Some(stamp) = row.date {
         out.push(when(stamp, today));
     }
+    // when a workout ended, if it did: the vault keeps it beside the start, not as a field
+    if row.kind == Kind::Workout
+        && let Some(end) = row.extra.get("end").and_then(|end| Stamp::parse(end))
+    {
+        out.push(format!("end {}", end.show()));
+    }
     let spec = row.kind.spec();
     for field in spec.fields {
         let Some(value) = row.field(field.name) else {

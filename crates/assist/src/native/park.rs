@@ -1846,6 +1846,9 @@ fn workout_log(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String>
         .to_owned();
     let mut row = new_row(Kind::Workout, &id, &title, cx);
     row.date = text(input, "starts").and_then(|starts| local_stamp(&world.zone, starts));
+    if let Some(ends) = text(input, "ends").and_then(|ends| local_stamp(&world.zone, ends)) {
+        row.extra.insert("end", ends.vault());
+    }
     workout_figures(&mut row, input);
     world.rows.insert(row.key(), row);
     Ok(ok(json!({"id": id, "workout_id": id})))
@@ -1875,6 +1878,9 @@ fn workout_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String
     }
     if let Some(starts) = text(input, "starts") {
         row.date = local_stamp(&zone, starts);
+    }
+    if let Some(ends) = text(input, "ends").and_then(|ends| local_stamp(&zone, ends)) {
+        row.extra.insert("end", ends.vault());
     }
     workout_figures(row, input);
     row.updated = cx.now.clone();

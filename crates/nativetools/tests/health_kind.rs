@@ -386,6 +386,88 @@ fn a_workout_is_logged_at_the_instant_it_was_on_the_members_clock() {
 }
 
 #[test]
+fn a_workouts_end_is_stored_when_logged_shown_and_set_by_an_edit() {
+    let world = seeded_with(&world_json());
+    let mut session = world.session();
+    session.user("log a swim from 7, it ended at 7:45");
+    let made = call(
+        &mut session,
+        "create",
+        json!({"kind": "workout", "args": "name: Swim\ndate: {\"date\":\"2026-09-26\",\"time\":\"07:00\"}\nend: {\"unit\":\"day\",\"rel\":0,\"time\":\"07:45\"}"}),
+    );
+    assert!(wrote(&made), "{made}");
+    session.user("when did the swim end");
+    let shown = text(
+        &mut session,
+        "find",
+        json!({"kind": "workout", "name": "Swim"}),
+    );
+    assert!(shown.contains("2026-09-26 07:45"), "the end shows: {shown}");
+
+    // the end moves with an edit, on the day the workout started
+    session.user("make the swim end at 8");
+    let found = call(
+        &mut session,
+        "find",
+        json!({"kind": "workout", "name": "Swim"}),
+    );
+    let handle = found["effect"]["result"]
+        .as_str()
+        .expect("the swim")
+        .to_owned();
+    let edited = call(
+        &mut session,
+        "edit",
+        json!({"rows": handle, "args": "end: {\"unit\":\"day\",\"rel\":0,\"time\":\"08:00\"}"}),
+    );
+    assert!(wrote(&edited), "{edited}");
+    session.user("when does the swim end now");
+    let shown = text(
+        &mut session,
+        "find",
+        json!({"kind": "workout", "name": "Swim"}),
+    );
+    assert!(
+        shown.contains("2026-09-26 08:00"),
+        "the new end shows: {shown}"
+    );
+}
+
+#[test]
+fn a_workout_cannot_end_before_it_starts_or_on_a_day_with_no_time() {
+    let world = seeded_with(&world_json());
+    let mut session = world.session();
+    session.user("log a swim from 7 that ended at 6");
+    let early = call(
+        &mut session,
+        "create",
+        json!({"kind": "workout", "args": "name: Swim\ndate: {\"date\":\"2026-09-26\",\"time\":\"07:00\"}\nend: {\"unit\":\"day\",\"rel\":0,\"time\":\"06:00\"}"}),
+    );
+    assert!(!wrote(&early), "{early}");
+    assert!(
+        early["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("cannot end before it starts"),
+        "{early}"
+    );
+    session.user("log a swim that ended on the 27th");
+    let dayless = call(
+        &mut session,
+        "create",
+        json!({"kind": "workout", "args": "name: Swim\ndate: {\"date\":\"2026-09-26\",\"time\":\"07:00\"}\nend: 2026-09-27"}),
+    );
+    assert!(!wrote(&dayless), "{dayless}");
+    assert!(
+        dayless["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("a time"),
+        "{dayless}"
+    );
+}
+
+#[test]
 fn a_figure_is_logged_cleared_and_put_back_once_the_store_is_disconnected() {
     use centraid_nativetools::park::Writes;
     let world = seeded_with(&world_json());
