@@ -81,24 +81,6 @@ fn status(core: &Handle) -> wire::BackupStatusResponse {
     status
 }
 
-fn drain(core: &Handle) -> wire::DrainResponse {
-    let wire::response::Kind::Drain(drained) = call(
-        core,
-        wire::request::Kind::Drain(wire::DrainRequest {
-            deadline_ms: 0,
-            rule: wire::TransferRule::WifiOnly as i32,
-            metered: false,
-            charging: true,
-            wants_snapshot: true,
-            exclude_videos: false,
-            asked: false,
-        }),
-    ) else {
-        panic!("a drain answers");
-    };
-    drained
-}
-
 /// A drain once the phone's own pass is done. A relaunched phone starts a pass of its own, and a
 /// second pass while one runs is refused, never queued (core-ffi CONTRACT); so a refusal here
 /// pumps the phone and asks again, a bounded number of times.
@@ -203,8 +185,12 @@ fn a_paired_phone_is_still_paired_and_still_backs_up_after_the_process_dies() {
     assert_eq!(phone.secrets.shelf_id_of(&identity), Some(id.clone()));
 
     // THE FIRST BACKUP IS ACKNOWLEDGED, and nothing is left for the operating system to be handed.
-    let first = drain(&core);
-    assert!(first.confirmed_parts > 0, "{first:?}");
+    // Pairing may start the phone's own pass: wait for it, then read the first backup from the
+    // ledger, whichever pass made it.
+    drain_when_free(&mut phone, &core);
+    let first = status(&core);
+    assert!(first.last_snapshot_ms.is_some(), "{first:?}");
+    assert_eq!(first.pending_bytes, 0, "{first:?}");
     assert!(!waiting_to_pair_again(&core));
     let first_snapshot_ms = status(&core)
         .last_snapshot_ms
@@ -264,8 +250,12 @@ fn work_queued_before_the_process_dies_is_still_queued_and_goes_out_after_the_re
     let mut phone = launched(&dir, &id, FakeShell::default());
     let core = phone.shelf.core_of(&id).expect("the vault is open");
     pair(&mut phone, &gateway.payload());
-    let first = drain(&core);
-    assert!(first.confirmed_parts > 0, "{first:?}");
+    // Pairing may start the phone's own pass: wait for it, then read the first backup from the
+    // ledger, whichever pass made it.
+    drain_when_free(&mut phone, &core);
+    let first = status(&core);
+    assert!(first.last_snapshot_ms.is_some(), "{first:?}");
+    assert_eq!(first.pending_bytes, 0, "{first:?}");
 
     // A note is written and the process dies before any backup carried it.
     core.command(
@@ -318,8 +308,12 @@ fn after_the_first_backup_the_same_phone_shows_its_24_words() {
     phone.driver.serve(&mut phone.shell);
     let core = phone.shelf.core_of(&id).expect("the vault is open");
     pair(&mut phone, &gateway.payload());
-    let first = drain(&core);
-    assert!(first.confirmed_parts > 0, "{first:?}");
+    // Pairing may start the phone's own pass: wait for it, then read the first backup from the
+    // ledger, whichever pass made it.
+    drain_when_free(&mut phone, &core);
+    let first = status(&core);
+    assert!(first.last_snapshot_ms.is_some(), "{first:?}");
+    assert_eq!(first.pending_bytes, 0, "{first:?}");
 
     // THE MEMBER OPENS THE WORDS from the same running phone, after the first backup.
     let page = phone
