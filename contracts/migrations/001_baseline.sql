@@ -700,8 +700,8 @@ CREATE INDEX txn_by_account_day ON txn(account_id, posted_on, id);
 -- table and sorts (`a_month_across_accounts_reads_the_day_index`).
 CREATE INDEX txn_by_day         ON txn(posted_on, id);
 CREATE INDEX txn_by_category    ON txn(category_id) WHERE category_id IS NOT NULL;
-CREATE TRIGGER txn_line_is_fixed BEFORE UPDATE OF account_id, currency, posted_on, amount_minor ON txn
-  BEGIN SELECT RAISE(ABORT, 'a statement line is never edited'); END;
+CREATE TRIGGER txn_line_is_fixed BEFORE UPDATE OF account_id, currency ON txn
+  BEGIN SELECT RAISE(ABORT, 'a statement line stays in its account and its currency'); END;
 CREATE TRIGGER txn_void_is_final BEFORE UPDATE OF status ON txn WHEN old.status = 'void'
   BEGIN SELECT RAISE(ABORT, 'a voided line stays void'); END;
 

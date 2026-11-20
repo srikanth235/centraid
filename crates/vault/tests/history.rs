@@ -384,7 +384,7 @@ fn a_task_keeps_what_was_set() {
 }
 
 #[test]
-fn a_transaction_keeps_the_members_category_and_never_the_banks_words() {
+fn a_transaction_keeps_the_members_category_and_corrections_and_never_its_account() {
     let w = World::new();
     let account = w.id(
         "account.add",
@@ -419,11 +419,12 @@ fn a_transaction_keeps_the_members_category_and_never_the_banks_words() {
         World::change(&versions[1], "txn.category_id"),
         (Value::Null, json!(food))
     );
-    // The bank's amount, day and account are never in a version: they never change.
+    // The account and the currency never change, so they are in no version; the amount and the
+    // day are the member's to correct and are kept (`a_correction_is_an_earlier_version`).
     for version in &versions {
         for change in &version.changes {
             assert!(
-                !["amount_minor", "posted_on", "account_id"]
+                !["account_id", "currency"]
                     .iter()
                     .any(|column| change.field.ends_with(column)),
                 "{}",
@@ -443,7 +444,7 @@ fn a_transaction_keeps_the_members_category_and_never_the_banks_words() {
         })
         .expect("states");
     assert!(
-        !stored.contains("amount_minor") && !stored.contains("posted_on"),
+        !stored.contains("account_id") && !stored.contains("\"currency\""),
         "{stored}"
     );
     w.story(&id, &first);

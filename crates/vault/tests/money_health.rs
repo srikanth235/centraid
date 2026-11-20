@@ -308,17 +308,17 @@ fn a_line_is_never_edited_and_the_members_category_and_name_survive_a_restatemen
             .as_deref(),
         Some("Groceries")
     );
-    // The schema says so too: a line's day and amount are never written.
+    // The schema says so too: a line's account and currency are never written.
     let refused = world.scratch.vault.commit(|tx| {
         tx.connection()
-            .execute("UPDATE txn SET amount_minor = 1 WHERE id = ?1", [&grocer])?;
+            .execute("UPDATE txn SET currency = 'EUR' WHERE id = ?1", [&grocer])?;
         Ok(())
     });
     assert!(
         refused
             .expect_err("refused")
             .to_string()
-            .contains("never edited")
+            .contains("stays in its account")
     );
 }
 

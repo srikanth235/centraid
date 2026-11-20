@@ -389,11 +389,14 @@ pub const OMITTED: &[(&str, &str, &str)] = &[
     ("photo", "exif", "immutable: the file"),
     ("photo", "burst", "immutable: the camera's"),
     ("photo", "edited_from", "immutable: how it was made"),
-    // A statement line's own words are the bank's; only what the member sets is state.
-    ("txn", "account_id", "bank-stated, never edited"),
-    ("txn", "currency", "bank-stated, never edited"),
-    ("txn", "posted_on", "bank-stated, never edited"),
-    ("txn", "amount_minor", "bank-stated, never edited"),
+    // A statement line stays in its account and its account's currency; its amount and day are
+    // the member's to correct (`txn.correct`) and so are state.
+    ("txn", "account_id", "a line stays in its account"),
+    (
+        "txn",
+        "currency",
+        "a line is in its account's currency, which the schema keeps",
+    ),
     // Locker: the five sealed cells, the stamp of the last change to one and the key generation
     // they were sealed under are all kept (the ciphertext, never a plaintext), so a changed
     // password comes back with its age. What is only a use of the item is not.

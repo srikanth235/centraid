@@ -207,7 +207,7 @@ pub struct SystemMap {
     /// owned, and is the entity's.
     pub fields: &'static [&'static str],
     /// The fields (`title` among them) that are written when a row is added and
-    /// never after: a statement line is never edited, whatever a later
+    /// never after: a statement line is the bank's once, whatever a later
     /// statement says.
     pub fixed: &'static [&'static str],
     /// The fields that are rows of their own, after the columns.
@@ -578,7 +578,8 @@ pub const SYSTEMS: &[SystemMap] = &[
         named: nothing_to_settle,
     },
     // A line of a statement: its title is the bank's words until the member
-    // renames it, its day and amount are the bank's and never edited, and the
+    // renames it, its day and amount are the bank's until the member corrects them (a later
+    // statement never overwrites a correction), and the
     // category is the member's to change.
     SystemMap {
         system: "statement",

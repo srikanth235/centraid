@@ -14,10 +14,12 @@
 //!   account's own id, so every account has exactly one origin from birth.
 //!   Closing is the `archived` flag and a rename is `entity.retitle`: nothing
 //!   here duplicates a shared verb.
-//! - **A line** is `follow.statement`'s: the vault adds a line once, a re-import
-//!   writes nothing, and a line is never edited (the schema refuses it). Money's
-//!   own verbs on a line are a category, a void and a transfer. **The amount is
-//!   signed: money out is negative.**
+//! - **A line** is `follow.statement`'s: the vault adds a line once and a re-import
+//!   writes nothing, so what the member corrected stays corrected. Money's own
+//!   verbs on a line are a category, a correction (`txn.correct`: the amount and the
+//!   day, for what an import read wrongly), a void and a transfer. A line stays in its
+//!   account and its account's currency (the schema refuses either to change).
+//!   **The amount is signed: money out is negative.**
 //! - **A category** is a concept; a group is a category with no parent. Its id is
 //!   its key, so asking for a category that exists is the same ask.
 //! - **A plan** (`budget`) is a category's amount for a month, and a checkpoint is
@@ -247,12 +249,39 @@ fn pre_account(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     ))
 }
 
+/// A currency is an ISO 4217 code: three letters, upper case once trimmed.
+fn currency_code(text: &str) -> Option<String> {
+    let code = text.trim().to_ascii_uppercase();
+    (code.len() == 3 && code.bytes().all(|b| b.is_ascii_uppercase())).then_some(code)
+}
+
 fn pre_edit_account(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if let Some(sentence) = pre_account(ctx)? {
         return Ok(Some(sentence));
     }
     let connection = ctx.connection();
     let id = ctx.required_str("id")?;
+    if let Some(wanted) = ctx.optional_str("currency") {
+        let Some(code) = currency_code(wanted) else {
+            return Ok(Some(
+                "A currency is a three-letter code like USD.".to_owned(),
+            ));
+        };
+        let held: String =
+            connection.query_row("SELECT currency FROM account WHERE id = ?1", [id], |row| {
+                row.get(0)
+            })?;
+        let has_lines: bool = connection.query_row(
+            "SELECT EXISTS (SELECT 1 FROM txn WHERE account_id = ?1)",
+            [id],
+            |row| row.get(0),
+        )?;
+        if code != held && has_lines {
+            return Ok(Some(
+                "An account with transactions keeps its currency; they are in it.".to_owned(),
+            ));
+        }
+    }
     if let Some(title) = ctx.optional_str("title") {
         let name = squash(title);
         if name.is_empty() {
@@ -302,6 +331,12 @@ fn edit_account(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             "UPDATE origin SET label = ?2 WHERE system = 'statement' AND fills = ?1",
             [id, &name],
         )?;
+    }
+    if let Some(code) = ctx.optional_str("currency").and_then(currency_code) {
+        changed |= connection.execute(
+            "UPDATE account SET currency = ?2 WHERE id = ?1 AND currency IS NOT ?2",
+            [id, &code],
+        )? > 0;
     }
     if let Some(account_type) = ctx.optional_str("type") {
         changed |= connection.execute(
@@ -503,6 +538,84 @@ fn categorize(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         [only] => with_rev(ctx, only, answer),
         _ => Ok(answer),
     }
+}
+
+/// Correct what an import read wrongly on a live line: its amount (signed, in the account's
+/// currency) and its day. The currency is the account's and cannot differ from it; a line named
+/// in another one is refused rather than summed into the account's balance.
+fn pre_correct(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let connection = ctx.connection();
+    let Some(found) = line(connection, ctx.required_str("id")?)? else {
+        return Ok(Some("That is not a transaction.".to_owned()));
+    };
+    if found.status == "void" {
+        return Ok(Some(
+            "A removed transaction cannot be corrected.".to_owned(),
+        ));
+    }
+    if ctx.input.get("amount_minor").is_none()
+        && ctx.input.get("posted_on").is_none()
+        && ctx.input.get("currency").is_none()
+    {
+        return Ok(Some(
+            "Say what to correct: the amount or the date.".to_owned(),
+        ));
+    }
+    if let Some(wanted) = ctx.optional_str("currency") {
+        let Some(code) = currency_code(wanted) else {
+            return Ok(Some(
+                "A currency is a three-letter code like USD.".to_owned(),
+            ));
+        };
+        if code != found.currency {
+            return Ok(Some(format!(
+                "That transaction is in its account's currency, {}.",
+                found.currency
+            )));
+        }
+    }
+    if let Some(day) = ctx.optional_str("posted_on")
+        && !is_day(connection, day)?
+    {
+        return Ok(Some("That is not a real date.".to_owned()));
+    }
+    // One side of a transfer is money out and the other money in; a correction keeps it so.
+    if let Some(amount) = integer(ctx, "amount_minor")
+        && found.transfer_id.is_some()
+        && (amount < 0) != (found.amount_minor < 0)
+    {
+        return Ok(Some(
+            "One side of a transfer is money out and the other money in. Unlink it first."
+                .to_owned(),
+        ));
+    }
+    Ok(None)
+}
+
+fn correct(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let id = ctx.required_str("id")?;
+    let connection = ctx.connection();
+    let (amount, day): (i64, String) = connection.query_row(
+        "SELECT amount_minor, posted_on FROM txn WHERE id = ?1",
+        [id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    let changed = connection.execute(
+        "UPDATE txn SET amount_minor = coalesce(?2, amount_minor), posted_on = coalesce(?3, posted_on)
+          WHERE id = ?1
+            AND (amount_minor, posted_on) IS NOT (coalesce(?2, amount_minor), coalesce(?3, posted_on))",
+        rusqlite::params![id, integer(ctx, "amount_minor"), ctx.optional_str("posted_on")],
+    )? > 0;
+    if changed {
+        ctx.touch(id)?;
+    }
+    // The act is taken back by correcting the line to what it held.
+    let replaced = changed.then(|| json!({ "id": id, "amount_minor": amount, "posted_on": day }));
+    with_rev(
+        ctx,
+        id,
+        json!({ "id": id, "changed": changed, "replaced": replaced }),
+    )
 }
 
 /// Let go of a line's transfer, and of the other half's.
@@ -950,6 +1063,14 @@ pub fn definitions() -> Vec<CommandDefinition> {
             check: pre_categorize,
         },
     ];
+    const CORRECT: &[CommandCondition] = &[
+        STALE_GUARD[0],
+        STALE_GUARD[1],
+        CommandCondition {
+            predicate: "line_can_be_corrected",
+            check: pre_correct,
+        },
+    ];
     const LINE: &[CommandCondition] = &[CommandCondition {
         predicate: "transaction_exists",
         check: pre_line,
@@ -1045,6 +1166,7 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 "id": { "type": "string", "minLength": 1 },
                 "title": { "type": "string", "minLength": 1, "maxLength": 80 },
                 "type": { "enum": ["checking", "savings", "credit_card", "cash"] },
+                "currency": { "type": "string", "minLength": 3, "maxLength": 3 },
                 "on_budget": { "type": "boolean" },
                 "external_ref": { "type": ["string", "null"], "minLength": 1, "maxLength": 64 },
                 "expected_rev": { "type": "integer", "minimum": 0 }
@@ -1125,6 +1247,25 @@ pub fn definitions() -> Vec<CommandDefinition> {
             Idempotency::Idempotent,
             CATEGORIZE,
             categorize,
+        ),
+        CommandDefinition::plain(
+            "txn.correct",
+            "txn",
+            r#"{
+              "type": "object",
+              "required": ["id"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "amount_minor": { "type": "integer" },
+                "posted_on": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+                "currency": { "type": "string", "minLength": 3, "maxLength": 3 },
+                "expected_rev": { "type": "integer", "minimum": 0 }
+              }
+            }"#,
+            Idempotency::Idempotent,
+            CORRECT,
+            correct,
         ),
         void_line,
         CommandDefinition::plain(
