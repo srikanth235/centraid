@@ -56,6 +56,8 @@ struct PhotosHomeView: View {
                 onClose: { send(PhotosHomeEvents.make { $0.searchClosed = .init() }) }
             ),
             filter: filter,
+            // JUSTIFIED ROWS KEEP THE FULL WIDTH (ruling 27); the band stays in the readable column.
+            readable: false,
             band: { foot },
             content: { pageBody }
         )

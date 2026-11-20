@@ -515,6 +515,8 @@ iconChipRadiusRatio = 0.26
 iconChipTintDark = 0.2
 iconChipTintLight = 0.13
 pageMargin = 18
+# Wide screens (ruling 27): page content and the floating band stand in one column this wide (dp / pt), centred.
+readableWidth = 720
 targetMinCoarse = 44
 targetMinFine = 34
 

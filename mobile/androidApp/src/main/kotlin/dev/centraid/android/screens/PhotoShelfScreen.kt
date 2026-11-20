@@ -97,6 +97,8 @@ public fun PhotoShelfScreen(
     // THE PUSHED PAGE every other shelf of the app is: the back chevron, the title inline beside it
     // and the count under it, on the page's own ground, in Photos' colour.
     PushedPage(
+        // THE SHELF IS JUSTIFIED ROWS: the full width (ruling 27).
+        readable = false,
         title = state.title,
         parentTitle = CentraidCatalog.byId["photos"]?.name.orEmpty(),
         onBack = onClose,

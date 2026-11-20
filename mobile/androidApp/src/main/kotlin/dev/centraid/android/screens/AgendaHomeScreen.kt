@@ -170,6 +170,8 @@ public fun AgendaHomeScreen(
     Box(Modifier.fillMaxSize().testTag("agenda-home")) {
         AppPlace(
             app = state.app_key,
+            // THE CALENDAR'S GRIDS (Day, Week, Month, Year) KEEP THE FULL WIDTH (ruling 27); the lists stand in the readable column.
+            readable = state.data_?.let { it.time_grid == null && it.month == null && it.year == null } ?: true,
             title = header?.title?.takeIf { it.isNotEmpty() } ?: chrome.title,
             meta = meta,
             barLeading = header?.let { { AgendaMonthChip(it, onEvent) } },

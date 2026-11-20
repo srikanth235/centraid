@@ -691,6 +691,7 @@ public object CentraidGeometry {
     public const val ICON_CHIP_TINT_DARK: Double = 0.2
     public const val ICON_CHIP_TINT_LIGHT: Double = 0.13
     public const val PAGE_MARGIN: Int = 18
+    public const val READABLE_WIDTH: Int = 720
     public const val TARGET_MIN_COARSE: Int = 44
     public const val TARGET_MIN_FINE: Int = 34
 }

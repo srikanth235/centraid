@@ -13,6 +13,26 @@ import UIKit
 // `SystemPlace` is the vault/settings sheets; the four every app port needs
 // live here.
 
+extension View {
+    /// THE READABLE COLUMN (ruling 27): on a wide screen (an iPad) the page's content and the floating band
+    /// stand in one column `CentraidGeometry.readableWidth` wide, centred, with the page colour either side. A
+    /// phone is narrower than the cap, so nothing changes there. Applied once, by the rooms below; `enabled`
+    /// false is the opt-out (Photos' justified rows, the Calendar's grids), which keeps the full width.
+    ///
+    /// `alignment` is where content narrower than the column sits inside it (the leading edge for a header
+    /// and an editor, the middle for a list page, as each already stood).
+    @ViewBuilder
+    func readableColumn(_ enabled: Bool = true, alignment: Alignment = .center) -> some View {
+        if enabled {
+            frame(maxWidth: .infinity, alignment: alignment)
+                .frame(maxWidth: CentraidGeometry.readableWidth)
+                .frame(maxWidth: .infinity)
+        } else {
+            self
+        }
+    }
+}
+
 /// THE SEARCH SLOT an `AppPlace` carries. The field's state is the machine's `SearchField`;
 /// the words are the app's copy.
 ///
@@ -275,6 +295,8 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
     /// A bar of the place's own: no drawn title, its leading view and keys in the system bar.
     var bar: PlaceBar? = nil
     var showsBand: Bool = true
+    /// False keeps the content's full width (Photos, the Calendar's grids); the band stays in the readable column.
+    var readable: Bool = true
     let trailing: () -> Trailing
     let band: () -> Band
     let content: () -> Content
@@ -294,6 +316,7 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         subtitle: SubtitleSlot? = nil,
         bar: PlaceBar? = nil,
         showsBand: Bool = true,
+        readable: Bool = true,
         @ViewBuilder trailing: @escaping () -> Trailing,
         @ViewBuilder band: @escaping () -> Band,
         @ViewBuilder content: @escaping () -> Content
@@ -306,6 +329,7 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         self.subtitle = subtitle
         self.bar = bar
         self.showsBand = showsBand
+        self.readable = readable
         self.trailing = trailing
         self.band = band
         self.content = content
@@ -319,15 +343,17 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
             // (the glass filter and the filled accent `+`) at the trailing, nothing else.
             // THE TITLE IS IN THE BAR'S TOP ROW (`RootBarTitle`); the scope line is first here, and a
             // place's own bar (the Calendar's month chip) is one control row under it.
-            if showsBarTitle { KitHeader(title: "", subtitle: subtitle) }
+            if showsBarTitle { KitHeader(title: "", subtitle: subtitle).readableColumn(readable, alignment: .leading) }
             if let bar, showsBarTitle {
                 HStack(spacing: 0) {
                     bar.leading.environment(\.appAccent, AppAccent(app))
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, CentraidGeometry.pageMargin)
+                .readableColumn(readable, alignment: .leading)
             }
             content()
+                .readableColumn(readable)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 // THE FOOT OF EVERY LIST CLEARS THE BAND AND FADES UNDER IT (#1202): a last row sits
                 // fully above the plates, and rows that scroll beneath them dissolve instead of
@@ -397,6 +423,8 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
                         )
                 }
             }
+            // THE BAND STANDS IN THE READABLE COLUMN (ruling 27), whatever the content does.
+            .readableColumn()
             // GLASS STANDS ON NOTHING: the content scrolls under the plates and shows
             // through them. Under Reduce Transparency or Increase Contrast the strip is the
             // page's colour again (`BandStrip`).
@@ -424,6 +452,7 @@ extension AppPlace where Trailing == RoomTrailing {
         subtitle: SubtitleSlot? = nil,
         bar: PlaceBar? = nil,
         showsBand: Bool = true,
+        readable: Bool = true,
         @ViewBuilder band: @escaping () -> Band,
         @ViewBuilder content: @escaping () -> Content
     ) {
@@ -436,6 +465,7 @@ extension AppPlace where Trailing == RoomTrailing {
             subtitle: subtitle,
             bar: bar,
             showsBand: showsBand,
+            readable: readable,
             trailing: { RoomTrailing(action: trailing, app: app) },
             band: band,
             content: content
@@ -456,6 +486,8 @@ struct PushedPage<Trailing: View, Content: View>: View {
     var titleColor: Color? = nil
     var titleIcon: String = ""
     var titleIdentifier: String? = nil
+    /// False keeps the full width (a Photos shelf); see `readableColumn`.
+    var readable: Bool = true
     let trailing: () -> Trailing
     let content: () -> Content
 
@@ -469,9 +501,11 @@ struct PushedPage<Trailing: View, Content: View>: View {
         titleColor: Color? = nil,
         titleIcon: String = "",
         titleIdentifier: String? = nil,
+        readable: Bool = true,
         @ViewBuilder trailing: @escaping () -> Trailing,
         @ViewBuilder content: @escaping () -> Content
     ) {
+        self.readable = readable
         self.title = title
         self.parentTitle = parentTitle
         self.onBack = onBack
@@ -485,8 +519,9 @@ struct PushedPage<Trailing: View, Content: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !meta.isEmpty { KitHeader(title: "", meta: meta) }
+            if !meta.isEmpty { KitHeader(title: "", meta: meta).readableColumn(readable, alignment: .leading) }
             content()
+                .readableColumn(readable)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 // A FLOATING BAR AT THE FOOT (Docs' quick look, a Locker verb row) fades what scrolls
                 // under it instead of cutting through its text (#1202).
@@ -575,8 +610,10 @@ struct EditorRoom<Trailing: View, Content: View>: View {
                 AutosaveStatus(status)
                     .padding(.horizontal, CentraidGeometry.pageMargin)
                     .padding(.bottom, 4)
+                    .readableColumn(alignment: .leading)
             }
             content()
+                .readableColumn(alignment: .topLeading)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .background(Theme.color("bg", scheme).ignoresSafeArea())

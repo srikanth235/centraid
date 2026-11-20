@@ -60,7 +60,9 @@ struct AgendaHomeView: View {
                     showsTitle: !header.title.isEmpty
                 )
             },
-            showsBand: !denied && !state.band.isEmpty && !quickAddTyping
+            showsBand: !denied && !state.band.isEmpty && !quickAddTyping,
+            // THE CALENDAR'S GRIDS (Day, Week, Month, Year) KEEP THE FULL WIDTH (ruling 27); the lists stand in the readable column.
+            readable: !isCalendarGrid(state)
         ) {
             AppBand(
                 app: state.appKey,
@@ -334,6 +336,12 @@ struct AgendaHomeView: View {
     private func monthGrid(_ state: Centraid_Core_V1_AgendaHomeState) -> Centraid_Core_V1_AgendaMonthGrid? {
         if case let .data(home)? = state.content, home.hasMonth { return home.month }
         return nil
+    }
+
+    /// Day, Week, Month and Year are grids: they keep the full width on a wide screen (ruling 27).
+    private func isCalendarGrid(_ state: Centraid_Core_V1_AgendaHomeState) -> Bool {
+        if case let .data(home)? = state.content { return home.hasTimeGrid || home.hasMonth || home.hasYear }
+        return false
     }
 
     /// MONTH AND YEAR STEP BY THEIR OWN PERIOD (`PeriodStepped`); the lists by days. Day and Week

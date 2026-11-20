@@ -677,6 +677,7 @@ public enum CentraidGeometry {
     public static let iconChipTintDark: CGFloat = 0.2
     public static let iconChipTintLight: CGFloat = 0.13
     public static let pageMargin: CGFloat = 18
+    public static let readableWidth: CGFloat = 720
     public static let targetMinCoarse: CGFloat = 44
     public static let targetMinFine: CGFloat = 34
 }

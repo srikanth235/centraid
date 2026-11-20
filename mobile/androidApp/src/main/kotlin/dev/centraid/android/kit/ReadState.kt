@@ -467,6 +467,9 @@ public object KitGeometry {
      */
     public val GUTTER: Dp = CentraidGeometry.PAGE_MARGIN.dp
 
+    /** The readable column's cap on a wide screen (ruling 27): the emitted `CentraidGeometry.READABLE_WIDTH`. */
+    public val READABLE_WIDTH: Dp = CentraidGeometry.READABLE_WIDTH.dp
+
     /** A thumb's press: every row and key is at least this tall. */
     public val ROW_MIN: Dp = 44.dp
 

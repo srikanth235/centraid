@@ -513,6 +513,14 @@
       "x": 5080,
       "y": 28360
     },
+    "ReadableColumn.dc.html": {
+      "h": 800,
+      "page": "light",
+      "title": "Wide screens · readable column",
+      "w": 1280,
+      "x": 0,
+      "y": 77000
+    },
     "RemindersStopPhone.dc.html": {
       "h": 844,
       "page": "light",
@@ -1504,6 +1512,14 @@
       "w": 390,
       "x": 4660,
       "y": 28360
+    },
+    "ReadableColumnDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Wide screens · readable column · dark",
+      "w": 1280,
+      "x": 0,
+      "y": 77000
     },
     "ReadsPageDark.dc.html": {
       "h": 844,
@@ -4769,7 +4785,9 @@
     "BackupUnpaired.dc.html",
     "BackupUnpairedDark.dc.html",
     "HomeBackupDayTwo.dc.html",
-    "HomeBackupDayTwoDark.dc.html"
+    "HomeBackupDayTwoDark.dc.html",
+    "ReadableColumn.dc.html",
+    "ReadableColumnDark.dc.html"
   ],
   "pages": [
     {

@@ -108,6 +108,8 @@ internal fun PhotosHomeScreen(
     Box(Modifier.fillMaxSize().testTag("photos-home")) {
         AppPlace(
             app = "photos",
+            // JUSTIFIED ROWS KEEP THE FULL WIDTH (ruling 27); the band stays in the readable column.
+            readable = false,
             title = if (selecting) selection.title.ifEmpty { chrome.selecting_title } else chrome.title,
             trailing = when {
                 searching -> null

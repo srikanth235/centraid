@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
@@ -19,6 +20,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -113,6 +116,20 @@ public data class RoomSearch(
 )
 
 /**
+ * THE READABLE COLUMN (ruling 27): on a wide screen (a tablet, a foldable's inner screen) the page's
+ * content and the floating band stand in one column [CentraidGeometry.READABLE_WIDTH] wide, centred, with
+ * the page colour either side. A phone is narrower than the cap, so this changes nothing there. It is
+ * applied once, by the rooms below; [enabled] false is the opt-out (Photos' justified rows, the
+ * Calendar's grids), which keeps the full width.
+ */
+public fun Modifier.readableColumn(enabled: Boolean = true): Modifier =
+    if (!enabled) {
+        this
+    } else {
+        this.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = KitGeometry.READABLE_WIDTH).fillMaxWidth()
+    }
+
+/**
  * HOW FAR THE BAND REACHES UP INTO THE CONTENT: the foot's height (the band and the status lines
  * above it) while an [AppPlace] was asked to run its content under the band, and zero everywhere
  * else. A scroller that runs under the band gives its last row this much bottom padding, so the
@@ -145,6 +162,7 @@ public fun bandFootPadding(): PaddingValues =
 private fun BandStage(
     modifier: Modifier,
     contentUnderBand: Boolean,
+    readable: Boolean,
     foot: @Composable () -> Unit,
     content: @Composable () -> Unit,
 ) {
@@ -158,7 +176,7 @@ private fun BandStage(
         val clearance = if (contentUnderBand) footHeight.toDp() else 0.dp
         val contentPlaceables = subcompose("content") {
             CompositionLocalProvider(LocalBandClearance provides clearance) {
-                Box(Modifier.fillMaxSize()) { content() }
+                Box(Modifier.readableColumn(readable).fillMaxHeight()) { content() }
             }
         }.map { it.measure(Constraints.fixed(width, room)) }
         layout(width, height) {
@@ -210,6 +228,8 @@ public fun AppPlace(
     statusLine: (@Composable () -> Unit)? = null,
     band: (@Composable () -> Unit)? = null,
     contentUnderBand: Boolean = false,
+    /** False keeps the full width (Photos, the Calendar's grids); the band stays in the readable column. */
+    readable: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     CompositionLocalProvider(LocalAppAccentId provides app) {
@@ -220,7 +240,7 @@ public fun AppPlace(
         // control row under the title.
         val showsTitle = barLeading == null || barShowsTitle
         Row(
-            Modifier.fillMaxWidth().padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 8.dp, bottom = 8.dp),
+            Modifier.readableColumn(readable).padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 8.dp, bottom = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.Top,
         ) {
@@ -246,7 +266,7 @@ public fun AppPlace(
         }
         if (barLeading != null && showsTitle) {
             Row(
-                Modifier.fillMaxWidth().padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, bottom = 4.dp),
+                Modifier.readableColumn(readable).padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, bottom = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -256,15 +276,18 @@ public fun AppPlace(
         BandStage(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             contentUnderBand = contentUnderBand,
+            readable = readable,
             foot = {
                 Column(Modifier.fillMaxWidth()) {
                     // THE LINES STAND ON THE PAGE'S COLOUR: they are text, and text over a
                     // photograph is not legible. The floating pill is the band's alone.
                     Column(Modifier.fillMaxWidth().background(Surface.page)) {
+                      Column(Modifier.readableColumn()) {
                         StatusLine(status)
                         statusLine?.invoke()
                         // THE SHELL'S LINE SITS ON THE BAND, never under it.
                         LocalShellLine.current?.invoke()
+                      }
                     }
                     // A SCRIM under the floating pills when the content runs under them: a day's heading or the
                     // next row's edge would otherwise show in the gaps between the pills as a stray digit or strip.
@@ -280,6 +303,7 @@ public fun AppPlace(
                         Modifier
                     }
                     Column(Modifier.fillMaxWidth().then(scrim).bandStrip()) {
+                      Column(Modifier.readableColumn()) {
                         if (search != null && search.field.open_) {
                             // OPEN SEARCH TAKES THE BAND'S PLACE, and stays there while the keyboard
                             // goes (its search key) so the foot is never a blank.
@@ -298,6 +322,7 @@ public fun AppPlace(
                                 LocalBandSearchKey provides search?.let { BandSearchKey(it.placeholder, it.onOpen) },
                             ) { band?.invoke() }
                         }
+                      }
                     }
                 }
             },
@@ -338,6 +363,8 @@ public fun PushedPage(
     titleColor: androidx.compose.ui.graphics.Color? = null,
     titleIcon: String = "",
     titleTag: String? = null,
+    /** False keeps the full width (a Photos shelf); the status lines stay in the readable column. */
+    readable: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     CompositionLocalProvider(LocalAppAccentId provides app.ifEmpty { LocalAppAccentId.current }) {
@@ -345,7 +372,7 @@ public fun PushedPage(
         // THE TITLE IS IN THE TOP ROW (#1173, round 9): the back chevron, the title inline beside
         // it, the page's keys at the end; the scope line, if any, under the title.
         Row(
-            Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, top = 4.dp),
+            Modifier.readableColumn(readable).padding(start = 4.dp, end = 8.dp, top = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // THE BACK KEY IS A CHEVRON (#1173): a drill-in page is the only place one appears.
@@ -377,10 +404,12 @@ public fun PushedPage(
             if (more != null) HeaderVerb(more)
             if (trailing != null) HeaderVerb(trailing)
         }
-        Box(Modifier.weight(1f).fillMaxWidth()) { content() }
-        StatusLine(status)
-        statusLine?.invoke()
-        LocalShellLine.current?.invoke()
+        Box(Modifier.weight(1f).readableColumn(readable)) { content() }
+        Column(Modifier.readableColumn()) {
+            StatusLine(status)
+            statusLine?.invoke()
+            LocalShellLine.current?.invoke()
+        }
     }
     }
 }
@@ -410,7 +439,7 @@ public fun EditorRoom(
     BackHandler(onBack = onClose)
     Column(modifier.fillMaxSize().testTag("editor-room")) {
         Row(
-            Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, top = 4.dp),
+            Modifier.readableColumn().padding(start = 4.dp, end = 8.dp, top = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconKey("X", closeLabel, "room-close", bordered = false, onPress = onClose)
@@ -433,7 +462,7 @@ public fun EditorRoom(
                 IconKey(trailing.iconKey, trailing.label, trailing.testTag, onPress = trailing.onPress)
             }
         }
-        Column(Modifier.weight(1f).fillMaxWidth(), content = content)
+        Column(Modifier.weight(1f).readableColumn(), content = content)
     }
 }
 
