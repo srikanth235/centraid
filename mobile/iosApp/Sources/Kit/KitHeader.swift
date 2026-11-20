@@ -47,8 +47,9 @@ struct KitHeader: View {
     private func scope(_ slot: SubtitleSlot) -> some View {
         HStack(spacing: 4) {
             if slot.subtitle.tappable {
-                Button(action: slot.onTap) { words(slot) }
+                Button(action: slot.onTap) { words(slot).modifier(SubtitleHitArea()) }
                     .buttonStyle(.plain)
+                    .padding(.vertical, -SubtitleHitArea.growth)
                     .accessibilityLabel(slot.subtitle.spoken)
                     .accessibilityIdentifier("room-subtitle")
             } else {
@@ -108,5 +109,18 @@ struct KitAccentKey: View {
         .disabled(!enabled)
         .accessibilityLabel(label)
         .accessibilityIdentifier(identifier)
+    }
+}
+
+/// A SUBTITLE THAT OPENS SOMETHING (Money's month) IS A 44 PT TARGET AND DRAWS AS SMALL AS EVER
+/// (#1202): the label is padded inside the button, which is the button's own hit area, and the
+/// caller takes the same padding back outside so the header does not grow.
+struct SubtitleHitArea: ViewModifier {
+    static let growth: CGFloat = 14
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.vertical, Self.growth)
+            .contentShape(Rectangle())
     }
 }

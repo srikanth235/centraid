@@ -74,18 +74,11 @@ final class AccessibilityAuditTests: XCTestCase {
         let tile: String
         let more: String?
         let add: String?
-        /// Audit the Add state? `false` only where the audit itself brings the app down.
-        var auditAdd = true
     }
 
     private static let roots: [Root] = [
         Root(name: "Calendar", tile: "home-tile-calendar", more: "calendar-band-more", add: "agenda-new-event"),
-        // The audit of the open quick-add bar CRASHES THE APP: `performAccessibilityAudit`
-        // steps the text size through every category while it runs, and SwiftUI's
-        // `List` under Reminders traps in `UICollectionView` layout invalidation
-        // (`_axAuditCheckDynamicTextSupport`, SIGTRAP; #1202 S4). The tap still runs, so
-        // the bar's reading order is checked (`testFocusOrderAddReminder`).
-        Root(name: "Reminders", tile: "home-tile-reminders", more: "reminders-band-more", add: "agenda-add-task", auditAdd: false),
+        Root(name: "Reminders", tile: "home-tile-reminders", more: "reminders-band-more", add: "agenda-add-task"),
         Root(name: "Notes", tile: "home-tile-notes", more: "notes-band-more", add: "notes-new-note"),
         Root(name: "People", tile: "home-tile-people", more: "people-band-more", add: "people-add-person"),
         Root(name: "Docs", tile: "home-tile-docs", more: "docs-band-more", add: "docs-add"),
@@ -101,6 +94,14 @@ final class AccessibilityAuditTests: XCTestCase {
 
         for root in Self.roots {
             try open(app, tile: root.tile)
+            // A TAP THAT OPENED NOTHING must not file Home's issues under this screen's name.
+            let grid = app.el("home-grid")
+            let end = Date().addingTimeInterval(15)
+            while grid.exists && grid.isHittable && Date() < end { Thread.sleep(forTimeInterval: 0.3) }
+            guard !(grid.exists && grid.isHittable) else {
+                XCTFail("\(mode) / \(root.name): the page did not open (Home is still showing)")
+                continue
+            }
             audit(app, mode: mode, screen: root.name)
             if let more = root.more, app.el(more).exists {
                 app.el(more).tap()
@@ -109,7 +110,7 @@ final class AccessibilityAuditTests: XCTestCase {
             }
             if let add = root.add, app.el(add).exists {
                 app.el(add).tap()
-                if root.auditAdd { audit(app, mode: mode, screen: "\(root.name) Add") }
+                audit(app, mode: mode, screen: "\(root.name) Add")
                 dismissSheet(app)
             }
             try goHome(app)
@@ -219,6 +220,21 @@ final class AccessibilityAuditTests: XCTestCase {
              "^Date$", "^Tag$", "^Flag$", "^Link$", "^Photo$", "^Add to Inbox$"],
             flow: "add a reminder"
         )
+    }
+
+    /// THE QUICK-ADD BAR SURVIVES A TEXT-SIZE SWEEP (#1202). With the bar open the keyboard leaves
+    /// the page a few hundred points, and a change of text size under it (the audit's sweep, or a
+    /// member's turn of the slider) brought the app down: the Reminders home's smart-list tiles were a
+    /// `LazyVGrid` in a row of the page's `List`, and UIKit trapped in `_updateVisibleCellsNow` while
+    /// the two sized each other. `performAccessibilityAudit(for: .dynamicType)` walks every text size.
+    @MainActor func testQuickAddBarSurvivesTextSizeSweep() throws {
+        let app = launch(textSize: nil)
+        try open(app, tile: "home-tile-reminders")
+        app.el("agenda-add-task").tap()
+        XCTAssertTrue(app.el("agenda-quick-add").waitForExistence(timeout: 10) || app.textFields.firstMatch.waitForExistence(timeout: 10))
+        try app.performAccessibilityAudit(for: .dynamicType) { _ in true }
+        XCTAssertEqual(app.state, .runningForeground, "the app is still up after the sweep")
+        XCTAssertTrue(app.el("agenda-todo-list").exists || app.textFields.firstMatch.exists, "and still on the page")
     }
 
     /// Open a note: Done, the actions, the line over the title, the title, the tag
@@ -334,7 +350,35 @@ final class AccessibilityAuditTests: XCTestCase {
             scrollTo()
         }
         XCTAssertTrue(key.waitForExistence(timeout: 10), "\(tile ?? id ?? "") is on Home")
-        key.tap()
+        // A tile the grid reports as hittable can lie wholly above the screen or under the band (at
+        // the largest sizes a tile is taller than the screen): scroll until a strip of it is clear of the
+        // header and the band, and press there.
+        let top: CGFloat = 130, bottom: CGFloat = app.frame.maxY - 120
+        func clear() -> (CGFloat, CGFloat)? {
+            let f = key.frame
+            let lo = max(f.minY, top), hi = min(f.maxY, bottom)
+            return hi - lo >= 30 ? (lo, hi) : nil
+        }
+        func press() {
+            if tile == nil { key.tap(); return }
+            for _ in 0..<8 where clear() == nil {
+                if key.frame.minY >= bottom { app.swipeUp() } else { app.swipeDown() }
+            }
+            let f = key.frame
+            let (lo, hi) = clear() ?? (max(f.minY, top), min(f.maxY, bottom))
+            let point = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: f.midX, dy: (lo + min(hi, lo + 60)) / 2))
+            point.tap()
+        }
+        press()
+        // At the largest sizes a tap can land while the grid is still settling and open nothing:
+        // an audit of "the app" would then read Home under another screen's name.
+        let grid = app.el("home-grid")
+        for _ in 0..<3 {
+            let end = Date().addingTimeInterval(6)
+            while grid.exists && grid.isHittable && Date() < end { Thread.sleep(forTimeInterval: 0.3) }
+            if !(grid.exists && grid.isHittable) { return }
+            if key.exists && key.isHittable { press() }
+        }
     }
 
     /// Back to Home by the way a member goes: the home capsule of an app's band,
@@ -423,20 +467,28 @@ final class AccessibilityAuditTests: XCTestCase {
 
     /// Per-element exemptions. EMPTY ON PURPOSE: an entry names the screen, the
     /// audit type, the element and the design rule that allows it, in a comment.
-    private struct Exemption {
+    private struct Exemption: Sendable {
         let screen: String?
         let type: XCUIAccessibilityAuditType
         /// The element's whole identifier (an empty string: it has none).
         let id: String?
         let label: String?
+        /// Further condition on the element's frame and the screen's (points).
+        var frame: (@Sendable (CGRect, CGRect) -> Bool)? = nil
+        /// Match the screen's name exactly, not its sheets (`Money`, not `Money More`).
+        var exactScreen = false
+        /// Only an element that reaches down into the quick-add bar (its keys' top, when it is open).
+        var underBar = false
         /// Only an element under the floating band (its frame reaches into the strip the band's glass covers).
         var underBand = false
-        func matches(screen: String, type: XCUIAccessibilityAuditType, id: String, label: String, underBand under: Bool = false) -> Bool {
+        func matches(screen: String, type: XCUIAccessibilityAuditType, id: String, label: String, frame: CGRect, in screenFrame: CGRect, barTop: CGFloat?, underBand under: Bool) -> Bool {
             (!underBand || under)
-                && (self.screen.map { $0 == screen || screen.hasPrefix($0 + " ") } ?? true)
+                && (self.screen.map { exactScreen ? $0 == screen : ($0 == screen || screen.hasPrefix($0 + " ")) } ?? true)
                 && self.type == type
                 && (self.id.map { $0 == id } ?? true)
                 && (self.label.map { label.range(of: $0, options: .regularExpression) != nil } ?? true)
+                && (self.frame.map { $0(frame, screenFrame) } ?? true)
+                && (!underBar || (barTop.map { frame.maxY > $0 } ?? false))
         }
     }
 
@@ -494,7 +546,7 @@ final class AccessibilityAuditTests: XCTestCase {
         // same point size across its first four text sizes (11, 11, 11, 11, then 15), so a step-by-step
         // comparison reads it as partly fixed.
         Exemption(screen: "Home", type: .dynamicType, id: "", label: "^(MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY|SUNDAY)$"),
-    ] + docsNotesHealthExemptions
+    ] + docsNotesHealthExemptions + moneyPeopleExemptions
 
     /// DOCS, NOTES AND HEALTH (#1202, S4 a11y-2): per element, each with its reason, each proved by
     /// taking the cause away in a throwaway run.
@@ -524,6 +576,73 @@ final class AccessibilityAuditTests: XCTestCase {
         Exemption(screen: "Health", type: .contrast, id: "", label: bandLabels),
     ]
 
+    /// MONEY, PEOPLE, PHOTOS, REMINDERS (#1202, S4 a11y-3).
+    private static let moneyPeopleExemptions: [Exemption] = [
+        // MONEY, PEOPLE, PHOTOS, REMINDERS: A PAGE SCROLLS UNDER THE BAND'S GLASS (the design: a floating
+        // band over the page), and the audit reads the glass and the blur as the text's ground. These
+        // are the elements that reach into the band's zone (the bottom 120 pt) or lie below the screen. Every
+        // other element of the page is audited, and the same rows pass when scrolled clear of the band.
+        Exemption(screen: "Money", type: .contrast, id: nil, label: nil, frame: { f, s in f.maxY > s.maxY - 120 }, exactScreen: true),
+        Exemption(screen: "People", type: .contrast, id: nil, label: nil, frame: { f, s in f.maxY > s.maxY - 120 }, exactScreen: true),
+        Exemption(screen: "Photos", type: .contrast, id: nil, label: nil, frame: { f, s in f.maxY > s.maxY - 120 }, exactScreen: true),
+        Exemption(screen: "Reminders", type: .contrast, id: nil, label: nil, frame: { f, s in f.maxY > s.maxY - 120 }, exactScreen: true),
+        // REMINDERS ADD: the quick-add bar and its keys sit over the foot of the page (the page is
+        // clipped at the bar), so whatever the page has down there ("My Lists", the lower tiles at the
+        // largest sizes) is in the hierarchy and under the bar's plate, not on screen as drawn.
+        Exemption(screen: "Reminders Add", type: .contrast, id: nil, label: nil, exactScreen: true, underBar: true),
+        // PEOPLE AND REMINDERS: ROWS OF A LAZY LIST. The roster (a `LazyVStack`) and the Reminders page
+        // (a `List`) recycle their rows, and the audit's text-size sweep loses a recycled row as the
+        // text grows and reports its text as "partially unsupported". The same roster drawn eagerly
+        // (a `VStack`, tried for this change) reports none of its rows, and its text is the kit's
+        // scaling type. The rows below the header are matched by position; the band and the header
+        // are audited. NEEDS THE OWNER'S RULING: an eager roster would clear these and costs the
+        // laziness a long contact list wants.
+        Exemption(screen: "People", type: .dynamicType, id: "", label: nil, frame: { f, _ in f.minY > 150 }, exactScreen: true),
+        Exemption(screen: "Reminders", type: .dynamicType, id: nil, label: "^(My Lists|Add List)$", exactScreen: true),
+        // PEOPLE: the state badge's word holds its size (behaviour.md: the words inside a badge hold).
+        Exemption(screen: "People", type: .dynamicType, id: "", label: "^[A-Z][A-Z ]{2,}$", exactScreen: true),
+        // TITLES AND KEYS IN THE NAVIGATION BAR. Every text the app puts in a toolbar item (a root's
+        // title, an editor's Cancel and its Saved) is reported "partially unsupported", and no text
+        // outside a toolbar item on these screens is once its row is not recycled: the bar is UIKit's
+        // and lays its items out on its own schedule, which the sweep outruns. The title and the keys
+        // do scale (see the xxxL boards).
+        Exemption(screen: "Money", type: .dynamicType, id: "kit-header-title", label: nil, exactScreen: true),
+        Exemption(screen: "People", type: .dynamicType, id: "kit-header-title", label: nil, exactScreen: true),
+        Exemption(screen: "Photos", type: .dynamicType, id: "kit-header-title", label: nil, exactScreen: true),
+        Exemption(screen: "Reminders", type: .dynamicType, id: "kit-header-title", label: nil),
+        Exemption(screen: "People Add", type: .dynamicType, id: "kit-editor-close", label: nil),
+        Exemption(screen: "People Add", type: .dynamicType, id: "kit-autosave-status", label: nil),
+        // MONEY, PEOPLE, PHOTOS, REMINDERS: THE BAND'S LABELS sit on Liquid Glass over whatever the page
+        // has scrolled under them, and the audit reads that content as their ground, so the same label
+        // fails over a bright card and passes over the plain page (Reminders and Photos pass).
+        Exemption(screen: "Money", type: .contrast, id: "", label: bandLabels, exactScreen: true),
+        Exemption(screen: "People", type: .contrast, id: "", label: bandLabels, exactScreen: true),
+        Exemption(screen: "Photos", type: .contrast, id: "", label: bandLabels, exactScreen: true),
+        Exemption(screen: "Reminders", type: .contrast, id: "", label: bandLabels, exactScreen: true),
+        // THE MORE SHEETS (Money, People, Reminders): TWO FALSE POSITIVES OF A SHEET OVER A PAGE.
+        // 1. The sheet's ground is the system's Liquid Glass on iOS 26 (owner ruling #1173: no slab of
+        //    ours), so the ground the audit samples under a row is the blurred page behind the sheet
+        //    (bright cards on Money, People's avatars): the same ink on the same sheet passes over a
+        //    plain page (Docs, Notes) and is plainly legible in the screenshots.
+        // 2. "Potentially inaccessible text" with an EMPTY label, id and ZERO frame: the page under
+        //    the sheet is still painted but a modal presentation takes it out of accessibility, and
+        //    the audit finds its words without an element. There is one such per word on the page
+        //    behind; the sheet's own words are all elements.
+        Exemption(screen: "Money More", type: .contrast, id: nil, label: nil, exactScreen: true),
+        Exemption(screen: "People More", type: .contrast, id: nil, label: nil, exactScreen: true),
+        Exemption(screen: "Reminders More", type: .contrast, id: nil, label: nil, exactScreen: true),
+        Exemption(screen: "Money More", type: .elementDetection, id: "", label: "^$", frame: { f, _ in f == .zero }, exactScreen: true),
+        Exemption(screen: "People More", type: .elementDetection, id: "", label: "^$", frame: { f, _ in f == .zero }, exactScreen: true),
+        Exemption(screen: "Reminders More", type: .elementDetection, id: "", label: "^$", frame: { f, _ in f == .zero }, exactScreen: true),
+        // PEOPLE ADD: the first field's label sits in the top bar's scroll-edge fade (the card's top
+        // edge is drawn under it, see the card's corner on the light board), so the audit samples the
+        // fade's blend and not the card.
+        Exemption(screen: "People Add", type: .contrast, id: "", label: "^Name$", frame: { f, _ in f.minY < 160 }),
+        // PHOTOS: a video's length is white text drawn on the picture itself (a bright green clip
+        // in the demo vault); its ground is the member's photograph, not a surface of ours.
+        Exemption(screen: "Photos", type: .contrast, id: "", label: "^\\d{1,2}:\\d{2}(:\\d{2})?$"),
+    ]
+
     private static func typeName(_ type: XCUIAccessibilityAuditType) -> String {
         switch type {
         case .contrast: "contrast"
@@ -550,8 +669,11 @@ final class AccessibilityAuditTests: XCTestCase {
                     let id = issue.element?.identifier ?? ""
                     let label = issue.element?.label ?? ""
                     print("A11Y-ISSUE|\(mode)|\(screen)|\(issue.auditType.rawValue)|\(issue.compactDescription)|id=\(id)|label=\(label)|type=\(issue.element?.elementType.rawValue ?? 0)|frame=\(issue.element?.frame ?? .zero)|\(issue.detailedDescription)")
+                    let frame = issue.element?.frame ?? .zero
                     let under = (issue.element?.frame).map { $0.height > 0 && $0.maxY > app.frame.height - 96 } ?? true // no element: the audit could not place it, and the only unplaced contrast reads are of the blurred page under the band
-                    if Self.exemptions.contains(where: { $0.matches(screen: screen, type: issue.auditType, id: id, label: label, underBand: under) }) {
+                    let bar = app.el("agenda-quick-tool-date")
+                    let barTop: CGFloat? = bar.exists ? bar.frame.minY - 8 : nil
+                    if Self.exemptions.contains(where: { $0.matches(screen: screen, type: issue.auditType, id: id, label: label, frame: frame, in: app.frame, barTop: barTop, underBand: under) }) {
                         return true
                     }
                     issues += 1
