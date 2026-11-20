@@ -43,6 +43,28 @@ const ROW_ARGS: &[(&str, &str)] = &[
     ("document", "folder"),
 ];
 
+/// Why a pair no sampler draw reaches is not live, when the runtime would take it: a gap of the sampler, which `datagen
+/// drift` counts and a publish refuses. Every other reason of a `NotLive` pair is the runtime's own refusal.
+pub const SAMPLER_GAP: &str = "the sampler draws no value for it";
+const ROW_GAP: &str = "it names another row by `#n`; no draw puts a `find` ahead of the create";
+const UNLISTED: &str = "the runtime applies it though its editable-fields line does not list it: a question for the runtime, open";
+
+/// Whether the reason of a `NotLive` pair is a gap of the sampler or of the runtime's contract (an argument chat could
+/// use that nothing draws), and not a refusal the runtime makes on purpose.
+#[must_use]
+pub fn is_gap(reason: &str) -> bool {
+    matches!(reason, SAMPLER_GAP | ROW_GAP | UNLISTED)
+}
+
+/// Edits the runtime applies though the line of editable fields it prints for the kind leaves them out (an account's
+/// `type` and `on_budget`, a rule's `position` and `category`): listed as the gaps they are, never as refusals.
+const UNLISTED_EDITS: &[(&str, &str)] = &[
+    ("account", "type"),
+    ("account", "on_budget"),
+    ("rule", "position"),
+    ("rule", "category"),
+];
+
 /// The label of a pair.
 #[must_use]
 pub fn label(verb: &str, kind: &str, field: &str) -> String {
@@ -80,14 +102,14 @@ pub fn pairs(catalog: &Catalog, grid: &Grid) -> BTreeMap<String, Live> {
                         )
                     } else if ROW_ARGS.contains(&(kind.name.as_str(), field)) {
                         Live::NotLive(
-                            "it names another row by `#n`; no draw puts a `find` ahead of the create".into(),
+                            ROW_GAP.into(),
                         )
                     } else if kind.name == "workout" && matches!(field, "end" | "type") {
                         Live::NotLive(
                             "the runtime reads no `end` or `type` of a new workout, so nothing shows it was set".into(),
                         )
                     } else if !crate::sample::draws_field("create", &kind.name, field) {
-                        Live::NotLive("the sampler draws no value for it".into())
+                        Live::NotLive(SAMPLER_GAP.into())
                     } else {
                         Live::Live
                     }
@@ -125,8 +147,16 @@ pub fn pairs(catalog: &Catalog, grid: &Grid) -> BTreeMap<String, Live> {
                         Live::NotLive(
                             "a followed Health store states every figure, so the runtime refuses the edit".into(),
                         )
+                    } else if kind.name == "budget" && matches!(field, "category" | "date") {
+                        Live::NotLive(
+                            "they name the budget, not a value to change: the runtime answers `budgets have no field category`".into(),
+                        )
+                    } else if kind.name == "workout" && matches!(field, "end" | "type") {
+                        Live::NotLive(
+                            "the runtime answers `workouts have no field end` (or `type`) though it lists them".into(),
+                        )
                     } else if !crate::sample::draws_field("edit", &kind.name, field) {
-                        Live::NotLive("the sampler draws no value for it".into())
+                        Live::NotLive(SAMPLER_GAP.into())
                     } else {
                         Live::Live
                     }
@@ -135,6 +165,12 @@ pub fn pairs(catalog: &Catalog, grid: &Grid) -> BTreeMap<String, Live> {
                 None => Live::NotLive("the runtime has no `edit` for this kind".into()),
             };
             out.insert(label("edit", &kind.name, field), state);
+        }
+    }
+    for (kind, field) in UNLISTED_EDITS {
+        if catalog.kind(kind).is_some() {
+            out.entry(label("edit", kind, field))
+                .or_insert_with(|| Live::NotLive(UNLISTED.into()));
         }
     }
     // the money pairs the runtime does not set are listed as the gap they are: a transaction and a budget are not created in
@@ -149,6 +185,45 @@ pub fn pairs(catalog: &Catalog, grid: &Grid) -> BTreeMap<String, Live> {
                 });
             out.entry(label("edit", &kind.name, &field.name))
                 .or_insert_with(|| Live::NotLive(format!("no edit sets {}", field.name)));
+        }
+    }
+    out
+}
+
+/// The `create` and `edit` arguments no live pair covers and no gap leaves open: arguments the runtime answers without
+/// setting anything, as `(tool, argument)` with the reason beside each. Drift does not count them (`drift::Catalogue`),
+/// and a test drives the runtime to show it answers each so (`proofs`). An argument that some pair of the verb leaves to
+/// the sampler, or to the runtime's contract, is a gap and is not in it, so it counts until it is drawn.
+#[must_use]
+pub fn refused_arguments(catalog: &Catalog, grid: &Grid) -> BTreeMap<(String, String), String> {
+    let pairs = pairs(catalog, grid);
+    let mut out = BTreeMap::new();
+    for verb in VERBS {
+        for field in meta::flat_field_names() {
+            let mine: Vec<&Live> = pairs
+                .iter()
+                .filter(|(l, _)| split(l).is_some_and(|(v, _, f)| v == verb && f == field))
+                .map(|(_, state)| state)
+                .collect();
+            let gap = mine
+                .iter()
+                .any(|s| matches!(s, Live::NotLive(why) if is_gap(why)));
+            if gap || mine.iter().any(|s| **s == Live::Live) {
+                continue;
+            }
+            let why: std::collections::BTreeSet<&str> = mine
+                .iter()
+                .filter_map(|s| match s {
+                    Live::NotLive(why) | Live::Invalid(why) => Some(why.as_str()),
+                    Live::Live => None,
+                })
+                .collect();
+            let why = if why.is_empty() {
+                format!("no kind's {verb} takes `{field}` as a field of its own")
+            } else {
+                why.into_iter().collect::<Vec<_>>().join("; ")
+            };
+            out.insert((verb.to_owned(), field.to_owned()), why);
         }
     }
     out

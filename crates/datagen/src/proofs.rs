@@ -1745,3 +1745,125 @@ fn a_line_is_moved_to_an_earlier_day_through_the_runtime() {
     // a line is posted on a day that has passed
     assert!(arg_lines(&args).contains("\"rel\":-"), "{args}");
 }
+
+// ------------------------------------------------------------------ the arguments drift leaves out are refused by the runtime
+
+/// A call as the model writes it, on a fresh user message, and the runtime's answer.
+fn say(
+    live: &mut crate::plan::Live,
+    tool: &str,
+    pairs: &[(&str, &str)],
+) -> (Value, String, bool) {
+    let _ = live.session.user("a message");
+    let mut args = serde_json::Map::new();
+    for (k, v) in pairs {
+        args.insert((*k).to_owned(), Value::String((*v).to_owned()));
+    }
+    let answer = live.session.call_text(&crate::plan::call_xml(tool, &args));
+    let text = answer["text"].as_str().unwrap_or_default().to_owned();
+    let error = answer["effect"].get("error").is_some();
+    (answer, text, error)
+}
+
+/// How the runtime answered a call that carried `arg`, when it did not set it as a value of its own: an error, a refusal, a
+/// note that it ignored it, or a note that it read it as another argument or ran another verb for it.
+fn answered_without_setting(text: &str, error: bool, arg: &str) -> Option<&'static str> {
+    if error {
+        Some("an error")
+    } else if text.starts_with("refused:") {
+        Some("a refusal")
+    } else if text.contains(&format!("ignored {arg}")) {
+        Some("a note that it ignored the argument")
+    } else if text.contains(&format!("read {arg} as")) || text.contains(&format!("edit of {arg}")) {
+        Some("a note that it read the argument as another")
+    } else {
+        None
+    }
+}
+
+#[test]
+fn every_argument_drift_leaves_out_is_one_the_runtime_answers_without_setting() {
+    use centraid_assist::native::meta::{self, KINDS, Kind};
+    let catalog = catalog();
+    let grid = Grid::build(&catalog);
+    let refused = fields::refused_arguments(&catalog, &grid);
+    // the list is derived from the pairs: nothing in it is live, and what the pairs call a gap is never in it
+    let pairs = fields::pairs(&catalog, &grid);
+    for (verb, arg) in refused.keys() {
+        assert!(
+            !pairs.iter().any(|(l, state)| fields::split(l)
+                .is_some_and(|(v, _, f)| v == verb && f == arg)
+                && (*state == Live::Live
+                    || matches!(state, Live::NotLive(why) if fields::is_gap(why)))),
+            "{verb}.{arg} is left out of drift but a pair of it is live or a gap"
+        );
+    }
+    for must in [
+        ("create", "account"),
+        ("create", "amount"),
+        ("create", "value"),
+        ("edit", "date"),
+        ("edit", "value"),
+        ("edit", "text"),
+    ] {
+        assert!(
+            refused.contains_key(&(must.0.to_owned(), must.1.to_owned())),
+            "{must:?}"
+        );
+    }
+    let world = worlds(Split::Train, 1).remove(0);
+    let scratch = tempfile::tempdir().expect("scratch");
+    let mut run = WorldRun::seed(&world, &catalog, scratch.path()).expect("seeds");
+    let mut live = run.open().expect("opens");
+    let day = r#"{"unit":"day","rel":-1,"time":"07:30"}"#;
+    let mut shown = 0;
+    for spec in KINDS {
+        let kind = spec.name;
+        let Some(meta_kind) = Kind::parse(kind) else {
+            continue;
+        };
+        // one row of the kind to edit
+        let (found, _, _) = say(&mut live, "find", &[("kind", kind)]);
+        let row = found["effect"]["rows"][0]["n"]
+            .as_u64()
+            .map(|n| format!("#{n}"));
+        let takes = meta::create_args(meta_kind);
+        for ((tool, arg), why) in &refused {
+            let (_, text, error) = if tool == "create" {
+                // what a create of this kind needs besides a name, as the runtime says it
+                let mut lines = format!("name: Proof {arg}");
+                match kind {
+                    "account" => lines += "\ntype: checking",
+                    "workout" => lines += &format!("\ndate: {day}"),
+                    _ => {}
+                }
+                lines += &format!("\n{arg}: yes");
+                say(&mut live, "create", &[("kind", kind), ("args", &lines)])
+            } else {
+                let Some(row) = &row else { continue };
+                say(
+                    &mut live,
+                    "edit",
+                    &[("rows", row), ("args", &format!("{arg}: yes"))],
+                )
+            };
+            if answered_without_setting(&text, error, arg).is_some() {
+                shown += 1;
+                continue;
+            }
+            // a create of a kind that lists the argument and reads it nowhere: the row shows nothing of it
+            assert!(
+                tool == "create" && takes.contains(&arg.as_str()),
+                "the runtime set `{arg}` on a {kind} ({tool}), yet drift leaves it out ({why}): {text}"
+            );
+            let (read, _, _) = say(&mut live, "find", &[("kind", kind), ("name", &format!("Proof {arg}"))]);
+            let header = read["text"].as_str().unwrap_or_default();
+            let header = header.lines().next().unwrap_or_default();
+            assert!(
+                !header.contains(&format!("{arg} ")) && !text.contains(&format!("{arg} ")),
+                "{kind} shows `{arg}` after a create: {header} / {text}"
+            );
+        }
+    }
+    assert!(shown > refused.len(), "the runtime was asked {shown} times");
+}

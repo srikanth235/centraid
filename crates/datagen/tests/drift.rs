@@ -215,6 +215,22 @@ fn tools_arguments_and_kinds_the_data_hardly_shows_are_coverage() {
 }
 
 #[test]
+fn an_argument_the_runtime_refuses_for_every_kind_is_not_counted_and_the_rest_still_are() {
+    let mut left_out = catalogue();
+    left_out
+        .refused
+        .insert(("find".to_owned(), "text".to_owned()));
+    let gaps = drift::coverage(&[], &left_out, &[], 1);
+    assert!(!gaps.iter().any(|g| g.name == "find.text"), "{gaps:?}");
+    assert!(gaps.iter().any(|g| g.name == "find.kind"), "{gaps:?}");
+    // the library's catalogue leaves out what `fields::refused_arguments` derives, and nothing a pair leaves to a draw
+    let current = Catalogue::of_mode(ToolsMode::Compact).expect("the compact mode");
+    assert!(current.refused.contains(&("create".to_owned(), "account".to_owned())));
+    assert!(!current.refused.contains(&("create".to_owned(), "priority".to_owned())));
+    assert!(!current.refused.contains(&("edit".to_owned(), "currency".to_owned())));
+}
+
+#[test]
 fn the_level_is_the_most_work_any_finding_calls_for() {
     let mut h = same();
     h.catalog.1 = "c2".into();

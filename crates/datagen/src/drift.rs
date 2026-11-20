@@ -114,6 +114,9 @@ pub struct ToolShape {
 #[derive(Debug, Clone)]
 pub struct Catalogue {
     pub tools: BTreeMap<String, ToolShape>,
+    /// `(tool, argument)` pairs the runtime answers without setting anything, for every kind: coverage does not count
+    /// them, since chat has no use for them (`fields::refused_arguments`, each shown by a test that drives the runtime).
+    pub refused: BTreeSet<(String, String)>,
 }
 
 impl Catalogue {
@@ -153,7 +156,10 @@ impl Catalogue {
             }
             tools.insert(name.clone(), shape);
         }
-        Self { tools }
+        Self {
+            tools,
+            refused: BTreeSet::new(),
+        }
     }
 
     /// The current runtime's catalogue for `mode`.
@@ -172,7 +178,13 @@ impl Catalogue {
             .iter()
             .filter_map(|t| t["function"]["name"].as_str().map(str::to_owned))
             .collect();
-        Ok(Self::from_schema(&names, &tools()))
+        let mut catalogue = Self::from_schema(&names, &tools());
+        let catalog = crate::catalog::Catalog::build()?;
+        let grid = crate::grid::Grid::build(&catalog);
+        catalogue.refused = crate::fields::refused_arguments(&catalog, &grid)
+            .into_keys()
+            .collect();
+        Ok(catalogue)
     }
 }
 
@@ -283,6 +295,9 @@ pub fn coverage(
             });
         }
         for arg in &shape.properties {
+            if catalogue.refused.contains(&(name.clone(), arg.clone())) {
+                continue;
+            }
             let n = arg_n
                 .get(&(name.clone(), arg.clone()))
                 .copied()
