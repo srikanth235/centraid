@@ -62,7 +62,12 @@ impl Rehearsal {
                     .and_then(|t| t.get(..10))
                     .context("a session with no `today`")?
                     .parse()?;
-                let briefer = Briefer { catalog, today };
+                let currency = record["currency"].as_str().unwrap_or("USD").to_owned();
+                let briefer = Briefer {
+                    catalog,
+                    today,
+                    currency: &currency,
+                };
                 for (i, turn) in scenario.turns.iter().enumerate() {
                     let b = briefer.turn(turn, i);
                     expected.insert(

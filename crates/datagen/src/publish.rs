@@ -281,7 +281,7 @@ pub fn card(manifest: &Value, repo: &str, heldout: &str) -> String {
     let _ = writeln!(out, "## Limits\n");
     let _ = writeln!(
         out,
-        "- Amounts are written in thousands and plain numbers; the runtime does not resolve `lakh` or `crore`, so the data does not teach them.\n- A request for something the runtime has no behaviour for is not in the data; the build report lists those kinds.\n- The correct answer is the runtime's at the commit above, not a statement about any real person."
+        "- A money amount in a message names its currency in the form members use for it (`₹`, `Rs`, `rupees`, `lakh`, `crore`, `$`, `dollars`, `€`, `£`, `AED`, `S$`); a threshold is in the vault's currency, and the worlds hold accounts in INR, USD, EUR, GBP, AED and SGD.\n- A request for something the runtime has no behaviour for is not in the data; the build report lists those kinds.\n- The correct answer is the runtime's at the commit above, not a statement about any real person."
     );
     out
 }

@@ -27,11 +27,18 @@ pub struct TurnBrief {
     /// The secrets the member types in the turn (a password, a card number, the text of a secret note): made-up values the
     /// writer must say as given, each also one of `spans`. Never a value a vault stores.
     pub typed: Vec<String>,
+    /// The vault's currency when the turn gives a money amount (a threshold or a new value): the message must name it.
+    pub money: Option<String>,
 }
+
+/// What a money amount in an ask starts with; `turn` reads it to know the turn gives one.
+const MONEY_MARK: &str = " (money in ";
 
 pub struct Briefer<'a> {
     pub catalog: &'a Catalog,
     pub today: Date,
+    /// The vault's currency (an ISO code): a money amount in a filter or a new value is in it.
+    pub currency: &'a str,
 }
 
 fn when_phrase(period: &Period, today: Date) -> String {
@@ -148,6 +155,15 @@ impl Briefer<'_> {
             .map_or_else(|| format!("{kind}s"), |k| k.plural.clone())
     }
 
+    fn is_money(&self, kind: &str, field: &str) -> bool {
+        self.catalog
+            .kinds
+            .iter()
+            .find(|k| k.name == kind)
+            .and_then(|k| k.fields.iter().find(|f| f.name == field))
+            .is_some_and(|f| f.ty == "money")
+    }
+
     fn unit(&self, kind: &str, field: &str) -> String {
         self.catalog
             .kinds
@@ -178,15 +194,11 @@ impl Briefer<'_> {
             crate::intent::Lit::Text(t) => format!("\"{t}\""),
             other => other.render(),
         };
-        let money = self
-            .catalog
-            .kinds
-            .iter()
-            .find(|k| k.name == kind)
-            .and_then(|k| k.fields.iter().find(|f| f.name == filter.field))
-            .is_some_and(|f| f.ty == "money");
-        let note = if money {
-            " (money; negative is money out, spending)".to_owned()
+        let note = if self.is_money(kind, &filter.field) {
+            format!(
+                "{MONEY_MARK}{}, so say the amount in that currency; negative is money out, spending)",
+                self.currency
+            )
         } else {
             self.unit(kind, &filter.field)
         };
@@ -345,7 +357,18 @@ impl Briefer<'_> {
                     format!("\"{t}\"")
                 }
             }
-            Val::Num(n) => format!("{}{}", number(*n), self.unit(kind, &change.field)),
+            Val::Num(n) => format!(
+                "{}{}",
+                number(*n),
+                if self.is_money(kind, &change.field) {
+                    format!(
+                        "{MONEY_MARK}{}, so say the amount in that currency)",
+                        self.currency
+                    )
+                } else {
+                    self.unit(kind, &change.field)
+                }
+            ),
             Val::Flag(b) => if *b { "yes" } else { "no" }.to_owned(),
             Val::When(json) => self.when_json(json),
         };
@@ -371,8 +394,10 @@ impl Briefer<'_> {
         let mut spans = Vec::new();
         let mut typed = Vec::new();
         let ask = self.ask(&turn.intent, turn, &mut spans, &mut typed);
+        let money = ask.contains(MONEY_MARK).then(|| self.currency.to_owned());
         TurnBrief {
             ask,
+            money,
             spans: unique(spans),
             how: how_of(turn, index),
             typed: unique(typed),

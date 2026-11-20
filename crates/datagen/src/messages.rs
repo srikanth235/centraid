@@ -207,7 +207,7 @@ Hard rules:\n\
 - Each message asks EXACTLY what its \"ask\" says: the same rows, conditions, numbers and period. Add nothing, drop nothing.\n\
 - Every string in \"say_verbatim\" must appear in the message exactly as written (letters, spelling and spacing), even if it looks misspelt.\n\
 - Numbers: the exact quantity, never rounded or approximated. A natural unit is fine (45 km for 45000 m, 90 minutes for 5400 s) when it is exactly equal.\n\
-- Money: plain numbers with the currency word the ask uses (\"5000 rupees\", \"5k\", \"$40\"); never the rupee sign, never lakh or crore.\n\
+- Money: when the ask says \"(money in XXX\", say the amount in that currency, every amount with its currency in the form people use for it: INR as \"₹5000\", \"Rs 5000\", \"5000 rupees\", \"2 lakh\" or \"1 crore\" (lakh is 100000, crore 10000000); USD \"$40\" or \"40 dollars\"; EUR \"€40\" or \"40 euros\"; GBP \"£40\" or \"40 pounds\"; AED \"40 AED\" or \"40 dirhams\"; SGD \"S$40\" or \"40 SGD\". A bare number (\"5000\", \"5k\") is not enough, and never name a different currency than the ask's.\n\
 - Dates: say them the way a person does (\"last week\", \"yesterday\", \"march 3 to 9\", \"in august\"), spelling the words out (\"tomorrow\", never \"tmrw\"). Never write ISO dates like 2026-10-12.\n\
 - When no row is named, make the kind of thing unmistakable (tasks, events, people, notes, documents, photos, transactions, workouts, steps, accounts, locker items), so it cannot be read as another kind. When a row IS named, just say its name the way a person would (\"unstar Vera Haddad\", \"rename Dinner party menu to ...\"); do not add \"the person called\" or \"the task named\".\n\
 - Use plain words for fields (\"heart rate\", \"sleep\", \"due\"), never code names (no \"heart_rate\", no \"sleep_min\") and never tool or system words (\"turn\", \"vault\", \"query\", \"row\").\n\
@@ -364,9 +364,18 @@ fn check_message(
         return bad("hygiene", "a placeholder".to_owned());
     }
     let lower = text.to_lowercase();
-    if lower.contains("lakh") || lower.contains("crore") || text.contains('₹') {
-        // the runtime reads a number as written: it does not resolve lakh or crore, so the data must not teach them
-        return bad("hygiene", "lakh, crore or the rupee sign".to_owned());
+    if let Some(base) = &brief.money {
+        // an amount is in the vault's currency: the message names it, in a form that currency
+        // uses, and names no other (the runtime reads the number in the vault's currency)
+        if !names_currency(&lower, base) {
+            return bad("currency", format!("no {base} form for the amount"));
+        }
+        if let Some(other) = CURRENCIES
+            .iter()
+            .find(|c| **c != base.as_str() && names_currency_only(&lower, c, base))
+        {
+            return bad("currency", format!("{other} for an amount in {base}"));
+        }
     }
     if text.contains("20") && has_iso_date(text) {
         return bad("hygiene", "an ISO date".to_owned());
@@ -390,6 +399,56 @@ fn check_message(
         }
     }
     Ok(())
+}
+
+/// The currencies a world's accounts are in.
+const CURRENCIES: [&str; 6] = ["INR", "USD", "EUR", "GBP", "AED", "SGD"];
+
+/// How people write each currency: a symbol or a word; a code is matched as a whole word. Lakh and
+/// crore are rupees, so they carry the currency by themselves.
+fn forms(currency: &str) -> &'static [&'static str] {
+    match currency {
+        "INR" => &["₹", "rs", "inr", "rupee", "lakh", "crore"],
+        "USD" => &["$", "usd", "dollar", "buck"],
+        "EUR" => &["€", "eur", "euro"],
+        "GBP" => &["£", "gbp", "pound", "quid"],
+        "AED" => &["aed", "dirham"],
+        "SGD" => &["s$", "sgd", "dollar", "$"],
+        _ => &[],
+    }
+}
+
+/// Is `form` in `lower` as a symbol or a whole word (a plural `rupees` counts), not inside another
+/// word (`european` is not `euro`, `grs` is not `rs`) and, for a `$`, not the tail of `s$`?
+fn has_form(lower: &str, form: &str) -> bool {
+    let symbol = !form.chars().all(|c| c.is_ascii_alphabetic());
+    lower.match_indices(form).any(|(at, _)| {
+        let before = lower[..at].chars().next_back();
+        let rest = &lower[at + form.len()..];
+        if symbol {
+            // a bare `$` after a letter is `s$` (or `us$`): not a dollar
+            return form != "$" || !before.is_some_and(char::is_alphabetic);
+        }
+        // a code is not pluralised
+        let rest = if form.len() > 3 {
+            rest.strip_prefix('s').unwrap_or(rest)
+        } else {
+            rest
+        };
+        !before.is_some_and(char::is_alphabetic)
+            && !rest.chars().next().is_some_and(char::is_alphabetic)
+    })
+}
+
+fn names_currency(lower: &str, currency: &str) -> bool {
+    forms(currency).iter().any(|f| has_form(lower, f))
+}
+
+/// Does `lower` name `currency` by a form `base` does not share?
+fn names_currency_only(lower: &str, currency: &str, base: &str) -> bool {
+    forms(currency)
+        .iter()
+        .any(|f| !forms(base).contains(f) && has_form(lower, f))
 }
 
 fn has_iso_date(text: &str) -> bool {
@@ -618,7 +677,12 @@ pub fn run(
             .and_then(|t| t.get(..10))
             .context("a session with no `today`")?
             .parse()?;
-        let briefer = Briefer { catalog, today };
+        let currency = record["currency"].as_str().unwrap_or("USD").to_owned();
+        let briefer = Briefer {
+            catalog,
+            today,
+            currency: &currency,
+        };
         let briefs: Vec<TurnBrief> = scenario
             .turns
             .iter()
@@ -1291,6 +1355,7 @@ mod tests {
             ask: String::new(),
             spans: spans.iter().map(|s| (*s).to_owned()).collect(),
             how: String::new(),
+            money: None,
         }
     }
 
@@ -1315,6 +1380,53 @@ mod tests {
         assert!(check_message("star her", &now, Reference::Pronoun, &[&earlier]).is_ok());
         // a name turn may say it again
         assert!(check_message("star vera adler", &now, Reference::Name, &[&earlier]).is_ok());
+    }
+
+    #[test]
+    fn an_amount_names_the_vaults_currency_in_a_form_that_currency_uses() {
+        let money = |c: &str| TurnBrief {
+            money: Some(c.to_owned()),
+            ..brief(&[])
+        };
+        let ok = |c: &str, text: &str| check_message(text, &money(c), Reference::Select, &[]);
+        for (c, text) in [
+            ("INR", "transactions above ₹5000"),
+            ("INR", "spent more than Rs 5000 last month"),
+            ("INR", "payments over 5000 rupees"),
+            ("INR", "anything over 2 lakh"),
+            ("INR", "over 1 crore"),
+            ("USD", "spent more than 100 dollars"),
+            ("USD", "over $100"),
+            ("EUR", "over €100"),
+            ("EUR", "more than 100 euros"),
+            ("GBP", "above £100"),
+            ("GBP", "over 100 pounds"),
+            ("AED", "more than 100 AED"),
+            ("AED", "over 100 dirhams"),
+            ("SGD", "above S$100"),
+            ("SGD", "over 100 sgd"),
+        ] {
+            assert!(ok(c, text).is_ok(), "{c}: {text}");
+        }
+        for (c, text) in [
+            ("INR", "spent more than 5000"),
+            ("INR", "over 5k"),
+            ("INR", "over $100"),
+            ("INR", "over 100 dollars"),
+            ("USD", "over S$100"),
+            ("USD", "over 5000 rupees"),
+            ("EUR", "over a european 100"),
+            ("GBP", "over 100 euros"),
+            ("AED", "over 100 grs"),
+        ] {
+            let (reason, _) = ok(c, text).expect_err(text);
+            assert_eq!(reason, "currency", "{c}: {text}");
+        }
+        // a turn with no amount is free of it, and the other hygiene checks still hold
+        assert!(check_message("over 5k", &brief(&[]), Reference::Select, &[]).is_ok());
+        assert!(ok("INR", "over ₹5000 on 2026-10-12").is_err());
+        let long = format!("over ₹5000 {}", "x".repeat(240));
+        assert!(ok("INR", &long).is_err());
     }
 
     #[test]

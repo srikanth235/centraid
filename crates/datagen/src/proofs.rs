@@ -285,6 +285,7 @@ fn a_typed_secret_is_a_verbatim_span_of_its_brief_and_a_placeholder_is_still_ref
     let briefer = Briefer {
         catalog: &catalog,
         today,
+        currency: &world.persona.currency,
     };
     let brief = briefer.turn(&scenario.turns[0], 0);
     let value = brief
@@ -399,6 +400,7 @@ fn a_measurement_is_made_and_changed_through_the_runtime_and_the_brief_says_its_
     let brief = Briefer {
         catalog: &catalog,
         today,
+        currency: &world.persona.currency,
     }
     .turn(&turn_of(&scenario, "create"), 0);
     assert!(
@@ -526,6 +528,7 @@ impl Said<'_> {
         Briefer {
             catalog: self.catalog,
             today: self.today,
+            currency: "USD",
         }
         .turn(&self.scenario.turns[turn], turn)
     }

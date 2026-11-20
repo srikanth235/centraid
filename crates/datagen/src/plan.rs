@@ -220,6 +220,8 @@ pub struct WorldRun<'a> {
     keys: BTreeMap<String, String>,
     copies: usize,
     pub me: String,
+    /// The vault's currency: what a money amount in a message is said in.
+    pub currency: String,
     pub today_at: String,
     /// Whether the runtime gives an empty `find` a handle, so `answer rows=@k` can end a read that
     /// found nothing. The regroup adds it; the runtime this was built against may not have it.
@@ -294,6 +296,7 @@ impl<'a> WorldRun<'a> {
             keys,
             copies: 0,
             me: world.persona.me.clone(),
+            currency: world.persona.currency.clone(),
             today_at,
             empty_reads,
             observed: Vec::new(),
@@ -383,6 +386,7 @@ impl<'a> WorldRun<'a> {
                 "world": scenario.world,
                 "today": self.today_at,
                 "me": self.me,
+                "currency": self.currency,
                 "tags": tags,
                 "turns": out_turns,
                 "scenario": scenario,
