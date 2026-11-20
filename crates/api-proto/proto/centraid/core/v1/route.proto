@@ -668,8 +668,10 @@ message HomeSearchRoute {}
 message SettingsRoute {}
 
 // The Reconnect page (#1185): the phone stores a vault followed on another phone, offered one
-// by one. It takes no arguments.
-message ReconnectRoute {}
+// by one. `parent` names the page it was opened from, which its back control reads.
+message ReconnectRoute {
+  string parent = 1;
+}
 
 // What a tap on a search's Ask row opens: the assistant, asking `question` in
 // `scope` (an app's id, or empty for every app). The chat lane registers the
