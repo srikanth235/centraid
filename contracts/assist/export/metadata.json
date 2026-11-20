@@ -457,6 +457,10 @@
       "id_param": "id",
       "kind": "account",
       "names": [
+        "currency",
+        "on_budget",
+        "opening",
+        "opening_on",
         "name",
         "type"
       ],
@@ -470,6 +474,7 @@
       "id_param": "id",
       "kind": "account",
       "names": [
+        "currency",
         "name"
       ],
       "qualifier": null,
@@ -494,6 +499,19 @@
       "names": [],
       "qualifier": null,
       "verb": "unarchive"
+    },
+    {
+      "action": "set-opening-balance",
+      "app": "money",
+      "command": "account.set_opening",
+      "id_param": "id",
+      "kind": "account",
+      "names": [
+        "opening",
+        "opening_on"
+      ],
+      "qualifier": "opening",
+      "verb": "edit"
     },
     {
       "action": "trash-transaction",
@@ -528,6 +546,30 @@
       "verb": "edit"
     },
     {
+      "action": "correct-amount",
+      "app": "money",
+      "command": "txn.correct",
+      "id_param": "id",
+      "kind": "transaction",
+      "names": [
+        "amount"
+      ],
+      "qualifier": "amount",
+      "verb": "edit"
+    },
+    {
+      "action": "correct-date",
+      "app": "money",
+      "command": "txn.correct",
+      "id_param": "id",
+      "kind": "transaction",
+      "names": [
+        "date"
+      ],
+      "qualifier": null,
+      "verb": "reschedule"
+    },
+    {
       "action": "unlink-transfer",
       "app": "money",
       "command": "txn.unlink_transfer",
@@ -536,6 +578,35 @@
       "names": [],
       "qualifier": null,
       "verb": "unlink"
+    },
+    {
+      "action": "set-target",
+      "app": "money",
+      "command": "budget.set",
+      "id_param": "id",
+      "kind": "budget",
+      "names": [
+        "amount",
+        "category",
+        "currency",
+        "date"
+      ],
+      "qualifier": null,
+      "verb": "edit"
+    },
+    {
+      "action": "set-carry",
+      "app": "money",
+      "command": "budget.set_carry",
+      "id_param": "id",
+      "kind": "budget",
+      "names": [
+        "carry",
+        "category",
+        "date"
+      ],
+      "qualifier": "carry",
+      "verb": "edit"
     },
     {
       "action": "edit-rule",
@@ -2839,16 +2910,16 @@
         "also": [],
         "app": "money",
         "bulk": false,
-        "chat": "card",
+        "chat": "direct",
         "command": "account.set_opening",
-        "inverse": null,
+        "inverse": "set-opening-balance",
         "kind": "account",
         "phrasings": [
           "set the opening balance of Everyday to 500",
           "this account started with 1200 euros",
           "correct the starting balance on savings"
         ],
-        "qualifier": null,
+        "qualifier": "opening",
         "sealed": [],
         "verb": "edit"
       },
@@ -3015,6 +3086,42 @@
         "verb": "edit"
       },
       {
+        "action": "correct-amount",
+        "also": [],
+        "app": "money",
+        "bulk": false,
+        "chat": "direct",
+        "command": "txn.correct",
+        "inverse": "correct-amount",
+        "kind": "transaction",
+        "phrasings": [
+          "the Starbucks charge was 4.50 not 45",
+          "fix the amount on that rent line to 1,200",
+          "that deposit should be 2,500"
+        ],
+        "qualifier": "amount",
+        "sealed": [],
+        "verb": "edit"
+      },
+      {
+        "action": "correct-date",
+        "also": [],
+        "app": "money",
+        "bulk": false,
+        "chat": "direct",
+        "command": "txn.correct",
+        "inverse": "correct-date",
+        "kind": "transaction",
+        "phrasings": [
+          "that charge posted on 3 March, not 2 March",
+          "move the Netflix line to the 5th",
+          "the rent was posted on the first, fix it"
+        ],
+        "qualifier": null,
+        "sealed": [],
+        "verb": "reschedule"
+      },
+      {
         "action": "link-transfer",
         "also": [],
         "app": "money",
@@ -3055,7 +3162,7 @@
         "also": [],
         "app": "money",
         "bulk": false,
-        "chat": "card",
+        "chat": "direct",
         "command": "budget.set",
         "inverse": "set-target",
         "kind": "budget",
@@ -3073,7 +3180,7 @@
         "also": [],
         "app": "money",
         "bulk": false,
-        "chat": "card",
+        "chat": "direct",
         "command": "budget.set_carry",
         "inverse": "set-carry",
         "kind": "budget",
@@ -6906,7 +7013,7 @@
       ]
     },
     {
-      "card": "transaction: name, date (posted), amount (USD), account, category, transfer, status (posted|void) · verbs: edit delete restore unlink",
+      "card": "transaction: name, date (posted), amount (USD), account, category, transfer, status (posted|void) · verbs: edit reschedule delete restore unlink",
       "container": false,
       "date": {
         "label": "posted",
@@ -6990,6 +7097,7 @@
       "trash": false,
       "verbs": [
         "edit",
+        "reschedule",
         "delete",
         "restore",
         "unlink"
@@ -7317,7 +7425,7 @@
       ]
     },
     {
-      "card": "budget: name, date (month), amount (USD), currency, carry (yes|no)",
+      "card": "budget: name, date (month), amount (USD), currency, carry (yes|no) · verbs: edit",
       "container": false,
       "date": {
         "label": "month",
@@ -7370,7 +7478,9 @@
       "plural": "budgets",
       "table": "budget",
       "trash": false,
-      "verbs": [],
+      "verbs": [
+        "edit"
+      ],
       "where_fields": [
         "amount",
         "currency",
@@ -7509,6 +7619,9 @@
   "mapped_commands": [
     "account.add",
     "account.edit",
+    "account.set_opening",
+    "budget.set",
+    "budget.set_carry",
     "category.add",
     "container.create",
     "container.style",
@@ -7544,6 +7657,7 @@
     "task.edit",
     "task.organize",
     "task.reopen",
+    "txn.correct",
     "txn.unlink_transfer",
     "workout.edit",
     "workout.log"
@@ -7741,6 +7855,10 @@
           "account.edit"
         ],
         [
+          "budget",
+          "budget.set"
+        ],
+        [
           "rule",
           "rule.edit"
         ]
@@ -7760,6 +7878,10 @@
         [
           "event",
           "event.edit"
+        ],
+        [
+          "transaction",
+          "txn.correct"
         ]
       ],
       "done": "rescheduled",

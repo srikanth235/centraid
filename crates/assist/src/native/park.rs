@@ -495,6 +495,10 @@ pub(crate) fn apply(
         "txn.link_transfer" | "txn.unlink_transfer" => {
             transfer(world, input, command == "txn.link_transfer")
         }
+        "txn.correct" => txn_correct(world, cx, input),
+        "account.set_opening" => account_set_opening(world, cx, input),
+        "budget.set" => budget_set(world, cx, input),
+        "budget.set_carry" => budget_set_carry(world, input),
         other => Err(format!(
             "error: park has no patch for {other}; the write cannot be shown before it is made."
         )),
@@ -1975,12 +1979,17 @@ fn account_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String>
     {
         row.fields.insert("type", Val::Enum(model));
     }
-    let currency =
-        text(input, "currency").map_or_else(|| world.currency.clone(), str::to_uppercase);
+    let currency = text(input, "currency")
+        .map_or_else(|| world.currency.clone(), |code| code.trim().to_uppercase());
     row.fields.insert("currency", Val::Text(currency.clone()));
     row.fields.insert(
         "opening",
         Val::Money(int(input, "opening_minor").unwrap_or(0), currency),
+    );
+    put(
+        &mut row,
+        "opening_on",
+        text(input, "opening_on").and_then(nonempty),
     );
     row.fields.insert(
         "on_budget",
@@ -2037,6 +2046,38 @@ fn account_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String
         return Ok(refused("account_live", &gone_text(id)));
     };
     let old_name = row.name.clone();
+    // an account with transactions keeps its currency (the vault's sentence, for the lines the world holds)
+    if let Some(code) = text(input, "currency").map(|code| code.trim().to_uppercase()) {
+        let held = match row.fields.get("currency") {
+            Some(Val::Text(held)) => held.clone(),
+            _ => world.currency.clone(),
+        };
+        let has_lines = world.rows.values().any(|line| {
+            line.kind == Kind::Transaction
+                && line.fields.get("account") == Some(&Val::Text(old_name.clone()))
+        });
+        if code != held && has_lines {
+            return Ok(refused(
+                "account_edit_is_sound",
+                "An account with transactions keeps its currency; they are in it.",
+            ));
+        }
+    }
+    let Some(row) = world
+        .rows
+        .get_mut(&(Kind::Account, id.to_owned()))
+        .filter(|row| !row.trashed)
+    else {
+        return Ok(refused("account_live", &gone_text(id)));
+    };
+    if let Some(code) = text(input, "currency").map(|code| code.trim().to_uppercase()) {
+        let minor = match row.fields.get("opening") {
+            Some(Val::Money(minor, _)) => *minor,
+            _ => 0,
+        };
+        row.fields.insert("currency", Val::Text(code.clone()));
+        row.fields.insert("opening", Val::Money(minor, code));
+    }
     if let Some(title) = text(input, "title") {
         row.name = title.trim().to_owned();
     }
@@ -2103,6 +2144,145 @@ fn rule_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
     }
     row.updated = cx.now.clone();
     Ok(ok(json!({"id": id})))
+}
+
+/// An account's opening balance as of a day: the amount in the account's currency, and the day it was true.
+fn account_set_opening(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default();
+    let Some(row) = world
+        .rows
+        .get_mut(&(Kind::Account, id.to_owned()))
+        .filter(|row| !row.trashed)
+    else {
+        return Ok(refused(
+            "account_exists_and_opening_has_its_day",
+            "There is no such account.",
+        ));
+    };
+    let minor = int(input, "opening_minor").unwrap_or(0);
+    let day = text(input, "opening_on");
+    if minor != 0 && day.is_none() {
+        return Ok(refused(
+            "account_exists_and_opening_has_its_day",
+            "An opening balance needs the day it was true.",
+        ));
+    }
+    let currency = match row.fields.get("currency") {
+        Some(Val::Text(code)) => code.clone(),
+        _ => world.currency.clone(),
+    };
+    let row = world
+        .rows
+        .get_mut(&(Kind::Account, id.to_owned()))
+        .ok_or_else(|| gone_text(id))?;
+    row.fields.insert("opening", Val::Money(minor, currency));
+    put(row, "opening_on", day.and_then(nonempty));
+    row.updated = cx.now.clone();
+    Ok(ok(json!({"id": id, "changed": true})))
+}
+
+/// A line's amount and day, corrected: its account and currency stay.
+fn txn_correct(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default();
+    let Some(row) = world
+        .rows
+        .get_mut(&(Kind::Transaction, id.to_owned()))
+        .filter(|row| !row.trashed)
+    else {
+        return Ok(refused(
+            "line_can_be_corrected",
+            "That is not a transaction.",
+        ));
+    };
+    if row.field("status") == Some(&Val::Enum("void")) {
+        return Ok(refused(
+            "line_can_be_corrected",
+            "A removed transaction cannot be corrected.",
+        ));
+    }
+    let (held_minor, currency) = match row.field("amount") {
+        Some(Val::Money(minor, currency)) => (*minor, currency.clone()),
+        _ => (0, String::new()),
+    };
+    if let Some(wanted) = text(input, "currency")
+        && wanted.trim().to_uppercase() != currency
+    {
+        return Ok(refused(
+            "line_can_be_corrected",
+            &format!("That transaction is in its account's currency, {currency}."),
+        ));
+    }
+    let amount = int(input, "amount_minor");
+    if let Some(minor) = amount
+        && row.field("transfer").is_some()
+        && (minor < 0) != (held_minor < 0)
+    {
+        return Ok(refused(
+            "line_can_be_corrected",
+            "One side of a transfer is money out and the other money in. Unlink it first.",
+        ));
+    }
+    if let Some(minor) = amount {
+        row.fields.insert("amount", Val::Money(minor, currency));
+    }
+    if let Some(day) = text(input, "posted_on").and_then(Stamp::parse) {
+        row.date = Some(day);
+    }
+    row.updated = cx.now.clone();
+    Ok(ok(json!({"id": id, "changed": true})))
+}
+
+/// A category's plan for a month: its id is `<category>:<month>`.
+fn budget_set(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let (Some(category), Some(month)) = (text(input, "category_id"), text(input, "month")) else {
+        return Ok(refused(
+            "plan_is_for_a_month_and_a_category",
+            "That is not a real month.",
+        ));
+    };
+    let id = format!("{category}:{month}");
+    let key = (Kind::Budget, id.clone());
+    let Some(amount) = int(input, "amount_minor") else {
+        // `null` removes the plan
+        world.rows.remove(&key);
+        return Ok(ok(json!({"changed": true})));
+    };
+    let currency = text(input, "currency")
+        .map_or_else(|| world.currency.clone(), |code| code.trim().to_uppercase());
+    let title = world
+        .rows
+        .get(&(Kind::Category, category.to_owned()))
+        .map_or_else(|| category.to_owned(), |row| row.name.clone());
+    let row = world.rows.entry(key).or_insert_with(|| {
+        let mut row = new_row(Kind::Budget, &id, &format!("{title} {month}"), cx);
+        row.fields.insert("carry", Val::Bool(false));
+        row
+    });
+    row.fields
+        .insert("amount", Val::Money(amount, currency.clone()));
+    row.fields.insert("currency", Val::Text(currency));
+    if let Some(carry) = input.get("carry").and_then(Value::as_bool) {
+        row.fields.insert("carry", Val::Bool(carry));
+    }
+    row.updated = cx.now.clone();
+    Ok(ok(json!({"changed": true})))
+}
+
+fn budget_set_carry(world: &mut World, input: &Value) -> Result<Ran, String> {
+    let (Some(category), Some(month)) = (text(input, "category_id"), text(input, "month")) else {
+        return Ok(refused("plan_exists", "That is not a real month."));
+    };
+    let Some(row) = world
+        .rows
+        .get_mut(&(Kind::Budget, format!("{category}:{month}")))
+    else {
+        return Ok(refused("plan_exists", "There is no plan for that month."));
+    };
+    row.fields.insert(
+        "carry",
+        Val::Bool(input.get("carry").and_then(Value::as_bool).unwrap_or(false)),
+    );
+    Ok(ok(json!({"changed": true})))
 }
 
 /// Two lines pointing at each other (or at nothing): the `transfer` field of both halves.

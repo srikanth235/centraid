@@ -92,7 +92,7 @@ use centraid_apps_kit::actions::{act, confirmed};
 /// and a name for a line are the shared verbs (`flag.set`, `flag.clear`,
 /// `entity.retitle`): Money wraps none of them, so two actions may name one command.
 /// Confirmation is asked for what cannot be taken back or touches many rows.
-pub const ACTIONS: [ActionRow; 31] = [
+pub const ACTIONS: [ActionRow; 33] = [
     act("add-account", "account.add"),
     act("edit-account", "account.edit"),
     act("close-account", "flag.set"),
@@ -110,6 +110,9 @@ pub const ACTIONS: [ActionRow; 31] = [
     confirmed("purge-transaction", "entity.purge"),
     confirmed("empty-trash", "entity.empty_trash"),
     act("set-display-name", "entity.retitle"),
+    // What an import read wrongly on a line is the member's to correct: the amount and the day.
+    act("correct-amount", "txn.correct"),
+    act("correct-date", "txn.correct"),
     act("link-transfer", "txn.link_transfer"),
     act("unlink-transfer", "txn.unlink_transfer"),
     act("set-target", "budget.set"),

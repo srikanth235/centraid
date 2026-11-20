@@ -511,9 +511,10 @@ pub fn kind_card(currency: &str) -> Vec<String> {
 
 /// The kind card as the model of `tools` learned it. S2's is frozen as it was trained (#1166):
 /// Health's two kinds were read-only then and list no verbs, whatever the runtime lets chat do to
-/// them now; a task's star (#1173) is neither a field nor a verb it learned; and a transaction goes
-/// to the trash (#1185) where S2 learned it could only be edited and unlinked. The runtime still
-/// takes such a call from S2; its prompt does not advertise one.
+/// them now; a task's star (#1173) is neither a field nor a verb it learned; a transaction goes
+/// to the trash (#1185) and has its day corrected (`reschedule`, 2026-11-20) where S2 learned it
+/// could only be edited and unlinked; and a plan (a budget) is edited where S2 learned it had no
+/// verb. The runtime still takes such a call from S2; its prompt does not advertise one.
 #[must_use]
 pub fn kind_card_for(tools: ToolsMode, currency: &str) -> Vec<String> {
     Kind::ALL
@@ -524,9 +525,11 @@ pub fn kind_card_for(tools: ToolsMode, currency: &str) -> Vec<String> {
                 (ToolsMode::S2, Kind::Workout | Kind::DailyFigure) => {
                     line.split(" · verbs: ").next().unwrap_or(&line).to_owned()
                 }
-                (ToolsMode::S2, Kind::Transaction) => {
-                    line.replace(" verbs: edit delete restore unlink", " verbs: edit unlink")
-                }
+                (ToolsMode::S2, Kind::Transaction) => line.replace(
+                    " verbs: edit reschedule delete restore unlink",
+                    " verbs: edit unlink",
+                ),
+                (ToolsMode::S2, Kind::Budget) => line.replace(" \u{b7} verbs: edit", ""),
                 (ToolsMode::S2, Kind::Task) => line
                     .replace(", starred (yes|no)", "")
                     .replace(" restore star unstar ", " restore "),

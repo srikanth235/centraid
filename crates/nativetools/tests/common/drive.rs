@@ -34,7 +34,7 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
         Kind::Account => "Everyday",
         Kind::Rule => "BLUE BOTTLE",
         Kind::Category => "Pets fund",
-        Kind::Budget => return None,
+        Kind::Budget => "Dining out",
         // Health's kinds are read-only in chat (#1135): no verb applies.
         Kind::DailyFigure | Kind::Workout => return None,
     };
@@ -77,6 +77,8 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
                 Kind::Task => json!({"effort": 45}),
                 Kind::LockerItem => json!({"username": "sam2"}),
                 Kind::Rule => json!({"position": 1}),
+                // a plan's amount, in the plan's own currency
+                Kind::Budget => json!({"amount": 350}),
                 _ => json!({"name": format!("{subject} renamed")}),
             };
             measure(session, json!({"verb": "edit", "rows": row, "args": args}))

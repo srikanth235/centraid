@@ -2150,5 +2150,134 @@
     "tool": "create",
     "argument": "args",
     "why_none": "the fixture world holds no daily figure to log over; tests/health_kind.rs says it on a world that holds one"
+  },
+  "act.a_transaction_is_posted_on_one": {
+    "tool": "do",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "do",
+        "args": {
+          "verb": "reschedule",
+          "kind": "transaction",
+          "name": "To savings",
+          "args": "to: {\"unit\":\"week\",\"rel\":1}"
+        }
+      }
+    ]
+  },
+  "act.field_is_one_day_x_is": {
+    "tool": "create",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "create",
+        "args": {
+          "kind": "account",
+          "args": "name: Holiday\ntype: cash\nopening_on: {\"unit\":\"week\",\"rel\":1}"
+        }
+      }
+    ]
+  },
+  "act.this_transaction_is_in_row_currency_its": {
+    "tool": "edit",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "edit",
+        "args": {
+          "kind": "transaction",
+          "name": "To savings",
+          "args": "amount: €5"
+        }
+      }
+    ]
+  },
+  "act.this_account_is_in_row_currency_field": {
+    "tool": "edit",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "edit",
+        "args": {
+          "kind": "account",
+          "name": "Everyday",
+          "args": "opening: €5\nopening_on: 2026-01-01"
+        }
+      }
+    ]
+  },
+  "act.that_plan_has_no_category_and": {
+    "tool": "edit",
+    "argument": "args",
+    "why_none": "a plan's id is always `<category>:<month>`, built by the runtime when it reads the plan, so a plan the model can name always has both; the check guards a row that is not one."
+  },
+  "act.a_plan_is_an_amount_to": {
+    "tool": "edit",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "edit",
+        "args": {
+          "kind": "budget",
+          "name": "Dining out",
+          "args": "amount: -5"
+        }
+      }
+    ]
+  },
+  "act.the_amount_is_in_currency_and": {
+    "tool": "edit",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "edit",
+        "args": {
+          "kind": "budget",
+          "name": "Dining out",
+          "args": "amount: 5 EUR\ncurrency: USD"
+        }
+      }
+    ]
+  },
+  "act.new_currency_counts_in_other_minor_units": {
+    "tool": "edit",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "edit",
+        "args": {
+          "kind": "budget",
+          "name": "Dining out",
+          "args": "currency: JPY"
+        }
+      }
+    ]
+  },
+  "act.this_account_is_in_currency_opening": {
+    "tool": "create",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "create",
+        "args": {
+          "kind": "account",
+          "args": "name: Holiday\ntype: cash\ncurrency: INR\nopening: $5\nopening_on: 2026-01-01"
+        }
+      }
+    ]
+  },
+  "act.an_opening_balance_is_as_of": {
+    "tool": "create",
+    "argument": "args",
+    "calls": [
+      {
+        "tool": "create",
+        "args": {
+          "kind": "account",
+          "args": "name: Holiday\ntype: cash\nopening: 40"
+        }
+      }
+    ]
   }
 }

@@ -48,10 +48,10 @@ mod tests {
     }
 
     #[test]
-    fn it_declares_thirteen_queries_and_twenty_eight_actions() {
+    fn it_declares_its_queries_and_actions() {
         let manifest = manifest();
         assert_eq!(manifest.queries.len(), 14);
-        assert_eq!(manifest.actions.len(), 31);
+        assert_eq!(manifest.actions.len(), 33);
         for name in [
             "spending",
             "activity",

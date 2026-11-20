@@ -739,6 +739,29 @@
       "why_no_example": ""
     },
     {
+      "argument": "args",
+      "example": [
+        {
+          "args": {
+            "args": "to: {\"unit\":\"week\",\"rel\":1}",
+            "kind": "transaction",
+            "name": "To savings",
+            "verb": "reschedule"
+          },
+          "strict": false,
+          "think": null,
+          "tool": "do",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "act.a_transaction_is_posted_on_one",
+      "source": "act.rs",
+      "template": "error: a transaction is posted on one day; {} is more.",
+      "tool": "do",
+      "why_no_example": ""
+    },
+    {
       "argument": "kind",
       "example": [
         {
@@ -756,7 +779,7 @@
       "family": "applicability",
       "id": "act.reschedule_does_not_apply_to_x",
       "source": "act.rs",
-      "template": "error: reschedule does not apply to {}. reschedule applies to: task, event.",
+      "template": "error: reschedule does not apply to {}. reschedule applies to: task, event, transaction.",
       "tool": "do",
       "why_no_example": ""
     },
@@ -1036,6 +1059,147 @@
       "example": [
         {
           "args": {
+            "args": "name: Holiday\ntype: cash\nopening_on: {\"unit\":\"week\",\"rel\":1}",
+            "kind": "account"
+          },
+          "strict": false,
+          "think": null,
+          "tool": "create",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "act.field_is_one_day_x_is",
+      "source": "act.rs",
+      "template": "error: {field} is one day; {} is more.",
+      "tool": "create",
+      "why_no_example": ""
+    },
+    {
+      "argument": "args",
+      "example": [
+        {
+          "args": {
+            "args": "amount: €5",
+            "kind": "transaction",
+            "name": "To savings"
+          },
+          "strict": false,
+          "think": null,
+          "tool": "edit",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "act.this_transaction_is_in_row_currency_its",
+      "source": "act.rs",
+      "template": "error: this transaction is in {row_currency}, its account's currency; {field} is not an amount in {currency}. Nothing was changed.",
+      "tool": "edit",
+      "why_no_example": ""
+    },
+    {
+      "argument": "args",
+      "example": [
+        {
+          "args": {
+            "args": "opening: €5\nopening_on: 2026-01-01",
+            "kind": "account",
+            "name": "Everyday"
+          },
+          "strict": false,
+          "think": null,
+          "tool": "edit",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "act.this_account_is_in_row_currency_field",
+      "source": "act.rs",
+      "template": "error: this account is in {row_currency}; {field} is not an amount in {currency}. Set the account's currency first (only an account with no transactions can change it).",
+      "tool": "edit",
+      "why_no_example": ""
+    },
+    {
+      "argument": "args",
+      "example": null,
+      "family": "value",
+      "id": "act.that_plan_has_no_category_and",
+      "source": "act.rs",
+      "template": "error: that plan has no category and month.",
+      "tool": "edit",
+      "why_no_example": "a plan's id is always `<category>:<month>`, built by the runtime when it reads the plan, so a plan the model can name always has both; the check guards a row that is not one."
+    },
+    {
+      "argument": "args",
+      "example": [
+        {
+          "args": {
+            "args": "amount: -5",
+            "kind": "budget",
+            "name": "Dining out"
+          },
+          "strict": false,
+          "think": null,
+          "tool": "edit",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "act.a_plan_is_an_amount_to",
+      "source": "act.rs",
+      "template": "error: a plan is an amount to spend, not a negative one.",
+      "tool": "edit",
+      "why_no_example": ""
+    },
+    {
+      "argument": "args",
+      "example": [
+        {
+          "args": {
+            "args": "amount: 5 EUR\ncurrency: USD",
+            "kind": "budget",
+            "name": "Dining out"
+          },
+          "strict": false,
+          "think": null,
+          "tool": "edit",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "act.the_amount_is_in_currency_and",
+      "source": "act.rs",
+      "template": "error: the amount is in {currency} and the currency is {in_force}; one plan has one currency.",
+      "tool": "edit",
+      "why_no_example": ""
+    },
+    {
+      "argument": "args",
+      "example": [
+        {
+          "args": {
+            "args": "currency: JPY",
+            "kind": "budget",
+            "name": "Dining out"
+          },
+          "strict": false,
+          "think": null,
+          "tool": "edit",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "act.new_currency_counts_in_other_minor_units",
+      "source": "act.rs",
+      "template": "error: {new_currency} counts in other minor units than {old_currency}; say the amount with the currency.",
+      "tool": "edit",
+      "why_no_example": ""
+    },
+    {
+      "argument": "args",
+      "example": [
+        {
+          "args": {
             "args": "url: https://x.example",
             "kind": "locker item",
             "name": "Home wifi"
@@ -1216,6 +1380,48 @@
       "id": "act.create_account_needs_type_checking_savings",
       "source": "act.rs",
       "template": "error: create account needs type: checking | savings | credit card | cash.",
+      "tool": "create",
+      "why_no_example": ""
+    },
+    {
+      "argument": "args",
+      "example": [
+        {
+          "args": {
+            "args": "name: Holiday\ntype: cash\ncurrency: INR\nopening: $5\nopening_on: 2026-01-01",
+            "kind": "account"
+          },
+          "strict": false,
+          "think": null,
+          "tool": "create",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "act.this_account_is_in_currency_opening",
+      "source": "act.rs",
+      "template": "error: this account is in {currency}; opening is not an amount in {}. Name the account's currency with currency: …",
+      "tool": "create",
+      "why_no_example": ""
+    },
+    {
+      "argument": "args",
+      "example": [
+        {
+          "args": {
+            "args": "name: Holiday\ntype: cash\nopening: 40",
+            "kind": "account"
+          },
+          "strict": false,
+          "think": null,
+          "tool": "create",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "act.an_opening_balance_is_as_of",
+      "source": "act.rs",
+      "template": "error: an opening balance is as of a day; add opening_on: <date>.",
       "tool": "create",
       "why_no_example": ""
     },

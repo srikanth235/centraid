@@ -31,6 +31,7 @@ use crate::native::dates::{self, Stamp};
 use crate::native::door::{Call, Ran};
 use crate::native::member::{ActionKind, MemberAction};
 use crate::native::meta::{self, ActionSpec, FieldType, Kind, ROW_CAP, Verb, Via};
+use crate::native::money;
 use crate::native::park::{FieldChange, LinkChange, RowChange};
 use crate::native::render;
 use crate::native::session::{
@@ -2793,8 +2794,39 @@ impl Session {
                     note: said,
                 })
             }
+            // A TRANSACTION'S DAY is what an import read: the member corrects it, and the amount, the
+            // account and the currency stay
+            Kind::Transaction => {
+                let day = resolved.point().map(|point| point.date).ok_or_else(|| {
+                    format!(
+                        "error: a transaction is posted on one day; {} is more.",
+                        resolved.echo()
+                    )
+                })?;
+                if row.date.map(|held| held.date) == Some(day) {
+                    return Ok(Plan::Already(format!("is already posted on {day}")));
+                }
+                let action = Verb::Reschedule
+                    .action(Kind::Transaction)
+                    .ok_or_else(|| not_applicable(Verb::Reschedule, Kind::Transaction))?;
+                let back = row
+                    .date
+                    .map_or_else(|| day.to_string(), |held| held.date.to_string());
+                Ok(Plan::Run {
+                    steps: vec![Step::of(
+                        action,
+                        json!({action.id_param: row.id, "posted_on": day.to_string()}),
+                    )],
+                    inverse: vec![Step::of(
+                        action,
+                        json!({action.id_param: row.id, "posted_on": back}),
+                    )],
+                    not_undoable: None,
+                    note: said,
+                })
+            }
             other => Err(format!(
-                "error: reschedule does not apply to {}. reschedule applies to: task, event.",
+                "error: reschedule does not apply to {}. reschedule applies to: task, event, transaction.",
                 other.plural()
             )),
         }
@@ -3034,8 +3066,14 @@ impl Session {
         let mut not_undoable: Option<String> = None;
         let mut offers: Vec<MemberAction> = Vec::new();
         let mut typed_secrets: Vec<(&'static str, String)> = Vec::new();
+        // a budget's amount, currency and carry, planned together after the fields are read
+        let mut plan_args: BTreeMap<&str, &Value> = BTreeMap::new();
         for (field, value) in args {
             let field = field.as_str();
+            if kind == Kind::Budget && matches!(field, "amount" | "currency" | "carry") {
+                plan_args.insert(field, value);
+                continue;
+            }
             if field == "name" {
                 let name = text_of(value);
                 if name.trim().is_empty() {
@@ -3111,7 +3149,15 @@ impl Session {
             // the action that edits this field: the one that names it (`edit:cadence`), else the one
             // whose input takes it. A task's status, a note's pin and a list's area are commands
             // of their own, planned below.
-            let action = meta::edit_action(kind, field);
+            // an opening balance's day is said with the balance: one command sets both
+            let action = meta::edit_action(
+                kind,
+                if (kind, field) == (Kind::Account, "opening_on") {
+                    "opening"
+                } else {
+                    field
+                },
+            );
             if action.is_none() && !special {
                 let hint = match (kind, field) {
                     (_, "starred") => "use star or unstar".to_owned(),
@@ -3128,7 +3174,12 @@ impl Session {
             let old = row.field(field).cloned();
             let (new_json, new_val) = match spec_field.ty {
                 FieldType::Text => {
-                    let text = text_of(value);
+                    // an account's opening day is a day, said as a date is (`1 Jan 2026`)
+                    let text = if (kind, field) == (Kind::Account, "opening_on") {
+                        self.one_day(value, "opening_on")?
+                    } else {
+                        text_of(value)
+                    };
                     (
                         json!(text),
                         (!text.is_empty()).then(|| Val::Text(text.clone())),
@@ -3149,7 +3200,11 @@ impl Session {
                     let vault = spec_field.vault_value(model).unwrap_or(model);
                     (json!(vault), Some(Val::Enum(model)))
                 }
-                FieldType::Money | FieldType::Date => {
+                FieldType::Money => {
+                    let (minor, currency) = self.edit_money(row, field, value)?;
+                    (json!(minor), Some(Val::Money(minor, currency)))
+                }
+                FieldType::Date => {
                     return Err(format!("error: {field} cannot be edited."));
                 }
             };
@@ -3251,6 +3306,14 @@ impl Session {
                     },
                     old.as_ref().map_or(Value::Null, Val::json),
                 ),
+                // an amount goes back as minor units, in the currency it was stated in
+                (Kind::Account, "opening") | (Kind::Transaction, "amount") => (
+                    new_json,
+                    match &old {
+                        Some(Val::Money(minor, _)) => json!(minor),
+                        _ => json!(0),
+                    },
+                ),
                 // a Health figure goes back as the vault held it, not as the world shows it
                 (Kind::DailyFigure, "value") => (new_json, json!(self.figure_value(row)?)),
                 (Kind::Workout, "moving" | "distance" | "energy" | "heart_rate" | "climb") => {
@@ -3266,6 +3329,36 @@ impl Session {
                 .entry(command)
                 .or_default()
                 .insert(param.to_owned(), old_json);
+        }
+        // an opening balance is stated with its day: `account.set_opening` replaces both, so an edit of one
+        // sends the other as the row holds it (and its undo sends both as they were)
+        if let Some(input) = forward.get_mut("account.set_opening") {
+            let held_minor = match row.field("opening") {
+                Some(Val::Money(minor, _)) => *minor,
+                _ => 0,
+            };
+            let held_on = match row.field("opening_on") {
+                Some(Val::Text(day)) => Some(day.clone()),
+                _ => None,
+            };
+            input
+                .entry("opening_minor".to_owned())
+                .or_insert(json!(held_minor));
+            if let Some(day) = &held_on {
+                input.entry("opening_on".to_owned()).or_insert(json!(day));
+            }
+            let back = backward.entry("account.set_opening").or_default();
+            back.insert("opening_minor".to_owned(), json!(held_minor));
+            match held_on {
+                Some(day) => back.insert("opening_on".to_owned(), json!(day)),
+                None => back.remove("opening_on"),
+            };
+        }
+        if !plan_args.is_empty() {
+            let (steps, back, plan_changed) = self.plan_budget(row, &plan_args)?;
+            changed |= plan_changed;
+            apart.extend(steps);
+            apart_back.extend(back);
         }
         if !offers.is_empty() {
             if changed || !forward.is_empty() || !apart.is_empty() {
@@ -3338,6 +3431,135 @@ impl Session {
             not_undoable,
             note: None,
         })
+    }
+
+    /// A day, said as a date is (`2026-01-01`, `1 Jan 2026`, `last Friday`), as the vault spells it.
+    fn one_day(&mut self, value: &Value, field: &str) -> Result<String, String> {
+        let expr = self.date_expr(value)?;
+        let resolved =
+            dates::evaluate(&expr, self.now, None).map_err(|why| dates::rejection(&why))?;
+        match resolved {
+            dates::Resolved::At(at) => Ok(at.date().to_string()),
+            dates::Resolved::Days { from, to } if from == to => Ok(from.to_string()),
+            other => Err(format!(
+                "error: {field} is one day; {} is more.",
+                other.echo()
+            )),
+        }
+    }
+
+    /// An amount the member states for `field` of `row`, in minor units and the currency it is in. Every amount is
+    /// read with its currency: one the text names must be the row's own where the vault keeps the row in one
+    /// currency (an account's opening balance, a transaction), and a sign the text leaves out is the row's own
+    /// direction for a transaction (money out stays out).
+    fn edit_money(&self, row: &Row, field: &str, value: &Value) -> Result<(i64, String), String> {
+        let held = self.vault_currencies();
+        let (old_minor, row_currency) = match row.field(field) {
+            Some(Val::Money(minor, currency)) => (*minor, currency.clone()),
+            _ => (0, self.world.currency.clone()),
+        };
+        let stated = money::read(field, &text_of(value), &row_currency, &held)?;
+        let currency = stated
+            .currency
+            .clone()
+            .unwrap_or_else(|| row_currency.clone());
+        if currency != row_currency {
+            return Err(match row.kind {
+                Kind::Transaction => format!(
+                    "error: this transaction is in {row_currency}, its account's currency; {field} is not an amount in {currency}. Nothing was changed."
+                ),
+                _ => format!(
+                    "error: this account is in {row_currency}; {field} is not an amount in {currency}. Set the account's currency first (only an account with no transactions can change it)."
+                ),
+            });
+        }
+        let minor = match (row.kind, stated.signed) {
+            (Kind::Transaction, false) if old_minor < 0 => -stated.minor,
+            _ => stated.minor,
+        };
+        Ok((minor, currency))
+    }
+
+    /// A budget's amount, currency and carry (`budget.set` and `budget.set_carry`): the plan for a category and a
+    /// month is one row, so its amount is always sent with its currency. Returns the steps, the steps that put it
+    /// back, and whether anything differs from what the row holds.
+    fn plan_budget(
+        &self,
+        row: &Row,
+        args: &BTreeMap<&str, &Value>,
+    ) -> Result<(Vec<Step>, Vec<Step>, bool), String> {
+        let (category, month) = row
+            .id
+            .rsplit_once(':')
+            .ok_or_else(|| "error: that plan has no category and month.".to_owned())?;
+        let held = self.vault_currencies();
+        let (old_minor, old_currency) = match row.field("amount") {
+            Some(Val::Money(minor, currency)) => (*minor, currency.clone()),
+            _ => (0, self.world.currency.clone()),
+        };
+        let old_carry = row.field("carry") == Some(&Val::Bool(true));
+        let named = match args.get("currency") {
+            Some(value) => Some(money::currency(&text_of(value), &old_currency, &held)?),
+            None => None,
+        };
+        let in_force = named.clone().unwrap_or_else(|| old_currency.clone());
+        let mut amount = None;
+        if let Some(value) = args.get("amount") {
+            let stated = money::read("amount", &text_of(value), &in_force, &held)?;
+            if stated.minor < 0 {
+                return Err("error: a plan is an amount to spend, not a negative one.".to_owned());
+            }
+            // an amount that names a currency is in it: with no currency said beside it, it is the plan's
+            let currency = stated.currency.unwrap_or_else(|| in_force.clone());
+            if named.as_ref().is_some_and(|named| *named != currency) {
+                return Err(format!(
+                    "error: the amount is in {currency} and the currency is {in_force}; one plan has one currency."
+                ));
+            }
+            amount = Some((stated.minor, currency));
+        }
+        let new_currency = amount
+            .as_ref()
+            .map(|(_, currency)| currency.clone())
+            .or(named)
+            .unwrap_or_else(|| old_currency.clone());
+        if amount.is_none()
+            && new_currency != old_currency
+            && centraid_apps_kit::money::minor_units(&new_currency)
+                != centraid_apps_kit::money::minor_units(&old_currency)
+        {
+            return Err(format!(
+                "error: {new_currency} counts in other minor units than {old_currency}; say the amount with the currency."
+            ));
+        }
+        let new_minor = amount.map_or(old_minor, |(minor, _)| minor);
+        let mut steps = Vec::new();
+        let mut back = Vec::new();
+        let mut changed = false;
+        if (new_minor, &new_currency) != (old_minor, &old_currency) {
+            let action = meta::edit_action(Kind::Budget, "amount")
+                .ok_or_else(|| not_applicable(Verb::Edit, Kind::Budget))?;
+            let plan = |minor: i64, currency: &str| json!({"month": month, "category_id": category, "amount_minor": minor, "currency": currency});
+            steps.push(Step::of(action, plan(new_minor, &new_currency)));
+            back.push(Step::of(action, plan(old_minor, &old_currency)));
+            changed = true;
+        }
+        if let Some(value) = args.get("carry") {
+            let on = whr::parse_bool(&text_of(value))
+                .ok_or_else(|| whr::bool_error("carry", &text_of(value)))?;
+            if on != old_carry {
+                let action = meta::edit_action(Kind::Budget, "carry")
+                    .ok_or_else(|| not_applicable(Verb::Edit, Kind::Budget))?;
+                let carry =
+                    |on: bool| json!({"month": month, "category_id": category, "carry": on});
+                steps.push(Step::of(action, carry(on)));
+                back.push(Step::of(action, carry(old_carry)));
+                changed = true;
+            }
+        }
+        // the undo runs the last step first
+        back.reverse();
+        Ok((steps, back, changed))
     }
 
     /// A list's area, as steps: the list moves into the area of that name (found by its title,
@@ -3573,6 +3795,11 @@ impl Session {
         } else {
             None
         };
+        // an account's opening day is a day, said as a date is
+        let opening_day = match (kind, args.get("opening_on")) {
+            (Kind::Account, Some(value)) => Some(self.one_day(value, "opening_on")?),
+            _ => None,
+        };
         let mint = || self.door.mint_id();
         // EVERY CREATE NAMES THE ID IT WILL HAVE: a parked card shows it, and the confirm writes
         // the row the card named (the vault honours an id the caller minted).
@@ -3743,10 +3970,48 @@ impl Session {
                     );
                 };
                 let kind_value = whr::enum_value(Kind::Account, "type", &kind_value)?;
-                (
-                    json!({"id": mint(), "title": name, "type": kind_value}),
-                    action.id_param,
-                )
+                let mut input = json!({"id": mint(), "title": name, "type": kind_value});
+                // AN ACCOUNT IS IN ONE CURRENCY, named or the vault's own; its opening balance is an amount in
+                // it, as of a day
+                let held = self.vault_currencies();
+                let currency = match text("currency") {
+                    Some(said) => {
+                        let code = money::currency(&said, &self.world.currency, &held)?;
+                        input["currency"] = json!(code);
+                        code
+                    }
+                    None => self.world.currency.clone(),
+                };
+                if let Some(said) = text("opening") {
+                    let stated = money::read("opening", &said, &currency, &held)?;
+                    if stated
+                        .currency
+                        .as_ref()
+                        .is_some_and(|named| *named != currency)
+                    {
+                        return Err(format!(
+                            "error: this account is in {currency}; opening is not an amount in {}. Name the account's currency with currency: …",
+                            stated.currency.unwrap_or_default()
+                        ));
+                    }
+                    if stated.minor != 0 && opening_day.is_none() {
+                        return Err(
+                            "error: an opening balance is as of a day; add opening_on: <date>."
+                                .to_owned(),
+                        );
+                    }
+                    input["opening_minor"] = json!(stated.minor);
+                }
+                if let Some(day) = &opening_day {
+                    input["opening_on"] = json!(day);
+                }
+                if let Some(said) = text("on_budget") {
+                    input["on_budget"] = json!(
+                        whr::parse_bool(&said)
+                            .ok_or_else(|| whr::bool_error("on_budget", &said))?
+                    );
+                }
+                (input, action.id_param)
             }
             // A DAILY FIGURE THE MEMBER STATES: the metric (its name), the day and the value, while
             // no health store is followed (a store states them at each read)

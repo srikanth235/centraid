@@ -3,7 +3,7 @@
 Money is a personal-finance app: accounts, transactions that enter by **importing a bank statement**, categories by rule, spending by month ([#1099](https://github.com/srikanth235/centraid/issues/1099)). Its doctrine:
 
 - one account is one currency; nothing sums across currencies;
-- an imported transaction is never edited (a category, a name and the trash are the member's decisions, not edits to what the bank said);
+- an imported transaction is the bank's until the member corrects what the import read wrongly (`txn.correct`: its amount and day; it stays in its account and its account's currency), besides a category, a name and the trash; a correction is a version in the line's history and a later import of the same statement leaves it; chat edits these but never creates a transaction;
 - a transaction in the trash is in no balance, total, recurring charge or search result, comes back exactly on a restore, and is never brought back by a statement imported again (a void is what a member could do before the trash: a vault may still hold one, and it stays void and counts nowhere; the member now moves a line to the trash instead);
 - re-importing the same file writes nothing;
 - the fuzzy duplicate pass only **proposes**;

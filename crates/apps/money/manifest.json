@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "money",
   "name": "Money",
-  "description": "Where your money went — a personal ledger as a projection of the vault. Import a bank or card statement (CSV, OFX or QFX) and see spending by category against a monthly plan, cash flow, and balances checked against the balances your statements state. An account is the vault's own account entity and an imported line its own transaction, followed from the statement the member imported; the app adds your names, rules, plans and checkpoints. A line is never edited, only named, filed under a category or moved to the trash (and brought back, exactly as it was); importing the same file twice writes nothing; a possible duplicate or transfer is proposed and never decided for you. Every balance, total and forecast is derived at read time — nothing is stored — and nothing is ever added across currencies. The statement itself is read once and never kept. The app stores no separate copy of the data.",
+  "description": "Where your money went — a personal ledger as a projection of the vault. Import a bank or card statement (CSV, OFX or QFX) and see spending by category against a monthly plan, cash flow, and balances checked against the balances your statements state. An account is the vault's own account entity and an imported line its own transaction, followed from the statement the member imported; the app adds your names, rules, plans and checkpoints. A line is the bank's words until the member corrects what an import read wrongly (its amount and day), names it, files it under a category or moves it to the trash (and brings it back, exactly as it was); chat never adds a line; importing the same file twice writes nothing; a possible duplicate or transfer is proposed and never decided for you. Every balance, total and forecast is derived at read time — nothing is stored — and nothing is ever added across currencies. The statement itself is read once and never kept. The app stores no separate copy of the data.",
   "version": "0.2.0",
   "iconKey": "Coin",
   "colorKey": "indigo",
@@ -141,6 +141,11 @@
       },
       {
         "schema": "txn",
+        "table": "correct",
+        "verbs": "act"
+      },
+      {
+        "schema": "txn",
         "table": "link_transfer",
         "verbs": "act"
       },
@@ -230,12 +235,13 @@
         "create a checking account called Everyday",
         "open a cash account"
       ],
-      "description": "Add an account the member imports statements into, with its currency, type, (optionally) an opening balance and the bank's own account number.",
+      "description": "Add an account the member imports statements into, with its currency, type, (optionally) an opening balance as of a day (an amount in its currency) and the bank's own account number.",
       "confirmation": "none",
       "input": {
         "additionalProperties": false,
         "properties": {
           "currency": {
+            "aliases": ["currency"],
             "maxLength": 3,
             "minLength": 3,
             "type": "string"
@@ -250,12 +256,15 @@
             "type": "string"
           },
           "on_budget": {
+            "aliases": ["on_budget"],
             "type": "boolean"
           },
           "opening_minor": {
+            "aliases": ["opening"],
             "type": "integer"
           },
           "opening_on": {
+            "aliases": ["opening_on"],
             "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
             "type": "string"
           },
@@ -300,11 +309,17 @@
         "change Everyday to a savings account",
         "take my cash account off budget"
       ],
-      "description": "Rename an account, change its type (checking and savings are one class), move it on or off budget, or set or clear the bank's account number.",
+      "description": "Rename an account, change its type (checking and savings are one class), move it on or off budget, set or clear the bank's account number, or correct its currency while it has no transactions.",
       "confirmation": "none",
       "input": {
         "additionalProperties": false,
         "properties": {
+          "currency": {
+            "aliases": ["currency"],
+            "maxLength": 3,
+            "minLength": 3,
+            "type": "string"
+          },
           "external_ref": {
             "maxLength": 64,
             "minLength": 1,
@@ -439,9 +454,9 @@
     },
     {
       "name": "set-opening-balance",
-      "verb": "edit",
+      "verb": "edit:opening",
       "kind": "account",
-      "inverse": null,
+      "inverse": "set-opening-balance",
       "sealed": [],
       "command": "account.set_opening",
       "phrasings": [
@@ -459,9 +474,11 @@
             "type": "string"
           },
           "opening_minor": {
+            "aliases": ["opening"],
             "type": "integer"
           },
           "opening_on": {
+            "aliases": ["opening_on"],
             "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
             "type": "string"
           }
@@ -497,7 +514,7 @@
         "load the CSV from my checking account",
         "add the lines from last month's statement"
       ],
-      "description": "Write the new lines of a statement the member reviewed (the Import screen previews them and writes only on the member's tap): a line already in the account is left as it is (a line is never edited, and the member's category and name survive), so importing the same file twice writes nothing.",
+      "description": "Write the new lines of a statement the member reviewed (the Import screen previews them and writes only on the member's tap): a line already in the account is left as it is (the member's corrections, category and name survive), so importing the same file twice writes nothing.",
       "confirmation": "required",
       "input": {
         "additionalProperties": false,
@@ -810,7 +827,7 @@
         "remove that charge from my figures",
         "trash the Amazon line from Tuesday"
       ],
-      "description": "Move a transaction to the trash through entity.trash: it leaves every balance, total, recurring charge and search result, the vault keeps it thirty days, and restoring it brings it back exactly. What the bank wrote is never changed.",
+      "description": "Move a transaction to the trash through entity.trash: it leaves every balance, total, recurring charge and search result, the vault keeps it thirty days, and restoring it brings it back exactly. What the bank wrote stays in the statement.",
       "confirmation": "none",
       "input": {
         "additionalProperties": false,
@@ -1012,6 +1029,121 @@
       }
     },
     {
+      "name": "correct-amount",
+      "verb": "edit:amount",
+      "kind": "transaction",
+      "inverse": "correct-amount",
+      "sealed": [],
+      "command": "txn.correct",
+      "phrasings": [
+        "the Starbucks charge was 4.50 not 45",
+        "fix the amount on that rent line to 1,200",
+        "that deposit should be 2,500"
+      ],
+      "description": "Correct the amount an import read wrongly on a transaction: signed minor units of the account's own currency (money out is negative), as the bank stated it; the line keeps its account and its currency, so an amount in another currency is refused. A later import of the same statement leaves the correction.",
+      "confirmation": "none",
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "amount_minor": {
+            "aliases": ["amount"],
+            "type": "integer"
+          },
+          "currency": {
+            "maxLength": 3,
+            "minLength": 3,
+            "type": "string"
+          },
+          "expected_rev": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "posted_on": {
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "type": "string"
+          }
+        },
+        "required": ["id"],
+        "type": "object"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "correct-date",
+      "verb": "reschedule",
+      "kind": "transaction",
+      "inverse": "correct-date",
+      "sealed": [],
+      "command": "txn.correct",
+      "phrasings": [
+        "that charge posted on 3 March, not 2 March",
+        "move the Netflix line to the 5th",
+        "the rent was posted on the first, fix it"
+      ],
+      "description": "Correct the day an import read wrongly on a transaction (posted_on); the amount and the account are not changed, and a later import of the same statement leaves the correction.",
+      "confirmation": "none",
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "amount_minor": {
+            
+            "type": "integer"
+          },
+          "currency": {
+            "maxLength": 3,
+            "minLength": 3,
+            "type": "string"
+          },
+          "expected_rev": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "posted_on": {
+            "aliases": ["date"],
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "type": "string"
+          }
+        },
+        "required": ["id"],
+        "type": "object"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
       "name": "link-transfer",
       "verb": "link",
       "kind": "transaction",
@@ -1113,6 +1245,7 @@
         "additionalProperties": false,
         "properties": {
           "amount_minor": {
+            "aliases": ["amount"],
             "minimum": 0,
             "type": ["integer", "null"]
           },
@@ -1120,15 +1253,18 @@
             "type": "boolean"
           },
           "category_id": {
+            "aliases": ["category"],
             "minLength": 1,
             "type": "string"
           },
           "currency": {
+            "aliases": ["currency"],
             "maxLength": 3,
             "minLength": 3,
             "type": "string"
           },
           "month": {
+            "aliases": ["date"],
             "pattern": "^[0-9]{4}-[0-9]{2}$",
             "type": "string"
           }
@@ -1169,13 +1305,16 @@
         "additionalProperties": false,
         "properties": {
           "carry": {
+            "aliases": ["carry"],
             "type": "boolean"
           },
           "category_id": {
+            "aliases": ["category"],
             "minLength": 1,
             "type": "string"
           },
           "month": {
+            "aliases": ["date"],
             "pattern": "^[0-9]{4}-[0-9]{2}$",
             "type": "string"
           }

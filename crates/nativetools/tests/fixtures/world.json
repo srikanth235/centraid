@@ -225,6 +225,7 @@
   ],
   "transfers": [{ "a": "to_savings", "b": "from_checking" }],
   "categories": [{ "key": "pets_fund", "name": "Pets fund" }],
+  "budgets": [{ "month": "2026-09", "category": "food.dining", "amount": 300 }],
   "rules": [
     {
       "key": "coffee_rule",

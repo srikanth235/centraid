@@ -12,7 +12,7 @@
     },
     {
       "name": "reschedule",
-      "kindOrder": ["task", "event"],
+      "kindOrder": ["task", "event", "transaction"],
       "args": "to: <date expression>",
       "done": "rescheduled"
     },

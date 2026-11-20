@@ -1080,7 +1080,7 @@ impl World {
         for account in by_ids(
             door,
             "account",
-            "id, type, currency, opening_minor, on_budget",
+            "id, type, currency, opening_minor, opening_on, on_budget",
             &scopes.of("account").ids(),
         )? {
             let id = text(&account, "id").unwrap_or_default();
@@ -1100,6 +1100,11 @@ impl World {
             fields.insert(
                 "opening",
                 Val::Money(int(&account, "opening_minor").unwrap_or_default(), currency),
+            );
+            put(
+                &mut fields,
+                "opening_on",
+                nonempty(text(&account, "opening_on")),
             );
             fields.insert(
                 "on_budget",

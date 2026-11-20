@@ -89,7 +89,7 @@ money,add-account,create,account,direct,yes: crates/screens/src/money/accounts.r
 money,edit-account,edit,account,direct,yes: crates/screens/src/money/accounts.rs,no
 money,close-account,archive,account,direct,yes: crates/screens/src/money/accounts.rs; crates/screens/src/money/categories.rs,no
 money,reopen-account,unarchive,account,direct,yes: crates/screens/src/money/accounts.rs; crates/screens/src/money/categories.rs,no
-money,set-opening-balance,edit,account,card,no,no
+money,set-opening-balance,edit:opening,account,direct,no,yes
 money,import-transactions,import,transaction,card,yes: crates/screens/src/money/import.rs,no
 money,record-checkpoint,log,account,card,yes: crates/screens/src/money/import.rs,no
 money,save-import-profile,edit,account,card,yes: crates/screens/src/money/import.rs,no
@@ -99,10 +99,12 @@ money,restore-transaction,restore,transaction,direct,yes: crates/screens/src/mon
 money,purge-transaction,purge,transaction,card,yes: crates/screens/src/money/trash.rs,no
 money,empty-trash,purge,transaction,card,yes: crates/screens/src/money/trash.rs,no
 money,set-display-name,edit,transaction,direct,yes: crates/screens/src/money/transaction.rs,no
+money,correct-amount,edit:amount,transaction,direct,no,yes
+money,correct-date,reschedule,transaction,direct,no,yes
 money,link-transfer,link,transaction,card,yes: crates/screens/src/money/transaction.rs,no
 money,unlink-transfer,unlink,transaction,direct,yes: crates/screens/src/money/transaction.rs,no
-money,set-target,edit,budget,card,yes: crates/screens/src/money/target.rs,no
-money,set-carry,edit:carry,budget,card,no,no
+money,set-target,edit,budget,direct,yes: crates/screens/src/money/target.rs,yes
+money,set-carry,edit:carry,budget,direct,no,yes
 money,add-rule,create,rule,card,yes: crates/screens/src/money/rules.rs; crates/screens/src/money/transaction.rs,no
 money,edit-rule,edit,rule,direct,yes: crates/screens/src/money/rules.rs,no
 money,delete-rule,delete,rule,card,yes: crates/screens/src/money/rules.rs,no
