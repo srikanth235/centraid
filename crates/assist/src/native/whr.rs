@@ -758,14 +758,7 @@ pub fn number_arg(field: &meta::Field, text: &str) -> Result<i64, String> {
     Ok(parsed.round() as i64)
 }
 
-/// The currency symbols an amount may start with, and the ISO codes each names (nt12 B5). A
-/// symbol names a currency: `€` is the euro, `$` is any of the dollars.
-const SYMBOLS: [(char, &[&str]); 4] = [
-    ('$', &["USD", "CAD", "AUD", "NZD", "SGD", "HKD", "MXN"]),
-    ('\u{20ac}', &["EUR"]),
-    ('\u{a3}', &["GBP"]),
-    ('\u{a5}', &["JPY", "CNY"]),
-];
+use crate::native::money::{SYMBOL_CHARS, SYMBOLS};
 
 /// The currency symbol an amount starts with.
 fn symbol_of(text: &str) -> Option<char> {
@@ -852,9 +845,7 @@ pub(crate) fn settle_currencies(conds: &mut [Cond], codes: &[String]) -> Result<
 /// number of minutes or days "30m" stays an error.
 #[must_use]
 pub fn parse_amount(text: &str) -> Option<f64> {
-    let text = text
-        .trim()
-        .trim_start_matches(['$', '\u{20ac}', '\u{a3}', '\u{a5}']);
+    let text = text.trim().trim_start_matches(SYMBOL_CHARS);
     let (digits, scale) = match text.chars().last()? {
         'k' | 'K' => (&text[..text.len() - 1], 1_000.0),
         'm' | 'M' => (&text[..text.len() - 1], 1_000_000.0),
@@ -1061,7 +1052,7 @@ pub(crate) fn parse_cond(kind: Kind, part: &str) -> Result<Cond, String> {
                     .map_or((false, written), |rest| (true, rest)),
                 _ => (false, written),
             };
-            let number = written.trim_start_matches(['$', '\u{20ac}', '\u{a3}', '\u{a5}']);
+            let number = written.trim_start_matches(SYMBOL_CHARS);
             let symbol = (field.ty == FieldType::Money)
                 .then(|| symbol_of(written))
                 .flatten();

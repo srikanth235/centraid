@@ -42,6 +42,7 @@ pub mod identity;
 pub mod legacy;
 pub mod member;
 pub mod meta;
+pub mod money;
 mod normalize;
 pub mod nums;
 pub mod park;

@@ -185,7 +185,15 @@ pub fn read_nums(message: &str, date_phrases: &[&str]) -> Vec<Num> {
                 end += 1;
                 (
                     chars[start..end].iter().collect::<String>(),
-                    base.and_then(|base| times_thousand(&base)),
+                    base.and_then(|base| times_power(&base, 3)),
+                )
+            } else if let Some((power, scale_end)) = scale_word(&chars, end) {
+                // `2.5 lakh`, `1.2 crore`, `3 million`: the figure and the word that scales it are one number
+                let base = canonical(&text);
+                end = scale_end;
+                (
+                    chars[start..end].iter().collect::<String>(),
+                    base.and_then(|base| times_power(&base, power)),
                 )
             } else {
                 (text.clone(), canonical(&text))
@@ -214,12 +222,35 @@ pub fn read_nums(message: &str, date_phrases: &[&str]) -> Vec<Num> {
     out
 }
 
-fn times_thousand(base: &str) -> Option<String> {
-    let (whole, fraction) = base.split_once('.').unwrap_or((base, ""));
-    if fraction.len() > 3 {
+/// The scale word that follows a figure after one space, and the power of ten it is, with where the word ends:
+/// `lakh` (a hundred thousand), `crore` (ten million), `thousand`, `million`, `billion`, in the singular or the plural.
+fn scale_word(chars: &[char], at: usize) -> Option<(u32, usize)> {
+    if chars.get(at) != Some(&' ') {
         return None;
     }
-    let padded = format!("{fraction:0<3}");
+    let mut end = at + 1;
+    while end < chars.len() && chars[end].is_alphabetic() {
+        end += 1;
+    }
+    let word: String = chars[at + 1..end].iter().collect::<String>().to_lowercase();
+    let power = match word.as_str() {
+        "thousand" | "thousands" => 3,
+        "lakh" | "lakhs" | "lac" | "lacs" => 5,
+        "million" | "millions" => 6,
+        "crore" | "crores" | "cr" => 7,
+        "billion" | "billions" => 9,
+        _ => return None,
+    };
+    Some((power, end))
+}
+
+/// `base` (a canonical decimal) times ten to the `power`, exactly; `None` when it has more places than the power.
+fn times_power(base: &str, power: u32) -> Option<String> {
+    let (whole, fraction) = base.split_once('.').unwrap_or((base, ""));
+    if fraction.len() > power as usize {
+        return None;
+    }
+    let padded = format!("{fraction:0<width$}", width = power as usize);
     let joined = format!("{whole}{padded}");
     canonical(&joined)
 }
@@ -382,6 +413,18 @@ mod tests {
             Some("nums: twenty-five = 25 · twenty five = 25 · two hundred = 200")
         );
         assert_eq!(line("5k budget").as_deref(), Some("nums: 5k = 5000"));
+        assert_eq!(
+            line("a \u{20b9}2.5 lakh plan").as_deref(),
+            Some("nums: 2.5 lakh = 250000")
+        );
+        assert_eq!(
+            line("worth 1.2 crore").as_deref(),
+            Some("nums: 1.2 crore = 12000000")
+        );
+        assert_eq!(
+            line("a $1,200 fee and 3 million").as_deref(),
+            Some("nums: 1,200 = 1200 \u{b7} 3 million = 3000000")
+        );
         assert_eq!(line("$35 for the cab").as_deref(), Some("nums: 35 = 35"));
         assert_eq!(line("move it to the next week"), None);
     }
