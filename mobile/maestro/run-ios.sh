@@ -3,7 +3,7 @@
 # run-android.sh nothing is staged.
 #
 #   mobile/maestro/run-ios.sh                 # the made-vault flows, in order
-#   mobile/maestro/run-ios.sh --demo          # the demo-vault flows, after `demo-vault.sh ios`
+#   mobile/maestro/run-ios.sh --demo          # the demo-vault flows (see the order below)
 #   mobile/maestro/run-ios.sh --health        # health-seed (HealthSeeder installed), then health-connect
 #   mobile/maestro/run-ios.sh home-search     # named flows (no .yaml)
 #   DEVICE=<udid> MAESTRO=~/.maestro/bin/maestro mobile/maestro/run-ios.sh home
@@ -16,6 +16,13 @@ if [ "$device" = booted ]; then
   device="$(xcrun simctl list devices booted | sed -n 's/.*(\([0-9A-F-]\{36\}\)) (Booted).*/\1/p' | head -1)"
 fi
 
+# THE ORDER ON ONE SIMULATOR, because each phase needs a different vault:
+#   1. a FRESH install (`simctl uninstall`, `install`, launch once), then `CENTRAID_SIMULATOR=<udid>
+#      mobile/scripts/demo-vault.sh ios`, then `--demo`. A made vault beside the demo ones is the one
+#      the app opens (and it imports the phone's photos), so the demo flows would read the wrong vault.
+#   2. the default (made-vault) phase: first-launch and onboarding throw the app's state away.
+#   3. `--health`, last: health-connect wants a vault whose Health is not connected (the demo vault's
+#      is), so it follows onboarding, and health-seed needs the HealthSeeder app installed.
 # The made-vault phase in this order: first-launch and onboarding throw away whatever the app
 # holds, home wants day zero (straight after onboarding), then the flows that add their own rows.
 if [ "${1:-}" = "--demo" ]; then
