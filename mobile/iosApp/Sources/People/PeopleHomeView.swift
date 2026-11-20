@@ -387,6 +387,7 @@ private struct PeopleSectionLetter: View {
             .padding(.bottom, 4)
             .background(Surface.page)
             .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("people-section-letter")
     }
 }
 
@@ -590,9 +591,11 @@ private struct PeopleRosterRowView: View {
                             .kitType(.row)
                             .foregroundStyle(Surface.ink)
                             .kitLineLimit(1)
+                            .accessibilityIdentifier("people-row-name")
                         meta
                             .kitType(.meta)
                             .foregroundStyle(Surface.meta)
+                            .accessibilityIdentifier("people-row-meta")
                     }
                     if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
                     ForEach(Array(row.chips.filter { !isReminder($0) }.enumerated()), id: \.offset) { _, chip in
@@ -793,6 +796,7 @@ struct PeopleAvatarView: View {
         Text(avatar.initials)
             .centraidType(size > 40 ? "title" : "annotLabelOn")
             .foregroundStyle(Theme.color("text", scheme))
+            .accessibilityIdentifier("people-avatar-initials")
             .kitScaledSquare(size, relativeTo: size > 40 ? .largeTitle : .footnote)
             .background(
                 Circle().fill(Theme.color(peopleHue(avatar.hueKey, else: "bgSunken"), scheme).opacity(0.28))

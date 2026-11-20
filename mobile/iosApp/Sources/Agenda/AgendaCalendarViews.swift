@@ -769,11 +769,11 @@ private struct AgendaChipView: View {
                 Button {
                     open(chip.route)
                 } label: {
-                    // THE CHIP'S OWN 4pt OF AIR IS THE BUTTON'S (#1202): the button was the 16pt line and
-                    // the audit read it as a hit area too small; at 24 it is the chip, drawn as it was.
+                    // THE CHIP'S OWN 4pt OF AIR IS THE BUTTON'S (#1202), and the rest of the 44 the iOS
+                    // floor asks is an invisible extension, so the chip is drawn as it was.
                     title
                         .padding(.vertical, chipAir)
-                        .contentShape(Rectangle())
+                        .hitArea()
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(chip.accessibilityLabel)
@@ -919,17 +919,20 @@ private struct AgendaBlockView: View {
                     .minimumScaleFactor(0.6)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, AgendaGridMetrics.checkSize + 8)
+                    .accessibilityIdentifier("agenda-grid-block-title")
             } else if block.isTask {
                 HStack(spacing: 4) {
                     Text(block.title)
                         .centraidType(titleFace)
                         .foregroundStyle(ink)
                         .kitLineLimit(1)
+                        .accessibilityIdentifier("agenda-grid-block-title")
                     if roomy, !block.detail.isEmpty {
                         Text(block.detail)
                             .centraidType("annotLabel")
                             .foregroundStyle(Theme.color("textSoft", scheme))
                             .kitLineLimit(1)
+                            .accessibilityIdentifier("agenda-grid-block-detail")
                     }
                 }
                 .frame(maxHeight: .infinity, alignment: .center)
@@ -940,6 +943,7 @@ private struct AgendaBlockView: View {
                         .centraidType("annotLabelOn")
                         .foregroundStyle(Theme.color("textSoft", scheme))
                         .lineLimit(height >= AgendaGridMetrics.metaFrom ? 2 : 1)
+                        .accessibilityIdentifier("agenda-grid-block-detail")
                 }
             }
         }
@@ -981,6 +985,7 @@ private struct AgendaBlockView: View {
                 .frame(width: length, height: thickness, alignment: .leading)
                 .rotationEffect(.degrees(90))
                 .frame(width: thickness, height: length)
+                .accessibilityIdentifier("agenda-grid-block-title")
         } else {
             Text(block.title)
                 .centraidType(face)
@@ -988,6 +993,7 @@ private struct AgendaBlockView: View {
                 .lineLimit(titleLines(height: height, withDetail: showsDetail))
                 .minimumScaleFactor(0.75)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("agenda-grid-block-title")
         }
     }
 
@@ -1009,7 +1015,6 @@ private struct AgendaBlockView: View {
             .gesture(resizeGesture)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(resizeLabel)
-            .accessibilityAddTraits(.isButton)
             .accessibilityAdjustableAction { direction in
                 switch direction {
                 case .increment: send(resized(to: min(end + step, AgendaGridMetrics.minutesPerDay)))

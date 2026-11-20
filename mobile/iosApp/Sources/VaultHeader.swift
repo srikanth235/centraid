@@ -91,9 +91,9 @@ struct VaultHeader: View {
                         .foregroundStyle(Theme.color("link", scheme))
                 }
             }
-            // A REAL 24 POINTS (#1202): the audit reads a smaller frame than that as a hit area too small.
+            // 44 POINTS TO TOUCH, THE LINE'S OWN 24 TO LOOK AT (#1202): the iOS hit floor.
             .frame(minHeight: 24)
-            .contentShape(Rectangle())
+            .hitArea()
         }
         .buttonStyle(.plain)
         // THE BACKUP TAB ITSELF IS PLAIN TEXT, not a dimmed control: the status
@@ -140,7 +140,7 @@ struct VaultHeader: View {
                     .lineLimit(largestText ? nil : 1)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
-                    .contentShape(Rectangle())
+                    .hitArea()
             }
             .buttonStyle(.plain)
             .accessibilityLabel(bar.switchLabel)
