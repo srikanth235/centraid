@@ -37,7 +37,7 @@ These are decided. Do not build them, propose them in passing, or leave a hook "
 - **A recognition plane.** No faces, no People-in-photos, no memories, no enrichment queue or engine profiles, no "prioritise" controls. If on-device detection is ever wanted, it is proposed separately.
 - **Map SDKs and tile fetches.** A tile URL is a bounding box and tells a server roughly where a member photographs. Places are drawn as a zero-egress plot of the member's own coordinates.
 - **Breach checking and anything else that sends Locker data off the phone.** Weak and reused password scoring is likewise not done and is said not to be.
-- **Shared expenses.** No Tally, group balances, debts or settle verbs. Money is one person's own imported statements.
+- **Shared expenses.** No Tally, group balances, debts or settle verbs. Money is one person's own imported statements: transactions come only from imports, the member may correct what an import read wrongly (a line's amount and day), and chat may not create a transaction.
 - **Sample data in a member's vault.** No example vault, no sample mark, no "See an example". The first vault is the member's alone.
 - **Sharing-era vocabulary on the phone.** No copy says "gateway", "queued for the vault" or "owner" to a member who is looking at their own data.
 - **Compatibility with the earlier generation.** No seat files, pair tickets, npm gateway, over-the-air JS updates. Compatibility between releases of this generation is a requirement.
