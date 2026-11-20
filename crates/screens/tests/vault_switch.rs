@@ -192,6 +192,7 @@ fn switching(
         Runtime::new(
             people::registry()
                 .merge(vault::registry(shelf, secrets))
+                .merge(centraid_screens::shell::registry(secrets))
                 .merge(
                     Registry::default()
                         .with(SWITCHER, move |_| {
@@ -563,4 +564,35 @@ fn a_request_for_the_vault_goes_to_the_vault_in_front_and_the_front_keeps_its_ow
     assert_eq!(name_of(&phone), a);
     assert!(phone.shelf.bring_to_front(&b));
     assert_eq!(name_of(&phone), b);
+}
+
+#[test]
+fn recent_searches_do_not_follow_a_switch_to_another_vault() {
+    use centraid_screens::shell;
+    use wire::home_search_event::Kind as S;
+    let (mut phone, _a, b, _seen, _dir) = two_vaults();
+    let search = |phone: &mut Phone| phone.driver.push("switcher", shell::routes::search());
+    let recent = |phone: &Phone, i: u64| match &phone.driver.view(i).kind {
+        Some(wire::view_state::Kind::HomeSearch(state)) => state.recent.clone(),
+        other => panic!("not Home's search: {other:?}"),
+    };
+    let i = search(&mut phone);
+    for kind in [
+        S::Term(wire::home_search_event::TermChanged {
+            term: "tahoe".to_owned(),
+        }),
+        S::Committed(wire::home_search_event::Committed {}),
+    ] {
+        phone
+            .driver
+            .send(i, E::HomeSearch(wire::HomeSearchEvent { kind: Some(kind) }));
+    }
+    phone.driver.pop("switcher", i);
+    let i = search(&mut phone);
+    assert_eq!(recent(&phone, i), ["tahoe"], "kept within the vault");
+    phone.driver.pop("switcher", i);
+    ask_switch(&mut phone, &b);
+    phone.driver.pump(Duration::from_millis(500));
+    let i = search(&mut phone);
+    assert!(recent(&phone, i).is_empty(), "another vault shows none");
 }

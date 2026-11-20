@@ -19,8 +19,10 @@
 //!
 //! ## Recent
 //!
-//! The last four terms the member acted on are the resting page's suggestions,
-//! held for as long as the screen is open.
+//! The last four terms the member acted on are the resting page's suggestions. They last until
+//! the app quits (owner ruling 24, #1202): kept in memory by the runtime (`kit::search::Recents`),
+//! so closing and reopening Search shows them, never written to the vault or the disk, and emptied
+//! when the vault in front changes so one vault's terms never show over another's.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
@@ -37,12 +39,10 @@ use crate::kit::search as ask;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, home as words, shared};
 
-/// How many recent terms are kept.
-pub const RECENT_MAX: usize = 4;
+pub use crate::kit::search::RECENT_MAX;
 
 pub(crate) struct Search {
     term: String,
-    recent: Vec<String>,
     /// No term: the resting page, which reads nothing.
     resting: bool,
     /// The read of the term asked.
@@ -204,7 +204,6 @@ impl Search {
     fn over(scope: Option<&'static str>) -> Self {
         Self {
             term: String::new(),
-            recent: Vec::new(),
             resting: true,
             page: Page::loading(),
             answered: String::new(),
@@ -356,16 +355,9 @@ impl Search {
     }
 
     /// Remember the term the member acted on, newest first, once.
-    fn commit(&mut self) {
-        let asked = self.asked().to_owned();
-        if asked.is_empty() {
-            return;
-        }
-        self.recent.retain(|kept| {
-            !kept.eq_ignore_ascii_case(&asked) && kept.to_lowercase() != asked.to_lowercase()
-        });
-        self.recent.insert(0, asked);
-        self.recent.truncate(RECENT_MAX);
+    fn commit(&self, ctx: &Ctx) {
+        ctx.recents()
+            .remember(self.scope.unwrap_or_default(), self.asked());
     }
 }
 
@@ -377,7 +369,7 @@ impl Screen for Search {
             Some(E::HomeSearch(search)) => match search.kind {
                 Some(S::Term(typed)) => self.set_term(typed.term, ctx),
                 Some(S::Suggestion(picked)) => self.set_term(picked.term, ctx),
-                Some(S::Committed(_)) => self.commit(),
+                Some(S::Committed(_)) => self.commit(ctx),
                 Some(S::Cleared(_)) => {
                     self.term.clear();
                     self.rest();
@@ -393,18 +385,19 @@ impl Screen for Search {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::home_search_state::Content;
         let locale = ctx.locale();
+        let recent = ctx.recents().get(self.scope.unwrap_or_default());
         // THE RESTING PAGE reads nothing, so it is ready: its note and the recent terms are content.
         // A term that matched nothing is the page's own empty state, with the answer kept for the
         // Ask row under it.
         let content = if self.resting {
             Some(Content::Resting(wire::HomeSearchResting {
                 note: words::home_search_note(locale),
-                suggestions_label: if self.recent.is_empty() {
+                suggestions_label: if recent.is_empty() {
                     String::new()
                 } else {
                     words::home_search_recent_label(locale)
                 },
-                suggestions: self.recent.clone(),
+                suggestions: recent.clone(),
             }))
         } else {
             self.page
@@ -419,7 +412,7 @@ impl Screen for Search {
                     term: self.term.clone(),
                     content,
                     page: Some(page),
-                    recent: self.recent.clone(),
+                    recent,
                 },
             ))),
             ..wire::ViewState::default()
