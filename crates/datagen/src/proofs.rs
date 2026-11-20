@@ -125,6 +125,8 @@ fn the_pairs_come_from_the_runtime_and_the_not_live_ones_say_why() {
         "create/account/opening",
         "create/account/opening_on",
         "create/account/currency",
+        "create/account/on_budget",
+        "edit/account/currency",
         "edit/account/opening",
         "edit/account/opening_on",
         "edit/transaction/amount",
@@ -137,7 +139,7 @@ fn the_pairs_come_from_the_runtime_and_the_not_live_ones_say_why() {
     for (label, why) in [
         ("create/transaction/amount", "money field"),
         ("create/budget/amount", "money field"),
-        ("edit/account/currency", "draws no value"),
+        ("edit/budget/currency", "draws no value"),
         ("create/task/list", "`#n`"),
         ("create/workout/end", "reads no"),
         ("edit/daily figure/value", "Health store"),
@@ -1744,6 +1746,23 @@ fn a_line_is_moved_to_an_earlier_day_through_the_runtime() {
         .expect("a reschedule");
     // a line is posted on a day that has passed
     assert!(arg_lines(&args).contains("\"rel\":-"), "{args}");
+}
+
+#[test]
+fn an_account_kept_off_the_budget_and_an_empty_account_in_another_currency_are_solved_through_the_runtime()
+ {
+    let (_, made) = solved_pair("create/account/on_budget");
+    let (_, args) = made
+        .iter()
+        .find(|(tool, args)| tool == "create" && args["kind"] == "account")
+        .expect("a create of an account");
+    assert!(arg_lines(args).contains("on_budget: no"), "{args}");
+    let (_, made) = solved_pair("edit/account/currency");
+    let (_, args) = made
+        .iter()
+        .find(|(tool, args)| tool == "edit" && arg_lines(args).contains("currency: "))
+        .expect("an edit of a currency");
+    assert!(!arg_lines(args).contains("opening"), "{args}");
 }
 
 // ------------------------------------------------------------------ the arguments drift leaves out are refused by the runtime

@@ -54,8 +54,8 @@ const WORKOUT_DRAWS: usize = 6;
 /// Draws of each ask cell as the last turn of a longer session, of each decline cell, and of each read or count that
 /// finds nothing. Ask, nothing found and decline are 25% of the turns, and sessions of two turns or more are 60% of the
 /// sessions, so most of them have to come after another turn.
-const TAIL_ASK_DRAWS: usize = 58;
-const TAIL_DECLINE_DRAWS: usize = 50;
+const TAIL_ASK_DRAWS: usize = 60;
+const TAIL_DECLINE_DRAWS: usize = 52;
 const TAIL_EMPTY_DRAWS: usize = 13;
 
 /// Draws of each create, edit and verb cell said together with a create in one message, for the `more` argument of the

@@ -208,15 +208,18 @@ pub fn draws_field(verb: &str, kind: &str, field: &str) -> bool {
             field,
             "climb" | "distance" | "energy" | "heart_rate" | "moving" | "date"
         ),
-        ("create", "account") => matches!(field, "type" | "opening" | "opening_on" | "currency"),
+        ("create", "account") => matches!(
+            field,
+            "type" | "opening" | "opening_on" | "currency" | "on_budget"
+        ),
         ("edit", "person") => matches!(field, "cadence" | "met" | "nickname" | "role"),
         ("edit", "event") => matches!(field, "description" | "duration"),
         ("edit", "task") => matches!(field, "description" | "effort" | "priority" | "status"),
         ("edit", "note") => matches!(field, "body" | "pinned"),
         ("edit", "list") => field == "area",
         // an account's opening balance is said with its day, a line's amount keeps its account's currency, a plan's amount
-        // and whether it carries over (`edit/account/currency` is not drawn: only an account with no lines changes it)
-        ("edit", "account") => matches!(field, "opening" | "opening_on"),
+        // and whether it carries over, and an account with no lines changes its currency
+        ("edit", "account") => matches!(field, "opening" | "opening_on" | "currency"),
         ("edit", "transaction") => field == "amount",
         ("edit", "budget") => matches!(field, "amount" | "carry"),
         ("edit", "locker item") => matches!(
@@ -1921,6 +1924,10 @@ impl<'a> Sampler<'a> {
                     named: false,
                 }
             }
+            ("account", "currency") => {
+                let have = row.map_or_else(|| self.facts.base.clone(), |r| self.currency_of(r));
+                Val::Text(self.other_currency(&have, rng))
+            }
             ("account", "opening_on") => Val::When(
                 Period::Day {
                     rel: -rng.range(10, 120),
@@ -2012,6 +2019,8 @@ impl<'a> Sampler<'a> {
             .live_rows(kind)
             .into_iter()
             .filter(|r| Self::edit_fits(kind, &field, r.text("type")))
+            // an account with lines keeps its currency: only one with none changes it
+            .filter(|r| field != "currency" || !self.has_lines(r))
             .collect();
         if rows.is_empty() {
             return None;
@@ -2064,6 +2073,14 @@ impl<'a> Sampler<'a> {
         ))
     }
 
+    /// Whether an account has lines posted to it.
+    fn has_lines(&self, account: &Row) -> bool {
+        self.facts
+            .rows
+            .iter()
+            .any(|r| r.kind == "transaction" && r.text("account") == Some(account.name.as_str()))
+    }
+
     /// An edit the runtime refuses because the amount is not in the currency of the thing it is set on: a line is in its
     /// account's currency, an account's opening balance is in the account's, and an account with lines keeps its currency
     /// (the owner's ruling: the runtime never converts). The turn ends on a decline `out_of_scope`.
@@ -2083,11 +2100,7 @@ impl<'a> Sampler<'a> {
         let (target, reference) = self.target_for(row, rng, false)?;
         let currency = self.currency_of(row);
         let other = self.other_currency(&currency, rng);
-        let has_lines =
-            kind == "account"
-                && self.facts.rows.iter().any(|r| {
-                    r.kind == "transaction" && r.text("account") == Some(row.name.as_str())
-                });
+        let has_lines = kind == "account" && self.has_lines(row);
         let changes = if kind == "transaction" {
             vec![Change {
                 field: "amount".into(),
@@ -2297,6 +2310,10 @@ impl<'a> Sampler<'a> {
                 let currency = foreign.clone().unwrap_or_else(|| self.facts.base.clone());
                 if let Some(code) = foreign {
                     put("currency", Val::Text(code));
+                }
+                // an account kept off the budget (the runtime's default is on it)
+                if want("on_budget", 0.25, rng) {
+                    put("on_budget", Val::Flag(false));
                 }
                 if want("opening", 0.5, rng) || focus == Some("opening_on") {
                     put(
@@ -2757,11 +2774,17 @@ impl<'a> Sampler<'a> {
                 ));
                 extra = extra.saturating_sub(1);
             }
-            ("edit", _) if cell.kind == "workout" && aim.field.is_some() => {
-                // the only workouts a member can edit are ones they logged: a followed store states the rest
+            ("edit", _)
+                if aim.field.is_some()
+                    && (cell.kind == "workout"
+                        || (cell.kind == "account"
+                            && aim.field.as_deref() == Some("currency"))) =>
+            {
+                // the only workouts a member can edit are ones they logged: a followed store states the rest; and the only
+                // account that changes its currency is one with no lines, which a new one is
                 // aimed at a pair the field floor needs
                 let field = aim.field.clone()?;
-                let first = self.create("workout", None, rng, 0)?;
+                let first = self.create(&cell.kind, None, rng, 0)?;
                 let Intent::Create { fields: made, .. } = &first.intent else {
                     return None;
                 };
@@ -2770,7 +2793,7 @@ impl<'a> Sampler<'a> {
                     .find_map(|c| (c.field == "name").then(|| c.value.render()))
                     .unwrap_or_default();
                 let value = (0..8).find_map(|_| {
-                    let v = self.edit_value("workout", &field, None, None, &made_name, rng)?;
+                    let v = self.edit_value(&cell.kind, &field, None, None, &made_name, rng)?;
                     (!made.iter().any(|c| c.field == field && c.value == v)).then_some(v)
                 })?;
                 // most are said by the name the member logged it under ("change my Morning run to 6 km"), which is no
@@ -2780,7 +2803,7 @@ impl<'a> Sampler<'a> {
                     self.turn(
                         Intent::Edit {
                             target: Target::Name {
-                                kind: "workout".into(),
+                                kind: cell.kind.clone(),
                                 name: made_name.clone(),
                                 key: "+1".into(),
                                 trashed: false,
@@ -2796,7 +2819,7 @@ impl<'a> Sampler<'a> {
                         Intent::Edit {
                             target: Target::Turn {
                                 turn: 0,
-                                kind: "workout".into(),
+                                kind: cell.kind.clone(),
                             },
                             changes: vec![Change { field, value }],
                         },
