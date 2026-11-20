@@ -276,6 +276,11 @@ private struct WidgetBody: View {
                 .centraidType(invites ? "annotLabelOn" : "annotLabel")
                 .foregroundStyle(invites ? accent : meta)
                 // WHOLE, THE TILE GROWS (#1202): two lines and a shrink cut a longer caption at larger sizes.
+                // A WORD WIDER THAN THE TILE SHRINKS, NEVER BREAKS (#1202, S13): on an iPhone SE the four
+                // small tiles are 74 pt wide, 50 inside the padding, and "November" and "reconnect" broke
+                // mid-word there.
+                .lineLimit(lead ? nil : 3)
+                .minimumScaleFactor(lead ? 1 : 0.7)
                 .fixedSize(horizontal: false, vertical: true)
                 .multilineTextAlignment(lead ? .leading : .center)
             // A SMALL TILE NAMES ITS APP (#1202, S2-7; `HomeWidgets`): "1 person" and "Connect Apple

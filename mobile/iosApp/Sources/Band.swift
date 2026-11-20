@@ -417,6 +417,10 @@ private struct AppBandTab: View {
                     .centraidType(selected ? "control" : "band", scales: false)
                     .foregroundStyle(ink)
                     .lineLimit(1)
+                    // A LONG PLACE ("Calendars", "Summary") ON THE SMALLEST PHONE shrinks to fit its tab
+                    // and is never cut to an ellipsis (#1202, S13): four places and More share the
+                    // plate's 255 pt on an iPhone SE, and the segments below already shrink the same way.
+                    .minimumScaleFactor(0.7)
             }
             .padding(.top, BandMetrics.tabTop)
             .padding(.bottom, BandMetrics.tabBottom)
