@@ -37,6 +37,13 @@ elif [ "$#" -eq 0 ]; then
     app-root-edge-swipe search-containers search-correction
 fi
 
+# THE KEYCHAIN OUTLIVES AN UNINSTALL ON THE SIMULATOR, and a vault key, a connected Health (a keychain
+# habit, `crates/screens/src/health/follow.rs`) and the demo seed would all carry into the made-vault
+# phase; reset it first, as onboarding.yaml says.
+if [ "$#" -ge 2 ] && [ "$1" = first-launch ]; then
+  xcrun simctl keychain "$device" reset
+fi
+
 status=0
 for flow in "$@"; do
   if "$maestro" --device "$device" test "$here/flows/$flow.yaml"; then
