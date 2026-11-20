@@ -45,6 +45,7 @@ import dev.centraid.android.screens.words.WordsControls
 import dev.centraid.android.screens.words.WordsHead
 import dev.centraid.android.screens.words.WordsNotice
 import dev.centraid.android.screens.words.WordsPage
+import dev.centraid.android.screens.words.revealWhenFocused
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -210,6 +211,7 @@ private fun PayloadField(label: String, value: String, onEdit: (String) -> Unit)
                 cursorBrush = SolidColor(centraidColor("text")),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .revealWhenFocused()
                     .testTag("pair-payload")
                     .semantics {
                         contentDescription = label

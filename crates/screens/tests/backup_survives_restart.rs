@@ -242,6 +242,53 @@ fn a_paired_phone_is_still_paired_and_still_backs_up_after_the_process_dies() {
     assert!(deleted[0].starts_with(&format!("gateway-token.{identity}.")));
 }
 
+/// RULING 28 (#1202): a phone whose backup device no longer knows it (an upgrade that lost the
+/// token) reads "Pair again" on Backup's status card, routed to pairing; a healthy phone has none.
+#[test]
+fn a_phone_the_backup_device_does_not_know_offers_pair_again_on_the_status_card() {
+    use centraid_screens::backup::routes as backup_routes;
+    let gateway = gateway();
+    let dir = scratch();
+    let id = lay_down(&dir, "a", "Home");
+    let mut phone = launched(&dir, &id, FakeShell::default());
+    let core = phone.shelf.core_of(&id).expect("the vault is open");
+    pair(&mut phone, &gateway.payload());
+    drain_when_free(&mut phone, &core);
+
+    let card = |phone: &mut Phone| {
+        let page = phone.driver.push("home", backup_routes::home());
+        phone.driver.pump(Duration::from_millis(500));
+        phone.driver.serve(&mut phone.shell);
+        phone.driver.pump(Duration::from_millis(500));
+        match &phone.driver.view(page).kind {
+            Some(wire::view_state::Kind::BackupHome(wire::BackupHomeState {
+                body: Some(wire::backup_home_state::Body::Data(data)),
+                ..
+            })) => (data.pair_again_label.clone(), data.pair_again.clone()),
+            other => panic!("not a ready Backup screen: {other:?}"),
+        }
+    };
+    assert_eq!(card(&mut phone), (String::new(), None), "a healthy phone");
+
+    // THE UPGRADE: the process comes back with the device store holding no gateway token.
+    let mut shell = phone.shell.clone();
+    shell
+        .device
+        .retain(|key, _| !key.starts_with("gateway-token."));
+    drop(core);
+    drop(phone);
+    let mut phone = launched(&dir, &id, shell);
+    let core = phone.shelf.core_of(&id).expect("the vault is open");
+    assert!(
+        waiting_to_pair_again(&core),
+        "{:?}",
+        status(&core).destinations
+    );
+    let (label, route) = card(&mut phone);
+    assert_eq!(label, "Pair again");
+    assert_eq!(route, Some(backup_routes::add_destination()));
+}
+
 #[test]
 fn work_queued_before_the_process_dies_is_still_queued_and_goes_out_after_the_restart() {
     let gateway = gateway();

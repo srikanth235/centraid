@@ -820,6 +820,9 @@ impl Backup {
         } else {
             words::backup_add_destination(locale)
         };
+        // THE STATUS CARD'S OWN WAY BACK (ruling 28): when any device no longer knows this phone,
+        // the card that says "Pair it again" carries the button, and the row below keeps its own.
+        let any_pair_again = !frozen && destinations.iter().any(|d| d.pair_again);
         let back_up_now_label = if destinations.is_empty() || all_pair_again {
             String::new()
         } else {
@@ -984,6 +987,12 @@ impl Backup {
                 .collect(),
             add_destination: (!add_label.is_empty()).then(routes::add_destination),
             add_destination_label: add_label,
+            pair_again_label: if any_pair_again {
+                words::backup_card_pair_again(locale)
+            } else {
+                String::new()
+            },
+            pair_again: any_pair_again.then(routes::add_destination),
             // NOR FORGOTTEN FROM HERE: the core refuses it, because the gateway's
             // row is where the moved mark lives (#1080, the sweep).
             forget_label: if frozen {

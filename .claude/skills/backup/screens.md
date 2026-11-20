@@ -17,6 +17,8 @@ What the Rust screens draw, and the code that keeps them honest. The wording rul
 - When one device is behind, its name replaces the headline, and `behind_last_good` says what the current devices hold.
 - The second clause (`detail`) is bytes from the per-app holdings behind "In this backup": decimal units, rounded down, with videos left out stated. With no per-app rows it falls back to item counts.
 
+- **Pair again on the status card (ruling 28, #1202).** While any backup device no longer knows this phone (`pair_again`), the top status card that says "Pair it again" carries a "Pair again" button: `pair_again_label` and `pair_again` on `BackupHomeData`, empty/absent otherwise and on a moved vault. Its route is `add_destination`'s, the pairing page; the device's row keeps its own "Pair it again". Both shells draw it with their kit button under the id `backup-card-pair-again`. Board: `BackupPairAgain`.
+
 ## Reasons
 
 - `REASONS` lists the 13 `WaitReason`s in the order the line shows them. One row per reason with a count above zero, each worded by `strings::backup`.

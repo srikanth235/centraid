@@ -160,6 +160,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `backup-include-videos` | Backup | the include-videos switch |
 | `backup-rule-<stored>` | Backup | one transfer-rule choice, keyed on the stored word |
 | `backup-add-destination` | Backup | the add-a-gateway control, which opens pairing |
+| `backup-card-pair-again` | Backup | "Pair again" on the top status card, drawn while any backup device no longer knows this phone; opens pairing for it (ruling 28; the device's own row keeps its "Pair it again") |
 | `backup-forget-<gatewayId>` | Backup | one gateway's Forget |
 | `backup-battery` | Backup | the battery-optimisation remedy — **Android only**; iOS has no such setting |
 | `home-band-chat` | Home | the band's Chat tab (the second place, after Home) |

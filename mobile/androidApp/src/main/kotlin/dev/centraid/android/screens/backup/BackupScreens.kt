@@ -388,6 +388,11 @@ private fun BackupPage(
             } else if (model.destinations.isEmpty() && model.add_destination_label.isNotEmpty()) {
                 InkButton(label = model.add_destination_label, testTag = "backup-add-destination", onPress = onAddDestination)
             }
+            // A DEVICE THAT NO LONGER KNOWS THIS PHONE (ruling 28): the card that says "Pair it again" carries
+            // the way back, the same pairing page as the row below.
+            if (model.pair_again_label.isNotEmpty()) {
+                InkButton(label = model.pair_again_label, testTag = "backup-card-pair-again") { model.pair_again?.let(onOpen) }
+            }
         }
         if (model.apps.isNotEmpty()) Group(model.apps_heading) { Apps(model.apps) }
         if (model.apps_waiting.isNotEmpty()) Group(model.waiting_heading) { Apps(model.apps_waiting) }

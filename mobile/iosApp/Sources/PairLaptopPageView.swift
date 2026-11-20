@@ -120,6 +120,7 @@ struct PairLaptopPageView: View {
                     )
                     .accessibilityLabel(state.payloadLabel)
                     .accessibilityIdentifier("pair-payload")
+                    .wordsFocusTarget()
                 }
             }
 

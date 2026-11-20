@@ -54,7 +54,11 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.composed
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -659,6 +663,7 @@ private fun EndpointField(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
+                            .revealWhenFocused()
                             .testTag(if (name) "words-make-name" else "words-endpoint")
                             .semantics {
                                 contentDescription = label
@@ -682,6 +687,27 @@ private fun EndpointField(
  * and the answers pinned at the foot. With no leave control and no answers it is just the page
  * (pairing's page is drawn this way).
  */
+/**
+ * THE KEYBOARD NEVER COVERS A FOCUSED FIELD (the kit's rule, #1202): a field that takes focus
+ * asks its scroll parent to bring it into view once the keyboard's inset has settled, so it sits
+ * above the keys and the pinned footer and not under them.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+internal fun Modifier.revealWhenFocused(): Modifier = composed {
+    val requester = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
+    this
+        .bringIntoViewRequester(requester)
+        .onFocusChanged { focus ->
+            if (focus.isFocused) {
+                scope.launch {
+                    kotlinx.coroutines.delay(200)
+                    requester.bringIntoView()
+                }
+            }
+        }
+}
+
 @Composable
 internal fun WordsPage(
     testTag: String,

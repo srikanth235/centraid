@@ -159,7 +159,8 @@ struct WordsEntryView: View {
                     send(Self.event { $0.secondary = .init() })
                 },
                 identifier: "words-enter",
-                dismissesKeyboard: true
+                dismissesKeyboard: true,
+                focusedID: focus.map { "words-cell-\($0)" }
             ) {
                 WordsHead(title: state.title, lead: state.body)
 
@@ -196,6 +197,7 @@ struct WordsEntryView: View {
                                     focus = cell.position < 24 ? cell.position + 1 : nil
                                 }
                             )
+                            .id("words-cell-\(cell.position)")
                         }
                     }
                     .disabled(working)
@@ -242,6 +244,7 @@ struct WordsEntryView: View {
                             .wordsFieldBox()
                             .accessibilityLabel(state.endpointLabel)
                             .accessibilityIdentifier("words-endpoint")
+                            .wordsFocusTarget()
 
                             // THE CODE IS SCANNED AS WELL AS PASTED, as pairing's is. Beside the
                             // field while the words are typed; a held restore has the room for
@@ -601,6 +604,10 @@ struct WordsFrame<Content: View, Footer: View>: View {
     let onClose: () -> Void
     let identifier: String
     var dismissesKeyboard = false
+    /// THE FIELD THE MEMBER IS IN, when the page knows it (a restore's grid cell); the page scrolls
+    /// it into view. A page with one text field marks it `wordsFocusTarget()` instead and the
+    /// keyboard's arrival brings that one into view.
+    var focusedID: String?
     @ViewBuilder let content: () -> Content
     @ViewBuilder let footer: () -> Footer
 
@@ -612,8 +619,21 @@ struct WordsFrame<Content: View, Footer: View>: View {
     /// reachable by scrolling.
     private var footerScrolls: Bool { dynamicTypeSize.isAccessibilitySize }
 
+    /// THE KEYBOARD NEVER COVERS A FOCUSED FIELD (the kit's rule, #1202): the footer sits above the
+    /// keys and the scroll above the footer, and the field the member is in is scrolled to the
+    /// middle of what is left, so neither the keys nor the footer's buttons are over it.
+    private func reveal(_ proxy: ScrollViewProxy) {
+        let id: AnyHashable = focusedID.map { AnyHashable($0) } ?? AnyHashable(WordsFocusTarget.id)
+        // After the keyboard's own layout pass has shrunk the scroll view.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(id, anchor: .center) }
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     content()
@@ -642,6 +662,10 @@ struct WordsFrame<Content: View, Footer: View>: View {
                                 .contentShape(Circle())
                         }
                         .buttonStyle(.plain)
+                        // THE ID IS ON THE TAPPABLE ELEMENT ITSELF (#1202): one element that is the
+                        // button, so a tap by its id lands, not only a tap by its words.
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityAddTraits(.isButton)
                         .accessibilityLabel(closeLabel)
                         .accessibilityIdentifier(closeIdentifier)
                         Spacer()
@@ -654,6 +678,12 @@ struct WordsFrame<Content: View, Footer: View>: View {
             }
             .hardTopScrollEdge()
             .scrollDismissesKeyboard(dismissesKeyboard ? .interactively : .automatic)
+            // A FIELD TAKEN WHILE THE KEYBOARD IS ALREADY UP sends no keyboard notification, so a
+            // field asks for itself to be shown when it takes focus.
+            .environment(\.wordsReveal, { reveal(proxy) })
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in reveal(proxy) }
+            .onChange(of: focusedID) { _, id in if id != nil { reveal(proxy) } }
+            }
             if !footerScrolls {
                 VStack(spacing: 12) {
                     footer()
@@ -667,8 +697,33 @@ struct WordsFrame<Content: View, Footer: View>: View {
         // THE ROUND X IS THE WAY OUT: with it drawn the stack's own back chevron would be a
         // second one (the board has a single control).
         .toolbar(closeLabel.isEmpty ? .automatic : .hidden, for: .navigationBar)
+        // A CONTAINER, so its id names the page and does not spread over the buttons inside it
+        // (the X's `…-secondary` and the footer's ids are their own).
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier(identifier)
     }
+}
+
+private struct WordsRevealKey: EnvironmentKey {
+    static let defaultValue: @MainActor () -> Void = {}
+}
+
+extension EnvironmentValues {
+    /// Asks the words frame around a field to scroll the focused field clear of the keyboard.
+    var wordsReveal: @MainActor () -> Void {
+        get { self[WordsRevealKey.self] }
+        set { self[WordsRevealKey.self] = newValue }
+    }
+}
+
+/// The id a page's one text field takes so the frame can scroll it clear of the keyboard.
+enum WordsFocusTarget {
+    static let id = "words-focus-target"
+}
+
+extension View {
+    /// Mark this field as the one the frame scrolls into view when the keyboard comes up.
+    func wordsFocusTarget() -> some View { id(WordsFocusTarget.id) }
 }
 
 struct WordsHead: View {
