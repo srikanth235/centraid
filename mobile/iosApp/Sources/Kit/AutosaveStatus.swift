@@ -39,6 +39,7 @@ struct AutosaveStatus: View {
                 .foregroundStyle(Theme.color(tone, scheme))
                 .frame(maxWidth: inline ? nil : .infinity, alignment: inline ? .trailing : .leading)
                 .fixedSize(horizontal: inline, vertical: false)
+                .accessibilityShowsLargeContentViewer { Text(label) }
                 .accessibilityIdentifier("kit-autosave-status")
                 .accessibilityHidden(label.isEmpty)
             // A SAVE THE VAULT REFUSED BECAUSE THE RECORD CHANGED ELSEWHERE (#1185): the words stay,

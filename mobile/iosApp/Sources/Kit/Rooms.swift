@@ -134,6 +134,10 @@ struct RootBarTitle: ToolbarContent {
             .lineLimit(1)
             .fixedSize()
             .accessibilityAddTraits(.isHeader)
+            // A BAR ITEM STOPS GROWING AT THE BAR'S OWN CAP (UIKit sizes a bar's items itself: "Recents" grows
+            // 1.1x from the default to the largest size while the page's text grows 1.7x), so a long press shows
+            // it at the size the member chose, as every system bar's items do (#1202).
+            .accessibilityShowsLargeContentViewer { Text(title) }
             .accessibilityIdentifier("kit-header-title")
     }
 }
@@ -592,6 +596,7 @@ struct EditorRoom<Trailing: View, Content: View>: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityShowsLargeContentViewer { Text(closeLabel) }
                 .accessibilityIdentifier("kit-editor-close")
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -827,14 +832,50 @@ struct SheetPresentation: ViewModifier {
 }
 
 /// THE GROUND UNDER EVERY SHEET: the system's own on iOS 26 (Liquid Glass), and the kit's cream
-/// `sheet` surface only before it. Fixed here, once, so no sheet states its own ground and none
-/// lays a slab of its own colour on the glass (the owner's ruling, #1173).
+/// `sheet` surface before it. Fixed here, once, so no sheet states its own ground and none
+/// lays a slab of its own colour on the glass (the owner's ruling, #1173). UNDER REDUCE
+/// TRANSPARENCY OR INCREASE CONTRAST the ground is the `sheet` surface on any version (owner
+/// ruling 26, 20 November): the sheet stays compact glass for everyone else, and text on it
+/// never sits over a blurred page for a member who asked for none.
 private struct SheetGround: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
     func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
+        if #available(iOS 26.0, *), !(reduceTransparency || contrast == .increased) {
             content
         } else {
             content.presentationBackground(Surface.sheet)
+        }
+    }
+}
+
+private struct SheetCardGround<S: Shape>: ViewModifier {
+    let shape: S
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *), !(reduceTransparency || contrast == .increased) {
+            content.background(Color(uiColor: .secondarySystemGroupedBackground).opacity(0.6), in: shape)
+        } else {
+            content.background(Surface.sheetCard, in: shape)
+        }
+    }
+}
+
+private struct SheetPageGround: ViewModifier {
+    let edges: Edge.Set
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *), !(reduceTransparency || contrast == .increased) {
+            content
+        } else {
+            content.background(Surface.sheet.ignoresSafeArea(edges: edges))
         }
     }
 }
@@ -900,25 +941,15 @@ struct KitInkButton: View {
 
 extension View {
     /// A SHEET PAGE'S GROUND: the system's glass on iOS 26 (nothing drawn), the kit's `sheet`
-    /// surface before it.
-    @ViewBuilder
+    /// surface before it and under Reduce Transparency or Increase Contrast.
     func sheetPageGround(edges: Edge.Set = .all) -> some View {
-        if #available(iOS 26, *) {
-            self
-        } else {
-            self.background(Surface.sheet.ignoresSafeArea(edges: edges))
-        }
+        modifier(SheetPageGround(edges: edges))
     }
 
     /// A GROUPED CARD INSIDE A SHEET: on iOS 26 the system's own grouped fill over the glass (no
     /// cream slab), the kit's `sheetCard` before it.
-    @ViewBuilder
     func sheetCardGround(_ shape: some Shape = RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)) -> some View {
-        if #available(iOS 26, *) {
-            self.background(Color(uiColor: .secondarySystemGroupedBackground).opacity(0.6), in: shape)
-        } else {
-            self.background(Surface.sheetCard, in: shape)
-        }
+        modifier(SheetCardGround(shape: shape))
     }
 
     /// A PAGE THAT SCROLLS UNDER GLASS KEYS WITH CONTENT OF ITS OWN (a hero's round keys) takes a
