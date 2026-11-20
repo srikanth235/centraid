@@ -131,6 +131,9 @@ fn the_pairs_come_from_the_runtime_and_the_not_live_ones_say_why() {
         "create/note/notebook",
         "create/document/folder",
         "edit/account/currency",
+        "edit/account/type",
+        "edit/account/on_budget",
+        "edit/rule/position",
         "edit/account/opening",
         "edit/account/opening_on",
         "edit/transaction/amount",
@@ -1820,6 +1823,22 @@ fn a_create_that_names_a_row_finds_it_first_and_carries_its_number() {
         // the row was found by its name in the call just before
         let (tool, find) = &made[at - 1];
         assert!(tool == "find" && find["kind"] == found, "{label}: {find}");
+    }
+}
+
+#[test]
+fn an_account_type_its_budget_flag_and_a_rules_position_are_edited_through_the_runtime() {
+    for (label, kind, line) in [
+        ("edit/account/type", "account", "type: "),
+        ("edit/account/on_budget", "account", "on_budget: no"),
+        ("edit/rule/position", "rule", "position: "),
+    ] {
+        let (_, made) = solved_pair(label);
+        assert!(
+            made.iter()
+                .any(|(tool, args)| tool == "edit" && arg_lines(args).contains(line)),
+            "{label} ({kind}): {made:?}"
+        );
     }
 }
 

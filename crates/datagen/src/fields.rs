@@ -38,22 +38,20 @@ fn money_live(verb: &str, kind: &str, field: &str) -> bool {
 /// Why a pair no sampler draw reaches is not live, when the runtime would take it: a gap of the sampler, which `datagen
 /// drift` counts and a publish refuses. Every other reason of a `NotLive` pair is the runtime's own refusal.
 pub const SAMPLER_GAP: &str = "the sampler draws no value for it";
-const UNLISTED: &str = "the runtime applies it though its editable-fields line does not list it: a question for the runtime, open";
 
 /// Whether the reason of a `NotLive` pair is a gap of the sampler or of the runtime's contract (an argument chat could
 /// use that nothing draws), and not a refusal the runtime makes on purpose.
 #[must_use]
 pub fn is_gap(reason: &str) -> bool {
-    matches!(reason, SAMPLER_GAP | UNLISTED)
+    reason == SAMPLER_GAP
 }
 
-/// Edits the runtime applies though the line of editable fields it prints for the kind leaves them out (an account's
-/// `type` and `on_budget`, a rule's `position` and `category`): listed as the gaps they are, never as refusals.
+/// Edits the runtime applies though the line of editable fields it prints for the kind leaves them out, drawn all the same
+/// (an account's `type` and `on_budget`, a rule's `position`): the tools' schema offers them and the runtime sets them.
 const UNLISTED_EDITS: &[(&str, &str)] = &[
     ("account", "type"),
     ("account", "on_budget"),
     ("rule", "position"),
-    ("rule", "category"),
 ];
 
 /// The label of a pair.
@@ -117,6 +115,11 @@ pub fn pairs(catalog: &Catalog, grid: &Grid) -> BTreeMap<String, Live> {
                 }
             }
         }
+        for (k, field) in UNLISTED_EDITS {
+            if *k == kind.name && !edit_fields.contains(field) {
+                edit_fields.push(field);
+            }
+        }
         for (k, field) in SPECIAL_EDITS {
             if *k == kind.name && !edit_fields.contains(field) {
                 edit_fields.push(field);
@@ -152,12 +155,6 @@ pub fn pairs(catalog: &Catalog, grid: &Grid) -> BTreeMap<String, Live> {
                 None => Live::NotLive("the runtime has no `edit` for this kind".into()),
             };
             out.insert(label("edit", &kind.name, field), state);
-        }
-    }
-    for (kind, field) in UNLISTED_EDITS {
-        if catalog.kind(kind).is_some() {
-            out.entry(label("edit", kind, field))
-                .or_insert_with(|| Live::NotLive(UNLISTED.into()));
         }
     }
     // the money pairs the runtime does not set are listed as the gap they are: a transaction and a budget are not created in

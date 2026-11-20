@@ -222,7 +222,11 @@ pub fn draws_field(verb: &str, kind: &str, field: &str) -> bool {
         ("edit", "list") => field == "area",
         // an account's opening balance is said with its day, a line's amount keeps its account's currency, a plan's amount
         // and whether it carries over, and an account with no lines changes its currency
-        ("edit", "account") => matches!(field, "opening" | "opening_on" | "currency"),
+        ("edit", "account") => matches!(
+            field,
+            "opening" | "opening_on" | "currency" | "type" | "on_budget"
+        ),
+        ("edit", "rule") => field == "position",
         ("edit", "transaction") => field == "amount",
         ("edit", "budget") => matches!(field, "amount" | "carry"),
         ("edit", "locker item") => matches!(
@@ -1927,6 +1931,13 @@ impl<'a> Sampler<'a> {
                     named: false,
                 }
             }
+            ("account", "type") => differs(
+                &["checking", "savings", "credit card", "cash"],
+                text("type"),
+                rng,
+            )?,
+            ("account", "on_budget") => Val::Flag(false),
+            ("rule", "position") => Val::Num(rng.range(3, 9) as f64),
             ("account", "currency") => {
                 let have = row.map_or_else(|| self.facts.base.clone(), |r| self.currency_of(r));
                 Val::Text(self.other_currency(&have, rng))

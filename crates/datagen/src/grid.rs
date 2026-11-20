@@ -262,9 +262,7 @@ impl Grid {
             );
             cells.insert(
                 Cell::new("edit", k, "edit"),
-                if k == "rule" {
-                    Live::NotLive("the runtime answers `edit does not apply to rule`".into())
-                } else if has("edit") && live("edit") {
+                if has("edit") && live("edit") {
                     Live::Live
                 } else if matches!(k, "workout" | "daily figure") {
                     Live::NotLive("read-only in chat today; live-pending the regroup's Health writes (owner-approved, not landed)".into())
