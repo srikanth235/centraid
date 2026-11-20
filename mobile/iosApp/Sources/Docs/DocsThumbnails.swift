@@ -96,8 +96,10 @@ struct DocsBadge: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 9, weight: .bold))
+            .kitSystemFont(9, weight: .bold)
+            .kitHeld()
             .foregroundStyle(Color.white)
+            .accessibilityIdentifier("docs-tile-badge")
             .padding(.horizontal, 4)
             .padding(.vertical, 1)
             .background(RoundedRectangle(cornerRadius: Theme.radius("sm", scheme)).fill(Color.black.opacity(0.78)))
@@ -208,7 +210,7 @@ struct DocsGridTile: View {
                     .centraidType("smallStrong")
                     .foregroundStyle(Theme.color("text", scheme))
                     .multilineTextAlignment(.center)
-                    .lineLimit(3)
+                    .accessibilityIdentifier("docs-tile-text")
                 // THE SIZE MUST SHOW (#1202): a tile is about 100 pt wide, so the parts of the meta
                 // take a line each (kind, then size) instead of one line cut after the kind.
                 HStack(alignment: .top, spacing: 4) {
@@ -216,6 +218,7 @@ struct DocsGridTile: View {
                     MetaLine(row.meta, lines: 2, alignment: .center)
                         .centraidType("annotLabel")
                         .foregroundStyle(Theme.color("textFaint", scheme))
+                        .accessibilityIdentifier("docs-tile-text")
                 }
             }
             .frame(maxWidth: .infinity)
@@ -249,11 +252,12 @@ struct DocsFolderTile: View {
                     .centraidType("smallStrong")
                     .foregroundStyle(Theme.color("text", scheme))
                     .multilineTextAlignment(.center)
-                    .lineLimit(2)
+                    .accessibilityIdentifier("docs-tile-text")
                 Text(node.countLabel)
                     .centraidType("annotLabel")
                     .foregroundStyle(Theme.color("textFaint", scheme))
                     .kitLineLimit(1)
+                    .accessibilityIdentifier("docs-tile-text")
             }
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())

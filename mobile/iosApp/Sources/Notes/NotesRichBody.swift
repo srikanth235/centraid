@@ -91,7 +91,9 @@ struct NotesRichBody: UIViewRepresentable {
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: NotesRichTextView, context: Context) -> CGSize? {
         guard let width = proposal.width, width.isFinite, width > 0 else { return nil }
         let fit = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
-        return CGSize(width: width, height: fit.height)
+        // A TARGET OF 44 EVEN WHEN EMPTY (#1202): an empty note's field is one line high, and the whole
+        // field takes the tap that puts the caret in it.
+        return CGSize(width: width, height: max(fit.height, CentraidGeometry.targetMinCoarse))
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }

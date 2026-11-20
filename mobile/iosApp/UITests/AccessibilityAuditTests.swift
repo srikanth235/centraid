@@ -494,6 +494,34 @@ final class AccessibilityAuditTests: XCTestCase {
         // same point size across its first four text sizes (11, 11, 11, 11, then 15), so a step-by-step
         // comparison reads it as partly fixed.
         Exemption(screen: "Home", type: .dynamicType, id: "", label: "^(MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY|SUNDAY)$"),
+    ] + docsNotesHealthExemptions
+
+    /// DOCS, NOTES AND HEALTH (#1202, S4 a11y-2): per element, each with its reason, each proved by
+    /// taking the cause away in a throwaway run.
+    private static let docsNotesHealthExemptions: [Exemption] = [
+        // The page title is the navigation bar's own toolbar item (`RootBarTitle`): UIKit hosts it on
+        // one line and holds its size, so the audit reads it as only partly scaling.
+        Exemption(screen: "Docs", type: .dynamicType, id: "kit-header-title", label: nil),
+        Exemption(screen: "Notes", type: .dynamicType, id: "kit-header-title", label: nil),
+        Exemption(screen: "Health", type: .dynamicType, id: "kit-header-title", label: nil),
+        // The editor's Cancel is a toolbar item too (`kit-editor-close`), held by the bar the same way.
+        Exemption(screen: "Notes Add", type: .dynamicType, id: "kit-editor-close", label: nil),
+        // A kind badge's words hold at `xxxLarge` (design/behaviour.md, Accessibility: "the words
+        // inside a badge ... hold"), so the audit reads them as only partly scaling.
+        Exemption(screen: "Docs", type: .dynamicType, id: "docs-tile-badge", label: nil),
+        // A Docs tile's title, meta and count: the grid reflows from three across to two to one as the
+        // text grows ("Cards reflow at large text sizes"), and the audit reads a text that moves to a
+        // wider column as not scaling. Held at three across the audit finds nothing.
+        Exemption(screen: "Docs", type: .dynamicType, id: "docs-tile-text", label: nil),
+        // A note's preview is the first lines of its body, line-clamped by design ("Text in a
+        // fixed-height container is line-clamped"); the full text is the note.
+        Exemption(screen: "Notes", type: .textClipped, id: "notes-row-preview", label: nil),
+        // The band's own labels on its glass: the audit measures ink against what shows through the
+        // glass, and with the band drawn solid it finds none (the same labels the dynamic-type
+        // exemption above names).
+        Exemption(screen: "Docs", type: .contrast, id: "", label: bandLabels),
+        Exemption(screen: "Notes", type: .contrast, id: "", label: bandLabels),
+        Exemption(screen: "Health", type: .contrast, id: "", label: bandLabels),
     ]
 
     private static func typeName(_ type: XCUIAccessibilityAuditType) -> String {
