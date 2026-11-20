@@ -761,6 +761,16 @@
       "why_no_example": ""
     },
     {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.a_workout_s_end_is_a",
+      "source": "act.rs",
+      "template": "error: a workout's end is a time, or a day and a time; {} is not one.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
       "argument": "args",
       "example": [
         {
@@ -932,6 +942,36 @@
       "template": "error: a {item_type} item has no place for {field}; nothing was stored.",
       "tool": "edit",
       "why_no_example": ""
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.that_workout_has_no_start_to",
+      "source": "act.rs",
+      "template": "error: that workout has no start to end after.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.a_workout_cannot_end_before_it",
+      "source": "act.rs",
+      "template": "error: a workout cannot end before it starts.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "args",
+      "example": null,
+      "family": "value",
+      "id": "act.at_is_not_a_time_in",
+      "source": "act.rs",
+      "template": "error: {at} is not a time in {zone}.",
+      "tool": "create",
+      "why_no_example": "only a zone with no such clock reaches it (an hour a DST change skips); the fixture world's days are UTC, which skips none"
     },
     {
       "argument": "args",
@@ -1324,14 +1364,14 @@
       "why_no_example": ""
     },
     {
-      "argument": "args",
+      "argument": "",
       "example": null,
-      "family": "value",
-      "id": "act.at_is_not_a_time_in",
+      "family": "cardinality",
+      "id": "act.date_already_carries_the_end_of",
       "source": "act.rs",
-      "template": "error: {at} is not a time in {zone}.",
-      "tool": "create",
-      "why_no_example": "only a zone with no such clock reaches it (an hour a DST change skips); the fixture world's days are UTC, which skips none"
+      "template": "error: date already carries the end of a span; give a span or end:, not both.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
     },
     {
       "argument": "verb",
