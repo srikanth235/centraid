@@ -135,19 +135,52 @@ internal object AppSession {
         }
     }
 
-    /** Let go; queued behind everything asked before it. The last holder closes the core. */
-    fun release() {
+    private var pinned = false
+
+    /**
+     * A ROTATION IS NOT A LEAVING. The activity is destroyed and made again, and the old composition's
+     * [release] (queued by its disposal) could reach the lock before the new one's [acquire], so the
+     * last holder closed the core and the new activity opened a fresh one: the member came back to
+     * Home, their place and a typed search gone. The old activity pins the session from `onDestroy`,
+     * before its composition is disposed (both are queued, in order, on the one executor), and the new
+     * one [unpin]s once it holds the session itself.
+     */
+    fun pinForRecreation() {
         serialScope.launch {
             lock.withLock {
-                holders = (holders - 1).coerceAtLeast(0)
-                if (holders == 0) {
-                    val going = state.value
-                    state.value = null
-                    going?.let {
-                        it.scope.cancel()
-                        it.core.close()
-                    }
+                if (state.value != null && !pinned) {
+                    pinned = true
+                    holders += 1
                 }
+            }
+        }
+    }
+
+    /** The recreated activity holds the session; give the pin back. */
+    fun unpin() {
+        serialScope.launch {
+            lock.withLock {
+                if (pinned) {
+                    pinned = false
+                    releaseLocked()
+                }
+            }
+        }
+    }
+
+    /** Let go; queued behind everything asked before it. The last holder closes the core. */
+    fun release() {
+        serialScope.launch { lock.withLock { releaseLocked() } }
+    }
+
+    private fun releaseLocked() {
+        holders = (holders - 1).coerceAtLeast(0)
+        if (holders == 0) {
+            val going = state.value
+            state.value = null
+            going?.let {
+                it.scope.cancel()
+                it.core.close()
             }
         }
     }
