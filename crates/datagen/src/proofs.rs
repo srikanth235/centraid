@@ -126,6 +126,10 @@ fn the_pairs_come_from_the_runtime_and_the_not_live_ones_say_why() {
         "create/account/opening_on",
         "create/account/currency",
         "create/account/on_budget",
+        "create/task/list",
+        "create/task/parent",
+        "create/note/notebook",
+        "create/document/folder",
         "edit/account/currency",
         "edit/account/opening",
         "edit/account/opening_on",
@@ -140,7 +144,6 @@ fn the_pairs_come_from_the_runtime_and_the_not_live_ones_say_why() {
         ("create/transaction/amount", "money field"),
         ("create/budget/amount", "money field"),
         ("edit/budget/currency", "draws no value"),
-        ("create/task/list", "`#n`"),
         ("create/workout/end", "reads no"),
         ("edit/daily figure/value", "Health store"),
     ] {
@@ -1723,6 +1726,52 @@ fn the_think_of_a_call_that_says_more_compiles_back_to_the_call() {
 }
 
 #[test]
+fn the_think_of_a_create_that_names_a_row_compiles_back_to_the_call() {
+    for (kind, field, name, found, message) in [
+        (
+            "task",
+            "list",
+            "Errands",
+            "list",
+            "new task called Buy stamps in my Errands list",
+        ),
+        (
+            "task",
+            "parent",
+            "Plan the trip",
+            "task",
+            "new task called Book hotel under Plan the trip",
+        ),
+        (
+            "note",
+            "notebook",
+            "Recipes",
+            "notebook",
+            "new note called Soup in my Recipes notebook",
+        ),
+        (
+            "document",
+            "folder",
+            "Taxes",
+            "folder",
+            "new document called Receipt in my Taxes folder",
+        ),
+    ] {
+        let line = format!("#21 {found} \"{name}\"");
+        let args = format!("name: New one\n{field}: #21");
+        traced_as(
+            "write",
+            "create",
+            &[("kind", kind), ("args", args.as_str())],
+            message,
+            "",
+            &[line.as_str()],
+        )
+        .unwrap_or_else(|why| panic!("{kind} {field}: {why:?}"));
+    }
+}
+
+#[test]
 fn a_line_is_moved_to_an_earlier_day_through_the_runtime() {
     let catalog = catalog();
     let grid = Grid::build(&catalog);
@@ -1746,6 +1795,32 @@ fn a_line_is_moved_to_an_earlier_day_through_the_runtime() {
         .expect("a reschedule");
     // a line is posted on a day that has passed
     assert!(arg_lines(&args).contains("\"rel\":-"), "{args}");
+}
+
+#[test]
+fn a_create_that_names_a_row_finds_it_first_and_carries_its_number() {
+    for (label, kind, field, found) in [
+        ("create/task/list", "task", "list", "list"),
+        ("create/task/parent", "task", "parent", "task"),
+        ("create/note/notebook", "note", "notebook", "notebook"),
+        ("create/document/folder", "document", "folder", "folder"),
+    ] {
+        let (scenario, made) = solved_pair(label);
+        let at = made
+            .iter()
+            .position(|(tool, args)| tool == "create" && args["kind"] == kind)
+            .expect("a create");
+        let (_, args) = &made[at];
+        let line = arg_lines(args)
+            .lines()
+            .find(|l| l.starts_with(&format!("{field}: ")))
+            .unwrap_or_else(|| panic!("{label}: {args} in {scenario:?}"))
+            .to_owned();
+        assert!(line.contains(": #"), "{label}: {line}");
+        // the row was found by its name in the call just before
+        let (tool, find) = &made[at - 1];
+        assert!(tool == "find" && find["kind"] == found, "{label}: {find}");
+    }
 }
 
 #[test]

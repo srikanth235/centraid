@@ -27,7 +27,7 @@ use crate::catalog::Catalog;
 use crate::facts::Facts;
 use crate::grid::{Cell, cell_of};
 use crate::intent::{
-    Change, Intent, Measure, Outcome, Scenario, Selector, Target, TurnIntent, VerbArg,
+    Change, Intent, Measure, Outcome, Scenario, Selector, Target, TurnIntent, Val, VerbArg,
 };
 use crate::world::World;
 
@@ -720,10 +720,25 @@ impl<'a> WorldRun<'a> {
                 })
             }
             Intent::Create { kind, fields } => {
-                let steps = vec![step(
+                // a row the new one belongs to is found first, and the create carries the `#n` the find shows
+                let mut steps = Vec::new();
+                let mut lines = Vec::new();
+                for change in fields {
+                    if let Val::Row { kind, name } = &change.value {
+                        let at = steps.len();
+                        steps.push(step(
+                            "find",
+                            vec![("kind", kind.clone()), ("name", name.clone())],
+                        ));
+                        lines.push(format!("{}: §n{at}", change.field));
+                    } else {
+                        lines.push(format!("{}: {}", change.field, change.value.render()));
+                    }
+                }
+                steps.push(step(
                     "create",
-                    vec![("kind", kind.clone()), ("args", change_lines(fields))],
-                )];
+                    vec![("kind", kind.clone()), ("args", lines.join("\n"))],
+                ));
                 Ok(Plan {
                     steps,
                     check: Check::Created(kind.clone()),

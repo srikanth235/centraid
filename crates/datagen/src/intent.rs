@@ -560,6 +560,12 @@ pub enum Val {
         currency: String,
         named: bool,
     },
+    /// Another row the new one belongs to, found by its name first (`list`, `parent`, `notebook`, `folder` of a create):
+    /// the call carries the `#n` its `find` shows.
+    Row {
+        kind: String,
+        name: String,
+    },
 }
 
 impl Val {
@@ -572,7 +578,7 @@ impl Val {
                 named: true,
             } => format!("{} {currency}", number(*amount)),
             Self::Money { amount, .. } => number(*amount),
-            Self::Text(text) => text.clone(),
+            Self::Text(text) | Self::Row { name: text, .. } => text.clone(),
             Self::Num(n) => number(*n),
             Self::Flag(true) => "yes".to_owned(),
             Self::Flag(false) => "no".to_owned(),

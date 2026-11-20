@@ -196,9 +196,12 @@ pub fn draws_field(verb: &str, kind: &str, field: &str) -> bool {
     match (verb, kind) {
         ("create", "person") => matches!(field, "cadence" | "nickname" | "role"),
         ("create", "event") => matches!(field, "description" | "duration" | "date"),
-        ("create", "task") => matches!(field, "description" | "date" | "effort" | "priority"),
-        ("create", "note") => field == "body",
-        ("create", "document") => field == "text",
+        ("create", "task") => matches!(
+            field,
+            "description" | "date" | "effort" | "priority" | "list" | "parent"
+        ),
+        ("create", "note") => matches!(field, "body" | "notebook"),
+        ("create", "document") => matches!(field, "text" | "folder"),
         ("create", "list") => field == "area",
         ("create", "locker item") => matches!(
             field,
@@ -2073,6 +2076,36 @@ impl<'a> Sampler<'a> {
         ))
     }
 
+    /// A row of `kind` that `fits`, to name from a create (`list: Errands`): the call finds it by its name first, so the name
+    /// is one only that row answers to.
+    fn row_named(&self, kind: &str, rng: &mut Rng, fits: impl Fn(&Row) -> bool) -> Option<Val> {
+        let rows: Vec<&Row> = self
+            .live_rows(kind)
+            .into_iter()
+            .filter(|r| fits(r) && self.facts.matching(kind, &r.name).len() == 1)
+            .collect();
+        (!rows.is_empty()).then(|| {
+            let row = rows[rng.below(rows.len())];
+            Val::Row {
+                kind: kind.to_owned(),
+                name: row.name.clone(),
+            }
+        })
+    }
+
+    /// An open task with no subtask and no parent: the runtime takes only such a task as a parent.
+    fn top_level_open(&self, task: &Row) -> bool {
+        task.text("status") == Some("open")
+            && self.facts.related.get(&task.key).is_none_or(|others| {
+                !others.iter().any(|k| {
+                    self.facts
+                        .rows
+                        .iter()
+                        .any(|r| r.key == *k && r.kind == "task")
+                })
+            })
+    }
+
     /// Whether an account has lines posted to it.
     fn has_lines(&self, account: &Row) -> bool {
         self.facts
@@ -2226,6 +2259,17 @@ impl<'a> Sampler<'a> {
                 if want("description", 0.3, rng) {
                     put("description", pick(pools::DESCRIPTIONS, rng));
                 }
+                // put in a list, or under an open task of its own (the runtime takes no subtask of a subtask)
+                if focus != Some("parent")
+                    && want("list", 0.15, rng)
+                    && let Some(list) = self.row_named("list", rng, |_| true)
+                {
+                    put("list", list);
+                } else if (focus == Some("parent") || (focus.is_none() && rng.chance(0.1)))
+                    && let Some(parent) = self.row_named("task", rng, |t| self.top_level_open(t))
+                {
+                    put("parent", parent);
+                }
             }
             "event" => {
                 put(
@@ -2258,10 +2302,20 @@ impl<'a> Sampler<'a> {
                 if want("body", 0.8, rng) {
                     put("body", pick(pools::BODIES, rng));
                 }
+                if want("notebook", 0.2, rng)
+                    && let Some(notebook) = self.row_named("notebook", rng, |_| true)
+                {
+                    put("notebook", notebook);
+                }
             }
             "document" => {
                 if want("text", 0.6, rng) {
                     put("text", pick(pools::DOC_TEXTS, rng));
+                }
+                if want("folder", 0.2, rng)
+                    && let Some(folder) = self.row_named("folder", rng, |_| true)
+                {
+                    put("folder", folder);
                 }
             }
             "list" => {

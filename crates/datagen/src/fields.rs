@@ -35,25 +35,16 @@ fn money_live(verb: &str, kind: &str, field: &str) -> bool {
     MONEY_LIVE.contains(&(verb, kind, field))
 }
 
-/// Fields that name a row by `#n`: a create that sets one needs a `find` ahead of it, which no draw makes.
-const ROW_ARGS: &[(&str, &str)] = &[
-    ("task", "list"),
-    ("task", "parent"),
-    ("note", "notebook"),
-    ("document", "folder"),
-];
-
 /// Why a pair no sampler draw reaches is not live, when the runtime would take it: a gap of the sampler, which `datagen
 /// drift` counts and a publish refuses. Every other reason of a `NotLive` pair is the runtime's own refusal.
 pub const SAMPLER_GAP: &str = "the sampler draws no value for it";
-const ROW_GAP: &str = "it names another row by `#n`; no draw puts a `find` ahead of the create";
 const UNLISTED: &str = "the runtime applies it though its editable-fields line does not list it: a question for the runtime, open";
 
 /// Whether the reason of a `NotLive` pair is a gap of the sampler or of the runtime's contract (an argument chat could
 /// use that nothing draws), and not a refusal the runtime makes on purpose.
 #[must_use]
 pub fn is_gap(reason: &str) -> bool {
-    matches!(reason, SAMPLER_GAP | ROW_GAP | UNLISTED)
+    matches!(reason, SAMPLER_GAP | UNLISTED)
 }
 
 /// Edits the runtime applies though the line of editable fields it prints for the kind leaves them out (an account's
@@ -100,8 +91,6 @@ pub fn pairs(catalog: &Catalog, grid: &Grid) -> BTreeMap<String, Live> {
                         Live::NotLive(
                             "no create sets a money field of this kind: a transaction is not created in chat".into(),
                         )
-                    } else if ROW_ARGS.contains(&(kind.name.as_str(), field)) {
-                        Live::NotLive(ROW_GAP.into())
                     } else if kind.name == "workout" && matches!(field, "end" | "type") {
                         Live::NotLive(
                             "the runtime reads no `end` or `type` of a new workout, so nothing shows it was set".into(),

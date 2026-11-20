@@ -370,6 +370,10 @@ impl Briefer<'_> {
                 }
             ),
             Val::Flag(b) => if *b { "yes" } else { "no" }.to_owned(),
+            Val::Row { kind, name } => {
+                spans.push(name.clone());
+                format!("the {kind} \"{name}\"")
+            }
             Val::When(json) => self.when_json(json),
             // an amount is in the currency of the thing it is set on, which is not always the vault's
             Val::Money {
