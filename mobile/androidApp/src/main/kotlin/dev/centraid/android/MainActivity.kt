@@ -85,6 +85,12 @@ public class MainActivity : FragmentActivity() {
         open.scope.launch { NotifyTaps.flush(open.screens) }
     }
 
+    override fun onDestroy() {
+        // BEFORE super: the composition is disposed (and its session released) inside it.
+        if (isChangingConfigurations) AppSession.pinForRecreation()
+        super.onDestroy()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // A secret copied before the app was killed is cleared once its deadline has passed.
@@ -122,6 +128,7 @@ public class MainActivity : FragmentActivity() {
                 val session by produceState<AppSession.Open?>(null, reopens) {
                     val opened = withContext(NonCancellable) { AppSession.acquire(applicationContext, devSeed) }
                     if (opened == null) return@produceState
+                    AppSession.unpin()
                     try {
                         rust.attach(opened, scope)
                         value = opened
