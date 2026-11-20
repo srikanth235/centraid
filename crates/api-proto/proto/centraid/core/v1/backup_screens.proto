@@ -308,6 +308,12 @@ message BackupHomeData {
   // BEFORE PAIRING (BackupUnpaired): no backup device is paired on a vault still on this phone, so the
   // page is this card, the two steps and the footnote, and nothing else. Absent otherwise.
   optional BackupUnpaired unpaired = 52;
+  // THE STATUS CARD'S ACTION when any backup device no longer knows this phone ("Pair again", ruling
+  // 28): empty otherwise. The shell draws it as the card's own button, beside the card's other
+  // action; the device's row keeps its own "Pair it again".
+  string pair_again_label = 53;
+  // Where it goes: the same pairing page as `add_destination`.
+  Route pair_again = 54;
 }
 
 // "Not backed up yet", what it means, and how to pair.

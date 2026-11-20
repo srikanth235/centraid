@@ -345,6 +345,12 @@ struct BackupHomeView: View {
                 KitInkButton(label: model.addDestinationLabel) { open(model.addDestination) }
                     .accessibilityIdentifier("backup-add-destination")
             }
+            // A DEVICE THAT NO LONGER KNOWS THIS PHONE (ruling 28): the card that says "Pair it again" carries
+            // the way back, the same pairing page as the row below.
+            if !model.pairAgainLabel.isEmpty {
+                KitInkButton(label: model.pairAgainLabel) { open(model.pairAgain) }
+                    .accessibilityIdentifier("backup-card-pair-again")
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -497,6 +497,36 @@ fn a_paired_gateway_with_no_stored_token_offers_the_pairing_action() {
     assert_eq!(data.ink, wire::BackupInk::AddDestination as i32);
 }
 
+/// RULING 28: THE STATUS CARD THAT SAYS "PAIR IT AGAIN" CARRIES THE BUTTON, routed to the pairing page
+/// the row uses; a phone every device knows carries none, and the row keeps its own words.
+#[test]
+fn the_status_card_offers_pair_again_when_a_device_does_not_know_the_phone() {
+    let healthy = steady();
+    let mut page = Page::over(healthy);
+    page.send(E::Appeared(wire::Appeared {}));
+    page.serve();
+    let data = page.data();
+    assert_eq!(data.pair_again_label, "");
+    assert_eq!(data.pair_again, None);
+
+    let mut refused = steady();
+    refused.destinations[0].pair_again = true;
+    let mut page = Page::over(refused);
+    page.send(E::Appeared(wire::Appeared {}));
+    page.serve();
+    let data = page.data();
+    assert_eq!(data.pair_again_label, words::backup_card_pair_again(EN));
+    assert_eq!(data.pair_again_label, "Pair again");
+    assert_eq!(data.pair_again, Some(routes::add_destination()));
+    assert_eq!(data.pair_again, data.add_destination);
+    assert_eq!(
+        data.destinations[0].detail.matches("Pair it again").count(),
+        1,
+        "the row stays: {:?}",
+        data.destinations[0].detail
+    );
+}
+
 #[test]
 fn every_gateway_refusing_this_phones_token_reads_pair_again_never_all_backed_up() {
     // THE LEDGER STILL SAYS EVERYTHING IS ACKNOWLEDGED: nothing waits, so no row
