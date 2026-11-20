@@ -28,9 +28,20 @@ name: search-containers
       - tapOn:
           id: "agenda-style-name"
       - inputText: "Orchard"
-      - hideKeyboard
-      - tapOn:
-          id: "agenda-style-submit"
+      # iOS's keyboard has a Done key that submits the sheet (Maestro's hideKeyboard presses it), so
+      # there is no Add left to tap afterwards; Android hides the keyboard and taps Add.
+      - runFlow:
+          when:
+            platform: iOS
+          commands:
+            - pressKey: Enter
+      - runFlow:
+          when:
+            platform: Android
+          commands:
+            - hideKeyboard
+            - tapOn:
+                id: "agenda-style-submit"
 # A list's row is one spoken element ("Orchard, 0 tasks"), so the name is matched at its start.
 - assertVisible: "Orchard.*"
 # Home's search: the project is a hit of the Agenda group, kind named, above the

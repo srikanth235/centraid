@@ -696,11 +696,8 @@ private struct AgendaTodoList: View {
                     }
                 }
                 if !todo.newProjectLabel.isEmpty {
-                    HStack {
-                        KitLink(label: todo.addListLabel.isEmpty ? todo.newProjectLabel : todo.addListLabel, identifier: "agenda-new-project") {
-                            send(AgendaEvents.make { $0.sheetOpened = .with { $0.sheet = .newProject } })
-                        }
-                        Spacer(minLength: 0)
+                    KitLink(label: todo.addListLabel.isEmpty ? todo.newProjectLabel : todo.addListLabel, identifier: "agenda-new-project", fillsRow: true) {
+                        send(AgendaEvents.make { $0.sheetOpened = .with { $0.sheet = .newProject } })
                     }
                     .padding(.horizontal, CentraidGeometry.pageMargin)
                     .padding(.top, 12)
