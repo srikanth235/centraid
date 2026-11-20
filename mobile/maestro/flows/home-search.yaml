@@ -17,10 +17,27 @@ name: home-search
     visible:
       id: "home-search-group-notes"
     timeout: 5000
-- assertVisible: "This note is yours"
-# Cancel goes home; the picked term comes back as a recent search.
+# The row is one spoken element, "Note, This note is yours" on Android, so match the title at its end.
+- assertVisible: ".*This note is yours"
+# A row opens in its own app (the tap is what makes the term a recent search); Done closes the note
+# and lands on the results it left.
+- tapOn: ".*This note is yours"
+- assertNotVisible:
+    id: "home-search-field"
+- tapOn: "Done"
+- assertVisible:
+    id: "home-search-group-notes"
+# The picked term comes back as a recent search once the field is emptied.
 - tapOn:
-    id: "home-search-cancel"
+    id: "home-search-clear"
+- assertVisible:
+    id: "home-search-recent-yours"
+# The close key goes home; the picked term comes back as a recent search when search is opened again.
+# OPEN FINDING (#1202): the recents live in the page's own state (`shell/search.rs`, `Search.recent`),
+# so a search opened again starts with none and this step fails on both shells until the owner rules
+# whether recents are the session's (R-CHROME-6, "this session's recent searches").
+- tapOn:
+    id: "home-search-close"
 - assertVisible:
     id: "home-grid"
 - tapOn:
@@ -28,4 +45,4 @@ name: home-search
 - assertVisible:
     id: "home-search-recent-yours"
 - tapOn:
-    id: "home-search-cancel"
+    id: "home-search-close"

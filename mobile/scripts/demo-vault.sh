@@ -88,6 +88,10 @@ place_android() {
     local bytes="${vault%.*}.bytes"
     local bytes_name="$stem.bytes"
     if [ -d "$bytes" ]; then
+      # A DIRECTORY PUSHED ONTO AN EXISTING ONE LANDS INSIDE IT (`.../x.bytes/x.bytes`), so a re-seed
+      # would leave the new store nested and the app's own top level with the old one: files a
+      # vault's rows name were then missing and its backup waited on them for good (#1202).
+      "$adb" shell "rm -rf /data/local/tmp/$bytes_name" >/dev/null 2>&1 || true
       "$adb" push "$bytes" "/data/local/tmp/$bytes_name" >/dev/null 2>&1 || true
       "$adb" shell "run-as dev.centraid sh -c 'rm -rf files/$stem/vault.bytes && cp -R /data/local/tmp/$bytes_name files/$stem/vault.bytes'" \
         2>/dev/null || true

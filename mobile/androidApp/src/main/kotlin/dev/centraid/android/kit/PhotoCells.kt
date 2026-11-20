@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -131,6 +132,8 @@ public fun PhotoCellSquare(
                     Modifier
                 },
             )
+            // THE CELL'S ID (iOS draws the same string): `photos.cell.<asset id>`, what the flows find.
+            .testTag("photos.cell.${cell.photo_id}")
             .semantics { contentDescription = spoken },
     ) {
         if (!path.isNullOrEmpty()) ContentImage(path) else Text(text = label)
@@ -198,6 +201,7 @@ public fun PhotoTile(
                 onLongClick = onLongPress,
                 onClickLabel = if (selecting) KitWords.SELECT else KitWords.OPEN,
             )
+            .testTag("photos.cell.${cell.photo_id}")
             .semantics {
                 contentDescription = label
                 role = Role.Image

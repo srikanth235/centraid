@@ -42,6 +42,7 @@ import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.kitTextStyle
+import dev.centraid.android.kit.menuTestIds
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -164,6 +165,7 @@ internal fun AgendaViewMenu(
         DropdownMenu(
             expanded = open,
             onDismissRequest = { open = false },
+            modifier = Modifier.menuTestIds(),
             containerColor = Surface.card,
             shape = RoundedCornerShape(CentraidScale.cardRadius.dp),
         ) {

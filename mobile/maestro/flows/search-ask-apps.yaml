@@ -23,7 +23,7 @@ name: search-ask-apps
 - tapOn:
     id: "home-tile-calendar"
 - tapOn:
-    id: "agenda-search-open"
+    id: "band-search"
 - inputText: "zzqxv"
 - extendedWaitUntil:
     visible:
@@ -58,11 +58,11 @@ name: search-ask-apps
 - runFlow:
     when:
       notVisible:
-        id: "notes-search-open"
+        id: "band-search"
     commands:
       - tapOn: "Done"
 - tapOn:
-    id: "notes-search-open"
+    id: "band-search"
 - inputText: "zzqxn"
 - extendedWaitUntil:
     visible:
@@ -96,7 +96,7 @@ name: search-ask-apps
 - tapOn:
     id: "home-tile-photos"
 - tapOn:
-    id: "photos-search-open"
+    id: "band-search"
 - inputText: "zzqxp"
 - extendedWaitUntil:
     visible:
@@ -136,10 +136,10 @@ name: search-ask-apps
 - runFlow:
     when:
       visible:
-        id: "locker-search-open"
+        id: "band-search"
     commands:
       - tapOn:
-          id: "locker-search-open"
+          id: "band-search"
       - inputText: "zzqxl"
       - extendedWaitUntil:
           visible: "Nothing matches “zzqxl”"
