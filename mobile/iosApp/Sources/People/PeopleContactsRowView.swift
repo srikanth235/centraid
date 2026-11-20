@@ -41,10 +41,14 @@ struct PeopleContactsRowView: View {
                 Text(row.actionLabel)
                     .centraidType("smallStrong")
                     .foregroundStyle(accent.text)
+                    // THE ACTION'S WORDS ARE WHOLE (#1202): beside a long title the row gave the button less
+                    // than "Turn on" needs; it keeps its width and the title wraps instead.
+                    .fixedSize(horizontal: !stacked, vertical: true)
                     .frame(minWidth: CentraidGeometry.targetMinCoarse, minHeight: CentraidGeometry.targetMinCoarse)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .layoutPriority(1)
             .accessibilityIdentifier("people-contacts-action")
         }
         .padding(.horizontal, 16)

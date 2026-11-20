@@ -523,8 +523,9 @@ final class AccessibilityAuditTests: XCTestCase {
     private static let exemptions: [Exemption] = [
         Exemption(screen: nil, type: .dynamicType, id: "", label: bandLabels),
         // CALENDAR: the seven-day strip's initials and numbers, the hour marks and the now pill's clock
-        // are the grid's held words (behaviour.md, Accessibility: "like the calendar's seven-day grids").
-        Exemption(screen: "Calendar", type: .dynamicType, id: "", label: "^([MTWFS]|\\d{1,2}|\\d{2}:\\d{2})$"),
+        // are the grid's held words (behaviour.md, Accessibility: "like the calendar's seven-day grids"), in the
+        // 24-hour ("16:09") and 12-hour ("4:04 PM") clocks alike.
+        Exemption(screen: "Calendar", type: .dynamicType, id: "", label: "^([MTWFS]|\\d{1,2}|\\d{1,2}:\\d{2}(\\s?[AP]M)?)$"),
         // HOME / CALENDAR, UNDER THE BAND: the page scrolls beneath the floating band's glass (behaviour.md,
         // Rooms: "the page scrolls under its glass"), and the audit samples the blurred pixels of whatever
         // passes under it, so text there reads as low contrast (seen on a Home tile and a Day block whose
@@ -685,7 +686,7 @@ final class AccessibilityAuditTests: XCTestCase {
     /// with no element (elementDetection, frame zero). No whole screen is excused.
     private static let sheetExemptions: [Exemption] = [
         // CALENDAR MORE. Proof: light-Calendar-More.png, dark-Calendar-More.png, accessibility-xxxl-Calendar-More.png.
-        Exemption(screen: "Calendar More", type: .contrast, id: nil, label: "^(Calendar|Family|New Calendar|What Calendar may read|Work)$", exactScreen: true),
+        Exemption(screen: "Calendar More", type: .contrast, id: nil, label: "^(Calendar|Calendars|Family|New Calendar|What Calendar may read|Work)$", exactScreen: true),
         Exemption(screen: "Calendar More", type: .textClipped, id: nil, label: "^(Calendar|Family|New Calendar|What Calendar may read|Work)$", exactScreen: true),
         // REMINDERS MORE. Proof: light-Reminders-More.png, dark-Reminders-More.png, accessibility-xxxl-Reminders-More.png.
         Exemption(screen: "Reminders More", type: .contrast, id: nil, label: "^(30 days, then erased|Anytime|Export|Turn on Phone reminders|What Reminders may read|done and won't do|no date, still yours|open work with a reminder)$", exactScreen: true),

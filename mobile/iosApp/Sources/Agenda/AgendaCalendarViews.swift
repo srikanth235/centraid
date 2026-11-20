@@ -714,12 +714,14 @@ struct AgendaTimeGridView: View {
                 // THE CLOCK NEVER ENDS IN AN ELLIPSIS: 13pt "08:53" is wider than the 44pt gutter
                 // less its padding, so it scales down to fit rather than truncating.
                 // (#1202: it no longer scales down, which the audit reads as clipped text; it is as wide as
-                // its clock, and the pill grows leftward out of the gutter into the page margin.)
+                // its clock; it sits right-aligned in the gutter and, when wider, grows into the day column.)
                 .fixedSize()
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
                 .background(accent.fill, in: Capsule())
-                .frame(width: AgendaGridMetrics.gutter, alignment: .trailing)
+                // NEVER PAST THE SCREEN'S EDGE (#1202): right-aligned in the gutter while it fits; a wider
+                // clock ("4:04 PM" in a 12-hour region) starts at the edge and runs into the day column.
+                .frame(minWidth: AgendaGridMetrics.gutter - 2, alignment: .trailing)
                 .padding(.trailing, 2)
             Circle()
                 .fill(accent.fill)
