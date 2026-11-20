@@ -512,7 +512,7 @@ pub fn plan(
     let grid = Grid::build(catalog);
     let mut settings = settings.clone();
     settings.mix.live = grid.live().iter().map(ToString::to_string).collect();
-    settings.mix.live_fields = crate::fields::live_labels(catalog, &grid);
+    settings.mix.live_fields = crate::fields::mix_labels(catalog, &grid);
     let catalogue = Catalogue::of_mode(crate::plan::tools_mode())?;
     let kinds: Vec<&str> = Kind::ALL.iter().map(|k| k.name()).collect();
     let mut plan = tally(&features, &sessions, &settings, &catalogue, &kinds)?;

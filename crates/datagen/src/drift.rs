@@ -190,8 +190,18 @@ impl Catalogue {
 
 /// The names a call carries, flat and, for a tool that folds, inside its `args` lines (read as the runtime reads them).
 fn names_of(shape: &ToolShape, args: &serde_json::Map<String, Value>) -> BTreeSet<String> {
+    names_in(shape.folds, args)
+}
+
+/// The names a call of the tool `tool` carries (what coverage counts), without a catalogue to say whether it folds.
+#[must_use]
+pub fn call_names(tool: &str, args: &serde_json::Map<String, Value>) -> BTreeSet<String> {
+    names_in(matches!(tool, "create" | "edit" | "do"), args)
+}
+
+fn names_in(folds: bool, args: &serde_json::Map<String, Value>) -> BTreeSet<String> {
     let mut names: BTreeSet<String> = args.keys().cloned().collect();
-    if shape.folds
+    if folds
         && let Ok(inner) = act_args(args.get("args"))
     {
         names.extend(inner.keys().map(|k| k.trim_end_matches('+').to_owned()));

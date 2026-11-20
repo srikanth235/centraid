@@ -229,6 +229,44 @@ pub fn refused_arguments(catalog: &Catalog, grid: &Grid) -> BTreeMap<(String, St
     out
 }
 
+/// The label of an argument of a call that is no (kind, field) pair: `find/-/limit`, the way a cell without a kind is
+/// named.
+#[must_use]
+pub fn argument_label(tool: &str, arg: &str) -> String {
+    label(tool, "-", arg)
+}
+
+/// The arguments of the tools that drift counts and no pair of `create` or `edit` covers (`find.limit`, `compute.trashed`,
+/// `create.more`), as labels: each is balanced by the mix like a pair, with the floor of one, so the sessions chosen show
+/// every one of them often enough for drift's coverage. The arguments of `create` and `edit` that are fields are the
+/// pairs', and the ones the runtime refuses for every kind are not counted ([`refused_arguments`]).
+#[must_use]
+pub fn live_arguments() -> Vec<String> {
+    let Ok(catalogue) = crate::drift::Catalogue::of_mode(crate::plan::tools_mode()) else {
+        return Vec::new();
+    };
+    let field_names = meta::flat_field_names();
+    let mut out = Vec::new();
+    for (tool, shape) in &catalogue.tools {
+        let folds = VERBS.contains(&tool.as_str());
+        for arg in &shape.properties {
+            let is_field = folds && field_names.contains(&arg.as_str());
+            if !is_field && !catalogue.refused.contains(&(tool.clone(), arg.clone())) {
+                out.push(argument_label(tool, arg));
+            }
+        }
+    }
+    out
+}
+
+/// What the mix balances beside the cells: the live (kind, field) pairs and the live arguments.
+#[must_use]
+pub fn mix_labels(catalog: &Catalog, grid: &Grid) -> Vec<String> {
+    let mut out = live_labels(catalog, grid);
+    out.extend(live_arguments());
+    out
+}
+
 /// The live pairs of one tool and kind, by field name.
 #[must_use]
 pub fn live_fields(catalog: &Catalog, grid: &Grid, verb: &str, kind: &str) -> Vec<String> {

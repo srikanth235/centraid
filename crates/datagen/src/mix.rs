@@ -328,7 +328,7 @@ fn weighted_fill(
 
 /// The labels of a session by dimension, in the order of [`DIMS`]. A label is `dim:name`; a turn-level dimension has a
 /// label per turn that has one, a session-level dimension one.
-fn labelled(f: &Features) -> Vec<Vec<String>> {
+fn labelled(f: &Features, live_fields: &BTreeSet<&String>) -> Vec<Vec<String>> {
     let per_turn = |dim: &str, labels: &[String]| -> Vec<String> {
         labels
             .iter()
@@ -338,7 +338,11 @@ fn labelled(f: &Features) -> Vec<Vec<String>> {
     };
     vec![
         f.cells.iter().map(|c| format!("cell:{c}")).collect(),
-        f.fields.iter().map(|x| format!("field:{x}")).collect(),
+        f.fields
+            .iter()
+            .chain(f.args.iter().filter(|a| live_fields.contains(a)))
+            .map(|x| format!("field:{x}"))
+            .collect(),
         per_turn("outcome", &f.outcomes),
         per_turn("action", &f.actions),
         per_turn("reference", &f.refs),
@@ -444,6 +448,7 @@ fn select(
     let mut turns_supply = 0_usize;
     let mut supply_counts = (0_usize, 0_usize, 0_usize);
     let mut vectors: Vec<Vector> = Vec::with_capacity(units.len());
+    let live_fields: BTreeSet<&String> = cfg.live_fields.iter().collect();
     for u in units {
         let (pronoun, refs, undo, turns) = cap_counts(features, u);
         supply_counts.1 += refs;
@@ -452,7 +457,7 @@ fn select(
         let mut counts: BTreeMap<u32, u32> = BTreeMap::new();
         let mut dims = [0_u32; balance::NDIMS];
         for m in &u.members {
-            for (d, labels) in labelled(&features[*m]).into_iter().enumerate() {
+            for (d, labels) in labelled(&features[*m], &live_fields).into_iter().enumerate() {
                 for l in labels {
                     let id = if let Some(id) = index.get(&l) {
                         *id

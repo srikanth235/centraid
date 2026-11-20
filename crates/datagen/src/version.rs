@@ -668,7 +668,7 @@ pub fn render_and_mix(
     let grid = Grid::build(&catalog);
     let mut mcfg = mcfg.clone();
     mcfg.live = grid.live().iter().map(|c| c.to_string()).collect();
-    mcfg.live_fields = crate::fields::live_labels(&catalog, &grid);
+    mcfg.live_fields = crate::fields::mix_labels(&catalog, &grid);
     // the combinations a pre-selection reserved for test are the ones held out here too
     if mcfg.reserved.is_empty()
         && let Some(reserved) = crate::preselect::reserved_of(input)?

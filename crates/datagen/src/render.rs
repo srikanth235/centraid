@@ -376,6 +376,9 @@ pub struct Features {
     /// The (kind, field) pairs the turns set (`create/task/priority`): every field a create carries and every field an edit
     /// changes, which the mix balances beside the cells.
     pub fields: Vec<String>,
+    /// The arguments the reference calls of the turns carry, once per call, as `find/-/limit` (`fields::argument_label`):
+    /// what drift's coverage counts, which the mix balances for the arguments that are no (kind, field) pair.
+    pub args: Vec<String>,
     pub turns: usize,
     pub across: bool,
     /// `pair:<id>` on a minimal pair's two sessions.
@@ -742,6 +745,22 @@ pub(crate) fn features_of(
             .map(|turn| cell_of(turn).to_string())
             .collect(),
         fields: kept_turns().flat_map(labels::fields).collect(),
+        args: record["turns"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .take(kept)
+            .flat_map(|turn| turn["ref"].as_array().into_iter().flatten())
+            .filter(|call| call["bad"] != true)
+            .flat_map(|call| {
+                let tool = call["tool"].as_str().unwrap_or_default();
+                let args = call["args"].as_object().cloned().unwrap_or_default();
+                crate::drift::call_names(tool, &args)
+                    .into_iter()
+                    .map(|name| crate::fields::argument_label(tool, &name))
+                    .collect::<Vec<_>>()
+            })
+            .collect(),
         turns: kept,
         across: scenario.span == Span::Across,
         pair,

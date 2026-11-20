@@ -602,7 +602,7 @@ fn preselect_records(
     let grid = crate::grid::Grid::build(catalog);
     let mut mix = p.mix.clone();
     mix.live = grid.live().iter().map(ToString::to_string).collect();
-    mix.live_fields = crate::fields::live_labels(catalog, &grid);
+    mix.live_fields = crate::fields::mix_labels(catalog, &grid);
     let mut features = Vec::with_capacity(loaded.len());
     for (split, record) in loaded {
         let scenario: Scenario = serde_json::from_value(record["scenario"].clone())
