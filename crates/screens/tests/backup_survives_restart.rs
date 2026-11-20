@@ -99,6 +99,36 @@ fn drain(core: &Handle) -> wire::DrainResponse {
     drained
 }
 
+/// A drain once the phone's own pass is done. A relaunched phone starts a pass of its own, and a
+/// second pass while one runs is refused, never queued (core-ffi CONTRACT); so a refusal here
+/// pumps the phone and asks again, a bounded number of times.
+fn drain_when_free(phone: &mut Phone, core: &Handle) -> wire::DrainResponse {
+    let request = wire::request::Kind::Drain(wire::DrainRequest {
+        deadline_ms: 0,
+        rule: wire::TransferRule::WifiOnly as i32,
+        metered: false,
+        charging: true,
+        wants_snapshot: true,
+        exclude_videos: false,
+        asked: false,
+    });
+    for _ in 0..200 {
+        match core.call(&wire::Request {
+            kind: Some(request.clone()),
+        }) {
+            Ok(wire::Response {
+                kind: Some(wire::response::Kind::Drain(drained)),
+            }) => return drained,
+            Ok(other) => panic!("a drain answers: {other:?}"),
+            Err(error) if error.to_string().contains("a drain is already running") => {
+                phone.driver.pump(Duration::from_millis(50));
+            }
+            Err(error) => panic!("refused: {error}"),
+        }
+    }
+    panic!("the phone's own pass never finished");
+}
+
 /// Pair through the screen a member uses, and let the shell keep what it asks to keep.
 fn pair(phone: &mut Phone, payload: &str) {
     let page = phone.driver.push("home", routes::laptop());
@@ -176,12 +206,15 @@ fn a_paired_phone_is_still_paired_and_still_backs_up_after_the_process_dies() {
     let first = drain(&core);
     assert!(first.confirmed_parts > 0, "{first:?}");
     assert!(!waiting_to_pair_again(&core));
+    let first_snapshot_ms = status(&core)
+        .last_snapshot_ms
+        .expect("the first backup named a snapshot");
 
     // THE PROCESS DIES: a new phone over the same files, with only the device store carried over.
     let shell = phone.shell.clone();
     drop(core);
     drop(phone);
-    let phone = launched(&dir, &id, shell);
+    let mut phone = launched(&dir, &id, shell);
     let core = phone.shelf.core_of(&id).expect("the vault is open");
     assert!(
         !waiting_to_pair_again(&core),
@@ -196,8 +229,19 @@ fn a_paired_phone_is_still_paired_and_still_backs_up_after_the_process_dies() {
         "after-the-restart",
     )
     .expect("a note is written");
-    let second = drain(&core);
-    assert!(second.confirmed_parts > 0, "{second:?}");
+    // The relaunched phone's own pass may be running, or may carry the note itself: read the
+    // outcome from the ledger, not from whose pass sent it.
+    let first_snapshot = first_snapshot_ms;
+    drain_when_free(&mut phone, &core);
+    let after = status(&core);
+    assert!(
+        after
+            .last_snapshot_ms
+            .expect("a snapshot after the restart")
+            > first_snapshot,
+        "a newer snapshot, holding the note, was acknowledged: {after:?}"
+    );
+    assert_eq!(after.pending_bytes, 0, "{after:?}");
 
     // FORGETTING THE VAULT DELETES ITS TOKENS under the same key the pairing wrote.
     let forgotten = phone.shelf.forget(&id);
@@ -230,18 +274,31 @@ fn work_queued_before_the_process_dies_is_still_queued_and_goes_out_after_the_re
         "queued-before-the-restart",
     )
     .expect("a note is written");
+    let before = status(&core)
+        .last_snapshot_ms
+        .expect("the first backup named a snapshot");
     let shell = phone.shell.clone();
     drop(core);
     drop(phone);
 
-    // The relaunched phone is still paired and still owes that note: the next backup sends it.
-    let phone = launched(&dir, &id, shell);
+    // The relaunched phone is still paired and still owes that note: a backup after the restart
+    // carries it. The phone's own launch pass may be the one that does, so the test asks once that
+    // pass is done, and reads the outcome from the ledger rather than from whose pass sent it.
+    let mut phone = launched(&dir, &id, shell);
     let core = phone.shelf.core_of(&id).expect("the vault is open");
     assert!(!waiting_to_pair_again(&core));
-    let after = drain(&core);
-    assert!(after.confirmed_parts > 0, "{after:?}");
+    drain_when_free(&mut phone, &core);
+    let after = status(&core);
+    assert!(
+        after
+            .last_snapshot_ms
+            .expect("a snapshot after the restart")
+            > before,
+        "a newer snapshot, holding the note, was acknowledged: {after:?}"
+    );
+    assert_eq!(after.pending_bytes, 0, "{after:?}");
     // And nothing is left owed: a further pass has nothing new to send.
-    let again = drain(&core);
+    let again = drain_when_free(&mut phone, &core);
     assert_eq!(again.confirmed_parts, 0, "{again:?}");
 }
 

@@ -441,6 +441,10 @@ final class LightboxPlayer: ObservableObject {
 
     deinit { metadataLoad?.cancel() }
 
+    /// Returns once the asset's own length read has answered, with a length or a failure; the
+    /// item's path may have answered earlier. Lets a caller wait on the read itself, not a clock.
+    func lengthRead() async { await metadataLoad?.value }
+
     func toggle() {
         if player.timeControlStatus == .playing {
             player.pause()
