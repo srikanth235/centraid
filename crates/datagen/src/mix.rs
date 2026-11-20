@@ -457,7 +457,10 @@ fn select(
         let mut counts: BTreeMap<u32, u32> = BTreeMap::new();
         let mut dims = [0_u32; balance::NDIMS];
         for m in &u.members {
-            for (d, labels) in labelled(&features[*m], &live_fields).into_iter().enumerate() {
+            for (d, labels) in labelled(&features[*m], &live_fields)
+                .into_iter()
+                .enumerate()
+            {
                 for l in labels {
                     let id = if let Some(id) = index.get(&l) {
                         *id
@@ -1058,7 +1061,9 @@ pub fn check_floors(selection: &Selection, cfg: &Config) -> Result<()> {
 
 /// The combinations to reserve for test: rare enough that train and val lose little, present in test so there is something
 /// to hold out, alternating the two families (a kind with a filter field, a kind with a verb and a constraint count), in a
-/// seeded order. At most 10% of the sessions of train and val may carry one.
+/// seeded order. At most 10% of the sessions of train and val may carry one, and none that takes a live cell or pair of
+/// train below its floor (a kind whose every session filters on one field would otherwise lose most of its sessions to the
+/// one combination: the daily figures filtered on `value`).
 #[must_use]
 pub fn choose_reserved(features: &[Features], cfg: &Config) -> Vec<String> {
     if cfg.reserve == 0 {
@@ -1076,6 +1081,52 @@ pub fn choose_reserved(features: &[Features], cfg: &Config) -> Vec<String> {
             }
         }
     }
+    // what train holds of each live cell and pair (the first of each key counts: the mix drops the rest), and what each
+    // combination would take of it
+    let floor_of = |label: &str| -> usize {
+        if label.starts_with("cell:") {
+            cfg.floor[0]
+        } else {
+            cfg.field_floor[0]
+        }
+    };
+    let live: BTreeSet<String> = cfg
+        .live
+        .iter()
+        .map(|c| format!("cell:{c}"))
+        .chain(cfg.live_fields.iter().map(|f| format!("field:{f}")))
+        .collect();
+    let mut seen_keys: BTreeSet<&str> = BTreeSet::new();
+    let mut held: BTreeMap<String, usize> = BTreeMap::new();
+    let mut taken_by: BTreeMap<&str, BTreeMap<String, usize>> = BTreeMap::new();
+    for f in features.iter().filter(|f| f.split == "train") {
+        if !seen_keys.insert(&f.key) {
+            continue;
+        }
+        let labels: Vec<String> = f
+            .cells
+            .iter()
+            .map(|c| format!("cell:{c}"))
+            .chain(f.fields.iter().chain(&f.args).map(|x| format!("field:{x}")))
+            .filter(|l| live.contains(l))
+            .collect();
+        for l in &labels {
+            *held.entry(l.clone()).or_default() += 1;
+        }
+        for combo in &f.combos {
+            let slot = taken_by.entry(combo).or_default();
+            for l in &labels {
+                *slot.entry(l.clone()).or_default() += 1;
+            }
+        }
+    }
+    let mut left = held.clone();
+    let starves = |combo: &str, left: &BTreeMap<String, usize>| -> bool {
+        taken_by.get(combo).is_some_and(|take| {
+            take.iter()
+                .any(|(l, n)| left.get(l).copied().unwrap_or(0) < floor_of(l) + n)
+        })
+    };
     let rare = (sessions / 25).max(3);
     let mut families: [Vec<&str>; 2] = [Vec::new(), Vec::new()];
     for (combo, n) in &total {
@@ -1112,8 +1163,13 @@ pub fn choose_reserved(features: &[Features], cfg: &Config) -> Vec<String> {
             next[1 - f] += 1;
         }
         let here = total[combo] - in_test.get(combo).copied().unwrap_or(0);
-        if lost + here <= budget {
+        if lost + here <= budget && !starves(combo, &left) {
             lost += here;
+            for (l, n) in taken_by.get(combo).into_iter().flatten() {
+                if let Some(h) = left.get_mut(l) {
+                    *h = h.saturating_sub(*n);
+                }
+            }
             out.push((*combo).to_owned());
         }
     }
@@ -1568,6 +1624,83 @@ mod tests {
             .chain(&selection.subset_reports)
             .find(|r| r.split == split)
             .unwrap()
+    }
+
+    /// A combination that carries most of one cell of train is not reserved: it would leave the cell under its floor.
+    #[test]
+    fn a_combination_that_would_starve_a_live_cell_of_train_is_not_reserved() {
+        let session = |split: &str, i: usize, cell: &str, combo: &str| Features {
+            id: format!("{split}-{i}"),
+            split: split.to_owned(),
+            world: format!("{split}-w"),
+            cells: vec![cell.to_owned()],
+            turns: 1,
+            key: format!("{split}-{i}-{cell}"),
+            combos: vec![combo.to_owned()],
+            ..Features::default()
+        };
+        let mut all = Vec::new();
+        // the thin cell: 12 sessions in train, every one of them carries `kf:daily figure:value`; the broad cell has plenty
+        for i in 0..12 {
+            all.push(session(
+                "train",
+                i,
+                "edit/daily figure/edit",
+                "kf:daily figure:value",
+            ));
+        }
+        for i in 0..400 {
+            all.push(session(
+                "train",
+                i,
+                "find/task/read",
+                &format!("kf:task:f{}", i % 40),
+            ));
+        }
+        for i in 0..4 {
+            all.push(session(
+                "test",
+                i,
+                "edit/daily figure/edit",
+                "kf:daily figure:value",
+            ));
+        }
+        for i in 0..40 {
+            all.push(session(
+                "test",
+                10 + i,
+                "find/task/read",
+                &format!("kf:task:f{}", i % 20),
+            ));
+        }
+        let cfg = Config {
+            live: vec!["edit/daily figure/edit".into(), "find/task/read".into()],
+            floor: [10, 0, 0],
+            reserve: 2,
+            ..Config::default()
+        };
+        let reserved = choose_reserved(&all, &cfg);
+        assert!(
+            !reserved.contains(&"kf:daily figure:value".to_owned()),
+            "{reserved:?}"
+        );
+        assert!(!reserved.is_empty(), "the broad cell can give some away");
+        // with no floor it is a candidate like any other
+        let mut only: Vec<Features> = all
+            .iter()
+            .filter(|f| f.cells[0] == "edit/daily figure/edit")
+            .cloned()
+            .collect();
+        only.extend((0..400).map(|i| Features {
+            combos: Vec::new(),
+            ..session("train", 100 + i, "find/task/read", "")
+        }));
+        let free = Config {
+            floor: [0; 3],
+            reserve: 1,
+            ..cfg
+        };
+        assert_eq!(choose_reserved(&only, &free), ["kf:daily figure:value"]);
     }
 
     #[test]

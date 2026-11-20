@@ -201,9 +201,7 @@ pub fn call_names(tool: &str, args: &serde_json::Map<String, Value>) -> BTreeSet
 
 fn names_in(folds: bool, args: &serde_json::Map<String, Value>) -> BTreeSet<String> {
     let mut names: BTreeSet<String> = args.keys().cloned().collect();
-    if folds
-        && let Ok(inner) = act_args(args.get("args"))
-    {
+    if folds && let Ok(inner) = act_args(args.get("args")) {
         names.extend(inner.keys().map(|k| k.trim_end_matches('+').to_owned()));
     }
     names

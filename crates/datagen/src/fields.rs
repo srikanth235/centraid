@@ -101,9 +101,7 @@ pub fn pairs(catalog: &Catalog, grid: &Grid) -> BTreeMap<String, Live> {
                             "no create sets a money field of this kind: a transaction is not created in chat".into(),
                         )
                     } else if ROW_ARGS.contains(&(kind.name.as_str(), field)) {
-                        Live::NotLive(
-                            ROW_GAP.into(),
-                        )
+                        Live::NotLive(ROW_GAP.into())
                     } else if kind.name == "workout" && matches!(field, "end" | "type") {
                         Live::NotLive(
                             "the runtime reads no `end` or `type` of a new workout, so nothing shows it was set".into(),

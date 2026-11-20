@@ -1749,11 +1749,7 @@ fn a_line_is_moved_to_an_earlier_day_through_the_runtime() {
 // ------------------------------------------------------------------ the arguments drift leaves out are refused by the runtime
 
 /// A call as the model writes it, on a fresh user message, and the runtime's answer.
-fn say(
-    live: &mut crate::plan::Live,
-    tool: &str,
-    pairs: &[(&str, &str)],
-) -> (Value, String, bool) {
+fn say(live: &mut crate::plan::Live, tool: &str, pairs: &[(&str, &str)]) -> (Value, String, bool) {
     let _ = live.session.user("a message");
     let mut args = serde_json::Map::new();
     for (k, v) in pairs {
@@ -1856,7 +1852,11 @@ fn every_argument_drift_leaves_out_is_one_the_runtime_answers_without_setting() 
                 tool == "create" && takes.contains(&arg.as_str()),
                 "the runtime set `{arg}` on a {kind} ({tool}), yet drift leaves it out ({why}): {text}"
             );
-            let (read, _, _) = say(&mut live, "find", &[("kind", kind), ("name", &format!("Proof {arg}"))]);
+            let (read, _, _) = say(
+                &mut live,
+                "find",
+                &[("kind", kind), ("name", &format!("Proof {arg}"))],
+            );
             let header = read["text"].as_str().unwrap_or_default();
             let header = header.lines().next().unwrap_or_default();
             assert!(

@@ -225,9 +225,21 @@ fn an_argument_the_runtime_refuses_for_every_kind_is_not_counted_and_the_rest_st
     assert!(gaps.iter().any(|g| g.name == "find.kind"), "{gaps:?}");
     // the library's catalogue leaves out what `fields::refused_arguments` derives, and nothing a pair leaves to a draw
     let current = Catalogue::of_mode(ToolsMode::Compact).expect("the compact mode");
-    assert!(current.refused.contains(&("create".to_owned(), "account".to_owned())));
-    assert!(!current.refused.contains(&("create".to_owned(), "priority".to_owned())));
-    assert!(!current.refused.contains(&("edit".to_owned(), "currency".to_owned())));
+    assert!(
+        current
+            .refused
+            .contains(&("create".to_owned(), "account".to_owned()))
+    );
+    assert!(
+        !current
+            .refused
+            .contains(&("create".to_owned(), "priority".to_owned()))
+    );
+    assert!(
+        !current
+            .refused
+            .contains(&("edit".to_owned(), "currency".to_owned()))
+    );
 }
 
 #[test]
