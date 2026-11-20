@@ -26,10 +26,14 @@ extension EffectReason {
     static func ofWrite(_ error: Swift.Error, otherwise: String) -> String {
         let ns = error as NSError
         let underlying = ns.userInfo[NSUnderlyingErrorKey] as? NSError
-        let full = [ns, underlying].compactMap { $0 }.contains {
-            ($0.domain == NSCocoaErrorDomain && $0.code == NSFileWriteOutOfSpaceError)
-                || ($0.domain == NSPOSIXErrorDomain && $0.code == Int(ENOSPC))
-        }
+        let candidates: [NSError] = [ns, underlying].compactMap { $0 }
+        let full = candidates.contains(where: isOutOfSpace)
         return full ? storageFull : otherwise
+    }
+
+    private static func isOutOfSpace(_ error: NSError) -> Bool {
+        if error.domain == NSCocoaErrorDomain, error.code == NSFileWriteOutOfSpaceError { return true }
+        let enospc: Int = Int(ENOSPC)
+        return error.domain == NSPOSIXErrorDomain && error.code == enospc
     }
 }
