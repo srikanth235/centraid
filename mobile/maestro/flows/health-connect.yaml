@@ -80,4 +80,6 @@ name: health-connect
 - assertVisible:
     id: "health-trend-steps"
 - tapOn: "Workouts"
-- assertVisible: "All"
+# The workout kind is a filter in the header's funnel menu (#1173: it replaced the "All" chip).
+- assertVisible:
+    id: "health-filter-menu"
