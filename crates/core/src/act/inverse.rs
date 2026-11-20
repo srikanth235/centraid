@@ -223,7 +223,8 @@ const HEALTH: &[Row] = &[
 ];
 /// Money. A statement import is taken back by nothing and asks first (the Import screen previews
 /// the lines and the statement balance, and writes on the tap), as does the balance it records.
-/// A line's category is taken back by filing the lines it changed under the one they held (when
+/// A line's amount and day (what the member corrected), an opening balance and an account's currency
+/// are taken back by the version they made (`Earlier`). A line's category is taken back by filing the lines it changed under the one they held (when
 /// they held one), a plan, a rule, a saved layout and an ended transfer by the values the command
 /// answers it replaced: none of them is a record the history keeps. A category has no trash, so
 /// its creation is taken back by archiving it, and a new account by closing it (the same flag):
@@ -236,6 +237,11 @@ const MONEY: &[Row] = &[
     ("add-account", "close-account", Input::CreatedWith("flag", "archived")),
     ("edit-account", "edit-account", Input::Earlier),
     ("set-display-name", "set-display-name", Input::Earlier),
+    // what an import read wrongly, corrected: the amount, the day and an opening balance are state
+    // the history keeps, so each is put back by the version it made
+    ("set-opening-balance", "set-opening-balance", Input::Earlier),
+    ("correct-amount", "correct-amount", Input::Earlier),
+    ("correct-date", "correct-date", Input::Earlier),
     ("categorize", "categorize", Input::Prior),
     ("save-import-profile", "save-import-profile", Input::Prior),
     ("unlink-transfer", "link-transfer", Input::Relinks),
