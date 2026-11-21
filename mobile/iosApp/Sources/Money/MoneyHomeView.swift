@@ -177,17 +177,20 @@ struct MoneyHomeView: View {
         return AnyView(EmptyView())
     }
 
+    /// The most rows of Activity drawn eagerly; a longer month is a lazy list.
+    private static let eagerRowLimit = 150
+
     @ViewBuilder
     private var homeList: some View {
         if case let .data(home)? = state.content {
             ScrollView {
-                // SPENDING AND CASH FLOW ARE BOUNDED AND EAGER; ACTIVITY IS THE
-                // LONG LIST AND STAYS LAZY. A `LazyVStack` here drew the
-                // Spending page with its "In" row missing and a blank band in
-                // its place (a figure row among sibling `ForEach(…, id:
-                // \.offset)` blocks), so only the page that can hold hundreds
-                // of rows pays for laziness.
-                if state.destination == .activity {
+                // SPENDING AND CASH FLOW ARE BOUNDED AND EAGER; ACTIVITY IS EAGER UP TO A MONTH'S
+                // WORTH OF ROWS (#1202) AND LAZY BEYOND IT. A `LazyVStack` here drew the Spending page
+                // with its "In" row missing and a blank band in its place (a figure row among sibling
+                // `ForEach(…, id: \.offset)` blocks), and under the audit's text-size sweep a lazy
+                // Activity page lost every one of its words ("partially unsupported", 28 of them on
+                // the first screen), so only a page that can hold hundreds of rows pays for laziness.
+                if state.destination == .activity, home.activity.sections.reduce(0, { $0 + $1.rows.count }) > Self.eagerRowLimit {
                     LazyVStack(alignment: .leading, spacing: 0) { page(home, state: state) }
                         .padding(.bottom, 16)
                 } else {

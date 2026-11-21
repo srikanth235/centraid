@@ -646,7 +646,8 @@ final class AccessibilityAuditTests: XCTestCase {
         // laziness a long contact list wants.
         Exemption(screen: "Reminders", type: .dynamicType, id: nil, label: "^(My Lists|Add List)$", exactScreen: true),
         // PEOPLE: the state badge's word holds its size (behaviour.md: the words inside a badge hold).
-        Exemption(screen: "People", type: .dynamicType, id: "", label: "^[A-Z][A-Z ]{2,}$", exactScreen: true),
+        // The audit reads the word as typed ("Overdue") and the badge draws it in capitals, so either case matches; a badge is 14pt tall.
+        Exemption(screen: "People", type: .dynamicType, id: "", label: "^[A-Za-z][A-Za-z ]{2,}$", frame: { f, _ in f.height < 20 }, exactScreen: true),
         // TITLES AND KEYS IN THE NAVIGATION BAR. Every text the app puts in a toolbar item (a root's
         // title, an editor's Cancel and its Saved) is reported "partially unsupported", and no text
         // outside a toolbar item on these screens is once its row is not recycled: the bar is UIKit's
@@ -699,6 +700,10 @@ final class AccessibilityAuditTests: XCTestCase {
         // CALENDAR MORE. Proof: light-Calendar-More.png, dark-Calendar-More.png, accessibility-xxxl-Calendar-More.png.
         Exemption(screen: "Calendar More", type: .contrast, id: nil, label: "^(Calendar|Calendars|Family|New Calendar|What Calendar may read|Work)$", exactScreen: true),
         Exemption(screen: "Calendar More", type: .textClipped, id: nil, label: "^(Calendar|Family|New Calendar|What Calendar may read|Work)$", exactScreen: true),
+        // CALENDAR MORE, THE PAGE'S BLOCKS BEHIND THE SHEET (#1202): the sheet's scrim dims the page, and a block's title and
+        // time that show above the sheet are read at the dimmed ink. The same block passes on the page (Calendar, dark). Proof:
+        // dark-Calendar-More.png (the dimmed page above the sheet).
+        Exemption(screen: "Calendar More", type: .contrast, id: nil, label: nil, exactScreen: true, idRegex: "^agenda-grid-block-(title|detail)$"),
         // REMINDERS MORE. Proof: light-Reminders-More.png, dark-Reminders-More.png, accessibility-xxxl-Reminders-More.png.
         Exemption(screen: "Reminders More", type: .contrast, id: nil, label: "^(30 days, then erased|Anytime|Export|Turn on Phone reminders|What Reminders may read|done and won't do|no date, still yours|open work with a reminder)$", exactScreen: true),
         Exemption(screen: "Reminders More", type: .textClipped, id: nil, label: "^(30 days, then erased|Anytime|Export|Turn on Phone reminders|What Reminders may read|done and won't do|no date, still yours|open work with a reminder)$", exactScreen: true),
@@ -707,7 +712,7 @@ final class AccessibilityAuditTests: XCTestCase {
         Exemption(screen: "Notes More", type: .textClipped, id: nil, label: "^(30 days, then erased|Export|Import|What Notes may read)$", exactScreen: true),
         // PEOPLE MORE. Proof: light-People-More.png, dark-People-More.png, accessibility-xxxl-People-More.png.
         Exemption(screen: "People More", type: .contrast, id: nil, label: "^(30 days, then erased|Export|Import|Lists|Phone contacts|What People may read)$", exactScreen: true),
-        Exemption(screen: "People More", type: .textClipped, id: nil, label: "^(30 days, then erased|Export|Import|Lists|Phone contacts|What People may read)$", exactScreen: true),
+        Exemption(screen: "People More", type: .textClipped, id: nil, label: "^(30 days, then erased|Export|Import|Lists|Phone contacts|Turn on|What People may read)$", exactScreen: true),
         // DOCS MORE. Proof: light-Docs-More.png, dark-Docs-More.png, accessibility-xxxl-Docs-More.png.
         Exemption(screen: "Docs More", type: .contrast, id: nil, label: "^(30 days, then erased|Recently added|What Docs may read|Your originals as one archive)$", exactScreen: true),
         Exemption(screen: "Docs More", type: .elementDetection, id: "", label: "^$", frame: { f, _ in f == .zero }, exactScreen: true),
