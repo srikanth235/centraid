@@ -544,13 +544,7 @@ fn every_gateway_refusing_this_phones_token_reads_pair_again_never_all_backed_up
     assert_eq!(line.detail, "");
     assert!(!line.accessibility_label.contains("backed up"));
     assert_eq!(
-        line::behind_reason(
-            EN,
-            "UTC",
-            crate::kit::civil::HourCycle::H24,
-            &reading(&refused),
-            NOW
-        ),
+        line::behind_reason(EN, "UTC", &reading(&refused), NOW),
         None
     );
 

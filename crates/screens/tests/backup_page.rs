@@ -152,14 +152,7 @@ fn a_device_that_is_not_simply_behind_is_named_with_its_reason() {
             let built = line::line(EN, Some(&read), false, false, now);
             assert_eq!(built.sentence, text(case, "sentence"), "{name}: the line");
             assert_eq!(
-                line::behind_reason(
-                    EN,
-                    &zone,
-                    centraid_screens::kit::civil::HourCycle::H24,
-                    &read,
-                    now
-                )
-                .unwrap_or_default(),
+                line::behind_reason(EN, &zone, &read, now).unwrap_or_default(),
                 text(case, "reason"),
                 "{name}: the reason under it"
             );

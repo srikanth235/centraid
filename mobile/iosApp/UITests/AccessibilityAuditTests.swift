@@ -90,18 +90,13 @@ final class AccessibilityAuditTests: XCTestCase {
     ]
 
     @MainActor private func tour(mode: String, appearance: XCUIDevice.Appearance, textSize: String?) throws {
-        XCUIDevice.shared.appearance = appearance
-        var app = launch(textSize: textSize)
-        // THE APPEARANCE IS PROVED, NOT ASSUMED (#1202): `XCUIDevice.appearance` can be a no-op, and a "dark"
-        // audit of a light app proves nothing (the screenshots of testAuditDark were light). Home's own pixels
-        // say which it is; two more tries (set it again, start the app afresh), then a failure that says so.
-        for attempt in 1...2 where Self.rendersDark(app) != (appearance == .dark) {
-            print("APPEARANCE-RETRY|\(mode)|\(attempt)")
-            XCUIDevice.shared.appearance = appearance
-            Thread.sleep(forTimeInterval: 2)
-            app.terminate()
-            app = launch(textSize: textSize)
-        }
+        // THE APPEARANCE IS THE APP'S, NOT THE SIMULATOR'S (#1202): `XCUIDevice.appearance` asks the
+        // system, and on a CI runner it did not take, over and over (a "dark" audit of a light app). The
+        // launch hands the scheme to the app (`ShellModel.uiTestScheme`, a DEBUG build only), which holds
+        // it on its own window, so no simulator setting can leave the audit on the wrong one.
+        let app = launch(textSize: textSize, appearance: appearance)
+        // AND IT IS PROVED, NOT ASSUMED: Home's own pixels say which it is, and a "dark" audit of a light
+        // app proves nothing.
         XCTAssertEqual(Self.rendersDark(app), appearance == .dark, "\(mode): the app renders in \(appearance == .dark ? "dark" : "light"), so the audit audits what it says")
         // `CENTRAID_UI_ONLY` (comma-separated screen names) narrows a run to those roots, to iterate on one
         // screen; unset, the whole tour runs, which is what the gate does.
@@ -145,7 +140,8 @@ final class AccessibilityAuditTests: XCTestCase {
             try goHome(app)
         }
 
-        if only != nil { XCUIDevice.shared.appearance = .light; settle(mode: mode); return }
+        // `CENTRAID_UI_ONLY=Locker` goes on to the wall and stops there; any other narrowing stops here.
+        if let only, !only.contains("Locker") { settle(mode: mode); return }
         // LOCKER, UP TO ITS WALL: the wall is what a member sees first.
         try open(app, tile: "home-tile-locker")
         var wall = app.el("locker-wall").waitForExistence(timeout: 15)
@@ -167,6 +163,7 @@ final class AccessibilityAuditTests: XCTestCase {
             self.openLockerWall(app)
         }
         try goHome(app)
+        if only != nil { settle(mode: mode); return }
 
         try open(app, tile: nil, id: "home-settings-open")
         audit(app, mode: mode, screen: "Settings")
@@ -175,7 +172,6 @@ final class AccessibilityAuditTests: XCTestCase {
         try open(app, tile: nil, id: "home-band-backup")
         audit(app, mode: mode, screen: "Backup")
         try goHome(app)
-        XCUIDevice.shared.appearance = .light
         settle(mode: mode)
     }
 
@@ -331,8 +327,9 @@ final class AccessibilityAuditTests: XCTestCase {
 
     // MARK: Driving the app
 
-    @MainActor private func launch(textSize: String?) -> XCUIApplication {
+    @MainActor private func launch(textSize: String?, appearance: XCUIDevice.Appearance = .light) -> XCUIApplication {
         let app = XCUIApplication()
+        app.launchEnvironment["CENTRAID_UI_APPEARANCE"] = appearance == .dark ? "dark" : "light"
         if let size = textSize {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", size]
         }

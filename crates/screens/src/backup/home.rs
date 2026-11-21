@@ -942,8 +942,7 @@ impl Backup {
             // ONE DEVICE BEHIND, FULL OR HOLDING AN OLDER BACKUP names its reason (#1188, NB1).
             (_, Some(reading)) if !frozen => (
                 line::behind_last_good(locale, reading, now),
-                line::behind_reason(locale, ctx.zone(), ctx.hour_cycle(), reading, now)
-                    .unwrap_or_default(),
+                line::behind_reason(locale, ctx.zone(), reading, now).unwrap_or_default(),
             ),
             // ANOTHER PHONE TOOK OVER: what the member can do about a takeover that was not theirs
             // (#1191, A). The person at the backup device has the last word.

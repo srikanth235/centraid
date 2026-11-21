@@ -261,6 +261,26 @@ final class ShellModel: ObservableObject {
         #endif
     }
 
+    /// THE APPEARANCE A UI TEST ASKS FOR, HONOURED BY A DEBUG BUILD ONLY (#1202).
+    ///
+    /// `XCUIDevice.appearance` is a request to the simulator's system settings, and on a CI runner it
+    /// did not take (the dark audit drew a light app on every try). The audit hands the app the scheme
+    /// itself (`CENTRAID_UI_APPEARANCE` = `light` or `dark`, in the launch environment), and the app
+    /// holds it on its own window the way a member's Appearance choice does, so the audit audits what
+    /// it says whatever the simulator thinks. A member's own choice (Keychain) wins; a release build
+    /// compiles `nil` here and reads no environment.
+    static var uiTestScheme: ColorScheme? {
+        #if DEBUG
+        switch ProcessInfo.processInfo.environment["CENTRAID_UI_APPEARANCE"] {
+        case "light": .light
+        case "dark": .dark
+        default: nil
+        }
+        #else
+        nil
+        #endif
+    }
+
     // MARK: The store
 
     /// THE CORE IS OPEN: one store over it, and every road from the platform to

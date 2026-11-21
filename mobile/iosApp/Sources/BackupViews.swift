@@ -246,7 +246,6 @@ struct BackupHomeView: View {
                                 .frame(minHeight: CentraidGeometry.targetMinCoarse)
                         }
                         .buttonStyle(.plain)
-                        .hitArea()
                         .accessibilityIdentifier("backup-key-prompt-save")
                         Button {
                             send(event { $0.keyPromptAnswered = .init() })
@@ -255,7 +254,6 @@ struct BackupHomeView: View {
                                 .frame(minHeight: CentraidGeometry.targetMinCoarse)
                         }
                         .buttonStyle(.plain)
-                        .hitArea()
                         .accessibilityIdentifier("backup-key-prompt-not-now")
                     }
                 }
