@@ -33,6 +33,7 @@ pub(crate) fn holds_query(today: &str) -> Option<query_cal::Upcoming> {
         alerts: None,
     })
 }
+pub mod draft;
 pub mod earlier;
 pub mod editor;
 pub mod event;
@@ -67,4 +68,5 @@ pub fn registry() -> Registry {
         .with(TRASH, trash::build)
         .with(EARLIER, earlier::build)
         .with(EXPORT, export::build)
+        .with(draft::NAME, draft::build)
 }

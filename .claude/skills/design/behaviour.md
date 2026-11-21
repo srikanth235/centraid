@@ -11,7 +11,7 @@ A mobile screen is one of seven rooms, and nothing else. The room owns the heade
 | `HomeRoom` | the vault lockup, a search key at its trailing edge (every app), the appearance key, widgets and app tiles, one status line, one trailing verb (Settings) | Home |
 | `AppPlace` | **the title in the top row**: the app's name large at the leading edge on the same row as at most two trailing keys (iOS 26 Photos' "Library"), the scope line (`HeaderSubtitle`) directly under it, no empty band and no row of chips under it, the app band floating at the foot | Photos grid, Calendar, Reminders |
 | `PushedPage` | `PlaceHeader` with **the title inline in the same row as the back chevron** (Contacts style; a list's own colour and glyph allowed), back to the named parent (computed by Rust, never a string), at most one trailing action; a "…" key that opens the platform menu counts as that action | album, contact, document, settings sub-page |
-| `EditorRoom` | full screen, autosave, close = done, band hidden, status line hosted inside | note, document, expense, event |
+| `EditorRoom` | full screen, autosave, close = done, band hidden, status line hosted inside; the event editor saves on an explicit Save and keeps a new event's draft across a kill (ruling 29) | note, document, expense, event |
 | `SheetRoom` | grabber, title carrying the noun, at most one ink button, status line hosted inside | confirm delete, pick date, add to album |
 | `SystemPlace` | `PlaceHeader` and section or row blocks only; a place root draws the Home band, a sub-page keeps its back key | Settings, Backup |
 | `StageRoom` | full-bleed media ground, no header and no band, the caller's own floating chrome, one close act reached by a control and by a swipe down | photo lightbox, slideshow, video |
