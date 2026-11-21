@@ -981,6 +981,7 @@ internal fun DocsEditorScreen(state: DocsEditorState, onEvent: (DocsEditorEvent)
                     placeholder = chrome?.title_placeholder.orEmpty(),
                     style = "title",
                     testTag = "docs-editor-title",
+                    imeNext = true,
                     onEdit = { onEvent(DocsEditorEvent(title = DocsEditorEvent.TitleEdited(title = it))) },
                 )
                 EditableFieldRow(
