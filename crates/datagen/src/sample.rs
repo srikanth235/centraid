@@ -209,7 +209,7 @@ pub fn draws_field(verb: &str, kind: &str, field: &str) -> bool {
         ),
         ("create", "workout") => matches!(
             field,
-            "climb" | "distance" | "energy" | "heart_rate" | "moving" | "date"
+            "climb" | "distance" | "energy" | "heart_rate" | "moving" | "date" | "end"
         ),
         ("create", "account") => matches!(
             field,
@@ -235,10 +235,18 @@ pub fn draws_field(verb: &str, kind: &str, field: &str) -> bool {
         ),
         ("edit", "workout") => matches!(
             field,
-            "climb" | "distance" | "energy" | "heart_rate" | "moving"
+            "climb" | "distance" | "energy" | "heart_rate" | "moving" | "end"
         ),
         _ => false,
     }
+}
+
+/// When a workout that began at `hour`:30 on day `rel` ended: the same day, 45 minutes on.
+fn workout_end(rel: i64, hour: i64) -> Val {
+    Val::When(format!(
+        r#"{{"unit":"day","rel":{rel},"time":"{:02}:15"}}"#,
+        hour + 1
+    ))
 }
 
 pub struct Sampler<'a> {
@@ -2393,14 +2401,17 @@ impl<'a> Sampler<'a> {
                 }
             }
             "workout" => {
+                let (rel, hour) = (-rng.range(1, 14), rng.range(6, 20));
                 put(
                     "date",
                     Val::When(format!(
-                        r#"{{"unit":"day","rel":-{},"time":"{:02}:30"}}"#,
-                        rng.range(1, 14),
-                        rng.range(6, 20)
+                        r#"{{"unit":"day","rel":{rel},"time":"{hour:02}:30"}}"#
                     )),
                 );
+                // it ended the same day, some time after it began
+                if want("end", 0.3, rng) {
+                    put("end", workout_end(rel, hour));
+                }
                 let figures: [(&str, i64, i64, i64); 5] = [
                     ("moving", 10, 150, 60),
                     ("distance", 1, 40, 500),
@@ -2858,7 +2869,24 @@ impl<'a> Sampler<'a> {
                     .find_map(|c| (c.field == "name").then(|| c.value.render()))
                     .unwrap_or_default();
                 let value = (0..8).find_map(|_| {
-                    let v = self.edit_value(&cell.kind, &field, None, None, &made_name, rng)?;
+                    let v = if cell.kind == "workout" && field == "end" {
+                        // the end moves on the day the workout began, to a time after its start
+                        let start: serde_json::Value = serde_json::from_str(
+                            &made.iter().find(|c| c.field == "date")?.value.render(),
+                        )
+                        .ok()?;
+                        let rel = start["rel"].as_i64()?;
+                        let at = start["time"].as_str()?;
+                        let hour: i64 = at.get(..2)?.parse().ok()?;
+                        let minute = rng.range(1, 5) * 10 + 30;
+                        let (h, m) = (hour + 1 + rng.range(0, 3), minute % 60);
+                        Val::When(format!(
+                            r#"{{"unit":"day","rel":{rel},"time":"{:02}:{m:02}"}}"#,
+                            h + minute / 60
+                        ))
+                    } else {
+                        self.edit_value(&cell.kind, &field, None, None, &made_name, rng)?
+                    };
                     (!made.iter().any(|c| c.field == field && c.value == v)).then_some(v)
                 })?;
                 // most are said by the name the member logged it under ("change my Morning run to 6 km"), which is no
@@ -3475,6 +3503,8 @@ impl<'a> Sampler<'a> {
                     let fits: Vec<&String> = live
                         .iter()
                         .filter(|f| Self::edit_fits(&kind, f, made_type.as_deref()))
+                        // a workout's end is set from its start, in a session aimed at it
+                        .filter(|f| !(kind == "workout" && f.as_str() == "end"))
                         .collect();
                     if fits.is_empty() {
                         None

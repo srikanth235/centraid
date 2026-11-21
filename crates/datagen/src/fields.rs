@@ -89,9 +89,9 @@ pub fn pairs(catalog: &Catalog, grid: &Grid) -> BTreeMap<String, Live> {
                         Live::NotLive(
                             "no create sets a money field of this kind: a transaction is not created in chat".into(),
                         )
-                    } else if kind.name == "workout" && matches!(field, "end" | "type") {
+                    } else if kind.name == "workout" && field == "type" {
                         Live::NotLive(
-                            "the runtime reads no `end` or `type` of a new workout, so nothing shows it was set".into(),
+                            "the runtime reads no `type` of a new workout, so nothing shows it was set".into(),
                         )
                     } else if !crate::sample::draws_field("create", &kind.name, field) {
                         Live::NotLive(SAMPLER_GAP.into())
@@ -141,9 +141,10 @@ pub fn pairs(catalog: &Catalog, grid: &Grid) -> BTreeMap<String, Live> {
                         Live::NotLive(
                             "they name the budget, not a value to change: the runtime answers `budgets have no field category`".into(),
                         )
-                    } else if kind.name == "workout" && matches!(field, "end" | "type") {
+                    } else if kind.name == "workout" && field == "type" {
                         Live::NotLive(
-                            "the runtime answers `workouts have no field end` (or `type`) though it lists them".into(),
+                            "the runtime answers `workouts have no field type` though it lists it"
+                                .into(),
                         )
                     } else if !crate::sample::draws_field("edit", &kind.name, field) {
                         Live::NotLive(SAMPLER_GAP.into())

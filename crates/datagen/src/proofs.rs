@@ -130,6 +130,8 @@ fn the_pairs_come_from_the_runtime_and_the_not_live_ones_say_why() {
         "create/task/parent",
         "create/note/notebook",
         "create/document/folder",
+        "create/workout/end",
+        "edit/workout/end",
         "edit/account/currency",
         "edit/account/type",
         "edit/account/on_budget",
@@ -147,7 +149,7 @@ fn the_pairs_come_from_the_runtime_and_the_not_live_ones_say_why() {
         ("create/transaction/amount", "money field"),
         ("create/budget/amount", "money field"),
         ("edit/budget/currency", "draws no value"),
-        ("create/workout/end", "reads no"),
+        ("create/workout/type", "reads no"),
         ("edit/daily figure/value", "Health store"),
     ] {
         match pairs.get(label) {
@@ -1840,6 +1842,40 @@ fn an_account_type_its_budget_flag_and_a_rules_position_are_edited_through_the_r
             "{label} ({kind}): {made:?}"
         );
     }
+}
+
+#[test]
+fn a_workouts_end_is_drawn_for_a_create_and_an_edit_solved_through_the_runtime_and_shown_by_the_row()
+ {
+    let (_, made) = solved_pair("create/workout/end");
+    assert!(
+        made.iter()
+            .any(|(tool, args)| tool == "create" && arg_lines(args).contains("\nend: ")),
+        "{made:?}"
+    );
+    let (_, made) = solved_pair("edit/workout/end");
+    assert!(
+        made.iter()
+            .any(|(tool, args)| tool == "edit" && arg_lines(args).starts_with("end: ")),
+        "{made:?}"
+    );
+    // and the runtime keeps it: the row shows the end it was logged with
+    let catalog = catalog();
+    let world = worlds(Split::Train, 1).remove(0);
+    let scratch = tempfile::tempdir().expect("scratch");
+    let mut run = WorldRun::seed(&world, &catalog, scratch.path()).expect("seeds");
+    let mut live = run.open().expect("opens");
+    let args = "name: Proof swim\ndate: {\"unit\":\"day\",\"rel\":-1,\"time\":\"07:30\"}\nend: {\"unit\":\"day\",\"rel\":-1,\"time\":\"08:15\"}";
+    let (_, text, error) = say(&mut live, "create", &[("kind", "workout"), ("args", args)]);
+    assert!(!error, "{text}");
+    let (found, _, _) = say(
+        &mut live,
+        "find",
+        &[("kind", "workout"), ("name", "Proof swim")],
+    );
+    let n = found["effect"]["rows"][0]["n"].as_u64().expect("a row");
+    let (_, shown, _) = say(&mut live, "find", &[("rows", &format!("#{n}"))]);
+    assert!(shown.contains("08:15"), "the end shows: {shown}");
 }
 
 #[test]
