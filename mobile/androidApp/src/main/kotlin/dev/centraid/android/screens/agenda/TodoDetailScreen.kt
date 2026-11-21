@@ -163,6 +163,7 @@ private fun TodoDetailBody(
                 style = "title",
                 onEdit = { onEvent(TodoDetailEvent(title = TodoDetailEvent.TitleChanged(title = it))) },
                 testTag = "tasks-title-field",
+                imeNext = true,
             )
         }
         if (data.status_label.isNotEmpty()) {

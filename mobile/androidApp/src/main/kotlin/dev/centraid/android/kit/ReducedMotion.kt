@@ -10,8 +10,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 
 /**
  * REDUCED MOTION, AS ANDROID SPELLS IT: animations off set the animator scale to
@@ -34,11 +39,18 @@ public val LocalReducedMotion: ProvidableCompositionLocal<Boolean> = composition
 @ReadOnlyComposable
 public fun rememberReducedMotion(): Boolean = LocalReducedMotion.current
 
-/** [reducedMotion] for the composition's own context, read once per entry. */
+/**
+ * [reducedMotion] for the composition's own context, read on entry and again every time the
+ * activity resumes (#1202): the setting is changed in the system's Settings, which pauses this
+ * activity and does not recreate it, so a read taken once would keep animating after the member
+ * turned animations off (and keep snapping after they turned them on) until the process died.
+ */
 @Composable
 internal fun observeReducedMotion(): Boolean {
     val context = LocalContext.current
-    return remember(context) { reducedMotion(context) }
+    var reduced by remember(context) { mutableStateOf(reducedMotion(context)) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { reduced = reducedMotion(context) }
+    return reduced
 }
 
 /**

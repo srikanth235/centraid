@@ -37,6 +37,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -477,6 +479,9 @@ public fun rememberFollowedText(value: String): EditorText {
 /**
  * AN EDITABLE FIELD ROW: key over a bare text field. [onEdit] is sent only for
  * a difference from [value], from local text held by [rememberEditorText].
+ *
+ * [imeNext] says another text field follows directly below: the keyboard's action is Next and moves
+ * focus to it (#1202), where a field that ends the form keeps Done and closes the keyboard.
  */
 @Composable
 public fun EditableFieldRow(
@@ -490,8 +495,10 @@ public fun EditableFieldRow(
     style: String = "body",
     testTag: String = "kit-field",
     onNext: (() -> Unit)? = null,
+    imeNext: Boolean = false,
 ) {
     val editor = rememberEditorText(value, reload)
+    val focus = LocalFocusManager.current
     val text = editor.text
     // A FIELD WRAPS at the largest text (#1202): a one-line field clipped the words at its edge. Return
     // still finishes (or moves on) rather than adding a line.
@@ -513,11 +520,13 @@ public fun EditableFieldRow(
                 singleLine = singleLine && !wraps,
                 // RETURN LEAVES THE FIELD for the next one (the note's title hands focus to its body).
                 keyboardOptions = when {
-                    onNext != null -> KeyboardOptions(imeAction = ImeAction.Next)
+                    onNext != null || imeNext -> KeyboardOptions(imeAction = ImeAction.Next)
                     wraps -> KeyboardOptions(imeAction = ImeAction.Done)
                     else -> KeyboardOptions.Default
                 },
-                keyboardActions = KeyboardActions(onNext = { onNext?.invoke() }),
+                keyboardActions = KeyboardActions(
+                    onNext = { onNext?.invoke() ?: focus.moveFocus(FocusDirection.Down) },
+                ),
                 textStyle = centraidType(style).copy(color = centraidColor("text")),
                 cursorBrush = SolidColor(centraidColor("text")),
                 modifier = Modifier
