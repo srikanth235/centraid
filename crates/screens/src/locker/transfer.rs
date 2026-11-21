@@ -570,6 +570,8 @@ impl Import {
                             "application/json".to_owned(),
                             "text/plain".to_owned(),
                         ],
+                        // The import's own ceiling, so a larger file is never read.
+                        max_bytes: centraid_apps_locker::transfer::MAX_IMPORT_BYTES as u64,
                         ..wire::PickBytes::default()
                     })),
                 }]
@@ -800,6 +802,23 @@ impl Screen for Import {
                     if self.wall.is_open() {
                         self.picked(ctx, file);
                     }
+                    Vec::new()
+                }
+                // A FILE THE PICKER COULD NOT HAND OVER SAYS SO (#1202): it was said nowhere before.
+                Some(wire::effect_result::Outcome::Failed(failed))
+                    if !failed.cancelled
+                        && self.wall.is_open()
+                        && matches!(
+                            failed.reason.as_str(),
+                            crate::effect_reason::TOO_LARGE | crate::effect_reason::UNREADABLE
+                        ) =>
+                {
+                    self.status =
+                        shared::refused(if failed.reason == crate::effect_reason::TOO_LARGE {
+                            words::import_too_large(ctx.locale())
+                        } else {
+                            words::import_failed(ctx.locale())
+                        });
                     Vec::new()
                 }
                 _ => {

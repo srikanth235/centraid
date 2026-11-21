@@ -513,6 +513,14 @@
       "x": 5080,
       "y": 28360
     },
+    "ReadableColumn.dc.html": {
+      "h": 800,
+      "page": "light",
+      "title": "Wide screens · readable column",
+      "w": 1280,
+      "x": 0,
+      "y": 77000
+    },
     "RemindersStopPhone.dc.html": {
       "h": 844,
       "page": "light",
@@ -780,7 +788,7 @@
     "FirstHome.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "2 · Home on first run",
+      "title": "2 · Home on first run, imports first",
       "w": 390,
       "x": 470,
       "y": 18560
@@ -788,7 +796,7 @@
     "FirstHomeDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "2 · Home on first run · dark",
+      "title": "2 · Home on first run, imports first · dark",
       "w": 390,
       "x": 470,
       "y": 18560
@@ -868,7 +876,7 @@
     "HealthSearch.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "7 · Health search",
+      "title": "7 · Health search, in place",
       "w": 390,
       "x": 3810,
       "y": 24000
@@ -913,22 +921,6 @@
       "x": 470,
       "y": 0
     },
-    "IconConcepts.dc.html": {
-      "h": 980,
-      "page": "archive",
-      "title": "Icon round two (not chosen)",
-      "w": 1200,
-      "x": 0,
-      "y": 0
-    },
-    "IconMarks.dc.html": {
-      "h": 980,
-      "page": "archive",
-      "title": "Icon round three (Cradle chosen from here)",
-      "w": 1200,
-      "x": 1280,
-      "y": 0
-    },
     "ImportReminders.dc.html": {
       "h": 844,
       "page": "light",
@@ -953,12 +945,108 @@
       "x": 0,
       "y": 19720
     },
+    "LargeTextActions.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Largest text: action keys stack",
+      "w": 390,
+      "x": 940,
+      "y": 19720
+    },
+    "LargeTextDocs.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · Largest text: Docs in one column",
+      "w": 390,
+      "x": 1410,
+      "y": 19720
+    },
+    "LargeTextCalendarList.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Largest text: Calendar List, date above rows",
+      "w": 390,
+      "x": 1880,
+      "y": 19720
+    },
+    "LargeTextHealth.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Largest text: Health range picker scrolls",
+      "w": 390,
+      "x": 2350,
+      "y": 19720
+    },
+    "LargeTextWeek.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Largest text: week strip held at xxxLarge",
+      "w": 390,
+      "x": 2820,
+      "y": 19720
+    },
+    "LargeTextControls.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "8 · Largest text: controls stack, chart words hold, status and addresses stay whole",
+      "w": 390,
+      "x": 3760,
+      "y": 19720
+    },
+    "LargeTextRows.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Largest text: values stack under their names, the safety number wraps",
+      "w": 390,
+      "x": 3290,
+      "y": 19720
+    },
     "LargeTextDark.dc.html": {
       "h": 844,
       "page": "dark",
       "title": "1 · Largest text size · dark",
       "w": 390,
       "x": 0,
+      "y": 19720
+    },
+    "LargeTextActionsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Largest text: action keys stack · dark",
+      "w": 390,
+      "x": 940,
+      "y": 19720
+    },
+    "LargeTextDocsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · Largest text: Docs in one column · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 19720
+    },
+    "LargeTextCalendarListDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Largest text: Calendar List, date above rows · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 19720
+    },
+    "LargeTextHealthDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Largest text: Health range picker scrolls · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 19720
+    },
+    "LargeTextWeekDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Largest text: week strip held at xxxLarge · dark",
+      "w": 390,
+      "x": 2820,
       "y": 19720
     },
     "List.dc.html": {
@@ -1244,7 +1332,7 @@
     "MoneySearch.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "7 · Search",
+      "title": "7 · Money search, in place",
       "w": 390,
       "x": 2820,
       "y": 10440
@@ -1252,7 +1340,7 @@
     "MoneySearchDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "7 · Search · dark",
+      "title": "7 · Money search, in place · dark",
       "w": 390,
       "x": 2820,
       "y": 10440
@@ -1372,18 +1460,74 @@
     "MoreMoney.dc.html": {
       "h": 844,
       "page": "light",
-      "title": "3 · Money More, with Trash",
+      "title": "3 · Money More, with What Money may read and Trash",
       "w": 390,
       "x": 940,
       "y": 28360
     },
+    "MoreNotes.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "14 · Notes More, with What Notes may read",
+      "w": 390,
+      "x": 4250,
+      "y": 28360
+    },
+    "MoreDocs.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "15 · Docs More, with What Docs may read",
+      "w": 390,
+      "x": 4660,
+      "y": 28360
+    },
+    "ReadsPage.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "9 · What an app may read, a page of its own",
+      "w": 390,
+      "x": 4630,
+      "y": 29520
+    },
     "MoreMoneyDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "3 · Money More, with Trash · dark",
+      "title": "3 · Money More, with What Money may read and Trash · dark",
       "w": 390,
       "x": 940,
       "y": 28360
+    },
+    "MoreNotesDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "14 · Notes More, with What Notes may read · dark",
+      "w": 390,
+      "x": 4250,
+      "y": 28360
+    },
+    "MoreDocsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "15 · Docs More, with What Docs may read · dark",
+      "w": 390,
+      "x": 4660,
+      "y": 28360
+    },
+    "ReadableColumnDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Wide screens · readable column · dark",
+      "w": 1280,
+      "x": 0,
+      "y": 77000
+    },
+    "ReadsPageDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "9 · What an app may read, a page of its own · dark",
+      "w": 390,
+      "x": 4630,
+      "y": 29520
     },
     "NoteEditor.dc.html": {
       "h": 844,
@@ -2417,14 +2561,6 @@
       "x": 0,
       "y": 0
     },
-    "WheelIcon.dc.html": {
-      "h": 1100,
-      "page": "archive",
-      "title": "The Wheel (replaced by four quarters)",
-      "w": 1200,
-      "x": 3840,
-      "y": 0
-    },
     "ChatDownload.dc.html": {
       "h": 844,
       "page": "light",
@@ -3193,6 +3329,14 @@
       "x": 7520,
       "y": 39000
     },
+    "BackupPairAgain.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Backup, a device no longer knows this phone: Pair again (#1202)",
+      "w": 390,
+      "x": 7520,
+      "y": 39960
+    },
     "DocEditorUnavailable.dc.html": {
       "h": 915,
       "page": "light",
@@ -3344,6 +3488,358 @@
       "w": 390,
       "x": 940,
       "y": 70840
+    },
+    "FirstOpenCalendar.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Calendar, first open",
+      "w": 390,
+      "x": 0,
+      "y": 74200
+    },
+    "FirstOpenCalendarDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Calendar, first open · dark",
+      "w": 390,
+      "x": 0,
+      "y": 74200
+    },
+    "FirstOpenNotes.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Notes, first open",
+      "w": 390,
+      "x": 470,
+      "y": 74200
+    },
+    "FirstOpenNotesDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Notes, first open · dark",
+      "w": 390,
+      "x": 470,
+      "y": 74200
+    },
+    "FirstOpenDocs.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · Docs, first open",
+      "w": 390,
+      "x": 940,
+      "y": 74200
+    },
+    "FirstOpenDocsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · Docs, first open · dark",
+      "w": 390,
+      "x": 940,
+      "y": 74200
+    },
+    "FirstOpenPeople.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · People, first open",
+      "w": 390,
+      "x": 1410,
+      "y": 74200
+    },
+    "FirstOpenPeopleDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · People, first open · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 74200
+    },
+    "FirstOpenMoney.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Money, first open",
+      "w": 390,
+      "x": 1880,
+      "y": 74200
+    },
+    "FirstOpenMoneyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Money, first open · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 74200
+    },
+    "FirstOpenHealth.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Health, first open",
+      "w": 390,
+      "x": 2350,
+      "y": 74200
+    },
+    "FirstOpenHealthDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Health, first open · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 74200
+    },
+    "LockerFirstCheck.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Locker, step 1: the owner check",
+      "w": 390,
+      "x": 0,
+      "y": 75360
+    },
+    "LockerFirstCheckDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · Locker, step 1: the owner check · dark",
+      "w": 390,
+      "x": 0,
+      "y": 75360
+    },
+    "LockerFirstItem.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "8 · Locker, step 2: the first item",
+      "w": 390,
+      "x": 470,
+      "y": 75360
+    },
+    "LockerFirstItemDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "8 · Locker, step 2: the first item · dark",
+      "w": 390,
+      "x": 470,
+      "y": 75360
+    },
+    "FirstHomeRefused.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "9 · Home, photo access refused",
+      "w": 390,
+      "x": 940,
+      "y": 75360
+    },
+    "FirstHomeRefusedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "9 · Home, photo access refused · dark",
+      "w": 390,
+      "x": 940,
+      "y": 75360
+    },
+    "PhotosRefused.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "10 · Photos, access refused",
+      "w": 390,
+      "x": 1410,
+      "y": 75360
+    },
+    "PhotosRefusedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "10 · Photos, access refused · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 75360
+    },
+    "RemindersRefused.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "10 · Reminders, access refused",
+      "w": 390,
+      "x": 1800,
+      "y": 75360
+    },
+    "RemindersRefusedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "10 · Reminders, access refused · dark",
+      "w": 390,
+      "x": 1800,
+      "y": 75360
+    },
+    "PeopleTouchEmpty.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "10 · People, Touch with no one yet",
+      "w": 390,
+      "x": 2190,
+      "y": 75360
+    },
+    "PeopleTouchEmptyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "10 · People, Touch with no one yet · dark",
+      "w": 390,
+      "x": 2190,
+      "y": 75360
+    },
+    "CalendarInvitesEmpty.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "10 · Calendar, Invites with nothing waiting",
+      "w": 390,
+      "x": 2610,
+      "y": 75360
+    },
+    "CalendarInvitesEmptyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "10 · Calendar, Invites with nothing waiting · dark",
+      "w": 390,
+      "x": 2610,
+      "y": 75360
+    },
+    "NotesJournalEmpty.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "10 · Notes, Journal with no entries",
+      "w": 390,
+      "x": 3030,
+      "y": 75360
+    },
+    "NotesJournalEmptyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "10 · Notes, Journal with no entries · dark",
+      "w": 390,
+      "x": 3030,
+      "y": 75360
+    },
+    "BackupUnpaired.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "11 · Backup, before anything is paired",
+      "w": 390,
+      "x": 1880,
+      "y": 75360
+    },
+    "BackupUnpairedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "11 · Backup, before anything is paired · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 75360
+    },
+    "HomeBackupDayTwo.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "12 · Home, a day after the first item",
+      "w": 390,
+      "x": 2350,
+      "y": 75360
+    },
+    "HomeBackupDayTwoDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "12 · Home, a day after the first item · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 75360
+    },
+    "AndroidFirstHome.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "1 · Home on first run, Android",
+      "w": 412,
+      "x": 0,
+      "y": 76360
+    },
+    "AndroidFirstHomeDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "1 · Home on first run, Android · dark",
+      "w": 412,
+      "x": 0,
+      "y": 76360
+    },
+    "AndroidEmptyReminders.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "2 · Reminders first open, Android",
+      "w": 412,
+      "x": 470,
+      "y": 76360
+    },
+    "AndroidEmptyRemindersDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "2 · Reminders first open, Android · dark",
+      "w": 412,
+      "x": 470,
+      "y": 76360
+    },
+    "CalendarRefused.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "11 · Calendar, access refused",
+      "w": 390,
+      "x": 940,
+      "y": 76360
+    },
+    "CalendarRefusedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "11 · Calendar, access refused · dark",
+      "w": 390,
+      "x": 940,
+      "y": 76360
+    },
+    "PeopleRefused.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "12 · People, access refused",
+      "w": 390,
+      "x": 1410,
+      "y": 76360
+    },
+    "PeopleRefusedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "12 · People, access refused · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 76360
+    },
+    "FirstOpenHealthTrends.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Health, trends, first open",
+      "w": 390,
+      "x": 3290,
+      "y": 76360
+    },
+    "FirstOpenHealthTrendsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Health, trends, first open · dark",
+      "w": 390,
+      "x": 3290,
+      "y": 76360
+    },
+    "FirstOpenHealthWorkouts.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Health, workouts, first open",
+      "w": 390,
+      "x": 3760,
+      "y": 76360
+    },
+    "FirstOpenHealthWorkoutsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Health, workouts, first open · dark",
+      "w": 390,
+      "x": 3760,
+      "y": 76360
     }
   },
   "createdOnFiles": {
@@ -3404,7 +3900,9 @@
     "dark20",
     "dark21",
     "dark22",
-    "dark23"
+    "dark23",
+    "light25",
+    "dark24"
   ],
   "notes": {
     "dark0": {
@@ -3847,16 +4345,31 @@
       "w": 240,
       "x": 0,
       "y": 10240
+    },
+    "light25": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "First run: every app, Locker, refused access and the backup nudge",
+      "w": 240,
+      "x": 0,
+      "y": 74000
+    },
+    "dark24": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "First run: every app, Locker, refused access and the backup nudge",
+      "w": 240,
+      "x": 0,
+      "y": 74000
     }
   },
   "order": [
     "DesignRules.dc.html",
     "Decisions.dc.html",
     "CodeMap.dc.html",
-    "IconConcepts.dc.html",
-    "IconMarks.dc.html",
     "CradlePalettes.dc.html",
-    "WheelIcon.dc.html",
     "QuartersIcon.dc.html",
     "Backup.dc.html",
     "Welcome.dc.html",
@@ -3946,10 +4459,19 @@
     "BackupFailed.dc.html",
     "StatusLine.dc.html",
     "LargeText.dc.html",
+    "LargeTextActions.dc.html",
+    "LargeTextDocs.dc.html",
+    "LargeTextCalendarList.dc.html",
+    "LargeTextHealth.dc.html",
+    "LargeTextWeek.dc.html",
+    "LargeTextRows.dc.html",
+    "LargeTextControls.dc.html",
     "SolidBand.dc.html",
     "AndroidHome.dc.html",
     "AndroidReminders.dc.html",
     "AndroidDetails.dc.html",
+    "AndroidFirstHome.dc.html",
+    "AndroidEmptyReminders.dc.html",
     "AndroidHealth.dc.html",
     "AndroidLocker.dc.html",
     "AndroidPeople.dc.html",
@@ -4047,10 +4569,17 @@
     "BackupFailedDark.dc.html",
     "StatusLineDark.dc.html",
     "LargeTextDark.dc.html",
+    "LargeTextActionsDark.dc.html",
+    "LargeTextDocsDark.dc.html",
+    "LargeTextCalendarListDark.dc.html",
+    "LargeTextHealthDark.dc.html",
+    "LargeTextWeekDark.dc.html",
     "SolidBandDark.dc.html",
     "AndroidHomeDark.dc.html",
     "AndroidRemindersDark.dc.html",
     "AndroidDetailsDark.dc.html",
+    "AndroidFirstHomeDark.dc.html",
+    "AndroidEmptyRemindersDark.dc.html",
     "AndroidHealthDark.dc.html",
     "AndroidLockerDark.dc.html",
     "AndroidPeopleDark.dc.html",
@@ -4083,6 +4612,9 @@
     "MoreCalendar.dc.html",
     "MoreHealth.dc.html",
     "MoreMoney.dc.html",
+    "MoreNotes.dc.html",
+    "MoreDocs.dc.html",
+    "ReadsPage.dc.html",
     "UndoNotes.dc.html",
     "UndoPeople.dc.html",
     "UndoHealth.dc.html",
@@ -4221,7 +4753,49 @@
     "DocEditorUnavailable.dc.html",
     "DocEditorUnavailableDark.dc.html",
     "PhotoRemoteFailure.dc.html",
-    "PhotoRemoteFailureDark.dc.html"
+    "PhotoRemoteFailureDark.dc.html",
+    "FirstOpenCalendar.dc.html",
+    "FirstOpenCalendarDark.dc.html",
+    "FirstOpenNotes.dc.html",
+    "FirstOpenNotesDark.dc.html",
+    "FirstOpenDocs.dc.html",
+    "FirstOpenDocsDark.dc.html",
+    "FirstOpenPeople.dc.html",
+    "FirstOpenPeopleDark.dc.html",
+    "FirstOpenMoney.dc.html",
+    "FirstOpenMoneyDark.dc.html",
+    "FirstOpenHealth.dc.html",
+    "FirstOpenHealthDark.dc.html",
+    "FirstOpenHealthWorkouts.dc.html",
+    "FirstOpenHealthWorkoutsDark.dc.html",
+    "FirstOpenHealthTrends.dc.html",
+    "FirstOpenHealthTrendsDark.dc.html",
+    "LockerFirstCheck.dc.html",
+    "LockerFirstCheckDark.dc.html",
+    "LockerFirstItem.dc.html",
+    "LockerFirstItemDark.dc.html",
+    "FirstHomeRefused.dc.html",
+    "FirstHomeRefusedDark.dc.html",
+    "PhotosRefused.dc.html",
+    "PhotosRefusedDark.dc.html",
+    "RemindersRefused.dc.html",
+    "RemindersRefusedDark.dc.html",
+    "PeopleRefused.dc.html",
+    "PeopleRefusedDark.dc.html",
+    "CalendarRefused.dc.html",
+    "CalendarRefusedDark.dc.html",
+    "PeopleTouchEmpty.dc.html",
+    "PeopleTouchEmptyDark.dc.html",
+    "CalendarInvitesEmpty.dc.html",
+    "CalendarInvitesEmptyDark.dc.html",
+    "NotesJournalEmpty.dc.html",
+    "NotesJournalEmptyDark.dc.html",
+    "BackupUnpaired.dc.html",
+    "BackupUnpairedDark.dc.html",
+    "HomeBackupDayTwo.dc.html",
+    "HomeBackupDayTwoDark.dc.html",
+    "ReadableColumn.dc.html",
+    "ReadableColumnDark.dc.html"
   ],
   "pages": [
     {

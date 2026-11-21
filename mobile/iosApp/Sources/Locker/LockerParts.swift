@@ -30,6 +30,9 @@ struct LockerWallView: View {
         let accent = AppAccent("locker")
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
+                LockerStepRow(step: wall.step, steps: wall.steps, label: wall.stepLabel)
+                    .padding(.horizontal, -CentraidGeometry.pageMargin)
+                    .padding(.top, 8)
                 CentraidIconView(iconKey: "Lock", tint: accent.text, size: 28)
                     .frame(width: 64, height: 64)
                     .background(accent.wash(dark: scheme == .dark), in: Circle())
@@ -155,10 +158,11 @@ struct LockerCovered<Content: View>: View {
 /// wall replaces the page.
 struct LockerShield<Content: View>: View {
     let secure: Bool
+    var bleedsBottom = false
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        WordsShield(secure: secure, content: content)
+        WordsShield(secure: secure, bleedsBottom: bleedsBottom, content: content)
     }
 }
 
@@ -170,8 +174,22 @@ struct LockerRowView: View {
     let onTap: () -> Void
 
     @Environment(\.appAccent) private var accent
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// THE BADGES AND THE STAR (#1202): at the end of the row while it has the room, under the
+    /// words at accessibility sizes, where beside them they cut the name to a few letters.
+    private var marks: some View {
+        HStack(spacing: 8) {
+            ForEach(Array(row.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
+            if row.starred {
+                // THE STAR WEARS THE APP'S COLOUR: amber only ever means a state.
+                CentraidIconView(iconKey: "Star", tint: accent.text, size: 14)
+            }
+        }
+    }
 
     var body: some View {
+        let stacked = dynamicTypeSize.isAccessibilitySize
         Button(action: onTap) {
             HStack(spacing: 12) {
                 LockerTypeChip(letters: row.typeChip)
@@ -179,19 +197,18 @@ struct LockerRowView: View {
                     Text(row.title)
                         .kitType(.row)
                         .foregroundStyle(Surface.ink)
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                     if !row.meta.isEmpty {
-                        Text(row.meta)
+                        MetaLine(row.meta)
                             .kitType(.meta)
                             .foregroundStyle(Surface.meta)
-                            .lineLimit(1)
                     }
+                    if stacked, !row.chips.isEmpty || row.starred { marks.padding(.top, 2) }
                 }
-                Spacer(minLength: 8)
-                ForEach(Array(row.chips.enumerated()), id: \.offset) { _, chip in StatusChipView(chip) }
-                if row.starred {
-                    // THE STAR WEARS THE APP'S COLOUR: amber only ever means a state.
-                    CentraidIconView(iconKey: "Star", tint: accent.text, size: 14)
+                .frame(maxWidth: stacked ? .infinity : nil, alignment: .leading)
+                if !stacked {
+                    Spacer(minLength: 8)
+                    marks
                 }
             }
             .padding(.horizontal, 14)
@@ -220,7 +237,7 @@ struct LockerTypeChip: View {
         Text(letters)
             .kitType(side > 40 ? .title : .badge)
             .foregroundStyle(Color.white)
-            .frame(width: side, height: side)
+            .kitScaledSquare(side, relativeTo: side > 40 ? .largeTitle : .caption2)
             .background(accent.fill, in: RoundedRectangle(cornerRadius: side * CentraidGeometry.iconChipRadiusRatio, style: .continuous))
             .accessibilityHidden(true)
     }
@@ -251,6 +268,39 @@ struct LockerChoicePills: View {
 }
 
 /// One quiet line of Rust's — a status, a note, a window's end.
+/// THE FIRST RUN'S TWO STEPS (LockerFirstCheck, LockerFirstItem): a dot per step, the current one long,
+/// and Rust's "Step 1 of 2". Drawn only while Rust says there are steps.
+struct LockerStepRow: View {
+    let step: UInt32
+    let steps: UInt32
+    let label: String
+
+    @Environment(\.appAccent) private var accent
+
+    var body: some View {
+        if steps > 0 {
+            HStack(spacing: 10) {
+                HStack(spacing: 6) {
+                    ForEach(1...Int(steps), id: \.self) { number in
+                        Capsule()
+                            .fill(number == Int(step) ? accent.text : Surface.border)
+                            .frame(width: number == Int(step) ? 22 : 6, height: 6)
+                    }
+                }
+                .accessibilityHidden(true)
+                Text(label)
+                    .kitType(.meta)
+                    .foregroundStyle(Surface.meta)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.vertical, 8)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("locker-step")
+        }
+    }
+}
+
 struct LockerNote: View {
     let text: String
 
@@ -365,7 +415,7 @@ struct LockerHeroTile: View {
         Text(letter)
             .kitType(.title)
             .foregroundStyle(Color.white)
-            .frame(width: side, height: side)
+            .kitScaledSquare(side, relativeTo: .largeTitle)
             .background(Surface.tile, in: RoundedRectangle(cornerRadius: side * CentraidGeometry.iconChipRadiusRatio, style: .continuous))
             .accessibilityHidden(true)
     }

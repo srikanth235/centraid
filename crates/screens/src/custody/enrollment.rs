@@ -267,6 +267,19 @@ impl Adoption {
                         return Step::Done(Err(Refusal::StoreRefused));
                     };
                     self.writes = writes;
+                    // THE TOKENS THE CLAIMS MINTED go to the device store with the key metadata and
+                    // are read back with it, before the vault is opened and handed them (E12).
+                    let minted: Vec<wire::GatewayToken> = answer
+                        .tokens
+                        .iter()
+                        .filter(|minted| minted.path == vault.path)
+                        .map(|minted| wire::GatewayToken {
+                            vault_id: minted.vault_id.clone(),
+                            gateway_id: minted.gateway_id.clone(),
+                            token: minted.token.clone(),
+                        })
+                        .collect();
+                    self.writes.extend(env.secrets.token_writes(&minted));
                     if self.writes.is_empty() {
                         self.at += 1;
                         continue;

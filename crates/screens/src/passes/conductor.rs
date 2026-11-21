@@ -609,6 +609,12 @@ impl Conductor {
         }
     }
 
+    /// Whether `ask` is waiting for the service's next turn.
+    #[must_use]
+    pub fn is_asked(&self, ask: wire::pass_asked::Ask) -> bool {
+        self.lock().inbox.contains(&ask)
+    }
+
     /// What the screens asked since the service last looked.
     pub(crate) fn take_asks(&self) -> Vec<wire::pass_asked::Ask> {
         self.lock().inbox.drain(..).collect()
@@ -892,12 +898,28 @@ impl Conductor {
     /// ledger from the gateway.
     #[must_use]
     pub fn upload_settled(&self, settled: &wire::UploadSettled) -> Vec<Action> {
+        self.upload_settled_in(&settled.vault_id, settled)
+    }
+
+    /// Whether the shelf has opened the vault it holds as `shelf_id` and can drain it: where a
+    /// settle can be routed now.
+    #[must_use]
+    pub fn drains(&self, shelf_id: &str) -> bool {
+        self.lock().drainable().iter().any(|held| held == shelf_id)
+    }
+
+    /// [`Self::upload_settled`] for a report that names its vault by the vault's identity (the 64
+    /// hex a handed-off part carries, which the OS hands back), with `shelf_id` the id the shelf
+    /// holds that vault under: the two are not one string (#1202), and the settle is routed by the
+    /// shelf's.
+    #[must_use]
+    pub fn upload_settled_in(&self, shelf_id: &str, settled: &wire::UploadSettled) -> Vec<Action> {
         let inner = self.lock();
-        if !inner.drainable().contains(&settled.vault_id) {
+        if !inner.drainable().iter().any(|held| held == shelf_id) {
             return Vec::new();
         }
         vec![Action::Settle {
-            vault: settled.vault_id.clone(),
+            vault: shelf_id.to_owned(),
             settled: wire::Settled {
                 name: settled.name.clone(),
                 http_status: settled.http_status,

@@ -1123,6 +1123,34 @@ fn on_ios_a_finished_task_settles_in_its_own_vault() {
     assert_eq!(settle.settled[0].vault_id, "aa");
 }
 
+/// A SETTLE THAT ARRIVES BEFORE THE SHELF HAS OPENED ITS VAULT (a background relaunch) is held, not
+/// dropped, and goes to its vault once the shelf holds it.
+#[test]
+fn a_settle_before_the_vault_is_open_waits_for_it() {
+    let mut rig = Rig::new();
+    ios(&mut rig);
+    rig.first_pass(empty());
+    rig.fact(wire::shell_fact::Fact::Settled(wire::UploadSettled {
+        name: "early".to_owned(),
+        http_status: 201,
+        error: String::new(),
+        gateway_id: "gw-1".to_owned(),
+        vault_id: "aa".to_owned(),
+    }));
+    rig.fact(wire::shell_fact::Fact::Held(wire::VaultsHeld {
+        vaults: vec![wire::Held {
+            vault_id: "aa".to_owned(),
+            drainable: true,
+        }],
+    }));
+    rig.answer_call(Err(wire::Error::default()));
+    let wire::request::Kind::Settle(settle) = request_of(&mut rig) else {
+        panic!("a settle");
+    };
+    assert_eq!(settle.settled.len(), 1);
+    assert_eq!(settle.settled[0].name, "early");
+}
+
 #[test]
 fn changing_the_rule_on_ios_lets_go_of_every_upload_the_os_holds() {
     let mut rig = Rig::new();

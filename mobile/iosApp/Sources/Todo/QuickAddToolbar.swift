@@ -93,7 +93,7 @@ struct QuickAddToolbar: View {
                         Text(row.title)
                             .centraidType("small")
                             .foregroundStyle(Theme.color("text", scheme))
-                            .lineLimit(1)
+                            .kitLineLimit(1)
                         Text(row.kindLabel)
                             .centraidType("annotLabel")
                             .foregroundStyle(Theme.color("textSoft", scheme))

@@ -157,6 +157,7 @@ pub fn more_rows(
         key: MORE_READS.to_owned(),
         label: reminders::reads_reminders_title(locale),
         spoken: reminders::reads_reminders_title(locale),
+        icon_key: "Shield".to_owned(),
         ..wire::AgendaMoreRow::default()
     });
     out

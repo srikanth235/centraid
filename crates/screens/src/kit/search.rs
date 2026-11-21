@@ -5,6 +5,53 @@ use centraid_api_proto::core_v1 as wire;
 
 use crate::strings::{Locale, fill, shared};
 
+/// How many recent terms are kept for one search.
+pub const RECENT_MAX: usize = 4;
+
+/// THE TERMS MEMBERS RECENTLY SEARCHED (ruling 24, #1202): held in memory for as long as the
+/// runtime lives, so closing and reopening Search shows them and a restart shows none. Never
+/// written anywhere. One list per search (Home's, Health's in place), newest first, once each.
+/// The runtime empties it whenever the vault in front changes, so one vault's terms are never
+/// offered over another's.
+#[derive(Clone, Debug, Default)]
+pub struct Recents(
+    std::sync::Arc<std::sync::Mutex<std::collections::BTreeMap<String, Vec<String>>>>,
+);
+
+impl Recents {
+    fn lock(&self) -> std::sync::MutexGuard<'_, std::collections::BTreeMap<String, Vec<String>>> {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// The terms kept for the search `scope` (an app id, or empty for Home's), newest first.
+    #[must_use]
+    pub fn get(&self, scope: &str) -> Vec<String> {
+        self.lock().get(scope).cloned().unwrap_or_default()
+    }
+
+    /// Remember `term` for `scope`: newest first, a repeat (in any case) moved to the front,
+    /// at most [`RECENT_MAX`] kept. A blank term is not remembered.
+    pub fn remember(&self, scope: &str, term: &str) {
+        let term = term.trim();
+        if term.is_empty() {
+            return;
+        }
+        let mut held = self.lock();
+        let kept = held.entry(scope.to_owned()).or_default();
+        let folded = term.to_lowercase();
+        kept.retain(|old| old.to_lowercase() != folded);
+        kept.insert(0, term.to_owned());
+        kept.truncate(RECENT_MAX);
+    }
+
+    /// Forget every term (the vault in front changed).
+    pub fn clear(&self) {
+        self.lock().clear();
+    }
+}
+
 /// The question the Ask sends for `term`.
 #[must_use]
 pub fn question(locale: Locale, term: &str) -> String {

@@ -175,6 +175,7 @@ private struct SettingsRowView: View {
     /// A row with no page behind it is still pressed (`pressable`): Rust is told which.
     let press: () -> Void
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// THE ROW'S TILE, as Rust names it: the vault's round initial, the state-amber fill (the
     /// recovery key), or the shell's colour.
@@ -186,7 +187,7 @@ private struct SettingsRowView: View {
                 .kitType(.row)
                 .fontWeight(.bold)
                 .foregroundStyle(.white)
-                .frame(width: 32, height: 32)
+                .kitScaledSquare(32, relativeTo: .body)
                 .background(AppAccent.shell.fill, in: Circle())
                 .accessibilityHidden(true)
         case "amber":
@@ -212,9 +213,14 @@ private struct SettingsRowView: View {
                 if !row.meta.isEmpty {
                     Text(row.meta).kitType(.meta).foregroundStyle(Surface.meta)
                 }
+                // THE VALUE UNDER THE TITLE AT ACCESSIBILITY SIZES (#1202): beside it, "Download
+                // settings" broke as "Downl/oad/settin/gs" with "Wi-Fi only" squeezed next to it.
+                if dynamicTypeSize.isAccessibilitySize, !row.value.isEmpty {
+                    Text(row.value).kitType(.row).foregroundStyle(Surface.meta)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            if !row.value.isEmpty {
+            if !dynamicTypeSize.isAccessibilitySize, !row.value.isEmpty {
                 Text(row.value).kitType(.row).foregroundStyle(Surface.meta)
             }
             // A row that MAKES something draws no chevron (the board's Make a vault).

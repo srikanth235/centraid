@@ -41,6 +41,7 @@ import centraid.core.v1.ScreenEvent
 import dev.centraid.android.kit.AndroidHealth
 import dev.centraid.android.kit.EarlierPreviewScreen
 import dev.centraid.android.kit.EarlierScreen
+import dev.centraid.android.kit.ReadsScreen
 import dev.centraid.android.kit.TrashScreen
 import dev.centraid.android.kit.BackupCheckScreen
 import dev.centraid.android.kit.TransferScreen
@@ -78,7 +79,6 @@ import dev.centraid.android.screens.money.MoneyHomeScreen
 import dev.centraid.android.screens.money.MoneyImportScreen
 import dev.centraid.android.screens.money.MoneyRecurringScreen
 import dev.centraid.android.screens.money.MoneyRulesScreen
-import dev.centraid.android.screens.money.MoneySearchScreen
 import dev.centraid.android.screens.money.MoneyTargetScreen
 import dev.centraid.android.screens.money.MoneyTransactionScreen
 import dev.centraid.android.screens.notes.NotesEditorScreen
@@ -239,6 +239,17 @@ internal class RustRoot(
         val made = madeRoot?.let { views[it]?.imports_made }
         var closed by remember { mutableStateOf("") }
         val sentence = made?.summary.orEmpty().takeIf { it != closed }.orEmpty()
+        // THE MEMBER'S NEXT MOVE PUTS A SETTLED LINE AWAY (#1202, as iOS `importLineMoved`): a move is
+        // a different place or page on the stack the member is in. A line is settled once it is not
+        // running, finished or not (an import with no made vault never finishes), so it cannot stay
+        // over Home and every app. A running import keeps its line.
+        val place = activeTab() to navigation?.tabs?.firstOrNull { it.tab == activeTab() }?.entries?.lastOrNull()?.instance
+        val settled = made?.summary.orEmpty().takeIf { made?.running == false }.orEmpty()
+        var lastPlace by remember { mutableStateOf(place) }
+        LaunchedEffect(place) {
+            if (place != lastPlace && settled.isNotEmpty()) closed = settled
+            lastPlace = place
+        }
         val line: (@Composable () -> Unit)? = if (sentence.isEmpty()) {
             null
         } else {
@@ -304,6 +315,9 @@ internal class RustRoot(
                 pop(top.instance)
             }
         }
+        // BACK FROM ANOTHER TAB'S ROOT (the chat, the backup) GOES HOME: only Home's root leaves the
+        // app. The tab's own pages, when it has any, pop first (the handler above).
+        BackHandler(enabled = entries.size <= 1 && tab != TAB) { select(TAB) }
         // WHAT HOME NEEDS TO BE TOLD THE PHONE DOES: its own scheme, once it is open and when it moves.
         val homeRoot = runtime.navigation.value?.tabs?.firstOrNull { it.tab == TAB }?.entries?.firstOrNull()?.instance
         LaunchedEffect(homeRoot, phoneDark) {
@@ -317,8 +331,14 @@ internal class RustRoot(
         // member still sees, and the sheet's own screen composes its ModalBottomSheet on top.
         val sheetOver = top.route?.sheet == true && entries.size > 1
         val shown = if (sheetOver) entries[entries.size - 2] else top
-        ShownEntry(runtime, navigation, views, shown, root, inChat, homeRoot)
-        if (sheetOver) views[top.instance]?.let { Page(runtime, it, top.instance) }
+        // THE APP A PAGE BELONGS TO tints everything it draws, its sheets included (a More sheet's
+        // marks, a link, an empty card's glyph): the screen id's prefix names it, and the shell's own
+        // places (Home, the chat, the backup) keep the shell's colour.
+        val appOfPage = shown.route?.screen?.substringBefore('.')?.takeIf { it in CHAT_SCOPES }.orEmpty()
+        CompositionLocalProvider(LocalAppAccentId provides appOfPage) {
+            ShownEntry(runtime, navigation, views, shown, root, inChat, homeRoot)
+            if (sheetOver) views[top.instance]?.let { Page(runtime, it, top.instance) }
+        }
     }
 
     /** THE ENTRY THE MEMBER SEES: Home, another tab's root over the band, or a page. */
@@ -367,7 +387,9 @@ internal class RustRoot(
         }
         if (top.instance == root.instance) {
             // ANOTHER TAB'S ROOT (the chat, the backup), over the band: a place Rust owns, drawn like Home's.
-            androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
+            // THE PAGE'S OWN GROUND UNDER THE BAND (#1202): without it the window's white showed as a seam
+            // under the content on the light Backup page.
+            androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().background(dev.centraid.android.kit.Surface.page)) {
                 Box(Modifier.weight(1f)) { Page(runtime, view, top.instance) }
                 Band(navigation?.band, ::select)
             }
@@ -401,6 +423,23 @@ internal class RustRoot(
         // answered cancelled, so the bar never opened.
         LaunchedEffect(runtime) { AgendaIntents.deliver(runtime) }
         LaunchedEffect(runtime) { HealthIntents.deliver(runtime) }
+        // THE PHONE'S 12 OR 24 HOUR SETTING CHANGED WHILE THE APP IS OPEN: Rust words every time by it,
+        // so it is told again at once and not at the next start.
+        val appContext = LocalContext.current.applicationContext
+        DisposableEffect(open) {
+            val resolver = appContext.contentResolver
+            val clock = object : android.database.ContentObserver(android.os.Handler(android.os.Looper.getMainLooper())) {
+                override fun onChange(selfChange: Boolean) {
+                    scope?.launch { open.environment() }
+                }
+            }
+            resolver.registerContentObserver(
+                android.provider.Settings.System.getUriFor(android.provider.Settings.System.TIME_12_24),
+                false,
+                clock,
+            )
+            onDispose { resolver.unregisterContentObserver(clock) }
+        }
         val owner = LocalLifecycleOwner.current
         DisposableEffect(owner, runtime) {
             val observer = LifecycleEventObserver { _, event ->
@@ -475,6 +514,7 @@ internal class RustRoot(
         val detail = view.todo_detail
         val catchUp = view.todo_catch_up
         val trash = view.trash
+        val reads = view.reads
         val earlier = view.earlier
         val earlierPreview = view.earlier_preview
         val transfer = view.transfer
@@ -492,7 +532,6 @@ internal class RustRoot(
         val moneyRules = view.money_rules
         val moneyCategories = view.money_categories
         val moneyImport = view.money_import
-        val moneySearch = view.money_search
         val drive = view.docs_drive
         val doc = view.docs_document
         val docEditor = view.docs_editor
@@ -515,7 +554,7 @@ internal class RustRoot(
 
         // THE SCREEN IS DONE (a cancel committed, the editor saved or left, the task deleted): its page goes.
         val done = event?.dismissed == true || editor?.dismissed == true || detail?.finished == true ||
-            doc?.dismissed == true || peoplePerson?.done == true || earlierPreview?.done == true || healthConnect?.finished == true ||
+            doc?.dismissed == true || peoplePerson?.done == true || earlierPreview?.done == true || healthConnect?.finished == true || notesEditor?.finished == true ||
             lockerItem?.finished == true || lockerEditor?.finished == true || lockerLock?.finished == true ||
             moneyTarget?.finished == true || moneyImport?.finished == true ||
             wordsMake?.finished == true || wordsEnter?.finished == true || wordsShow?.finished == true
@@ -689,12 +728,6 @@ internal class RustRoot(
                 onOpen = open,
                 onBack = back,
             )
-            moneySearch != null -> MoneySearchScreen(
-                state = moneySearch,
-                onEvent = { send(ScreenEvent(money_search = it)) },
-                onOpen = open,
-                onBack = back,
-            )
             drive != null -> {
                 // WHAT THE OS LETS DOCS OFFER, reported as state.
                 DocsReports(instance, send)
@@ -827,6 +860,8 @@ internal class RustRoot(
                 onEvent = { send(ScreenEvent(trash = it)) },
                 onBack = back,
             )
+            // "WHAT <APP> MAY READ" (owner, 2026-11-19): the kit's one reads page, from More.
+            reads != null -> ReadsScreen(view = reads, onBack = back)
             // EVERY RECORD'S EARLIER VERSIONS (#1185).
             earlier != null -> EarlierScreen(
                 view = earlier,

@@ -256,23 +256,31 @@ fn the_backup_line_under_the_vault_is_the_backup_lanes_reading_of_it() {
     lay_down(&dir, "a", "Alpha");
     let mut phone = Phone::standard(&dir);
     launched(&mut phone);
-    // No gateway is paired, and the line says so in the backup lane's words.
-    let line = state(&phone)
-        .bar
-        .and_then(|bar| bar.backup)
-        .expect("a line under the vault");
-    assert_eq!(line.status, "Not backed up. Pair a backup device.");
-    assert_eq!(
-        line.route.expect("the line leads to pairing").screen,
-        "pair.laptop"
+    // DAY ZERO: the backup's one seat is empty, whatever is paired or not.
+    assert!(state(&phone).bar.expect("a bar").backup.is_none());
+    first_item(&mut phone);
+    // THE FIRST ITEM IS MINUTES OLD: a day has to pass before Home asks to pair (the 23 and 25
+    // hour cases are `backup::line`'s `pairing_is_asked_about_a_day_after_the_first_item`).
+    assert!(state(&phone).bar.expect("a bar").backup.is_none());
+    // A DAY ON, the lane tells Home the line (told here as the shelf tells it) and it leads to
+    // pairing, not to the Backup place (decided in #1173); its spoken label is the line itself.
+    let home = phone.driver.navigation.as_ref().expect("navigation").tabs[0].entries[0].instance;
+    phone.driver.send(
+        home,
+        E::Home(wire::HomeEvent {
+            kind: Some(H::BackupTold(wire::home_event::BackupLineTold {
+                line: Some(wire::HomeBackupLine {
+                    status: "Not backed up yet".into(),
+                    tone: wire::HomeTone::Attention as i32,
+                    accessibility_label: "Not backed up yet. Pair".into(),
+                    route: Some(centraid_screens::pairing::routes::laptop()),
+                    action: "Pair".into(),
+                }),
+            })),
+        }),
     );
-    // PRESSING IT LEADS TO PAIRING, not to the Backup place (decided in #1173),
-    // and its spoken label is the line itself, which is the action.
     let bar = state(&phone).bar.expect("a bar");
-    assert_eq!(
-        bar.backup_open_label,
-        "Not backed up. Pair a backup device."
-    );
+    assert_eq!(bar.backup_open_label, "Not backed up yet. Pair");
     phone.driver.effects.clear();
     press(&mut phone, H::Backup(wire::home_event::BackupPressed {}));
     let opened = phone
@@ -337,6 +345,27 @@ fn pair_in_the_ledger(phone: &mut Phone, vault: &str, acked_at_ms: Option<u64>) 
     phone.driver.pump(Duration::from_millis(800));
 }
 
+/// THE FIRST THING THE MEMBER ADDS: ends day zero, so the backup's one seat may speak.
+fn first_item(phone: &mut Phone) {
+    use centraid_screens::catalog::act;
+    use centraid_screens::field::Keyed;
+    let told = phone.driver.act(
+        wire::ActRequest::from(act::notes::CreateNote {
+            title: "Groceries".to_owned(),
+            body: "Milk".to_owned(),
+            ..Default::default()
+        })
+        .keyed("arrange:first-item"),
+    );
+    assert_eq!(
+        told.status,
+        wire::ActStatus::Executed as i32,
+        "{}",
+        told.reason
+    );
+    phone.driver.pump(Duration::from_millis(800));
+}
+
 fn backup_line(phone: &Phone) -> wire::HomeBackupLine {
     state(phone)
         .bar
@@ -355,10 +384,9 @@ fn the_backup_line_follows_the_ledger_after_a_pairing_and_after_an_acknowledgeme
     let mut phone = Phone::standard(&dir);
     launched(&mut phone);
     let a = phone.holdings().foreground;
-    assert_eq!(
-        backup_line(&phone).status,
-        "Not backed up. Pair a backup device."
-    );
+    first_item(&mut phone);
+    // The first item is minutes old, so nothing is asked of an unpaired vault yet.
+    assert!(state(&phone).bar.expect("a bar").backup.is_none());
 
     pair_in_the_ledger(&mut phone, &a, None);
     let line = backup_line(&phone);
@@ -429,7 +457,9 @@ fn a_restore_offers_the_reconnect_page_only_when_the_vault_followed_stores() {
             matches!(
                 request.effect.as_ref().and_then(|e| e.kind.as_ref()),
                 Some(wire::effect::Kind::OpenRoute(open))
-                    if open.route.as_ref().is_some_and(|r| r.screen == "follow.reconnect")
+                    if open.route.as_ref().is_some_and(|r| r.screen == "follow.reconnect"
+                        // Opened from Home after a restore, so its back control says so (#1202).
+                        && matches!(&r.args, Some(wire::route::Args::Reconnect(a)) if a.parent == "Home"))
             )
         })
     };

@@ -21,8 +21,9 @@ struct KitHeader: View {
                 Text(title)
                     .kitType(.title)
                     .foregroundStyle(Surface.ink)
+                    // NO SCALE-DOWN (#1202): a title that shrinks stops following the text size, which the
+                    // audit reads as unsupported Dynamic Type; it wraps to a second line instead.
                     .lineLimit(2)
-                    .minimumScaleFactor(0.8)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("kit-header-title")
             }
@@ -32,7 +33,7 @@ struct KitHeader: View {
                 Text(meta)
                     .kitType(.meta)
                     .foregroundStyle(Surface.meta)
-                    .lineLimit(1)
+                    .kitLineLimit(1)
                     .accessibilityIdentifier("kit-header-meta")
             }
         }
@@ -46,14 +47,16 @@ struct KitHeader: View {
     private func scope(_ slot: SubtitleSlot) -> some View {
         HStack(spacing: 4) {
             if slot.subtitle.tappable {
-                Button(action: slot.onTap) { words(slot) }
+                Button(action: slot.onTap) { words(slot).modifier(SubtitleHitArea()) }
                     .buttonStyle(.plain)
+                    .padding(.vertical, -SubtitleHitArea.growth)
                     .accessibilityLabel(slot.subtitle.spoken)
                     .accessibilityIdentifier("room-subtitle")
             } else {
                 words(slot)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(slot.subtitle.spoken)
+                    .accessibilityAddTraits(.isStaticText)
                     .accessibilityIdentifier("room-subtitle")
             }
             if slot.subtitle.clearable {
@@ -74,7 +77,7 @@ struct KitHeader: View {
             Text(slot.subtitle.label)
                 .kitType(.meta)
                 .foregroundStyle(Surface.meta)
-                .lineLimit(1)
+                .kitLineLimit(1)
             if slot.subtitle.tappable {
                 CentraidIconView(iconKey: "ChevronDown", tint: Surface.meta, size: 12)
             }
@@ -101,10 +104,24 @@ struct KitAccentKey: View {
                 .frame(width: 30, height: 30)
         }
         .buttonStyle(.borderedProminent)
+        .headerKeyTarget()
         .buttonBorderShape(.circle)
         .tint(accent.fill)
         .disabled(!enabled)
         .accessibilityLabel(label)
         .accessibilityIdentifier(identifier)
+    }
+}
+
+/// A SUBTITLE THAT OPENS SOMETHING (Money's month) IS A 44 PT TARGET AND DRAWS AS SMALL AS EVER
+/// (#1202): the label is padded inside the button, which is the button's own hit area, and the
+/// caller takes the same padding back outside so the header does not grow.
+struct SubtitleHitArea: ViewModifier {
+    static let growth: CGFloat = 14
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.vertical, Self.growth)
+            .contentShape(Rectangle())
     }
 }

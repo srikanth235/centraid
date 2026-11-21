@@ -12,8 +12,13 @@ pub const DENIED: &str = "denied";
 pub const UNAVAILABLE: &str = "unavailable";
 /// The store or file was there but could not be read.
 pub const UNREADABLE: &str = "unreadable";
+/// The file is over the size the importer reads (`PickBytes.max_bytes`).
+pub const TOO_LARGE: &str = "too_large";
 /// The store or file was there but could not be written.
 pub const UNWRITABLE: &str = "unwritable";
+/// The phone has no room left: a copy or a stage could not be written because the storage is full
+/// (`ENOSPC`, `NSFileWriteOutOfSpaceError`). The core words it ("The phone is full").
+pub const STORAGE_FULL: &str = "storage_full";
 /// The phone store was asked for but this shell does not watch it.
 pub const NOT_WATCHED: &str = "not_watched";
 /// No window or screen was up to perform the effect over.

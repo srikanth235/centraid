@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
@@ -177,16 +178,20 @@ public fun PeopleHomeScreen(
             page = state.page!!,
             onRetry = { onEvent(PeopleHomeEvent(refreshed = PeopleHomeEvent.Refreshed())) },
             retryLabel = chrome?.retry.orEmpty(),
-            emptyExtra = if (asksUnderEmpty || offersImport) {
+            // THE CARD'S ONE ACTION is Rust's to decide: Open Settings after a refused import, else Add person.
+            onEmptyAction = { onEvent(PeopleHomeEvent(empty_acted = PeopleHomeEvent.EmptyActed())) },
+            emptyExtra = if (asksUnderEmpty) {
+                { SearchAskRow(search?.ask, onOpen) }
+            } else {
+                null
+            },
+            // THE IMPORT IS DAY ONE'S ACTION, inside the card with the hint under it.
+            emptyAction = if (offersImport && !chrome?.import_contacts.isNullOrEmpty()) {
                 {
-                    if (asksUnderEmpty) SearchAskRow(search?.ask, onOpen)
-                    if (offersImport && !chrome?.import_contacts.isNullOrEmpty()) {
-                        OutlineButton(
-                            chrome?.import_contacts.orEmpty(),
-                            modifier = Modifier.padding(horizontal = KitGeometry.GUTTER),
-                            testTag = "kit-empty-import",
-                        ) { onEvent(PeopleHomeEvent(import_contacts = PeopleHomeEvent.ImportContactsTapped())) }
-                    }
+                    OutlineButton(
+                        chrome?.import_contacts.orEmpty(),
+                        testTag = "kit-empty-import",
+                    ) { onEvent(PeopleHomeEvent(import_contacts = PeopleHomeEvent.ImportContactsTapped())) }
                 }
             } else {
                 null
@@ -218,7 +223,7 @@ public fun PeopleHomeScreen(
                 SheetRow(
                     label = row.label,
                     iconKey = row.icon_key,
-                    detail = row.meta,
+                    detail = row.meta.dotSafe(),
                     testTag = "people-more-${row.key}",
                     onTap = {
                         val route = row.route
@@ -276,7 +281,7 @@ private fun RosterList(
         LazyColumn(
             state = listState,
             modifier = Modifier.testTag("people-list"),
-            contentPadding = PaddingValues(end = if (showIndex) 22.dp else 0.dp),
+            contentPadding = PaddingValues(end = if (showIndex) 30.dp else 0.dp),
         ) {
             roster.my_card?.let { card -> item(key = "my-card") { MyCardRow(card, onOpen) } }
             roster.reconnect?.let { line ->
@@ -329,8 +334,10 @@ private fun IndexRail(letters: List<PeopleIndexLetter>, modifier: Modifier, onJu
         onJump(letters[at].section_key)
     }
     Column(
+        // THE TOUCH AREA is a 48dp-wide strip along the whole index (#1202); a touch picks the nearest
+        // letter by its height, so a finger never has to land on a 13sp glyph.
         modifier
-            .padding(end = 2.dp)
+            .width(48.dp)
             .onSizeChanged { height = it.height.coerceAtLeast(1) }
             .pointerInput(letters) { detectTapGestures { offset -> pick(offset.y) } }
             .pointerInput(letters) { detectVerticalDragGestures { change, _ -> pick(change.position.y) } }
@@ -340,8 +347,9 @@ private fun IndexRail(letters: List<PeopleIndexLetter>, modifier: Modifier, onJu
         letters.forEach { letter ->
             KitText(
                 text = letter.letter,
-                rung = KitType.Badge,
-                color = accent.text.copy(alpha = if (letter.has_rows) 1f else 0.4f),
+                // READABLE (#1202): the Meta rung, an empty letter in the quiet ink, not a 40% tint.
+                rung = KitType.Meta,
+                color = if (letter.has_rows) accent.text else Surface.meta,
                 modifier = Modifier
                     .padding(horizontal = 4.dp, vertical = 1.dp)
                     .clearAndSetSemantics {
@@ -459,7 +467,7 @@ private fun LazyListScope.touch(
     items(touch.reconnect, key = { "r-" + it.party_id }) { card ->
         CentraidRow(
             title = card.name,
-            meta = listOf(card.role, card.detail).filter { it.isNotEmpty() }.joinToString(" · "),
+            meta = listOf(card.role, card.detail).filter { it.isNotEmpty() }.joinToString(" · ").dotSafe(),
             hueKey = card.avatar?.hue_key.orEmpty(),
             a11y = card.accessibility_label,
             testTag = "people-reconnect-${card.party_id}",
@@ -481,7 +489,7 @@ private fun LazyListScope.touch(
     items(touch.upcoming, key = { "u-" + it.date_id }) { row ->
         CentraidRow(
             title = row.name,
-            meta = listOf(row.label, row.day_label).filter { it.isNotEmpty() }.joinToString(" · "),
+            meta = listOf(row.label, row.day_label).filter { it.isNotEmpty() }.joinToString(" · ").dotSafe(),
             trailing = row.when_label,
             hueKey = row.avatar?.hue_key.orEmpty(),
             a11y = row.accessibility_label,
@@ -496,7 +504,7 @@ private fun LazyListScope.touch(
     items(touch.recent, key = { "t-" + it.interaction_id }) { row ->
         CentraidRow(
             title = row.name,
-            meta = listOf(row.kind_label, row.text).filter { it.isNotEmpty() }.joinToString(" · "),
+            meta = listOf(row.kind_label, row.text).filter { it.isNotEmpty() }.joinToString(" · ").dotSafe(),
             trailing = row.when_label,
             hueKey = row.avatar?.hue_key.orEmpty(),
             a11y = row.accessibility_label,
@@ -527,10 +535,11 @@ private fun PersonRow(row: PeopleRow, onOpen: (Route) -> Unit, onEvent: (PeopleH
         Box(Modifier.weight(1f)) {
             CentraidRow(
                 title = row.name,
-                meta = listOf(row.role, row.meta).filter { it.isNotEmpty() }.joinToString(" · "),
-                chips = row.chips.map { chip ->
-                    StatusChip(label = chip.label, tone = StatusChip.Tone.fromValue(chip.tone.value) ?: StatusChip.Tone.TONE_UNSPECIFIED)
-                },
+                // A REMINDER CHIP (Overdue, Birthday) reads in the meta line in the app's colour, as on iOS;
+                // a state chip (Not yet, Owes) stays a chip.
+                metaParts = listOf(row.role, row.meta),
+                metaAccented = chipsOf(row).filter { it.isReminder() }.map { it.label },
+                chips = chipsOf(row).filterNot { it.isReminder() },
                 a11y = row.accessibility_label,
                 testTag = "people-row-${row.party_id}",
                 onTap = { row.route?.let(onOpen) },
@@ -546,17 +555,32 @@ private fun PersonRow(row: PeopleRow, onOpen: (Route) -> Unit, onEvent: (PeopleH
     }
 }
 
+private fun chipsOf(row: PeopleRow): List<StatusChip> = row.chips.map { chip ->
+    StatusChip(label = chip.label, tone = StatusChip.Tone.fromValue(chip.tone.value) ?: StatusChip.Tone.TONE_UNSPECIFIED)
+}
+
+/** A neutral chip is a reminder the roster says in words, not a state badge. */
+private fun StatusChip.isReminder(): Boolean = tone == StatusChip.Tone.TONE_NEUTRAL || tone == StatusChip.Tone.TONE_UNSPECIFIED
+
 /** The avatar: initials on the person's hue. Decorative; the row speaks the name. */
 @Composable
 internal fun Avatar(avatar: PeopleAvatar?, size: Int = 32) {
+    // THE DISC GROWS WITH THE TEXT IN IT (#1202): at font scale 2.0 two initials clipped in 32dp.
+    val side = (size * LocalDensity.current.fontScale.coerceIn(1f, 2f)).dp
     Box(
         Modifier
-            .size(size.dp)
+            .size(side)
             .clip(CircleShape)
             .background(hueColor(avatar?.hue_key.orEmpty()))
             .clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
     ) {
-        Text(avatar?.initials.orEmpty(), style = centraidType("smallStrong"), color = centraidColor("onAccent"))
+        Text(avatar?.initials.orEmpty(), style = centraidType("smallStrong"), color = centraidColor("onAccent"), maxLines = 1, softWrap = false)
     }
 }
+
+/**
+ * A WRAPPED META LINE NEVER STARTS WITH "·" (#1202): the separator keeps to the part before it (a
+ * no-break space ahead of the dot), so a break falls after the dot, never before it.
+ */
+internal fun String.dotSafe(): String = replace(" · ", "\u00A0· ")

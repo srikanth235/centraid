@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Docs grid at largest text (dark)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #0E0D0C; font-family: Geist, system-ui, sans-serif; color: #F2EFEA;">
+  <div style="display: flex; align-items: flex-start; justify-content: space-between; padding: 56px 20px 4px;">
+    <h1 style="margin: 4px 0 0; flex: 1; min-width: 0; font-size: 40px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.1;">Recents</h1>
+  </div>
+  <p style="margin: 0 20px 12px; font-size: 18px; color: #A39E95; line-height: 1.25;">Changed lately · 42 documents</p>
+  <div style="display: flex; flex-wrap: wrap; gap: 8px; padding: 0 20px 14px;">
+    <span style="font-size: 18px; padding: 6px 12px; border-radius: 18px; background: #1D4144; color: #30A9C6; display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; border-radius: 5px; background: #1E72DC;"></span>Taxes</span>
+    <span style="font-size: 18px; padding: 6px 12px; border-radius: 18px; background: #2A2826; display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; border-radius: 5px; background: #CC4268;"></span>Medical</span>
+    <span style="font-size: 18px; padding: 6px 12px; border-radius: 18px; background: #2A2826; display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; border-radius: 5px; background: #1399B5;"></span>Receipts</span>
+  </div>
+  <div style="display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 0 20px;">
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+      <div style="width: 96px; height: 120px; border-radius: 8px; background: #FFFFFF; border: 1px solid #E4E0D8;"></div>
+      <span style="font-size: 22px; text-align: center; line-height: 1.2;">Passport scan</span>
+      <span style="font-size: 18px; color: #A39E95; text-align: center; line-height: 1.2;">28 Oct · 2.1 MB</span>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+      <div style="width: 96px; height: 120px; border-radius: 8px; background: linear-gradient(160deg, #D9C7A7, #8F7A57); border: 1px solid #3A3733;"></div>
+      <span style="font-size: 22px; text-align: center; line-height: 1.2;">Rent receipt Oct</span>
+      <span style="font-size: 18px; color: #A39E95; text-align: center; line-height: 1.2;">27 Oct · 640 KB</span>
+    </div>
+  </div>
+  <div style="position: absolute; left: 16px; right: 16px; bottom: 24px; display: flex; align-items: center; gap: 8px;">
+    <button aria-label="Home" style="width: 56px; height: 56px; flex-shrink: 0; border-radius: 28px; background: rgba(44,42,39,0.72); border: 1px solid #3A3733; box-shadow: 0 6px 20px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"/></svg></button>
+    <div style="flex-grow: 1; height: 56px; border-radius: 28px; background: rgba(44,42,39,0.72); border: 1px solid #3A3733; box-shadow: 0 6px 20px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: space-around; font-size: 11px;">
+      <span aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: #F2EFEA; font-weight: 600;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Recents</span>
+      <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: #A39E95;"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>More</span>
+      </div>
+    <button aria-label="Search" style="width: 56px; height: 56px; flex-shrink: 0; border-radius: 28px; background: rgba(44,42,39,0.72); border: 1px solid #3A3733; box-shadow: 0 6px 20px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F2EFEA" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

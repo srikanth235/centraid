@@ -55,9 +55,9 @@ public fun LinkSectionView(
             section.title,
             KitType.Group,
             Surface.meta,
-            Modifier.padding(start = 4.dp, top = 12.dp, bottom = 6.dp).testTag("link-section-title"),
+            Modifier.padding(top = 12.dp, bottom = 6.dp).testTag("link-section-title"),
         )
-        Column(Modifier.fillMaxWidth().kitCard()) {
+        Column(Modifier.fillMaxWidth().kitBorderedCard()) {
             section.rows.forEachIndexed { index, row ->
                 if (index > 0) LinkHairline()
                 LinkRowView(row, onEvent, onOpen)
@@ -156,6 +156,7 @@ public fun LinkPickerSheet(picker: LinkPicker, onEvent: (LinkEvent) -> Unit) {
         title = picker.title,
         onDismiss = { onEvent(LinkEvent(closed = LinkEvent.PickerClosed())) },
         expanded = true,
+        scrolls = false,
     ) {
         var typed by remember(picker.open_) { mutableStateOf(picker.query) }
         Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER)) {
@@ -178,7 +179,7 @@ public fun LinkPickerSheet(picker: LinkPicker, onEvent: (LinkEvent) -> Unit) {
                 Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 16.dp).testTag("link-picker-empty"),
             )
         } else {
-            LazyColumn(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER - 12.dp)) {
+            LazyColumn(Modifier.fillMaxWidth()) {
                 items(picker.candidates, key = { it.id }) { row ->
                     SheetRow(
                         label = row.title,

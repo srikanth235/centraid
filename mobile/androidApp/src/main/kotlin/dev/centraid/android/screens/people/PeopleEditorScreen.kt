@@ -88,6 +88,7 @@ public fun PeopleEditorScreen(
                     reload = reload,
                     style = "title",
                     testTag = "people-editor-name",
+                    imeNext = true,
                     onEdit = { onEvent(PeopleEditorEvent(name = PeopleEditorEvent.NameChanged(it))) },
                 )
                 EditableFieldRow(
@@ -96,6 +97,7 @@ public fun PeopleEditorScreen(
                     reload = reload,
                     placeholder = chrome?.role_placeholder.orEmpty(),
                     testTag = "people-editor-role",
+                    imeNext = true,
                     onEdit = { onEvent(PeopleEditorEvent(role = PeopleEditorEvent.RoleChanged(it))) },
                 )
                 EditableFieldRow(
@@ -103,6 +105,7 @@ public fun PeopleEditorScreen(
                     value = profile.nickname,
                     reload = reload,
                     testTag = "people-editor-nickname",
+                    imeNext = true,
                     onEdit = { onEvent(PeopleEditorEvent(nickname = PeopleEditorEvent.NicknameChanged(it))) },
                 )
                 EditableFieldRow(

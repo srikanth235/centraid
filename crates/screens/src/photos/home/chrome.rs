@@ -281,7 +281,12 @@ impl Roll {
         &self,
         locale: Locale,
         empty_library: bool,
+        card_asks: bool,
     ) -> Option<wire::PhotosHomeImportBanner> {
+        // THE EMPTY CARD IS THE ASK (PermissionPhotos): the banner does not say it twice.
+        if card_asks {
+            return None;
+        }
         let remedy = match self.permission {
             Permission::NotAsked => Remedy::Ask,
             Permission::Denied => Remedy::Settings,

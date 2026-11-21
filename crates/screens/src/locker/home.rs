@@ -56,6 +56,20 @@ pub fn review_count(review: &wire::LockerReview) -> u32 {
 }
 
 /// The rows "Recently used" lists, in the core's order (newest use first).
+/// Locker's first run is two steps: the owner check, then the first item.
+const FIRST_STEPS: u32 = 2;
+
+/// "Step 1 of 2".
+fn step_label(locale: Locale, step: u32) -> String {
+    fill(
+        &words::step_of(locale),
+        &[
+            ("n", &step.to_string()),
+            ("total", &FIRST_STEPS.to_string()),
+        ],
+    )
+}
+
 fn recent_of(answer: &wire::LockerItems) -> Vec<&wire::LockerItemRow> {
     answer
         .recent_ids
@@ -123,6 +137,9 @@ struct Home {
     undo: Undo,
     /// THE PLACE A LOCKED BAND WAS TAPPED ON: the unlock it started lands there.
     pending: Option<String>,
+    /// Whether Locker holds no item at all, as the last read of its count (metadata, never an item) said:
+    /// a wall over a vault with none is the first check (step 1 of 2). `None` until read.
+    holds_none: Option<bool>,
 }
 
 impl Home {
@@ -143,10 +160,32 @@ impl Home {
             status: None,
             undo: Undo::default(),
             pending: None,
+            holds_none: None,
         }
     }
 
     // --- reads ---------------------------------------------------------------
+
+    /// HOW MANY ITEMS THE VAULT HOLDS, and nothing of them: the count that says whether the wall is the
+    /// first check. The Home tile reads the same metadata while Locker is shut.
+    fn read_holds(&mut self, ctx: &Ctx) {
+        if let read::Reading::Data(items) = read::read(
+            ctx,
+            load::locker::Items {
+                limit: 1,
+                ..Default::default()
+            },
+            |a| match a {
+                Answer::LockerItems(items) => Some(items),
+                _ => None,
+            },
+        ) {
+            let total = items
+                .total
+                .unwrap_or(u32::try_from(items.items.len()).unwrap_or(u32::MAX));
+            self.holds_none = Some(total == 0);
+        }
+    }
 
     /// Read what the surface on screen shows — and nothing while locked.
     fn reload(&mut self, ctx: &Ctx) {
@@ -485,10 +524,11 @@ impl Home {
         let empty = if !shown.is_empty() {
             None
         } else if day_one {
+            // FIRST ITEM (LockerFirstItem): step 2 of 2, the one action, and what an item can be.
             Some(wire::EmptyState {
-                headline: words::day_one(locale),
-                body: words::day_one_body(locale),
+                headline: words::first_item(locale),
                 action_label: words::day_one_action(locale),
+                hint: words::first_item_hint(locale),
                 ..wire::EmptyState::default()
             })
         } else if filter == ARCHIVED {
@@ -540,6 +580,13 @@ impl Home {
                         .into_iter()
                         .map(|row| shared::row(locale, row, &parent))
                         .collect(),
+                    step: if day_one { 2 } else { 0 },
+                    steps: if day_one { FIRST_STEPS } else { 0 },
+                    step_label: if day_one {
+                        step_label(locale, 2)
+                    } else {
+                        String::new()
+                    },
                     ..wire::LockerHomeData::default()
                 },
                 said,
@@ -757,11 +804,19 @@ impl Home {
             return None;
         }
         match self.destination {
-            D::Generate => Some(C::Data(Box::new(wire::LockerHomeData {
-                status_line: words::items_status(locale),
-                generator: Some(self.generator.view(locale)),
-                ..wire::LockerHomeData::default()
-            }))),
+            D::Generate => {
+                let mut generator = self.generator.view(locale);
+                // "PUT IT ON AN ITEM" IS FOR A LOCKER THAT HOLDS ONE: with none, it would go nowhere.
+                if self.holds_none == Some(true) {
+                    generator.use_label = String::new();
+                    generator.use_route = None;
+                }
+                Some(C::Data(Box::new(wire::LockerHomeData {
+                    status_line: words::items_status(locale),
+                    generator: Some(generator),
+                    ..wire::LockerHomeData::default()
+                })))
+            }
             D::Review => self
                 .review
                 .data()
@@ -829,6 +884,33 @@ impl Home {
         }
     }
 
+    /// FIRST CHECK (LockerFirstCheck): over a vault with no item the wall is step 1 of 2, and the
+    /// locked wall says "Confirm it's you" in place of the lock's own sentence. Any other wall, and a
+    /// failure or an unavailable phone, say what they always did.
+    fn first_check(
+        &self,
+        locale: Locale,
+        wall: Option<wire::LockerWall>,
+    ) -> Option<wire::LockerWall> {
+        use wire::locker_wall::Phase as P;
+        let mut wall = wall?;
+        let phase = P::try_from(wall.phase).unwrap_or(P::Unspecified);
+        if self.holds_none != Some(true) || !matches!(phase, P::Locked | P::Unlocking | P::Failed) {
+            return Some(wall);
+        }
+        wall.step = 1;
+        wall.steps = FIRST_STEPS;
+        wall.step_label = step_label(locale, 1);
+        if phase == P::Locked {
+            wall.title = words::first_check_title(locale);
+            wall.body = words::first_check_body(locale);
+            wall.unlock_label = words::first_check_action(locale);
+            wall.notice = String::new();
+            wall.accessibility_label = wall.title.clone();
+        }
+        Some(wall)
+    }
+
     fn band(&self, locale: Locale) -> Vec<wire::LockerBandTab> {
         use wire::LockerDestination as D;
         let denied = matches!(
@@ -889,7 +971,7 @@ impl Home {
             retry: words::retry(locale),
             more_title: words::more_title(locale),
             // THE HANDOFF'S MORE ROWS, in its order, as far as the phone has
-            // them: Import, Trash and Export — then what the phone adds, the
+            // them: Import, Export and Trash (Trash last, as in every app) — then what the phone adds, the
             // facts and the Lock. There is no Access history (#1146): the
             // Locker keeps no log to show.
             more_rows: vec![
@@ -901,18 +983,18 @@ impl Home {
                     Some(routes::import(&parent)),
                 ),
                 more(
-                    "trash",
-                    kit_words::trash_entry(locale),
-                    kit_words::trash_entry_meta(locale),
-                    "Trash",
-                    Some(routes::trash()),
-                ),
-                more(
                     "export",
                     words::more_export(locale),
                     words::more_export_meta(locale),
                     "Share",
                     Some(routes::export(&parent)),
+                ),
+                more(
+                    "trash",
+                    kit_words::trash_entry(locale),
+                    kit_words::trash_entry_meta(locale),
+                    "Trash",
+                    Some(routes::trash()),
                 ),
                 more(
                     "facts",
@@ -958,9 +1040,12 @@ impl Home {
 impl Screen for Home {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
-            // OPENING LOCKER IS THE ASK: no wall before the prompt.
+            // OPENING LOCKER IS THE ASK: no wall before the prompt. The one exception is the first
+            // check (LockerFirstCheck), over a vault with no item: the wall is the screen, and its
+            // button is the ask.
             Some(E::Appeared(_)) => {
-                let step = self.wall.appeared(ctx, true);
+                self.read_holds(ctx);
+                let step = self.wall.appeared(ctx, self.holds_none != Some(true));
                 let effects = self.walled(ctx, step);
                 // A home that finds the session already open still reads.
                 if self.wall.is_open() && matches!(self.items, Page::Loading) {
@@ -975,6 +1060,7 @@ impl Screen for Home {
                     self.reload(ctx);
                     Vec::new()
                 } else {
+                    self.read_holds(ctx);
                     let step = self.wall.recheck(ctx);
                     self.walled(ctx, step)
                 }
@@ -1061,7 +1147,7 @@ impl Screen for Home {
         }
         wire::ViewState {
             kind: Some(wire::view_state::Kind::LockerHome(wire::LockerHomeState {
-                wall: self.wall.view(locale),
+                wall: self.first_check(locale, self.wall.view(locale)),
                 secure: open,
                 destination: self.destination as i32,
                 content,

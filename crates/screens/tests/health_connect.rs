@@ -6,7 +6,7 @@
 mod health_support;
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_screens::catalog::load;
+use centraid_screens::catalog::{act, load};
 use centraid_screens::health::routes;
 use centraid_screens::testing::Driver;
 use health_support::*;
@@ -506,4 +506,116 @@ fn no_apple_health_copy_says_anything_about_reading_while_centraid_is_closed() {
             .iter()
             .all(|fact| fact.label != "When Centraid is closed")
     );
+}
+
+/// The cursor the iOS reader keeps (`HealthKitReader.Cursor.encode`): a JSON map of the seven
+/// sample types to the base64 of each archived `HKQueryAnchor`. One archive measures 344 base64
+/// characters, so the whole cursor is about 2.7 KB.
+fn ios_cursor() -> String {
+    let anchor: String = "YnBsaXN0MDDUAQIDBAUGBwpYJHZlcnNpb25ZJGFyY2hpdmVy"
+        .chars()
+        .cycle()
+        .take(344)
+        .collect();
+    let types = [
+        "HKQuantityTypeIdentifierStepCount",
+        "HKQuantityTypeIdentifierActiveEnergyBurned",
+        "HKQuantityTypeIdentifierAppleExerciseTime",
+        "HKQuantityTypeIdentifierRestingHeartRate",
+        "HKQuantityTypeIdentifierBodyMass",
+        "HKCategoryTypeIdentifierSleepAnalysis",
+        "HKWorkoutTypeIdentifier",
+    ];
+    let map: serde_json::Map<String, serde_json::Value> = types
+        .iter()
+        .map(|t| ((*t).to_owned(), serde_json::json!(anchor)))
+        .collect();
+    serde_json::Value::Object(map).to_string()
+}
+
+/// What the iOS reader sends for a workout: the `HKWorkout` uuid in capitals, instants with
+/// fractional seconds, real-valued figures, the source's name for `recorded_by`.
+fn ios_workout(n: i64, today: &str, kind: &str) -> wire::HealthPhoneWorkout {
+    let day = day_back(today, n * 7);
+    wire::HealthPhoneWorkout {
+        id: format!("5B1D3C2E-0000-4000-8000-{n:012X}"),
+        kind: kind.to_owned(),
+        started_at: format!("{day}T06:15:42.317Z"),
+        ended_at: format!("{day}T06:58:09.904Z"),
+        moving_sec: Some(2_547),
+        distance_m: Some(6_412.730_4),
+        energy_kcal: Some(412.6),
+        avg_hr_bpm: Some(148),
+        elevation_gain_m: Some(37.5),
+        recorded_by: Some("Apple Watch".to_owned()),
+    }
+}
+
+fn connect_with_ios_workouts(d: &mut Driver, today: &str) {
+    let i = opened(d);
+    d.answer_effect(no_memory());
+    tap(d, i);
+    let kinds = [
+        "running",
+        "walking",
+        "cycling",
+        "traditionalStrengthTraining",
+        "swimming",
+        "hiking",
+        "yoga",
+        "other",
+        "running",
+        "handCycling",
+        "functionalStrengthTraining",
+    ];
+    let mut snap = snapshot(today);
+    snap.device_id = "9F2C6D44-7A1B-4C55-8E0A-3D5B7C1E2F10".to_owned();
+    snap.next_cursor = ios_cursor();
+    snap.workouts = kinds
+        .iter()
+        .enumerate()
+        .map(|(n, kind)| ios_workout(n as i64 + 1, today, kind))
+        .collect();
+    d.answer_effect(Outcome::Health(snap));
+}
+
+fn workouts_listed(d: &Driver) -> usize {
+    match answer(
+        d,
+        load::health::Workouts {
+            limit: 50,
+            ..Default::default()
+        },
+    ) {
+        Answer::HealthWorkouts(found) => found.workouts.len(),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn every_workout_an_ios_read_sends_lands_in_the_workouts_tab() {
+    let mut d = driver();
+    let today = today(&d);
+    connect_with_ios_workouts(&mut d, &today);
+    assert_eq!(workouts_listed(&d), 11);
+}
+
+#[test]
+fn a_workout_the_member_logged_yesterday_does_not_hide_the_stores_older_ones() {
+    let mut d = driver();
+    let today = today(&d);
+    // The member logs a run by hand: it is no read of any store, so the first read's window is
+    // still the first window (90 days), not a week behind this run.
+    arrange(
+        &d,
+        act::health::LogWorkout {
+            r#type: Some("run".to_owned()),
+            starts: format!("{}T07:00:00Z", day_back(&today, 1)),
+            ends: Some(format!("{}T07:30:00Z", day_back(&today, 1))),
+            ..Default::default()
+        },
+    );
+    assert_eq!(workouts_listed(&d), 1);
+    connect_with_ios_workouts(&mut d, &today);
+    assert_eq!(workouts_listed(&d), 12);
 }

@@ -86,6 +86,34 @@ impl Kind {
         Self::Txn,
     ];
 
+    /// THE KINDS A MEMBER CAN ADD OR IMPORT, one definition for "the member holds something": every
+    /// app's items and the containers they make (a workout, a place, an assistant thread, a notebook,
+    /// folder, album, list, project, area or calendar included). Not the concepts (a tag, a flag, a
+    /// category, a kind of workout or activity, a relation) and not a section, which only exists in
+    /// a project. `person` and `calendar` are here, but the founding person and the default Calendar the
+    /// vault is founded with never count (see [`crate::first_item`]).
+    pub const MEMBER_ITEMS: [Self; 19] = [
+        Self::Person,
+        Self::Place,
+        Self::Event,
+        Self::Task,
+        Self::Activity,
+        Self::Note,
+        Self::Document,
+        Self::Photo,
+        Self::Account,
+        Self::Txn,
+        Self::Thread,
+        Self::Notebook,
+        Self::Folder,
+        Self::Album,
+        Self::List,
+        Self::Project,
+        Self::Area,
+        Self::Calendar,
+        Self::LockerItem,
+    ];
+
     /// The kinds `concept` hosts: the `concept.kind` CHECK.
     pub const CONCEPTS: [Self; 6] = [
         Self::Tag,

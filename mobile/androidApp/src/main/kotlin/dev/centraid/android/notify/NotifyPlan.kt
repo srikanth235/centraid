@@ -32,6 +32,14 @@ internal object NotifyPlan {
     }
 
     /**
+     * WHAT THE MEMBER'S ANSWER TO THE PROMPT MEANS. A "yes" is a grant: the answer is trusted over
+     * `areNotificationsEnabled()`, which can still read false for a moment after the system sheet
+     * closes, and recording a denial then would keep the editor saying "Notifications are off" until
+     * a restart. Only a "no" is denied.
+     */
+    fun afterAsk(answer: Boolean): Gate = if (answer) Gate.GRANTED else Gate.DENIED
+
+    /**
      * PENDING AND DELIVERED ARE SEPARATE (#1188, A2). What to do to make the OS hold what Rust wants:
      *
      * - [removePending]: alarms set for ids that are no longer wanted to come, or that are already past.
@@ -46,6 +54,8 @@ internal object NotifyPlan {
      * Pure, and tested against the one fixture the iOS shell reads too (`contracts/notify/reconcile-cases.json`).
      */
     class Plan(
+        /** Timed items whose moment has just passed and whose alarm has not yet been delivered: left alone. */
+        val late: List<PendingNotification>,
         val removePending: List<String>,
         val removeShowing: List<String>,
         val schedule: List<PendingNotification>,
@@ -65,6 +75,7 @@ internal object NotifyPlan {
         retainDelivered: Boolean = false,
         explicitIds: Collection<String> = emptyList(),
         seenImmediateIds: Set<String> = emptySet(),
+        recorded: List<PendingNotification> = emptyList(),
     ): Plan {
         // THE LAST OF A REPEATED ID WINS, as a replace by id would.
         val next = LinkedHashMap<String, PendingNotification>()
@@ -72,8 +83,21 @@ internal object NotifyPlan {
         val schedule = next.values.filter { !it.immediate && it.fire_at_ms > nowMs }
         val scheduled = schedule.map { it.notification_id }.toSet()
         val keep = next.keys + live
+        // A TIMED ONE WHOSE MOMENT HAS JUST PASSED AND WHOSE ALARM HAS NOT YET SOUNDED IS NOT CANCELLED,
+        // BUT ONLY WHILE RUST STILL WANTS IT. Rust sends only what is still to come, so a resync in the
+        // minutes an inexact alarm runs late would take the alarm down and the reminder would never
+        // alert. Absence from the new set cannot tell "late" from "resolved": Rust's [live] (the items
+        // whose moment has passed and that are still open) can. A task completed, deleted or moved
+        // (its id embeds the moment) is not in it, so its alarm goes. A delivered one leaves the record
+        // at once ([NotifyStore.deliveredTimed]), so what is recorded here is undelivered.
+        val late = recorded.filter {
+            !it.immediate && it.notification_id !in scheduled && it.notification_id in live &&
+                it.fire_at_ms <= nowMs && nowMs - it.fire_at_ms < LATE_GRACE_MS
+        }.associateBy { it.notification_id }.values.toList()
+        val lateIds = late.map { it.notification_id }.toSet()
         return Plan(
-            removePending = pending.filter { it !in scheduled }.distinct().sorted(),
+            late = late,
+            removePending = pending.filter { it !in scheduled && it !in lateIds }.distinct().sorted(),
             removeShowing = showing.filter { it in explicitIds || (!retainDelivered && it !in keep) }.distinct().sorted(),
             schedule = schedule,
             post = next.values.filter { it.immediate && it.notification_id !in showing && it.notification_id !in seenImmediateIds },
@@ -84,12 +108,16 @@ internal object NotifyPlan {
     fun rememberedImmediates(current: Set<String>, previous: Set<String>, showing: Set<String>): Set<String> =
         (previous + showing).intersect(current)
 
-    /** What the record keeps after [reconcile]: future alarms and the immediate offers. */
-    fun kept(wanted: List<PendingNotification>, nowMs: Long): List<PendingNotification> {
+    /** What the record keeps after [reconcile]: future alarms, the immediate offers and the [late] ones. */
+    fun kept(wanted: List<PendingNotification>, nowMs: Long, late: List<PendingNotification> = emptyList()): List<PendingNotification> {
         val next = LinkedHashMap<String, PendingNotification>()
         wanted.forEach { next[it.notification_id] = it }
-        return next.values.filter { it.immediate || it.fire_at_ms > nowMs }
+        val still = next.values.filter { it.immediate || it.fire_at_ms > nowMs }
+        return still + late.filter { it.notification_id !in next }
     }
+
+    /** How long after its moment an undelivered alarm is still owed: an inexact alarm runs minutes late. */
+    const val LATE_GRACE_MS: Long = 10 * 60 * 1000L
 
     /** Exact while the platform lets this app (always below API 31); otherwise the inexact alarm. */
     fun exact(sdk: Int, canScheduleExact: Boolean): Boolean = sdk < 31 || canScheduleExact

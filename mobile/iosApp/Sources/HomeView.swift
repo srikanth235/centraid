@@ -184,11 +184,9 @@ private struct HomeRoot: View {
                 skeleton: { Springboard(data: Centraid_Core_V1_HomeData(), shell: shell, header: scrolling) }
             ) {
                 if case let .data(data)? = home.content {
-                    if data.springboard == .firstRun {
-                        DayOne(data: data, shell: shell, header: scrolling)
-                    } else {
-                        Springboard(data: data, shell: shell, header: scrolling)
-                    }
+                    // ONE LAYOUT AT EVERY STAGE (2026-11-17): day zero is the same grid with the welcome
+                    // card above it, which Rust words and sends only until the first add or import.
+                    Springboard(data: data, shell: shell, header: scrolling)
                 }
             }
         }
@@ -277,45 +275,50 @@ private struct Springboard: View {
     var body: some View {
         ScrollView {
             header
-            WidgetGrid(data: data, shell: shell)
-                .padding(.horizontal, pageMargin)
-                .padding(.top, 10)
-                .padding(.bottom, 24)
+            VStack(alignment: .leading, spacing: 12) {
+                // THE WELCOME CARD: day zero only, one sentence, gone after the first add or import.
+                if !data.welcome.isEmpty {
+                    WelcomeCard(welcome: data.welcome)
+                }
+                WidgetGrid(data: data, shell: shell)
+            }
+            .padding(.horizontal, pageMargin)
+            .padding(.top, 10)
+            .padding(.bottom, 24)
+        }
+        // THE CLOCK STAYS READABLE (#1202): the lockup scrolls with the page at the largest text, so
+        // the tiles passed under the status bar with the time drawn over their words. A strip of the
+        // page's ground the height of the status bar covers them (only when the lockup scrolls).
+        .overlay(alignment: .top) {
+            if header != nil {
+                GeometryReader { proxy in
+                    Surface.page
+                        .frame(height: proxy.safeAreaInsets.top)
+                        .offset(y: -proxy.safeAreaInsets.top)
+                }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
         }
     }
 }
 
-/// Day one: the vault holds nothing anywhere.
-///
-/// Reached ONLY when every readable tile has settled and is empty. A
-/// still-loading vault, or an unreachable replica, gets the ordinary grid —
-/// this page is a claim about the vault, and an unanswered read has not
-/// earned it.
-private struct DayOne: View {
-    let data: Centraid_Core_V1_HomeData
-    @ObservedObject var shell: ShellModel
-    var header: AnyView?
+/// THE WELCOME CARD (`FirstHome`): one sentence above the grid, no button.
+private struct WelcomeCard: View {
+    let welcome: String
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        ScrollView {
-            header
-            VStack(alignment: .leading, spacing: 12) {
-                Text(data.dayOneTitle)
-                    .centraidType("title")
-                    .foregroundStyle(Theme.color("text", scheme))
-                Text(data.dayOneBody)
-                .centraidType("small")
-                .foregroundStyle(Theme.color("textSoft", scheme))
-                WidgetGrid(data: data, shell: shell)
-                    .padding(.top, 12)
-            }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .padding(pageMargin)
-        }
-        .accessibilityIdentifier("home-day-one")
+        Text(welcome)
+            .centraidType("small")
+            .foregroundStyle(Theme.color("textSoft", scheme))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(Surface.card, in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme)))
+            .accessibilityIdentifier("home-welcome")
     }
 }
+
 /// THE VAULT SWITCHER, and the only control that changes what the whole app is
 /// reading. Every word, the roster's order and the questions it asks are Rust's
 /// (`HomeVaultSheet`); the press is an event, and the shelf's act is the shell's.
@@ -329,7 +332,7 @@ private struct VaultSheet: View {
     var body: some View {
         // A SHEETROOM: the room owns the grabber, the title and the gutter,
         // and the roster scrolls inside it.
-        SheetRoom(title: sheet.title, titleIdentifier: "home-vault-sheet") {
+        SheetRoom(title: sheet.title, titleIdentifier: "home-vault-sheet", scrollsItself: true) {
             roster
         }
         .sheet(item: Binding(get: { forgetAsk }, set: { if $0 == nil { store.sendHome(.askDismissed(.init())) } })) { ask in
@@ -375,7 +378,7 @@ private struct VaultSheet: View {
                         Text(vault.initial)
                             .centraidType("smallStrong")
                             .foregroundStyle(Theme.color("text", scheme))
-                            .frame(width: 30, height: 30)
+                            .kitScaledSquare(30, relativeTo: .footnote)
                             .background(
                                 Theme.color("bgSunken", scheme),
                                 in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
@@ -391,7 +394,7 @@ private struct VaultSheet: View {
                                 Text(vault.stateLine)
                                     .centraidType("mono")
                                     .foregroundStyle(Theme.color("textFaint", scheme))
-                                    .lineLimit(1)
+                                    .kitLineLimit(1, wide: 3)
                             }
                         }
                         Spacer(minLength: 0)

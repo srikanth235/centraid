@@ -1053,7 +1053,10 @@ fn a_hidden_calendar_re_folds_and_says_so_in_the_sheet_and_hides_no_task() {
     assert!(choice.hidden);
     assert_eq!(choice.state_label, "Hidden");
     // EVERYTHING HIDDEN IS NOT DAY ONE.
-    assert_ne!(r.empty_headline(), Some("Nothing in your calendar yet."));
+    assert_ne!(
+        r.empty_headline(),
+        Some("Your events and invitations, day by day.")
+    );
     // Toggled back.
     r.send(H::CalendarToggled(
         wire::agenda_home_event::CalendarToggled {
@@ -1113,12 +1116,12 @@ fn more_is_rows_on_the_state_and_a_rows_key_does_the_rest() {
             .collect::<Vec<_>>(),
         ["What Calendar may read"]
     );
-    // THE HEADINGS RIDE ON THE FIRST ROW OF EACH GROUP, and only there (R-1128-6).
+    // THE SHEET'S TITLE IS "Calendars", so no row repeats it as a heading (R-1128-6).
     assert_eq!(
         rows.iter()
             .map(|row| row.section.as_str())
             .collect::<Vec<_>>(),
-        ["Calendars", "", ""]
+        ["", "", ""]
     );
     assert_eq!(
         rows.iter().map(|row| row.toggle).collect::<Vec<_>>(),
@@ -1494,6 +1497,94 @@ fn to_dos_search_draws_the_containers_too() {
 // Empties, failure, change
 // ---------------------------------------------------------------------------
 
+/// THE FIRST-OPEN CARD OFFERS ITS IMPORT WHILE THE PHONE CAN DO IT, and says the refusal with Open
+/// Settings once the phone refused the calendar (RemindersRefused): no import that fails again, and
+/// no "Or tap +" hint under the button.
+#[test]
+fn a_phone_that_refused_its_calendar_gets_open_settings_on_the_card_and_no_hint() {
+    // THE FIRST REFUSAL, no second tap: the shell names a no as `denied` the moment the member says it.
+    let (empty, import_label) = first_open_after_failed_read(wire::EffectFailed {
+        denied: true,
+        ..Default::default()
+    });
+    // CANNOT IMPORT: Open Settings is the card's action, with no hint and no import.
+    assert_eq!(empty.import_source, wire::ImportSource::Unspecified as i32);
+    assert_eq!(empty.headline, "Calendar access is off.");
+    assert_eq!(
+        empty.body,
+        "Turn it on in Settings to import your calendar."
+    );
+    assert_eq!(empty.action_label, "Open Settings");
+    assert_eq!(empty.hint, "");
+    assert_eq!(import_label, "");
+}
+
+/// A PHONE THAT WAS NEVER ASKED IS NOT A PHONE THAT REFUSED: a read that fails with no grant's state
+/// keeps the card's import and hint (which is why a shell must say `denied` for a no it just heard).
+#[test]
+fn a_calendar_read_that_names_no_refusal_keeps_the_import_and_the_hint() {
+    let (empty, import_label) = first_open_after_failed_read(wire::EffectFailed {
+        reason: "unavailable".to_owned(),
+        ..Default::default()
+    });
+    assert_eq!(empty.import_source, wire::ImportSource::Calendar as i32);
+    assert_eq!(empty.action_label, "");
+    assert_eq!(empty.hint, "Or tap + to write one.");
+    assert_eq!(import_label, "Import from Calendar");
+}
+
+/// The first-open card, and its import label, after the phone answers the calendar read with `failed`.
+fn first_open_after_failed_read(failed: wire::EffectFailed) -> (wire::EmptyState, String) {
+    let mut r = rig(Dest::Schedule);
+    r.clear();
+    for _ in 0..12 {
+        if r.data_or_default().days.is_empty() {
+            break;
+        }
+        r.step(30);
+    }
+    // CAN IMPORT: the import is the action and the hint names the plus.
+    let empty = r.empty().clone();
+    assert_eq!(empty.import_source, wire::ImportSource::Calendar as i32);
+    assert_eq!(empty.action_label, "");
+    assert_eq!(empty.hint, "Or tap + to write one.");
+    // The member taps Import and the phone says no.
+    // THE HOME HAS ASKED WHETHER THIS DEVICE FOLLOWS: it does not.
+    while let Some(at) = r.driver.effects.iter().position(|request| {
+        matches!(
+            request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::Keychain(_))
+        )
+    }) {
+        let request = r.driver.effects.remove(at);
+        r.driver.send(
+            request.instance,
+            wire::screen_event::Kind::EffectResult(wire::EffectResult {
+                effect_id: request.effect_id,
+                outcome: Some(wire::effect_result::Outcome::Keychain(
+                    wire::KeychainValue {
+                        found: false,
+                        value: Vec::new(),
+                    },
+                )),
+            }),
+        );
+    }
+    r.driver.effects.clear();
+    r.send(H::ImportRequested(
+        wire::agenda_home_event::ImportRequested {},
+    ));
+    r.driver.effects.retain(|request| {
+        matches!(
+            request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::CalendarRead(_))
+        )
+    });
+    r.driver
+        .answer_effect(wire::effect_result::Outcome::Failed(failed));
+    (r.empty().clone(), r.state().import_label.clone())
+}
+
 #[test]
 fn the_empties_are_four_different_screens() {
     // DAY ONE: Schedule's whole window empty, nothing hidden, no search. A window
@@ -1511,11 +1602,12 @@ fn the_empties_are_four_different_screens() {
         "a window with no birthday exists within a year"
     );
     let empty = r.empty();
-    assert_eq!(empty.headline, "Nothing in your calendar yet.");
-    assert_eq!(empty.body, "The first event is one field and a time.");
-    assert_eq!(empty.action_label, "New event");
+    assert_eq!(empty.headline, "Your events and invitations, day by day.");
+    assert_eq!(empty.body, "");
+    assert_eq!(empty.action_label, "");
+    assert_eq!(empty.hint, "Or tap + to write one.");
     assert_eq!(empty.import_source, wire::ImportSource::Calendar as i32);
-    assert_eq!(r.state().import_label, "Import calendar");
+    assert_eq!(r.state().import_label, "Import from Calendar");
     // The action pushes the add sheet, on the anchor day.
     let add = r.state().new_event.clone().unwrap();
     assert_eq!(
@@ -1548,9 +1640,25 @@ fn the_empties_are_four_different_screens() {
     );
     assert_eq!(r.state().import_label, "");
 
+    // FIRST OPEN IS THE CARD IN DAY TOO (FirstOpenCalendar): a calendar that holds nothing at all
+    // draws no grid.
     let mut d = rig(Dest::Day);
     d.clear_day();
-    // Day draws its hour grid whatever the day holds: a drawn grid is the place, not an empty page.
+    assert_eq!(
+        d.empty().headline,
+        "Your events and invitations, day by day."
+    );
+    assert_eq!(d.empty().hint, "Or tap + to write one.");
+    assert!(d.state().content.is_none());
+    // A calendar that holds an event keeps its grid on a day with nothing, wherever the event is.
+    let anchor = d.state().anchor_day.clone();
+    d.event(
+        "zq-far",
+        "Zq Far",
+        &format!("{}T09:00", civil::plus_days(&anchor, 40).unwrap()),
+        None,
+    );
+    d.settle();
     d.not_empty();
     assert!(d.data().time_grid.is_some());
 }

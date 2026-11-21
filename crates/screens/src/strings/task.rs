@@ -31,8 +31,6 @@ catalog! {
     plain days_away = ("days away", "days away");
     plain day_one = ("Add the first thing you must not forget.", "Add the first thing you must not forget.");
     plain delete = ("Move to trash", "Move to trash");
-    plain delete_body = ("It goes to trash with its subtasks, and Restore brings it back for 30 days.", "It goes to trash with its subtasks, and Restore brings it back for 30 days.");
-    plain delete_title = ("Move this task to trash?", "Move this task to trash?");
     plain export_all = ("All lists", "All lists");
     plain export_lede = (
         "Reminders as to-dos in one .ics file, for other task apps.",
@@ -90,7 +88,7 @@ catalog! {
     plain more_anytime_meta = ("no date, still yours", "no date, still yours");
     plain more_logbook_meta = ("done and won't do", "done and won't do");
     plain more_reminders_meta = ("open work with a reminder", "open work with a reminder");
-    plain more_title = ("More in Reminders", "More in Reminders");
+    plain more_title = ("More", "More");
     plain new_project_title = ("New project", "New project");
     plain next_is = ("next is", "next is");
     plain next_one_is = ("the next one is", "the next one is");
@@ -117,9 +115,12 @@ catalog! {
     plain reads_fact_writes_value = ("tasks, projects and sections you make", "tasks, projects and sections you make");
     plain reads_title = ("What Reminders may read", "What Reminders may read");
     plain read_incomplete = ("Part of this list didn't load.", "Part of this list didn't load.");
-    plain release = ("Release", "Release");
+    plain refused_title = ("Reminders access is off.", "Reminders access is off.");
+    plain refused_body = ("Turn it on in Settings to import your reminders.", "Turn it on in Settings to import your reminders.");
+    plain refused_open_settings = ("Open Settings", "Open Settings");
+    plain release = ("Won't do", "Won't do");
     plain release_body = ("It goes to the Logbook as won't do, with its history. Nothing is erased.", "It goes to the Logbook as won't do, with its history. Nothing is erased.");
-    plain release_title = ("Release this task?", "Release this task?");
+    plain release_title = ("Mark this task won't do?", "Mark this task won't do?");
     plain reminder = ("reminder", "reminder");
     plain reminders_empty = ("No open task has a reminder.", "No open task has a reminder.");
     plain reminder_needs_due = ("A reminder needs a due date.", "A reminder needs a due date.");
@@ -139,6 +140,7 @@ catalog! {
     plain repeats_yearly = ("Yearly", "Yearly");
     plain retry = ("Try again", "Try again");
     plain search_label = ("Search tasks", "Search tasks");
+    plain search_no_match_body = ("Try fewer words, or part of a title.", "Try fewer words, or part of a title.");
     plain search_placeholder = ("Search tasks", "Search tasks");
     plain section_added = ("Section added", "Section added");
     plain show_more = ("Show more", "Show more");
@@ -153,7 +155,7 @@ catalog! {
     plain task_gone = ("This task is gone.", "This task is gone.");
     plain task_many = ("tasks", "tasks");
     plain task_one = ("task", "task");
-    plain task_released = ("Task released", "Task released");
+    plain task_released = ("Marked won't do", "Marked won't do");
     plain task_reopened = ("Task reopened", "Task reopened");
     plain time_none = ("No time", "No time");
     plain title_placeholder = ("Task name", "Task name");

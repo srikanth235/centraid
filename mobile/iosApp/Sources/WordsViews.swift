@@ -159,7 +159,8 @@ struct WordsEntryView: View {
                     send(Self.event { $0.secondary = .init() })
                 },
                 identifier: "words-enter",
-                dismissesKeyboard: true
+                dismissesKeyboard: true,
+                focusedID: focus.map { "words-cell-\($0)" }
             ) {
                 WordsHead(title: state.title, lead: state.body)
 
@@ -196,6 +197,7 @@ struct WordsEntryView: View {
                                     focus = cell.position < 24 ? cell.position + 1 : nil
                                 }
                             )
+                            .id("words-cell-\(cell.position)")
                         }
                     }
                     .disabled(working)
@@ -229,17 +231,23 @@ struct WordsEntryView: View {
                             .kitType(.meta)
                             .foregroundStyle(Surface.meta)
                             .fixedSize(horizontal: false, vertical: true)
-                        HStack(spacing: 8) {
-                            MachineTextField(placeholder: state.endpointPlaceholder, value: state.endpoint) { text in
+                        // THE SCAN KEY STANDS AT THE FIELD'S TOP (#1202, S13): centred on a field that grows to
+                        // five lines it sat at the field's middle, and with the keyboard up the field is cut at
+                        // the foot of the scroller, so the key was cut with it.
+                        HStack(alignment: .top, spacing: 8) {
+                            // THE WHOLE CODE: it has no word breaks, so it wraps anywhere in a field that
+                            // grows (#1202, S2-6), as pairing's does.
+                            MachineTextEditor(value: state.endpoint, minHeight: 56, maxHeight: 140, placeholder: state.endpointPlaceholder) { text in
                                 send(Self.event { $0.endpoint = .with { $0.text = text } })
                             }
-                            .keyboardType(.URL)
+                            .keyboardType(.asciiCapable)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
-                            .centraidType(held ? "mono" : "body")
+                            .centraidType("mono")
                             .wordsFieldBox()
                             .accessibilityLabel(state.endpointLabel)
                             .accessibilityIdentifier("words-endpoint")
+                            .wordsFocusTarget()
 
                             // THE CODE IS SCANNED AS WELL AS PASTED, as pairing's is. Beside the
                             // field while the words are typed; a held restore has the room for
@@ -599,51 +607,126 @@ struct WordsFrame<Content: View, Footer: View>: View {
     let onClose: () -> Void
     let identifier: String
     var dismissesKeyboard = false
+    /// THE FIELD THE MEMBER IS IN, when the page knows it (a restore's grid cell); the page scrolls
+    /// it into view. A page with one text field marks it `wordsFocusTarget()` instead and the
+    /// keyboard's arrival brings that one into view.
+    var focusedID: String?
     @ViewBuilder let content: () -> Content
     @ViewBuilder let footer: () -> Footer
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// THE ANSWERS SCROLL WITH THE PAGE AT ACCESSIBILITY SIZES (#1202): pinned, three full-width
+    /// keys took most of the screen and left a sliver for the words, so the sentence was cut mid-line
+    /// and "Pair" and the code field could not be reached. Under the content they are always
+    /// reachable by scrolling.
+    private var footerScrolls: Bool { dynamicTypeSize.isAccessibilitySize }
+
+    /// THE KEYBOARD NEVER COVERS A FOCUSED FIELD (the kit's rule, #1202): the footer sits above the
+    /// keys and the scroll above the footer, and the field the member is in is scrolled to the
+    /// middle of what is left, so neither the keys nor the footer's buttons are over it.
+    private func reveal(_ proxy: ScrollViewProxy) {
+        let id: AnyHashable = focusedID.map { AnyHashable($0) } ?? AnyHashable(WordsFocusTarget.id)
+        // After the keyboard's own layout pass has shrunk the scroll view.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(id, anchor: .center) }
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            if !closeLabel.isEmpty {
-                HStack {
-                    Button(action: onClose) {
-                        CentraidIconView(iconKey: "X", tint: Surface.ink, size: 16)
-                            .frame(width: 44, height: 44)
-                            .background(Surface.card, in: Circle())
-                            .overlay(Circle().strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline))
-                            .contentShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(closeLabel)
-                    .accessibilityIdentifier(closeIdentifier)
-                    Spacer()
-                }
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-                .padding(.top, 8)
-            }
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     content()
+                    if footerScrolls {
+                        VStack(spacing: 12) {
+                            footer()
+                        }
+                        .padding(.top, 8)
+                    }
                 }
                 .padding(.horizontal, CentraidGeometry.pageMargin)
                 .padding(.top, 12)
                 .padding(.bottom, 16)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .scrollDismissesKeyboard(dismissesKeyboard ? .interactively : .automatic)
-            VStack(spacing: 12) {
-                footer()
+            // THE ROUND X STANDS OVER THE SCROLL, ON THE PAGE'S OWN GROUND (#1202, S2-6): the heading
+            // scrolls away behind it and stops at its edge, never sliding under the button.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if !closeLabel.isEmpty {
+                    HStack {
+                        Button(action: onClose) {
+                            CentraidIconView(iconKey: "X", tint: Surface.ink, size: 16)
+                                .frame(width: 44, height: 44)
+                                .background(Surface.card, in: Circle())
+                                .overlay(Circle().strokeBorder(Surface.border, lineWidth: CentraidGeometry.hairline))
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        // THE ID IS ON THE TAPPABLE ELEMENT ITSELF (#1202): one element that is the
+                        // button, so a tap by its id lands, not only a tap by its words.
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityLabel(closeLabel)
+                        .accessibilityIdentifier(closeIdentifier)
+                        Spacer()
+                    }
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
+                    .background(Surface.page)
+                }
             }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.vertical, 12)
+            .hardTopScrollEdge()
+            .scrollDismissesKeyboard(dismissesKeyboard ? .interactively : .automatic)
+            // A FIELD TAKEN WHILE THE KEYBOARD IS ALREADY UP sends no keyboard notification, so a
+            // field asks for itself to be shown when it takes focus.
+            .environment(\.wordsReveal, { reveal(proxy) })
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in reveal(proxy) }
+            .onChange(of: focusedID) { _, id in if id != nil { reveal(proxy) } }
+            }
+            if !footerScrolls {
+                VStack(spacing: 12) {
+                    footer()
+                }
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.vertical, 12)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Surface.page.ignoresSafeArea())
         // THE ROUND X IS THE WAY OUT: with it drawn the stack's own back chevron would be a
         // second one (the board has a single control).
         .toolbar(closeLabel.isEmpty ? .automatic : .hidden, for: .navigationBar)
+        // A CONTAINER, so its id names the page and does not spread over the buttons inside it
+        // (the X's `…-secondary` and the footer's ids are their own).
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier(identifier)
     }
+}
+
+private struct WordsRevealKey: EnvironmentKey {
+    static let defaultValue: @MainActor () -> Void = {}
+}
+
+extension EnvironmentValues {
+    /// Asks the words frame around a field to scroll the focused field clear of the keyboard.
+    var wordsReveal: @MainActor () -> Void {
+        get { self[WordsRevealKey.self] }
+        set { self[WordsRevealKey.self] = newValue }
+    }
+}
+
+/// The id a page's one text field takes so the frame can scroll it clear of the keyboard.
+enum WordsFocusTarget {
+    static let id = "words-focus-target"
+}
+
+extension View {
+    /// Mark this field as the one the frame scrolls into view when the keyboard comes up.
+    func wordsFocusTarget() -> some View { id(WordsFocusTarget.id) }
 }
 
 struct WordsHead: View {
@@ -664,11 +747,9 @@ struct WordsHead: View {
                     .accessibilityIdentifier("words-title")
             }
             if !lead.isEmpty {
-                Text(lead)
+                KitQuotedSentence(text: lead, centered: centered)
                     .kitType(.row)
                     .foregroundStyle(Surface.body)
-                    .multilineTextAlignment(centered ? .center : .leading)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -1063,22 +1144,34 @@ final class WordTextField: UITextField {
 /// while the screen is being recorded or mirrored, or the scene is not active.
 struct WordsShield<Content: View>: View {
     let secure: Bool
+    /// A scrolling detail page lets its scroll view run to the screen's foot: the capture-proof
+    /// host is laid out inside the safe area, so the scroll content stopped at a hard edge above
+    /// the home indicator (#1202). The inset it gives up is handed to the page as `shieldBottomInset`.
+    var bleedsBottom = false
     @ViewBuilder let content: () -> Content
 
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var scheme
     @State private var captured = WordsShieldCapture.now
+    @State private var foot: CGFloat = 0
 
     var body: some View {
         Group {
-            if secure {
+            if secure, bleedsBottom {
+                CaptureProof(content: content().environment(\.shieldBottomInset, foot))
+                    .ignoresSafeArea(.container, edges: .bottom)
+            } else if secure {
                 CaptureProof(content: content())
             } else {
                 content()
             }
         }
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { foot = $0 }
+        // THE PAGE FILLS THE SCREEN: the capture-proof host is laid out inside the safe area, so
+        // its own background leaves a band at the top and the foot.
+        .background(Surface.page.ignoresSafeArea())
         .overlay {
-            if secure, captured || scenePhase != .active {
+            if Self.covers(secure: secure, captured: captured, active: scenePhase == .active) {
                 Theme.color("bg", scheme)
                     .ignoresSafeArea()
                     .accessibilityHidden(true)
@@ -1088,7 +1181,41 @@ struct WordsShield<Content: View>: View {
         .onReceive(NotificationCenter.default.publisher(for: UIScreen.capturedDidChangeNotification)) { note in
             captured = (note.object as? UIScreen)?.isCaptured ?? WordsShieldCapture.now
         }
+        // THE CAPTURE STATE IS READ AGAIN WHENEVER THE SCENE MOVES (#1202): the cover leaves a blank
+        // page under a live header and band (Locker read "All 6" over nothing), so a capture
+        // notification that was missed while the owner check was up must not keep it there.
+        .onChange(of: scenePhase) { _, _ in captured = WordsShieldCapture.now }
     }
+
+    /// WHEN THE CONTENT IS COVERED: only while it is secure, and the screen is being captured or the
+    /// scene is not the active one. A page that is not secure is never covered.
+    static func covers(secure: Bool, captured: Bool, active: Bool) -> Bool {
+        secure && (captured || !active)
+    }
+}
+
+private struct ShieldBottomInsetKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+extension EnvironmentValues {
+    /// The bottom safe-area inset a bleeding `WordsShield` gave up; a scroll view inside adds it to
+    /// its own foot padding so the last row clears the home indicator.
+    var shieldBottomInset: CGFloat {
+        get { self[ShieldBottomInsetKey.self] }
+        set { self[ShieldBottomInsetKey.self] = newValue }
+    }
+}
+
+private struct ShieldFoot: ViewModifier {
+    @Environment(\.shieldBottomInset) private var inset
+
+    func body(content: Content) -> some View { content.padding(.bottom, inset) }
+}
+
+extension View {
+    /// Pads the foot of a scroll page by the inset a bleeding `WordsShield` gave up.
+    func shieldFoot() -> some View { modifier(ShieldFoot()) }
 }
 
 enum WordsShieldCapture {

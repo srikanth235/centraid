@@ -370,7 +370,7 @@ fn the_star_is_a_write_and_the_label_follows_the_vault() {
 }
 
 #[test]
-fn move_to_trash_and_remove_a_channel_are_asked_first_and_the_trash_commit_pops_the_screen() {
+fn remove_a_channel_is_asked_first_and_move_to_trash_asks_nothing_and_pops_the_screen() {
     let mut d = clean();
     let (i, id) = opened(&mut d);
     let email = person_data(d.view(i))
@@ -420,12 +420,9 @@ fn move_to_trash_and_remove_a_channel_are_asked_first_and_the_trash_commit_pops_
     assert_eq!(person_data(d.view(i)).channels.len(), 1);
 
     send_person(&mut d, i, P::TrashTapped(ev::TrashTapped {}));
-    let confirm = person_state(d.view(i)).confirm.clone().unwrap();
-    assert_eq!(confirm.title, "Move Dana Reyes to trash?");
-    assert_eq!(confirm.body, "Restorable for 30 days.");
-    assert!(!person_state(d.view(i)).done);
-    send_person(&mut d, i, P::Confirmed(ev::Confirmed {}));
+    // MOVE TO TRASH ASKS NOTHING: the write is made at once and the status line carries the Undo.
     let state = person_state(d.view(i));
+    assert!(state.confirm.is_none(), "no confirm is asked");
     assert!(state.done, "the shell pops");
     assert_eq!(
         state.status.as_ref().unwrap().sentence,
@@ -785,4 +782,40 @@ fn my_card_is_the_owner_s_own_sheet_and_offers_no_star_merge_trash_or_touch() {
         }),
     );
     assert!(person_state(d.view(i)).sheet.is_some());
+}
+
+#[test]
+fn trashing_a_person_hands_its_line_and_undo_to_the_people_page_beneath() {
+    let mut d = clean();
+    let id = dana(&d);
+    let home = begin(&mut d);
+    let i = open_person(&mut d, &id, "Dana Reyes");
+    send_person(&mut d, i, P::TrashTapped(ev::TrashTapped {}));
+    // THE PERSON'S OWN PAGE says it with its Undo for the frames before the shell pops it ...
+    let own = person_state(d.view(i)).status.clone().expect("a line");
+    assert_eq!(
+        (own.sentence.as_str(), own.action_label.as_str()),
+        ("Dana Reyes moved to trash", "Undo")
+    );
+    assert!(person_state(d.view(i)).done);
+    // ... and the page beneath draws the same line once it is popped.
+    d.pop(centraid_screens::people::TAB, i);
+    let beneath = home_state(d.view(home))
+        .status
+        .clone()
+        .expect("People says it was trashed");
+    assert_eq!(
+        (beneath.sentence.as_str(), beneath.action_label.as_str()),
+        ("Dana Reyes moved to trash", "Undo")
+    );
+    // The Undo brings her back.
+    d.send(
+        home,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    assert!(
+        names(roster_data(d.view(home)))
+            .iter()
+            .any(|name| name == "Dana Reyes")
+    );
 }

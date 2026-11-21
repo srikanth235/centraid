@@ -27,29 +27,92 @@ struct AgendaSmartListGrid: View {
     let lists: [Centraid_Core_V1_AgendaSmartList]
     let open: (Centraid_Core_V1_Route) -> Void
 
-    private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// ONE COLUMN FROM THE REFLOW SIZE UP (#1202): two tiles across left "Scheduled" a word too
+    /// wide for its tile, cut to "Schedul..." at the largest text.
+    private var across: Int { dynamicTypeSize >= Theme.reflowSize ? 1 : 2 }
+
+    /// The tiles, `across` to a row. NOT A LAZY GRID (#1202): this view is a row of the page's
+    /// `List`, a lazy grid sizes itself from the part of the scroll view that is on screen, and a
+    /// row is sized from its content, so with the quick-add bar's keyboard up the two chased each
+    /// other through a text-size change until UIKit trapped. Five tiles need no laziness.
+    private var tileRows: [[Centraid_Core_V1_AgendaSmartList]] {
+        stride(from: 0, to: tiles.count, by: across).map { Array(tiles[$0..<min($0 + across, tiles.count)]) }
+    }
+
+    /// THE BOARD'S SHAPE (`AndroidReminders`): the counted lists are tiles in two columns, and
+    /// Completed (the Logbook, which shows no count) is one bar across both, so its word is on one
+    /// line and never breaks mid-word at a large text size.
+    private var tiles: [Centraid_Core_V1_AgendaSmartList] { lists.filter { $0.key != "completed" } }
+    private var bars: [Centraid_Core_V1_AgendaSmartList] { lists.filter { $0.key == "completed" } }
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 10) {
-            ForEach(lists, id: \.key) { list in
+        VStack(spacing: 10) {
+            ForEach(Array(tileRows.enumerated()), id: \.offset) { _, rowTiles in
+                HStack(spacing: 10) {
+                    ForEach(rowTiles, id: \.key) { list in
+                        Button { open(list.route) } label: {
+                            VStack(alignment: .leading) {
+                                HStack(alignment: .top) {
+                                    CentraidIconView(iconKey: list.iconKey, tint: .white, size: 26)
+                                    Spacer(minLength: 0)
+                                    if !list.count.isEmpty {
+                                        Text(list.count)
+                                            .kitScaledFont(28, weight: .bold)
+                                            .foregroundStyle(.white)
+                                    }
+                                }
+                                Spacer(minLength: 0)
+                                Text(list.label)
+                                    .kitScaledFont(17, weight: .semibold)
+                                    .foregroundStyle(.white)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
+                            }
+                            .padding(14)
+                            .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
+                            .background(AgendaPalette.token(list.colorKey))
+                            .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(list.accessibilityLabel)
+                        .accessibilityIdentifier("agenda-smart-\(list.key)")
+                    }
+                    // AN ODD TILE KEEPS ITS COLUMN'S WIDTH, as it did in the grid.
+                    if rowTiles.count < across { Color.clear.frame(maxWidth: .infinity, maxHeight: 0) }
+                }
+            }
+            ForEach(bars, id: \.key) { list in
                 Button { open(list.route) } label: {
-                    VStack(alignment: .leading) {
-                        HStack(alignment: .top) {
-                            CentraidIconView(iconKey: list.iconKey, tint: .white, size: 26)
-                            Spacer(minLength: 0)
+                    // THE WORD UNDER THE NAME AT ACCESSIBILITY SIZES (#1202): beside "Logbook" the
+                    // Logbook's "Completed" was left a column too narrow and broke as "Comp/leted".
+                    let stacked = dynamicTypeSize.isAccessibilitySize
+                    let layout = stacked
+                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                        : AnyLayout(HStackLayout(spacing: 12))
+                    HStack(spacing: 12) {
+                        CentraidIconView(iconKey: list.iconKey, tint: .white, size: 24)
+                        layout {
+                            Text(list.label)
+                                .kitScaledFont(17, weight: .semibold)
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                            if !stacked { Spacer(minLength: 0) }
                             if !list.count.isEmpty {
                                 Text(list.count)
-                                    .kitScaledFont(28, weight: .bold)
+                                    .kitScaledFont(17, weight: .semibold)
                                     .foregroundStyle(.white)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
                             }
                         }
-                        Spacer(minLength: 0)
-                        Text(list.label)
-                            .kitScaledFont(17, weight: .semibold)
-                            .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .padding(14)
-                    .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
+                    .padding(.vertical, stacked ? 12 : 0)
+                    .padding(.horizontal, 16)
+                    .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
                     .background(AgendaPalette.token(list.colorKey))
                     .clipShape(RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous))
                 }

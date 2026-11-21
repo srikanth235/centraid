@@ -99,24 +99,23 @@ struct NotesEditorView: View {
                         Button("\(state.earlier.label)  \(state.earlier.countLabel)") { open(state.earlier.route) }
                             .accessibilityIdentifier(EarlierEntryRow.identifier)
                     }
-                    if state.hasOrigin, OriginLineView.isDrawn(state.origin) {
-                        // WHERE IT CAME FROM (#1185): a quiet line in the menu, nothing to tap.
-                        Button(state.origin.text) {}
-                            .disabled(true)
-                            .accessibilityLabel(state.origin.accessibilityLabel)
-                            .accessibilityIdentifier(OriginLineView.identifier)
-                    }
                     if state.hasSendToAgenda {
                         Button(chrome.sendToAgendaLabel) { open(state.sendToAgenda) }
                     }
                     if !chrome.shareLabel.isEmpty {
                         Button(chrome.shareLabel) { send(event { $0.shareRequested = .init() }) }
                     }
+                    if !chrome.trashLabel.isEmpty {
+                        // MOVE TO TRASH asks nothing (`behaviour.md`): the page closes with an Undo beneath.
+                        Button(chrome.trashLabel, role: .destructive) { send(event { $0.trashTapped = .init() }) }
+                            .accessibilityIdentifier("note-editor-trash")
+                    }
                 } label: {
                     ToolbarIconFace(iconKey: "MoreHoriz")
                 }
                 .accessibilityLabel(chrome.menuLabel)
                 .accessibilityIdentifier("note-editor-menu")
+                .headerKeyTarget()
             }
         } content: {
             PageReadStateView(
@@ -136,6 +135,13 @@ struct NotesEditorView: View {
                                 // AN EDIT IS A DIFFERENCE FROM THE DRAFT, not an
                                 // assignment to the field: seeding writes to it too.
                                 .onChange(of: typedTitle) { _, typed in
+                                    // RETURN IN THE TITLE moves to the body; the title stays one line
+                                    // (#1202, S2-3). The field wraps, so the key arrives as a line break.
+                                    if typed.contains(where: \.isNewline) {
+                                        typedTitle = String(typed.filter { !$0.isNewline })
+                                        bodyFocused = true
+                                        return
+                                    }
                                     guard typed != draft.title else { return }
                                     send(event { $0.title = .with { $0.title = typed } })
                                 }
@@ -166,6 +172,16 @@ struct NotesEditorView: View {
                                 )
                                 .frame(minHeight: 280, alignment: .top)
                             }
+                            if state.hasOrigin, OriginLineView.isDrawn(state.origin) {
+                                // WHERE IT CAME FROM (#1185, #1202): an imported note ends with a quiet
+                                // "From <file>" line, as Docs' Details do; a typed note has none.
+                                Text(state.origin.text)
+                                    .kitType(.meta)
+                                    .foregroundStyle(Surface.meta)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .accessibilityLabel(state.origin.accessibilityLabel.isEmpty ? state.origin.text : state.origin.accessibilityLabel)
+                                    .accessibilityIdentifier(OriginLineView.identifier)
+                            }
                         }
                         .padding(.horizontal, CentraidGeometry.pageMargin)
                         .padding(.bottom, 80)
@@ -193,6 +209,10 @@ struct NotesEditorView: View {
                     }
                 }
             }
+        }
+        .onChange(of: state.finished) { _, finished in
+            // MOVED TO TRASH from the menu: the page closes, and the Undo is on the page beneath.
+            if finished { onClose() }
         }
         .sheet(isPresented: Binding(
             get: { state.hasLink },
@@ -253,7 +273,7 @@ struct NotesEditorView: View {
                 Text(state.meta)
                     .kitType(.meta)
                     .foregroundStyle(Surface.meta)
-                    .lineLimit(1)
+                    .kitLineLimit(1)
                     .accessibilityIdentifier("notes-editor-meta")
             }
         }
@@ -358,20 +378,22 @@ private struct NotesEditorRoom<Trailing: View, Content: View>: View {
                             .kitType(.row)
                             .fontWeight(.semibold)
                             .foregroundStyle(accent.text)
-                            .lineLimit(1)
+                            .kitLineLimit(1)
                             .fixedSize()
                             .padding(.horizontal, 8)
                             .frame(minHeight: CentraidGeometry.targetMinCoarse)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityShowsLargeContentViewer { Text(closeLabel) }
                     .accessibilityIdentifier("kit-editor-close")
                 }
                 ToolbarItem(placement: .principal) {
                     Text(status)
                         .kitType(.meta)
                         .foregroundStyle(refused ? StateColor.red.text : Surface.meta)
-                        .lineLimit(1)
+                        .kitLineLimit(1)
+                        .accessibilityShowsLargeContentViewer { Text(status) }
                         .accessibilityIdentifier("kit-autosave-status")
                         // A principal toolbar item does not redraw when only its text changes; a
                         // new identity per sentence does, so a tapped chip's "in the trash" shows.
@@ -454,16 +476,26 @@ struct KitFlow: Layout {
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let laid = arrange(bounds.width, subviews)
-        for (subview, point) in zip(subviews, laid.points) {
-            subview.place(at: CGPoint(x: bounds.minX + point.x, y: bounds.minY + point.y), proposal: .unspecified)
+        for ((subview, point), size) in zip(zip(subviews, laid.points), laid.sizes) {
+            subview.place(
+                at: CGPoint(x: bounds.minX + point.x, y: bounds.minY + point.y),
+                proposal: ProposedViewSize(width: size.width, height: size.height)
+            )
         }
     }
 
-    private func arrange(_ width: CGFloat, _ subviews: Subviews) -> (size: CGSize, points: [CGPoint]) {
+    /// EACH ITEM IS MEASURED AT THE ROW'S WIDTH AT MOST (#1202): an item whose one line is wider
+    /// than the container wraps inside it, instead of pushing the whole flow past the screen.
+    private func arrange(_ width: CGFloat, _ subviews: Subviews) -> (size: CGSize, points: [CGPoint], sizes: [CGSize]) {
         var points: [CGPoint] = []
+        var sizes: [CGSize] = []
         var x: CGFloat = 0, y: CGFloat = 0, row: CGFloat = 0, widest: CGFloat = 0
         for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
+            var size = subview.sizeThatFits(.unspecified)
+            if width > 0, size.width > width {
+                size = subview.sizeThatFits(ProposedViewSize(width: width, height: nil))
+            }
+            sizes.append(size)
             if x > 0, x + size.width > width {
                 x = 0
                 y += row + spacing
@@ -474,7 +506,7 @@ struct KitFlow: Layout {
             row = max(row, size.height)
             widest = max(widest, x - spacing)
         }
-        return (CGSize(width: widest, height: y + row), points)
+        return (CGSize(width: widest, height: y + row), points, sizes)
     }
 }
 

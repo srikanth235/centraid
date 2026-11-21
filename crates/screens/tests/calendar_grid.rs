@@ -550,6 +550,9 @@ fn toolbar_words_follow_the_view() {
     assert!(r.state().toolbar.as_ref().expect("bar").at_today);
     r.period(1);
     assert!(!r.state().toolbar.as_ref().expect("bar").at_today);
+    // Invites lists what waits, whatever the day: no day bar (no "From <date>", arrows or Today).
+    r.destination(Dest::Waiting);
+    assert!(!r.state().toolbar.as_ref().expect("the toolbar").shown);
 }
 
 #[test]

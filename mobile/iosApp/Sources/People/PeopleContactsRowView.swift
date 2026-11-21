@@ -8,12 +8,22 @@ struct PeopleContactsRowView: View {
     let onAction: () -> Void
 
     @Environment(\.appAccent) private var accent
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(spacing: 12) {
+        // AT ACCESSIBILITY SIZES THE ROW STACKS (#1202): beside the status and "Turn on" the
+        // title was a column of syllables ("Phon / e / conta / cts").
+        let stacked = dynamicTypeSize.isAccessibilitySize
+        let layout = stacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 12))
+        let titleLayout = stacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(spacing: 6))
+        layout {
             KitTile(iconKey: "Users", size: 30)
             VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 6) {
+                titleLayout {
                     Text(row.title).kitType(.row).foregroundStyle(Surface.ink)
                     Text(row.stateLabel)
                         .kitType(.meta)
@@ -21,7 +31,7 @@ struct PeopleContactsRowView: View {
                         .foregroundStyle(row.state == .denied ? StateColor.red.text : accent.text)
                 }
                 if !row.detail.isEmpty {
-                    Text(row.detail).kitType(.meta).foregroundStyle(Surface.meta).lineLimit(2)
+                    Text(row.detail.dotSafe).kitType(.meta).foregroundStyle(Surface.meta).kitLineLimit(2, wide: 6)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -31,10 +41,14 @@ struct PeopleContactsRowView: View {
                 Text(row.actionLabel)
                     .centraidType("smallStrong")
                     .foregroundStyle(accent.text)
+                    // THE ACTION'S WORDS ARE WHOLE (#1202): beside a long title the row gave the button less
+                    // than "Turn on" needs; it keeps its width and the title wraps instead.
+                    .fixedSize(horizontal: !stacked, vertical: true)
                     .frame(minWidth: CentraidGeometry.targetMinCoarse, minHeight: CentraidGeometry.targetMinCoarse)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .layoutPriority(1)
             .accessibilityIdentifier("people-contacts-action")
         }
         .padding(.horizontal, 16)

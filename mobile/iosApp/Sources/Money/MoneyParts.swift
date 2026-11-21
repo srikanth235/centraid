@@ -96,14 +96,6 @@ extension Centraid_Core_V1_MoneyCategoriesState {
     }
 }
 
-extension Centraid_Core_V1_MoneySearchState {
-    /// The data, once the read has landed (the page's own state draws loading, failure, the gate and empty).
-    var loaded: Centraid_Core_V1_MoneySearchData? {
-        if case let .data(data)? = content { return data }
-        return nil
-    }
-}
-
 // MARK: - A sheet's binding
 
 /// READ from the state, WRITTEN as an event: a swiped-away sheet tells the
@@ -218,27 +210,58 @@ struct MoneyChoiceField: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.moneyInset) private var inset
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         Button(action: onTap) {
-            HStack {
-                Text(key)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color("text", scheme))
-                Spacer(minLength: 8)
-                Text(value)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color("textSoft", scheme))
-                    .lineLimit(1)
-                CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textFaint", scheme), size: 14)
-            }
-            .padding(.horizontal, inset)
-            .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
-            .overlay(alignment: .bottom) { KitHairline() }
-            .contentShape(Rectangle())
+            rowContent
+                .padding(.horizontal, inset)
+                .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 10 : 0)
+                .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
+                .overlay(alignment: .bottom) { KitHairline() }
+                .contentShape(Rectangle())
         }
         .buttonStyle(KitRowPress())
         .accessibilityElement(children: .combine)
         .modifier(MoneyIdentifier(identifier: identifier))
+    }
+
+    /// THE VALUE IS NEVER CUT (#1202): beside its name while the row has the room, under it
+    /// (wrapping, whole) once the text is large.
+    @ViewBuilder private var rowContent: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            HStack(alignment: .center, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    keyText
+                    valueText.fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                chevron
+            }
+        } else {
+            HStack {
+                keyText
+                Spacer(minLength: 8)
+                valueText.lineLimit(1)
+                chevron
+            }
+        }
+    }
+
+    private var keyText: some View {
+        Text(key)
+            .centraidType("body")
+            .foregroundStyle(Theme.color("text", scheme))
+    }
+
+    private var valueText: some View {
+        Text(value)
+            .centraidType("body")
+            .foregroundStyle(Theme.color("textSoft", scheme))
+    }
+
+    private var chevron: some View {
+        CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textFaint", scheme), size: 14)
     }
 }
 
@@ -543,6 +566,7 @@ struct MoneyCashflowChart: View {
                         .frame(height: plotHeight, alignment: .bottom)
                         Text(month.label)
                             .centraidType("eyebrow")
+                            .kitHeld()
                             .foregroundStyle(Theme.color(month.partial ? "text" : "textFaint", scheme))
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
@@ -580,21 +604,28 @@ struct MoneyLegend: View {
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.moneyInset) private var inset
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(spacing: 16) {
+        // ONE KEY PER LINE AT ACCESSIBILITY SIZES (#1202): in a row "month not over" wrapped under
+        // its swatch a word at a time.
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            : AnyLayout(HStackLayout(spacing: 16))
+        layout {
             item(incoming, filled: true, ink: "textSoft")
             item(outgoing, filled: true, ink: "textGhost")
             item(partial, filled: false, ink: "textSoft")
-            Spacer(minLength: 0)
+            if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 0) }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, inset)
         .padding(.top, 8)
         .accessibilityHidden(true)
     }
 
     private func item(_ text: String, filled: Bool, ink: String) -> some View {
-        HStack(spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             Group {
                 if filled {
                     RoundedRectangle(cornerRadius: Theme.radius("sm", scheme)).fill(Theme.color(ink, scheme))
@@ -615,11 +646,58 @@ struct MoneyLegend: View {
 struct MoneyMonthRow: View {
     let month: Centraid_Core_V1_MoneyCashflowMonth
     let identifier: String
+    /// The In, Out and Net column words, for the stacked reading at accessibility sizes.
+    var labels: [String] = []
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.moneyInset) private var inset
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
+        if dynamicTypeSize.isAccessibilitySize, labels.count == 3 {
+            stacked
+        } else {
+            columns
+        }
+    }
+
+    /// THE THREE FIGURES UNDER THE MONTH AT ACCESSIBILITY SIZES (#1202): three 68-wide columns
+    /// beside the name cut every amount to "$0....". Each is a line of its own, its word first.
+    private var stacked: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(month.label)
+                .centraidType("body")
+                .foregroundStyle(Theme.color(month.partial ? "textSoft" : "text", scheme))
+            if !month.meta.isEmpty {
+                Text(month.meta)
+                    .centraidType("annotLabel")
+                    .foregroundStyle(Theme.color("textFaint", scheme))
+            }
+            ForEach(Array(zip(labels, [month.incoming, month.outgoing, month.net]).enumerated()), id: \.offset) { index, pair in
+                HStack(spacing: 8) {
+                    Text(pair.0)
+                        .centraidType("annotLabel")
+                        .foregroundStyle(Theme.color("textFaint", scheme))
+                    Spacer(minLength: 0)
+                    Text(MoneyWords.amount(pair.1))
+                        .centraidType("annotLabel")
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.color(index == 2 ? StatusChipView.ink(month.netTone, neutral: "text") : "text", scheme))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                }
+            }
+        }
+        .padding(.horizontal, inset)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .top) { KitHairline() }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(month.accessibilityLabel)
+        .accessibilityIdentifier(identifier)
+    }
+
+    private var columns: some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 0) {
                 Text(month.label)

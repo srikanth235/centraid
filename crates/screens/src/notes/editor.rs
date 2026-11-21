@@ -69,6 +69,7 @@ use crate::kit::read::{self, Note, Page, Reading};
 use crate::kit::share::{self, Share};
 use crate::kit::undo::Undo as Door;
 use crate::screen::{Ctx, Screen};
+use crate::shell::row_routes;
 use crate::strings::{Locale, fill, links as link_words, notes as words, shared};
 use std::collections::{BTreeSet, HashMap};
 
@@ -81,11 +82,24 @@ enum Resolution {
         id: String,
         title: String,
     },
+    /// The title names another kind of item (a person, a document): the chip is that item's,
+    /// opened at its own page and said by its kind, never taken for a missing note.
+    Item {
+        title: String,
+        kind: String,
+        route: Option<wire::Route>,
+    },
     /// In the trash, as this note: the id Restore brings back.
     Trashed {
         id: String,
     },
     Missing,
+}
+
+/// The kind's word for a chip's spoken label ("Person"); the entity's own name for a kind the
+/// link sheet has no word for.
+fn item_kind(locale: Locale, entity: &str) -> String {
+    Kind::parse(entity).map_or_else(|| entity.to_owned(), |kind| kind.name(locale))
 }
 
 /// WHAT A TAP ON A DEAD LINK OFFERS, on the status line beside its sentence: make the note the
@@ -220,6 +234,11 @@ impl Draft for NoteDraft {
     }
 }
 
+/// `text` without its line breaks.
+fn one_line(text: &str) -> String {
+    text.chars().filter(|c| !matches!(c, '\n' | '\r')).collect()
+}
+
 /// The title a save gives the note: the field, else the body's first line.
 fn effective_title(draft: &NoteDraft) -> String {
     if draft.title.trim().is_empty() {
@@ -280,6 +299,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         attachments: None,
         attachments_for: String::new(),
         attachments_open: false,
+        finished: false,
         started: false,
     }))
 }
@@ -370,6 +390,8 @@ struct Editor {
     attachments: Option<Attachments>,
     /// The note's id `attachments` was built for.
     attachments_for: String,
+    /// The note was moved to Trash from the menu: the page is closing.
+    finished: bool,
     /// The menu's "Attachments" sheet is up.
     attachments_open: bool,
     /// `Appeared` has been seen.
@@ -656,15 +678,41 @@ impl Editor {
                 return;
             };
             let wanted = title.trim().to_lowercase();
-            match targets.into_iter().find(|target| {
-                target.entity == "note" && target.title.trim().to_lowercase() == wanted
-            }) {
-                Some(target) => {
+            let named =
+                |target: &&wire::NotesLinkTarget| target.title.trim().to_lowercase() == wanted;
+            // A NOTE OF THAT NAME WINS; failing one, any other item the powerbox offered under it
+            // (a person picked from the sheet lands `[[Name]]` too) is that item, not a missing note.
+            let found = targets
+                .iter()
+                .filter(named)
+                .find(|target| target.entity == "note")
+                .or_else(|| targets.iter().find(named));
+            match found {
+                Some(target) if target.entity == "note" => {
                     self.resolutions.insert(
                         title,
                         Resolution::Resolved {
-                            id: target.id,
-                            title: target.title,
+                            id: target.id.clone(),
+                            title: target.title.clone(),
+                        },
+                    );
+                }
+                Some(target) => {
+                    self.resolutions.insert(
+                        title,
+                        Resolution::Item {
+                            title: target.title.clone(),
+                            kind: target.entity.clone(),
+                            route: row_routes::route(
+                                &row_routes::RowRef::new(
+                                    &target.app_id,
+                                    &target.entity,
+                                    &target.id,
+                                    &target.title,
+                                ),
+                                "",
+                                &[],
+                            ),
                         },
                     );
                 }
@@ -820,7 +868,9 @@ impl Editor {
             }],
             LinkTarget::Wiki(title) => {
                 let (template, offer) = match self.resolutions.get(title) {
-                    Some(Resolution::Resolved { .. }) => return Vec::new(),
+                    Some(Resolution::Resolved { .. } | Resolution::Item { .. }) => {
+                        return Vec::new();
+                    }
                     Some(Resolution::Trashed { id }) => (
                         words::link_trashed(locale),
                         Offer::Restore {
@@ -991,6 +1041,41 @@ impl Editor {
         }
     }
 
+    /// MOVE TO TRASH, asking nothing (`behaviour.md`): the write is made at once, its Undo is handed
+    /// to the page beneath and this page closes. The words not yet saved go with the note.
+    fn trash(&mut self, ctx: &Ctx) {
+        let Some(id) = self.note_id.clone() else {
+            return;
+        };
+        let title = self
+            .auto
+            .draft()
+            .map(|draft| {
+                if draft.title.trim().is_empty() {
+                    fold::first_line(&draft.body)
+                } else {
+                    draft.title.trim().to_owned()
+                }
+            })
+            .unwrap_or_default();
+        self.forget_sentence();
+        self.status = None;
+        self.said = false;
+        let request: wire::ActRequest = act::notes::DeleteNote {
+            note_id: id.clone(),
+        }
+        .into();
+        let key = kit_act::key(&[&request.action.clone(), &id], kit_act::fresh());
+        let settled = self.door.act_handing_down(ctx, request, &key, |locale| {
+            crate::kit::trash::moved_to_trash(locale, &title)
+        });
+        self.wrote(&settled);
+        if settled.committed {
+            self.finished = true;
+            self.auto = Autosave::new();
+        }
+    }
+
     /// A TAG IS ITS OWN WRITE, sent at once under the note's id (`add-tag`,
     /// `remove-tag`): a choice, not typing. A note not yet created has nothing to
     /// tag, so the field is not offered then. The load after shows what committed.
@@ -1143,13 +1228,18 @@ impl Editor {
 
     fn event(&mut self, event: wire::NotesEditorEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
-            Some(N::Title(edited)) => self.auto.edit(ctx, |draft| draft.title = edited.title),
+            // A TITLE IS ONE LINE (#1202, S2-3): the shell moves focus to the body on Return, and a
+            // line break that still arrives (a paste) is dropped here.
+            Some(N::Title(edited)) => self
+                .auto
+                .edit(ctx, |draft| draft.title = one_line(&edited.title)),
             Some(N::Body(edited)) => self.body_edited(ctx, edited.body),
             Some(N::Pin(_)) => self.pin(ctx),
             Some(N::ShareRequested(_)) if self.note_exists() => {
                 return self.share.tap(ctx.locale());
             }
             Some(N::ShareRequested(_)) => {}
+            Some(N::TrashTapped(_)) => self.trash(ctx),
             Some(N::ChecklistRequested(_)) => self.checklist(ctx),
             // THE POWERBOX. The link button opens it at the END of the note,
             // whatever a field's caret says (no shell reports one); a pick
@@ -1353,6 +1443,15 @@ impl Editor {
                         wire::NotesLinkResolution::Resolved,
                         Some(routes::editor(id)),
                         words::link_note_spoken(locale),
+                    ),
+                    Some(Resolution::Item { title, kind, route }) => (
+                        title.clone(),
+                        wire::NotesLinkResolution::Resolved,
+                        route.clone(),
+                        fill(
+                            &words::link_item_spoken(locale),
+                            &[("kind", &item_kind(locale, kind))],
+                        ),
                     ),
                     Some(Resolution::Trashed { .. }) => (
                         typed.clone(),
@@ -1577,6 +1676,7 @@ impl Screen for Editor {
         };
         let reminders_words = title.clone();
         let mut state = wire::NotesEditorState {
+            finished: self.finished,
             note_id: self.note_id.clone().unwrap_or_default(),
             page: Some(wired),
             content: draft.filter(|_| ready).map(|draft| {
@@ -1587,9 +1687,10 @@ impl Screen for Editor {
                 })
             }),
             chrome: Some(wire::NotesEditorChrome {
-                // "Cancel" only before the first keystroke of this visit; after
-                // it, close = done, and an autosave does not undo that.
-                close: if autosave.edit_seq == 0 {
+                // "Cancel" only on a NEW note before its first keystroke: nothing exists to keep.
+                // A note that is already there closes with "Done" (close = done, #1202, S2-4):
+                // opening it and leaving changes nothing, and an autosave does not undo that.
+                close: if self.note_id.is_none() && autosave.edit_seq == 0 {
                     words::cancel(locale)
                 } else {
                     words::done(locale)
@@ -1647,6 +1748,11 @@ impl Screen for Editor {
                 } else {
                     String::new()
                 },
+                trash_label: if exists {
+                    crate::strings::shared::trash_move(locale)
+                } else {
+                    String::new()
+                },
                 retry: words::retry(locale),
                 // Tags belong to a note, so the field waits for the first save.
                 tag_placeholder: if exists {
@@ -1692,7 +1798,8 @@ impl Screen for Editor {
         if let (Some(draft), true) = (draft, ready) {
             state.rich = Some(self.rich_view(locale, &rich::parse(&draft.body)));
         }
-        // WHERE IT CAME FROM (#1185): the menu's quiet "From ..." line, read with the entry.
+        // WHERE IT CAME FROM (#1185, #1202): the quiet "From ..." line a shell draws at the end of an
+        // imported note's words (a typed note has none), read with the entry.
         state.origin = self.earlier.origin.clone();
         // THE MENU'S "Earlier versions" ROW: the kit's entry, its route naming the note as the
         // page the member comes from.
@@ -1997,6 +2104,12 @@ mod tests {
             ["note.body", "entity.title"]
         );
         assert!(base.kept_fields(&base).is_empty());
+    }
+
+    #[test]
+    fn a_title_is_one_line() {
+        assert_eq!(one_line("Trip\nplan\r\n"), "Tripplan");
+        assert_eq!(one_line("Trip plan"), "Trip plan");
     }
 
     #[test]
@@ -2367,6 +2480,41 @@ mod tests {
             ctx,
             N::LinkOpened(wire::notes_editor_event::LinkOpened { at }),
         )
+    }
+
+    #[test]
+    fn a_wiki_link_naming_a_person_is_that_person_not_a_missing_note() {
+        let driver = Driver::with_runtime(super::super::runtime());
+        let mut request: wire::ActRequest = act::people::AddPerson {
+            title: "Jake Bennett".into(),
+            ..Default::default()
+        }
+        .into();
+        request.invoke_key = format!("test:{}", kit_act::fresh());
+        let added = driver.act(request);
+        let output: serde_json::Value = serde_json::from_slice(&added.output).expect("output");
+        let person = output["id"].as_str().expect("id").to_owned();
+        let id = make(&driver, "Host", "Ask [[Jake Bennett]] and [[Nowhere]]");
+        let core = Flaky::new(&driver.handle);
+        let (screen, ctx) = opened(&core, &id);
+        let view = state(&*screen, &ctx);
+        let chips = chips(&view);
+        assert_eq!(chips.len(), 2, "{chips:?}");
+        assert_eq!(chips[0].label, "Jake Bennett");
+        assert_eq!(
+            chips[0].resolution,
+            wire::NotesLinkResolution::Resolved as i32,
+            "a person is not a missing note"
+        );
+        assert_eq!(chips[0].accessibility_label, "Person Jake Bennett");
+        assert_eq!(
+            chips[0].route,
+            Some(links::person_route(&person, "Jake Bennett"))
+        );
+        assert_eq!(
+            chips[1].resolution,
+            wire::NotesLinkResolution::Missing as i32
+        );
     }
 
     #[test]

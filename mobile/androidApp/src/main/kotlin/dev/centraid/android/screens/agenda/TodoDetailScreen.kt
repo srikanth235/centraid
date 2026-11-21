@@ -56,6 +56,8 @@ import dev.centraid.android.kit.EditorRoom
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitLink
+import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.PhoneSaysLine
@@ -161,6 +163,7 @@ private fun TodoDetailBody(
                 style = "title",
                 onEdit = { onEvent(TodoDetailEvent(title = TodoDetailEvent.TitleChanged(title = it))) },
                 testTag = "tasks-title-field",
+                imeNext = true,
             )
         }
         if (data.status_label.isNotEmpty()) {
@@ -204,11 +207,11 @@ private fun TodoDetailBody(
             if (head.group.isEmpty()) {
                 block.forEach { TodoFieldRow(it, onEvent) }
             } else {
-                Text(
+                KitText(
                     head.group,
-                    style = centraidType("eyebrow"),
-                    color = centraidColor("textSoft"),
-                    modifier = Modifier.padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 16.dp, bottom = 6.dp),
+                    KitType.Group,
+                    Surface.meta,
+                    Modifier.padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 16.dp, bottom = 6.dp),
                 )
                 val shape = RoundedCornerShape(CentraidScale.cardRadius.dp)
                 Column(
@@ -309,16 +312,11 @@ private fun TodoFieldRow(field: TodoField, onEvent: (TodoDetailEvent) -> Unit) {
         if (field.note.isNotEmpty()) FieldNote(field.note)
         // "Open Settings" under a line that sends the member there (#1188, NA1).
         if (field.action_label.isNotEmpty()) {
-            Text(
+            OutlineButton(
                 field.action_label,
-                style = centraidType("annotLabel"),
-                color = centraidColor("text"),
-                modifier = Modifier
-                    .heightIn(min = KitGeometry.ROW_MIN)
-                    .clickable(role = Role.Button) { onEvent(TodoDetailEvent(alert_settings = AlertSettingsPressed())) }
-                    .padding(horizontal = KitGeometry.GUTTER, vertical = 12.dp)
-                    .testTag("tasks-field-${field.key}-settings"),
-            )
+                modifier = Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp),
+                testTag = "tasks-field-${field.key}-settings",
+            ) { onEvent(TodoDetailEvent(alert_settings = AlertSettingsPressed())) }
         }
     } else {
         FieldRow(key = field.label, value = field.value_, note = field.note)

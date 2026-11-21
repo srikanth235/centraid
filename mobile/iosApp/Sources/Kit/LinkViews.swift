@@ -58,9 +58,10 @@ struct LinkSectionView: View {
                 }
             }
             .kitCard()
+            // The head already carries the page margin (as ATTACHMENTS does), so only the card is
+            // inset here; padding the whole column pushed the label in twice (#1202).
+            .padding(.horizontal, padded ? CentraidGeometry.pageMargin : 0)
         }
-        .padding(.horizontal, padded ? CentraidGeometry.pageMargin : 0)
-        .padding(.top, padded ? 8 : 0)
     }
 
     @ViewBuilder

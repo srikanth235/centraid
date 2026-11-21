@@ -70,6 +70,11 @@ struct State {
     follows: crate::follow::Follows,
     /// What the phone said about alerts, for every screen's row (`kit::permission::AlertBoard`).
     alerts: crate::kit::permission::AlertBoard,
+    /// The terms recently searched: kept while the runtime lives, emptied when the vault in
+    /// front changes (ruling 24, #1202).
+    recents: crate::kit::search::Recents,
+    /// The unsaved new event (`calendar::draft`): memory here, the device store behind it.
+    drafts: crate::calendar::draft::Board,
     band: Option<BandFn>,
     next_instance: u64,
     next_effect: u64,
@@ -134,6 +139,8 @@ impl Runtime {
                 onward: None,
                 follows: crate::follow::Follows::default(),
                 alerts: crate::kit::permission::AlertBoard::default(),
+                recents: crate::kit::search::Recents::default(),
+                drafts: crate::calendar::draft::Board::default(),
                 band: None,
                 next_instance: 1,
                 next_effect: 1,
@@ -364,6 +371,8 @@ impl Runtime {
             .is_none_or(crate::kit::permission::details_shown);
         let follows = state.follows.clone();
         let alerts = state.alerts.clone();
+        let recents = state.recents.clone();
+        let drafts = state.drafts.clone();
         let Some(instance) = state.instances.get_mut(&id) else {
             return;
         };
@@ -375,6 +384,8 @@ impl Runtime {
         let ctx = Ctx::new(core, &env)
             .with_follows(follows.clone())
             .with_alerts(alerts.clone())
+            .with_recents(recents.clone())
+            .with_drafts(drafts.clone())
             .with_handed(handed);
         let effects = instance.screen.update(event, &ctx);
         let done = ctx.finish();
@@ -419,7 +430,9 @@ impl Runtime {
         if !instance.service {
             let view_ctx = Ctx::new(core, &env)
                 .with_follows(follows)
-                .with_alerts(alerts);
+                .with_alerts(alerts)
+                .with_recents(recents)
+                .with_drafts(drafts);
             let mut view = instance.screen.view(&view_ctx);
             view.instance = id;
             view.revision = 0;
@@ -793,6 +806,8 @@ impl Runtime {
             return;
         }
         state.foreground = now;
+        // One vault's searches are never offered over another's.
+        state.recents.clear();
         state.handed = None;
         state.onward = None;
         let mut reopened = Vec::new();

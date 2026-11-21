@@ -172,7 +172,7 @@ private struct RestingView: View {
 }
 
 /// One app's head (#1173): its name in the app's own colour, its count at the far edge in meta.
-private struct GroupHeader: View {
+struct GroupHeader: View {
     let group: Centraid_Core_V1_HomeSearchGroup
 
     var body: some View {
@@ -197,8 +197,8 @@ private struct GroupHeader: View {
     }
 }
 
-/// One hit (#1173): the app's glyph on a tile in its colour, the title, and the kind under it.
-private struct HitRow: View {
+/// One hit (#1173; Health's in-place search draws it too): the app's glyph on a tile in its colour, the title, and the kind under it.
+struct HitRow: View {
     let row: Centraid_Core_V1_HomeSearchRow
     let appId: String
     let onTap: () -> Void
@@ -214,14 +214,14 @@ private struct HitRow: View {
                     Text(row.title)
                         .kitType(.row)
                         .foregroundStyle(Surface.ink)
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                         .truncationMode(.tail)
                     // The kind, then "In an earlier version" when only an earlier version of
                     // the item held the words (#1185); the row then opens Earlier versions.
                     Text([row.kindLabel, row.earlierLabel].filter { !$0.isEmpty }.joined(separator: " \u{00B7} "))
                         .kitType(.meta)
                         .foregroundStyle(Surface.meta)
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                 }
                 Spacer(minLength: 0)
             }

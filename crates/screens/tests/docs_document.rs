@@ -197,17 +197,17 @@ fn the_heads_writes_star_rename_move_and_labels() {
 }
 
 #[test]
-fn trashing_asks_first_and_a_trashed_document_offers_restore_and_delete_forever() {
+fn trashing_asks_nothing_and_a_trashed_document_offers_restore_and_delete_forever() {
     let mut d = driver();
     let id = text(&d, "Return", "x");
     let i = open(&mut d, &id, "Return", "Docs");
     pick_doc(&mut d, i, "trash");
     let state = document_state(d.view(i));
-    assert_eq!(state.confirm.as_ref().unwrap().title, "Move to trash?");
-    document_send(&mut d, i, DD::Dismissed(dd::Dismissed {}));
-    assert!(document_state(d.view(i)).confirm.is_none());
-    pick_doc(&mut d, i, "trash");
-    document_send(&mut d, i, DD::Confirmed(dd::Confirmed {}));
+    assert!(state.confirm.is_none(), "move to trash asks nothing");
+    assert_eq!(
+        state.status.as_ref().unwrap().sentence,
+        "Return moved to trash"
+    );
     let data = document_data(d.view(i));
     assert!(data.row.as_ref().unwrap().trashed);
     assert_eq!(keys(d.view(i)), ["restore", "purge"]);
@@ -377,6 +377,49 @@ fn a_vault_change_never_replaces_words_being_typed() {
     assert_eq!(
         state.remote_note,
         "Changed elsewhere; your next save will ask to reload."
+    );
+}
+
+#[test]
+fn the_editors_own_saves_never_read_as_a_change_elsewhere() {
+    let mut d = driver();
+    let id = text(&d, "Letter", "first");
+    let i = editor(&mut d, &id);
+    // Typing runs on past each save: the member's next words arrive before the core delivers the
+    // vault's change for the save before, so that change is read over unsaved words. It is the
+    // editor's own commit, at the revision the draft already holds, and no other writer.
+    for burst in ["one", "one two", "one two three", "one two three four"] {
+        editor_send(
+            &mut d,
+            i,
+            EE::Body(ee::BodyEdited {
+                body: burst.to_owned(),
+            }),
+        );
+        d.pump(Duration::from_millis(1300));
+        editor_send(
+            &mut d,
+            i,
+            EE::Body(ee::BodyEdited {
+                body: format!("{burst}!"),
+            }),
+        );
+        d.send(
+            i,
+            wire::screen_event::Kind::DataChanged(wire::DataChanged { tables: Vec::new() }),
+        );
+        assert_eq!(
+            editor_state(d.view(i)).remote_note,
+            "",
+            "after {burst:?}: the editor's own save is not another writer"
+        );
+    }
+    d.pump(Duration::from_millis(1300));
+    let state = editor_state(d.view(i));
+    assert_eq!(state.remote_note, "");
+    assert_eq!(
+        document(&d, &id).body.as_deref(),
+        Some("one two three four!")
     );
 }
 

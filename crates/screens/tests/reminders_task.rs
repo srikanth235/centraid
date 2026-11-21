@@ -210,6 +210,30 @@ fn the_reminder_row_says_it_sounds_at_nine_for_a_date_with_no_time() {
     assert_eq!(reminder.note, "Delivered on your phone.");
 }
 
+/// THE HINT NAMES 09:00 THE WAY THE PHONE WRITES TIME: "9:00 AM" on a 12-hour phone.
+#[test]
+fn the_date_only_hint_says_nine_in_the_phones_hour_cycle() {
+    let mut d = driver();
+    d.call(wire::screen_request::Kind::Environment(wire::Environment {
+        locale: "en".to_owned(),
+        hour_cycle_12: true,
+        ..Default::default()
+    }));
+    let dated = add(
+        &d,
+        act::reminders::AddTask {
+            title: "Bins".into(),
+            due: due(&day(&d, 2)),
+            remind_before_min: Field::Is(0),
+            ..Default::default()
+        },
+    );
+    let i = open(&mut d, &dated);
+    let note = field(d.view(i), "reminder").note.clone();
+    assert!(note.contains("sounds at 9:00 AM that day"), "{note}");
+    assert!(!note.contains("09:00"), "{note}");
+}
+
 #[test]
 fn an_undated_task_opens_pickers_on_today_and_a_reminder_needs_a_due() {
     let mut d = driver();
@@ -1063,21 +1087,11 @@ fn subtasks_count_what_is_done_are_added_as_a_write_and_stay_one_level() {
 // -----------------------------------------------------------------------------
 
 #[test]
-fn delete_asks_in_full_sentences_then_trashes_and_ends_the_screen() {
+fn delete_asks_nothing_trashes_at_once_and_ends_the_screen() {
     let mut d = driver();
     let id = rent(&d);
     let i = open(&mut d, &id);
     send_detail(&mut d, i, de::Kind::Delete(de::DeleteRequested {}));
-    let state = detail(d.view(i));
-    let confirm = state.confirm.as_ref().expect("a confirm");
-    assert_eq!(confirm.title, "Move this task to trash?");
-    assert!(confirm.destructive);
-    // Dismissed, nothing is written.
-    send_detail(&mut d, i, de::Kind::Dismissed(de::Dismissed {}));
-    assert!(detail(d.view(i)).confirm.is_none());
-    assert_eq!(task_of(&d, &id).status, "open");
-    send_detail(&mut d, i, de::Kind::Delete(de::DeleteRequested {}));
-    send_detail(&mut d, i, de::Kind::Confirmed(de::Confirmed {}));
     let state = detail(d.view(i));
     assert!(state.finished);
     assert_eq!(
@@ -1102,7 +1116,6 @@ fn closing_a_deleted_task_does_not_save_its_unsaved_words() {
     let i = open(&mut d, &id);
     typed_title(&mut d, i, "Rent, never saved");
     send_detail(&mut d, i, de::Kind::Delete(de::DeleteRequested {}));
-    send_detail(&mut d, i, de::Kind::Confirmed(de::Confirmed {}));
     d.pop(agenda::TAB, i);
     d.pump(DEBOUNCED);
     let trash_page = d.push(agenda::TAB, routes::trash());
@@ -1123,12 +1136,16 @@ fn release_destroys_nothing_and_goes_to_the_logbook_as_wont_do() {
     send_detail(&mut d, i, de::Kind::Release(de::ReleaseRequested {}));
     let state = detail(d.view(i));
     let confirm = state.confirm.as_ref().unwrap();
-    assert_eq!(confirm.title, "Release this task?");
+    assert_eq!(confirm.title, "Mark this task won't do?");
+    assert_eq!(confirm.confirm_label, "Won't do");
     assert!(!confirm.destructive);
     assert!(detail_data(d.view(i)).can_release);
     send_detail(&mut d, i, de::Kind::Confirmed(de::Confirmed {}));
     let v = d.view(i);
-    assert_eq!(detail(v).status.as_ref().unwrap().sentence, "Task released");
+    assert_eq!(
+        detail(v).status.as_ref().unwrap().sentence,
+        "Marked won't do"
+    );
     assert!(!detail(v).finished);
     assert_eq!(detail_data(v).check, wire::TodoCheck::WontDo as i32);
     assert_eq!(detail_data(v).status_label, "Won't do");

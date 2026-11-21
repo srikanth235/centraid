@@ -19,10 +19,15 @@ struct FirstLaunchView: View {
     let gate: Centraid_Core_V1_HomeFirstLaunch
     @ObservedObject var store: ScreenStore
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @ScaledMetric(relativeTo: .largeTitle) private var titleSize = 30
     @ScaledMetric(relativeTo: .body) private var bodySize = CentraidScale.rowSize
     @ScaledMetric(relativeTo: .callout) private var detailSize = 15
+    /// THE PRIMARY'S LABEL AND THE CLAIMS' TILES FOLLOW THE TEXT SIZE (#1202): the label stayed
+    /// at 17 in a pill while the words around it grew, and the tiles stayed 40.
+    @ScaledMetric(relativeTo: .body) private var primarySize = 17
+    @ScaledMetric(relativeTo: .body) private var claimTile = 40
 
     /// The icon in each claim's tile, in the order Rust lists the claims: apps,
     /// assistant, backups.
@@ -55,15 +60,27 @@ struct FirstLaunchView: View {
                         }
                     }
                     .padding(.top, 36)
+                    // THE DOORS SCROLL WITH THE PAGE AT ACCESSIBILITY SIZES (#1202): pinned, their two
+                    // large keys took the screen and left the claims no room to be read or scrolled to.
+                    if dynamicTypeSize.isAccessibilitySize {
+                        doors
+                            .padding(.top, 28)
+                            .padding(.bottom, 24)
+                    }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 32)
             }
             .scrollBounceBehavior(.basedOnSize)
+            // THE CONTENT STOPS AT THE STATUS BAR (#1202): scrolled, the first claim's icon ran
+            // under the clock.
+            .hardTopScrollEdge()
 
-            doors
-                .padding(.horizontal, 32)
-                .padding(.bottom, 24)
+            if !dynamicTypeSize.isAccessibilitySize {
+                doors
+                    .padding(.horizontal, 32)
+                    .padding(.bottom, 24)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(page).ignoresSafeArea())
@@ -92,16 +109,21 @@ struct FirstLaunchView: View {
     }
 
     private func claimRow(index: Int, claim: Centraid_Core_V1_HomeFirstLaunchSlide) -> some View {
-        HStack(alignment: .top, spacing: 16) {
+        // THE TILE SITS OVER THE WORDS AT ACCESSIBILITY SIZES (#1202): beside them it left the body
+        // a column too narrow for "documents", which broke as "document/s".
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 16))
+        return layout {
             ZStack {
                 RoundedRectangle(cornerRadius: CentraidScale.cardRadius * 0.75, style: .continuous)
                     .fill(Color(CentraidAsset.shellText).opacity(scheme == .dark ? 0.18 : 0.12))
                 CentraidIconView(
                     iconKey: Self.claimIcons[min(index, Self.claimIcons.count - 1)],
                     tint: Color(CentraidAsset.shellText),
-                    size: 20, strokeWidth: 2)
+                    size: claimTile / 2, strokeWidth: 2)
             }
-            .frame(width: 40, height: 40)
+            .frame(width: claimTile, height: claimTile)
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(claim.title)
@@ -112,8 +134,9 @@ struct FirstLaunchView: View {
                     .foregroundStyle(Color(CentraidAsset.textMeta))
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: 0)
+            if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 0) }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("first-launch-claim-\(index)")
     }
@@ -124,10 +147,14 @@ struct FirstLaunchView: View {
         VStack(spacing: 10) {
             Button { store.sendHome(.make(.init())) } label: {
                 Text(gate.makeLabel)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: primarySize, weight: .semibold))
                     .foregroundStyle(Color.white)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
                     .frame(maxWidth: .infinity, minHeight: 52)
-                    .background(Capsule().fill(Color(CentraidAsset.shell)))
+                    .background(KitPillShape().fill(Color(CentraidAsset.shell)))
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("first-launch-primary")

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -41,8 +42,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import centraid.core.v1.BackupCondition
 import centraid.core.v1.BackupLine
 import dev.centraid.android.R
+import dev.centraid.android.kit.readableColumn
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.KitTile
+import dev.centraid.android.kit.WholeTokensText
+import dev.centraid.android.kit.rememberLargestText
+import dev.centraid.android.kit.unitsJoined
 import dev.centraid.android.kit.StateColor
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
@@ -53,6 +58,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -74,6 +80,7 @@ import dev.centraid.android.kit.KitSpinner
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.kitTextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
@@ -114,7 +121,83 @@ internal fun BackupHomeScreen(
         onRetry = { onEvent(BackupHomeEvent(retry = BackupHomeEvent.Retry())) },
     ) {
         val data = state.data_ ?: return@ReadStateView
-        BackupPage(data, onEvent, onOpen)
+        // BEFORE PAIRING (BackupUnpaired): one card, two steps and a footnote, and nothing else.
+        if (data.unpaired != null) BackupUnpairedPage(data, onOpen) else BackupPage(data, onEvent, onOpen)
+    }
+}
+
+/**
+ * BEFORE PAIRING (BackupUnpaired): the card, "To pair" and its two steps, and the footnote. Every word is
+ * `model.unpaired`'s; the card's button is the page's pairing route. The SwiftUI twin is `unpairedPage`.
+ */
+@Composable
+private fun BackupUnpairedPage(model: BackupHomeData, onOpen: (Route) -> Unit) {
+    val unpaired = model.unpaired ?: return
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Surface.page)
+            .verticalScroll(rememberScrollState())
+            .readableColumn()
+            .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp, vertical = 16.dp)
+            .testTag("backup-screen"),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            model.title,
+            style = centraidType("title"),
+            color = Surface.ink,
+            modifier = Modifier.padding(horizontal = 4.dp).testTag("backup-title").semantics { heading() },
+        )
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(CardRadius)).background(Surface.card).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            val tint = StateColor.Amber.text
+            Box(
+                Modifier.size(52.dp).clip(CircleShape).background(tint.copy(alpha = 0.14f)).clearAndSetSemantics { },
+                contentAlignment = Alignment.Center,
+            ) { CentraidIcon(iconKey = "Refresh", tint = tint, size = 24.dp) }
+            Text(
+                unpaired.title,
+                style = centraidType("title").copy(fontSize = tokenSp(R.dimen.centraid_text_section)),
+                color = Surface.ink,
+                modifier = Modifier.semantics { heading() },
+            )
+            Sentence(unpaired.body)
+            InkButton(
+                label = unpaired.action_label,
+                testTag = "backup-add-destination",
+                modifier = Modifier.padding(top = 6.dp),
+            ) { model.add_destination?.let(onOpen) }
+        }
+        Group(unpaired.steps_heading) {
+            unpaired.steps.forEachIndexed { index, step ->
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text("${index + 1}", style = centraidType("annotLabel"), color = Surface.meta, modifier = Modifier.width(22.dp))
+                    Text(
+                        androidx.compose.ui.text.buildAnnotatedString {
+                            append(step.before)
+                            // A COMMAND WRAPS ONLY AT ITS SPACES (#1202): its hyphen is a non-breaking one (display only; copy keeps
+                            // the ASCII), and a word is never split.
+                            if (step.command.isNotEmpty()) {
+                                withStyle(
+                                    androidx.compose.ui.text.SpanStyle(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                                ) { append(step.command.replace('-', '\u2011')) }
+                            }
+                            append(step.after)
+                        },
+                        style = kitTextStyle(KitType.Row),
+                        color = Surface.ink,
+                    )
+                }
+                if (index < unpaired.steps.size - 1) RowRule()
+            }
+        }
+        Sentence(unpaired.foot)
     }
 }
 
@@ -143,10 +226,11 @@ private fun BackupPage(
     val batteryHeld = model.battery_sentence.isNotEmpty() && !ignoresBatteryOptimizations(context)
     Column(
         Modifier
-            .fillMaxWidth()
+            .fillMaxSize()
             .background(Surface.page)
             .imePadding()
             .verticalScroll(rememberScrollState())
+            .readableColumn()
             .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp, vertical = 16.dp)
             .testTag("backup-screen"),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -307,6 +391,11 @@ private fun BackupPage(
             } else if (model.destinations.isEmpty() && model.add_destination_label.isNotEmpty()) {
                 InkButton(label = model.add_destination_label, testTag = "backup-add-destination", onPress = onAddDestination)
             }
+            // A DEVICE THAT NO LONGER KNOWS THIS PHONE (ruling 28): the card that says "Pair it again" carries
+            // the way back, the same pairing page as the row below.
+            if (model.pair_again_label.isNotEmpty()) {
+                InkButton(label = model.pair_again_label, testTag = "backup-card-pair-again") { model.pair_again?.let(onOpen) }
+            }
         }
         if (model.apps.isNotEmpty()) Group(model.apps_heading) { Apps(model.apps) }
         if (model.apps_waiting.isNotEmpty()) Group(model.waiting_heading) { Apps(model.apps_waiting) }
@@ -361,18 +450,23 @@ private fun BackupPage(
                 }
                 if (model.include_videos_label.isNotEmpty()) {
                     Row(
-                        Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp).testTag("backup-include-videos"),
+                        // THE WHOLE ROW IS THE SWITCH: a label beside a switch is a word nobody can press, and a screen
+                        // reader gets one control named by the row. Same size as before.
+                        Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                            .toggleable(
+                                value = model.include_videos,
+                                role = Role.Switch,
+                                onValueChange = { onEvent(BackupHomeEvent(set_include_videos = BackupHomeEvent.SetIncludeVideos(include = it))) },
+                            )
+                            .padding(horizontal = 16.dp).testTag("backup-include-videos"),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Text(model.include_videos_label, style = centraidType("body"), color = Surface.ink, modifier = Modifier.weight(1f))
                         Switch(
                             checked = model.include_videos,
-                            onCheckedChange = {
-                                onEvent(BackupHomeEvent(set_include_videos = BackupHomeEvent.SetIncludeVideos(include = it)))
-                            },
+                            onCheckedChange = null,
                             colors = SwitchDefaults.colors(checkedTrackColor = appAccent("").fill),
-                            modifier = Modifier.semantics { contentDescription = model.include_videos_label },
                         )
                     }
                 }
@@ -556,12 +650,13 @@ private fun RuleMark(picked: Boolean) {
 /** One of the screen's sentences, drawn quietly. */
 @Composable
 private fun Sentence(text: String, testTag: String? = null) {
-    Text(
-        text,
-        style = centraidType("annotLabel"),
-        color = Surface.meta,
-        modifier = if (testTag == null) Modifier else Modifier.testTag(testTag),
-    )
+    val mod = if (testTag == null) Modifier else Modifier.testTag(testTag)
+    // A device's address stays whole and a number keeps its unit at the largest text (#1202).
+    if (rememberLargestText()) {
+        WholeTokensText(text, centraidType("annotLabel"), Surface.meta, mod)
+    } else {
+        Text(unitsJoined(text), style = centraidType("annotLabel"), color = Surface.meta, modifier = mod)
+    }
 }
 
 @Composable
@@ -586,22 +681,10 @@ private fun AddDevice(label: String, onAddDestination: () -> Unit) {
 @Composable
 private fun Destinations(model: BackupHomeData, onEvent: (BackupHomeEvent) -> Unit, onAddDestination: () -> Unit) {
     model.destinations.forEach { row ->
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            KitTile(iconKey = "Monitor", size = 32.dp)
-            Column(
-                Modifier.weight(1f).clearAndSetSemantics { contentDescription = row.accessibility_label.ifEmpty { row.label } },
-                verticalArrangement = Arrangement.spacedBy(1.dp),
-            ) {
-                Text(row.label, style = centraidType("body"), color = Surface.ink)
-                if (row.held.isNotEmpty()) Sentence(row.held)
-                if (row.backed_up.isNotEmpty()) Sentence(row.backed_up)
-                if (row.detail.isNotEmpty()) Sentence(row.detail)
-                row.notes.forEach { note -> Sentence(note) }
-            }
+        // THE ADDRESS WHOLE, AND ITS KEYS UNDER IT at the largest text (#1202): beside Forget the words
+        // were left a sliver and "192.168.1.5" split mid-number.
+        val stacked = rememberLargestText()
+        val keys: @Composable () -> Unit = {
             // UNDO, only while this phone has deletes held there (#1191).
             if (row.undo_label.isNotEmpty()) {
                 OutlineButton(
@@ -624,6 +707,38 @@ private fun Destinations(model: BackupHomeData, onEvent: (BackupHomeEvent) -> Un
                 }
             }
         }
+        val text: @Composable (Modifier) -> Unit = { mod ->
+            Column(
+                mod.clearAndSetSemantics { contentDescription = row.accessibility_label.ifEmpty { row.label } },
+                verticalArrangement = Arrangement.spacedBy(1.dp),
+            ) {
+                if (stacked) {
+                    WholeTokensText(row.label, centraidType("body"), Surface.ink)
+                } else {
+                    Text(row.label, style = centraidType("body"), color = Surface.ink)
+                }
+                if (row.held.isNotEmpty()) Sentence(row.held)
+                if (row.backed_up.isNotEmpty()) Sentence(row.backed_up)
+                if (row.detail.isNotEmpty()) Sentence(row.detail)
+                row.notes.forEach { note -> Sentence(note) }
+            }
+        }
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = if (stacked) Alignment.Top else Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            KitTile(iconKey = "Monitor", size = 32.dp)
+            if (stacked) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    text(Modifier.fillMaxWidth())
+                    keys()
+                }
+            } else {
+                text(Modifier.weight(1f))
+                keys()
+            }
+        }
         RowRule()
     }
     if (model.add_destination_label.isNotEmpty()) AddDevice(model.add_destination_label, onAddDestination)
@@ -644,18 +759,24 @@ private fun Apps(rows: List<BackupAppRow>) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             AppTile(appId = row.app_id, size = 32.dp)
+            // THE STATUS UNDER THE NAME at the largest text (#1202): beside it "Photos" broke as "Phot / os".
+            val stacked = rememberLargestText()
+            val status: @Composable () -> Unit = {
+                if (row.status.isNotEmpty()) {
+                    Text(
+                        unitsJoined(row.status),
+                        style = centraidType("annotLabel"),
+                        color = if (row.waiting) StateColor.Amber.text else Surface.meta,
+                    )
+                }
+            }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(row.name, style = centraidType("body"), color = Surface.ink)
                 if (row.detail.isNotEmpty()) Sentence(row.detail)
                 if (row.note.isNotEmpty()) Sentence(row.note)
+                if (stacked) status()
             }
-            if (row.status.isNotEmpty()) {
-                Text(
-                    row.status,
-                    style = centraidType("annotLabel"),
-                    color = if (row.waiting) StateColor.Amber.text else Surface.meta,
-                )
-            }
+            if (!stacked) status()
         }
         if (index < rows.size - 1) RowRule()
     }

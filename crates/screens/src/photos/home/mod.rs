@@ -405,7 +405,15 @@ impl Home {
             H::Remedy(picked) => {
                 use wire::camera_roll::Action;
                 use wire::photos_home_import_banner::Remedy;
-                let action = match Remedy::try_from(picked.remedy).unwrap_or(Remedy::Unspecified) {
+                let mut remedy = Remedy::try_from(picked.remedy).unwrap_or(Remedy::Unspecified);
+                // THE EMPTY CARD'S ONE BUTTON is sent as Settings by both shells; where the grant was
+                // never asked, the button is Allow and asks (PermissionPhotos).
+                if remedy == Remedy::Settings
+                    && self.roll.permission == wire::PhotosMediaPermission::NotAsked
+                {
+                    remedy = Remedy::Ask;
+                }
+                let action = match remedy {
                     // THE PROMPT IS THE CAMERA ROLL'S, asked by name: it walks if the grant allows.
                     Remedy::Ask => {
                         ask_roll(ctx, RollAsk::AskPermission);
@@ -614,6 +622,7 @@ impl Home {
             Status::Done | Status::Unspecified => missing,
             Status::NoneHere => sentences::copy_none_here(locale),
             Status::LocationNotRemovable => sentences::copy_location_not_removable(locale),
+            Status::StorageFull => crate::strings::permission::storage_full(locale),
             Status::Failed => sentences::copy_export_failed(locale),
         };
         self.status = (!sentence.is_empty()).then(|| wire::StatusLine {
@@ -821,7 +830,28 @@ impl Home {
     /// NOTHING TO SHOW, AND WHY: the Favorites filter has its own sentence, never the
     /// empty-library copy.
     fn library_empty(&self, locale: Locale) -> wire::EmptyState {
-        if self.filter == Filter::Favorites {
+        if self.refused_empty() {
+            // PhotosRefused: the app says the same as the Home widget, with Open Settings alone.
+            wire::EmptyState {
+                headline: words::photos_refused_title(locale),
+                body: words::photos_refused_body(locale),
+                action_label: words::photos_open_settings(locale),
+                ..wire::EmptyState::default()
+            }
+        } else if self.asks_access() {
+            // PermissionPhotos: the card carries the ask as its button, with the grant's own line.
+            wire::EmptyState {
+                headline: words::photos_grid_empty(locale),
+                body: words::photos_grid_empty_caption(locale),
+                action_label: words::photos_allow_access(locale),
+                hint: crate::kit::permission::says(
+                    locale,
+                    crate::kit::permission::Resource::Photos,
+                    crate::kit::permission::State::NotAsked,
+                ),
+                ..wire::EmptyState::default()
+            }
+        } else if self.filter == Filter::Favorites {
             wire::EmptyState {
                 headline: words::photos_grid_no_favorites(locale),
                 body: words::photos_grid_no_favorites_caption(locale),
@@ -834,6 +864,16 @@ impl Home {
                 ..wire::EmptyState::default()
             }
         }
+    }
+
+    /// An empty library behind a refused grant: the card says so (no banner beside it, no second ask).
+    fn refused_empty(&self) -> bool {
+        self.empty_library() && self.roll.permission == wire::PhotosMediaPermission::Denied
+    }
+
+    /// An empty library behind a grant not yet asked: the card is the ask.
+    fn asks_access(&self) -> bool {
+        self.empty_library() && self.roll.permission == wire::PhotosMediaPermission::NotAsked
     }
 
     fn empty_library(&self) -> bool {
@@ -1015,8 +1055,9 @@ impl Screen for Home {
             ),
             chrome: Some(chrome::words_of(locale)),
             sheet: self.sheet as i32,
-            import_banner: if library {
-                self.roll.banner(locale, self.empty_library())
+            import_banner: if library && !self.refused_empty() {
+                self.roll
+                    .banner(locale, self.empty_library(), self.asks_access())
             } else {
                 None
             },

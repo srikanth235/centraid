@@ -305,6 +305,35 @@ message BackupHomeData {
   // of that total, 0..1. Otherwise `progress` is drawn with a spinner.
   bool progress_known = 40;
   float progress_fraction = 41;
+  // BEFORE PAIRING (BackupUnpaired): no backup device is paired on a vault still on this phone, so the
+  // page is this card, the two steps and the footnote, and nothing else. Absent otherwise.
+  optional BackupUnpaired unpaired = 52;
+  // THE STATUS CARD'S ACTION when any backup device no longer knows this phone ("Pair again", ruling
+  // 28): empty otherwise. The shell draws it as the card's own button, beside the card's other
+  // action; the device's row keeps its own "Pair it again".
+  string pair_again_label = 53;
+  // Where it goes: the same pairing page as `add_destination`.
+  Route pair_again = 54;
+}
+
+// "Not backed up yet", what it means, and how to pair.
+message BackupUnpaired {
+  string title = 1;
+  string body = 2;
+  // "Pair a backup device"; its route is the page's `add_destination`.
+  string action_label = 3;
+  // "To pair"; the shell sets it as a small heading.
+  string steps_heading = 4;
+  repeated BackupPairStep steps = 5;
+  // "The recovery key comes after the first backup."
+  string foot = 6;
+}
+
+// One step: the words around the command the member types (`command` is set in the mono face).
+message BackupPairStep {
+  string before = 1;
+  string command = 2;
+  string after = 3;
 }
 
 // WHERE THE BACKUP STANDS, in one word the page draws its status card from (#1173).

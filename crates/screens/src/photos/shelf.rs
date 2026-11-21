@@ -687,6 +687,12 @@ impl Shelf {
             } else {
                 String::new()
             },
+            // A TRASH WEARS THE TRASH GLYPH (wording.md), as every app's does.
+            icon_key: if self.kind == wire::PhotosShelfKind::Trash {
+                "Trash".to_owned()
+            } else {
+                String::new()
+            },
             ..wire::EmptyState::default()
         }
     }
@@ -795,6 +801,7 @@ fn export_sentence(locale: Locale, mode: Option<Mode>, done: &wire::OriginalsExp
     match Status::try_from(done.status).unwrap_or(Status::Unspecified) {
         Status::NoneHere => home_words::copy_none_here(locale),
         Status::LocationNotRemovable => home_words::copy_location_not_removable(locale),
+        Status::StorageFull => crate::strings::permission::storage_full(locale),
         Status::Failed | Status::Unspecified => home_words::copy_export_failed(locale),
         Status::Done if mode == Some(Mode::Save) => {
             let saved = match done.handed {

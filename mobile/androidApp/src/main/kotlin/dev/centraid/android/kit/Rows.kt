@@ -3,7 +3,10 @@ package dev.centraid.android.kit
 import androidx.compose.foundation.background
 import dev.centraid.android.theme.centraidDark
 import androidx.compose.foundation.border
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,23 +19,33 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -43,6 +56,9 @@ import centraid.core.v1.SearchContainer
 import centraid.core.v1.StatusChip
 import dev.centraid.android.theme.centraidColor
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import dev.centraid.android.theme.centraidType
 
 /**
@@ -73,11 +89,42 @@ public fun CentraidRow(
     testTag: String = "kit-row",
     onTap: (() -> Unit)? = null,
     metaRuns: androidx.compose.ui.text.AnnotatedString? = null,
+    /** The meta as parts (see [MetaLine]); when set it replaces [meta]. [metaAccented] parts take the app's colour. */
+    metaParts: List<String> = emptyList(),
+    metaAccented: List<String> = emptyList(),
+    /** The hairline under the row; a row that stands on a tile of its own has none, so the tile's corner is whole. */
+    hairline: Boolean = true,
     accessory: (@Composable RowScope.() -> Unit)? = null,
 ) {
     val titleInk = if (dimmed) Surface.meta else Surface.ink
     val softInk = Surface.meta
     val line = Surface.line
+    // A CHIP ALONE goes under the title too (#1202): beside it the subtitle was left a sliver and cut.
+    val stackTrailing = rememberLargestText() && (trailing.isNotEmpty() || pending || chips.isNotEmpty())
+    val chipUnderFigure = trailing.isNotEmpty() && chips.isNotEmpty()
+    // THE FIGURE with its chip and sub-label, the ends aligned to [align].
+    @Composable
+    fun ColumnScope.TrailingFigure(align: Alignment.Horizontal) {
+        if (trailing.isNotEmpty()) {
+            val figureInk = if (dimmed) titleInk else toneInk(trailingTone, neutral = "text")
+            Text(
+                trailing,
+                style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
+                color = figureInk,
+                textAlign = if (align == Alignment.End) TextAlign.End else TextAlign.Start,
+                maxLines = if (stackTrailing) 2 else 1,
+            )
+        }
+        if (chipUnderFigure && !stackTrailing) {
+            Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                chips.forEach { chip -> StatusChipView(chip) }
+            }
+        }
+        val note = if (pending) pendingLabel else trailingNote
+        if (note.isNotEmpty()) {
+            KitText(note, KitType.Meta, softInk, Modifier, maxLines = if (stackTrailing) 2 else 1)
+        }
+    }
     Column(modifier.fillMaxWidth()) {
         Row(
             Modifier
@@ -122,44 +169,95 @@ public fun CentraidRow(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                } else if (metaParts.any { it.isNotEmpty() } || metaAccented.isNotEmpty()) {
+                    MetaLine(metaParts, metaAccented)
                 } else if (meta.isNotEmpty()) {
-                    KitText(meta, KitType.Meta, softInk, maxLines = 2)
+                    KitText(meta, KitType.Meta, softInk, maxLines = if (rememberLargestText()) 4 else 2)
+                }
+                if (stackTrailing) {
+                    chips.forEach { chip -> StatusChipView(chip, Modifier.padding(top = 4.dp)) }
+                    Column(Modifier.padding(top = 2.dp), horizontalAlignment = Alignment.Start) {
+                        TrailingFigure(Alignment.Start)
+                    }
                 }
             }
             // THE MONEY BOARDS' TRAILING COLUMN: a figure with its state chip UNDER it; a chip
-            // alone stays beside the title.
-            val chipUnderFigure = trailing.isNotEmpty() && chips.isNotEmpty()
-            if (!chipUnderFigure) {
+            // alone stays beside the title. AT THE LARGEST TEXT the whole column goes under the
+            // title (#1202), so the figure keeps its width: beside it the title was left a few
+            // letters wide and the figure was cut.
+            if (!chipUnderFigure && !stackTrailing) {
                 chips.forEach { chip -> StatusChipView(chip, Modifier.padding(start = 8.dp)) }
             }
-            if (trailing.isNotEmpty() || pending) {
+            if (!stackTrailing && (trailing.isNotEmpty() || pending)) {
                 // THE FIGURE: right-aligned, with its sub-label under it.
                 Column(Modifier.padding(start = 8.dp), horizontalAlignment = Alignment.End) {
-                    if (trailing.isNotEmpty()) {
-                        val figureInk = if (dimmed) titleInk else toneInk(trailingTone, neutral = "text")
-                        Text(
-                            trailing,
-                            style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
-                            color = figureInk,
-                            textAlign = TextAlign.End,
-                            maxLines = 1,
-                        )
-                    }
-                    if (chipUnderFigure) {
-                        Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            chips.forEach { chip -> StatusChipView(chip) }
-                        }
-                    }
-                    val note = if (pending) pendingLabel else trailingNote
-                    if (note.isNotEmpty()) {
-                        KitText(note, KitType.Meta, softInk, Modifier, maxLines = 1)
-                    }
+                    TrailingFigure(Alignment.End)
                 }
             }
             accessory?.invoke(this)
         }
         // THE HAIRLINE starts at the text, not at the edge.
-        Spacer(Modifier.padding(start = KitGeometry.GUTTER).fillMaxWidth().height(KitGeometry.HAIRLINE).background(line))
+        if (hairline) {
+            Spacer(Modifier.padding(start = KitGeometry.GUTTER).fillMaxWidth().height(KitGeometry.HAIRLINE).background(line))
+        }
+    }
+}
+
+/**
+ * A META LINE OF PARTS (#1202): the parts joined by a dot while they fit on one line, and one part
+ * to a line when they do not, so a separator never dangles at a line's end and a part never
+ * breaks at its own spaces ("Last / touch 30 days ago"). [accented] parts are set in the app's
+ * colour. Each part is split on its own dots, so a part Rust already joined stays a unit each.
+ */
+@Composable
+public fun MetaLine(
+    parts: List<String>,
+    accented: List<String> = emptyList(),
+    modifier: Modifier = Modifier,
+    lines: Int = 3,
+) {
+    val plain = parts.flatMap { it.split(" · ") }.filter { it.isNotEmpty() }
+    val marked = accented.filter { it.isNotEmpty() }
+    val accent = appAccent().text
+    val soft = Surface.meta
+    var stacked by remember(plain, marked) { mutableStateOf(false) }
+    val style = kitTextStyle(KitType.Meta)
+    if (!stacked) {
+        val joined = buildAnnotatedString {
+            withStyle(SpanStyle(color = soft)) { append(plain.joinToString(" · ")) }
+            marked.forEach { part ->
+                if (length > 0) withStyle(SpanStyle(color = soft)) { append(" · ") }
+                withStyle(SpanStyle(color = accent)) { append(part) }
+            }
+        }
+        Text(
+            joined,
+            style = style,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Clip,
+            onTextLayout = { if (it.hasVisualOverflow) stacked = true },
+            modifier = modifier,
+        )
+    } else {
+        Column(modifier) {
+            (plain.map { it to false } + marked.map { it to true }).take(lines).forEach { (part, accented) ->
+                // A PART IS NEVER CUT (#1202): one word (an address, a username, an email) has nowhere
+                // to wrap and shrinks to fit its line; a part of several words wraps by word.
+                val ink = if (accented) accent else soft
+                if (part.contains(' ')) {
+                    Text(part, style = style, color = ink, maxLines = 3)
+                } else {
+                    BasicText(
+                        part,
+                        style = style.copy(color = ink),
+                        maxLines = 1,
+                        softWrap = false,
+                        autoSize = TextAutoSize.StepBased(minFontSize = style.fontSize * 0.5f, maxFontSize = style.fontSize),
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -238,25 +336,25 @@ public fun SectionHeader(
     sentenceCase: Boolean = false,
     onVerb: (() -> Unit)? = null,
 ) {
-    Row(
-        modifier
-            .fillMaxWidth()
-            .padding(start = KitGeometry.GUTTER, end = 8.dp, top = 20.dp, bottom = 4.dp)
-            .testTag("kit-section"),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        val count = head.count
-        val title = if (count != null) "${head.title} · $count" else head.title
+    // THE VERB UNDER THE TITLE AT THE LARGEST TEXT (#1202): beside it, a long title was left a
+    // column a few letters wide.
+    val stacked = rememberLargestText() && head.verb_label.isNotEmpty() && onVerb != null
+    val titleAt = Modifier.semantics { heading() }
+    val count = head.count
+    val title = if (count != null) "${head.title} · $count" else head.title
+    val titleView: @Composable (Modifier) -> Unit = { m ->
         if (sentenceCase) {
             Text(
                 title,
                 style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
                 color = Surface.meta,
-                modifier = Modifier.weight(1f).semantics { heading() },
+                modifier = m.then(titleAt),
             )
         } else {
-            KitText(title, KitType.Group, Surface.meta, Modifier.weight(1f).semantics { heading() })
+            KitText(title, KitType.Group, Surface.meta, m.then(titleAt))
         }
+    }
+    val verbView: @Composable () -> Unit = {
         if (head.verb_label.isNotEmpty() && onVerb != null) {
             Text(
                 head.verb_label,
@@ -269,6 +367,21 @@ public fun SectionHeader(
                     .padding(horizontal = 8.dp, vertical = 9.dp)
                     .semantics { role = Role.Button },
             )
+        }
+    }
+    val frame = modifier
+        .fillMaxWidth()
+        .padding(start = KitGeometry.GUTTER, end = 8.dp, top = 20.dp, bottom = 4.dp)
+        .testTag("kit-section")
+    if (stacked) {
+        Column(frame) {
+            titleView(Modifier)
+            verbView()
+        }
+    } else {
+        Row(frame, verticalAlignment = Alignment.CenterVertically) {
+            titleView(Modifier.weight(1f))
+            verbView()
         }
     }
 }
@@ -366,6 +479,9 @@ public fun rememberFollowedText(value: String): EditorText {
 /**
  * AN EDITABLE FIELD ROW: key over a bare text field. [onEdit] is sent only for
  * a difference from [value], from local text held by [rememberEditorText].
+ *
+ * [imeNext] says another text field follows directly below: the keyboard's action is Next and moves
+ * focus to it (#1202), where a field that ends the form keeps Done and closes the keyboard.
  */
 @Composable
 public fun EditableFieldRow(
@@ -378,9 +494,15 @@ public fun EditableFieldRow(
     singleLine: Boolean = true,
     style: String = "body",
     testTag: String = "kit-field",
+    onNext: (() -> Unit)? = null,
+    imeNext: Boolean = false,
 ) {
     val editor = rememberEditorText(value, reload)
+    val focus = LocalFocusManager.current
     val text = editor.text
+    // A FIELD WRAPS at the largest text (#1202): a one-line field clipped the words at its edge. Return
+    // still finishes (or moves on) rather than adding a line.
+    val wraps = singleLine && rememberLargestText()
     Column(modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp)) {
         if (key.isNotEmpty()) Text(key, style = centraidType("eyebrow"), color = centraidColor("textSoft"))
         Box(Modifier.fillMaxWidth().heightIn(min = 36.dp), contentAlignment = Alignment.CenterStart) {
@@ -395,7 +517,16 @@ public fun EditableFieldRow(
             BasicTextField(
                 value = text.value,
                 onValueChange = { next -> if (editor.edited(next)) onEdit(next) },
-                singleLine = singleLine,
+                singleLine = singleLine && !wraps,
+                // RETURN LEAVES THE FIELD for the next one (the note's title hands focus to its body).
+                keyboardOptions = when {
+                    onNext != null || imeNext -> KeyboardOptions(imeAction = ImeAction.Next)
+                    wraps -> KeyboardOptions(imeAction = ImeAction.Done)
+                    else -> KeyboardOptions.Default
+                },
+                keyboardActions = KeyboardActions(
+                    onNext = { onNext?.invoke() ?: focus.moveFocus(FocusDirection.Down) },
+                ),
                 textStyle = centraidType(style).copy(color = centraidColor("text")),
                 cursorBrush = SolidColor(centraidColor("text")),
                 modifier = Modifier
@@ -543,10 +674,23 @@ private fun SearchContainerLine(
     // A matched container is one pill above the rows (#1173): its glyph in the app's colour, the
     // kind in meta, then its name.
     val shape = RoundedCornerShape(percent = 50)
+    // THE PRESS IS ON THE NODE THAT CARRIES THE ID AND THE SPOKEN LABEL (#1202): `clearAndSetSemantics`
+    // below drops every descendant's actions, so a click on the pill alone left the container
+    // unreachable by TalkBack and by a Maestro tap on its id, which lands in the row's middle.
+    // THE PILL KEEPS ITS OWN PRESS FEEDBACK: the row takes the press and no ripple of its own, and the
+    // pill draws the indication for the same interaction source, so it looks as it did.
+    val press = remember { MutableInteractionSource() }
     Box(
         modifier
             .fillMaxWidth()
             .heightIn(min = KitGeometry.ROW_MIN)
+            .then(
+                if (onTap != null) {
+                    Modifier.clickable(interactionSource = press, indication = null, onClick = onTap)
+                } else {
+                    Modifier
+                },
+            )
             .padding(horizontal = KitGeometry.GUTTER + 2.dp, vertical = 4.dp)
             .testTag("search-container-$entity-$id")
             .clearAndSetSemantics {
@@ -560,7 +704,7 @@ private fun SearchContainerLine(
                 .clip(shape)
                 .background(Surface.card)
                 .border(KitGeometry.HAIRLINE, Surface.border, shape)
-                .then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier)
+                .indication(press, LocalIndication.current)
                 .heightIn(min = KitGeometry.ROW_MIN)
                 .padding(start = 8.dp, end = 12.dp),
             verticalAlignment = Alignment.CenterVertically,

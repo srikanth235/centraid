@@ -17,6 +17,8 @@ use wire::screen_event::Kind as E;
 #[test]
 fn opening_locker_asks_at_once_and_a_cancel_leaves_the_wall_to_try_again() {
     let mut d = driver();
+    // A VAULT WITH AN ITEM: the wall is the lock's own, not the first check's.
+    login(&d, "i0", "Bank");
     d.start();
     let id = home_instance(&d);
     // No wall before the prompt: the prompt is the first thing.
@@ -30,6 +32,7 @@ fn opening_locker_asks_at_once_and_a_cancel_leaves_the_wall_to_try_again() {
     let wall = wall_of(&d, id).expect("still a wall");
     assert_eq!(wall.phase, wire::locker_wall::Phase::Locked as i32);
     assert_eq!(wall.unlock_label, "Unlock with your face");
+    assert_eq!((wall.step, wall.steps), (0, 0));
     // A CANCEL IS NOT A FAILURE: the wall says only the member's lock setting.
     assert_eq!(wall.notice, "Locks after 5 minutes idle.");
     // The wall reads nothing: no content under it.
@@ -39,9 +42,7 @@ fn opening_locker_asks_at_once_and_a_cancel_leaves_the_wall_to_try_again() {
 #[test]
 fn the_os_saying_yes_opens_the_locker_only_through_the_core() {
     let mut d = driver();
-    d.start();
-    let id = home_instance(&d);
-    d.answer_effect(passed(wire::Biometry::Face));
+    let id = open_home(&mut d);
     let state = home(&d, id);
     assert!(state.wall.is_none(), "the core opened its session");
     assert!(state.secure, "the capture shield holds while open");
@@ -81,6 +82,8 @@ fn a_failed_check_names_the_way_back_and_a_lockout_says_so() {
     let mut d = driver();
     d.start();
     let id = home_instance(&d);
+    d.effects.clear();
+    tap_unlock(&mut d, id);
     d.answer_effect(checked(wire::owner_checked::Outcome::Failed));
     let wall = wall_of(&d, id).unwrap();
     assert_eq!(wall.phase, wire::locker_wall::Phase::Failed as i32);
@@ -237,7 +240,12 @@ fn items_fold_into_a_menu_rows_and_a_day_one_state() {
     let data = home_data(&d, id);
     assert!(data.rows.is_empty());
     let empty = home_empty(&d, id);
-    assert_eq!(empty.headline, "Nothing is kept here yet");
+    assert_eq!(empty.headline, "Add your first item.");
+    assert_eq!(empty.action_label, "Add an item");
+    assert_eq!(empty.hint, "A password, a card, a Wi-Fi network or a code.");
+    // STEP 2 OF 2 sits over the card, and goes with the first item.
+    assert_eq!((data.step, data.steps), (2, 2));
+    assert_eq!(data.step_label, "Step 2 of 2");
     // A lone All is nothing to choose between: no button on day one.
     assert!(data.filter_menu.is_none());
     login(&d, "i1", "Bank");
@@ -545,10 +553,13 @@ fn generate_draws_from_the_given_bytes_and_a_relock_drops_the_candidate() {
     ));
     d.start();
     let id = home_instance(&d);
+    d.effects.clear();
+    tap_unlock(&mut d, id);
     d.answer_effect(passed(wire::Biometry::Passcode));
     let generator = home_data(&d, id).generator.expect("generate tab");
     assert_eq!(generator.output.chars().count(), 20);
-    assert!(!generator.use_label.is_empty());
+    // A Locker that holds no item offers no item to put the password on.
+    assert!(generator.use_label.is_empty() && generator.use_route.is_none());
     home_event(
         &mut d,
         id,
@@ -575,14 +586,37 @@ fn generate_draws_from_the_given_bytes_and_a_relock_drops_the_candidate() {
     )));
 }
 
+#[test]
+fn generate_offers_to_put_the_password_on_an_item_when_the_locker_holds_one() {
+    let mut d = Driver::keyed(Runtime::new(
+        Registry::default().with(
+            locker::HOME,
+            locker::home::build_with(fixed((0..=255).collect())),
+        ),
+        vec![(
+            "locker".to_owned(),
+            routes::home(wire::LockerDestination::Generate),
+        )],
+    ));
+    arrange(
+        &d,
+        centraid_screens::catalog::act::locker::AddItem {
+            title: "Bank".to_owned(),
+            password: Some("x".to_owned()),
+            ..Default::default()
+        },
+    );
+    let id = open_home(&mut d);
+    let generator = home_data(&d, id).generator.expect("generate tab");
+    assert!(!generator.use_label.is_empty() && generator.use_route.is_some());
+}
+
 /// THE HEADER'S LOCK KEY (#1173): a tap covers the Locker at once, through the same wall as More's
 /// Lock row, and the chrome says the key's words.
 #[test]
 fn the_header_lock_key_covers_the_locker_and_says_its_words() {
     let mut d = driver();
-    d.start();
-    let id = home_instance(&d);
-    d.answer_effect(passed(wire::Biometry::Face));
+    let id = open_home(&mut d);
     assert!(home(&d, id).wall.is_none());
     assert_eq!(home(&d, id).chrome.unwrap().lock_label, "Lock now");
     d.send(
@@ -767,4 +801,49 @@ fn selecting_another_tab_drops_a_pending_unlock() {
         wire::locker_session_request::Step::State(wire::LockerStateAsk::default()),
     );
     assert_eq!(state.state, wire::LockerSessionState::Locked as i32);
+}
+
+#[test]
+fn over_a_vault_with_no_item_the_wall_is_the_first_check_and_its_button_is_the_ask() {
+    let mut d = driver();
+    d.start();
+    let id = home_instance(&d);
+    // NO PROMPT YET (LockerFirstCheck): the wall is the screen, counts the steps and says what the
+    // check is for; the check is raised only when the member presses its button.
+    assert!(
+        !d.effects.iter().any(|e| matches!(
+            e.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::OwnerCheck(check)) if check.ask
+        )),
+        "nothing asks before the button"
+    );
+    let wall = wall_of(&d, id).expect("a wall");
+    assert_eq!(wall.phase, wire::locker_wall::Phase::Locked as i32);
+    assert_eq!((wall.step, wall.steps), (1, 2));
+    assert_eq!(wall.step_label, "Step 1 of 2");
+    assert_eq!(wall.title, "Your passwords and secure notes");
+    assert_eq!(
+        wall.body,
+        "Locker opens with your face or your passcode, every time."
+    );
+    assert_eq!(wall.unlock_label, "Confirm it's you");
+    assert_eq!(wall.notice, "");
+    // THE BUTTON ASKS, and the wall under the prompt still counts the steps.
+    d.effects.clear();
+    tap_unlock(&mut d, id);
+    assert!(matches!(
+        effects_of(&d, 0).as_slice(),
+        [wire::effect::Kind::OwnerCheck(check)] if check.ask
+    ));
+    let wall = wall_of(&d, id).expect("a wall");
+    assert_eq!((wall.step, wall.steps), (1, 2));
+    assert_eq!(wall.step_label, "Step 1 of 2");
+    // A cancel returns to the card, button and all.
+    d.answer_effect(checked(wire::owner_checked::Outcome::Cancelled));
+    let wall = wall_of(&d, id).expect("still a wall");
+    assert_eq!(wall.phase, wire::locker_wall::Phase::Locked as i32);
+    assert_eq!(wall.step_label, "Step 1 of 2");
+    assert_eq!(wall.title, "Your passwords and secure notes");
+    assert_eq!(wall.unlock_label, "Confirm it's you");
+    assert_eq!(wall.notice, "");
 }

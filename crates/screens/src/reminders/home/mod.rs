@@ -71,6 +71,9 @@ pub(super) struct Home {
     followed: Option<Vec<String>>,
     /// The Import reminders sheet's option "Include completed reminders"; off each time it opens.
     import_completed: bool,
+    /// The route asked for the phone's Reminders import as the page opens (Home's tile): run once,
+    /// on the first appearance.
+    import_on_open: bool,
     filing_task_id: String,
     /// The style sheet's draft: the new list.
     style: Option<Draft>,
@@ -108,6 +111,7 @@ impl Home {
             asking_stop: false,
             followed: None,
             import_completed: false,
+            import_on_open: args.open_import,
             filing_task_id: String::new(),
             style: None,
             quick: QuickAdd {
@@ -262,6 +266,8 @@ impl Home {
                 }
             }
             H::ImportRemindersSubmitted(_) => self.import_reminders(ctx),
+            // THE FIRST-OPEN CARD'S IMPORT: one tap, no option sheet (completed ones stay on the phone).
+            H::ImportRemindersRequested(_) => Self::import(ctx, false),
             // THE EMPTY LIST'S ONE ACTION is the new-project sheet.
             H::TodoEmptyActed(_) => {
                 let acts = self
@@ -332,6 +338,16 @@ impl Home {
         }
         let include_completed = std::mem::take(&mut self.import_completed);
         self.sheet = Sheet::None;
+        Self::import(ctx, include_completed);
+    }
+
+    /// The phone refused Reminders when the member last asked to import.
+    fn import_refused(ctx: &Ctx) -> bool {
+        ctx.reminders_source() && ctx.follows().report(crate::follow::Store::Reminders).denied
+    }
+
+    /// Ask the one reminders import to read the phone, only where the platform has a Reminders store.
+    fn import(ctx: &Ctx, include_completed: bool) {
         if !ctx.reminders_source() {
             return;
         }
@@ -507,6 +523,15 @@ impl Home {
     }
 }
 
+/// THE CARD OF A PHONE WITH NO REMINDERS TO READ: no import, and the hint to add by hand without its
+/// "Or" ("Tap + to write one."), so the card still says how to add.
+fn without_import(empty: &mut wire::EmptyState, locale: crate::strings::Locale) {
+    empty.import_source = wire::ImportSource::Unspecified as i32;
+    if !empty.hint.is_empty() {
+        empty.hint = crate::strings::notes::first_open_hint(locale);
+    }
+}
+
 impl Screen for Home {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
@@ -516,6 +541,11 @@ impl Screen for Home {
                     self.quick.chip.hold(ctx);
                 }
                 self.refresh(ctx);
+                // HOME'S "IMPORT YOUR REMINDERS" TILE opened this page to import, once.
+                if self.import_on_open && ctx.reminders_source() {
+                    self.import_on_open = false;
+                    Self::import(ctx, false);
+                }
                 return self.prefs.ask().into_iter().collect();
             }
             Some(E::EnvironmentChanged(_) | E::DataChanged(_)) => {
@@ -545,6 +575,14 @@ impl Screen for Home {
                 Some(H::QuickTool(picked)) if self.toolbar_up() => {
                     return self.quick.staged.press(&picked.key);
                 }
+                // THE REFUSED CARD'S ONE ACTION is the phone's Settings, not a new list.
+                Some(H::TodoEmptyActed(_)) if Self::import_refused(ctx) => {
+                    return vec![wire::Effect {
+                        kind: Some(wire::effect::Kind::CameraRoll(wire::CameraRoll {
+                            action: wire::camera_roll::Action::OpenSettings as i32,
+                        })),
+                    }];
+                }
                 Some(H::StopConfirmed(_)) => return self.stop(ctx),
                 Some(H::StopDismissed(_)) => self.asking_stop = false,
                 Some(kind) => self.on_event(kind, ctx),
@@ -569,7 +607,32 @@ impl Screen for Home {
         let locale = ctx.locale();
         let denied = self.denied();
         let ready = matches!(self.page, Page::Ready { .. });
-        let data = if ready { self.data(ctx) } else { None };
+        let mut data = if ready { self.data(ctx) } else { None };
+        // A PHONE WITH NO REMINDERS TO READ offers no import, and so drops the "Or" of the hint to add by
+        // hand ("Tap + to write one."): the way to add stays.
+        if !ctx.reminders_source()
+            && let Some(empty) = data
+                .as_mut()
+                .and_then(|data| data.todo.as_mut())
+                .and_then(|todo| todo.empty.as_mut())
+        {
+            without_import(empty, locale);
+        }
+        // A REFUSED GRANT is said on the card, with Open Settings alone (as Photos says it): no
+        // import it cannot do, no hint, and no status line to follow the member elsewhere.
+        if Self::import_refused(ctx)
+            && let Some(empty) = data
+                .as_mut()
+                .and_then(|data| data.todo.as_mut())
+                .and_then(|todo| todo.empty.as_mut())
+            && empty.import_source == wire::ImportSource::Reminders as i32
+        {
+            empty.import_source = wire::ImportSource::Unspecified as i32;
+            empty.headline = task::refused_title(locale);
+            empty.body = task::refused_body(locale);
+            empty.action_label = task::refused_open_settings(locale);
+            empty.hint = String::new();
+        }
         // A ready page with nothing to draw is a failure, never a blank.
         let page = if ready && data.is_none() {
             Page::Failed
@@ -591,7 +654,7 @@ impl Screen for Home {
             },
             || wire::EmptyState {
                 headline: words::empty_no_match(locale),
-                body: words::empty_no_match_body(locale),
+                body: task::search_no_match_body(locale),
                 ..wire::EmptyState::default()
             },
         );
@@ -613,6 +676,12 @@ impl Screen for Home {
             Sheet::More | Sheet::Reads | Sheet::ImportReminders
         );
         let drawn = self.quick.drawn;
+        let offers_import = data.as_ref().is_some_and(|data| {
+            data.todo
+                .as_ref()
+                .and_then(|todo| todo.empty.as_ref())
+                .is_some_and(|empty| empty.import_source == wire::ImportSource::Reminders as i32)
+        });
         wire::ViewState {
             kind: Some(wire::view_state::Kind::AgendaHome(Box::new(
                 wire::AgendaHomeState {
@@ -705,10 +774,37 @@ impl Screen for Home {
                     }),
                     content,
                     page: Some(page),
-                    import_label: String::new(),
+                    // THE FIRST-OPEN CARD'S IMPORT, where the phone has Reminders to read.
+                    import_label: if ctx.reminders_source() && offers_import {
+                        reminders::import_from_reminders(locale)
+                    } else {
+                        String::new()
+                    },
                 },
             ))),
             ..wire::ViewState::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::strings::Locale;
+
+    #[test]
+    fn a_phone_with_no_reminders_store_drops_the_import_and_the_or_but_keeps_the_way_to_add() {
+        let mut empty = wire::EmptyState {
+            import_source: wire::ImportSource::Reminders as i32,
+            hint: "Or tap + to write one.".to_owned(),
+            ..Default::default()
+        };
+        without_import(&mut empty, Locale::En);
+        assert_eq!(empty.import_source, wire::ImportSource::Unspecified as i32);
+        assert_eq!(empty.hint, "Tap + to write one.");
+        // A card with no hint (the inbox emptied) gets none.
+        let mut bare = wire::EmptyState::default();
+        without_import(&mut bare, Locale::En);
+        assert_eq!(bare.hint, "");
     }
 }

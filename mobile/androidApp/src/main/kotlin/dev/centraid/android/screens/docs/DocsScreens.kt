@@ -54,6 +54,7 @@ import centraid.core.v1.DocsCrumb
 import centraid.core.v1.DocsDestination
 import centraid.core.v1.DocsDocumentEvent
 import centraid.core.v1.DocsDocumentData
+import centraid.core.v1.DocsReader
 import centraid.core.v1.DocsDocumentState
 import centraid.core.v1.DocsDriveData
 import centraid.core.v1.DocsDriveEvent
@@ -84,6 +85,7 @@ import dev.centraid.android.kit.EditorRoom
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.OutlineButton
@@ -463,7 +465,9 @@ private fun DriveData(
     }
     val chrome = state.chrome
     if (state.layout == DocsDriveState.Layout.LAYOUT_GRID) {
-        LazyVerticalGrid(columns = GridCells.Fixed(3), modifier = Modifier.fillMaxSize()) {
+        // THREE TILES ACROSS, ONE AT THE LARGEST TEXT (#1202): a third of the width left a tile's name a
+        // column of three letters, and two across cut the meta line.
+        LazyVerticalGrid(columns = GridCells.Fixed(if (rememberLargestText()) 1 else 3), modifier = Modifier.fillMaxSize()) {
             item(span = { GridItemSpan(maxLineSpan) }, key = "head") { DriveHead(data) }
             if (data.label_chips.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }, key = "chips") {
@@ -555,7 +559,8 @@ private fun DocumentLine(row: DocsRowView, starredWord: String, menuLabel: Strin
             accessory = {
                 // The row opens; its words are the state's accessibility label.
                 Box(Modifier.semantics { contentDescription = row.accessibility_label })
-                if (menuLabel.isNotEmpty()) IconKey("MoreVert", menuLabel, "docs-row-menu-${row.document_id}", bordered = false, onPress = onMenu)
+                // NAMED FOR ITS ROW: Rust sends one "More" for the page, and a list of identical "More" keys tells a screen reader nothing.
+                if (menuLabel.isNotEmpty()) IconKey("MoreVert", "$menuLabel, ${row.title}", "docs-row-menu-${row.document_id}", bordered = false, onPress = onMenu)
             },
         )
         if (row.snippet.isNotEmpty()) {
@@ -600,12 +605,14 @@ private fun Tile(
             CentraidIcon(iconKey.ifEmpty { "FileText" }, tint = centraidColor("textSoft"), size = 20.dp)
             Box(Modifier.weight(1f))
             if (menuLabel != null && menuLabel.isNotEmpty() && onMenu != null) {
-                IconKey("MoreVert", menuLabel, "$tag-menu", bordered = false, onPress = onMenu)
+                IconKey("MoreVert", "$menuLabel, $title", "$tag-menu", bordered = false, onPress = onMenu)
             }
         }
         Column(Modifier.clearAndSetSemantics { contentDescription = a11y.ifEmpty { title }; role = Role.Button }) {
-            Text(title, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (meta.isNotEmpty()) Text(meta, style = centraidType("annotLabel"), color = centraidColor("textSoft"), maxLines = 1)
+            Text(title, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = 3, overflow = TextOverflow.Ellipsis)
+            // THE SIZE MUST SHOW (#1202): a tile is narrow, so the parts of the meta take a line each
+            // (kind, then size) instead of one line cut after the kind.
+            if (meta.isNotEmpty()) dev.centraid.android.kit.MetaLine(listOf(meta), lines = 4)
         }
     }
 }
@@ -630,6 +637,7 @@ internal fun DocsDocumentScreen(
         // RUST NAMES THE PARENT (`chrome.back`, #1047).
         parentTitle = chrome?.back.orEmpty(),
         onBack = onBack,
+        app = "docs",
         // THE HEAD'S MORE: the verbs sheet opens on Rust's say
         // (`MoreOpened` → `DocsSheet.KIND_MORE`), every action a row in it.
         trailing = if (data?.actions.orEmpty().isNotEmpty() && chrome?.more.orEmpty().isNotEmpty()) {
@@ -666,7 +674,12 @@ internal fun DocsDocumentScreen(
                     val facts = document.facts_only
                     when {
                         reading != null -> Column(Modifier.fillMaxWidth().padding(KitGeometry.GUTTER)) {
-                            Text(
+                            if (reading.has_text && reading.body.isNotEmpty() && reading.format == DocsReader.Format.FORMAT_MARKDOWN) {
+                                // MARKDOWN IS READ, NOT SHOWN (#1202): headings and lists, never `#` and `-`.
+                                dev.centraid.android.screens.chat.MarkdownText(
+                                    reading.body, false, dev.centraid.android.screens.chat.ChatMarkdown.plain(reading.body), "docs-reader-markdown",
+                                )
+                            } else Text(
                                 when {
                                     reading.has_text && reading.body.isNotEmpty() -> reading.body
                                     reading.has_text -> reading.empty_body
@@ -968,6 +981,7 @@ internal fun DocsEditorScreen(state: DocsEditorState, onEvent: (DocsEditorEvent)
                     placeholder = chrome?.title_placeholder.orEmpty(),
                     style = "title",
                     testTag = "docs-editor-title",
+                    imeNext = true,
                     onEdit = { onEvent(DocsEditorEvent(title = DocsEditorEvent.TitleEdited(title = it))) },
                 )
                 EditableFieldRow(

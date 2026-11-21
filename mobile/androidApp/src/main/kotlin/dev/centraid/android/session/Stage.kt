@@ -1,7 +1,9 @@
 package dev.centraid.android.session
 
 import centraid.core.v1.Envelope
+import centraid.core.v1.ErrorCode
 import centraid.core.v1.Request
+import centraid.core.v1.StageAbort
 import centraid.core.v1.StageBegin
 import centraid.core.v1.StageChunk
 import centraid.core.v1.StageEnd
@@ -9,7 +11,10 @@ import centraid.core.v1.StageHandle
 import centraid.core.v1.StageRequest
 import centraid.core.v1.StageSource
 import dev.centraid.core.CentraidCore
+import dev.centraid.core.CoreFailure
 import dev.centraid.core.CoreOutcome
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import okio.ByteString
 import okio.ByteString.Companion.decodeHex
 import okio.ByteString.Companion.toByteString
@@ -17,9 +22,11 @@ import okio.ByteString.Companion.toByteString
 /**
  * THE STAGE DOOR, STREAMED (#1025 S5; #1080 ruling 6; #1135): bytes go in, the core names them.
  *
- * Three frames: `begin` declares the media type, the length (0 when the platform does not know it
+ * Four frames: `begin` declares the media type, the length (0 when the platform does not know it
  * before the read) and where the bytes live; `chunk` is numbered from zero and sized by the core's
- * own ceiling (`StageBegun.chunk_bytes`, never this shell's guess); `end` answers the handle. A
+ * own ceiling (`StageBegun.chunk_bytes`, never this shell's guess); `end` answers the handle; `abort`
+ * drops the session when this shell's own read broke or its coroutine was cancelled after `begin`, so
+ * a failed stage never holds one of the core's four places. A
  * BLAKE3 is the vault's identity and no Android API computes one, so the shell never names its own
  * bytes. A refusal ends the stage where it happened; there is no resume, and the core's
  * `already_held` makes a retry cheap.
@@ -31,7 +38,7 @@ internal object Stage {
     sealed interface Outcome {
         data class Staged(val handle: StageHandle) : Outcome
 
-        data class Refused(val sentence: String) : Outcome
+        data class Refused(val sentence: String, val full: Boolean = false) : Outcome
     }
 
     /**
@@ -57,26 +64,36 @@ internal object Stage {
             tier = tier,
         )
         val begun = when (val answer = core.send(StageRequest(begin = begin))) {
-            is CoreOutcome.Failed -> return Outcome.Refused(answer.failure.sentence)
+            is CoreOutcome.Failed -> return Outcome.Refused(answer.failure.sentence, answer.failure.diskFull())
             is CoreOutcome.Answered -> answer.value.response?.stage?.begun
         } ?: return Outcome.Refused("")
         val chunkBytes = begun.chunk_bytes.toInt().coerceAtLeast(1)
-        var seq = 0L
-        while (true) {
-            val slice = read(chunkBytes)
-            if (slice.isEmpty()) break
-            val chunk = StageChunk(staging_id = begun.staging_id, seq = seq, payload = slice.toByteString())
-            when (val answer = core.send(StageRequest(chunk = chunk))) {
-                is CoreOutcome.Failed -> return Outcome.Refused(answer.failure.sentence)
-                is CoreOutcome.Answered -> Unit
+        var finished = false
+        try {
+            var seq = 0L
+            while (true) {
+                val slice = read(chunkBytes)
+                if (slice.isEmpty()) break
+                val chunk = StageChunk(staging_id = begun.staging_id, seq = seq, payload = slice.toByteString())
+                when (val answer = core.send(StageRequest(chunk = chunk))) {
+                    is CoreOutcome.Failed -> return Outcome.Refused(answer.failure.sentence, answer.failure.diskFull())
+                    is CoreOutcome.Answered -> Unit
+                }
+                seq += 1
             }
-            seq += 1
+            finished = true
+            val handle = when (val answer = core.send(StageRequest(end = StageEnd(staging_id = begun.staging_id)))) {
+                is CoreOutcome.Failed -> return Outcome.Refused(answer.failure.sentence, answer.failure.diskFull())
+                is CoreOutcome.Answered -> answer.value.response?.stage?.handle
+            } ?: return Outcome.Refused("")
+            return Outcome.Staged(handle)
+        } finally {
+            // A read that threw, a cancelled coroutine or a refused chunk leaves the session open on the
+            // core's side: drop it (the core forgives an id it already closed). `end` closes its own.
+            if (!finished) {
+                withContext(NonCancellable) { core.send(StageRequest(abort = StageAbort(staging_id = begun.staging_id))) }
+            }
         }
-        val handle = when (val answer = core.send(StageRequest(end = StageEnd(staging_id = begun.staging_id)))) {
-            is CoreOutcome.Failed -> return Outcome.Refused(answer.failure.sentence)
-            is CoreOutcome.Answered -> answer.value.response?.stage?.handle
-        } ?: return Outcome.Refused("")
-        return Outcome.Staged(handle)
     }
 
     /** Read a stream to its end in slices: `read` may short-read without being at the end. */
@@ -100,3 +117,6 @@ internal object Stage {
 
     private suspend fun CentraidCore.send(request: StageRequest) = call(Envelope(request = Request(stage = request)))
 }
+
+/** The core refused because the phone is full (`ERROR_CODE_DISK_FULL`): a fact the shell passes on, worded by Rust. */
+private fun CoreFailure.diskFull(): Boolean = (this as? CoreFailure.Refused)?.code == ErrorCode.ERROR_CODE_DISK_FULL.value

@@ -162,7 +162,7 @@ private struct WidgetBody: View {
             skeleton
         } else if tile.status != .content {
             // A SMALL SLOT HOLDS A GLANCE, NOT A SENTENCE: Health's one word under its mark.
-            if tile.size == .small { glance(figure: "", caption: tile.emptyCopy) } else { invitation }
+            if tile.size == .small { glance(figure: "", caption: tile.emptyCopy, invites: true) } else { invitation }
         } else {
             switch tile.body.kind {
             case let .agenda(day): agenda(day)
@@ -196,11 +196,11 @@ private struct WidgetBody: View {
                         Text(event.title)
                             .centraidType("annotLabelOn")
                             .foregroundStyle(ink)
-                            .lineLimit(1)
+                            .kitLineLimit(2)
                         Text(event.span)
                             .centraidType("annotLabel")
                             .foregroundStyle(meta)
-                            .lineLimit(1)
+                            .kitLineLimit(2)
                     }
                 }
                 .fixedSize(horizontal: false, vertical: true)
@@ -209,7 +209,7 @@ private struct WidgetBody: View {
             Text(day.foot)
                 .centraidType("annotLabel")
                 .foregroundStyle(meta)
-                .lineLimit(1)
+                .kitLineLimit(2)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
@@ -235,7 +235,8 @@ private struct WidgetBody: View {
                     Text(title)
                         .centraidType("annotLabel")
                         .foregroundStyle(ink)
-                        .lineLimit(1)
+                        // TWO LINES, NOT ONE (#1202): a title longer than the tile was cut to "Expense the Octobe...".
+                        .kitLineLimit(2)
                 }
             }
             Spacer(minLength: 0)
@@ -253,8 +254,12 @@ private struct WidgetBody: View {
     }
 
     /// A GLANCE (small): the app's mark in its colour, a figure and a word.
-    private func glance(figure: String, caption: String) -> some View {
-        VStack(spacing: 2) {
+    private func glance(figure: String, caption: String, invites: Bool = false) -> some View {
+        // AT THE LARGEST TEXT EVERY TILE IS A FULL-WIDTH CARD THAT LEANS LEADING (#1202): the glances
+        // stayed centred beside the leading Calendar, Reminders, Photos, Notes and Docs cards, so
+        // the day-zero column read as two layouts.
+        let lead = largestText
+        return VStack(alignment: lead ? .leading : .center, spacing: 2) {
             if let app = CentraidCatalog.byID[tile.appID] {
                 CentraidIconView(iconKey: widgetIcon(app.iconKey), tint: accent, size: 22)
                     .accessibilityHidden(true)
@@ -266,21 +271,38 @@ private struct WidgetBody: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
             }
+            // AN INVITATION IS THE APP'S COLOUR (FirstHome); what a glance reports is the quiet one.
             Text(caption)
-                .centraidType("annotLabel")
-                .foregroundStyle(meta)
-                .lineLimit(2)
-                .minimumScaleFactor(0.7)
-                .multilineTextAlignment(.center)
+                .centraidType(invites ? "annotLabelOn" : "annotLabel")
+                .foregroundStyle(invites ? accent : meta)
+                // WHOLE, THE TILE GROWS (#1202): two lines and a shrink cut a longer caption at larger sizes.
+                // A WORD WIDER THAN THE TILE SHRINKS, NEVER BREAKS (#1202, S13): on an iPhone SE the four
+                // small tiles are 74 pt wide, 50 inside the padding, and "November" and "reconnect" broke
+                // mid-word there.
+                .lineLimit(lead ? nil : 3)
+                .minimumScaleFactor(lead ? 1 : 0.7)
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(lead ? .leading : .center)
+            // A SMALL TILE NAMES ITS APP (#1202, S2-7; `HomeWidgets`): "1 person" and "Connect Apple
+            // Health" say what is in it, and this says whose. Locker's caption already is the name.
+            // A caption that already is the name ("people" under 6, "Locker") is not said twice.
+            if !tile.name.isEmpty, caption.caseInsensitiveCompare(tile.name) != .orderedSame {
+                Text(tile.name)
+                    .centraidType("annotLabel")
+                    .foregroundStyle(meta)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .accessibilityHidden(true)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: lead ? .topLeading : .center)
     }
 
     /// A LINE (medium, one row): the app's name in its colour, then what is
     /// newest in it and a word about it. AT THE LARGEST TEXT the word about it is dropped first
     /// and the titles wrap to two lines, so no line is cut mid-word.
     private func line(title: String, next: String = "", meta line2: String) -> some View {
-        let titleLines = largestText ? 2 : 1
+        let titleLines = largestText ? 3 : 2
         return VStack(alignment: .leading, spacing: 2) {
             Text(tile.name)
                 .centraidType("annotLabelOn")
@@ -300,7 +322,7 @@ private struct WidgetBody: View {
                 Text(line2)
                     .centraidType("annotLabel")
                     .foregroundStyle(meta)
-                    .lineLimit(1)
+                    .kitLineLimit(2)
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -310,22 +332,56 @@ private struct WidgetBody: View {
     /// what to DO, never what is missing.
     private var invitation: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                if let app = CentraidCatalog.byID[tile.appID] {
-                    CentraidIconView(iconKey: widgetIcon(app.iconKey), tint: accent, size: 16)
-                        .accessibilityHidden(true)
-                }
+            if case let .agenda(day)? = tile.body.kind {
+                // THE CALENDAR KEEPS ITS DATE (FirstHome): the weekday in caps and the day, then the
+                // invitation, then the app's name.
+                Text(day.weekday.uppercased())
+                    .centraidType("eyebrow")
+                    .foregroundStyle(accent)
+                Text(day.day)
+                    .centraidType("display")
+                    .foregroundStyle(ink)
+                    .padding(.top, -4)
+                Spacer(minLength: 0)
+                invitationText
+                Text(tile.name)
+                    .centraidType("annotLabel")
+                    .foregroundStyle(meta)
+            } else if tile.appID == "photos" {
+                // THE STRIP'S INVITATION IS CENTRED, under the name (FirstHome).
                 Text(tile.name)
                     .centraidType("annotLabelOn")
                     .foregroundStyle(accent)
+                Spacer(minLength: 0)
+                // AT THE LARGEST TEXT IT LEANS LEADING, like the name over it (#1202): a centred
+                // sentence under a leading name read as two layouts in one card.
+                invitationText
+                    .multilineTextAlignment(largestText ? .leading : .center)
+                    .frame(maxWidth: .infinity, alignment: largestText ? .leading : .center)
+                Spacer(minLength: 0)
+            } else {
+                HStack(spacing: 6) {
+                    if let app = CentraidCatalog.byID[tile.appID] {
+                        CentraidIconView(iconKey: widgetIcon(app.iconKey), tint: accent, size: 16)
+                            .accessibilityHidden(true)
+                    }
+                    Text(tile.name)
+                        .centraidType("annotLabelOn")
+                        .foregroundStyle(accent)
+                }
+                Spacer(minLength: 0)
+                invitationText
             }
-            Spacer(minLength: 0)
-            Text(tile.emptyCopy)
-                .centraidType("annotLabel")
-                .foregroundStyle(Surface.body)
-                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    /// WHAT TO DO, in the app's colour: the board's one quiet text action.
+    private var invitationText: some View {
+        Text(tile.emptyCopy)
+            .centraidType("annotLabelOn")
+            .foregroundStyle(accent)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     /// STATIC BARS, NEVER A SPINNER: a read in flight holds its slot, and the

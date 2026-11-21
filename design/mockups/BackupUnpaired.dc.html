@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Backup, before anything is paired</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<!-- Backup before a backup device is paired (owner, 2026-11-17): a short reason and the pairing step, not a pitch. No recovery, check or restore rows yet: the 24 words are asked after the first backup, never before (RecoveryKeyPrompt). -->
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #F4F2EE; font-family: Geist, system-ui, sans-serif; color: #1C1B19;">
+  <h1 style="margin: 64px 20px 12px; font-size: 34px; font-weight: 700; letter-spacing: -0.5px;">Backup</h1>
+  <div style="margin: 0 16px; background: #FFFFFF; border-radius: 16px; padding: 20px 16px 16px; display: flex; flex-direction: column; align-items: center; text-align: center;">
+    <span style="width: 52px; height: 52px; border-radius: 26px; background: #FFF6E8; display: flex; align-items: center; justify-content: center;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#874300" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 10-3 6.2M20 6v6h-6"></path></svg></span>
+    <div style="font-size: 18px; font-weight: 600; margin-top: 8px;">Not backed up yet</div>
+    <div style="font-size: 14px; color: #6F6B64; margin-top: 2px; line-height: 1.4;">This phone holds the only copy of your vault.</div>
+    <button style="margin-top: 14px; height: 44px; padding: 0 22px; border-radius: 22px; border: none; background: #1F4A45; color: #F3EDE2; font-size: 16px; font-weight: 600;">Pair a backup device</button>
+  </div>
+  <div style="font-size: 13px; color: #6F6B64; margin: 18px 32px 6px;">TO PAIR</div>
+  <div style="margin: 0 16px; background: #FFFFFF; border-radius: 16px;">
+    <div style="display: flex; align-items: flex-start; gap: 12px; padding: 11px 14px; border-bottom: 1px solid #EEEBE5;"><span style="width: 24px; height: 24px; border-radius: 12px; background: #EEEBE5; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; flex-shrink: 0;">1</span><div style="font-size: 15px; line-height: 1.4;">On a computer you own, run <span style="font-family: 'Geist Mono', ui-monospace, monospace; font-weight: 500; font-size: 14px;">centraid-gateway pair</span>.</div></div>
+    <div style="display: flex; align-items: flex-start; gap: 12px; padding: 11px 14px;"><span style="width: 24px; height: 24px; border-radius: 12px; background: #EEEBE5; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; flex-shrink: 0;">2</span><div style="font-size: 15px; line-height: 1.4;">Scan the QR code it shows.</div></div>
+  </div>
+  <p style="margin: 8px 32px 0; font-size: 13px; color: #6F6B64; line-height: 1.4;">The recovery key comes after the first backup.</p>
+  <div style="position: absolute; left: 16px; right: 16px; bottom: 24px; height: 56px; border-radius: 28px; border: 1px solid rgba(255,255,255,0.7); background: rgba(255,255,255,0.72); box-shadow: 0 6px 20px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: space-around; font-size: 11px;">
+    <a href="HomeWidgets.dc.html" style="text-decoration: none; display: flex; flex-direction: column; align-items: center; gap: 2px; color: #6F6B64;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"/></svg>Home</a>
+    <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: #6F6B64;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></svg>Chat</span>
+    <span style="display: flex; flex-direction: column; align-items: center; gap: 2px; color: #1C1B19; font-weight: 600;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M20 12a8 8 0 10-3 6.2M20 6v6h-6"/></svg>Backup</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

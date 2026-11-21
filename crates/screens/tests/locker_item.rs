@@ -18,8 +18,7 @@ use wire::screen_event::Kind as E;
 fn opened_item() -> (centraid_screens::testing::Driver, u64) {
     let mut d = driver();
     login(&d, "i1", "Bank");
-    d.start();
-    d.answer_effect(passed(wire::Biometry::Face));
+    open_home(&mut d);
     let id = push_item(&mut d, "i1");
     (d, id)
 }
@@ -230,8 +229,7 @@ fn a_seed_is_never_revealed_and_a_code_ticks_with_its_step() {
             ..Default::default()
         },
     );
-    d.start();
-    d.answer_effect(passed(wire::Biometry::Face));
+    open_home(&mut d);
     let id = push_item(&mut d, "i2");
     let data = item_data(&d, id);
     let seed = row_of(&data, "otp_seed");
@@ -270,8 +268,7 @@ fn a_one_time_code_field_is_added_makes_codes_and_keeps_its_seed_to_itself() {
         },
     );
     assert_eq!(added.status, wire::ActStatus::Executed as i32);
-    d.start();
-    d.answer_effect(passed(wire::Biometry::Face));
+    open_home(&mut d);
     let id = push_item(&mut d, "i3");
     let data = item_data(&d, id);
     let row = row_of(&data, "field:f-otp");
@@ -398,8 +395,7 @@ fn editor_data(d: &centraid_screens::testing::Driver, id: u64) -> wire::LockerEd
 #[test]
 fn a_new_login_saves_whole_with_its_tags_filed_after() {
     let mut d = driver();
-    d.start();
-    d.answer_effect(passed(wire::Biometry::Face));
+    open_home(&mut d);
     let id = d.push(locker::TAB, routes::add("", false));
     let data = editor_data(&d, id);
     assert!(!data.can_save && data.blocked == "A title is needed.");
@@ -452,8 +448,7 @@ fn a_new_login_saves_whole_with_its_tags_filed_after() {
 fn an_edit_leaves_a_stored_secret_alone_unless_it_is_retyped() {
     let mut d = driver();
     login(&d, "i1", "Bank");
-    d.start();
-    d.answer_effect(passed(wire::Biometry::Face));
+    open_home(&mut d);
     let id = d.push(locker::TAB, routes::edit("i1"));
     let data = editor_data(&d, id);
     let password = data.inputs.iter().find(|r| r.key == "password").unwrap();
@@ -481,8 +476,7 @@ fn an_edit_leaves_a_stored_secret_alone_unless_it_is_retyped() {
 fn a_save_over_an_item_that_changed_elsewhere_is_refused_and_no_secret_is_kept_or_named() {
     let mut d = driver();
     login(&d, "i1", "Bank");
-    d.start();
-    d.answer_effect(passed(wire::Biometry::Face));
+    open_home(&mut d);
     let id = d.push(locker::TAB, routes::edit("i1"));
     typed(&mut d, id, "title", "Mine");
     typed(&mut d, id, "password", "a brand new secret");
@@ -514,8 +508,7 @@ fn a_save_over_an_item_that_changed_elsewhere_is_refused_and_no_secret_is_kept_o
 #[test]
 fn the_editor_says_why_it_will_not_take_a_seed() {
     let mut d = driver();
-    d.start();
-    d.answer_effect(passed(wire::Biometry::Face));
+    open_home(&mut d);
     let id = d.push(locker::TAB, routes::add("login", false));
     typed(&mut d, id, "title", "Mail");
     typed(
@@ -539,8 +532,7 @@ fn the_editor_says_why_it_will_not_take_a_seed() {
 #[test]
 fn leaving_with_changes_asks_first_and_a_relock_closes_the_editor() {
     let mut d = driver();
-    d.start();
-    d.answer_effect(passed(wire::Biometry::Face));
+    open_home(&mut d);
     let id = d.push(locker::TAB, routes::add("", false));
     editor_event(
         &mut d,
@@ -579,8 +571,7 @@ fn the_compromised_flag_is_sent_only_when_it_changed() {
             ..Default::default()
         },
     );
-    d.start();
-    d.answer_effect(passed(wire::Biometry::Face));
+    open_home(&mut d);
     let id = d.push(locker::TAB, routes::edit("i1"));
     assert!(editor_data(&d, id).compromised);
     editor_event(

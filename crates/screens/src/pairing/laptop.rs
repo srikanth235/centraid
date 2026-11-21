@@ -18,6 +18,7 @@ use centraid_api_proto::core_v1 as wire;
 use wire::pair_laptop_state::Phase;
 
 use super::door::{self, Answer, Refusal, Verdict};
+use crate::custody::secrets::{self, VaultSecrets};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, pairing as words, shared};
 
@@ -29,8 +30,11 @@ pub(super) const PAIR_TAG: &str = "pair";
 pub const ANNOUNCE_PAIRED: &str = "backup.destinations";
 
 #[must_use]
-pub fn build(_route: &wire::Route) -> Option<Box<dyn Screen>> {
-    Some(Box::new(Laptop::default()))
+pub fn build(_route: &wire::Route, secrets: &VaultSecrets) -> Option<Box<dyn Screen>> {
+    Some(Box::new(Laptop {
+        secrets: secrets.clone(),
+        ..Laptop::default()
+    }))
 }
 
 /// The pairing code's secret is spent on first use, and the code is still never
@@ -39,6 +43,11 @@ struct Laptop {
     phase: Phase,
     payload: String,
     answer: Option<Answer>,
+    /// Where the token a pairing mints is kept (E12).
+    secrets: VaultSecrets,
+    /// The token writes asked of the device store, whose answer is read back (a refusal rolls the
+    /// cache's early copy back).
+    writes: Vec<wire::SecretOp>,
     notice: String,
     /// NEEDS_WORDS because the vault opened without its words, so re-key is the
     /// way on.
@@ -56,6 +65,8 @@ impl Default for Laptop {
             phase: Phase::Unspecified,
             payload: String::new(),
             answer: None,
+            secrets: VaultSecrets::default(),
+            writes: Vec::new(),
             notice: String::new(),
             rekey: false,
             barred: false,
@@ -140,7 +151,7 @@ impl Laptop {
         door::pair(ctx, &ticket);
     }
 
-    fn answered(&mut self, locale: Locale, verdict: Verdict) -> Vec<wire::Effect> {
+    fn answered(&mut self, ctx: &Ctx, locale: Locale, verdict: Verdict) -> Vec<wire::Effect> {
         if self.phase != Phase::Pairing {
             return Vec::new();
         }
@@ -173,9 +184,22 @@ impl Laptop {
                 } else {
                     self.phase = Phase::Paired;
                     self.payload.clear();
+                    // THE TOKEN IS KEPT IN THE DEVICE STORE (E12): the core holds it in memory only,
+                    // so a process that dies after this would otherwise ask to pair again.
+                    let writes = self.secrets.token_writes(&answer.tokens);
                     self.answer = Some(answer);
                     self.notice.clear();
-                    vec![announce(ANNOUNCE_PAIRED)]
+                    // THE FIRST BACKUP TO THIS GATEWAY STARTS NOW: a pairing writes no vault table, so
+                    // nothing else would run a pass until the next launch.
+                    self.secrets
+                        .conductor()
+                        .ask(ctx, wire::pass_asked::Ask::Paired);
+                    let mut effects = vec![announce(ANNOUNCE_PAIRED)];
+                    if !writes.is_empty() {
+                        self.writes.clone_from(&writes);
+                        effects.push(secrets::effect(writes));
+                    }
+                    effects
                 }
             }
         }
@@ -270,14 +294,22 @@ impl Screen for Laptop {
                 _ => {}
             },
             Some(E::EffectResult(result)) => {
-                if let Some(wire::effect_result::Outcome::CodeScanned(code)) = result.outcome {
-                    self.scanned(ctx, code.text);
+                match result.outcome {
+                    Some(wire::effect_result::Outcome::CodeScanned(code)) => {
+                        self.scanned(ctx, code.text);
+                    }
+                    // THE STORE'S ANSWER TO THE TOKEN WRITE: a refusal rolls the cache back.
+                    Some(wire::effect_result::Outcome::Secrets(batched)) => {
+                        let ops = std::mem::take(&mut self.writes);
+                        self.secrets.absorb(&ops, &batched.answers);
+                    }
+                    _ => {}
                 }
                 // A scan the member backed out of, or the camera refused, is
                 // nothing to say: the paste field is still there.
             }
             Some(E::OffThreadDone(done)) if done.tag == PAIR_TAG => {
-                return self.answered(ctx.locale(), door::verdict(&done));
+                return self.answered(ctx, ctx.locale(), door::verdict(&done));
             }
             _ => {}
         }

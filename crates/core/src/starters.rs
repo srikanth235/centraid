@@ -8,23 +8,16 @@
 //! Tahoe scenario ([`crate::example`]) seeds dev fixtures and tests only, and no
 //! found writes it.
 //!
-//! **EACH ROW TEACHES ONE REAL GESTURE, AND IS FINISHED BY DOING IT** (R-ONBOARD-5):
-//! a note that is trashed from the list's … menu (the one place a note is
-//! trashed), a note that teaches `[[` links, a task completed by its circle and
-//! one that teaches what opening a task gives. Only gestures both shells draw:
-//! there is no swipe or long press in Notes or Tasks, so no row mentions one.
-//! People, Agenda and
-//! Docs get none because their day one offers an import.
+//! **STARTER ROWS EXIST ONLY IN NOTES** (owner, 2026-11-17): the one app with no
+//! import. Calendar, Reminders, People, Photos, Money and Health offer to import
+//! what the phone already holds, and Docs offers its add, so none of them is
+//! seeded: a starter reminder would be a row of the member's that the phone's own
+//! import then sits beside. Each note teaches one real gesture (trash it from the
+//! list, link with `[[`), and the pair are not the member's: Home stays on day
+//! zero until the member adds or imports something of their own.
 //!
-//! **THE TASKS ARE UNDATED, so they wait in the Inbox**: a starter due on the
-//! day the vault was made read as overdue from the next morning on, "Overdue 2"
-//! and a Reschedule prompt over work the member never chose. Today, empty,
-//! offers "Open Inbox" while undated work waits there. Home's tile counts only
-//! overdue and due-today work, so it says "Nothing due today" for these undated tasks.
-//!
-//! **THE ROWS ARE DATA**, declared once in [`NOTES`] and [`TASKS`], so a test
-//! reads the same consts [`write`] writes and changing the content never has to
-//! change the test.
+//! **THE ROWS ARE DATA**, declared once in [`NOTES`], so a test reads the same
+//! consts [`write`] writes and changing the content never has to change the test.
 //!
 //! **BEST-EFFORT BY DESIGN.** A refused starter is a warning, never a failure:
 //! an empty vault is still a vault, and refusing the found over a teaching row
@@ -39,19 +32,13 @@ use crate::example::{Report, Seeder};
 /// The starter notes, in the order they are written: `(title, body)`, each a
 /// plain-text `note.create`.
 pub const NOTES: &[(&str, &str)] = &[
-    (
-        "This note is yours",
-        "It lives in your vault, on this phone. Edit it, or trash it: in the list, tap … beside it and choose Trash.",
-    ),
-    (
-        "Link with [[",
-        "Type [[ anywhere in a note to link a person, an event, a task or another note. Try it here, then trash this note.",
-    ),
+    ("This note is yours", "Change it, or move it to trash."),
+    ("Link with [[", "Type [[ in a note to link to another one."),
 ];
 
-/// The starter tasks, in the order they are written, each an undated
-/// `task.add`: an Inbox task.
-pub const TASKS: &[&str] = &[
+/// The titles of the two starter TASKS that vaults founded before starters were Notes-only still
+/// hold. They are not the member's first item either.
+pub const RETIRED_TASKS: &[&str] = &[
     "Tap the circle to finish me",
     "Open me to add a date, a tag or a subtask",
 ];
@@ -72,9 +59,6 @@ pub fn write(vault: &Vault, registry: &Registry, principal: &Principal) -> Repor
             "note.create",
             json!({ "title": title, "body": body, "format": "plain" }),
         );
-    }
-    for title in TASKS {
-        seeder.run("task.add", json!({ "title": title }));
     }
     seeder.report
 }

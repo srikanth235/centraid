@@ -130,3 +130,5 @@ centraid-gateway = { path = "../gateway", features = ["test-harness"] }
 # asks the core's door the same questions.
 centraid-nativetools = { path = "../nativetools" }
 tempfile.workspace = true
+# The log-hygiene test captures every `tracing` line a driven run writes (#1202).
+tracing-subscriber.workspace = true

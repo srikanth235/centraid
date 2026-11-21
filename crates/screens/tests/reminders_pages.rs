@@ -217,11 +217,13 @@ fn the_reminders_home_counts_its_smart_lists_and_gives_each_list_a_palette_colou
             ("Scheduled".to_owned(), "1".to_owned()),
             ("All".to_owned(), "2".to_owned()),
             ("Flagged".to_owned(), "1".to_owned()),
-            ("Completed".to_owned(), String::new()),
+            ("Logbook".to_owned(), "Completed".to_owned()),
         ]
     );
     assert_eq!(todo.my_lists_title, "My Lists");
     assert_eq!(todo.add_list_label, "Add List");
+    // The board draws no "Projects" heading: with no areas, projects filed in no area sit under no heading, whatever the vault holds.
+    assert!(todo.projects.iter().all(|group| group.title.is_empty()));
     let palette = [
         "blue",
         "mustard",

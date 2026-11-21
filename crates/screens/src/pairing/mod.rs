@@ -25,13 +25,13 @@ pub mod matching;
 /// The pairing screen's route name.
 pub const LAPTOP: &str = "pair.laptop";
 
-/// Every pairing screen, registered under its route name. Pairing keeps no
-/// secret of its own (the code's secret is spent on first use), so it reads
-/// nothing from the shared cache.
+/// Every pairing screen, registered under its route name. The pairing code's
+/// secret is spent on first use; the token the pairing mints is handed to the
+/// shared secrets, which write it to the device store (#1191 E12).
 #[must_use]
 pub fn registry(secrets: &VaultSecrets) -> Registry {
-    let _ = secrets;
-    Registry::default().with(LAPTOP, laptop::build)
+    let secrets = secrets.clone();
+    Registry::default().with(LAPTOP, move |route| laptop::build(route, &secrets))
 }
 
 /// The routes a screen of another area hands to a shell to open pairing

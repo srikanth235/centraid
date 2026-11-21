@@ -39,10 +39,15 @@ fn nothing_connected_every_tab_is_one_sentence_and_connect_naming_the_phones_sto
     let empty = empty_of(state);
     assert_eq!(
         empty.headline,
-        "Bring in your steps, sleep and workouts from Apple Health."
+        "Steps, sleep and workouts, read from Apple Health."
     );
-    assert_eq!(empty.action_label, "Connect to Apple Health");
+    assert_eq!(empty.action_label, "Turn on Apple Health");
     assert!(state.content.is_none());
+    // FirstOpenHealth: the page is the app's, titled "Health"; the band's first tab is Summary.
+    assert_eq!(
+        state.chrome.as_ref().map(|c| c.title.as_str()),
+        Some("Health")
+    );
     let band: Vec<&str> = state.band.iter().map(|tab| tab.label.as_str()).collect();
     assert_eq!(band, ["Summary", "Trends", "Workouts", "More"]);
     let more: Vec<&str> = state.more_rows.iter().map(|row| row.key.as_str()).collect();
@@ -61,6 +66,28 @@ fn nothing_connected_every_tab_is_one_sentence_and_connect_naming_the_phones_sto
     );
 }
 
+/// EACH TAB SAYS WHAT IT WILL HOLD before anything is connected (FirstOpenHealthTrends,
+/// FirstOpenHealthWorkouts), with the same one action: the three tabs are never one card.
+#[test]
+fn nothing_connected_each_tab_says_what_it_will_hold() {
+    let mut d = driver();
+    let i = root(&d);
+    let headline = |d: &centraid_screens::testing::Driver| {
+        let state = home_state(d.view(i));
+        let empty = empty_of(state);
+        assert_eq!(empty.action_label, "Turn on Apple Health");
+        empty.headline.clone()
+    };
+    let today = headline(&d);
+    band(&mut d, i, "trends");
+    let trends = headline(&d);
+    band(&mut d, i, "workouts");
+    let workouts = headline(&d);
+    assert_eq!(today, "Steps, sleep and workouts, read from Apple Health.");
+    assert_eq!(trends, "Your week and month, read from Apple Health.");
+    assert_eq!(workouts, "Your workouts, read from Apple Health.");
+}
+
 #[test]
 fn the_phones_store_is_its_os_health_connect_on_android() {
     let d = driver_on("android", "en-GB");
@@ -68,9 +95,9 @@ fn the_phones_store_is_its_os_health_connect_on_android() {
     let empty = empty_of(home_state(d.view(root(&d))));
     assert_eq!(
         empty.headline,
-        "Bring in your steps, sleep and workouts from Health Connect."
+        "Steps, sleep and workouts, read from Health Connect."
     );
-    assert_eq!(empty.action_label, "Connect to Health Connect");
+    assert_eq!(empty.action_label, "Turn on Health Connect");
 }
 
 #[test]
@@ -172,7 +199,7 @@ fn today_is_the_days_numbers_against_the_members_own_typical_in_the_members_word
         .collect();
     assert_eq!(
         icons,
-        ["MapPin", "Moon", "Bolt", "Activity", "Heart", "Gauge"]
+        ["Footprints", "Moon", "Bolt", "Activity", "Heart", "Gauge"]
     );
     assert_eq!(sleep.spark_bp.len(), 7);
     assert!(
@@ -301,7 +328,7 @@ fn more_says_what_health_reads_and_a_chosen_type_that_read_nothing_and_stops_beh
     assert_eq!(
         facts,
         [
-            ("Reads", "daily totals and workouts"),
+            ("Reads", "daily totals and workouts, documents, photos"),
             ("Writes", "nothing to Apple Health"),
             ("Nothing read", "Sleep: see Settings › Health › Data Access"),
         ]

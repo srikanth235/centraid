@@ -8,30 +8,32 @@
 appId: dev.centraid.Centraid
 name: home
 ---
-# A VAULT-HOLDING INSTALL, NOT A FRESH ONE: a fresh install holds no vault and
-# opens onto the first-launch deck (`first-launch.yaml`), and `clearState` here
-# would throw away the vault this flow reads. Seed one first with
-# `mobile/scripts/demo-vault.sh`, which relaunches the debug app on it.
+# A DAY-ZERO VAULT, made by `onboarding.yaml` and not yet added to (run this straight after it). A
+# fresh install holds no vault and opens onto the first-launch screen (`first-launch.yaml`), and
+# `clearState` here would throw away the vault this flow reads. The seeded demo vault is NOT this
+# flow's: its items are older than a day, so its lockup carries "Not backed up yet · Pair"
+# (`backup::line::pair_owed`, 2026-11-17), where a day-zero vault carries no status line.
 - launchApp
 # The grid is the root. Every other screen in the product is reached through it.
 - assertVisible:
     id: "home-grid"
-# The lockup's second line is the backup's status, always (R-ONBOARD-11). The
-# health ribbon (`home-status`) is drawn only while there is something to say,
-# so a healthy vault has none.
-- assertVisible:
+# The lockup's second line is the backup's status, empty on day zero and day one by ruling
+# (2026-11-17, R-ONBOARD-11): a fresh vault shows the welcome card and no status line. The health
+# ribbon (`home-status`) is drawn only while there is something to say, so a healthy vault has none.
+- assertNotVisible:
     id: "home-backup-status"
 
-# DAY ONE is a claim about the vault, and only a settled, readable, empty vault
-# earns it. When it shows, first moves show with it — never dashed placeholders.
+# DAY ZERO is a claim about the vault, and only a settled, readable vault that holds nothing of
+# the member's earns it. It is the one Home with a welcome card above it; each empty widget says
+# its one action (2026-11-17).
 - runFlow:
     when:
       visible:
-        id: "home-day-one"
+        id: "home-welcome"
     commands:
-      - assertVisible: "Nothing in here yet"
-      - assertVisible:
-          id: "home-first-moves"
+      - assertVisible: "Nothing in here yet. Start with what this phone already holds."
+      - assertVisible: "Import your calendar"
+      - assertVisible: "This note is yours"
       # An unreadable Home must NOT be able to reach this screen.
       - assertNotVisible: "Not on this phone yet"
 

@@ -15,6 +15,7 @@ catalog! {
     plain flag = ("Flag", "Flag");
     plain flagged_empty = ("Nothing is flagged.", "Nothing is flagged.");
     plain hide_completed = ("Hide", "Hide");
+    plain import_from_reminders = ("Import from Reminders", "Import from Reminders");
     plain paused_title = ("Reminders paused", "Reminders paused");
     plain paused_body = ("Open Centraid to keep reminders coming.", "Open Centraid to keep reminders coming.");
     plain move_down = ("Move down", "Move down");
@@ -47,7 +48,7 @@ catalog! {
     plain quick_chip_spoken_repeats = ("{when}. Saves as {title}.", "{when}. Saves as {title}.");
     plain reminders_title = ("Reminders", "Reminders");
     plain search_placeholder = ("Search reminders and lists", "Search reminders and lists");
-    plain reads_reminders_reads = ("reminders, lists, people", "reminders, lists, people");
+    plain reads_reminders_reads = ("reminders, lists, people, documents, photos", "reminders, lists, people, documents, photos");
     plain reads_reminders_title = ("What Reminders may read", "What Reminders may read");
     plain reads_reminders_writes = ("reminders you make", "reminders you make");
     plain row_unflagged = ("Flag removed", "Flag removed");

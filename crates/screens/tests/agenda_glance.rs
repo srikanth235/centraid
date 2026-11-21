@@ -133,7 +133,7 @@ fn a_new_task_asks_for_one_new_snapshot() {
 fn the_counts_say_every_open_task_when_the_rows_are_only_a_window() {
     let mut d = Driver::with_runtime(runtime());
     d.start();
-    // A founded vault holds a few starter tasks; the added ones are on top.
+    // The vault may already hold tasks; the added ones are on top.
     let before = documents(&d)[0]["reminders"].clone();
     let (was_overdue, was_today) = (
         before["overdue_count"].as_u64().expect("a count"),

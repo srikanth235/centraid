@@ -11,6 +11,29 @@
 //! of Reminders' own.
 
 use crate::Registry;
+use crate::catalog::load::calendar as query_cal;
+use crate::kit::civil;
+
+/// How far either side of today a calendar is looked through to learn whether it holds anything.
+const HOLDS_DAYS: i64 = 366;
+
+/// THE ONE QUESTION "DOES THE CALENDAR HOLD ANYTHING": the read of every event a year either side of
+/// `today` (`YYYY-MM-DD`); the calendar holds something when its answer has an event. Calendar's
+/// first-open card and Home's Calendar tile both ask it, so the two can never disagree about day zero.
+#[must_use]
+pub(crate) fn holds_query(today: &str) -> Option<query_cal::Upcoming> {
+    let midnight = |days: i64| {
+        civil::plus_days(today, days)
+            .filter(|day| civil::epoch_day_of(day).is_some())
+            .map(|day| format!("{day}T00:00:00Z"))
+    };
+    Some(query_cal::Upcoming {
+        from: Some(midnight(-HOLDS_DAYS)?),
+        to: Some(midnight(HOLDS_DAYS)?),
+        alerts: None,
+    })
+}
+pub mod draft;
 pub mod earlier;
 pub mod editor;
 pub mod event;
@@ -45,4 +68,5 @@ pub fn registry() -> Registry {
         .with(TRASH, trash::build)
         .with(EARLIER, earlier::build)
         .with(EXPORT, export::build)
+        .with(draft::NAME, draft::build)
 }

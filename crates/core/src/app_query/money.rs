@@ -706,6 +706,7 @@ pub(crate) fn home_tile(
         month: tile.month,
         spent: tile.spent.iter().map(amount).collect(),
         empty: tile.empty,
+        held: tile.held,
     })
 }
 

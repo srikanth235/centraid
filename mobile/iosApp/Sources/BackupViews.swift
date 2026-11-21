@@ -20,11 +20,18 @@ struct BackupHomeView: View {
     /// recovery key (`key_show`).
     let open: (Centraid_Core_V1_Route) -> Void
     @State private var ruleOpen = false
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private func event(_ build: (inout Centraid_Core_V1_BackupHomeEvent) -> Void) -> Centraid_Core_V1_BackupHomeEvent {
         var event = Centraid_Core_V1_BackupHomeEvent()
         build(&event)
         return event
+    }
+
+    /// A COMMAND IS ONE UNBROKEN RUN: a non-breaking hyphen and spaces, so it never wraps at
+    /// "centraid-" (display only; the words are Rust's).
+    private static func unbroken(_ command: String) -> String {
+        command.replacingOccurrences(of: "-", with: "\u{2011}").replacingOccurrences(of: " ", with: "\u{00A0}")
     }
 
     var body: some View {
@@ -40,7 +47,104 @@ struct BackupHomeView: View {
         }
     }
 
+    /// ONE STEP'S WORDS, the command set in the terminal's face. At accessibility sizes the command
+    /// is its own lines, one word to a line that shrinks to fit (#1202): inside the sentence the
+    /// hyphen was the only place a line could break, and "centraid-" was left apart from "gateway".
+    @ViewBuilder
+    private func stepText(_ step: Centraid_Core_V1_BackupPairStep) -> some View {
+        if dynamicTypeSize.isAccessibilitySize, !step.command.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(step.before.trimmingCharacters(in: .whitespaces))
+                    .kitType(.row)
+                    .foregroundStyle(Surface.ink)
+                ForEach(Array(step.command.split(separator: " ").enumerated()), id: \.offset) { _, word in
+                    Text(String(word))
+                        .font(.system(.callout, design: .monospaced))
+                        .foregroundStyle(Surface.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                }
+                if !step.after.trimmingCharacters(in: .whitespaces).isEmpty {
+                    Text(step.after.trimmingCharacters(in: .whitespaces))
+                        .kitType(.row)
+                        .foregroundStyle(Surface.ink)
+                }
+            }
+        } else {
+            (Text(step.before)
+                + Text(Self.unbroken(step.command)).font(.system(.callout, design: .monospaced))
+                + Text(step.after))
+                .kitType(.row)
+                .foregroundStyle(Surface.ink)
+        }
+    }
+
+    /// BEFORE PAIRING (BackupUnpaired): one card, the two steps and the footnote, and nothing else. Every
+    /// word is `model.unpaired`'s; the card's button is the page's pairing route.
+    private func unpairedPage(_ model: Centraid_Core_V1_BackupHomeData) -> some View {
+        let unpaired = model.unpaired
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                KitHeader(title: model.title)
+                    .padding(.horizontal, -CentraidGeometry.pageMargin)
+                VStack(alignment: .leading, spacing: 10) {
+                    CentraidIconView(iconKey: "Refresh", tint: StateColor.amber.text, size: 24)
+                        .frame(width: 52, height: 52)
+                        .background(StateColor.amber.text.opacity(0.14), in: Circle())
+                        .accessibilityHidden(true)
+                    Text(unpaired.title)
+                        .kitType(.section)
+                        .foregroundStyle(Surface.ink)
+                        .accessibilityAddTraits(.isHeader)
+                    sentence(unpaired.body)
+                    KitInkButton(label: unpaired.actionLabel, identifier: "backup-add-destination") {
+                        open(model.addDestination)
+                    }
+                    .padding(.top, 6)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .kitCard()
+                .padding(.top, 8)
+                group(unpaired.stepsHeading) {
+                    ForEach(Array(unpaired.steps.enumerated()), id: \.offset) { index, step in
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            Text("\(index + 1)")
+                                .kitType(.meta)
+                                .foregroundStyle(Surface.meta)
+                                .frame(width: 22)
+                            stepText(step)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 12)
+                        if index < unpaired.steps.count - 1 { Divider().padding(.leading, 46) }
+                    }
+                }
+                sentence(unpaired.foot)
+                    .padding(.top, 14)
+                    .padding(.horizontal, 4)
+            }
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.top, 4)
+            .padding(.bottom, 32)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // THE READABLE COLUMN (ruling 27, #1202): Backup stood the iPad's whole width.
+            .readableColumn(alignment: .leading)
+        }
+        // THE ROWS STOP AT THE BAR'S EDGE (#1202, S2-5): without it they scroll under the clock and
+        // the status icons with nothing between. The Android page is laid out inside the safe area.
+        .hardTopScrollEdge()
+        .background(Surface.page.ignoresSafeArea())
+        .accessibilityIdentifier("backup-screen")
+    }
+
     private func page(_ model: Centraid_Core_V1_BackupHomeData) -> some View {
+        if model.hasUnpaired { return AnyView(unpairedPage(model)) }
+        return AnyView(pagePaired(model))
+    }
+
+    private func pagePaired(_ model: Centraid_Core_V1_BackupHomeData) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -65,8 +169,11 @@ struct BackupHomeView: View {
                 }
                 .padding(.horizontal, CentraidGeometry.pageMargin)
                 .padding(.top, 4)
-                .padding(.bottom, 32)
+                // THE FLOATING BAND STANDS OVER THE FOOT: the last rows scroll clear of it.
+                .padding(.bottom, 120)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                // THE READABLE COLUMN (ruling 27, #1202): Backup stood the iPad's whole width.
+                .readableColumn(alignment: .leading)
                 .id(Self.top)
             }
             // THE PAGE OPENS AT ITS TOP AND STAYS THERE as the read fills it in.
@@ -76,6 +183,7 @@ struct BackupHomeView: View {
                 kitWithAnimation { proxy.scrollTo(Self.top, anchor: .top) }
             }
         }
+        .hardTopScrollEdge()
         .background(Surface.page.ignoresSafeArea())
         .accessibilityIdentifier("backup-screen")
         // A DEVICE FORGOTTEN OR ADDED CHANGES THE PINS: the mover must never trust a certificate this
@@ -241,6 +349,12 @@ struct BackupHomeView: View {
                 KitInkButton(label: model.addDestinationLabel) { open(model.addDestination) }
                     .accessibilityIdentifier("backup-add-destination")
             }
+            // A DEVICE THAT NO LONGER KNOWS THIS PHONE (ruling 28): the card that says "Pair it again" carries
+            // the way back, the same pairing page as the row below.
+            if !model.pairAgainLabel.isEmpty {
+                KitInkButton(label: model.pairAgainLabel) { open(model.pairAgain) }
+                    .accessibilityIdentifier("backup-card-pair-again")
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -274,10 +388,32 @@ struct BackupHomeView: View {
         Rectangle().fill(Surface.line).frame(height: CentraidGeometry.hairline).padding(.leading, 56)
     }
 
+    /// A DEVICE ROW'S LINE: plain text, and at accessibility sizes one whose address stays whole.
+    @ViewBuilder
+    private func deviceText(_ text: String, rung: KitType, ink: Color) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            KitWholeTokens(text: Self.unitsJoined(text)).kitType(rung).foregroundStyle(ink)
+        } else if rung == .row {
+            Text(text).kitType(rung).foregroundStyle(ink)
+        } else {
+            sentence(text)
+        }
+    }
+
+    /// A NUMBER AND ITS UNIT STAY ON ONE LINE (#1202): "928 KB" broke as "928 / KB" at the largest text.
+    /// Display only; the words are Rust's.
+    private static func unitsJoined(_ text: String) -> String {
+        text.replacingOccurrences(
+            of: #"(\d) (bytes|KB|MB|GB|TB)\b"#,
+            with: "$1\u{00A0}$2",
+            options: .regularExpression
+        )
+    }
+
     /// One of the screen's sentences, drawn quietly.
     @ViewBuilder
     private func sentence(_ text: String, id: String? = nil) -> some View {
-        let drawn = Text(text)
+        let drawn = Text(Self.unitsJoined(text))
             .kitType(.meta)
             .foregroundStyle(Surface.meta)
             .fixedSize(horizontal: false, vertical: true)
@@ -295,9 +431,16 @@ struct BackupHomeView: View {
                     Text(row.name).kitType(.row).foregroundStyle(Surface.ink)
                     if !row.detail.isEmpty { sentence(row.detail) }
                     if !row.note.isEmpty { sentence(row.note) }
+                    // THE STATUS UNDER THE WORDS AT ACCESSIBILITY SIZES (#1202): beside them it was left
+                    // a column too narrow and broke as "waitin/g" and "Backe/d up".
+                    if dynamicTypeSize.isAccessibilitySize, !row.status.isEmpty {
+                        Text(row.status)
+                            .kitType(.meta)
+                            .foregroundStyle(row.waiting ? StateColor.amber.text : Surface.meta)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                if !row.status.isEmpty {
+                if !dynamicTypeSize.isAccessibilitySize, !row.status.isEmpty {
                     Text(row.status)
                         .kitType(.meta)
                         .foregroundStyle(row.waiting ? StateColor.amber.text : Surface.meta)
@@ -319,32 +462,42 @@ struct BackupHomeView: View {
     @ViewBuilder
     private func devices(_ model: Centraid_Core_V1_BackupHomeData) -> some View {
         ForEach(model.destinations, id: \.gatewayID) { row in
-            HStack(alignment: .center, spacing: 12) {
+            // THE ADDRESS WHOLE, AND ITS LINKS UNDER IT AT ACCESSIBILITY SIZES (#1202): beside
+            // Forget the words were left a sliver, and "192.168.1.5" split mid-number.
+            let stacked = dynamicTypeSize.isAccessibilitySize
+            let layout = stacked
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+            HStack(alignment: .top, spacing: 12) {
                 KitTile(iconKey: "Monitor", size: 32)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(row.label).kitType(.row).foregroundStyle(Surface.ink)
-                    if !row.held.isEmpty { sentence(row.held) }
-                    if !row.backedUp.isEmpty { sentence(row.backedUp) }
-                    if !row.detail.isEmpty { sentence(row.detail) }
-                    ForEach(Array(row.notes.enumerated()), id: \.offset) { _, note in sentence(note) }
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(row.accessibilityLabel.isEmpty ? row.label : row.accessibilityLabel)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                // UNDO, only while this phone has deletes held there (#1191).
-                if !row.undoLabel.isEmpty {
-                    KitLink(label: row.undoLabel, dense: true, identifier: "backup-undo-\(row.gatewayID)") {
-                        send(event { $0.undoHeld = .with { $0.gatewayID = row.gatewayID } })
+                layout {
+                    VStack(alignment: .leading, spacing: 1) {
+                        deviceText(row.label, rung: .row, ink: Surface.ink)
+                        if !row.held.isEmpty { deviceText(row.held, rung: .meta, ink: Surface.meta) }
+                        if !row.backedUp.isEmpty { deviceText(row.backedUp, rung: .meta, ink: Surface.meta) }
+                        if !row.detail.isEmpty { deviceText(row.detail, rung: .meta, ink: Surface.meta) }
+                        ForEach(Array(row.notes.enumerated()), id: \.offset) { _, note in
+                            deviceText(note, rung: .meta, ink: Surface.meta)
+                        }
                     }
-                    .accessibilityLabel("\(row.undoLabel) \(row.label)")
-                }
-                // FORGET IS PLAIN AND VISIBLE, and needs no confirmation: it forgets this phone's
-                // pairing and nothing the backup device holds, and pairing again undoes it.
-                if !model.forgetLabel.isEmpty {
-                    KitLink(label: model.forgetLabel, dense: true, identifier: "backup-forget-\(row.gatewayID)") {
-                        send(event { $0.forgetDestination = .with { $0.gatewayID = row.gatewayID } })
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(row.accessibilityLabel.isEmpty ? row.label : row.accessibilityLabel)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    // UNDO, only while this phone has deletes held there (#1191).
+                    if !row.undoLabel.isEmpty {
+                        KitLink(label: row.undoLabel, dense: true, identifier: "backup-undo-\(row.gatewayID)") {
+                            send(event { $0.undoHeld = .with { $0.gatewayID = row.gatewayID } })
+                        }
+                        .accessibilityLabel("\(row.undoLabel) \(row.label)")
                     }
-                    .accessibilityLabel("\(model.forgetLabel) \(row.label)")
+                    // FORGET IS PLAIN AND VISIBLE, and needs no confirmation: it forgets this phone's
+                    // pairing and nothing the backup device holds, and pairing again undoes it.
+                    if !model.forgetLabel.isEmpty {
+                        KitLink(label: model.forgetLabel, dense: true, identifier: "backup-forget-\(row.gatewayID)") {
+                            send(event { $0.forgetDestination = .with { $0.gatewayID = row.gatewayID } })
+                        }
+                        .accessibilityLabel("\(model.forgetLabel) \(row.label)")
+                    }
                 }
             }
             .padding(.horizontal, 12)

@@ -18,6 +18,8 @@ struct PeopleEditorView: View {
     @State private var nickname = ""
     @State private var met = ""
     @State private var seeded = false
+    /// Return walks Name, Role, Nickname, Met; the last says done.
+    @FocusState private var field: Int?
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.appAccent) private var accent
@@ -43,7 +45,7 @@ struct PeopleEditorView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         // THE FOUR FIELDS ARE ONE WHITE CARD on the page (#1173).
                         VStack(alignment: .leading, spacing: 0) {
-                        EditableFieldRow(key: chrome.nameField, text: $name, identifier: "people-editor-name") { typed in
+                        EditableFieldRow(key: chrome.nameField, text: $name, identifier: "people-editor-name", chain: FocusChain(focus: $field, index: 0, last: 3)) { typed in
                             guard typed != draft.displayName else { return }
                             send(PeopleEvents.editor { $0.name = .with { $0.text = typed } })
                         }
@@ -51,16 +53,17 @@ struct PeopleEditorView: View {
                             key: chrome.roleField,
                             text: $role,
                             placeholder: chrome.rolePlaceholder,
-                            identifier: "people-editor-role"
+                            identifier: "people-editor-role",
+            chain: FocusChain(focus: $field, index: 1, last: 3)
                         ) { typed in
                             guard typed != draft.role else { return }
                             send(PeopleEvents.editor { $0.role = .with { $0.text = typed } })
                         }
-                        EditableFieldRow(key: chrome.nicknameField, text: $nickname, identifier: "people-editor-nickname") { typed in
+                        EditableFieldRow(key: chrome.nicknameField, text: $nickname, identifier: "people-editor-nickname", chain: FocusChain(focus: $field, index: 2, last: 3)) { typed in
                             guard typed != draft.nickname else { return }
                             send(PeopleEvents.editor { $0.nickname = .with { $0.text = typed } })
                         }
-                        EditableFieldRow(key: chrome.metField, text: $met, identifier: "people-editor-met") { typed in
+                        EditableFieldRow(key: chrome.metField, text: $met, identifier: "people-editor-met", chain: FocusChain(focus: $field, index: 3, last: 3)) { typed in
                             guard typed != draft.met else { return }
                             send(PeopleEvents.editor { $0.met = .with { $0.text = typed } })
                         }

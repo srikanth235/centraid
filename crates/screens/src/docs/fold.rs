@@ -531,6 +531,20 @@ fn subtitle(locale: Locale, answer: &wire::DocsDocument) -> String {
     }
 }
 
+/// A markdown body without its first line when that line is a heading that only says the title,
+/// which the page's head already shows: the title is said once.
+fn without_title_heading(body: &str, title: &str) -> String {
+    let trimmed = body.trim_start();
+    let (first, rest) = trimmed.split_once('\n').unwrap_or((trimmed, ""));
+    let heading = first.trim_start_matches('#');
+    let is_heading = first.starts_with('#') && first.len() - heading.len() <= 6;
+    if is_heading && !title.trim().is_empty() && heading.trim() == title.trim() {
+        rest.trim_start_matches('\n').to_owned()
+    } else {
+        body.to_owned()
+    }
+}
+
 fn reader(
     locale: Locale,
     row: &wire::DocsDocumentRow,
@@ -538,8 +552,15 @@ fn reader(
 ) -> wire::DocsReader {
     let body = answer.body.as_deref();
     let editable = body.is_some() && !row.trashed;
+    let shown = body.map(|text| {
+        if format_of(&row.media_type) == wire::docs_reader::Format::Markdown {
+            without_title_heading(text, &row.title)
+        } else {
+            text.to_owned()
+        }
+    });
     wire::DocsReader {
-        body: body.unwrap_or_default().to_owned(),
+        body: shown.unwrap_or_default(),
         has_text: body.is_some(),
         no_text: if body.is_none() && !answer.bytes_held {
             words::share_missing(locale)
@@ -616,8 +637,10 @@ fn facts(
             size(locale, units, row.byte_size),
         ));
     }
-    if !row.media_type.is_empty() {
-        facts.push(fact(words::fact_media_type(locale), row.media_type.clone()));
+    // THE FORMAT IS A WORD, never the media type's own text ("text/markdown"): a text document says
+    // so, and any other kind is already said by Kind.
+    if centraid_apps_docs::bytes::base_media_type(&row.media_type).starts_with("text/") {
+        facts.push(fact(words::fact_format(locale), words::format_text(locale)));
     }
     facts.push(fact(
         words::fact_folder(locale),
@@ -715,6 +738,19 @@ pub fn editor(locale: Locale, answer: &wire::DocsDocument) -> Result<EditorDraft
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_leading_heading_that_is_the_title_is_not_said_twice() {
+        assert_eq!(
+            without_title_heading("# Dentist receipt\n\nCleaning: $185", "Dentist receipt"),
+            "Cleaning: $185"
+        );
+        // A different heading, a deeper one that is not the title, or no title: the body stays whole.
+        let other = "# Summary\nText";
+        assert_eq!(without_title_heading(other, "Dentist receipt"), other);
+        assert_eq!(without_title_heading("Plain\nText", "Plain"), "Plain\nText");
+        assert_eq!(without_title_heading(other, ""), other);
+    }
 
     #[test]
     fn markdown_format_uses_the_same_mime_normalization_as_the_reader() {

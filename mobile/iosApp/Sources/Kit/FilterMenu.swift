@@ -69,6 +69,7 @@ struct FilterMenuButton: View {
         }
         .accessibilityLabel(menu.spoken)
         .accessibilityIdentifier("\(app)-filter-menu")
+        .headerKeyTarget()
     }
 
     @Environment(\.colorScheme) private var scheme
@@ -119,8 +120,9 @@ struct RoomTitle: View {
                 .lineLimit(1)
             HStack(spacing: 4) {
                 if slot.subtitle.tappable {
-                    Button(action: slot.onTap) { words }
+                    Button(action: slot.onTap) { words.modifier(SubtitleHitArea()) }
                         .buttonStyle(.plain)
+                        .padding(.vertical, -SubtitleHitArea.growth)
                         .accessibilityLabel(slot.subtitle.spoken)
                         .accessibilityIdentifier("room-subtitle")
                 } else {
@@ -128,6 +130,7 @@ struct RoomTitle: View {
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(slot.subtitle.spoken)
                         .accessibilityIdentifier("room-subtitle")
+                        .accessibilityAddTraits(.isStaticText)
                 }
                 if slot.subtitle.clearable {
                     Button(action: slot.onClear) {

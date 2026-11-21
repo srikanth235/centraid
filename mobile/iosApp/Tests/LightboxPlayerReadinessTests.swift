@@ -13,12 +13,11 @@ final class LightboxPlayerReadinessTests: XCTestCase {
         let file = folder.appendingPathComponent("original")
         try oneSecondOfSilence().write(to: file)
 
-        let loaded = expectation(description: "Paused media metadata loaded")
         let model = LightboxPlayer(path: file.path, mediaType: "audio/wav", once: false)
-        let observation = model.$duration.filter { $0 > 0 }.first().sink { _ in loaded.fulfill() }
-        defer { observation.cancel(); model.pause() }
-        let result = await XCTWaiter.fulfillment(of: [loaded], timeout: 5)
-        XCTAssertEqual(result, .completed)
+        defer { model.pause() }
+        // WAIT ON THE READ ITSELF, NOT A CLOCK: a loaded CI runner answers late, never wrongly.
+        await model.lengthRead()
+        XCTAssertNil(model.failure)
         XCTAssertEqual(model.duration, 1, accuracy: 0.01)
         XCTAssertEqual(model.position, 0)
         XCTAssertEqual(model.player.rate, 0)

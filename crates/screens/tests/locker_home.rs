@@ -167,8 +167,7 @@ fn the_item_page_leads_with_a_verification_code_card() {
         i.password = Some("pw".to_owned());
         i.url = Some("github.com/login".to_owned());
     });
-    d.start();
-    d.answer_effect(passed(wire::Biometry::Face));
+    open_home(&mut d);
     let id = push_item(&mut d, "g");
     let data = item_data(&d, id);
     let first = &data.sections[0];
@@ -198,8 +197,7 @@ fn change_password_opens_the_items_own_site_and_only_for_a_login_with_one() {
         i.r#type = act::locker::AddItemType::Wifi;
         i.password = Some("pw".to_owned());
     });
-    d.start();
-    d.answer_effect(passed(wire::Biometry::Face));
+    open_home(&mut d);
     let id = push_item(&mut d, "g");
     let action = item_data(&d, id)
         .change_password

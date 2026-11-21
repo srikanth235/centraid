@@ -29,6 +29,8 @@ import dev.centraid.android.screens.words.CodeScanDoor
 import dev.centraid.android.session.AppSession
 import dev.centraid.android.session.UiHost
 import java.io.File
+import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -69,7 +71,10 @@ internal fun HostScreenEffects(
     val manyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { pickingMany.answer(it) }
     val pickingFolder = remember { Ask<android.net.Uri?>() }
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { pickingFolder.answer(it) }
-    val saving = remember { Ask<android.net.Uri?>() }
+    // PROCESS-WIDE, NOT `remember`ed: the activity can be recreated (a font or locale change, a rotation)
+    // while the system's save sheet is up, and the answer must reach the export that is waiting for it
+    // and not a fresh `Ask` that nobody waits on, which left a 0-byte document and a screen that never heard.
+    val saving = SaveSheet.ask
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { saving.answer(it) }
     // PAIRING'S SCAN (`ScanCode`): the camera, or the photo picker on a phone with none.
     val scanDoor = remember { CodeScanDoor() }
@@ -120,10 +125,11 @@ internal fun HostScreenEffects(
                         effectAttempt { performExportOriginals(context, session.core, effect.export_originals!!) }
                             .getOrElse { failed(EffectReason.FAILED) }
                     effect.pick_bytes != null && effect.pick_bytes!!.folder ->
-                        pickFolder(context, pickingFolder.ask { folderPicker.launch(null) }, effect.pick_bytes!!.accept)
+                        pickFolder(context, pickingFolder.ask { folderPicker.launch(null) }, effect.pick_bytes!!.accept, limitsOf(effect.pick_bytes!!))
                     effect.pick_bytes != null && effect.pick_bytes!!.multiple ->
-                        pickMany(context, pickingMany.ask { manyPicker.launch(pickerTypes(effect.pick_bytes!!.accept)) })
-                    effect.pick_bytes != null -> pickBytes(context, picking.ask { picker.launch(pickerTypes(effect.pick_bytes!!.accept)) })
+                        pickMany(context, pickingMany.ask { manyPicker.launch(pickerTypes(effect.pick_bytes!!.accept)) }, limitsOf(effect.pick_bytes!!))
+                    effect.pick_bytes != null ->
+                        pickBytes(context, picking.ask { picker.launch(pickerTypes(effect.pick_bytes!!.accept)) }, limitsOf(effect.pick_bytes!!))
                     effect.save_file != null -> {
                         val file = effect.save_file!!
                         saveFile(context, file, saving.ask { saver.launch(file.name) })
@@ -178,6 +184,11 @@ internal fun HostScreenEffects(
     }
 }
 
+/** The save sheet's answer, held for the life of the process (see [HostScreenEffects]). */
+private object SaveSheet {
+    val ask = Ask<android.net.Uri?>()
+}
+
 /** One system prompt or sheet out at a time, and its answer. */
 private class Ask<T> {
     private var waiting: CompletableDeferred<T>? = null
@@ -196,8 +207,13 @@ private class Ask<T> {
     }
 }
 
-/** `PickBytes`: the chosen document's bytes, handed to Rust and kept nowhere here; a dismissal is a cancel. */
-private suspend fun pickBytes(context: Context, uri: android.net.Uri?): EffectResult {
+private fun limitsOf(pick: centraid.core.v1.PickBytes) = PickLimits(perFile = pick.max_bytes, total = pick.max_total_bytes)
+
+/**
+ * `PickBytes`: the chosen document's bytes, handed to Rust and kept nowhere here; a dismissal is a cancel.
+ * A file over the importer's ceiling is not read: it answers `too_large`.
+ */
+private suspend fun pickBytes(context: Context, uri: android.net.Uri?, limits: PickLimits): EffectResult {
     uri ?: return EffectResult(bytes_picked = BytesPicked(cancelled = true))
     return withContext(Dispatchers.IO) {
         runCatching {
@@ -205,8 +221,12 @@ private suspend fun pickBytes(context: Context, uri: android.net.Uri?): EffectRe
             val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
                 if (cursor.moveToFirst()) cursor.getString(0) else null
             }.orEmpty()
-            val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: error("unreadable")
-            EffectResult(bytes_picked = BytesPicked(name = name, media_type = resolver.getType(uri).orEmpty(), content = bytes.toByteString()))
+            when (val read = limits.read(context, uri)) {
+                is PickLimits.Read.Bytes ->
+                    EffectResult(bytes_picked = BytesPicked(name = name, media_type = resolver.getType(uri).orEmpty(), content = read.bytes.toByteString()))
+                PickLimits.Read.TooLarge -> failed(EffectReason.TOO_LARGE)
+                PickLimits.Read.Unreadable -> failed(EffectReason.UNREADABLE)
+            }
         }.getOrElse { failed(EffectReason.UNREADABLE) }
     }
 }
@@ -215,10 +235,15 @@ private suspend fun pickBytes(context: Context, uri: android.net.Uri?): EffectRe
 private suspend fun saveFile(context: Context, file: centraid.core.v1.SaveFile, uri: android.net.Uri?): EffectResult {
     uri ?: return EffectResult(failed = EffectFailed(reason = EffectReason.CANCELLED, cancelled = true))
     return withContext(Dispatchers.IO) {
-        runCatching {
+        try {
             context.contentResolver.openOutputStream(uri)?.use { it.write(file.content.toByteArray()) } ?: error("unwritable")
             EffectResult(done = EffectDone())
-        }.getOrElse { failed(EffectReason.UNWRITABLE) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.w("Centraid", "the saved file was not written: $error")
+            failed(error.writeFailureReason(EffectReason.UNWRITABLE))
+        }
     }
 }
 
@@ -230,12 +255,18 @@ private suspend fun saveFile(context: Context, file: centraid.core.v1.SaveFile, 
 private suspend fun saveFilePath(file: centraid.core.v1.SaveFilePath, uri: android.net.Uri?, context: Context): EffectResult {
     uri ?: return EffectResult(failed = EffectFailed(reason = EffectReason.CANCELLED, cancelled = true))
     return withContext(Dispatchers.IO) {
-        runCatching {
+        try {
             File(file.path).inputStream().use { input ->
                 context.contentResolver.openOutputStream(uri)?.use { output -> input.copyTo(output, 64 * 1024) } ?: error("unwritable")
             }
             EffectResult(done = EffectDone())
-        }.getOrElse { failed(EffectReason.UNWRITABLE) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            // LOGGED, NOT SWALLOWED: a save that leaves 0 bytes must say why.
+            Log.w("Centraid", "the export was not written: $error")
+            failed(error.writeFailureReason(EffectReason.UNWRITABLE))
+        }
     }
 }
 

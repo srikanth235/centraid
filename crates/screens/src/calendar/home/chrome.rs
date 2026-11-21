@@ -172,7 +172,14 @@ pub fn toolbar(
     today: &str,
     shown: bool,
 ) -> wire::AgendaToolbar {
-    if !shown || anchor.is_empty() || today.is_empty() || has_calendar_header(destination) {
+    // INVITES HAS NO WINDOW: it lists what waits on the member, whatever the day, so it draws no
+    // day bar (no "From <date>", no arrows, no Today key).
+    if !shown
+        || anchor.is_empty()
+        || today.is_empty()
+        || has_calendar_header(destination)
+        || destination == Dest::Waiting
+    {
         return wire::AgendaToolbar::default();
     }
     // THE PERIOD'S OWN WORDS: a month or a year, and today is in it when the
@@ -220,19 +227,13 @@ pub fn more_rows(
 ) -> Vec<wire::AgendaMoreRow> {
     let mut out: Vec<wire::AgendaMoreRow> = calendars
         .iter()
-        .enumerate()
-        .map(|(index, calendar)| wire::AgendaMoreRow {
+        .map(|calendar| wire::AgendaMoreRow {
             key: format!("{MORE_CALENDAR}{}", calendar.calendar_id),
             label: calendar.name.clone(),
             meta: calendar.state_label.clone(),
             hue_key: calendar.hue_key.clone(),
             toggle: true,
             on: !calendar.hidden,
-            section: if index == 0 {
-                words::rail_calendars(locale)
-            } else {
-                String::new()
-            },
             spoken: format!("{}, {}", calendar.name, calendar.state_label),
             icon_key: calendar.icon_key.clone(),
             color_key: calendar.color_key.clone(),
@@ -249,11 +250,6 @@ pub fn more_rows(
             label: lists::new_calendar_title(locale),
             spoken: lists::new_calendar_title(locale),
             icon_key: "CalendarPlus".to_owned(),
-            section: if calendars.is_empty() {
-                words::rail_calendars(locale)
-            } else {
-                String::new()
-            },
             ..wire::AgendaMoreRow::default()
         });
     }
@@ -261,6 +257,7 @@ pub fn more_rows(
         key: MORE_READS.to_owned(),
         label: words::reads_title(locale),
         spoken: words::reads_title(locale),
+        icon_key: "Shield".to_owned(),
         ..wire::AgendaMoreRow::default()
     });
     out
@@ -333,8 +330,9 @@ pub fn words_of(locale: Locale) -> wire::AgendaChrome {
         title: words::app_title(locale),
         new_event: words::new_event(locale),
         today: words::today(locale),
-        previous_day: words::previous_day(locale),
-        next_day: words::next_day(locale),
+        // THE LIST'S ARROWS move where the list starts, a day at a time.
+        previous_day: words::list_start_earlier(locale),
+        next_day: words::list_start_later(locale),
         search_placeholder: words::search_placeholder(locale),
         search_label: words::search_label(locale),
         search_close: words::close(locale),

@@ -1,9 +1,8 @@
 # Home's search (R-CHROME-6): one field over every app, grouped by
 # app, a row opening in its own app.
 #
-# A VAULT-HOLDING INSTALL, as `home.yaml`: the onboarding starters are enough —
-# the Tasks starter "Tap the circle to finish me" is what "circle" finds, and it
-# sits in Agenda's group (#1128: a task is grouped under the app it opens in).
+# A VAULT-HOLDING INSTALL, as `home.yaml`: the starter note "This note is yours" (Notes is
+# the one app with starter rows, 2026-11-17) is what "yours" finds, in Notes' group.
 appId: dev.centraid.Centraid
 name: home-search
 ---
@@ -12,37 +11,36 @@ name: home-search
     id: "home-search-open"
 - tapOn:
     id: "home-search-field"
-- inputText: "circle"
-# Grouped by app: the Reminders group heads the one hit.
+- inputText: "yours"
+# Grouped by app: the Notes group heads the one hit.
 - extendedWaitUntil:
     visible:
-      id: "home-search-group-reminders"
+      id: "home-search-group-notes"
     timeout: 5000
-- assertVisible: "Tap the circle to finish me"
-# A row opens in its own app; back lands on the results it left.
-- tapOn: "Tap the circle to finish me"
+# The row is one spoken element, "Note, This note is yours" on Android, so match the title at its end.
+- assertVisible: ".*This note is yours"
+# A row opens in its own app (the tap is what makes the term a recent search); Done closes the note
+# and lands on the results it left.
+- tapOn: ".*This note is yours"
 - assertNotVisible:
     id: "home-search-field"
-- runFlow:
-    when:
-      platform: iOS
-    commands:
-      - tapOn: "Done"
-- runFlow:
-    when:
-      platform: Android
-    commands:
-      - back
+- tapOn: "Done"
 - assertVisible:
-    id: "home-search-group-reminders"
-# Cancel goes home; the picked term comes back as a recent search.
+    id: "home-search-group-notes"
+# The picked term comes back as a recent search once the field is emptied.
 - tapOn:
-    id: "home-search-cancel"
+    id: "home-search-clear"
+- assertVisible:
+    id: "home-search-recent-yours"
+# The close key goes home; the picked term comes back as a recent search when search is opened again
+# (owner ruling 24, #1202: recents last until the app quits, held by the runtime, never written).
+- tapOn:
+    id: "home-search-close"
 - assertVisible:
     id: "home-grid"
 - tapOn:
     id: "home-search-open"
 - assertVisible:
-    id: "home-search-recent-circle"
+    id: "home-search-recent-yours"
 - tapOn:
-    id: "home-search-cancel"
+    id: "home-search-close"

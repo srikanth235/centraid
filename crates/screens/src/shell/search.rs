@@ -15,12 +15,14 @@
 //!
 //! The Ask row under an answer hands the term to the assistant by a route, scoped
 //! to every app (Home's search asks across all of them). An app's own search that runs on this
-//! screen (Health's) asks in its own scope, as every other app's search does (#1185).
+//! engine (Health's, in place on its home) asks in its own scope, as every other app's search does (#1185).
 //!
 //! ## Recent
 //!
-//! The last four terms the member acted on are the resting page's suggestions,
-//! held for as long as the screen is open.
+//! The last four terms the member acted on are the resting page's suggestions. They last until
+//! the app quits (owner ruling 24, #1202): kept in memory by the runtime (`kit::search::Recents`),
+//! so closing and reopening Search shows them, never written to the vault or the disk, and emptied
+//! when the vault in front changes so one vault's terms never show over another's.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
@@ -31,17 +33,16 @@ use super::policy;
 use super::routes;
 use super::row_routes::{self, RowRef};
 use crate::catalog::load;
+use crate::kit::civil;
 use crate::kit::read::{self, Page, Reading};
 use crate::kit::search as ask;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, home as words, shared};
 
-/// How many recent terms are kept.
-pub const RECENT_MAX: usize = 4;
+pub use crate::kit::search::RECENT_MAX;
 
-struct Search {
+pub(crate) struct Search {
     term: String,
-    recent: Vec<String>,
     /// No term: the resting page, which reads nothing.
     resting: bool,
     /// The read of the term asked.
@@ -49,7 +50,7 @@ struct Search {
     /// The term `page` answers: another term is another question, so the last term's hits are
     /// never shown for it.
     answered: String,
-    /// The one app this search answers for (`health.search`), or none for Home's.
+    /// The one app this search answers for (Health's, in place), or none for Home's.
     scope: Option<&'static str>,
 }
 
@@ -57,13 +58,6 @@ struct Search {
 #[must_use]
 pub fn build(_route: &wire::Route) -> Option<Box<dyn Screen>> {
     Some(Box::new(Search::over(None)))
-}
-
-/// The registry factory for Health's search page (#1173, item 11): the same search with the
-/// Health group alone, and the metrics found by name.
-#[must_use]
-pub fn build_health(_route: &wire::Route) -> Option<Box<dyn Screen>> {
-    Some(Box::new(Search::over(Some("health"))))
 }
 
 /// The month a word names (`nov`, `November`), 1 to 12.
@@ -123,11 +117,8 @@ fn date_of(term: &str) -> Option<(Option<u32>, Option<u32>, Option<u32>)> {
     (month.is_some()).then_some((year, month, day))
 }
 
-/// The workouts whose local day is the date `term` names (Health's page only).
-fn date_hits(ctx: &Ctx, term: &str) -> Vec<wire::VaultSearchHit> {
-    let Some((year, month, day)) = date_of(term) else {
-        return Vec::new();
-    };
+/// Health's recent workouts, the pool a date and a row's day are read from.
+fn recent_workouts(ctx: &Ctx) -> Vec<wire::HealthWorkoutRow> {
     let Reading::Data(workouts) = read::read(
         ctx,
         load::health::Workouts {
@@ -142,9 +133,16 @@ fn date_hits(ctx: &Ctx, term: &str) -> Vec<wire::VaultSearchHit> {
     ) else {
         return Vec::new();
     };
+    workouts.workouts
+}
+
+/// The workouts whose local day is the date `term` names (Health's page only).
+fn date_hits(workouts: &[wire::HealthWorkoutRow], term: &str) -> Vec<wire::VaultSearchHit> {
+    let Some((year, month, day)) = date_of(term) else {
+        return Vec::new();
+    };
     workouts
-        .workouts
-        .into_iter()
+        .iter()
         .filter(|workout| {
             let mut parts = workout.local_start.get(..10).unwrap_or_default().split('-');
             let (y, m, d): (Option<u32>, Option<u32>, Option<u32>) = (
@@ -159,11 +157,22 @@ fn date_hits(ctx: &Ctx, term: &str) -> Vec<wire::VaultSearchHit> {
         .map(|workout| wire::VaultSearchHit {
             app_id: "health".to_owned(),
             entity: "workout".to_owned(),
-            id: workout.activity_id,
-            title: workout.kind_label,
+            id: workout.activity_id.clone(),
+            title: workout.kind_label.clone(),
             ..wire::VaultSearchHit::default()
         })
         .collect()
+}
+
+/// A WORKOUT ROW NAMES ITS DAY (#1202): five runs read "Run / Workout" five times and could not be
+/// told apart until opened. Each hit on a workout takes the local day the workout began, from
+/// the same read the date search uses; the row's second line then says it.
+fn dated_workouts(hits: &mut [wire::VaultSearchHit], workouts: &[wire::HealthWorkoutRow]) {
+    for hit in hits.iter_mut().filter(|hit| hit.entity == "workout") {
+        if let Some(workout) = workouts.iter().find(|w| w.activity_id == hit.id) {
+            hit.subtitle_local_day = workout.local_start.get(..10).unwrap_or_default().to_owned();
+        }
+    }
 }
 
 /// The metrics whose name holds every word of `term`, as hits that open that metric.
@@ -195,7 +204,6 @@ impl Search {
     fn over(scope: Option<&'static str>) -> Self {
         Self {
             term: String::new(),
-            recent: Vec::new(),
             resting: true,
             page: Page::loading(),
             answered: String::new(),
@@ -205,6 +213,66 @@ impl Search {
 
     fn asked(&self) -> &str {
         self.term.trim()
+    }
+
+    /// Health's search, which runs in place on its home (owner, 2026-11-19).
+    pub(crate) fn health() -> Self {
+        Self::over(Some("health"))
+    }
+
+    /// Is a term being answered? A resting search reads nothing.
+    pub(crate) fn active(&self) -> bool {
+        !self.resting
+    }
+
+    /// The trimmed term asked.
+    pub(crate) fn term(&self) -> &str {
+        self.asked()
+    }
+
+    /// The member typed: another term is another question.
+    pub(crate) fn typed(&mut self, term: String, ctx: &Ctx) {
+        self.set_term(term, ctx);
+    }
+
+    /// Read the term again (the data changed).
+    pub(crate) fn refresh(&mut self, ctx: &Ctx) {
+        self.reload(ctx);
+    }
+
+    /// The answer as the page draws it, once the read is ready.
+    pub(crate) fn answer(&self, locale: Locale) -> Option<wire::HomeSearchData> {
+        if self.resting {
+            return None;
+        }
+        self.page.data().map(|found| self.folded(locale, found))
+    }
+
+    /// THE READ over this search: a resting search is ready (it reads nothing), a term that
+    /// matched nothing is the page's own empty state with the answer kept for the Ask row, and a
+    /// failure or the gate is the search's own.
+    pub(crate) fn wire_page(&self, locale: Locale) -> wire::PageState {
+        if self.resting {
+            return Page::<()>::Ready {
+                data: (),
+                note: None,
+            }
+            .wire(
+                locale,
+                |_| wire::Denied::default(),
+                wire::EmptyState::default,
+            );
+        }
+        let nothing = self
+            .page
+            .data()
+            .is_some_and(|found| self.folded(locale, found).groups.is_empty());
+        self.page.wire_keeping(
+            locale,
+            |denial| denied(locale, denial),
+            nothing,
+            || no_match(locale, self.asked(), self.scope),
+        )
     }
 
     /// The answer as the page draws it. The Ask is scoped to the app whose search this is; Home's
@@ -243,9 +311,14 @@ impl Search {
                 // A metric is found by its name, which no index holds: Health's group lists it
                 // first (it is what the name asks for), then the workouts the index found.
                 let mut hits = metric_hits(ctx.locale(), self.asked());
+                let workouts = if self.scope.is_some() {
+                    recent_workouts(ctx)
+                } else {
+                    Vec::new()
+                };
                 if self.scope.is_some() {
                     // A workout is also found by its date, which the index does not hold.
-                    for dated in date_hits(ctx, self.asked()) {
+                    for dated in date_hits(&workouts, self.asked()) {
                         if !found.hits.iter().any(|hit| hit.id == dated.id) {
                             hits.push(dated);
                         }
@@ -253,6 +326,7 @@ impl Search {
                 }
                 hits.append(&mut found.hits);
                 found.hits = hits;
+                dated_workouts(&mut found.hits, &workouts);
                 if let Some(scope) = self.scope {
                     found.hits.retain(|hit| hit.app_id == scope);
                 }
@@ -281,16 +355,9 @@ impl Search {
     }
 
     /// Remember the term the member acted on, newest first, once.
-    fn commit(&mut self) {
-        let asked = self.asked().to_owned();
-        if asked.is_empty() {
-            return;
-        }
-        self.recent.retain(|kept| {
-            !kept.eq_ignore_ascii_case(&asked) && kept.to_lowercase() != asked.to_lowercase()
-        });
-        self.recent.insert(0, asked);
-        self.recent.truncate(RECENT_MAX);
+    fn commit(&self, ctx: &Ctx) {
+        ctx.recents()
+            .remember(self.scope.unwrap_or_default(), self.asked());
     }
 }
 
@@ -302,7 +369,7 @@ impl Screen for Search {
             Some(E::HomeSearch(search)) => match search.kind {
                 Some(S::Term(typed)) => self.set_term(typed.term, ctx),
                 Some(S::Suggestion(picked)) => self.set_term(picked.term, ctx),
-                Some(S::Committed(_)) => self.commit(),
+                Some(S::Committed(_)) => self.commit(ctx),
                 Some(S::Cleared(_)) => {
                     self.term.clear();
                     self.rest();
@@ -318,55 +385,34 @@ impl Screen for Search {
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
         use wire::home_search_state::Content;
         let locale = ctx.locale();
+        let recent = ctx.recents().get(self.scope.unwrap_or_default());
         // THE RESTING PAGE reads nothing, so it is ready: its note and the recent terms are content.
         // A term that matched nothing is the page's own empty state, with the answer kept for the
         // Ask row under it.
         let content = if self.resting {
             Some(Content::Resting(wire::HomeSearchResting {
                 note: words::home_search_note(locale),
-                suggestions_label: if self.recent.is_empty() {
+                suggestions_label: if recent.is_empty() {
                     String::new()
                 } else {
                     words::home_search_recent_label(locale)
                 },
-                suggestions: self.recent.clone(),
+                suggestions: recent.clone(),
             }))
         } else {
             self.page
                 .data()
                 .map(|found| Content::Data(Box::new(self.folded(locale, found))))
         };
-        let nothing = !self.resting
-            && self
-                .page
-                .data()
-                .is_some_and(|found| self.folded(locale, found).groups.is_empty());
-        let page = if self.resting {
-            Page::<()>::Ready {
-                data: (),
-                note: None,
-            }
-            .wire(
-                locale,
-                |_| wire::Denied::default(),
-                wire::EmptyState::default,
-            )
-        } else {
-            self.page.wire_keeping(
-                locale,
-                |denial| denied(locale, denial),
-                nothing,
-                || no_match(locale, self.asked()),
-            )
-        };
+        let page = self.wire_page(locale);
         wire::ViewState {
             kind: Some(wire::view_state::Kind::HomeSearch(Box::new(
                 wire::HomeSearchState {
-                    chrome: Some(chrome(locale, self.scope)),
+                    chrome: Some(chrome(locale)),
                     term: self.term.clone(),
                     content,
                     page: Some(page),
-                    recent: self.recent.clone(),
+                    recent,
                 },
             ))),
             ..wire::ViewState::default()
@@ -374,16 +420,10 @@ impl Screen for Search {
     }
 }
 
-fn chrome(locale: Locale, scope: Option<&str>) -> wire::HomeSearchChrome {
+fn chrome(locale: Locale) -> wire::HomeSearchChrome {
     wire::HomeSearchChrome {
-        placeholder: match scope {
-            Some("health") => words::health_search_placeholder(locale),
-            _ => words::home_search_placeholder(locale),
-        },
-        scope_label: match scope {
-            Some(app) => app_label(locale, app),
-            None => words::home_search_scope_label(locale),
-        },
+        placeholder: words::home_search_placeholder(locale),
+        scope_label: words::home_search_scope_label(locale),
         cancel: shared::kit_cancel(locale),
         close_label: shared::kit_close_search(locale),
         loading: words::home_search_loading(locale),
@@ -403,6 +443,20 @@ fn denied(locale: Locale, denial: &wire::AppQueryDenial) -> wire::Denied {
 }
 
 /// The kind a row is, in a word; empty for an entity this search has no word for.
+/// A workout's kind word with the day it was done, when the hit knows it: `Workout · Wed 4 Nov`.
+fn with_day(locale: Locale, kind: String, hit: &wire::VaultSearchHit) -> String {
+    if hit.entity != "workout" || hit.subtitle_local_day.trim().is_empty() {
+        return kind;
+    }
+    fill(
+        &words::home_search_kind_when(locale),
+        &[
+            ("kind", &kind),
+            ("when", &civil::short_day(locale, &hit.subtitle_local_day)),
+        ],
+    )
+}
+
 fn kind_label(locale: Locale, entity: &str) -> String {
     match entity {
         "note" => words::search_kind_note(locale),
@@ -512,7 +566,7 @@ fn fold(locale: Locale, term: &str, found: &wire::VaultSearch) -> wire::HomeSear
                     });
                     continue;
                 }
-                let kind = kind_label(locale, &hit.entity);
+                let kind = with_day(locale, kind_label(locale, &hit.entity), hit);
                 // WORDS ONLY AN EARLIER VERSION HELD: the row says so and opens that item's
                 // Earlier versions, which is where the words can be read (#1185).
                 let earlier = hit
@@ -583,10 +637,14 @@ fn fold(locale: Locale, term: &str, found: &wire::VaultSearch) -> wire::HomeSear
 }
 
 /// What a term that matched nothing says: the page's own empty state.
-fn no_match(locale: Locale, term: &str) -> wire::EmptyState {
+fn no_match(locale: Locale, term: &str, scope: Option<&str>) -> wire::EmptyState {
+    let body = match scope {
+        Some("health") => crate::strings::health::search_nothing(locale),
+        _ => words::home_search_no_match_body(locale),
+    };
     wire::EmptyState {
         headline: words::home_search_no_match_headline(locale),
-        body: fill(&words::home_search_no_match_body(locale), &[("term", term)]),
+        body: fill(&body, &[("term", term)]),
         ..Default::default()
     }
 }
@@ -721,6 +779,37 @@ mod tests {
         assert_eq!(route.as_deref(), Some(crate::notes::EDITOR));
     }
 
+    /// FIVE RUNS MUST NOT READ AS FIVE COPIES OF ONE (#1202): each workout row names the day it was
+    /// done, so a search for "run" is five rows a member can tell apart.
+    #[test]
+    fn workouts_of_one_kind_are_told_apart_by_their_day() {
+        let workout = |id: &str, local_start: &str| wire::HealthWorkoutRow {
+            activity_id: id.to_owned(),
+            kind_label: "Run".to_owned(),
+            local_start: local_start.to_owned(),
+            ..Default::default()
+        };
+        let pool = [
+            workout("w1", "2026-11-04T07:10:00"),
+            workout("w2", "2026-11-06T07:12:00"),
+        ];
+        let mut hits = vec![
+            hit("workout", "w1", "Run", "health"),
+            hit("workout", "w2", "Run", "health"),
+        ];
+        dated_workouts(&mut hits, &pool);
+        let answer = data(hits);
+        let rows = &answer.groups[0].rows;
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].kind_label, "Workout · Wed 4 Nov");
+        assert_eq!(rows[1].kind_label, "Workout · Fri 6 Nov");
+        assert_ne!(rows[0].accessibility_label, rows[1].accessibility_label);
+        // A workout the pool does not hold keeps the plain kind.
+        let mut lone = vec![hit("workout", "w9", "Run", "health")];
+        dated_workouts(&mut lone, &pool);
+        assert_eq!(data(lone).groups[0].rows[0].kind_label, "Workout");
+    }
+
     #[test]
     fn a_locker_item_is_a_hit_in_lockers_group_naming_its_kind_and_opening_the_item() {
         let answer = data(vec![hit("locker_item", "i1", "Bank login", "locker")]);
@@ -766,7 +855,7 @@ mod tests {
         assert_eq!(answer.groups[0].app_id, "notes");
         let only = data(vec![hit("thing", "c1", "Cabin planning", "nowhere")]);
         assert!(only.groups.is_empty());
-        assert_eq!(no_match(Locale::En, "cabin").headline, "No matches");
+        assert_eq!(no_match(Locale::En, "cabin", None).headline, "No matches");
     }
 
     #[test]
@@ -817,7 +906,7 @@ mod tests {
         assert_eq!(ask.question, "Find cabin");
         assert_eq!(answer.ask_route, Some(super::routes::ask("Find cabin", "")));
         assert_eq!(
-            no_match(Locale::En, "cabin").body,
+            no_match(Locale::En, "cabin", None).body,
             "Nothing in this vault matches “cabin”."
         );
     }

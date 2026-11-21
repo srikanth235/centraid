@@ -175,10 +175,22 @@ impl Home {
 
     fn refresh(&mut self, ctx: &Ctx) {
         self.read_stored(ctx);
+        let was_today = self.today.clone();
         let before = std::mem::take(&mut self.held);
         // A refresh that failed keeps what was shown, under its note.
         if !self.read(ctx) {
             self.held.keep_unread(before);
+        }
+        // A SURFACE ON TODAY FOLLOWS TODAY past midnight: "From Wednesday 18 November" on the 19th
+        // is a window the member never chose.
+        if !was_today.is_empty()
+            && !self.today.is_empty()
+            && self.today != was_today
+            && self.anchor == was_today
+        {
+            self.anchor = self.today.clone();
+            self.held = Held::default();
+            self.read(ctx);
         }
     }
 
@@ -569,6 +581,8 @@ impl Home {
             held: &self.held,
             week_start: grid::week_start_of(ctx.region()),
             month_style: self.month_style,
+            import_denied: ctx.follows().report(Store::Calendar).denied,
+            import_refused: ctx.follows().report(Store::Calendar).refused(),
         })
     }
 
@@ -609,6 +623,22 @@ impl Screen for Home {
             }
             Some(E::AgendaHome(home)) => match home.kind {
                 Some(H::ImportRequested(_)) => return self.calendar.import(ctx),
+                // THE CARD'S ONE ACTION: the phone's Settings after a refusal (RemindersRefused),
+                // else the new event the plus also makes.
+                Some(H::TodoEmptyActed(_)) => {
+                    if ctx.follows().report(Store::Calendar).refused() {
+                        return vec![wire::Effect {
+                            kind: Some(wire::effect::Kind::CameraRoll(wire::CameraRoll {
+                                action: wire::camera_roll::Action::OpenSettings as i32,
+                            })),
+                        }];
+                    }
+                    return vec![wire::Effect {
+                        kind: Some(wire::effect::Kind::OpenRoute(wire::OpenRoute {
+                            route: Some(routes::editor("", "", None, &self.anchor)),
+                        })),
+                    }];
+                }
                 // THE TURN-ON ROW (the stop row's slot after a stop): the sheet is done and the
                 // phone is asked for the permission now, as the empty state's Import does.
                 Some(H::MoreRow(picked))
@@ -661,6 +691,9 @@ impl Screen for Home {
         let folded = if ready { self.data(ctx) } else { None };
         // A place with nothing to show is the page's own empty state; its data is not drawn.
         let empty_state = folded.as_ref().and_then(|folded| folded.empty.clone());
+        // THE CARD SAYS THE REFUSAL (with Open Settings) while it is on screen, and the status
+        // line stays silent so it does not say it twice or follow the member elsewhere.
+        let refusal_card = folded.as_ref().is_some_and(|folded| folded.refusal);
         // The calendars list is the More sheet's even when the place itself has nothing to show.
         let full = folded.map(|folded| folded.data);
         let mut data = full.clone().filter(|_| empty_state.is_none());
@@ -758,9 +791,9 @@ impl Screen for Home {
                         !denied && term.is_none(),
                     )),
                     chrome: Some(wire::AgendaChrome {
-                        // The menu sheet is titled for the app, the Calendars sheet for its list.
+                        // The menu sheet is titled "More", as every app's is; the Calendars sheet for its list.
                         more_title: if menu_up {
-                            words::app_title(locale)
+                            words::band_more(locale)
                         } else {
                             chrome::words_of(locale).more_title
                         },
@@ -788,9 +821,12 @@ impl Screen for Home {
                             "calendar",
                         )
                     }),
+                    // A REFUSAL IS THE CARD'S TO SAY (with Open Settings), never a line that
+                    // follows the member into other places.
                     status: self
                         .calendar
                         .status()
+                        .filter(|_| !refusal_card)
                         .cloned()
                         .or_else(|| self.ops.status())
                         .or_else(|| {

@@ -64,6 +64,10 @@ pub fn type_columns(item_type: &str) -> &'static [&'static str] {
 /// The custom field kinds the vault stores (`locker_item_field.kind`).
 pub const FIELD_KINDS: [&str; 5] = ["text", "sealed", "url", "date", "otp"];
 
+/// The cells an import keeps exactly as the file holds them: a password with a space at its end
+/// is a different password, and a note's text is the member's own.
+const VERBATIM_CELLS: [&str; 2] = ["password", "content"];
+
 /// The five sealed item cells.
 pub const SEALED_CELLS: [&str; 5] = ["password", "otp_seed", "card_number", "cvv", "content"];
 
@@ -446,7 +450,11 @@ fn read_json(text: &str) -> Result<ImportFile, ReadRefusal> {
             };
             let mut columns = BTreeMap::new();
             for column in type_columns(&item_type) {
-                let value = text_of(&item[*column]);
+                let value = if VERBATIM_CELLS.contains(column) {
+                    item[*column].as_str().unwrap_or_default().to_owned()
+                } else {
+                    text_of(&item[*column])
+                };
                 if !value.is_empty() {
                     columns.insert((*column).to_owned(), value);
                 }
@@ -561,6 +569,10 @@ fn read_csv(text: &str) -> Result<ImportFile, ReadRefusal> {
                     .map(|value| value.trim().to_owned())
                     .unwrap_or_default()
             };
+            // A password is what the member typed, spaces and all: trimming it would seal a
+            // different secret than the one the site holds.
+            let verbatim =
+                |at: Option<usize>| at.and_then(|at| row.get(at)).cloned().unwrap_or_default();
             let mut address = cell(url);
             let named = cell(title);
             // A SECURE NOTE (LastPass: the address `http://sn`; Bitwarden: `type = note`) is a
@@ -580,7 +592,7 @@ fn read_csv(text: &str) -> Result<ImportFile, ReadRefusal> {
             } else {
                 vec![
                     ("username", cell(username)),
-                    ("password", cell(password)),
+                    ("password", verbatim(password)),
                     ("url", address.clone()),
                     ("otp_seed", cell(otp)),
                     ("notes", body),
@@ -838,6 +850,17 @@ mod tests {
         assert_eq!(entries[0].column("notes"), "");
         assert_eq!(entries[1].item_type, "login");
         assert_eq!(entries[1].column("notes"), "a note");
+    }
+
+    #[test]
+    fn a_password_keeps_the_spaces_the_member_typed() {
+        let csv =
+            "name,url,username,password\nBank,https://bank.example,ada,\" pw with spaces \"\n";
+        let file = read(csv.as_bytes()).expect("a CSV");
+        assert_eq!(file.entries[0].column("password"), " pw with spaces ");
+        let json = "{\"format\":\"centraid-locker/1\",\"items\":[{\"type\":\"login\",\"title\":\"Bank\",\"password\":\" pw \"}]}";
+        let file = read(json.as_bytes()).expect("a Locker export");
+        assert_eq!(file.entries[0].column("password"), " pw ");
     }
 
     #[test]

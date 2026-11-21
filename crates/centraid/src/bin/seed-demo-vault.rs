@@ -72,9 +72,8 @@
 //! **THE BYTES ARE REAL.** `photo.add` claims the library's compiled-in
 //! frames through the content plane, and both shells draw the mosaic and the
 //! grid from the files this seed leaves in `<stem>.bytes`. The one video seeds
-//! its own bytes and no `poster` derivative — nothing in the workspace writes
-//! that variant — so its cell draws empty while every photograph draws its
-//! thumbnail.
+//! its own stub bytes and a generated `poster` derivative staged beside them, the still a shell
+//! renders for a real video, so its cell draws a frame like every photograph's thumbnail.
 
 use std::path::PathBuf;
 

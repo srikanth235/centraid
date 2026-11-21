@@ -36,31 +36,36 @@ struct KitIconKey: View {
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.isEnabled) private var enabled
+    /// THE KEY GROWS WITH THE TEXT (#1202), to at most 1.75 times: Home's search and settings keys
+    /// stayed their small size beside text at the largest setting.
+    @ScaledMetric(relativeTo: .body) private var scaleBase: CGFloat = 1
+
+    private var factor: CGFloat { min(scaleBase, 1.75) }
 
     var body: some View {
         Button(action: action) {
             ZStack {
                 if glass {
                     Color.clear
-                        .frame(width: 40, height: 40)
+                        .frame(width: 40 * factor, height: 40 * factor)
                         .bandGround(Circle(), solid: "bg", interactive: true)
                 } else if framed && round {
                     Circle()
                         .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 36 * factor, height: 36 * factor)
                 } else if framed {
                     RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
                         .strokeBorder(Theme.color("lineStrong", scheme), lineWidth: CentraidGeometry.hairline)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 36 * factor, height: 36 * factor)
                 }
                 CentraidIconView(
                     iconKey: iconKey,
                     tint: Theme.color(enabled ? tint : Self.disabledToken, scheme),
-                    size: 18,
+                    size: 18 * factor,
                     solid: solid
                 )
             }
-            .frame(width: CentraidGeometry.targetMinCoarse, height: CentraidGeometry.targetMinCoarse)
+            .frame(width: CentraidGeometry.targetMinCoarse * factor, height: CentraidGeometry.targetMinCoarse * factor)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -82,17 +87,23 @@ struct KitLink: View {
     /// A link that wears the surrounding page's colour (the words pages' teal) instead of the link blue.
     var tint: Color? = nil
     var identifier: String = ""
+    /// The link's whole row is its hit area (a link alone on a row: a tap anywhere along it, which is
+    /// also where the row's one accessibility element is activated).
+    var fillsRow: Bool = false
     let action: () -> Void
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.appAccent) private var accent
 
     var body: some View {
+        // A link is the app's own colour inside an app's place; the shell's links keep the link blue.
+        let ink = tint ?? (accent.appId.isEmpty ? Theme.color("link", scheme) : accent.text)
         Button(action: action) {
             Text(label)
                 .centraidType(dense ? "annotLabelOn" : "smallStrong")
-                .foregroundStyle(enabled ? (tint ?? Theme.color("link", scheme)) : Theme.color("textDisabled", scheme))
-                .frame(minHeight: CentraidGeometry.targetMinCoarse)
+                .foregroundStyle(enabled ? ink : Theme.color("textDisabled", scheme))
+                .frame(maxWidth: fillsRow ? .infinity : nil, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -209,6 +220,10 @@ struct KitSegmented<Key: Hashable>: View {
                 segment(option.key, option.label)
             }
         }
+        // A FILLING TRACK TAKES THE HEIGHT OF ITS TALLEST SEGMENT (#1202, S13): a label too long for its
+        // third ("Phone's setting" on an iPhone SE) wraps whole onto a second line, and the others stand
+        // as tall as it, so the lit one is never a short card beside a tall one.
+        .fixedSize(horizontal: false, vertical: fills && !stacked)
         .padding(3)
         .background(Surface.fill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityElement(children: .contain)
@@ -222,10 +237,17 @@ struct KitSegmented<Key: Hashable>: View {
                 .kitType(.row)
                 .fontWeight(active ? .semibold : .regular)
                 .foregroundStyle(active ? Surface.ink : Surface.meta)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .padding(.horizontal, 14)
-                .frame(maxWidth: fills ? .infinity : nil, minHeight: CentraidGeometry.targetMinCoarse)
+                .lineLimit(fills ? 2 : 1)
+                .multilineTextAlignment(.center)
+                // ONE SIZE FOR EVERY SEGMENT (#1202): a track that fills gives each the same width
+                // and a slim pad, and a label never shrinks alone ("6 months" came out smaller).
+                .minimumScaleFactor(fills ? 1 : 0.8)
+                .padding(.horizontal, fills ? 4 : 14)
+                .frame(
+                    maxWidth: fills ? .infinity : nil,
+                    minHeight: CentraidGeometry.targetMinCoarse,
+                    maxHeight: fills ? .infinity : nil
+                )
                 .background(active ? Surface.card : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .contentShape(Rectangle())
         }
@@ -405,6 +427,17 @@ struct ToolbarIcon: View {
         }
         .accessibilityLabel(label)
         .accessibilityIdentifier(identifier)
+        .headerKeyTarget()
+    }
+}
+
+extension View {
+    /// A HEADER KEY IS A 44 PT TARGET (#1202, S13): the bar's keys laid out 36 to 42 pt (the funnel, the
+    /// filled key, the "…" menus), and the frame is what is measured. Applied to the key itself, outside
+    /// its label, so the glass the bar draws around it keeps the size it has.
+    func headerKeyTarget() -> some View {
+        frame(minWidth: CentraidGeometry.targetMinCoarse, minHeight: CentraidGeometry.targetMinCoarse)
+            .contentShape(Rectangle())
     }
 }
 

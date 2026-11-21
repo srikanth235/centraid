@@ -127,7 +127,7 @@ pub fn scale_over(top: f64) -> f64 {
 #[must_use]
 pub const fn metric_icon(metric: Metric) -> &'static str {
     match metric {
-        Metric::Steps => "MapPin",
+        Metric::Steps => "Footprints",
         Metric::Sleep => "Moon",
         Metric::Energy => "Bolt",
         Metric::Exercise => "Activity",
@@ -223,7 +223,7 @@ pub fn month_heading(locale: Locale, day: &str, today: &str) -> String {
 pub fn kind_icon(key: &str) -> &'static str {
     match key {
         kinds::RUN => "Activity",
-        kinds::WALK => "MapPin",
+        kinds::WALK => "Footprints",
         kinds::CYCLE => "Compass",
         kinds::SWIM => "Water",
         kinds::HIKE => "Plant",

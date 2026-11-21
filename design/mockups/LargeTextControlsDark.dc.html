@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Controls stack, chart words hold, status and addresses stay whole at largest text (dark)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #0E0D0C; font-family: Geist, system-ui, sans-serif; color: #F2EFEA;">
+  <div style="padding: 56px 20px 0; font-size: 28px; font-weight: 700; line-height: 1.15;">Demo vault</div>
+  <div style="padding: 2px 20px 0; font-size: 20px; line-height: 1.25; color: #A39E95;">Not backed up yet</div>
+  <div style="padding: 0 20px; font-size: 20px; line-height: 1.25; color: #9DB0F0;">Pair</div>
+  <div style="margin: 14px 20px 0; background: #1F1E1C; border-radius: 16px; padding: 14px;">
+    <div style="font-size: 20px; color: #A39E95;">Spent so far</div>
+    <div style="font-size: 34px; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums;">$2,745.45</div>
+    <div style="margin-top: 8px; background: #3A3733; border-radius: 12px; padding: 3px;">
+      <div style="background: #1F1E1C; border-radius: 10px; text-align: center; font-size: 20px; font-weight: 600; line-height: 36px;">Week</div>
+      <div style="text-align: center; font-size: 20px; color: #A39E95; line-height: 36px;">Day</div>
+    </div>
+    <div style="display: flex; align-items: flex-end; gap: 8px; height: 70px; margin-top: 12px;">
+      <div style="flex: 1; height: 44px; background: #6A7888; border-radius: 4px;"></div>
+      <div style="flex: 1; height: 28px; background: #6A7888; border-radius: 4px;"></div>
+      <div style="flex: 1; height: 66px; background: #CB4669; border-radius: 4px;"></div>
+      <div style="flex: 1; height: 24px; border: 1px dashed #4A4741; border-radius: 4px;"></div>
+    </div>
+    <div style="display: flex; gap: 8px; font-size: 14px; color: #A39E95; text-align: center; margin-top: 4px;"><div style="flex: 1;">1–7</div><div style="flex: 1;">8–14</div><div style="flex: 1;">15–21</div><div style="flex: 1;">22–28</div></div>
+    <div style="font-size: 20px; color: #A39E95; margin-top: 8px;">- - planned pace</div>
+  </div>
+  <div style="margin: 12px 20px 0; background: #1F1E1C; border-radius: 16px; padding: 12px 14px;">
+    <div style="font-size: 22px; line-height: 1.25;">192.168.1.5</div>
+    <div style="font-size: 20px; color: #A39E95; line-height: 1.25;">192.168.1.5:18443 never breaks mid-number</div>
+    <div style="font-size: 20px; font-weight: 600; color: #9DB0F0; line-height: 1.5;">Forget</div>
+    <div style="font-size: 20px; color: #A39E95; line-height: 1.25;">Run “centraid&#8209;gateway pair”: a command breaks at its spaces only.</div>
+  </div>
+  <div style="margin: 12px 20px 0; background: #1F1E1C; border-radius: 16px; padding: 10px 14px; display: flex; align-items: center; gap: 8px;">
+    <div style="flex: 1;"><div style="font-size: 22px; line-height: 1.25;">Into</div><div style="font-size: 20px; color: #A39E95; line-height: 1.25;">Choose an account</div></div>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5C5852" stroke-width="2.4" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+  </div>
+  <div style="margin: 12px 20px 0;">
+    <div style="font-size: 17px; font-weight: 600; background: #1F1E1C; border: 1px solid #C9C2B6; border-radius: 22px; text-align: center; line-height: 40px;">Going</div>
+    <div style="font-size: 17px; font-weight: 600; background: #1F1E1C; border: 1px solid #C9C2B6; border-radius: 22px; text-align: center; line-height: 40px; margin-top: 6px;">Maybe</div>
+    <div style="margin-top: 8px; font-size: 12px; font-weight: 700; color: #F27A6D; border: 1px solid #F27A6D; border-radius: 6px; padding: 3px 6px; display: inline-block;">COMPROMISED</div>
+    <div style="font-size: 20px; color: #A39E95; line-height: 1.25; margin-top: 4px;">Keys stack; a choice's value sits under its name, whole.</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

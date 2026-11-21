@@ -24,6 +24,7 @@ use crate::kit::act as kit_act;
 use crate::kit::export;
 use crate::kit::menu;
 use crate::kit::read::Page;
+use crate::kit::reads_page;
 use crate::kit::undo::Undo as Door;
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, notes as words, shared};
@@ -591,6 +592,9 @@ impl Screen for Home {
         match event.kind {
             Some(E::Appeared(_) | E::DataChanged(_) | E::EnvironmentChanged(_)) => {
                 self.reload(ctx);
+                // THE NOTE'S PAGE ABOVE CLOSED (moved to trash from its menu): its line and Undo
+                // are drawn here.
+                self.line.take_handed(ctx);
             }
             Some(E::StatusActed(_)) => {
                 self.line.acted(ctx);
@@ -607,7 +611,14 @@ impl Screen for Home {
         let locale = ctx.locale();
         // The read is the page; the data is the place that is showing, when the page is ready
         // (and not over an open search, whose rows are `search`).
-        let (page, content) = match self.place {
+        // SEARCH IS THE BAND'S KEY IN EVERY PLACE (NotesJournalEmpty): an open search answers over
+        // Notebooks and Journal too, with the library's own page and results.
+        let place = if self.library.search.open {
+            wire::NotesPlace::Notes
+        } else {
+            self.place
+        };
+        let (page, content) = match place {
             wire::NotesPlace::Notebooks => (
                 self.notebooks.wire(locale),
                 self.notebooks
@@ -643,13 +654,21 @@ impl Screen for Home {
             chrome: Some(Self::chrome(locale, self.place)),
             content,
             page: Some(page),
-            search: notes_place.then(|| self.library.search_state(locale)),
+            search: Some(self.library.search_state(locale)),
             more_rows: if denied_now {
                 Vec::new()
             } else {
                 let back = words::title(locale);
                 let export = export::entry(locale, super::EXPORT);
                 vec![
+                    // WHAT NOTES MAY READ (owner, 2026-11-19), first, as Health's is.
+                    wire::NotesMoreRow {
+                        key: "reads".to_owned(),
+                        label: reads_page::title(locale, &back),
+                        icon_key: "Shield".to_owned(),
+                        route: Some(routes::reads()),
+                        meta: String::new(),
+                    },
                     wire::NotesMoreRow {
                         key: "import".to_owned(),
                         label: words::more_import(locale),

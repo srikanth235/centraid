@@ -19,12 +19,15 @@ struct TodoDetailView: View {
     /// THE ONLY PLACE A KEYSTROKE EXISTS BEFORE THE MACHINE HEARS IT —
     /// seeded once from the draft, never re-seeded (`NotesEditorView`'s rule).
     @State private var typedTitle = ""
+    /// Return moves from the title to the notes (`FocusChain`).
+    @FocusState private var detailField: Int?
     @State private var typedNotes = ""
     @State private var typedTag = ""
     @State private var typedSubtask = ""
     @State private var seeded = false
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private func event(_ build: (inout Centraid_Core_V1_TodoDetailEvent) -> Void) -> Centraid_Core_V1_TodoDetailEvent {
         var event = Centraid_Core_V1_TodoDetailEvent()
@@ -130,8 +133,16 @@ struct TodoDetailView: View {
                     .padding(.vertical, 8)
                     .accessibilityLabel(detail.titlePlaceholder)
                     .accessibilityIdentifier("tasks-title-field")
+                    .focusChain(FocusChain(focus: $detailField, index: 0, last: 1))
                     // AN EDIT IS A DIFFERENCE FROM THE DRAFT, not an assignment.
                     .onChange(of: typedTitle) { _, typed in
+                        // A VERTICAL FIELD TAKES RETURN AS A NEWLINE: a title is one line, so Return moves to
+                        // the notes (the key says "next", `FocusChain`) and the break never lands in it.
+                        if typed.contains("\n") {
+                            typedTitle = typed.replacingOccurrences(of: "\n", with: "")
+                            detailField = 1
+                            return
+                        }
                         guard seeded, typed != detail.draft.title else { return }
                         send(event { $0.title = .with { $0.title = typed } })
                     }
@@ -143,6 +154,7 @@ struct TodoDetailView: View {
                     .padding(.bottom, 8)
                     .accessibilityLabel(detail.notesPlaceholder)
                     .accessibilityIdentifier("tasks-notes-field")
+                    .focused($detailField, equals: 1)
                     .onChange(of: typedNotes) { _, typed in
                         guard seeded, typed != detail.draft.notes else { return }
                         send(event { $0.notes = .with { $0.notes = typed } })
@@ -189,7 +201,7 @@ struct TodoDetailView: View {
                 // EVERY RECORD KEEPS ITS EARLIER VALUES (#1185): the last content row, above the foot actions.
                 EarlierEntryRow(entry: state.hasEarlier ? state.earlier : nil, open: open)
                 OriginLineView(line: state.hasOrigin ? state.origin : nil)
-                HStack(spacing: 12) {
+                KitReflowRow(spacing: 12) {
                     if !detail.shareLabel.isEmpty {
                         KitOutlineButton(label: detail.shareLabel) { send(event { $0.shareRequested = .init() }) }
                             .accessibilityIdentifier("tasks-share")
@@ -248,24 +260,30 @@ struct TodoDetailView: View {
             .disabled(!field.enabled)
         } else {
             VStack(alignment: .leading, spacing: 6) {
-                HStack {
+                // THE VALUE UNDER ITS LABEL AT ACCESSIBILITY SIZES (#1202): beside "When" the date
+                // was left a narrow column and broke as "Novembe/r".
+                let keyLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                    : AnyLayout(HStackLayout())
+                keyLayout {
                     Text(field.label)
                         .centraidType("body")
                         .foregroundStyle(Theme.color(field.enabled ? "text" : "textDisabled", scheme))
-                    Spacer(minLength: 8)
+                    if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
                     Text(field.value)
                         .centraidType("body")
                         .foregroundStyle(Theme.color(field.enabled ? "textSoft" : "textDisabled", scheme))
-                        .lineLimit(1)
+                        .kitLineLimit(1, wide: 4)
                 }
                 if !field.choices.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(field.choices, id: \.key) { choice in
-                                chip(choice, field: field)
-                            }
+                    // THE CHOICES WRAP (#1202): a chip row that scrolled sideways cut "Next week" and
+                    // "Yearly" mid-word at the card's edge with no cue that more was there.
+                    KitFlow(spacing: 6) {
+                        ForEach(field.choices, id: \.key) { choice in
+                            chip(choice, field: field)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 pickers(field, today: today)
                 if field.addText {
@@ -286,12 +304,10 @@ struct TodoDetailView: View {
                 }
                 // "Open Settings" under a line that sends the member there (#1188, NA1).
                 if !field.actionLabel.isEmpty {
-                    Button(field.actionLabel) {
+                    KitOutlineButton(label: field.actionLabel) {
                         send(event { $0.alertSettings = .init() })
                     }
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color("text", scheme))
-                    .frame(minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+                    .padding(.top, 4)
                     .accessibilityIdentifier("tasks-field-\(field.key)-settings")
                 }
             }

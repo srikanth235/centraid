@@ -23,6 +23,7 @@ pub fn home() -> wire::Route {
             destination: wire::AgendaDestination::Todo as i32,
             quick_add_title: String::new(),
             open_quick_add: false,
+            open_import: false,
         }),
     )
 }
@@ -37,6 +38,21 @@ pub fn home_adding(title: &str) -> wire::Route {
             destination: wire::AgendaDestination::Todo as i32,
             quick_add_title: title.to_owned(),
             open_quick_add: true,
+            open_import: false,
+        }),
+    )
+}
+
+/// Reminders' home, starting the phone's Reminders import as it opens (Home's "Import your
+/// reminders" tile).
+#[must_use]
+pub fn home_importing() -> wire::Route {
+    route(
+        HOME,
+        wire::route::Args::AgendaHome(wire::AgendaHomeRoute {
+            destination: wire::AgendaDestination::Todo as i32,
+            open_import: true,
+            ..wire::AgendaHomeRoute::default()
         }),
     )
 }

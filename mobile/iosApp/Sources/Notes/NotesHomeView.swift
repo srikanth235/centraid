@@ -24,7 +24,6 @@ struct NotesHomeView: View {
         return false
     }
 
-    private var isNotesPlace: Bool { state.place == .notes || state.place == .unspecified }
 
     var body: some View {
         let chrome = state.chrome
@@ -32,7 +31,7 @@ struct NotesHomeView: View {
             app: "notes",
             title: state.title,
             trailing: addAction,
-            search: isNotesPlace && !denied ? searchSlot : nil,
+            search: !denied ? searchSlot : nil,
             filter: filter,
             subtitle: subtitle,
             showsBand: !denied && !state.band.isEmpty
@@ -61,7 +60,7 @@ struct NotesHomeView: View {
                 }
                 // THE ASK ROW closes an answer that matched nothing too (#1097): with matches it
                 // rides at the foot of the results, so only an answer with none draws it here.
-                if isNotesPlace, state.search.open, !state.search.hasResults, state.search.hasAsk {
+                if state.search.open, !state.search.hasResults, state.search.hasAsk {
                     SearchAskRow(ask: state.search.ask)
                 }
                 StatusLineView(status: state.status, identifier: "notes-status-action")
@@ -191,7 +190,7 @@ struct NotesHomeView: View {
 
     @ViewBuilder
     private var placeContent: some View {
-        if isNotesPlace, state.search.open {
+        if state.search.open {
             searchResults
         } else {
             switch state.content {
@@ -358,9 +357,23 @@ private struct NotesLibraryList: View {
                             .padding(.bottom, 4)
                             .accessibilityIdentifier("notes-count")
                     }
+                    // FIRST OPEN (`first_open`): the card over the starter notes, then their small head.
+                    if library.hasFirstOpen {
+                        EmptyStateView(library.firstOpen)
+                    }
                     ForEach(Array(library.sections.enumerated()), id: \.offset) { _, section in
                         if !section.head.title.isEmpty {
-                            NotesSectionTitle(title: section.head.title, pinned: section.rows.first?.pinned == true)
+                            if library.hasFirstOpen {
+                                Text(section.head.title.uppercased())
+                                    .kitType(.meta)
+                                    .foregroundStyle(Surface.meta)
+                                    .padding(.horizontal, CentraidGeometry.pageMargin + 2)
+                                    .padding(.top, 10)
+                                    .padding(.bottom, 6)
+                                    .accessibilityAddTraits(.isHeader)
+                            } else {
+                                NotesSectionTitle(title: section.head.title, pinned: section.rows.first?.pinned == true)
+                            }
                         }
                         NotesCard {
                             ForEach(Array(section.rows.enumerated()), id: \.element.noteID) { at, row in
@@ -458,7 +471,7 @@ struct NotesRowView: View {
                         .kitType(.row)
                         .fontWeight(.semibold)
                         .foregroundStyle(Surface.ink)
-                        .lineLimit(1)
+                        .kitLineLimit(2)
                     Spacer(minLength: 8)
                     if !row.checkLabel.isEmpty {
                         Text(row.checkLabel)
@@ -466,18 +479,19 @@ struct NotesRowView: View {
                             .fontWeight(.semibold)
                             .monospacedDigit()
                             .foregroundStyle(accent.text)
-                            .lineLimit(1)
+                            .kitLineLimit(1)
                     }
                 }
                 snippet
                     .kitType(.meta)
                     .foregroundStyle(Surface.body)
-                    .lineLimit(1)
+                    .kitLineLimit(1)
+                    .accessibilityIdentifier("notes-row-preview")
                 if !row.meta.isEmpty {
                     Text(row.meta)
                         .kitType(.meta)
                         .foregroundStyle(Surface.meta)
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                 }
                 AboutChips(chips: row.about)
                     .padding(.top, 2)

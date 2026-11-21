@@ -29,7 +29,7 @@
 //! moved the whole queue at once would hold the vault's head until the last
 //! film of a backlog had crossed. The records move on their own first, the
 //! head is set, and only then do the media move — which is what makes the
-//! recovery point for records about an hour while photographs stream.
+//! recovery point for records about half a minute behind an edit while photographs stream.
 //!
 //! # THE MEMBER'S RULE, AS A TABLE (#1080 ruling 6; the root's ruling A10)
 //!
@@ -92,10 +92,18 @@ use crate::error::{CoreError, Result};
 use crate::handle::HandleState as Handle;
 use crate::stage::{Planned, bytes_of_parts, window_within};
 
-/// A snapshot is taken at most this often unless the member asks or a pass
-/// confirms files whose rows no snapshot covers (R-1080-C15): an hour, the
-/// recovery point for records at home (#1080 ruling 5).
+/// How long a snapshot is trusted to be on its way, and how far back a head is believed to
+/// stand: an hour. It is no longer the interval between snapshots (see [`SNAPSHOT_SETTLE_MS`]);
+/// a vault that changed is copied once it has settled, and one that did not change is not
+/// copied again however long ago the head was set.
 pub const SNAPSHOT_EVERY_MS: u64 = 60 * 60 * 1000;
+
+/// How long after the last snapshot a changed vault is copied again while this phone is paired
+/// and online: about 30 seconds (#1202, S2-9, the owner's ruling). A burst of edits coalesces
+/// (the conductor waits five seconds between commits), and one snapshot follows it; an edit after
+/// the window is the next snapshot's. Leaving the screen and the member's ask still take one at
+/// once.
+pub const SNAPSHOT_SETTLE_MS: u64 = 30 * 1000;
 
 /// The most items one answer asks the shell to stream (`NeedBytes`).
 pub const MAX_NEED_BYTES: usize = 64;
@@ -1318,15 +1326,21 @@ const CLOCK_TOLERANCE_MS: u64 = 5 * 60 * 1000;
 
 /// Whether `taken_at_ms` is within the snapshot interval of `now`. **A date in the future
 /// is not recent** (#1188, B11): a clock set ahead and corrected dated a snapshot after now,
-/// and trusting it would have held the hourly snapshot off until the real date caught up.
+/// and trusting it would have held the next snapshot off until the real date caught up.
 fn recent(now: u64, taken_at_ms: u64) -> bool {
     taken_at_ms <= now.saturating_add(CLOCK_TOLERANCE_MS)
         && now.saturating_sub(taken_at_ms) < SNAPSHOT_EVERY_MS
 }
 
+/// Whether `taken_at_ms` is still inside the settle window. A date in the future is not.
+fn settling(now: u64, taken_at_ms: u64) -> bool {
+    taken_at_ms <= now.saturating_add(CLOCK_TOLERANCE_MS)
+        && now.saturating_sub(taken_at_ms) < SNAPSHOT_SETTLE_MS
+}
+
 /// Whether a snapshot is due at `gateway_id`. One the shell asked for (`wanted`, kept in the
 /// plane until taken) or a gateway whose head went backwards (`rolled`) always is; otherwise
-/// one is due an hour after the newest the gateway's head names, and not while a younger
+/// one is due once the settle window has passed since the newest the gateway's head names, and not while a younger
 /// one is still on its way to it (its manifest is in the outbox); and one is due at once at a
 /// gateway this phone has set no head at.
 fn snapshot_due(state: &DeviceState, gateway_id: &str, wanted: bool, rolled: bool) -> Result<bool> {
@@ -1358,9 +1372,10 @@ fn snapshot_due(state: &DeviceState, gateway_id: &str, wanted: bool, rolled: boo
     if gateway.head.is_none() {
         return Ok(true);
     }
-    // THE HOUR RUNS FROM THE SNAPSHOT THIS GATEWAY'S OWN HEAD NAMES: another gateway being
-    // current does not make this one so (#1188, B1).
-    Ok(gateway.head_ms.is_none_or(|at| !recent(now, at)))
+    // THE SETTLE RUNS FROM THE SNAPSHOT THIS GATEWAY'S OWN HEAD NAMES: another gateway being
+    // current does not make this one so (#1188, B1). A vault nothing changed is skipped before
+    // this is asked (`newest_stands`), so the window costs a copy only after an edit.
+    Ok(gateway.head_ms.is_none_or(|at| !settling(now, at)))
 }
 
 /// The names the newest snapshot gave each range, as far as every gateway of the pass still holds

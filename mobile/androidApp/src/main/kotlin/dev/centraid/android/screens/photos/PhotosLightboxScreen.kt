@@ -13,6 +13,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.platform.testTag
 import androidx.compose.material3.TextFieldDefaults
 import dev.centraid.android.kit.KitText
+import dev.centraid.android.kit.kitTextStyle
+import dev.centraid.android.kit.menuTestIds
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.StateColor
 import dev.centraid.android.kit.Surface
@@ -202,6 +205,11 @@ private fun LightViewer(
     onClose: () -> Unit,
 ) {
     val infoOpen = state.sheet == PhotosLightboxState.Sheet.SHEET_INFO
+    // BACK CLOSES THE DETAILS BEFORE IT CLOSES THE VIEWER (#1202), as (i) and a swipe down do: the
+    // shell's own back handler pops the whole page, so the open details must claim the gesture first.
+    androidx.activity.compose.BackHandler(enabled = infoOpen) {
+        onEvent(sheetEvent(PhotosLightboxState.Sheet.SHEET_NONE))
+    }
     Column(Modifier.fillMaxSize().background(Surface.page).statusBarsPadding().navigationBarsPadding()) {
         Row(
             modifier = Modifier
@@ -215,8 +223,10 @@ private fun LightViewer(
                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                if (photo != null && photo.stamp_date.isNotEmpty()) KitText(photo.stamp_date, KitType.Row, Surface.ink, maxLines = 1)
-                if (photo != null && photo.stamp_line.isNotEmpty()) KitText(photo.stamp_line, KitType.Meta, Surface.meta, maxLines = 1)
+                // TWO LINES, THE DATE THEN THE TIME (#1202): each holds to its own line and shrinks before
+                // it would wrap, as iOS's does; the date never runs to three lines.
+                if (photo != null && photo.stamp_date.isNotEmpty()) StampLine(photo.stamp_date, KitType.Row, Surface.ink)
+                if (photo != null && photo.stamp_line.isNotEmpty()) StampLine(photo.stamp_line, KitType.Meta, Surface.meta)
             }
             MoreMenu(state.menu, words.more, onEvent)
         }
@@ -502,7 +512,7 @@ private fun MoreMenu(menu: List<PhotosLightboxVerb>, label: String, onEvent: (Ph
     var open by remember { mutableStateOf(false) }
     Box {
         Chip(icon = "more", label = label, light = true) { open = true }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Surface.card) {
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.menuTestIds(), containerColor = Surface.card) {
             menu.forEach { verb ->
                 DropdownMenuItem(
                     text = {
@@ -595,6 +605,8 @@ private fun Toolbar(
                     showLabel = trashed,
                     destructive = verb.destructive,
                     light = light,
+                    // INFO'S i IS DRAWN INSIDE ITS RING: filled, the ring swallows the glyph (a bare disc).
+                    solid = verb.on && verb.kind != PhotosLightboxVerb.Kind.KIND_INFO,
                     // INFO IS PRESSED WHILE ITS CARDS ARE ON THE PAGE, which is always.
                     modifier = if (light && verb.kind == PhotosLightboxVerb.Kind.KIND_INFO) {
                         Modifier.clip(CircleShape).background(Surface.fill)
@@ -764,7 +776,8 @@ private fun InfoCards(
                 value = caption,
                 onValueChange = { caption = it },
                 placeholder = { Text(words.caption_placeholder) },
-                singleLine = true,
+                // THE CAPTION WRAPS at the largest text (#1202); Done still commits it.
+                singleLine = !rememberLargestText(),
                 colors = fieldColors,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { commitCaption() }),
@@ -950,3 +963,16 @@ private fun verbEvent(verb: PhotosLightboxVerb): PhotosLightboxEvent =
 private fun drawnPath(photo: PhotosLightboxPhoto): String? =
     photo.original_path?.takeIf { it.isNotEmpty() && photo.original_embeddable }
         ?: photo.tile?.thumbnail_path?.takeIf { it.isNotEmpty() }
+
+/** ONE LINE OF THE VIEWER'S STAMP: it shrinks (to half) rather than wrap or be cut. */
+@Composable
+private fun StampLine(text: String, rung: KitType, color: Color) {
+    val style = kitTextStyle(rung)
+    androidx.compose.foundation.text.BasicText(
+        if (rung.caps) text.uppercase() else text,
+        style = style.copy(color = color, textAlign = androidx.compose.ui.text.style.TextAlign.Center),
+        maxLines = 1,
+        softWrap = false,
+        autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = style.fontSize * 0.5f, maxFontSize = style.fontSize),
+    )
+}

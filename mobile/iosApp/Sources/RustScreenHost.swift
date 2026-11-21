@@ -117,11 +117,13 @@ struct RustScreenView: View {
         case .photosHome?, .photosShelf?, .photosPicker?, .photosPlaces?, .photosLightbox?, .photosEditor?: "photos"
         case .lockerHome?, .lockerItem?, .lockerEditor?, .lockerExport?, .lockerImport?, .lockerLock?: "locker"
         case .moneyHome?, .moneyTransaction?, .moneyTarget?, .moneyRecurring?, .moneyAccounts?, .moneyRules?,
-             .moneyCategories?, .moneyImport?, .moneySearch?: "money"
+             .moneyCategories?, .moneyImport?: "money"
         case .docsDrive?, .docsDocument?, .docsEditor?: "docs"
         case .healthHome?, .healthMetric?, .healthWorkout?, .healthConnect?: "health"
         case .notesHome?, .notesEditor?: "notes"
         case .peopleHome?, .peoplePerson?, .peopleEditor?, .peopleLists?: "people"
+        // The kit's reads page wears the colour of the app it says it for.
+        case .reads(let reads)?: reads.appID
         default: ""
         }
     }
@@ -371,13 +373,6 @@ struct RustScreenView: View {
                 open: open,
                 onBack: pop
             )
-        case .moneySearch(let state)?:
-            MoneySearchView(
-                state: state,
-                send: { store.send(instance, .moneySearch($0)) },
-                open: open,
-                onBack: pop
-            )
         case .docsDrive(let state)?:
             DocsDriveView(
                 state: state,
@@ -483,6 +478,9 @@ struct RustScreenView: View {
                 send: { store.send(instance, .trash($0)) },
                 onBack: pop
             )
+        // "WHAT <APP> MAY READ" (owner, 2026-11-19): the kit's one reads page, from More.
+        case .reads(let state)?:
+            CoreReadsView(state: state, onBack: pop)
         case .earlier(let state)?:
             CoreEarlierView(
                 state: state,
@@ -537,7 +535,17 @@ struct RustScreenView: View {
             ChatPageView(shell: shell, store: store, instance: instance, onBack: pop, open: open)
         // HOME is the root of the `home` tab, drawn by `HomeView`, never pushed.
         default:
+            // A PAGE THE CORE CLOSED LEAVES THE STACK (#1202, S13): a restore closes every screen, the
+            // words page's own among them, and the page stayed on screen as bare paper with a back key
+            // although `path` was already empty (SwiftUI kept the pushed destination while the root
+            // beneath it changed from the welcome screen to Home). Nothing is left to draw for a closed
+            // instance, so its entry leaves `path` and, when the stack still shows it, the stack is
+            // rebuilt. A page still opening is untouched.
             BarePaper()
+                .onAppear {
+                    guard let entry, store.closedInstances.contains(instance) else { return }
+                    DispatchQueue.main.async { shell.dropClosedPage(entry) }
+                }
         }
     }
 }

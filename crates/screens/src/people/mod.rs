@@ -45,6 +45,7 @@ pub mod fold;
 pub mod home;
 pub mod lists;
 pub mod person;
+pub mod reads;
 pub mod sections;
 pub mod transfer;
 pub mod trash;
@@ -53,6 +54,8 @@ pub const HOME: &str = "people.home";
 pub const PERSON: &str = "people.person";
 pub const EDITOR: &str = "people.editor";
 pub const TRASH: &str = "people.trash";
+/// "What People may read": the kit's reads page, opened from More (owner, 2026-11-19).
+pub const READS: &str = "people.reads";
 pub const EARLIER: &str = "people.earlier";
 pub const LISTS: &str = "people.lists";
 pub const IMPORT: &str = "people.import";
@@ -69,6 +72,7 @@ pub fn registry() -> Registry {
         .with(PERSON, person::build)
         .with(EDITOR, editor::build)
         .with(TRASH, trash::build)
+        .with(READS, reads::build)
         .with(EARLIER, earlier::build)
         .with(LISTS, lists::build)
         .with(IMPORT, transfer::build_import)
@@ -110,7 +114,7 @@ pub(crate) fn denied(
 
 /// The routes People's own screens hand to a shell inside a view state.
 pub mod routes {
-    use super::{EDITOR, HOME, LISTS, PERSON, TRASH, wire};
+    use super::{EDITOR, HOME, LISTS, PERSON, READS, TRASH, wire};
 
     fn route(screen: &str, args: wire::route::Args) -> wire::Route {
         wire::Route {
@@ -196,5 +200,11 @@ pub mod routes {
     #[must_use]
     pub fn trash() -> wire::Route {
         route(TRASH, wire::route::Args::Trash(wire::TrashRoute {}))
+    }
+
+    /// "What People may read" (owner, 2026-11-19).
+    #[must_use]
+    pub fn reads() -> wire::Route {
+        crate::kit::reads_page::route(READS)
     }
 }

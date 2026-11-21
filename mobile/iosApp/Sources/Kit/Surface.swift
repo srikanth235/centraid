@@ -169,11 +169,29 @@ struct KitBadge: View {
     var body: some View {
         Text(label)
             .kitType(.badge)
+            .kitHeld()
             .foregroundStyle(state.text)
             .lineLimit(1)
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
             .background(state.tint, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+}
+
+/// THE PILL'S OUTLINE: a capsule while the label is on one line, and a rounded key with a bounded
+/// corner once it wraps. A true capsule's radius is half its height, so a two-line label at the
+/// largest text sits against the curve with no room inside it (#1202); capping the radius keeps
+/// the words inside the straight edge.
+struct KitPillShape: InsettableShape {
+    var inset: CGFloat = 0
+
+    func path(in rect: CGRect) -> Path {
+        RoundedRectangle(cornerRadius: min(rect.height / 2, 26), style: .continuous)
+            .path(in: rect.insetBy(dx: inset, dy: inset))
+    }
+
+    func inset(by amount: CGFloat) -> KitPillShape {
+        KitPillShape(inset: inset + amount)
     }
 }
 
@@ -191,13 +209,18 @@ struct KitPillButton: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 if !iconKey.isEmpty { CentraidIconView(iconKey: iconKey, tint: .white, size: 16) }
-                Text(label).kitType(.row).fontWeight(.semibold)
+                Text(label)
+                    .kitType(.row)
+                    .fontWeight(.semibold)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .foregroundStyle(enabled ? Color.white : Surface.meta)
             .padding(.horizontal, 20)
+            .padding(.vertical, 8)
             .frame(minHeight: CentraidGeometry.targetMinCoarse)
-            .background(enabled ? accent.fill : Surface.fill, in: Capsule())
-            .contentShape(Capsule())
+            .background(enabled ? accent.fill : Surface.fill, in: KitPillShape())
+            .contentShape(KitPillShape())
         }
         .buttonStyle(.plain)
     }
@@ -211,12 +234,204 @@ struct KitTile: View {
     var fill: Color? = nil
 
     @Environment(\.appAccent) private var accent
+    @ScaledMetric private var scaleBase: CGFloat = 1
+
+    init(iconKey: String, size: CGFloat = 32, fill: Color? = nil) {
+        self.iconKey = iconKey
+        self.size = size
+        self.fill = fill
+    }
+
+    /// THE TILE GROWS WITH THE TEXT BESIDE IT (#1202), up to twice its size, so a glyph is not
+    /// the one small thing in a row of large words.
+    private var side: CGFloat { size * min(scaleBase, 2) }
 
     var body: some View {
-        CentraidIconView(iconKey: iconKey, tint: .white, size: (size * 0.5).rounded())
-            .frame(width: size, height: size)
-            .background(fill ?? accent.fill, in: RoundedRectangle(cornerRadius: size * CentraidGeometry.iconChipRadiusRatio, style: .continuous))
+        CentraidIconView(iconKey: iconKey, tint: .white, size: (side * 0.5).rounded())
+            .frame(width: side, height: side)
+            .background(fill ?? accent.fill, in: RoundedRectangle(cornerRadius: side * CentraidGeometry.iconChipRadiusRatio, style: .continuous))
             .accessibilityHidden(true)
+    }
+}
+
+// MARK: - Clamped text (#1202)
+
+extension View {
+    /// TEXT THAT HOLDS AT `xxxLarge` (#1202), for a badge or a chart's axis words. A status chip is
+    /// a capsule of capitals, and at the largest text "COMPROMISED" is wider than the row it sits
+    /// in and was cut to "COMPR..."; a chart's labels sit in a column a fixed fraction of the
+    /// card wide. Held at the size the LargeText board draws, the word is whole and still larger
+    /// than body text; the band's labels and the calendar grids hold the same way. Totals and
+    /// every figure a member reads in a row do not hold: they stay whole by wrapping or shrinking.
+    func kitHeld() -> some View {
+        dynamicTypeSize(...Theme.reflowSize)
+    }
+}
+
+extension View {
+    /// A ONE-LINE CLAMP THAT OPENS AT ACCESSIBILITY TEXT SIZES. A title, a date or a meta line
+    /// holds to `lines` where the row has the room, and takes up to `wide` once the text is
+    /// large, so what the member reads is not cut to an ellipsis (a word dropped from the end
+    /// of a name is a word lost). The row grows with its text; a fixed height is a bug.
+    func kitLineLimit(_ lines: Int = 1, wide: Int = 3) -> some View {
+        modifier(KitLineLimit(lines: lines, wide: wide))
+    }
+}
+
+private struct KitLineLimit: ViewModifier {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let lines: Int
+    let wide: Int
+
+    func body(content: Content) -> some View {
+        content.lineLimit(dynamicTypeSize >= .xLarge ? nil : lines)
+    }
+}
+
+// MARK: - Whole tokens (#1202)
+
+/// A SENTENCE THAT NEVER BREAKS AN ADDRESS. Words wrap as words do; a token with no space in it
+/// that carries a digit and a dot or colon (a network address, "192.168.1.5:18455") is a line of
+/// its own that shrinks to fit rather than split mid-number. The caller passes the rung's styling
+/// on the result, so it reads as one text.
+struct KitWholeTokens: View {
+    let text: String
+
+    /// A run of words, or one token that must stay whole.
+    private struct Piece: Identifiable {
+        let id: Int
+        let text: String
+        let whole: Bool
+    }
+
+    private static func isAddress(_ token: Substring) -> Bool {
+        token.contains { $0.isNumber } && token.contains { $0 == "." || $0 == ":" } && token.count >= 7
+    }
+
+    private var pieces: [Piece] {
+        var out: [Piece] = []
+        var run: [Substring] = []
+        func flush() {
+            if !run.isEmpty { out.append(Piece(id: out.count, text: run.joined(separator: " "), whole: false)); run = [] }
+        }
+        for token in text.split(separator: " ", omittingEmptySubsequences: true) {
+            if Self.isAddress(token) {
+                flush()
+                out.append(Piece(id: out.count, text: String(token), whole: true))
+            } else {
+                run.append(token)
+            }
+        }
+        flush()
+        return out
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(pieces) { piece in
+                if piece.whole {
+                    Text(piece.text).lineLimit(1).minimumScaleFactor(0.5)
+                } else {
+                    Text(piece.text).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+}
+
+/// A SENTENCE THAT HOLDS A QUOTED COMMAND WHOLE (#1202). Words wrap as words do; what sits between
+/// a pair of quotes ("centraid-gateway pair") is a line of its own that shrinks to fit, with its
+/// hyphens drawn non-breaking, so the command never breaks at a hyphen or inside a word. Display
+/// only: a screen reader says the original sentence.
+struct KitQuotedSentence: View {
+    let text: String
+    var centered = false
+
+    private struct Piece: Identifiable {
+        let id: Int
+        let text: String
+        let quoted: Bool
+    }
+
+    private var pieces: [Piece] {
+        var out: [Piece] = []
+        var run = ""
+        var quote = ""
+        var opening = ""
+        var inside = false
+        func flush() {
+            let trimmed = run.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty { out.append(Piece(id: out.count, text: trimmed, quoted: false)) }
+            run = ""
+        }
+        for character in text {
+            if !inside, character == "\u{201C}" || character == "\"" {
+                inside = true
+                opening = String(character)
+                quote = ""
+            } else if inside, character == "\u{201D}" || character == "\"" {
+                let closing = String(character)
+                inside = false
+                if quote.contains("-") {
+                    // A hyphenated quote is a command or a name: its own line, whole.
+                    flush()
+                    let words = quote.replacingOccurrences(of: "-", with: "\u{2011}")
+                    out.append(Piece(id: out.count, text: opening + words + closing, quoted: true))
+                } else {
+                    run += opening + quote + closing
+                }
+                quote = ""
+            } else if inside {
+                quote.append(character)
+            } else {
+                run.append(character)
+            }
+        }
+        if inside { run += opening + quote }
+        flush()
+        return out
+    }
+
+    var body: some View {
+        VStack(alignment: centered ? .center : .leading, spacing: 0) {
+            ForEach(pieces) { piece in
+                if piece.quoted {
+                    Text(piece.text).lineLimit(1).minimumScaleFactor(0.5)
+                } else {
+                    Text(piece.text).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .multilineTextAlignment(centered ? .center : .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(text)
+    }
+}
+
+// MARK: - Scaled tiles (#1202)
+
+extension View {
+    /// A SQUARE THAT GROWS WITH THE TEXT IT HOLDS. An initial tile or avatar at a fixed size is
+    /// cut to a sliver of its letter at the largest text; sized as a `@ScaledMetric` relative to
+    /// the text style the letter follows, the tile and the letter grow together. The letter
+    /// still shrinks (never past half) rather than clip, should a long one come.
+    func kitScaledSquare(_ side: CGFloat, relativeTo style: Font.TextStyle = .body) -> some View {
+        modifier(KitScaledSquare(side: side, style: style))
+    }
+}
+
+private struct KitScaledSquare: ViewModifier {
+    @ScaledMetric private var scaled: CGFloat
+
+    init(side: CGFloat, style: Font.TextStyle) {
+        _scaled = ScaledMetric(wrappedValue: side, relativeTo: style)
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+            .frame(width: scaled, height: scaled)
     }
 }
 
@@ -278,23 +493,68 @@ extension View {
 }
 
 private struct KitScaledFont: ViewModifier {
-    @ScaledMetric private var scaled: CGFloat
+    let size: CGFloat
     let weight: Font.Weight
 
-    init(size: CGFloat, weight: Font.Weight) {
-        let style: Font.TextStyle =
+    func body(content: Content) -> some View {
+        content.kitSystemFont(size, weight: weight)
+    }
+}
+
+// MARK: - System face that carries a text style (#1202)
+
+extension Font {
+    /// A SYSTEM-FACE SIZE THAT THE ACCESSIBILITY AUDIT READS AS DYNAMIC TYPE. `.system(size:)` has no
+    /// text style, so the audit reports it as unsupported however it is scaled; `UIFontMetrics` on the
+    /// nearest text style makes the font a scaled one. The size handed in is the member's, already
+    /// capped by the root (and by `kitHeld` where a badge holds), so the hold still holds.
+    static func kitScaled(_ size: CGFloat, weight: Font.Weight = .regular, at category: DynamicTypeSize) -> Font {
+        let style: UIFont.TextStyle =
             switch size {
+            case ..<12: .caption2
             case ..<14: .footnote
+            case ..<16: .subheadline
             case ..<18.5: .body
+            case ..<21: .title3
             case ..<25: .title2
-            case ..<32: .title
+            case ..<30: .title1
             default: .largeTitle
             }
-        _scaled = ScaledMetric(wrappedValue: size, relativeTo: style)
-        self.weight = weight
+        let traits = UITraitCollection(preferredContentSizeCategory: min(category, Theme.textSizeCap).contentSizeCategory)
+        let base = UIFont.systemFont(ofSize: size, weight: UIFont.Weight(weight))
+        return Font(UIFontMetrics(forTextStyle: style).scaledFont(for: base, compatibleWith: traits))
     }
+}
+
+extension UIFont.Weight {
+    init(_ weight: Font.Weight) {
+        switch weight {
+        case .ultraLight: self = .ultraLight
+        case .thin: self = .thin
+        case .light: self = .light
+        case .medium: self = .medium
+        case .semibold: self = .semibold
+        case .bold: self = .bold
+        case .heavy: self = .heavy
+        case .black: self = .black
+        default: self = .regular
+        }
+    }
+}
+
+extension View {
+    /// `Font.kitScaled`, reading the text size from the environment.
+    func kitSystemFont(_ size: CGFloat, weight: Font.Weight = .regular) -> some View {
+        modifier(KitSystemFont(size: size, weight: weight))
+    }
+}
+
+private struct KitSystemFont: ViewModifier {
+    @Environment(\.dynamicTypeSize) private var category
+    let size: CGFloat
+    let weight: Font.Weight
 
     func body(content: Content) -> some View {
-        content.font(.system(size: scaled, weight: weight))
+        content.font(.kitScaled(size, weight: weight, at: category))
     }
 }

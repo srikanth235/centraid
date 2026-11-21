@@ -138,7 +138,7 @@ fn the_event_page_offers_move_to_trash_and_it_asks_nothing() {
         keys,
         [
             ("edit", "Edit", false),
-            ("cancel", "Cancel…", true),
+            ("cancel", "Cancel event…", false),
             ("trash", "Move to trash", true)
         ]
     );
@@ -169,7 +169,11 @@ fn moving_an_event_to_trash_says_so_with_undo_and_takes_it_off_the_calendar_and_
     assert!(!status.refused);
     // The page reads the event as gone and keeps the line over it.
     assert!(world.event_state(page).content.is_none());
-    gone_of(&world.event_state(page).page);
+    // WHILE THE UNDO IS ON OFFER the page says it is in the trash, never "removed".
+    assert_eq!(
+        gone_of(&world.event_state(page).page).sentence,
+        "This is in the trash."
+    );
     // Off the grid and the agenda, and silent.
     assert!(in_window(&world, "Review").is_empty());
     assert!(world.event_row(&id).is_none());
@@ -370,7 +374,7 @@ fn the_bands_more_sheet_holds_the_trash_and_the_calendars_sheet_keeps_its_calend
     pick_band(&mut world, home, "menu");
     let state = home_state(&world, home);
     assert_eq!(state.sheet, wire::agenda_home_state::Sheet::More as i32);
-    assert_eq!(state.chrome.as_ref().unwrap().more_title, "Calendar");
+    assert_eq!(state.chrome.as_ref().unwrap().more_title, "More");
     // Export, Trash, and the stop slot offering Turn on (the vault follows nothing).
     assert_eq!(state.more_rows.len(), 3);
     assert_eq!(state.more_rows[2].key, "turn-on");
@@ -422,6 +426,7 @@ fn agenda_home() -> wire::Route {
             destination: wire::AgendaDestination::Month as i32,
             quick_add_title: String::new(),
             open_quick_add: false,
+            open_import: false,
         })),
     }
 }

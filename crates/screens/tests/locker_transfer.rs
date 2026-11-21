@@ -34,8 +34,7 @@ fn export_event(d: &mut centraid_screens::testing::Driver, id: u64, kind: X) {
 fn ready() -> centraid_screens::testing::Driver {
     let mut d = driver();
     login(&d, "i1", "Bank");
-    d.start();
-    d.answer_effect(passed(wire::Biometry::Face));
+    open_home(&mut d);
     // The unlock's announcement is the shell's to take; nothing answers it.
     d.effects.clear();
     d
@@ -324,4 +323,47 @@ fn locker_refuses_to_export_from_a_phone_with_no_passcode() {
             .status
             .is_some_and(|s| s.sentence.contains("passcode"))
     );
+}
+
+/// A FILE THE PICKER WOULD NOT HAND OVER IS SAID (#1202): too large, or unreadable, in words.
+#[test]
+fn a_file_over_the_limit_or_unreadable_is_said_and_the_pick_carries_the_limit() {
+    let mut d = ready();
+    let id = d.push(locker::TAB, routes::import("Locker"));
+    let before = d.effects.len();
+    d.send(
+        id,
+        E::LockerImport(wire::LockerImportEvent {
+            kind: Some(I::Choose(wire::locker_import_event::ChooseTapped {})),
+        }),
+    );
+    let pick = effects_of(&d, before)
+        .into_iter()
+        .find_map(|k| match k {
+            wire::effect::Kind::PickBytes(pick) => Some(pick),
+            _ => None,
+        })
+        .expect("a pick");
+    assert_eq!(pick.max_bytes, 4 * 1024 * 1024);
+    for (reason, sentence) in [
+        ("too_large", "That file is too large to import."),
+        ("unreadable", "That file could not be read."),
+    ] {
+        if reason != "too_large" {
+            // The first answer used up the ask: choose again.
+            d.send(
+                id,
+                E::LockerImport(wire::LockerImportEvent {
+                    kind: Some(I::Choose(wire::locker_import_event::ChooseTapped {})),
+                }),
+            );
+        }
+        d.answer_effect(wire::effect_result::Outcome::Failed(wire::EffectFailed {
+            reason: reason.to_owned(),
+            ..Default::default()
+        }));
+        let status = import_state(&d, id).status.expect("said");
+        assert!(status.refused);
+        assert_eq!(status.sentence, sentence);
+    }
 }

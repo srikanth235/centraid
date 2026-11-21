@@ -212,8 +212,8 @@ fn every_apps_records_come_back_row_for_row() {
 /// **RECORDS WRITTEN AFTER THE LAST SNAPSHOT WAIT FOR THE NEXT ONE; BACK UP
 /// NOW TAKES IT** (#1080, S2). A snapshot is taken on a pass the shell asks
 /// one of (Back up now, the app leaving the screen, a restore), at a gateway
-/// newly paired, and an hour after the last head — not on every pass. Within
-/// that hour a note written after the head is in no snapshot, and the
+/// newly paired, and once the settle window (30 s, #1202 S2-9) has passed
+/// since the last head — not on every pass. Within that window a note written after the head is in no snapshot, and the
 /// status's "records backed up" time is the head's, before the note.
 #[test]
 fn records_written_after_the_last_snapshot_wait_for_the_next() {
@@ -243,7 +243,7 @@ fn records_written_after_the_last_snapshot_wait_for_the_next() {
     assert!(acked.is_some() && first.acked_at_ms.is_some());
     assert_eq!(headed(&path), Some(1));
 
-    // A NOTE AFTER THE HEAD, AND AN ORDINARY PASS WITHIN THE HOUR.
+    // A NOTE AFTER THE HEAD, AND AN ORDINARY PASS WITHIN THE SETTLE WINDOW.
     run(
         &phone,
         "note.create",
@@ -271,27 +271,91 @@ fn records_written_after_the_last_snapshot_wait_for_the_next() {
     assert!(tapped.acked_at_ms.is_some(), "{tapped:?}");
     assert_eq!(headed(&path), Some(2));
 
-    // AN HOUR AFTER THE LAST HEAD, AN ORDINARY PASS TAKES ONE. The hour is
+    // AFTER THE SETTLE WINDOW, AN ORDINARY PASS TAKES ONE. The window is
     // told to the ledger rather than waited out: its snapshots' times are
     // moved back past it.
     run(
         &phone,
         "note.create",
-        &json!({ "title": "Third", "body": "an hour later", "format": "plain" }),
+        &json!({ "title": "Third", "body": "after the window", "format": "plain" }),
         "third",
     );
     let book = state(&path);
     for mut row in book.gateways().expect("reads") {
-        row.head_ms = row.head_ms.map(|at| at - 3_700_000);
-        row.snapshot_ms = row.snapshot_ms.map(|at| at - 3_700_000);
-        book.put_gateway(&row).expect("an hour passes");
+        row.head_ms = row.head_ms.map(|at| at - 31_000);
+        row.snapshot_ms = row.snapshot_ms.map(|at| at - 31_000);
+        book.put_gateway(&row).expect("the window passes");
     }
-    let hourly = drain(&phone, quietly());
+    let settled = drain(&phone, quietly());
     assert!(
-        hourly.acked_at_ms.is_some(),
-        "the hourly snapshot: {hourly:?}"
+        settled.acked_at_ms.is_some(),
+        "the settled snapshot: {settled:?}"
     );
     assert_eq!(headed(&path), Some(3));
+}
+
+/// **A BACKUP STARTS SOON AFTER AN EDIT** (#1202, S2-9, the owner's ruling). Twenty
+/// edits inside the settle window are one snapshot, and an edit after the window
+/// is a second. The window is told to the ledger (the head's time moved back past
+/// it) rather than waited out; the counts are the manifests the gateway holds.
+#[test]
+fn twenty_edits_inside_the_settle_window_are_one_snapshot_and_a_later_edit_is_a_second() {
+    let gateway = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    let phone = phone(dir.path());
+    pair(&phone, &gateway);
+    run(
+        &phone,
+        "note.create",
+        &json!({ "title": "Zero", "body": "the first head", "format": "plain" }),
+        "zero",
+    );
+    assert!(drain(&phone, at_home()).acked_at_ms.is_some());
+    let census = |path: &Path| head_manifest(path, &gateway).1.census.get("note").copied();
+    assert_eq!(census(&path), Some(1));
+    let passed = |path: &Path| {
+        let book = state(path);
+        for mut row in book.gateways().expect("reads") {
+            row.head_ms = row.head_ms.map(|at| at - 31_000);
+            row.snapshot_ms = row.snapshot_ms.map(|at| at - 31_000);
+            book.put_gateway(&row).expect("the window passes");
+        }
+    };
+
+    // THE HEAD IS OLDER THAN THE WINDOW, THEN TWENTY EDITS, EACH FOLLOWED BY AN ORDINARY PASS.
+    passed(&path);
+    let mut taken = 0;
+    for n in 0..20 {
+        run(
+            &phone,
+            "note.create",
+            &json!({ "title": format!("Edit {n}"), "body": "inside", "format": "plain" }),
+            &format!("edit-{n}"),
+        );
+        if drain(&phone, quietly()).acked_at_ms.is_some() {
+            taken += 1;
+        }
+    }
+    assert_eq!(taken, 1, "one snapshot for the burst");
+    assert!(
+        census(&path).is_some_and(|notes| notes >= 2),
+        "it holds the first edits"
+    );
+
+    // AN EDIT AFTER THE WINDOW IS THE SECOND.
+    passed(&path);
+    run(
+        &phone,
+        "note.create",
+        &json!({ "title": "Later", "body": "after", "format": "plain" }),
+        "later",
+    );
+    assert!(
+        drain(&phone, quietly()).acked_at_ms.is_some(),
+        "a second snapshot"
+    );
+    assert_eq!(census(&path), Some(22));
 }
 
 /// **A SNAPSHOT ASKED FOR WHILE THE GATEWAY IS AWAY IS TAKEN WHEN IT IS

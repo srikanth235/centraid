@@ -3,7 +3,6 @@ package dev.centraid.android.screens.agenda
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -12,6 +11,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -64,6 +65,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import centraid.core.v1.AgendaDestination
@@ -83,6 +86,7 @@ import centraid.core.v1.AgendaYearGrid
 import centraid.core.v1.AgendaYearMonth
 import centraid.core.v1.Route
 import dev.centraid.android.kit.CentraidIcon
+import dev.centraid.android.kit.HoldGridText
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.kit.KitType
@@ -90,6 +94,8 @@ import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.hueColor
 import dev.centraid.android.kit.kitTextStyle
+import dev.centraid.android.kit.menuTestIds
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.screens.daySection
 import dev.centraid.android.theme.LocalCentraidTokens
 import dev.centraid.android.theme.centraidColor
@@ -112,8 +118,8 @@ import kotlin.math.roundToInt
 /** One hour of the grid, the only layout constant: minutes map to it, 60 to a row. */
 private val HOUR_HEIGHT: Dp = 56.dp
 
-/** The hour labels' column. */
-private val GUTTER_WIDTH: Dp = KitGeometry.ROW_MIN
+/** The hour labels' column: wide enough for "12:00 PM" with a gap before the events. */
+private val GUTTER_WIDTH: Dp = 64.dp
 
 /** The grid's whole day, in minutes (the proto counts from local midnight, 0 to 1440). */
 private const val DAY_MINUTES: Int = 1440
@@ -124,8 +130,14 @@ private const val MIN_BLOCK_MINUTES: Int = 15
 /** The foot a resize drag takes hold of. */
 private val RESIZE_HANDLE: Dp = 14.dp
 
-/** Minutes either side of the now line inside which an hour label is not drawn. */
-private const val NOW_CLASH_MINUTES = 16
+/**
+ * Minutes around the now line inside which an hour label is not drawn. The pill hangs 9dp above the
+ * line and is about 19dp tall, and a label hangs about 15dp below its hour, so they meet from 11
+ * minutes before the hour to 26 minutes after it (at 56dp an hour); a symmetric 16 left the last ten
+ * minutes of that overlapping the label.
+ */
+private const val NOW_CLASH_BEFORE_MINUTES = 11
+private const val NOW_CLASH_AFTER_MINUTES = 26
 
 /** A lane this wide has room for a block's second line. */
 private val DETAIL_FROM_WIDTH: Dp = 96.dp
@@ -238,6 +250,7 @@ internal fun AgendaLayoutKey(header: AgendaCalendarHeader, onEvent: (AgendaHomeE
         DropdownMenu(
             expanded = open,
             onDismissRequest = { open = false },
+            modifier = Modifier.menuTestIds(),
             containerColor = Surface.card,
             shape = RoundedCornerShape(CentraidScale.cardRadius.dp),
         ) {
@@ -261,7 +274,8 @@ internal fun AgendaLayoutKey(header: AgendaCalendarHeader, onEvent: (AgendaHomeE
     }
 }
 
-/** DAY'S ALL-DAY LANE: one row under the strip, Rust's label then its chips; none on a day with none. */
+/** DAY'S ALL-DAY LANE: under the strip, Rust's label then its chips, wrapping; none on a day with none. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AgendaAllDayLane(
     header: AgendaCalendarHeader,
@@ -269,20 +283,22 @@ private fun AgendaAllDayLane(
     onCheck: (String) -> Unit,
 ) {
     if (header.all_day.isEmpty()) return
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
-            .testTag("agenda-all-day-lane"),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(header.all_day_label, style = kitTextStyle(KitType.Badge), color = Surface.meta, modifier = Modifier.width(GUTTER_WIDTH))
-        BoxWithConstraints(Modifier.weight(1f)) {
+    // THE LABEL OVER ITS CHIPS AT THE LARGEST TEXT (#1202): in the gutter's width "all-day" broke
+    // mid-word. Beside the chips otherwise.
+    val stacked = rememberLargestText()
+    val label: @Composable (Modifier) -> Unit = { m ->
+        Text(header.all_day_label, style = kitTextStyle(KitType.Badge), color = Surface.meta, modifier = m)
+    }
+    val chips: @Composable (Modifier) -> Unit = { m ->
+        BoxWithConstraints(m) {
             val laneWidth = maxWidth
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            // THE CHIPS WRAP (#1202): a lane that scrolled sideways hid every chip past the overdue
+            // reminders that lead it, so today's all-day event was off screen. The cap is whole rows
+            // (three chips and their gaps), so a row never shows as a sliver above the grid.
+            FlowRow(
+                Modifier.fillMaxWidth().heightIn(max = KitGeometry.ROW_MIN * 3 + 16.dp).verticalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 header.all_day.forEach { chip ->
                     AllDayChip(
@@ -291,6 +307,30 @@ private fun AgendaAllDayLane(
                     )
                 }
             }
+        }
+    }
+    if (stacked) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
+                .testTag("agenda-all-day-lane"),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            label(Modifier)
+            chips(Modifier.fillMaxWidth())
+        }
+    } else {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
+                .testTag("agenda-all-day-lane"),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            label(Modifier.width(GUTTER_WIDTH))
+            chips(Modifier.weight(1f))
         }
     }
     Box(Modifier.fillMaxWidth().height(KitGeometry.HAIRLINE).background(Surface.line))
@@ -315,7 +355,9 @@ internal fun AgendaTodayButton(label: String, modifier: Modifier = Modifier, onP
             },
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, style = kitTextStyle(KitType.Row), color = accent.text)
+        // THE CALENDAR BLUE ON ITS OWN WASH IS 4.24:1, UNDER THE 4.5 THE RULE ASKS OF TEXT (behaviour.md § Accessibility):
+        // a fifth of the way toward the ink keeps the hue and clears it (the accessibility suite holds it).
+        Text(label, style = kitTextStyle(KitType.Row), color = androidx.compose.ui.graphics.lerp(accent.text, Surface.ink, 0.2f))
     }
 }
 
@@ -334,7 +376,7 @@ internal fun AgendaTimeView(
     onCheck: (String) -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
-        if (strip != null) AgendaWeekStripView(strip, onEvent)
+        if (strip != null) HoldGridText { AgendaWeekStripView(strip, onEvent) }
         if (header != null) AgendaAllDayLane(header, onOpen, onCheck)
         val several = grid.days.size > 1
         Column(
@@ -347,9 +389,14 @@ internal fun AgendaTimeView(
                 }
                 .testTag("agenda-time-grid"),
         ) {
-            if (several) WeekHeadings(grid)
-            if (grid.days.any { it.all_day.isNotEmpty() }) AllDayStrip(grid, onEvent, onOpen, onCheck)
-            HourGrid(grid, onEvent, onOpen, onCheck, Modifier.weight(1f))
+            // THE HOUR GRID HOLDS ITS TEXT (#1202): its gutter, its columns and a block's height are
+            // fixed by the hour, so at the largest text the hour labels clipped, the week's heads ran
+            // together and a block showed a clipped title.
+            HoldGridText {
+                if (several) WeekHeadings(grid)
+                if (grid.days.any { it.all_day.isNotEmpty() }) AllDayStrip(grid, onEvent, onOpen, onCheck)
+                HourGrid(grid, onEvent, onOpen, onCheck, Modifier.weight(1f))
+            }
         }
     }
 }
@@ -593,7 +640,8 @@ private fun HourGrid(
             val now = grid.now
             grid.hours.forEach { mark ->
                 // THE NOW PILL HIDES THE HOUR IT SITS ON.
-                if (now == null || kotlin.math.abs(now.minute - mark.minute) >= NOW_CLASH_MINUTES) {
+                val sinceHour = now?.let { it.minute - mark.minute }
+                if (sinceHour == null || sinceHour <= -NOW_CLASH_BEFORE_MINUTES || sinceHour >= NOW_CLASH_AFTER_MINUTES) {
                     Text(
                         mark.label,
                         style = kitTextStyle(KitType.Badge),
@@ -842,14 +890,30 @@ private fun GridBlock(
                 // A TASK'S TITLE IS CENTRED, ON THE RING'S LINE.
                 verticalArrangement = if (block.is_task) Arrangement.Center else Arrangement.Top,
             ) {
-                Text(
-                    block.title,
-                    style = kitTextStyle(if (days.size > 1) KitType.Badge else KitType.Meta),
-                    color = if (block.is_past) Surface.meta else Surface.ink,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (lane >= DETAIL_FROM_WIDTH && block.detail.isNotEmpty() && (block.is_task || shownHeight >= HOUR_HEIGHT * 0.6f)) {
+                // THE TITLE OF A BLOCK, WHOLE (#1202), as iOS draws it: it wraps at its words for as many
+                // lines as the block is tall; a lane too thin for any word (two events side by side in a
+                // Week column) turns the title a quarter turn so it runs down the block; a task in such a
+                // lane is its check alone, never a half-word beside it.
+                val titleStyle = kitTextStyle(if (days.size > 1) KitType.Badge else KitType.Meta)
+                val titleInk = if (block.is_past) Surface.meta else Surface.ink
+                val thin = lane < TURNED_BELOW_WIDTH
+                val showsDetail = lane >= DETAIL_FROM_WIDTH && block.detail.isNotEmpty() && (block.is_task || shownHeight >= HOUR_HEIGHT * 0.6f)
+                if (thin && block.is_task) {
+                    Unit
+                } else if (thin) {
+                    TurnedText(block.title, titleStyle, titleInk)
+                } else {
+                    val lineHeight = with(LocalDensity.current) { titleStyle.lineHeight.toDp() }
+                    val fits = ((shownHeight - 4.dp) / lineHeight).toInt() - (if (showsDetail) 1 else 0)
+                    Text(
+                        block.title,
+                        style = titleStyle,
+                        color = titleInk,
+                        maxLines = fits.coerceIn(1, 6),
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (showsDetail) {
                     Text(
                         block.detail,
                         style = kitTextStyle(KitType.Badge),
@@ -931,22 +995,25 @@ internal fun AgendaMonthView(
             },
     ) {
         item(key = "month-grid") {
-            Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER).testTag("agenda-month-grid")) {
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    month.weekday_labels.forEach { label ->
-                        Text(
-                            label,
-                            style = kitTextStyle(KitType.Badge),
-                            color = Surface.meta,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 1,
-                            textAlign = TextAlign.Center,
-                        )
+            // SEVEN COLUMNS HOLD THEIR TEXT (#1202), as the week strip does; the list under the grid scales.
+            HoldGridText {
+                Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER).testTag("agenda-month-grid")) {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        month.weekday_labels.forEach { label ->
+                            Text(
+                                label,
+                                style = kitTextStyle(KitType.Badge),
+                                color = Surface.meta,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
                     }
-                }
-                month.cells.chunked(7).forEach { week ->
-                    Row(Modifier.fillMaxWidth()) {
-                        week.forEach { cell -> MonthCell(cell, grid, Modifier.weight(1f), onEvent) }
+                    month.cells.chunked(7).forEach { week ->
+                        Row(Modifier.fillMaxWidth()) {
+                            week.forEach { cell -> MonthCell(cell, grid, Modifier.weight(1f), onEvent) }
+                        }
                     }
                 }
             }
@@ -1051,6 +1118,11 @@ private fun MonthCell(cell: AgendaMonthCell, grid: Boolean, modifier: Modifier, 
 
 @Composable
 internal fun AgendaYearView(year: AgendaYearGrid, onEvent: (AgendaHomeEvent) -> Unit) {
+    HoldGridText { YearBody(year, onEvent) }
+}
+
+@Composable
+private fun YearBody(year: AgendaYearGrid, onEvent: (AgendaHomeEvent) -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
@@ -1118,4 +1190,29 @@ private fun YearMonth(month: AgendaYearMonth, modifier: Modifier, onEvent: (Agen
             }
         }
     }
+}
+
+
+/** A lane thinner than this cannot hold a word at the grid's type, so its title turns (iOS `turnedBelowWidth`). */
+private val TURNED_BELOW_WIDTH = 40.dp
+
+/** TEXT TURNED A QUARTER TURN, reading downward: one line along the height it is given, ellipsised only at its end. */
+@Composable
+private fun TurnedText(text: String, style: androidx.compose.ui.text.TextStyle, color: Color) {
+    Text(
+        text,
+        style = style,
+        color = color,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.layout { measurable, constraints ->
+            val along = if (constraints.hasBoundedHeight) constraints.maxHeight else constraints.maxWidth
+            val placeable = measurable.measure(Constraints(maxWidth = along.coerceAtLeast(0)))
+            layout(placeable.height, placeable.width) {
+                placeable.placeWithLayer((placeable.height - placeable.width) / 2, (placeable.width - placeable.height) / 2) {
+                    rotationZ = 90f
+                }
+            }
+        },
+    )
 }

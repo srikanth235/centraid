@@ -1,0 +1,22 @@
+//! NOTES'S "WHAT NOTES MAY READ" (owner, 2026-11-19): the kit's one reads page with Notes as the
+//! parameter. The kinds it lists are the manifest's read scopes outside Notes's own, in a member's
+//! words (`tests/reads_page.rs` holds the list against `manifest.json`).
+
+use centraid_api_proto::core_v1 as wire;
+
+use crate::kit::reads_page::{self, ReadsSpec};
+use crate::screen::Screen;
+use crate::strings::reads as words;
+
+/// Notes's reads, as the kit's page takes them.
+pub static SPEC: ReadsSpec = ReadsSpec {
+    app: "notes",
+    name: crate::strings::notes::title,
+    reads: words::notes_reads,
+    writes: words::notes_writes,
+};
+
+#[must_use]
+pub fn build(_route: &wire::Route) -> Option<Box<dyn Screen>> {
+    reads_page::build(&SPEC)
+}

@@ -182,7 +182,6 @@ impl<'a> Shell<'a> {
             Some(K::MoneyCategories(s)) => &s.page,
             Some(K::MoneyRules(s)) => &s.page,
             Some(K::MoneyRecurring(s)) => &s.page,
-            Some(K::MoneySearch(s)) => &s.page,
             Some(K::MoneyTransaction(s)) => &s.page,
             Some(K::MoneyTarget(s)) => &s.page,
             other => panic!("not a Money page: {other:?}"),
@@ -316,31 +315,34 @@ fn a_list_with_nothing_in_it_is_the_pages_own_empty_state() {
 fn a_search_rests_or_matches_nothing_as_an_empty_page_and_fails_as_a_failure() {
     let d = Driver::founded();
     let mut shell = Shell::new(&d.handle);
-    let i = shell.push(routes::search("Money"));
-    assert_eq!(
-        empty(shell.page(i)).headline,
-        "Search by name, bank words or category."
-    );
-    shell.reads(Mode::Fails);
+    let i = shell.push(routes::home(wire::MoneyDestination::Activity));
+    let send = |shell: &mut Shell, kind: wire::money_home_event::Kind| {
+        shell.call(wire::screen_request::Kind::Send(wire::InstanceEvent {
+            instance: i,
+            event: Some(wire::ScreenEvent {
+                kind: Some(wire::screen_event::Kind::MoneyHome(wire::MoneyHomeEvent {
+                    kind: Some(kind),
+                })),
+            }),
+        }));
+    };
     let term = |term: &str| {
-        wire::screen_event::Kind::MoneySearch(wire::MoneySearchEvent {
-            kind: Some(wire::money_search_event::Kind::Term(
-                wire::money_search_event::TermChanged {
-                    term: term.to_owned(),
-                },
-            )),
+        wire::money_home_event::Kind::SearchTerm(wire::money_home_event::SearchTermChanged {
+            term: term.to_owned(),
         })
     };
-    shell.call(wire::screen_request::Kind::Send(wire::InstanceEvent {
-        instance: i,
-        event: Some(wire::ScreenEvent {
-            kind: Some(term("coffee")),
-        }),
-    }));
+    // OPEN AND NOTHING TYPED: the page is ready, the hint is under the field.
+    send(
+        &mut shell,
+        wire::money_home_event::Kind::SearchOpened(wire::money_home_event::SearchOpened {}),
+    );
+    ready(shell.page(i));
+    shell.reads(Mode::Fails);
+    send(&mut shell, term("coffee"));
     failed(shell.page(i));
     shell.reads(Mode::Empty);
     shell.changed(i);
-    assert_eq!(empty(shell.page(i)).headline, "Nothing matches coffee.");
+    assert_eq!(empty(shell.page(i)).headline, "Nothing matches “coffee”.");
 }
 
 #[test]

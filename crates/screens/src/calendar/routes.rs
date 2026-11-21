@@ -21,6 +21,7 @@ pub fn home(destination: wire::AgendaDestination) -> wire::Route {
             destination: destination as i32,
             quick_add_title: String::new(),
             open_quick_add: false,
+            open_import: false,
         }),
     )
 }

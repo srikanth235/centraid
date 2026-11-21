@@ -19,6 +19,7 @@ import SwiftUI
 /// The Compose twin is `androidApp/.../screens/PhotosCollectionsScreen.kt`.
 struct PhotosCollectionsBody: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let state: Centraid_Core_V1_PhotosHomeState
     let collections: Centraid_Core_V1_PhotosCollections
@@ -120,12 +121,20 @@ struct PhotosCollectionsBody: View {
     }
 
     /// A strip that runs to the screen's edges, so a half-shown card says it scrolls.
+    @ViewBuilder
     private func strip<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: cardGap) { content() }
-                .padding(.horizontal, CentraidGeometry.pageMargin)
+        if dynamicTypeSize.isAccessibilitySize {
+            // ONE CARD PER ROW AT ACCESSIBILITY SIZES (#1202): three fixed-width cards across a strip
+            // left the third off the edge and every name cut to "Favor...". Stacked, each name wraps
+            // by word and the whole list is reached by scrolling the page.
+            VStack(alignment: .leading, spacing: 20) { content() }
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: cardGap) { content() }
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+            }
+            .padding(.horizontal, -CentraidGeometry.pageMargin)
         }
-        .padding(.horizontal, -CentraidGeometry.pageMargin)
     }
 }
 
@@ -179,6 +188,11 @@ private struct AlbumCard: View {
     /// Nil for a standing shelf, which has no delete.
     let onDelete: (() -> Void)?
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// THE CARD'S SIDE GROWS WITH THE TEXT UNDER IT (#1202): its name wraps by word in a column
+    /// as wide as the cover, which is itself larger at accessibility sizes.
+    private var side: CGFloat { dynamicTypeSize.isAccessibilitySize ? albumSide * 1.6 : albumSide }
 
     var body: some View {
         Button {
@@ -186,18 +200,18 @@ private struct AlbumCard: View {
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 CoverGround(card: card, iconKey: card.iconKey.isEmpty ? "album" : card.iconKey)
-                    .frame(width: albumSide, height: albumSide)
+                    .frame(width: side, height: side)
                     .clipShape(RoundedRectangle(cornerRadius: cardRadius(scheme)))
                 VStack(alignment: .leading, spacing: 0) {
                     Text(card.title)
                         .centraidType("smallStrong")
                         .foregroundStyle(Theme.color("text", scheme))
-                        .lineLimit(1)
+                        .kitLineLimit(1, wide: 3)
                     Text(card.countLabel)
                         .centraidType("small")
                         .foregroundStyle(Theme.color("textFaint", scheme))
                 }
-                .frame(width: albumSide, alignment: .leading)
+                .frame(width: side, alignment: .leading)
             }
             .contentShape(Rectangle())
         }
@@ -269,6 +283,9 @@ private struct UtilitiesGroup: View {
     let cards: [Centraid_Core_V1_PhotosCollectionCard]
     let open: (Centraid_Core_V1_Route) -> Void
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var stacked: Bool { dynamicTypeSize.isAccessibilitySize }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -290,20 +307,29 @@ private struct UtilitiesGroup: View {
             if card.hasRoute { open(card.route) }
         } label: {
             HStack(spacing: 12) {
-                CentraidIconView(iconKey: card.iconKey, tint: Theme.color("link", scheme), size: 22)
+                CentraidIconView(iconKey: card.iconKey, tint: AppAccent("photos").text, size: 22)
                     .frame(width: 26)
-                Text(card.title)
-                    .centraidType("body")
-                    .foregroundStyle(Theme.color("text", scheme))
-                Spacer(minLength: 8)
-                if !card.countLabel.isEmpty {
-                    Text(card.countLabel)
-                        .centraidType("small")
-                        .foregroundStyle(Theme.color(card.urgent ? "accent" : "textFaint", scheme))
+                // THE COUNT UNDER THE NAME AT ACCESSIBILITY SIZES (#1202): beside it the name was
+                // left a column too narrow and broke as "Archi/ve" and "Empt/y".
+                let layout = stacked
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                    : AnyLayout(HStackLayout(spacing: 8))
+                layout {
+                    Text(card.title)
+                        .centraidType("body")
+                        .foregroundStyle(Theme.color("text", scheme))
+                    if !stacked { Spacer(minLength: 0) }
+                    if !card.countLabel.isEmpty {
+                        Text(card.countLabel)
+                            .centraidType("small")
+                            .foregroundStyle(Theme.color(card.urgent ? "accent" : "textFaint", scheme))
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 CentraidIconView(iconKey: "ChevronRight", tint: Theme.color("textFaint", scheme))
             }
             .padding(.horizontal, 12)
+            .padding(.vertical, stacked ? 8 : 0)
             .frame(minHeight: CentraidGeometry.targetMinCoarse + 4)
             .contentShape(Rectangle())
         }
@@ -320,6 +346,7 @@ private struct DeletedGroup: View {
     let cards: [Centraid_Core_V1_PhotosCollectionCard]
     let onRestore: (String) -> Void
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(spacing: 0) {
@@ -330,22 +357,30 @@ private struct DeletedGroup: View {
                         .frame(height: CentraidGeometry.hairline)
                         .padding(.leading, 50)
                 }
+                // THE RESTORE KEY UNDER THE NAME AT ACCESSIBILITY SIZES (#1202), as the list above does.
+                let stacked = dynamicTypeSize.isAccessibilitySize
+                let layout = stacked
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
+                    : AnyLayout(HStackLayout(spacing: 12))
                 HStack(spacing: 12) {
                     CentraidIconView(iconKey: card.iconKey, tint: Theme.color("textFaint", scheme), size: 22)
                         .frame(width: 26)
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(card.title)
-                            .centraidType("body")
-                            .foregroundStyle(Theme.color("text", scheme))
-                            .lineLimit(1)
-                        if !card.countLabel.isEmpty {
-                            Text(card.countLabel)
-                                .centraidType("small")
-                                .foregroundStyle(Theme.color("textFaint", scheme))
+                    layout {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(card.title)
+                                .centraidType("body")
+                                .foregroundStyle(Theme.color("text", scheme))
+                                .kitLineLimit(1, wide: 3)
+                            if !card.countLabel.isEmpty {
+                                Text(card.countLabel)
+                                    .centraidType("small")
+                                    .foregroundStyle(Theme.color("textFaint", scheme))
+                            }
                         }
+                        if !stacked { Spacer(minLength: 8) }
+                        KitLink(label: card.restoreLabel, identifier: "photos.collections.restore-album") { onRestore(card.id) }
                     }
-                    Spacer(minLength: 8)
-                    KitLink(label: card.restoreLabel, identifier: "photos.collections.restore-album") { onRestore(card.id) }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(.horizontal, 12)
                 .frame(minHeight: CentraidGeometry.targetMinCoarse + 4)

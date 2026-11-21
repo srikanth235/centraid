@@ -55,6 +55,8 @@ import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.ContentImage
 import dev.centraid.android.kit.KitLink
+import dev.centraid.android.kit.rememberLargestText
+import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.LocalBandClearance
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ReadStateView
@@ -229,7 +231,7 @@ private fun Section(title: String, toggleLabel: String, isFolded: Boolean, onFol
                 ) {
                     CentraidIcon(
                         iconKey = "ChevronDown",
-                        tint = centraidColor("link"),
+                        tint = appAccent("photos").text,
                         modifier = Modifier.rotate(turn),
                     )
                 }
@@ -242,6 +244,12 @@ private fun Section(title: String, toggleLabel: String, isFolded: Boolean, onFol
 /** A strip that runs to the screen's edges, so a half-shown card says it scrolls. */
 @Composable
 private fun Strip(content: @Composable () -> Unit) {
+    // ONE CARD PER ROW AT THE LARGEST TEXT (#1202): fixed-width cards across a strip left the third
+    // off the edge and every name cut short. Stacked, each name wraps by word and the page scrolls.
+    if (rememberLargestText()) {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(20.dp)) { content() }
+        return
+    }
     Row(
         Modifier
             .padding(horizontal = 0.dp)
@@ -279,9 +287,13 @@ private fun CoverGround(path: String?, iconKey: String, side: Dp) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AlbumCard(card: PhotosCollectionCard, onOpen: (Route) -> Unit, onDelete: (() -> Unit)?) {
+    // THE CARD'S SIDE GROWS WITH THE TEXT UNDER IT (#1202): its name wraps by word in a column as
+    // wide as the cover.
+    val largest = rememberLargestText()
+    val side = if (largest) ALBUM_SIDE * 1.6f else ALBUM_SIDE
     Column(
         Modifier
-            .width(ALBUM_SIDE)
+            .width(side)
             .combinedClickable(onClick = { card.route?.let(onOpen) }, onLongClick = onDelete)
             .semantics(mergeDescendants = true) {
                 contentDescription = card.accessibility_label
@@ -292,9 +304,9 @@ private fun AlbumCard(card: PhotosCollectionCard, onOpen: (Route) -> Unit, onDel
             },
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        CoverGround(card.cover?.thumbnail_path, card.icon_key.ifEmpty { "album" }, ALBUM_SIDE)
+        CoverGround(card.cover?.thumbnail_path, card.icon_key.ifEmpty { "album" }, side)
         Column {
-            Text(card.title, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(card.title, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = if (largest) 3 else 1, overflow = TextOverflow.Ellipsis)
             Text(card.count_label, style = centraidType("small"), color = centraidColor("textFaint"))
         }
     }
@@ -322,6 +334,7 @@ private fun EmptySectionCard(iconKey: String, title: String, caption: String, ve
 /** UTILITIES, as a grouped list: one rounded card, hairlines inset past the icon. */
 @Composable
 private fun UtilitiesGroup(cards: List<PhotosCollectionCard>, onOpen: (Route) -> Unit) {
+    val stacked = rememberLargestText()
     Column(
         Modifier
             .fillMaxWidth()
@@ -341,11 +354,18 @@ private fun UtilitiesGroup(cards: List<PhotosCollectionCard>, onOpen: (Route) ->
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Box(Modifier.width(26.dp), contentAlignment = Alignment.Center) {
-                    CentraidIcon(iconKey = card.icon_key, tint = centraidColor("link"), size = 22.dp)
+                    CentraidIcon(iconKey = card.icon_key, tint = appAccent("photos").text, size = 22.dp)
                 }
-                Text(card.title, style = centraidType("body"), color = centraidColor("text"), modifier = Modifier.weight(1f))
-                if (card.count_label.isNotEmpty()) {
-                    Text(card.count_label, style = centraidType("small"), color = centraidColor(if (card.urgent) "accent" else "textFaint"))
+                // THE COUNT UNDER THE NAME AT THE LARGEST TEXT (#1202): beside it the name broke mid-word.
+                val countInk = centraidColor(if (card.urgent) "accent" else "textFaint")
+                Column(Modifier.weight(1f).padding(vertical = if (stacked) 8.dp else 0.dp)) {
+                    Text(card.title, style = centraidType("body"), color = centraidColor("text"))
+                    if (stacked && card.count_label.isNotEmpty()) {
+                        Text(card.count_label, style = centraidType("small"), color = countInk)
+                    }
+                }
+                if (!stacked && card.count_label.isNotEmpty()) {
+                    Text(card.count_label, style = centraidType("small"), color = countInk)
                 }
                 CentraidIcon(iconKey = "ChevronRight", tint = centraidColor("textFaint"))
             }
@@ -360,6 +380,7 @@ private fun UtilitiesGroup(cards: List<PhotosCollectionCard>, onOpen: (Route) ->
  */
 @Composable
 private fun DeletedGroup(cards: List<PhotosCollectionCard>, onRestore: (String) -> Unit) {
+    val stacked = rememberLargestText()
     Column(
         Modifier
             .fillMaxWidth()
@@ -380,13 +401,18 @@ private fun DeletedGroup(cards: List<PhotosCollectionCard>, onRestore: (String) 
                 Box(Modifier.width(26.dp), contentAlignment = Alignment.Center) {
                     CentraidIcon(iconKey = card.icon_key, tint = centraidColor("textFaint"), size = 22.dp)
                 }
-                Column(Modifier.weight(1f)) {
-                    Text(card.title, style = centraidType("body"), color = centraidColor("text"), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (card.count_label.isNotEmpty()) {
-                        Text(card.count_label, style = centraidType("small"), color = centraidColor("textFaint"))
+                // THE RESTORE KEY UNDER THE NAME AT THE LARGEST TEXT (#1202), as the list above does.
+                val name: @Composable (Modifier) -> Unit = { m ->
+                    Column(m) {
+                        Text(card.title, style = centraidType("body"), color = centraidColor("text"), maxLines = if (stacked) 3 else 1, overflow = TextOverflow.Ellipsis)
+                        if (card.count_label.isNotEmpty()) {
+                            Text(card.count_label, style = centraidType("small"), color = centraidColor("textFaint"))
+                        }
+                        if (stacked) KitLink(label = card.restore_label, onClick = { onRestore(card.id) })
                     }
                 }
-                KitLink(label = card.restore_label, onClick = { onRestore(card.id) })
+                name(Modifier.weight(1f))
+                if (!stacked) KitLink(label = card.restore_label, onClick = { onRestore(card.id) })
             }
         }
     }

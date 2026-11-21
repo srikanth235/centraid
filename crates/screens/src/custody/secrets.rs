@@ -25,8 +25,10 @@
 //!
 //! ## There is no device secret (#1080 A21)
 //!
-//! A gateway knows a phone by a bearer token in the core's backup ledger, so no
-//! device key is stored here and a core is opened with none.
+//! A gateway knows a phone by a bearer token. The token is kept here, in the device store, under
+//! `gateway-token.<vault>.<gateway>` (#1191 E12): a pairing or a restore writes it, the shelf hands a core
+//! the tokens it holds as it opens, and a forget deletes it. No device key is stored and a core is opened
+//! with none.
 //!
 //! ## Absent is not an error
 //!
@@ -53,6 +55,9 @@ pub const WORDS: usize = 24;
 /// Per VAULT: `vault-index.<vaultId>`. A phone holding two vaults holds two
 /// indices, and one shared across them would be two vaults at one identity.
 pub const INDEX_PREFIX: &str = "vault-index.";
+/// A gateway's bearer token, in the DEVICE store only: `gateway-token.<vault_id>.<gateway_id>`
+/// (#1191 B15, `contracts/backup/decisions.md` E12). The core holds it in memory and writes it nowhere.
+pub const GATEWAY_TOKEN_PREFIX: &str = "gateway-token.";
 /// The highest index this phone ever recorded; never lowered.
 pub const INDEX_HIGH_WATER: &str = "vault-index-high-water";
 /// Device-only: the seed, when the synchronised store refused it.
@@ -127,6 +132,12 @@ struct Cache {
     loaded: bool,
     device: BTreeMap<String, String>,
     synced: BTreeMap<String, String>,
+    /// The identity (64 hex, the spelling of a token's key) of each vault the shelf opened keyed this
+    /// session, by the shelf's own id for it. Memory only.
+    identities: BTreeMap<String, String>,
+    /// Tokens taken out of `device` ahead of the store's answer to their delete, by key, so a delete
+    /// the store refuses puts them back (the store still holds them, and a later forget retries).
+    unconfirmed_deletes: BTreeMap<String, String>,
 }
 
 /// The phone's vault secrets. Cheap to clone: every clone is the same cache, so
@@ -144,6 +155,10 @@ impl fmt::Debug for VaultSecrets {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "VaultSecrets(loaded={}, <redacted>)", self.loaded())
     }
+}
+
+fn token_key(vault_id: &str, gateway_id: &str) -> String {
+    format!("{GATEWAY_TOKEN_PREFIX}{vault_id}.{gateway_id}")
 }
 
 fn device(op: wire::secret_op::Op, key: &str, value: &str) -> wire::SecretOp {
@@ -269,8 +284,35 @@ impl VaultSecrets {
         if answers.len() < ops.len() {
             return;
         }
-        let mut cache = self.cache();
+        let mut guard = self.cache();
+        let cache = &mut *guard;
         for (op, answer) in ops.iter().zip(answers) {
+            let device_token = op.store != wire::SecretStore::Synced as i32
+                && op.key.starts_with(GATEWAY_TOKEN_PREFIX);
+            // A TOKEN WRITE OR DELETE IS TAKEN INTO THE CACHE BEFORE THE STORE ANSWERS (see
+            // `token_writes`), so a refusal undoes it: otherwise the session reads "token held" while
+            // the store has none (a restart then asks to pair again), or a token the store still
+            // holds is forgotten here and never deleted.
+            if device_token && !answer.ok {
+                match wire::secret_op::Op::try_from(op.op) {
+                    Ok(wire::secret_op::Op::Set)
+                        if cache.device.get(&op.key).map(String::as_bytes)
+                            == Some(&op.value[..]) =>
+                    {
+                        cache.device.remove(&op.key);
+                    }
+                    Ok(wire::secret_op::Op::Delete) => {
+                        if let Some(token) = cache.unconfirmed_deletes.remove(&op.key) {
+                            cache.device.insert(op.key.clone(), token);
+                        }
+                    }
+                    _ => {}
+                }
+                continue;
+            }
+            if device_token {
+                cache.unconfirmed_deletes.remove(&op.key);
+            }
             let synced_store = op.store == wire::SecretStore::Synced as i32;
             let map = if synced_store {
                 &mut cache.synced
@@ -447,6 +489,118 @@ impl VaultSecrets {
     pub fn vault_index(&self, vault_id: &str) -> Option<u32> {
         self.device_get(&format!("{INDEX_PREFIX}{vault_id}"))
             .and_then(|raw| raw.parse().ok())
+    }
+
+    /// THE DEVICE-STORE WRITES FOR TOKENS A PAIRING OR A RESTORE MINTED (E12). The cache takes them
+    /// now, so a core reopened before the shell answers is still handed them.
+    #[must_use]
+    pub fn token_writes(&self, tokens: &[wire::GatewayToken]) -> Vec<wire::SecretOp> {
+        let mut cache = self.cache();
+        tokens
+            .iter()
+            .filter(|given| !given.token.is_empty())
+            .map(|given| {
+                let key = token_key(&given.vault_id, &given.gateway_id);
+                cache.device.insert(key.clone(), given.token.clone());
+                set_device(&key, &given.token)
+            })
+            .collect()
+    }
+
+    /// THE SHELF OPENED THE VAULT IT KNOWS AS `shelf_id` AND ITS CORE SAYS IT IS `identity` (E12).
+    /// The shelf's id is the owner's person row; a token's key is spelled with the vault's identity,
+    /// so everything the shelf asks of the token keys goes through this one mapping.
+    pub fn note_identity(&self, shelf_id: &str, identity: &str) {
+        self.cache()
+            .identities
+            .insert(shelf_id.to_owned(), identity.to_owned());
+    }
+
+    /// The identity noted for the vault the shelf knows as `shelf_id`, if it opened one keyed.
+    #[must_use]
+    pub fn identity_of(&self, shelf_id: &str) -> Option<String> {
+        self.cache().identities.get(shelf_id).cloned()
+    }
+
+    /// The id the shelf holds the vault under, from its identity (what the OS names a vault by
+    /// when it reports a finished upload).
+    #[must_use]
+    pub fn shelf_id_of(&self, identity: &str) -> Option<String> {
+        self.cache()
+            .identities
+            .iter()
+            .find(|(_, held)| held.as_str() == identity)
+            .map(|(shelf_id, _)| shelf_id.clone())
+    }
+
+    /// Forget the identity noted for `shelf_id`: the vault is gone.
+    pub fn forget_identity(&self, shelf_id: &str) {
+        self.cache().identities.remove(shelf_id);
+    }
+
+    /// The delete of one gateway's token: forgetting that gateway.
+    #[must_use]
+    pub fn token_delete(&self, vault_id: &str, gateway_id: &str) -> Vec<wire::SecretOp> {
+        let key = token_key(vault_id, gateway_id);
+        let mut cache = self.cache();
+        if let Some(token) = cache.device.remove(&key) {
+            cache.unconfirmed_deletes.insert(key.clone(), token);
+        }
+        drop(cache);
+        vec![device(wire::secret_op::Op::Delete, &key, "")]
+    }
+
+    /// Delete every token kept for `vault_id`: forgetting the vault (E12).
+    #[must_use]
+    pub fn forget_vault_tokens(&self, vault_id: &str) -> Vec<wire::SecretOp> {
+        self.tokens_for(vault_id)
+            .iter()
+            .flat_map(|held| self.token_delete(vault_id, &held.gateway_id))
+            .collect()
+    }
+
+    /// Delete every token kept for a vault whose identity is NOT among `kept`: what a forgotten vault
+    /// left when its identity was never noted (it was not opened keyed this session), found by the
+    /// prefix over the stored names. Only for a caller that knows the identity of every vault that
+    /// remains.
+    #[must_use]
+    pub fn forget_tokens_outside(&self, kept: &[String]) -> Vec<wire::SecretOp> {
+        let held: Vec<String> = self
+            .cache()
+            .device
+            .keys()
+            .filter_map(|key| key.strip_prefix(GATEWAY_TOKEN_PREFIX))
+            .filter_map(|rest| rest.split_once('.'))
+            .filter(|(vault, _)| !kept.iter().any(|keep| keep == vault))
+            .map(|(vault, gateway)| token_key(vault, gateway))
+            .collect();
+        held.iter()
+            .map(|key| {
+                let mut cache = self.cache();
+                if let Some(token) = cache.device.remove(key) {
+                    cache.unconfirmed_deletes.insert(key.clone(), token);
+                }
+                device(wire::secret_op::Op::Delete, key, "")
+            })
+            .collect()
+    }
+
+    /// The tokens the shell holds for `vault_id`, to hand a core as it opens (`GatewayTokens`).
+    #[must_use]
+    pub fn tokens_for(&self, vault_id: &str) -> Vec<wire::GatewayToken> {
+        let prefix = format!("{GATEWAY_TOKEN_PREFIX}{vault_id}.");
+        self.cache()
+            .device
+            .iter()
+            .filter_map(|(key, token)| {
+                let gateway_id = key.strip_prefix(&prefix)?;
+                Some(wire::GatewayToken {
+                    vault_id: vault_id.to_owned(),
+                    gateway_id: gateway_id.to_owned(),
+                    token: token.clone(),
+                })
+            })
+            .collect()
     }
 
     /// Whether the acknowledged cache already contains this metadata write.

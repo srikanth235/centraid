@@ -767,7 +767,7 @@ fn a_change_re_reads_the_place_keeping_it_drawn() {
 }
 
 #[test]
-fn more_is_a_sheet_of_import_export_and_trash_and_the_same_tab_is_nothing() {
+fn more_is_a_sheet_of_reads_import_export_and_trash_and_the_same_tab_is_nothing() {
     let mut d = clean();
     note(&d, "One", "1");
     let i = home(&mut d, wire::NotesPlace::Notes);
@@ -782,14 +782,16 @@ fn more_is_a_sheet_of_import_export_and_trash_and_the_same_tab_is_nothing() {
     assert_eq!(
         rows,
         [
+            ("reads", "What Notes may read"),
             ("import", "Import"),
             ("export", "Export"),
             ("trash", "Trash")
         ]
     );
-    assert_eq!(state.more_rows[2].route, Some(routes::trash()));
-    assert_eq!(state.more_rows[2].meta, "30 days, then erased");
-    assert!(state.more_rows[..2].iter().all(|row| row.meta.is_empty()));
+    assert_eq!(state.more_rows[0].icon_key, "Shield");
+    assert_eq!(state.more_rows[3].route, Some(routes::trash()));
+    assert_eq!(state.more_rows[3].meta, "30 days, then erased");
+    assert!(state.more_rows[..3].iter().all(|row| row.meta.is_empty()));
     send_home(&mut d, i, H::SheetClosed(ev::SheetClosed {}));
     assert_eq!(
         home_state(d.view(i)).sheet,
@@ -815,4 +817,50 @@ fn a_truncated_window_offers_to_show_older() {
     // The core's window is 200 by default and at least 20: nothing is truncated here.
     assert_eq!(library_data(d.view(i)).window_end_verb, "");
     assert!(!library_data(d.view(i)).can_widen);
+}
+
+#[test]
+fn first_open_is_a_card_over_the_starter_notes_and_the_first_note_of_the_members_ends_it() {
+    // A FIRST VAULT holds the two starter notes and nothing else.
+    let mut d = Driver::first_vault(notes::runtime());
+    d.start();
+    let i = home(&mut d, wire::NotesPlace::Notes);
+    let data = library_data(d.view(i)).clone();
+    let card = data.first_open.as_ref().expect("the first-open card");
+    assert_eq!(card.headline, "Write down what you want to keep.");
+    assert_eq!(card.hint, "Tap + to write one.");
+    assert_eq!(card.action_label, "");
+    let heads: Vec<&str> = data
+        .sections
+        .iter()
+        .map(|section| section.head.as_ref().unwrap().title.as_str())
+        .collect();
+    assert_eq!(heads, ["To get you started"]);
+    assert_eq!(data.count_label, "2 notes");
+    assert_eq!(
+        titles(d.view(i)),
+        ["Link with [[", "This note is yours"],
+        "the newest starter first"
+    );
+    // WRITTEN TODAY, SO IT SAYS SO (FirstOpenNotes): "Edited today", not the date.
+    let metas: Vec<&str> = data
+        .sections
+        .iter()
+        .flat_map(|section| section.rows.iter())
+        .map(|row| row.meta.as_str())
+        .collect();
+    assert_eq!(metas, ["Edited today", "Edited today"]);
+
+    // THE MEMBER'S OWN NOTE ends it: no card, and the section is the library's.
+    arrange(
+        &d,
+        act::notes::CreateNote {
+            title: "Mine".to_owned(),
+            ..Default::default()
+        },
+    );
+    let j = home(&mut d, wire::NotesPlace::Notes);
+    let data = library_data(d.view(j)).clone();
+    assert!(data.first_open.is_none());
+    assert_eq!(data.sections[0].head.as_ref().unwrap().title, "Notes");
 }

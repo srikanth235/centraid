@@ -18,6 +18,7 @@ struct AgendaEventView: View {
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.openURL) private var openURL
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private func event(_ build: (inout Centraid_Core_V1_AgendaEventEvent) -> Void) -> Centraid_Core_V1_AgendaEventEvent {
         var event = Centraid_Core_V1_AgendaEventEvent()
@@ -44,6 +45,7 @@ struct AgendaEventView: View {
                 }
                 .accessibilityLabel(d.menuLabel)
                 .accessibilityIdentifier("agenda-event-menu")
+                .headerKeyTarget()
             }
         } content: {
             // THE READ IS THE KIT'S PAGE STATE (#1185): an event that is gone is its final failure, and
@@ -261,7 +263,12 @@ struct AgendaEventView: View {
                 .foregroundStyle(Theme.color("text", scheme))
             // THE BOARD'S THREE EQUAL KEYS: Going, Maybe, Not going share the width, the
             // answer given filled in Agenda's blue, the others a plain capsule.
-            HStack(spacing: 8) {
+            // THE KEYS STACK once the text reflows (#1202): three across, "Going" and "Maybe" broke
+            // as "Goin / g" and "Mayb / e".
+            let keys = dynamicTypeSize >= Theme.reflowSize
+                ? AnyLayout(VStackLayout(spacing: 8))
+                : AnyLayout(HStackLayout(spacing: 8))
+            keys {
                 ForEach(rsvp.choices, id: \.partstat) { choice in
                     Button {
                         send(event { $0.rsvp = .with { $0.partstat = choice.partstat } })
@@ -269,6 +276,8 @@ struct AgendaEventView: View {
                         Text(choice.label)
                             .centraidType(choice.selected ? "smallStrong" : "small")
                             .foregroundStyle(choice.selected ? Color.white : Theme.color(choice.enabled ? "text" : "textDisabled", scheme))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
                             .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse)
                             .background {
                                 if choice.selected {
@@ -295,29 +304,36 @@ struct AgendaEventView: View {
         .padding(CentraidGeometry.pageMargin)
     }
 
+    private func replyText(_ label: String) -> some View {
+        Text(label)
+            .centraidType("annotLabel")
+            .foregroundStyle(Theme.color("textSoft", scheme))
+    }
+
     private func followedRow(_ guest: Centraid_Core_V1_AgendaFollowedGuestRow, index: Int) -> some View {
         HStack(spacing: 10) {
             Text(guest.initial)
                 .centraidType("smallStrong")
                 .foregroundStyle(Theme.color("onAccent", scheme))
-                .frame(width: 28, height: 28)
+                .kitScaledSquare(28, relativeTo: .footnote)
                 .background(Circle().fill(Theme.color(KitHue.role(guest.hueKey) ?? "cSlate", scheme)))
             VStack(alignment: .leading, spacing: 0) {
                 Text(guest.name)
                     .centraidType("body")
                     .foregroundStyle(Theme.color("text", scheme))
-                    .lineLimit(1)
+                    .kitLineLimit(1)
                 if !guest.detail.isEmpty {
                     Text(guest.detail)
                         .centraidType("annotLabel")
                         .foregroundStyle(Theme.color("textSoft", scheme))
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                 }
+                // THE ANSWER UNDER THE NAME AT ACCESSIBILITY SIZES (#1202): beside it, it left the
+                // name a column too narrow for one word.
+                if dynamicTypeSize.isAccessibilitySize { replyText(guest.replyLabel) }
             }
-            Spacer(minLength: 8)
-            Text(guest.replyLabel)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color("textSoft", scheme))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if !dynamicTypeSize.isAccessibilitySize { replyText(guest.replyLabel) }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .frame(minHeight: CentraidGeometry.targetMinCoarse)
@@ -332,16 +348,17 @@ struct AgendaEventView: View {
             Text(guest.initial)
                 .centraidType("smallStrong")
                 .foregroundStyle(Theme.color("onAccent", scheme))
-                .frame(width: 28, height: 28)
+                .kitScaledSquare(28, relativeTo: .footnote)
                 .background(Circle().fill(Theme.color(KitHue.role(guest.hueKey) ?? "cSlate", scheme)))
-            Text(guest.name)
-                .centraidType("body")
-                .foregroundStyle(Theme.color("text", scheme))
-                .lineLimit(1)
-            Spacer(minLength: 8)
-            Text(guest.replyLabel)
-                .centraidType("annotLabel")
-                .foregroundStyle(Theme.color("textSoft", scheme))
+            VStack(alignment: .leading, spacing: 0) {
+                Text(guest.name)
+                    .centraidType("body")
+                    .foregroundStyle(Theme.color("text", scheme))
+                    .kitLineLimit(1)
+                if dynamicTypeSize.isAccessibilitySize { replyText(guest.replyLabel) }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if !dynamicTypeSize.isAccessibilitySize { replyText(guest.replyLabel) }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
         .frame(minHeight: CentraidGeometry.targetMinCoarse)

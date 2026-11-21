@@ -55,23 +55,45 @@ struct VaultHeader: View {
         return (VaultHue.mix(hue, over: Theme.color("bg", scheme), share: share), hue)
     }
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     private var statusLine: some View {
         Button {
             store.sendHome(.backup(.init()))
         } label: {
-            HStack(spacing: 6) {
-                if loud {
-                    Circle()
-                        .fill(Theme.color(bar.backup.tone == .urgent ? "danger" : "attention", scheme))
-                        .frame(width: 6, height: 6)
+            // TWO CLEAN LINES AT ACCESSIBILITY SIZES (#1202): the state, then its one verb under
+            // it; in one wrapping row "Not backed up yet · Pair" interleaved word by word.
+            let stacked = dynamicTypeSize.isAccessibilitySize
+            let layout = stacked
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                : AnyLayout(HStackLayout(spacing: 6))
+            layout {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    if loud {
+                        Circle()
+                            .fill(Theme.color(bar.backup.tone == .urgent ? "danger" : "attention", scheme))
+                            .frame(width: 6, height: 6)
+                    }
+                    Text(status)
+                        .centraidType("mono")
+                        .foregroundStyle(Theme.color(loud ? "text" : "textFaint", scheme))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Text(status)
-                    .centraidType("mono")
-                    .foregroundStyle(Theme.color(loud ? "text" : "textFaint", scheme))
-                    .fixedSize(horizontal: false, vertical: true)
+                // THE LINE'S ONE QUIET VERB ("Not backed up yet · Pair"): Rust's words.
+                if !bar.backup.action.isEmpty {
+                    if !stacked {
+                        Text("·")
+                            .centraidType("mono")
+                            .foregroundStyle(Theme.color("textFaint", scheme))
+                    }
+                    Text(bar.backup.action)
+                        .centraidType("mono")
+                        .foregroundStyle(Theme.color("link", scheme))
+                }
             }
-            .frame(minHeight: 18)
-            .contentShape(Rectangle())
+            // 44 POINTS TO TOUCH, THE LINE'S OWN 24 TO LOOK AT (#1202): the iOS hit floor.
+            .frame(minHeight: 24)
+            .hitArea()
         }
         .buttonStyle(.plain)
         // THE BACKUP TAB ITSELF IS PLAIN TEXT, not a dimmed control: the status
@@ -96,7 +118,7 @@ struct VaultHeader: View {
             Text(vault.initial)
                 .centraidType("smallStrong")
                 .foregroundStyle(mark.ink)
-                .frame(width: 30, height: 30)
+                .kitScaledSquare(30, relativeTo: .footnote)
                 // A static control rung, not `iconChipRadius` — that
                 // ratio is for app chips.
                 .background(mark.ground, in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
@@ -117,8 +139,8 @@ struct VaultHeader: View {
                     .foregroundStyle(Theme.color("text", scheme))
                     .lineLimit(largestText ? nil : 1)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
+                    .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+                    .hitArea()
             }
             .buttonStyle(.plain)
             .accessibilityLabel(bar.switchLabel)

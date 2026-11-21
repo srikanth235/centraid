@@ -6,9 +6,19 @@
     {
       "name": "current",
       "device": {
-        "label": "Office NAS"
+        "label": "Office NAS",
+        "last_ack_ms": 1794560000000
       },
       "standing": "Up to date",
+      "notes": [],
+      "undo": false
+    },
+    {
+      "name": "paired_but_never_acknowledged",
+      "device": {
+        "label": "Office NAS"
+      },
+      "standing": "Catching up",
       "notes": [],
       "undo": false
     },
@@ -46,7 +56,8 @@
       "name": "an_old_backup_cannot_be_read",
       "device": {
         "label": "Office NAS",
-        "manifest_unreadable": true
+        "manifest_unreadable": true,
+        "last_ack_ms": 1794560000000
       },
       "standing": "Up to date",
       "notes": ["One old backup can't be read"],
@@ -56,7 +67,8 @@
       "name": "a_damaged_piece_is_sent_again",
       "device": {
         "label": "Office NAS",
-        "reach_state": "repairing"
+        "reach_state": "repairing",
+        "last_ack_ms": 1794560000000
       },
       "standing": "Up to date",
       "notes": ["A stored piece was damaged. Sending it again."],
@@ -68,7 +80,8 @@
         "label": "Office NAS",
         "held_count": 3,
         "held_undoable": 3,
-        "held_purge_at_ms": 1795176000000
+        "held_purge_at_ms": 1795176000000,
+        "last_ack_ms": 1794560000000
       },
       "standing": "Up to date",
       "notes": ["3 old files go Friday 20 November"],
@@ -80,7 +93,8 @@
         "label": "Office NAS",
         "held_count": 1,
         "held_undoable": 1,
-        "held_purge_at_ms": 1795176000000
+        "held_purge_at_ms": 1795176000000,
+        "last_ack_ms": 1794560000000
       },
       "standing": "Up to date",
       "notes": ["1 old file goes Friday 20 November"],
@@ -103,7 +117,8 @@
       "device": {
         "label": "Office NAS",
         "held_count": 2,
-        "held_undoable": 2
+        "held_undoable": 2,
+        "last_ack_ms": 1794560000000
       },
       "standing": "Up to date",
       "notes": [],
@@ -117,7 +132,8 @@
         "manifest_unreadable": true,
         "held_count": 3,
         "held_undoable": 3,
-        "held_purge_at_ms": 1795176000000
+        "held_purge_at_ms": 1795176000000,
+        "last_ack_ms": 1794560000000
       },
       "standing": "Up to date",
       "notes": [

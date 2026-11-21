@@ -93,6 +93,14 @@ catalog! {
         "There are no photos or videos on this phone to export.",
         "There are no photos or videos on this phone to export."
     );
+    plain photos_export_not_here = (
+        "The originals of these photos are not on this phone, so there is nothing to export.",
+        "The originals of these photos are not on this phone, so there is nothing to export."
+    );
+    plain photos_export_left_out_why = (
+        "Their originals are not on this phone.",
+        "Their originals are not on this phone."
+    );
     plain photos_export_title = ("Export photos", "Export photos");
     plain photos_edit_cannot_draw = ("Centraid could not draw the edit.", "Centraid could not draw the edit.");
     plain photos_edit_cannot_open = ("Centraid could not open the original.", "Centraid could not open the original.");
@@ -174,7 +182,7 @@ catalog! {
     plain photos_manage_selection = ("Manage selection", "Manage selection");
     plain photos_more = ("More", "More");
     plain photos_more_foot = ("The rest of Photos is in Collections.", "The rest of Photos is in Collections.");
-    plain photos_more_title = ("More in Photos", "More in Photos");
+    plain photos_more_title = ("More", "More");
     plain photos_new_album = ("New album", "New album");
     plain photos_next = ("Next photo", "Next photo");
     plain photos_nothing_on_phone = ("Nothing of this photo is on this phone yet.", "Nothing of this photo is on this phone yet.");
@@ -186,6 +194,8 @@ catalog! {
     plain photos_opening_library = ("Opening your library", "Opening your library");
     plain photos_open_item = ("Open {label}", "Open {label}");
     plain photos_open_item_sub = ("Open {label}, {sub}", "Open {label}, {sub}");
+    plain photos_refused_body = ("Turn it on in Settings to import your camera roll.", "Turn it on in Settings to import your camera roll.");
+    plain photos_refused_title = ("Photo access is off.", "Photo access is off.");
     plain photos_open_settings = ("Open Settings", "Open Settings");
     plain photos_original_downloading_now = ("Downloading the original now.", "Downloading the original now.");
     plain photos_original_downloading_percent = ("Downloading the original — {percent}%", "Downloading the original — {percent}%");

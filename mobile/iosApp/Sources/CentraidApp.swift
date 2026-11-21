@@ -56,6 +56,7 @@ struct CentraidApp: App {
                         .modifier(ShellLineHost(shell: shell))
                     }
             }
+            .id(shell.stackEpoch)
             // A SCREEN RUST SAYS IS A SHEET (`Route.sheet`), over the page that opened it.
             .sheet(item: $shell.sheet) { entry in
                 RustScreenHost(shell: shell, entry: entry)
@@ -86,7 +87,7 @@ struct CentraidApp: App {
             // screen at that moment, and the mask is what it captures.
             .overlay { if shell.masked { Color.black.ignoresSafeArea() } }
             // THE MEMBER'S APPEARANCE (R-CHROME-7): nil follows the phone.
-            .preferredColorScheme(shell.preferredScheme)
+            .preferredColorScheme(shell.preferredScheme ?? ShellModel.uiTestScheme)
             // THE SYSTEM TEXT SIZE, CAPPED ONCE (design/behaviour.md § Accessibility): every
             // role but `band` follows it up to `xxxLarge`, here and nowhere else.
             .dynamicTypeSize(...Theme.textSizeCap)

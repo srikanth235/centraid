@@ -18,6 +18,31 @@ struct HealthMetricView: View {
         return event
     }
 
+    @Environment(\.isLargestText) private var largestText
+
+    /// The page has its data (not loading, empty, failed or refused): the chart is there to scroll.
+    private func pageIsData(_ state: Centraid_Core_V1_HealthMetricState) -> Bool {
+        switch state.page.state {
+        case nil: return true
+        default: return false
+        }
+    }
+
+    /// THE PERIOD CHIPS: Week, Month, 6 months, Year.
+    private func ranges(_ state: Centraid_Core_V1_HealthMetricState) -> some View {
+        KitSegmented(
+            options: state.segments.map { (key: $0.key, label: $0.label) },
+            selected: state.segments.first(where: \.active)?.key ?? "",
+            identifier: "health-metric-range",
+            fills: true,
+            onSelect: { key in send(event { $0.range = .with { $0.key = key } }) }
+        )
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, CentraidGeometry.pageMargin)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
+    }
+
     var body: some View {
         let state = state
         PushedPage(title: state.chrome.title, parentTitle: state.chrome.backLabel, onBack: onBack) {
@@ -26,18 +51,8 @@ struct HealthMetricView: View {
             VStack(spacing: 0) {
             // THE PERIOD CHIPS stay above the page whether it is ready or empty, so an empty
             // period can be left.
-            if !state.segments.isEmpty {
-                KitSegmented(
-                    options: state.segments.map { (key: $0.key, label: $0.label) },
-                    selected: state.segments.first(where: \.active)?.key ?? "",
-                    identifier: "health-metric-range",
-                    fills: true,
-                    onSelect: { key in send(event { $0.range = .with { $0.key = key } }) }
-                )
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, CentraidGeometry.pageMargin)
-                .padding(.top, 8)
-                .padding(.bottom, 8)
+            if !state.segments.isEmpty, !(largestText && pageIsData(state)) {
+                ranges(state)
             }
             PageReadStateView(
                 page: state.page,
@@ -45,6 +60,12 @@ struct HealthMetricView: View {
             ) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
+                        // AT THE LARGEST TEXT THE RANGES SCROLL WITH THE PAGE (#1202): stacked and pinned
+                        // above it they covered 40 percent of the screen and hid the chart.
+                        if !state.segments.isEmpty, largestText, pageIsData(state) {
+                            ranges(state)
+                                .padding(.horizontal, -CentraidGeometry.pageMargin)
+                        }
                         page(state.data)
                     }
                     .padding(.horizontal, CentraidGeometry.pageMargin)

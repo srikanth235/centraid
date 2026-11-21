@@ -41,6 +41,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -78,6 +79,7 @@ public fun ReadStateView(
     retryLabel: String = KitWords.RETRY,
     stage: Boolean = false,
     emptyExtra: (@Composable () -> Unit)? = null,
+    emptyAction: (@Composable () -> Unit)? = null,
     skeleton: @Composable () -> Unit = { RowSkeleton() },
     data: @Composable () -> Unit,
 ) {
@@ -96,7 +98,7 @@ public fun ReadStateView(
             }
             empty != null -> StageScheme(stage) {
                 Column {
-                    EmptyStateView(empty, onEmptyAction)
+                    EmptyStateView(empty, onEmptyAction, actionSlot = emptyAction)
                     // What a screen draws UNDER its empty state (People's phone-contacts import,
                     // search's Ask row). The SwiftUI twin is `PageReadStateView(emptyExtra:)`.
                     emptyExtra?.invoke()
@@ -261,6 +263,9 @@ public fun EmptyStateView(
     empty: EmptyState,
     onAction: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    // THE PHONE'S IMPORT, where the empty state names one: drawn in the action's place, inside the
+    // card, so the hint lands under it. The SwiftUI twin is `EmptyStateView(actionSlot:)`.
+    actionSlot: (@Composable () -> Unit)? = null,
 ) {
     // THE EMPTY STATE PATTERN (#1173): a card on the page with the app's glyph on a wash of its
     // colour, the one sentence, the reason, and at most one action as the app's pill.
@@ -282,12 +287,26 @@ public fun EmptyStateView(
                 contentAlignment = Alignment.Center,
             ) { CentraidIcon(iconKey = glyph, tint = accent.text, size = 22.dp) }
         }
-        KitText(empty.headline, KitType.Section, Surface.ink, Modifier.semantics { heading() })
+        // CENTRED AND BALANCED, as the boards draw it: a headline that wraps shares its words
+        // between its lines, so no last word stands alone on a line of its own.
+        Text(
+            empty.headline,
+            style = kitTextStyle(KitType.Section).copy(lineBreak = LineBreak.Heading),
+            color = Surface.ink,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.semantics { heading() },
+        )
         if (empty.body.isNotEmpty()) {
             Text(empty.body, style = kitTextStyle(KitType.Row), color = Surface.body, textAlign = TextAlign.Center)
         }
-        if (empty.action_label.isNotEmpty() && onAction != null) {
+        if (actionSlot != null) {
+            actionSlot()
+        } else if (empty.action_label.isNotEmpty() && onAction != null) {
             KitPillButton(empty.action_label, onAction, testTag = "kit-empty-action")
+        }
+        // THE WAY TO ADD BY HAND, under the action, on an app's first open ("Or tap + to write one.").
+        if (empty.hint.isNotEmpty()) {
+            Text(empty.hint, style = kitTextStyle(KitType.Meta), color = Surface.meta, textAlign = TextAlign.Center)
         }
     }
 }
@@ -345,31 +364,50 @@ public fun OutlineButton(
         else -> StateColor.Red.text
     }
     val shape = RoundedCornerShape(percent = 50)
-    Text(
-        label,
-        style = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold),
-        color = if (!enabled) Surface.meta else if (ink == "text") Surface.ink else StateColor.Red.text,
-        textAlign = if (stacked) TextAlign.Center else TextAlign.Unspecified,
-        maxLines = if (inRow) 1 else Int.MAX_VALUE,
-        modifier = modifier
-            .then(if (stacked) Modifier.fillMaxWidth() else Modifier)
-            .heightIn(min = if (stacked) KitGeometry.ROW_MIN else 36.dp)
-            .widthIn(min = 44.dp)
-            .clip(shape)
-            // THE ACTION ROW'S KEYS ARE WHITE PILLS (AgendaEvent): inside a choice row the outline
-            // sits on a card fill, so the keys read as keys on the page.
-            .then(if (inRow) Modifier.background(Surface.card, shape) else Modifier)
-            .border(KitGeometry.HAIRLINE, edge, shape)
-            .clickable(enabled = enabled, onClick = onPress)
-            // 13 + 18 (the label's line) + 13 is the stack's 44; 9 + 18 + 9 is
-            // the hugging button's 36.
-            .padding(horizontal = if (inRow) 6.dp else 12.dp, vertical = if (stacked) 13.dp else 9.dp)
-            .testTag(testTag)
-            .semantics {
-                role = Role.Button
-                if (!enabled) disabled()
-            },
-    )
+    val labelStyle = kitTextStyle(KitType.Row).copy(fontWeight = FontWeight.SemiBold)
+    val labelInk = if (!enabled) Surface.meta else if (ink == "text") Surface.ink else StateColor.Red.text
+    val frame = modifier
+        .then(if (stacked) Modifier.fillMaxWidth() else Modifier)
+        .heightIn(min = if (stacked) KitGeometry.ROW_MIN else 36.dp)
+        .widthIn(min = 44.dp)
+        .clip(shape)
+        // THE ACTION ROW'S KEYS ARE WHITE PILLS (AgendaEvent): inside a choice row the outline
+        // sits on a card fill, so the keys read as keys on the page.
+        .then(if (inRow) Modifier.background(Surface.card, shape) else Modifier)
+        .border(KitGeometry.HAIRLINE, edge, shape)
+        .clickable(enabled = enabled, onClick = onPress)
+        // 13 + 18 (the label's line) + 13 is the stack's 44; 9 + 18 + 9 is
+        // the hugging button's 36.
+        .padding(horizontal = if (inRow) 6.dp else 12.dp, vertical = if (stacked) 13.dp else 9.dp)
+        .testTag(testTag)
+        .semantics {
+            role = Role.Button
+            if (!enabled) disabled()
+        }
+    if (inRow) {
+        // A LABEL IN A SHARED ROW SHRINKS TO ITS KEY (#1202): "Cancel event..." was cut after "Cancel", which then
+        // read as a dismiss. One line, never clipped.
+        androidx.compose.foundation.text.BasicText(
+            label,
+            style = labelStyle.copy(color = labelInk, textAlign = TextAlign.Center),
+            maxLines = 1,
+            softWrap = false,
+            autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(
+                minFontSize = labelStyle.fontSize * 0.7f,
+                maxFontSize = labelStyle.fontSize,
+            ),
+            modifier = frame,
+        )
+    } else {
+        Text(
+            label,
+            style = labelStyle,
+            color = labelInk,
+            textAlign = if (stacked) TextAlign.Center else TextAlign.Unspecified,
+            maxLines = Int.MAX_VALUE,
+            modifier = frame,
+        )
+    }
 }
 
 /**
@@ -428,6 +466,9 @@ public object KitGeometry {
      * definition every kit and screen inset reads. The name stays; the value is no longer typed here.
      */
     public val GUTTER: Dp = CentraidGeometry.PAGE_MARGIN.dp
+
+    /** The readable column's cap on a wide screen (ruling 27): the emitted `CentraidGeometry.READABLE_WIDTH`. */
+    public val READABLE_WIDTH: Dp = CentraidGeometry.READABLE_WIDTH.dp
 
     /** A thumb's press: every row and key is at least this tall. */
     public val ROW_MIN: Dp = 44.dp

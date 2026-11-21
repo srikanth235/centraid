@@ -27,13 +27,20 @@ struct Rig {
 
 /// Agenda's home and the three import services, on a phone of `platform`.
 fn rig(platform: &str) -> Rig {
+    rig_on(platform, routes::home(wire::AgendaDestination::Todo, ""))
+}
+
+/// The same, with Reminders opened on `route` (Home's tile opens it importing).
+fn rig_on(platform: &str, route: wire::Route) -> Rig {
+    rig_in(Driver::with_runtime, platform, route)
+}
+
+/// The same, over `make`'s vault.
+fn rig_in(make: fn(Runtime) -> Driver, platform: &str, route: wire::Route) -> Rig {
     let registry = agenda::registry().merge(imports::registry(&VaultSecrets::new()));
-    let mut tabs = vec![(
-        agenda::TAB.to_owned(),
-        routes::home(wire::AgendaDestination::Todo, ""),
-    )];
+    let mut tabs = vec![(agenda::TAB.to_owned(), route)];
     tabs.extend(imports::roots());
-    let mut d = Driver::with_runtime(Runtime::new(registry, tabs));
+    let mut d = make(Runtime::new(registry, tabs));
     d.start();
     d.call(wire::screen_request::Kind::Environment(wire::Environment {
         locale: "en".to_owned(),
@@ -190,10 +197,6 @@ fn the_row_opens_a_sheet_with_the_option_off_and_the_import_words() {
     assert_eq!(sheet.completed_label, "Include completed reminders");
     assert!(!sheet.completed_on, "off by default");
     assert_eq!(sheet.import_label, "Import reminders");
-    // The words are ImportsMadeState's.
-    let line = r.line();
-    assert_eq!(sheet.completed_label, line.completed_label);
-    assert_eq!(sheet.import_label, line.reminders_label);
 
     r.send(H::ImportRemindersCompleted(
         wire::agenda_home_event::ImportRemindersCompletedToggled {},
@@ -280,8 +283,12 @@ fn the_verb_asks_the_one_import_to_read_with_the_option_and_the_line_says_the_ou
 }
 
 #[test]
-fn a_refusal_and_an_empty_phone_say_so_on_the_line_in_the_import_words() {
-    let mut r = rig("ios");
+fn a_refusal_is_the_apps_card_and_an_empty_phone_says_so_on_the_line() {
+    let mut r = rig_in(
+        Driver::first_vault,
+        "ios",
+        routes::home(wire::AgendaDestination::Todo, ""),
+    );
     r.tap_row();
     r.send(H::ImportRemindersSubmitted(
         wire::agenda_home_event::ImportRemindersSubmitted {},
@@ -292,11 +299,22 @@ fn a_refusal_and_an_empty_phone_say_so_on_the_line_in_the_import_words() {
         cancelled: false,
         ..Default::default()
     }));
-    assert_eq!(
-        r.line().summary,
-        // The line drops a sentence's final full stop, as every import line does.
-        "Reminders access is off. Turn it on in Settings"
-    );
+    // A REFUSAL IS REMINDERS' TO SAY, not the shell's line (it would follow the member into every
+    // app): the line is silent, and Reminders' own card says it with Open Settings.
+    assert_eq!(r.line().summary, "");
+    assert_eq!(r.line().open_label, "");
+    assert!(!r.line().running);
+    let Some(wire::agenda_home_state::Content::Data(data)) = &r.state().content else {
+        panic!("no data");
+    };
+    let empty = data
+        .todo
+        .as_ref()
+        .and_then(|todo| todo.empty.clone())
+        .expect("the card");
+    assert_eq!(empty.headline, "Reminders access is off.");
+    assert_eq!(empty.action_label, "Open Settings");
+    assert_eq!(empty.import_source, wire::ImportSource::Unspecified as i32);
 
     r.tap_row();
     r.send(H::ImportRemindersSubmitted(
@@ -304,6 +322,7 @@ fn a_refusal_and_an_empty_phone_say_so_on_the_line_in_the_import_words() {
     ));
     r.answer(reminders(&[]));
     assert_eq!(r.line().summary, "No open reminders to import");
+    assert_eq!(r.line().open_label, "");
 }
 
 #[test]
@@ -451,4 +470,126 @@ fn a_cold_start_reads_the_stored_follow_and_stop_works_from_it() {
         r.state().status.as_ref().map(|s| s.sentence.as_str()),
         Some("Reminders stopped reading your phone reminders.")
     );
+}
+
+/// THE FIRST-OPEN CARD'S IMPORT AND HOME'S TILE (FirstImports): one tap, or the tile's route, asks the
+/// phone for its Reminders at once, without the option sheet and without the completed ones; where
+/// the phone has no Reminders it asks nothing.
+#[test]
+fn the_card_and_the_tile_start_the_import_without_the_sheet() {
+    let mut r = rig("ios");
+    // The first-open card names the import where the phone has Reminders, and not elsewhere.
+    let first = |platform| {
+        rig_in(
+            Driver::first_vault,
+            platform,
+            routes::home(wire::AgendaDestination::Todo, ""),
+        )
+    };
+    assert_eq!(first("ios").state().import_label, "Import from Reminders");
+    assert_eq!(first("android").state().import_label, "");
+    r.send(H::ImportRemindersRequested(
+        wire::agenda_home_event::ImportRemindersRequested {},
+    ));
+    let reads = r.reads();
+    assert_eq!(reads.len(), 1, "{reads:?}");
+    assert!(reads[0].ask_permission && !reads[0].include_completed);
+    assert_eq!(r.state().sheet, Sheet::None as i32);
+
+    let tile = centraid_screens::reminders::routes::home_importing();
+    let mut r = rig_on("ios", tile.clone());
+    // The screen first appeared before the environment named the platform: it appears again.
+    let home = r.home;
+    r.d.send(home, E::Appeared(wire::Appeared {}));
+    let reads = r.reads();
+    assert_eq!(
+        reads.len(),
+        1,
+        "opening on the tile's route imports: {reads:?}"
+    );
+    assert!(reads[0].ask_permission);
+
+    let mut android = rig_on("android", tile);
+    android.send(H::ImportRemindersRequested(
+        wire::agenda_home_event::ImportRemindersRequested {},
+    ));
+    assert!(android.reads().is_empty());
+}
+
+/// A REFUSED REMINDERS GRANT reads on Home's Reminders tile as Photos' does (FirstHomeRefused), and
+/// only there: the shell's import line says nothing.
+#[test]
+fn a_refused_reminders_grant_reads_on_the_home_tile_and_nowhere_else() {
+    let secrets = VaultSecrets::new();
+    let registry = agenda::registry()
+        .merge(imports::registry(&secrets))
+        .merge(centraid_screens::shell::registry(&secrets));
+    let mut tabs = vec![(
+        agenda::TAB.to_owned(),
+        routes::home(wire::AgendaDestination::Todo, ""),
+    )];
+    tabs.extend(imports::roots());
+    tabs.push((
+        centraid_screens::shell::TAB.to_owned(),
+        centraid_screens::shell::routes::home(),
+    ));
+    let mut d = Driver::first_vault(Runtime::new(registry, tabs));
+    d.start();
+    d.call(wire::screen_request::Kind::Environment(wire::Environment {
+        locale: "en".to_owned(),
+        zone: "UTC".to_owned(),
+        platform: "ios".to_owned(),
+        ..Default::default()
+    }));
+    let tabs = d.navigation.clone().expect("navigation").tabs;
+    let home = tabs[0].entries[0].instance;
+    let made = tabs[3].entries[0].instance;
+    let springboard = tabs[4].entries[0].instance;
+    d.effects.clear();
+    d.send(
+        home,
+        E::AgendaHome(wire::AgendaHomeEvent {
+            kind: Some(H::ImportRemindersRequested(
+                wire::agenda_home_event::ImportRemindersRequested {},
+            )),
+        }),
+    );
+    let at = d
+        .effects
+        .iter()
+        .position(|request| {
+            matches!(
+                request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+                Some(K::RemindersRead(_))
+            )
+        })
+        .expect("a reminders read was asked");
+    let request = d.effects.remove(at);
+    d.send(
+        request.instance,
+        E::EffectResult(wire::EffectResult {
+            effect_id: request.effect_id,
+            outcome: Some(O::Failed(wire::EffectFailed {
+                reason: "denied".to_owned(),
+                denied: true,
+                ..Default::default()
+            })),
+        }),
+    );
+    let Some(wire::view_state::Kind::Home(state)) = d.view(springboard).kind.clone() else {
+        panic!("not Home");
+    };
+    let Some(wire::home_state::Content::Data(data)) = state.content else {
+        panic!("no data");
+    };
+    let tile = data
+        .tiles
+        .iter()
+        .find(|tile| tile.widget == "reminders")
+        .expect("the reminders widget");
+    assert_eq!(tile.empty_copy, "Reminders access is off · Open Settings");
+    let Some(wire::view_state::Kind::ImportsMade(line)) = d.view(made).kind.clone() else {
+        panic!("not made");
+    };
+    assert_eq!(line.summary, "");
 }

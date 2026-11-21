@@ -40,6 +40,7 @@ use super::routes;
 use super::row_routes;
 use super::tiles::{self, Made};
 use crate::custody::secrets::{self as secrets, VaultSecrets};
+use crate::health::Store;
 use crate::passes::{Rules, TransferRule, rule};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, home as words, photos};
@@ -101,8 +102,43 @@ struct Home {
     /// transfer rule is read from it and written through it.
     secrets: VaultSecrets,
     transfer_sheet_open: bool,
+    /// What the phone says of photo access, as the camera roll last told it.
+    photo_access: wire::PhotosMediaPermission,
     /// The rule write in flight, to be folded into the cache when it is answered.
     keeping: Option<Vec<wire::SecretOp>>,
+}
+
+/// Which phone stores the member refused, as the follows last heard (a grant the app asked for
+/// and was refused; read, never asked).
+#[derive(Clone, Copy)]
+struct Refusals {
+    /// The platform has a Reminders store to read.
+    reminders_source: bool,
+    calendar: bool,
+    reminders: bool,
+    contacts: bool,
+}
+
+impl Refusals {
+    const fn none() -> Self {
+        Self {
+            reminders_source: true,
+            calendar: false,
+            reminders: false,
+            contacts: false,
+        }
+    }
+
+    fn of(ctx: &Ctx) -> Self {
+        use crate::follow::Store as Follow;
+        let follows = ctx.follows();
+        Self {
+            reminders_source: ctx.reminders_source(),
+            calendar: follows.report(Follow::Calendar).denied,
+            reminders: follows.report(Follow::Reminders).denied,
+            contacts: follows.report(Follow::Contacts).denied,
+        }
+    }
 }
 
 /// The registry factory. Home shares the cache of what the shell keeps (the
@@ -130,6 +166,7 @@ impl Home {
             outcome: String::new(),
             appearance: Appearance::System,
             transfer_sheet_open: false,
+            photo_access: wire::PhotosMediaPermission::Unspecified,
             keeping: None,
         }
     }
@@ -182,6 +219,22 @@ impl Home {
     /// Read every tile, in one pass. Nothing to read on a phone with no vault.
     fn reload(&mut self, ctx: &Ctx) {
         self.read = true;
+        // THE CAMERA ROLL TELLS WHAT THE PHONE SAYS of photo access (a read, never an ask).
+        ctx.post(
+            crate::imports::CAMERA_ROLL,
+            wire::ScreenEvent {
+                kind: Some(E::ImportsCameraRoll(wire::ImportsCameraRollEvent {
+                    vault_id: String::new(),
+                    kind: Some(wire::imports_camera_roll_event::Kind::Requested(
+                        wire::imports_camera_roll_event::Requested {
+                            action:
+                                wire::imports_camera_roll_event::requested::Action::ReadPermission
+                                    as i32,
+                        },
+                    )),
+                })),
+            },
+        );
         if self.none {
             return;
         }
@@ -232,6 +285,10 @@ impl Home {
             // Following the phone is the shell's to draw: Home no longer words a switch
             // that depends on where the phone is.
             H::PhoneSchemeTold(_) => {}
+            H::PhotoAccessTold(told) => {
+                self.photo_access = wire::PhotosMediaPermission::try_from(told.permission)
+                    .unwrap_or(wire::PhotosMediaPermission::Unspecified);
+            }
             H::Vault(_) => self.sheet_open = true,
             H::VaultPicked(picked) => {
                 self.sheet_open = false;
@@ -431,7 +488,16 @@ impl Home {
     /// A widget, finished. `app` is the mark and the colour (Reminders wears
     /// Agenda's); `widget` is its identity and the key a row lists. Its size,
     /// height and place are the fold's ([`policy::fold`]).
-    fn dress(&self, locale: Locale, widget: &str, app: &str, made: &Made) -> wire::HomeTile {
+    fn dress(
+        &self,
+        locale: Locale,
+        store: Store,
+        refusals: Refusals,
+        widget: &str,
+        app: &str,
+        made: &Made,
+    ) -> wire::HomeTile {
+        let reminders_source = refusals.reminders_source;
         let name = widget_name(locale, widget, app);
         let open = fill(&words::open_app(locale), &[("name", &name)]);
         wire::HomeTile {
@@ -441,41 +507,69 @@ impl Home {
             status: made.status as i32,
             count: made.count,
             count_label: made.count_label.clone(),
-            empty_copy: empty_copy(locale, app),
+            // A REFUSED GRANT changes only its own widget (FirstHomeRefused): where it holds
+            // nothing, it says so, and its tap opens the app, which says the same with Open Settings.
+            empty_copy: if !made.holds
+                && let Some(refused) = self.refused_copy(locale, refusals, widget)
+            {
+                refused
+            } else {
+                empty_copy(locale, store, reminders_source, widget, made.holds)
+            },
+            holds: made.holds,
             body: made
                 .body
                 .clone()
                 .map(|kind| wire::HomeTileBody { kind: Some(kind) }),
             accessibility_label: spoken(&open, made),
             open_label: open,
-            route: tile_route(app, made),
+            route: tile_route(app, made, reminders_source),
             ..Default::default()
         }
     }
 
-    fn data(&self, locale: Locale) -> wire::HomeData {
+    /// What a widget whose phone grant was refused says, or `None` when it is not one.
+    fn refused_copy(&self, locale: Locale, refusals: Refusals, widget: &str) -> Option<String> {
+        match widget {
+            "photos" if self.photo_access == wire::PhotosMediaPermission::Denied => {
+                Some(words::tile_photos_refused(locale))
+            }
+            "calendar" if refusals.calendar => Some(words::tile_calendar_refused(locale)),
+            "reminders" if refusals.reminders => Some(words::tile_reminders_refused(locale)),
+            "people" if refusals.contacts => Some(words::tile_contacts_refused(locale)),
+            _ => None,
+        }
+    }
+
+    fn data(&self, locale: Locale, store: Store, refusals: Refusals) -> wire::HomeData {
         let tiles: Vec<wire::HomeTile> = self
             .tiles
             .iter()
-            .map(|(widget, app, made)| self.dress(locale, widget, app, made))
+            .map(|(widget, app, made)| self.dress(locale, store, refusals, widget, app, made))
             .collect();
-        let mut folded = policy::fold(tiles);
-        // A small Health invitation has room for one word; the medium one says the sentence.
-        for tile in &mut folded.tiles {
-            if tile.widget == "health"
-                && tile.size() == wire::HomeTileSize::Small
-                && tile.status() != wire::HomeTileStatus::Content
-            {
-                tile.empty_copy = words::tile_empty_health_small(locale);
-            }
-        }
+        let folded = policy::fold(tiles);
         wire::HomeData {
             springboard: folded.springboard as i32,
             grid_rows: folded.rows,
-            day_one_title: words::home_day_one_title(locale),
-            day_one_body: words::home_day_one_body(locale),
+            welcome: if folded.springboard == wire::HomeSpringboard::FirstRun {
+                words::home_welcome(locale)
+            } else {
+                String::new()
+            },
             tiles: folded.tiles,
         }
+    }
+
+    /// The springboard's grade as the tiles stand now.
+    fn stage(&self, locale: Locale) -> wire::HomeSpringboard {
+        let tiles: Vec<wire::HomeTile> = self
+            .tiles
+            .iter()
+            .map(|(widget, app, made)| {
+                self.dress(locale, Store::Any, Refusals::none(), widget, app, made)
+            })
+            .collect();
+        policy::springboard(&tiles)
     }
 
     fn bar(&self, locale: Locale) -> wire::HomeBar {
@@ -493,10 +587,21 @@ impl Home {
         };
         // The backup's status stands in the line only for a vault that has not
         // moved: a moved vault says so itself.
+        // THE BACKUP HAS ONE SEAT, and it is empty on day zero: a vault that holds nothing of
+        // the member's has nothing to lose, so the invitation to pair waits for the first item.
+        let day_zero = self.stage(locale) == wire::HomeSpringboard::FirstRun;
+        // "ON THIS PHONE" IS NOT A LINE OF ITS OWN (FirstHome, HomeWidgets): the seat under the vault
+        // name is the backup's, and it is empty until there is something to say. A moved vault
+        // still says so.
+        let mut vault = vault;
+        if vault.state() == wire::HomeVaultState::Online {
+            vault.state_line.clear();
+        }
         let backup = self
             .backup
             .clone()
-            .filter(|_| vault.state() != wire::HomeVaultState::Frozen);
+            .filter(|_| vault.state() != wire::HomeVaultState::Frozen)
+            .filter(|line| !(day_zero && line.route.is_some()));
         let switch_label = format!(
             "{}. {}",
             [
@@ -521,7 +626,7 @@ impl Home {
             .map(|line| {
                 // A line that leads to pairing is its own action.
                 if line.route.is_some() {
-                    line.status.clone()
+                    line.accessibility_label.clone()
                 } else {
                     format!("{}. {}", line.status, words::backup_status_open(locale))
                 }
@@ -660,7 +765,13 @@ impl Screen for Home {
         // THE READ (#1185): a phone that holds no vault has nothing to read, which is a final failure in
         // its own sentence (the first-launch gate is its way on, so no Retry); until the shelf has
         // spoken Home is loading.
-        let content = (!self.none && self.read).then(|| Content::Data(Box::new(self.data(locale))));
+        let content = (!self.none && self.read).then(|| {
+            Content::Data(Box::new(self.data(
+                locale,
+                Store::of(ctx),
+                Refusals::of(ctx),
+            )))
+        });
         let page = if self.none {
             wire::PageState {
                 state: Some(wire::page_state::State::Failed(wire::Failure {
@@ -745,12 +856,18 @@ fn first_launch(locale: Locale) -> wire::HomeFirstLaunch {
 /// WHERE A TILE'S TAP GOES: the app's home. Notes opens its shelf when it has
 /// notes and a new note when it has none, and nothing while it is unread; a tile
 /// that is still reading opens nothing.
-fn tile_route(app: &str, made: &Made) -> Option<wire::Route> {
+fn tile_route(app: &str, made: &Made, reminders_source: bool) -> Option<wire::Route> {
     use wire::HomeTileStatus as Status;
     match (app, made.status) {
         (_, Status::Loading) => None,
         ("notes", Status::Empty) => Some(crate::notes::routes::new_note()),
         ("notes", Status::Unknown) => None,
+        // "IMPORT YOUR REMINDERS": the tile's invitation starts the import as Reminders opens, where
+        // the platform has a Reminders store to read. Elsewhere the tile invites a first reminder
+        // and opens Reminders plainly.
+        ("reminders", Status::Empty) if !made.holds && reminders_source => {
+            Some(crate::reminders::routes::home_importing())
+        }
         _ => row_routes::app_home(app),
     }
 }
@@ -785,18 +902,34 @@ pub(crate) fn app_name(locale: Locale, app: &str) -> String {
     }
 }
 
-/// What an empty widget says to do.
-fn empty_copy(locale: Locale, app: &str) -> String {
-    match app {
-        "calendar" => words::tile_empty_calendar(locale),
-        "reminders" => crate::strings::agenda_glance::no_reminders(locale),
-        "docs" => words::tile_empty_docs(locale),
-        "health" => words::tile_empty_health(locale),
-        "locker" => words::tile_empty_locker(locale),
-        "money" => words::tile_empty_money(locale),
-        "notes" => words::tile_empty_notes(locale),
-        "people" => words::tile_empty_people(locale),
-        "photos" => words::tile_empty_photos(locale),
+/// What an empty widget says: its one invitation, or, when the app holds something and only has
+/// nothing to show now, a quiet line that never asks to import what is already there.
+fn empty_copy(
+    locale: Locale,
+    store: Store,
+    reminders_source: bool,
+    widget: &str,
+    holds: bool,
+) -> String {
+    match (widget, holds) {
+        ("calendar", true) => words::tile_quiet_calendar(locale),
+        ("calendar", false) => words::tile_empty_calendar(locale),
+        ("reminders", true) => crate::strings::agenda_glance::no_reminders(locale),
+        // NO REMINDERS STORE TO READ (Android): the tile never invites an import that cannot work.
+        ("reminders", false) if !reminders_source => words::tile_empty_reminders_by_hand(locale),
+        ("reminders", false) => words::tile_empty_reminders(locale),
+        ("money", true) => words::tile_quiet_money(locale),
+        ("docs", _) => words::tile_empty_docs(locale),
+        // THE PHONE'S OWN STORE: Apple Health on iOS, Health Connect on Android.
+        ("health", _) => match store {
+            Store::HealthConnect => words::tile_empty_health_connect(locale),
+            Store::AppleHealth | Store::Any => words::tile_empty_health(locale),
+        },
+        ("locker", _) => words::tile_empty_locker(locale),
+        ("money", false) => words::tile_empty_money(locale),
+        ("notes", _) => words::tile_empty_notes(locale),
+        ("people", _) => words::tile_empty_people(locale),
+        ("photos", _) => words::tile_empty_photos(locale),
         _ => String::new(),
     }
 }
@@ -877,16 +1010,32 @@ fn finish_vault(locale: Locale, vault: &wire::ShellVault) -> wire::HomeVault {
 mod tests {
     use super::*;
 
+    /// THE HEALTH TILE NAMES THE PHONE'S OWN STORE: Apple Health on iOS, Health Connect on Android.
+    #[test]
+    fn the_empty_health_tile_names_the_phones_store() {
+        let en = Locale::En;
+        assert_eq!(
+            empty_copy(en, Store::AppleHealth, true, "health", false),
+            "Connect Apple Health"
+        );
+        assert_eq!(
+            empty_copy(en, Store::HealthConnect, false, "health", false),
+            "Turn on Health Connect"
+        );
+    }
+
     #[test]
     fn a_tile_opens_its_app_and_notes_opens_a_new_note_when_it_holds_none() {
         use wire::HomeTileStatus as Status;
         let made = |status| Made {
             status,
+            holds: status == Status::Content,
             count: None,
             count_label: String::new(),
             body: None,
         };
-        let screen = |app: &str, status| tile_route(app, &made(status)).map(|route| route.screen);
+        let screen =
+            |app: &str, status| tile_route(app, &made(status), true).map(|route| route.screen);
         assert_eq!(
             screen("notes", Status::Content).as_deref(),
             Some("notes.home")
@@ -907,6 +1056,29 @@ mod tests {
         assert_eq!(
             screen("reminders", Status::Empty).as_deref(),
             Some("reminders.home")
+        );
+        // ... and an empty one that holds nothing opens it importing: that is what its tile says.
+        assert_eq!(
+            tile_route("reminders", &made(Status::Empty), true),
+            Some(crate::reminders::routes::home_importing())
+        );
+        // ... but not where the platform has no Reminders store: it opens Reminders plainly, and the
+        // tile invites a first reminder, not an import.
+        assert_eq!(
+            tile_route("reminders", &made(Status::Empty), false),
+            Some(crate::reminders::routes::home())
+        );
+        assert_eq!(
+            empty_copy(Locale::En, Store::HealthConnect, false, "reminders", false),
+            "Write your first reminder"
+        );
+        assert_eq!(
+            empty_copy(Locale::En, Store::AppleHealth, true, "reminders", false),
+            "Import your reminders"
+        );
+        assert_eq!(
+            tile_route("reminders", &made(Status::Content), true),
+            Some(crate::reminders::routes::home())
         );
         assert_eq!(
             screen("photos", Status::Unknown).as_deref(),

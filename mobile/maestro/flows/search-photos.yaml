@@ -21,7 +21,7 @@ name: search-photos
 - tapOn:
     id: "home-tile-photos"
 - tapOn:
-    id: "photos-search-open"
+    id: "band-search"
 - inputText: "emrald"
 # The slip finds the photograph, and the shared field names the word searched.
 - extendedWaitUntil:

@@ -66,6 +66,8 @@ pub const KEY_RECENT: &str = "recent";
 pub const KEY_TRASH_SHELF: &str = "trash_shelf";
 /// The More sheet's Export row (a route, so the shell pushes it).
 pub const KEY_EXPORT: &str = "export";
+/// The More sheet's "What Docs may read" row (a route, so the shell pushes it).
+pub const KEY_READS: &str = "reads";
 pub const KEY_UPLOAD: &str = "upload";
 pub const KEY_SCAN: &str = "scan";
 pub const KEY_TEXT: &str = "text";
@@ -151,7 +153,6 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         rail: None,
         sheet: Sheet::None,
         undo: Undo::default(),
-        asking: None,
         asking_stop: None,
         rename: None,
         camera: wire::DocsPermission::NotAsked,
@@ -184,7 +185,6 @@ struct Drive {
     /// The status line and what its Undo reverses (the kit's one door).
     undo: Undo,
     /// The document a trash confirm asks about.
-    asking: Option<String>,
     /// The followed folder's origin a stop-reading confirm asks about (#1185).
     asking_stop: Option<String>,
     rename: Option<Rename>,
@@ -439,23 +439,8 @@ impl Drive {
                 }
             }
             Some(D::FolderCreated(_)) => self.folder_created(ctx),
-            Some(D::Confirmed(_)) => {
-                if let Some(id) = self.asking.take() {
-                    let title = self
-                        .row(&id)
-                        .map(|row| row.title.clone())
-                        .unwrap_or_default();
-                    self.write(
-                        ctx,
-                        act::docs::Trash {
-                            document_id: id.clone(),
-                        },
-                        &id,
-                        |locale| trash::moved_to_trash(locale, &title),
-                    );
-                }
-            }
-            Some(D::Dismissed(_)) => self.asking = None,
+            // MOVE TO TRASH asks nothing (`behaviour.md`), so a trash confirm is never on screen.
+            Some(D::Confirmed(_) | D::Dismissed(_)) => {}
             Some(D::StopConfirmed(_)) => return self.stop(ctx),
             Some(D::StopDismissed(_)) => self.asking_stop = None,
             Some(D::Permission(changed)) => self.permission(&changed),
@@ -714,7 +699,15 @@ impl Drive {
             }
             KEY_TRASH => {
                 self.sheet = Sheet::None;
-                self.asking = Some(document_id.to_owned());
+                let title = row.title.clone();
+                self.write(
+                    ctx,
+                    act::docs::Trash {
+                        document_id: document_id.to_owned(),
+                    },
+                    document_id,
+                    |locale| trash::moved_to_trash(locale, &title),
+                );
             }
             _ => {}
         }

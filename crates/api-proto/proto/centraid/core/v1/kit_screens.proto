@@ -63,6 +63,9 @@ message EmptyState {
   // (day one); a trash's empty state says "Trash", so Locker's empty trash does
   // not wear a lock.
   string icon_key = 6;
+  // The small line under the action on an app's first open ("Or tap + to write one."):
+  // the way to add by hand, once the card has said what the app is for. Empty elsewhere.
+  string hint = 7;
 }
 
 // A SOURCE ON THE PHONE ITSELF that an app's day-one empty state can import
@@ -899,4 +902,27 @@ message PageNote {
   string sentence = 2;
   // "Try again", or empty when nothing can be done here.
   string action_label = 3;
+}
+
+// ---------------------------------------------------------------------------
+// The kit's reads page: "What <app> may read" (owner, 2026-11-19)
+// ---------------------------------------------------------------------------
+
+// ONE APP'S "WHAT <APP> MAY READ" (`<app>.reads`), drawn once by each shell from
+// `ViewState.reads`: what the app reads and what it writes, as finished words. Notes, Docs, Money and
+// People open it from their More sheet, as Calendar, Reminders and Health do.
+message ReadsView {
+  // The app this page belongs to, so the page wears its colour.
+  string app_id = 1;
+  // "What Notes may read".
+  string title = 2;
+  // The app the page was opened from, which the back control names.
+  string back_label = 3;
+  repeated ReadsFact facts = 4;
+}
+
+message ReadsFact {
+  // "Reads", "Writes".
+  string label = 1;
+  string detail = 2;
 }

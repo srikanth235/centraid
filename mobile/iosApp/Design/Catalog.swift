@@ -292,6 +292,9 @@ public enum CentraidCatalog {
             CentraidIconPath(d: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9H3z", filled: false, evenOdd: false),
             CentraidIconPath(d: "M12 11v5M9.5 13.5h5", filled: false, evenOdd: false),
         ],
+        "Footprints": [
+            CentraidIconPath(d: "M8 20c-2 0-3-2-3-4s2-3 3-3 2 2 2 4-1 3-2 3zM16 13c-2 0-3-2-3-4s2-3 3-3 2 2 2 4-1 3-2 3z", filled: false, evenOdd: false),
+        ],
         "Gauge": [
             CentraidIconPath(d: "M12 14l4-4", filled: false, evenOdd: false),
             CentraidIconPath(d: "M3.34 19a10 10 0 1 1 17.32 0", filled: false, evenOdd: false),
@@ -674,6 +677,7 @@ public enum CentraidGeometry {
     public static let iconChipTintDark: CGFloat = 0.2
     public static let iconChipTintLight: CGFloat = 0.13
     public static let pageMargin: CGFloat = 18
+    public static let readableWidth: CGFloat = 720
     public static let targetMinCoarse: CGFloat = 44
     public static let targetMinFine: CGFloat = 34
 }

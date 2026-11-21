@@ -101,6 +101,8 @@ pub(super) struct Library {
     /// while a filter leaves nothing).
     tags: Vec<wire::NotesTagFacet>,
     pub search: Search,
+    /// The member's today, read with the shelf, so a row can say "Edited today".
+    today: Option<String>,
 }
 
 impl Library {
@@ -119,6 +121,7 @@ impl Library {
             asked: String::new(),
             tags: Vec::new(),
             search: Search::default(),
+            today: None,
         }
     }
 
@@ -141,6 +144,7 @@ impl Library {
     /// Read the shelf (or search's answer); `wider` says the window grew, so a read that did not
     /// come keeps the rows already shown under the "more did not load" note.
     fn read(&mut self, ctx: &Ctx, wider: bool) {
+        self.today = crate::shell::tiles::today_of(ctx);
         if self.search.active() {
             self.read_search(ctx);
             return;
@@ -508,7 +512,7 @@ impl Library {
             .notes
             .iter()
             .filter(|row| self.shows(row))
-            .map(|row| fold::row(locale, row))
+            .map(|row| fold::row(locale, row, self.today.as_deref()))
             .collect();
         let count = rows.len();
         let window = if self.window == 0 {
@@ -516,8 +520,25 @@ impl Library {
         } else {
             self.window
         };
+        // FIRST OPEN (FirstOpenNotes): only the starter notes, so a card says what Notes is for and
+        // their section says what they are.
+        let first_open = !self.filtered() && count > 0 && fold::starters_only(library);
+        let mut sections = fold::sections(locale, rows);
+        if first_open {
+            for head in sections
+                .iter_mut()
+                .filter_map(|section| section.head.as_mut())
+            {
+                head.title = words::section_starters(locale);
+            }
+        }
         wire::NotesLibraryData {
-            sections: fold::sections(locale, rows),
+            first_open: first_open.then(|| wire::EmptyState {
+                headline: words::first_open(locale),
+                hint: words::first_open_hint(locale),
+                ..wire::EmptyState::default()
+            }),
+            sections,
             count_label: fold::notes_count(locale, count, false),
             truncated: library.truncated,
             window_end_label: if library.truncated {
@@ -569,7 +590,7 @@ impl Library {
         let rows: Vec<wire::NotesNoteRow> = found
             .hits
             .iter()
-            .map(|hit| fold::hit(locale, hit))
+            .map(|hit| fold::hit(locale, hit, self.today.as_deref()))
             .collect();
         state.results = Some(wire::NotesSearchResults {
             rows,

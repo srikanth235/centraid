@@ -581,6 +581,7 @@ fn task_to_wire(placed: &Placed) -> wire::AgendaTask {
         overdue: due.overdue,
         lands_today: due.lands_today,
         remind_at_local: due.remind_at_local.clone(),
+        remind_on_time_local: due.remind_on_time_local.clone(),
         completed_day: placed.completed_day.clone(),
         age_days: placed.age_days.map(small),
         created_local_day: placed.created_day.clone(),

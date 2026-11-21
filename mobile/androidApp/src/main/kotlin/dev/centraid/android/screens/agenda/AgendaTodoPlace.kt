@@ -114,7 +114,10 @@ internal fun AgendaTodoPlace(
     }
     // Nothing but the Inbox row in My Lists and an invitation to speak: the day-one screen.
     if (todo.groups.isEmpty() && todo.projects.all { it.key == "inbox" } && empty != null && empty.headline.isNotEmpty()) {
+        // EmptyReminders / AndroidEmptyReminders: the smart-list tiles stand over the card, with
+        // their zero counts, and no list link under it (a new list is reached from the lists).
         Column(Modifier.fillMaxSize()) {
+            if (todo.smart_lists.isNotEmpty()) AgendaSmartLists(todo.smart_lists, actions.onOpen)
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 EmptyStateView(
                     empty,
@@ -123,13 +126,6 @@ internal fun AgendaTodoPlace(
                     } else {
                         null
                     },
-                )
-            }
-            if (empty.action_label.isEmpty() && todo.new_project_label.isNotEmpty()) {
-                KitLink(
-                    label = todo.new_project_label,
-                    onClick = openNewProject,
-                    modifier = Modifier.testTag("agenda-new-project").padding(horizontal = 8.dp),
                 )
             }
         }
@@ -177,10 +173,13 @@ internal fun AgendaTodoPlace(
                     ) {
                         val listColor = agendaListColor(project.list_color_key) ?: centraidColor("textFaint")
                         // A LIST'S OWN ICON (#1173 wave 2) replaces the dot, in the list's colour.
-                        if (project.icon_key.isNotEmpty()) {
-                            CentraidIcon(project.icon_key, tint = listColor, size = 18.dp)
-                        } else {
-                            Box(Modifier.size(12.dp).clip(CircleShape).background(listColor))
+                        // The mark sits in one 18dp slot, so an icon row's label starts where a dot row's does.
+                        Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+                            if (project.icon_key.isNotEmpty()) {
+                                CentraidIcon(project.icon_key, tint = listColor, size = 18.dp)
+                            } else {
+                                Box(Modifier.size(12.dp).clip(CircleShape).background(listColor))
+                            }
                         }
                         Text(row.title, style = centraidType("body"), color = centraidColor("text"), modifier = Modifier.weight(1f).padding(start = 12.dp))
                         Text(project.count, style = centraidType("body"), color = centraidColor("textSoft"))

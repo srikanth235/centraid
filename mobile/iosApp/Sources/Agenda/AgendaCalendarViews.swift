@@ -42,6 +42,10 @@ enum AgendaGridMetrics {
     /// A lane this wide (a Day column, a lone event in a Week) has room for the second line.
     static let detailFromWidth: CGFloat = 96
     static let metaFrom: CGFloat = 56
+    /// A task in a lane thinner than `detailFromWidth` stands at least this tall.
+    static let thinTaskHeight: CGFloat = 80
+    /// A lane thinner than this cannot hold a word at the grid's type, so its title turns.
+    static let turnedBelowWidth: CGFloat = 40
     /// Month rows: the grid style's hold three chips, the list style's a day number and dots.
     static let monthRowGrid: CGFloat = 84
     static let monthRowList: CGFloat = 52
@@ -214,7 +218,7 @@ struct AgendaMonthChip: View {
                     Text(header.monthLabel)
                         .centraidType("smallStrong")
                         .foregroundStyle(Surface.ink)
-                        .lineLimit(1)
+                        .kitLineLimit(1)
                 }
                 .fixedSize()
                 .frame(minHeight: CentraidGeometry.targetMinCoarse)
@@ -255,6 +259,7 @@ struct AgendaLayoutKey: View {
         }
         .accessibilityLabel(header.layoutLabel)
         .accessibilityIdentifier("agenda-layout-key")
+        .headerKeyTarget()
     }
 
     private var selection: Binding<String> {
@@ -276,22 +281,23 @@ private struct AgendaAllDayLane: View {
     let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
     let open: (Centraid_Core_V1_Route) -> Void
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         if !header.allDay.isEmpty {
-            HStack(spacing: 8) {
+            // THE LABEL OVER ITS CHIPS AT ACCESSIBILITY SIZES (#1202): in the 44-point gutter
+            // "all-day" broke as "all/-/da/y".
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                : AnyLayout(HStackLayout(spacing: 8))
+            layout {
                 Text(header.allDayLabel)
                     .centraidType("annotLabel")
                     .foregroundStyle(Theme.color("textSoft", scheme))
-                    .frame(width: AgendaGridMetrics.gutter, alignment: .leading)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(header.allDay, id: \.key) { chip in
-                            AgendaChipView(chip: chip, send: send, open: open)
-                                .fixedSize(horizontal: true, vertical: false)
-                        }
-                    }
-                }
+                    .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : AgendaGridMetrics.gutter, alignment: .leading)
+                // THE CHIPS WRAP (#1202): a lane that scrolled sideways hid every chip past the
+                // overdue reminders that lead it, so today's all-day event was off screen.
+                chipLane
             }
             .padding(.horizontal, CentraidGeometry.pageMargin)
             .padding(.vertical, 8)
@@ -301,6 +307,35 @@ private struct AgendaAllDayLane: View {
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("agenda-all-day-lane")
         }
+    }
+
+    private var chips: some View {
+        KitFlow(spacing: 8) {
+            ForEach(header.allDay, id: \.key) { chip in
+                AgendaChipView(chip: chip, send: send, open: open)
+                    .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// THE CHIPS, NEVER CUT AT THE FOOT (#1202). They show whole while they fit the cap; past it
+    /// the lane scrolls and its foot fades, so a half-drawn chip reads as "more below" and not as a
+    /// clipped one.
+    private var chipLane: some View {
+        ViewThatFits(in: .vertical) {
+            chips
+            // The foot's own room keeps the LAST chip out of the fade once the lane is scrolled to its end.
+            ScrollView(.vertical, showsIndicators: false) { chips.padding(.bottom, 28) }
+                .mask(
+                    LinearGradient(
+                        stops: [.init(color: .black, location: 0.84), .init(color: .clear, location: 1)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+        }
+        .frame(maxHeight: 168)
     }
 }
 
@@ -344,13 +379,16 @@ private struct AgendaCheckCircle: View {
     var done = false
     let action: () -> Void
     @Environment(\.colorScheme) private var scheme
+    /// THE CIRCLE GROWS WITH THE NAME IT TICKS (#1202): a 14pt ring beside 40pt words read as a
+    /// speck drifting low and left of its text at the largest size.
+    @ScaledMetric(relativeTo: .caption) private var side: CGFloat = AgendaGridMetrics.checkSize
 
     var body: some View {
         Button(action: action) {
             Circle()
                 .strokeBorder(agendaHue(hueKey, scheme), lineWidth: 1.5)
                 .background(Circle().fill(done ? agendaHue(hueKey, scheme) : Color.clear))
-                .frame(width: AgendaGridMetrics.checkSize, height: AgendaGridMetrics.checkSize)
+                .frame(width: side, height: side)
                 .padding(10)
                 .contentShape(Circle())
         }
@@ -376,6 +414,10 @@ struct AgendaWeekStripView: View {
                 AgendaStripDayView(day: day, send: send)
             }
         }
+        // SEVEN DAYS ACROSS HOLD AT `xxxLarge` (#1202), as the band holds its labels: at the
+        // accessibility sizes a day's number is wider than a seventh of the screen, which pushed
+        // the whole Day view off both edges. Every other line on the page still scales.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .padding(.horizontal, CentraidGeometry.pageMargin / 2)
         .padding(.bottom, 8)
         .overlay(alignment: .bottom) {
@@ -406,8 +448,10 @@ private struct AgendaStripDayView: View {
         } label: {
             VStack(spacing: 0) {
                 Text(day.weekdayInitial)
-                    .centraidType("annotLabel")
-                    .foregroundStyle(Theme.color(day.isWeekend ? "textFaint" : "textSoft", scheme))
+                    .centraidType("annotLabelOn")
+                    // THE INITIALS ARE THIN 13pt GLYPHS (#1202): the audit reads a thin stem against
+                    // its ground at under 4.5:1 in `textSoft`/`textFaint`, so they take the next ink up.
+                    .foregroundStyle(Theme.color(day.isWeekend ? "textSoft" : "text", scheme))
                 Text(day.dayNumber)
                     .centraidType(day.isSelected || day.isToday ? "smallStrong" : "small")
                     .foregroundStyle(numberInk)
@@ -440,7 +484,9 @@ private struct AgendaStripDayView: View {
     }
 
     private var numberInk: Color {
-        if day.isSelected { return Theme.color("onAccent", scheme) }
+        // WHITE ON THE ACCENT FILL IN BOTH SCHEMES (#1202): `onAccent` is near-black in dark, which on the
+        // dark fill (a fill made for white glyphs) read as "nearly passed".
+        if day.isSelected { return Color.white }
         if day.isToday { return accent.text }
         return Theme.color(day.isWeekend ? "textFaint" : "text", scheme)
     }
@@ -478,6 +524,10 @@ struct AgendaTimeGridView: View {
                 }
                 .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
             }
+            // THE HOUR GRID HOLDS AT `xxxLarge` (#1202): its gutter, its columns and a block's height
+            // are fixed by the hour, so at the accessibility sizes the hour labels read "0...", the
+            // week's heads ran together and a block showed a clipped title.
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         }
     }
 
@@ -614,11 +664,14 @@ struct AgendaTimeGridView: View {
                     .centraidType("annotLabel")
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
-                    .foregroundStyle(Theme.color("textFaint", scheme))
+                    .foregroundStyle(Theme.color("textSoft", scheme))
                     .frame(width: AgendaGridMetrics.gutter, alignment: .trailing)
                     .padding(.trailing, 6)
                     .opacity(clashes ? 0 : 1)
                     .offset(y: y - 8)
+                    // THE HOUR MARKS ARE THE GRID'S AXIS, NOT CONTENT (#1202): every block says its own
+                    // time, so VoiceOver does not stop on twenty-four clocks.
+                    .accessibilityHidden(true)
                 Rectangle()
                     .fill(Surface.line)
                     .frame(width: max(width - AgendaGridMetrics.gutter, 0), height: CentraidGeometry.hairline)
@@ -661,12 +714,15 @@ struct AgendaTimeGridView: View {
                 .foregroundStyle(Color.white)
                 // THE CLOCK NEVER ENDS IN AN ELLIPSIS: 13pt "08:53" is wider than the 44pt gutter
                 // less its padding, so it scales down to fit rather than truncating.
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                // (#1202: it no longer scales down, which the audit reads as clipped text; it is as wide as
+                // its clock; it sits right-aligned in the gutter and, when wider, grows into the day column.)
+                .fixedSize()
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
                 .background(accent.fill, in: Capsule())
-                .frame(width: AgendaGridMetrics.gutter, alignment: .trailing)
+                // NEVER PAST THE SCREEN'S EDGE (#1202): right-aligned in the gutter while it fits; a wider
+                // clock ("4:04 PM" in a 12-hour region) starts at the edge and runs into the day column.
+                .frame(minWidth: AgendaGridMetrics.gutter - 2, alignment: .trailing)
                 .padding(.trailing, 2)
             Circle()
                 .fill(accent.fill)
@@ -677,11 +733,15 @@ struct AgendaTimeGridView: View {
                 .frame(width: max(columnWidth, 0), height: 2)
                 .offset(x: AgendaGridMetrics.gutter + CGFloat(index) * columnWidth)
         }
-        .frame(height: 0)
-        .offset(y: CGFloat(now.minute) * perMinute)
+        // 44 TALL, CENTRED ON THE MINUTE (#1202): the row was a zero-height line whose label was read
+        // as an 18pt tap target; the frame is the finger's, the drawing is where it was.
+        .frame(height: 44)
+        .offset(y: CGFloat(now.minute) * perMinute - 22)
         .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(now.accessibilityLabel)
+        // A READING, NOT A CONTROL (#1202): the audit read this label as a tap target 18pt tall.
+        .accessibilityAddTraits(.isStaticText)
         .accessibilityIdentifier("agenda-now-line")
     }
 }
@@ -712,7 +772,11 @@ private struct AgendaChipView: View {
                 Button {
                     open(chip.route)
                 } label: {
+                    // THE CHIP'S OWN 4pt OF AIR IS THE BUTTON'S (#1202), and the rest of the 44 the iOS
+                    // floor asks is an invisible extension, so the chip is drawn as it was.
                     title
+                        .padding(.vertical, chipAir)
+                        .hitArea()
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(chip.accessibilityLabel)
@@ -725,19 +789,40 @@ private struct AgendaChipView: View {
             }
         }
         .padding(.horizontal, narrow ? 3 : 6)
-        .padding(.vertical, 4)
+        .padding(.vertical, chip.hasRoute ? 0 : chipAir)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(agendaWash(chip.hueKey, scheme))
         .clipShape(RoundedRectangle(cornerRadius: Theme.radius("sm", scheme), style: .continuous))
     }
 
+    private let chipAir: CGFloat = 4
+
+    @ViewBuilder
     private var title: some View {
-        Text(chip.title)
-            .centraidType("annotLabel")
-            .foregroundStyle(Theme.color("text", scheme))
-            .lineLimit(1)
-            .minimumScaleFactor(narrow ? 0.7 : 1)
+        if narrow {
+            // WORDS FLOW, EACH WHOLE (#1202): a Week column is about 45pt of text, so a word too wide
+            // for it shrinks to fit instead of breaking ("Comp/any", "weeke/nd"). The row grows
+            // with the lines.
+            KitFlow(spacing: 3) {
+                ForEach(Array(chip.title.split(separator: " ").enumerated()), id: \.offset) { _, word in
+                    Text(String(word))
+                        .centraidType("annotLabel")
+                        .foregroundStyle(Theme.color("text", scheme))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.45)
+                }
+            }
             .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            // A CHIP'S NAME WRAPS WHOLE (#1202): the row grows with it, so a long name is more
+            // lines and never "Tahoe long we...".
+            Text(chip.title)
+                .centraidType("annotLabel")
+                .foregroundStyle(Theme.color("text", scheme))
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 
@@ -759,6 +844,8 @@ private struct AgendaBlockView: View {
     @Environment(\.colorScheme) private var scheme
     @GestureState private var move: CGSize = .zero
     @GestureState private var stretch: CGFloat = 0
+    /// One line of a block's small type, which grows with the text (#1202).
+    @ScaledMetric(relativeTo: .caption) private var titleLine: CGFloat = 15
 
     private var perMinute: CGFloat { AgendaGridMetrics.hourHeight / 60 }
     private var start: Int { Int(block.startMinute) }
@@ -770,7 +857,11 @@ private struct AgendaBlockView: View {
         let laneWidth = columnWidth / lanes
         let placed = placement(move)
         let newEnd = resizedEnd(stretch)
-        let height = max(CGFloat(newEnd - placed.start), 15) * perMinute
+        let timed = max(CGFloat(newEnd - placed.start), 15) * perMinute
+        // A TASK IN A THIN LANE IS TALL ENOUGH FOR ITS NAME (#1202): it has no length of its own, and
+        // at 17pt the title was "J5...". The check circle sits over the title, which wraps whole below it.
+        let thinTask = block.isTask && laneWidth < AgendaGridMetrics.detailFromWidth
+        let height = thinTask ? max(timed, AgendaGridMetrics.thinTaskHeight) : timed
         // THE HOUR LABELS' GUTTER comes first: the columns start after it.
         let x = AgendaGridMetrics.gutter + CGFloat(placed.index) * columnWidth + laneWidth * CGFloat(block.column)
         let dragging = move != .zero || stretch != 0
@@ -795,8 +886,9 @@ private struct AgendaBlockView: View {
                     ) {
                         if block.readOnly, block.hasRoute { open(block.route) } else { send(AgendaCalendarEvents.taskChecked(block.taskID)) }
                     }
-                    // CENTRED ON THE TITLE'S LINE (the title is centred in the block too).
-                    .frame(height: height)
+                    // CENTRED ON THE TITLE'S LINE (the title is centred in the block too); over the
+                    // title in a thin lane.
+                    .frame(height: thinTask ? AgendaGridMetrics.checkSize + 6 : height)
                     .padding(.leading, laneWidth >= AgendaGridMetrics.detailFromWidth ? 6 : 3)
                     .allowsHitTesting(true)
                 }
@@ -820,35 +912,45 @@ private struct AgendaBlockView: View {
         let roomy = width >= AgendaGridMetrics.detailFromWidth
         // A WEEK LANE IS A SLIVER: the title in the small bold face, packed to the edges.
         let titleFace = roomy ? "smallStrong" : "annotLabelOn"
+        let showsDetail = roomy && height >= AgendaGridMetrics.timeFrom && !block.detail.isEmpty
         return VStack(alignment: .leading, spacing: 0) {
-            if block.isTask {
+            if block.isTask, !roomy {
+                Text(block.title)
+                    .centraidType(titleFace)
+                    .foregroundStyle(ink)
+                    .lineLimit(3)
+                    .minimumScaleFactor(0.6)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, AgendaGridMetrics.checkSize + 8)
+                    .accessibilityIdentifier("agenda-grid-block-title")
+            } else if block.isTask {
                 HStack(spacing: 4) {
                     Text(block.title)
                         .centraidType(titleFace)
                         .foregroundStyle(ink)
-                        .lineLimit(1)
+                        .kitLineLimit(1)
+                        .accessibilityIdentifier("agenda-grid-block-title")
                     if roomy, !block.detail.isEmpty {
                         Text(block.detail)
                             .centraidType("annotLabel")
                             .foregroundStyle(Theme.color("textSoft", scheme))
-                            .lineLimit(1)
+                            .kitLineLimit(1)
+                            .accessibilityIdentifier("agenda-grid-block-detail")
                     }
                 }
                 .frame(maxHeight: .infinity, alignment: .center)
             } else {
-                Text(block.title)
-                    .centraidType(titleFace)
-                    .foregroundStyle(ink)
-                    .lineLimit(1)
-                if roomy, height >= AgendaGridMetrics.timeFrom, !block.detail.isEmpty {
+                eventTitle(face: titleFace, ink: ink, width: width, height: height, showsDetail: showsDetail)
+                if showsDetail {
                     Text(block.detail)
-                        .centraidType("annotLabel")
+                        .centraidType("annotLabelOn")
                         .foregroundStyle(Theme.color("textSoft", scheme))
                         .lineLimit(height >= AgendaGridMetrics.metaFrom ? 2 : 1)
+                        .accessibilityIdentifier("agenda-grid-block-detail")
                 }
             }
         }
-        .padding(.leading, block.isTask ? (roomy ? 28 : 21) : AgendaGridMetrics.barWidth + (roomy ? 6 : 3))
+        .padding(.leading, block.isTask ? (roomy ? 28 : 4) : AgendaGridMetrics.barWidth + (roomy ? 6 : 3))
         .padding(.trailing, roomy ? 4 : 1)
         .padding(.top, block.isTask ? 0 : 4)
         .frame(width: width, height: height, alignment: .topLeading)
@@ -868,6 +970,42 @@ private struct AgendaBlockView: View {
         .contentShape(shape)
     }
 
+    /// THE TITLE OF AN EVENT BLOCK, WHOLE (#1202). It wraps at its words inside the block, as many
+    /// lines as the block is tall. A lane too thin for any word (two events side by side in a
+    /// Week column, about 25pt each) turns the title a quarter turn so it runs down the block's
+    /// height instead: words stay whole and readable, and far more of the name shows than a
+    /// column of single letters would.
+    @ViewBuilder
+    private func eventTitle(face: String, ink: Color, width: CGFloat, height: CGFloat, showsDetail: Bool) -> some View {
+        if width < AgendaGridMetrics.turnedBelowWidth {
+            let thickness = max(width - AgendaGridMetrics.barWidth - 4, 10)
+            let length = max(height - 8, 10)
+            Text(block.title)
+                .centraidType(face)
+                .foregroundStyle(ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+                .frame(width: length, height: thickness, alignment: .leading)
+                .rotationEffect(.degrees(90))
+                .frame(width: thickness, height: length)
+                .accessibilityIdentifier("agenda-grid-block-title")
+        } else {
+            Text(block.title)
+                .centraidType(face)
+                .foregroundStyle(ink)
+                .lineLimit(titleLines(height: height, withDetail: showsDetail))
+                .minimumScaleFactor(0.75)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("agenda-grid-block-title")
+        }
+    }
+
+    /// How many lines of title the block's height holds, a line kept for the time when it shows.
+    private func titleLines(height: CGFloat, withDetail: Bool) -> Int {
+        let fits = Int(((height - 8) / titleLine).rounded(.down)) - (withDetail ? 1 : 0)
+        return min(max(fits, 1), 6)
+    }
+
     /// THE FOOT'S GRIP: a drag on it moves the end.
     private var handle: some View {
         // NO MARK ON THE BOARD: the foot is a grip by touch and by the accessibility action only.
@@ -880,7 +1018,6 @@ private struct AgendaBlockView: View {
             .gesture(resizeGesture)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(resizeLabel)
-            .accessibilityAddTraits(.isButton)
             .accessibilityAdjustableAction { direction in
                 switch direction {
                 case .increment: send(resized(to: min(end + step, AgendaGridMetrics.minutesPerDay)))
@@ -1037,6 +1174,10 @@ struct AgendaMonthView: View {
                 }
                 .padding(.vertical, 6)
                 .accessibilityHidden(true)
+                // SEVEN COLUMNS HOLD AT `xxxLarge` (#1202), as the week strip does: a date is wider
+                // than a seventh of the screen at the accessibility sizes and was cut in half. The
+                // list under the grid still scales.
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 VStack(spacing: 0) {
                     ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
                         HStack(spacing: 0) {
@@ -1046,6 +1187,7 @@ struct AgendaMonthView: View {
                         }
                     }
                 }
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel(month.title)
                 .accessibilityIdentifier("agenda-month-grid")
@@ -1119,7 +1261,7 @@ private struct AgendaMonthCellView: View {
                             Text(chip.title)
                                 .centraidType("annotLabel")
                                 .foregroundStyle(Theme.color(cell.inMonth ? "text" : "textFaint", scheme))
-                                .lineLimit(1)
+                                .kitLineLimit(1)
                                 .padding(.horizontal, 3)
                                 .frame(maxWidth: .infinity, minHeight: AgendaGridMetrics.monthChipHeight, alignment: .leading)
                                 .background {

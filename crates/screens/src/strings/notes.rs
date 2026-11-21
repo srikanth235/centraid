@@ -53,8 +53,8 @@ catalog! {
     plain item_checked = ("Item checked", "Item checked");
     plain item_unchecked = ("Item unchecked", "Item unchecked");
     plain journal_empty_body = (
-        "Entries you write about people in People appear here.",
-        "Entries you write about people in People appear here."
+        "A mood and a few lines about your day.",
+        "A mood and a few lines about your day."
     );
     plain journal_empty_headline = ("No journal entries yet", "No journal entries yet");
     plain journal_line = ("Entry (required)", "Entry (required)");
@@ -89,6 +89,7 @@ catalog! {
     plain link_label = ("Add link", "Add link");
     plain link_create = ("Create note", "Create note");
     plain link_restore = ("Restore", "Restore");
+    plain link_item_spoken = ("{kind} {title}", "{kind} {title}");
     plain link_missing = ("No note called {title}", "No note called {title}");
     plain link_missing_spoken = ("Missing note {title}", "Missing note {title}");
     plain link_note_spoken = ("Note {title}", "Note {title}");
@@ -120,8 +121,8 @@ catalog! {
     plain notebooks_title = ("Notebooks", "Notebooks");
     plain pin = ("Pin", "Pin");
     plain powerbox_foot = (
-        "Locker items link by name; their secrets stay locked.",
-        "Locker items link by name; their secrets stay locked."
+        "Any item can be linked except Locker items.",
+        "Any item can be linked except Locker items."
     );
     plain remove_tag = ("Remove tag", "Remove tag");
     plain tag_placeholder = ("Add a tag", "Add a tag");
@@ -138,6 +139,9 @@ catalog! {
     plain search_no_match_body = ("No notes match that search.", "No notes match that search.");
     plain search_no_match_headline = ("No matches", "No matches");
     plain search_placeholder = ("Search notes", "Search notes");
+    plain first_open = ("Write down what you want to keep.", "Write down what you want to keep.");
+    plain first_open_hint = ("Tap + to write one.", "Tap + to write one.");
+    plain section_starters = ("To get you started", "To get you started");
     plain section_notes = ("Notes", "Notes");
     plain section_pinned = ("Pinned", "Pinned");
     plain send_to_reminders = ("Send to Reminders", "Send to Reminders");
@@ -171,6 +175,7 @@ catalog! {
     plain transfer_import_ready = ("Ready to import", "Ready to import");
     plain transfer_import_title = ("Import notes", "Import notes");
     plain transfer_row_ignored = ("Not notes", "Not notes");
+    plain transfer_row_left_out = ("Files not read", "Files not read");
     plain transfer_row_links = ("Links", "Links");
     plain transfer_row_notebooks = ("Notebooks", "Notebooks");
     plain transfer_row_notes = ("Notes", "Notes");

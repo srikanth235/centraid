@@ -102,6 +102,22 @@ impl<'a> Shell<'a> {
             .next()
             .copied()
             .expect("Locker's home is open");
+        // THE FIRST CHECK waits for its button, over a vault with no item.
+        if shell.home().wall.is_some() {
+            let root = shell.root;
+            shell.call(wire::screen_request::Kind::Send(wire::InstanceEvent {
+                instance: root,
+                event: Some(wire::ScreenEvent {
+                    kind: Some(wire::screen_event::Kind::LockerWall(
+                        wire::LockerWallEvent {
+                            kind: Some(wire::locker_wall_event::Kind::Unlock(
+                                wire::locker_wall_event::UnlockTapped {},
+                            )),
+                        },
+                    )),
+                }),
+            }));
+        }
         shell
     }
 
@@ -338,7 +354,7 @@ fn a_shelf_with_nothing_on_it_is_the_pages_empty_state_with_its_filter_kept() {
     let State::Empty(empty) = state_of(&shell.home().page).expect("a state") else {
         panic!("day one is not empty: {:?}", shell.home().page);
     };
-    assert_eq!(empty.headline, "Nothing is kept here yet");
+    assert_eq!(empty.headline, "Add your first item.");
     assert!(!empty.action_label.is_empty());
     // The answer stays, because the header's filter is built from it.
     assert!(shell.home().content.is_some());

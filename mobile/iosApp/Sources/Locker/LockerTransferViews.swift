@@ -187,7 +187,7 @@ struct LockerImportView: View {
                         Text(row.title)
                             .centraidType("body")
                             .foregroundStyle(Theme.color("text", scheme))
-                            .lineLimit(1)
+                            .kitLineLimit(1)
                         Text(row.meta)
                             .centraidType("annotLabel")
                             .foregroundStyle(Theme.color("textSoft", scheme))

@@ -15,6 +15,11 @@ use crate::strings::{Locale, backup_check, backup_home, custody, fill};
 #[must_use]
 pub fn standing_words(locale: Locale, destination: &Destination) -> String {
     match destination.footing() {
+        // A DEVICE THAT HAS NEVER ACKNOWLEDGED A BACKUP IS NOT "UP TO DATE": the row's second line says
+        // "Not backed up yet", and the two must not disagree.
+        Footing::Current if destination.last_ack_ms.is_none() => {
+            backup_home::row_catching_up(locale)
+        }
         Footing::Current => backup_home::row_up_to_date(locale),
         Footing::Full => backup_home::row_full(locale),
         Footing::TooLarge => backup_home::row_too_large(locale),

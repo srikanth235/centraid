@@ -174,7 +174,10 @@ fn moving_a_workout_to_trash_says_so_with_undo_and_takes_it_out_of_the_lists() {
     else {
         panic!("a workout that is gone is a failed page");
     };
-    assert_eq!(failure.sentence, "This workout is no longer here.");
+    assert_eq!(
+        failure.sentence, "This is in the trash.",
+        "while Undo is on offer it is in the trash, not gone"
+    );
     assert!(failure.permanent, "trying again cannot bring it back");
     assert!(state.content.is_none());
     // Off the list, and still there for the other.

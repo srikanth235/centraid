@@ -87,16 +87,15 @@ struct Parts<'a> {
     /// The words matched only in an earlier version (#1185): the row says so and opens the
     /// note's Earlier versions.
     earlier: bool,
+    /// The member's today, when it is known: the day the row names reads "today" or "yesterday".
+    today: Option<&'a str>,
 }
 
 fn note_row(locale: Locale, parts: Parts<'_>) -> wire::NotesNoteRow {
     let title = title_of(locale, parts.title, parts.preview);
+    // "Edited today" and "Edited yesterday", else the day (FirstOpenNotes): the Home tile's words.
     let edited = parts.local_day.get(..10).map_or_else(String::new, |day| {
-        format!(
-            "{} {}",
-            words::edited(locale),
-            civil::day_month(locale, day)
-        )
+        crate::shell::tiles::edited_line(locale, day, parts.today)
     });
     let meta = std::iter::once(edited)
         .chain(
@@ -129,16 +128,43 @@ fn note_row(locale: Locale, parts: Parts<'_>) -> wire::NotesNoteRow {
     .filter(|part| !part.is_empty())
     .collect::<Vec<_>>()
     .join(", ");
-    let snippet = if parts.runs.is_empty() {
+    // A LINK READS AS ITS TEXT in a row's preview and in a search hit: "Priya Nair", never "[[Priya Nair]]".
+    let marks = link_marks(&if parts.runs.is_empty() {
         parts.preview.to_owned()
     } else {
-        parts.runs.iter().map(|run| run.text.as_str()).collect()
+        parts
+            .runs
+            .iter()
+            .map(|run| run.text.as_str())
+            .collect::<String>()
+    });
+    let mut at = 0;
+    let runs: Vec<wire::NotesTextRun> = parts
+        .runs
+        .into_iter()
+        .map(|run| {
+            let text = unlinked(&run.text, &marks, at);
+            at += run.text.len();
+            wire::NotesTextRun { text, ..run }
+        })
+        .collect();
+    let snippet = if runs.is_empty() {
+        let preview = unlinked(parts.preview, &marks, 0);
+        // A NOTE WITH NO TITLE is named by its first line, so the line is not said twice: the
+        // snippet is what follows it.
+        if parts.title.map(str::trim).is_none_or(str::is_empty) {
+            after_title(&preview, &unlinked(&title, &link_marks(&title), 0))
+        } else {
+            preview
+        }
+    } else {
+        runs.iter().map(|run| run.text.as_str()).collect()
     };
     wire::NotesNoteRow {
         note_id: parts.note_id.to_owned(),
         title,
         snippet,
-        snippet_runs: parts.runs,
+        snippet_runs: runs,
         meta,
         pinned: parts.pinned,
         check_label: check,
@@ -185,7 +211,7 @@ pub fn about_chips(locale: Locale, cards: &[wire::NotesCard]) -> Vec<wire::Notes
 
 /// A library (or trash) row.
 #[must_use]
-pub fn row(locale: Locale, row: &wire::NotesRow) -> wire::NotesNoteRow {
+pub fn row(locale: Locale, row: &wire::NotesRow, today: Option<&str>) -> wire::NotesNoteRow {
     let local_day = if row.updated_local_day.is_empty() {
         &row.created_local_day
     } else {
@@ -206,13 +232,14 @@ pub fn row(locale: Locale, row: &wire::NotesRow) -> wire::NotesNoteRow {
             runs: Vec::new(),
             about: about_chips(locale, &row.about),
             earlier: false,
+            today,
         },
     )
 }
 
 /// A search hit: its snippet's matches are runs.
 #[must_use]
-pub fn hit(locale: Locale, hit: &wire::NotesSearchHit) -> wire::NotesNoteRow {
+pub fn hit(locale: Locale, hit: &wire::NotesSearchHit, today: Option<&str>) -> wire::NotesNoteRow {
     let local_day = if hit.updated_local_day.is_empty() {
         &hit.created_local_day
     } else {
@@ -233,8 +260,44 @@ pub fn hit(locale: Locale, hit: &wire::NotesSearchHit) -> wire::NotesNoteRow {
             runs: runs_of(&hit.snippet),
             about: Vec::new(),
             earlier: hit.in_earlier_version,
+            today,
         },
     )
+}
+
+/// The preview after the title it lent: the leading title text goes, then the space or line break
+/// that followed it. A preview that does not start with the title is returned whole.
+fn after_title(preview: &str, title: &str) -> String {
+    let trimmed = preview.trim_start();
+    trimmed
+        .strip_prefix(title)
+        .map_or_else(|| preview.to_owned(), |rest| rest.trim().to_owned())
+}
+
+/// Which bytes of `full` are the brackets of a whole link: `[[Name]]` is a pair, and a lone `[[`
+/// (the starter note says "Type [[ in a note") is text and stays.
+fn link_marks(full: &str) -> Vec<bool> {
+    let mut marks = vec![false; full.len()];
+    let mut from = 0;
+    while let Some(open) = full[from..].find("[[").map(|at| at + from) {
+        let Some(close) = full[open + 2..].find("]]").map(|at| at + open + 2) else {
+            break;
+        };
+        for at in [open, open + 1, close, close + 1] {
+            marks[at] = true;
+        }
+        from = close + 2;
+    }
+    marks
+}
+
+/// `text` (which starts at byte `at` of the whole) without the brackets `marks` names: `[[Name]]`
+/// reads `Name`. A highlighted span may split a pair, so this goes by the whole's offsets.
+fn unlinked(text: &str, marks: &[bool], at: usize) -> String {
+    text.char_indices()
+        .filter(|(i, _)| !marks.get(at + i).copied().unwrap_or(false))
+        .map(|(_, c)| c)
+        .collect()
 }
 
 /// `⟦match⟧` spans as runs. No marker: no runs (the preview is drawn).
@@ -304,6 +367,21 @@ fn section(title: String, rows: Vec<wire::NotesNoteRow>) -> wire::NotesLibrarySe
         }),
         rows,
     }
+}
+
+/// Whether every note the library holds is one of the starters a first vault was founded with
+/// (and so the member has written nothing yet). A complete library only: a window that says more
+/// exist holds something of the member's.
+#[must_use]
+pub fn starters_only(library: &wire::NotesLibrary) -> bool {
+    let starters = centraid_core::starters::NOTES;
+    !library.truncated
+        && library.notes.len() <= starters.len()
+        && library.notes.iter().all(|row| {
+            row.title
+                .as_deref()
+                .is_some_and(|title| starters.iter().any(|(starter, _)| *starter == title))
+        })
 }
 
 /// PINNED FIRST, as the core ordered them: a "Pinned" section, then the rest.
@@ -576,13 +654,13 @@ mod tests {
             in_earlier_version: earlier,
             ..wire::NotesSearchHit::default()
         };
-        let now = hit(Locale::En, &found(false));
+        let now = hit(Locale::En, &found(false), None);
         assert_eq!(now.meta, "Edited Wed 4 March");
         assert_eq!(
             now.route.as_ref().map(|route| route.screen.as_str()),
             Some(crate::notes::EDITOR)
         );
-        let before = hit(Locale::En, &found(true));
+        let before = hit(Locale::En, &found(true), None);
         assert_eq!(before.meta, "In an earlier version · Edited Wed 4 March");
         assert!(before.accessibility_label.contains("In an earlier version"));
         let route = before.route.as_ref().expect("a route");
@@ -616,6 +694,76 @@ mod tests {
             .collect();
         assert_eq!(shape, [("a ", false), ("match", true), (" here", false)]);
         assert!(runs_of("no marker").is_empty());
+    }
+
+    #[test]
+    fn an_untitled_notes_preview_does_not_repeat_the_title_it_lent() {
+        let snippet = |title: Option<&str>, preview: &str| {
+            note_row(
+                Locale::En,
+                Parts {
+                    note_id: "n1",
+                    title,
+                    preview,
+                    pinned: false,
+                    local_day: "2026-11-18",
+                    notebook_names: &[],
+                    notebook_ids: &[],
+                    check_total: 0,
+                    check_done: 0,
+                    runs: Vec::new(),
+                    about: Vec::new(),
+                    earlier: false,
+                    today: Some("2026-11-18"),
+                },
+            )
+            .snippet
+        };
+        assert_eq!(
+            snippet(None, "Jake's lease ends in March\nCall the landlord"),
+            "Call the landlord"
+        );
+        assert_eq!(snippet(None, "Only a first line"), "");
+        // A note with its own title keeps its whole preview.
+        assert_eq!(
+            snippet(Some("Lease"), "Jake's lease ends in March"),
+            "Jake's lease ends in March"
+        );
+    }
+
+    #[test]
+    fn a_row_preview_and_a_hit_read_a_link_as_its_text() {
+        let row = |preview: &str, snippet: &str| {
+            note_row(
+                Locale::En,
+                Parts {
+                    note_id: "n1",
+                    title: Some("Trip"),
+                    preview,
+                    pinned: false,
+                    local_day: "2026-11-18",
+                    notebook_names: &[],
+                    notebook_ids: &[],
+                    check_total: 0,
+                    check_done: 0,
+                    runs: runs_of(snippet),
+                    about: Vec::new(),
+                    earlier: false,
+                    today: Some("2026-11-18"),
+                },
+            )
+        };
+        assert_eq!(
+            row("Ask [[Priya Nair]] about it", "").snippet,
+            "Ask Priya Nair about it"
+        );
+        let hit = row("", "Ask [[⟦Priya⟧ Nair]] about it");
+        assert_eq!(hit.snippet, "Ask Priya Nair about it");
+        assert!(
+            hit.snippet_runs
+                .iter()
+                .any(|run| run.highlighted && run.text == "Priya")
+        );
     }
 
     #[test]

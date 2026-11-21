@@ -20,7 +20,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,12 +31,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.runtime.key
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -109,6 +108,7 @@ import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.KitChip
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.KeysRow
 import dev.centraid.android.kit.KitWords
 import dev.centraid.android.kit.NoAutofill
 import dev.centraid.android.kit.OptionSheet
@@ -159,6 +159,7 @@ internal fun LockerWallView(wall: LockerWall, onUnlock: () -> Unit, onWords: () 
             val accent = appAccent("locker")
             CompositionLocalProvider(LocalAppAccentId provides "locker") {
             Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 24.dp)) {
+                LockerStepRow(wall.step, wall.steps, wall.step_label, Modifier.padding(horizontal = 0.dp).offset(x = -KitGeometry.GUTTER))
                 Box(
                     Modifier.size(64.dp).clip(CircleShape).background(accent.wash(centraidDark())).clearAndSetSemantics { },
                     contentAlignment = Alignment.Center,
@@ -321,7 +322,9 @@ internal fun LockerHomeScreen(
                     onClear = { onEvent(LockerHomeEvent(filter_menu_cleared = FilterMenuCleared())) },
                 )
             },
-            status = if (generating) "" else data?.status_line.orEmpty(),
+            // THE OPEN LINE IS SAID ONCE, as the page's own note under the title (the first run's and the
+            // landing's, as on iOS): never again as a pill over the band.
+            status = "",
             statusLine = state.status?.let { line ->
                 { StatusLine(line) }
             },
@@ -352,6 +355,11 @@ internal fun LockerHomeScreen(
                 onEvent(LockerHomeEvent(category_closed = LockerHomeEvent.CategoryClosed()))
             }
             if (categoryOpen && data != null) LockerCategoryHeader(data, onEvent)
+            // FIRST ITEM (LockerFirstItem): the open line and "Step 2 of 2" over the empty card.
+            if (data != null && data.steps > 0 && !generating) {
+                LockerNote(data.status_line)
+                LockerStepRow(data.step, data.steps, data.step_label)
+            }
             ReadStateView(
                 page = state.page!!,
                 onRetry = { onEvent(LockerHomeEvent(refreshed = LockerHomeEvent.Refreshed())) },
@@ -591,6 +599,33 @@ private fun HeroTile(letter: String, modifier: Modifier = Modifier, size: androi
     }
 }
 
+/**
+ * THE FIRST RUN'S TWO STEPS (LockerFirstCheck, LockerFirstItem): a dot per step, the current one long,
+ * and Rust's "Step 1 of 2". Drawn only while Rust says there are steps. The SwiftUI twin is `LockerStepRow`.
+ */
+@Composable
+internal fun LockerStepRow(step: Int, steps: Int, label: String, modifier: Modifier = Modifier) {
+    if (steps <= 0) return
+    val accent = appAccent("locker")
+    Row(
+        modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).testTag("locker-step"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.clearAndSetSemantics { }) {
+            for (number in 1..steps) {
+                Box(
+                    Modifier
+                        .size(width = if (number == step) 22.dp else 6.dp, height = 6.dp)
+                        .clip(CircleShape)
+                        .background(if (number == step) accent.text else Surface.border),
+                )
+            }
+        }
+        Text(label, style = kitTextStyle(KitType.Meta), color = Surface.meta)
+    }
+}
+
 /** A quiet sentence under a list or a field: Rust's, drawn only when present. */
 @Composable
 internal fun LockerNote(text: String, modifier: Modifier = Modifier, ink: String = "textSoft") {
@@ -605,13 +640,15 @@ internal fun LockerNote(text: String, modifier: Modifier = Modifier, ink: String
 
 /** A row of Rust's choices as kit chips; the selected one is `bgSunken`, never accent. */
 @Composable
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 internal fun LockerChoices(choices: List<LockerChoice>, testTag: String, onPick: (String) -> Unit) {
-    Row(
+    // THE CHIPS WRAP: a row that scrolls ran the last one ("Wi-Fi") to the screen edge.
+    androidx.compose.foundation.layout.FlowRow(
         Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
             .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         choices.forEach { choice ->
             KitChip(
@@ -654,7 +691,8 @@ private fun LockerGeneratorBody(state: LockerGenerator, onEvent: (LockerHomeEven
                 if (state.strength.isNotEmpty()) {
                     Text(state.strength, style = centraidType("annotLabel"), color = centraidColor("textSoft"), modifier = Modifier.padding(top = 6.dp))
                 }
-                Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // GENERATE ANOTHER AND COPY STACK at the largest text (#1202): side by side the first broke mid-word.
+                KeysRow(Modifier.padding(top = 12.dp)) {
                     if (state.regenerate_label.isNotEmpty()) {
                         OutlineButton(state.regenerate_label, testTag = "locker-regenerate") {
                             onEvent(LockerHomeEvent(generator_regenerate = LockerHomeEvent.GeneratorRegenerate()))

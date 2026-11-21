@@ -67,6 +67,8 @@ pub struct StagedFile {
     pub missing: u64,
     /// The first of those, by name (the file itself, `Left out.txt`, names every one).
     pub left_out: Vec<String>,
+    /// Why they are left out, in the app's words, said after the count; empty for no reason given.
+    pub left_out_why: String,
 }
 
 /// What a spec's `export` made: bytes in memory (a small file) or a file already on disk (a
@@ -200,6 +202,7 @@ pub fn staged_of(
         saved: u64::from(super::transfer::count(&settled.output, "count")),
         missing: u64::from(super::transfer::count(&settled.output, "missing")),
         left_out: super::transfer::names(&settled.output, "left_out"),
+        left_out_why: String::new(),
     })
 }
 
@@ -219,6 +222,7 @@ pub fn build(spec: &'static ExportSpec, route: &wire::Route) -> Option<Box<dyn S
         saved: 0,
         missing: 0,
         left_out: Vec::new(),
+        left_out_why: String::new(),
         status: None,
     }))
 }
@@ -249,6 +253,7 @@ struct Export {
     /// Originals the file just made leaves out, and the first few by name, said with the saved line.
     missing: u64,
     left_out: Vec<String>,
+    left_out_why: String,
     status: Option<wire::StatusLine>,
 }
 
@@ -281,6 +286,7 @@ impl Export {
         self.saved = 0;
         self.missing = 0;
         self.left_out.clear();
+        self.left_out_why.clear();
         self.status = None;
         self.stage = Stage::Checking;
         self.gate.begin(ctx.locale(), Leaving::Export)
@@ -319,9 +325,14 @@ impl Export {
                     let warning = self.warning.clone();
                     self.say(warning, false);
                 }
-                (self.saved, self.missing, self.left_out) = match &made {
-                    Made::Staged(file) => (file.saved, file.missing, file.left_out.clone()),
-                    Made::Bytes(_) => (0, 0, Vec::new()),
+                (self.saved, self.missing, self.left_out, self.left_out_why) = match &made {
+                    Made::Staged(file) => (
+                        file.saved,
+                        file.missing,
+                        file.left_out.clone(),
+                        file.left_out_why.clone(),
+                    ),
+                    Made::Bytes(_) => (0, 0, Vec::new(), String::new()),
                 };
                 let kind = match made {
                     Made::Bytes(file) => wire::effect::Kind::SaveFile(wire::SaveFile {
@@ -368,6 +379,9 @@ impl Export {
                         "{sentence}. {}",
                         left_out_line(locale, self.missing, &self.left_out)
                     );
+                    if !self.left_out_why.is_empty() {
+                        sentence = format!("{sentence}. {}", self.left_out_why);
+                    }
                 }
                 if !self.warning.is_empty() {
                     sentence = format!("{sentence}. {}", self.warning);
@@ -383,6 +397,7 @@ impl Export {
         self.saved = 0;
         self.missing = 0;
         self.left_out.clear();
+        self.left_out_why.clear();
     }
 }
 

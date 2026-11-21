@@ -56,6 +56,8 @@ struct PhotosHomeView: View {
                 onClose: { send(PhotosHomeEvents.make { $0.searchClosed = .init() }) }
             ),
             filter: filter,
+            // JUSTIFIED ROWS KEEP THE FULL WIDTH (ruling 27); the band stays in the readable column.
+            readable: false,
             band: { foot },
             content: { pageBody }
         )
@@ -452,12 +454,14 @@ private struct FreeUpSpaceRow: View {
     @Environment(\.colorScheme) private var scheme
     let row: Centraid_Core_V1_PhotosFreeUpRow
     let onFree: () -> Void
+    /// The tile grows with the text (`KitTile`'s own rule), so the footnotes' inset follows it.
+    @ScaledMetric private var tileScale: CGFloat = 1
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .top, spacing: 12) {
-                CentraidIconView(iconKey: "Gauge", tint: Theme.color("text", scheme), size: 18)
-                    .frame(width: 24, height: 24)
+                // THE MARK IS THE SHEET'S OWN TILE, as Export's and Trash's are.
+                KitTile(iconKey: "Gauge", size: 32)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(row.title)
                         .centraidType("body")
@@ -468,7 +472,7 @@ private struct FreeUpSpaceRow: View {
                 }
             }
             .accessibilityElement(children: .combine)
-            // THE FOOTNOTES START UNDER THE ROW'S WORDS, not under its mark: a 24 mark and a 12 gap.
+            // THE FOOTNOTES START UNDER THE ROW'S WORDS, not under its mark: a 32 tile and a 12 gap.
             VStack(alignment: .leading, spacing: 4) {
                 if !row.reason.isEmpty {
                     Text(row.reason)
@@ -491,9 +495,10 @@ private struct FreeUpSpaceRow: View {
                         .foregroundStyle(Theme.color("textFaint", scheme))
                 }
             }
-            .padding(.leading, 36)
+            .padding(.leading, 32 * min(tileScale, 2) + 12)
         }
         .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+        .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .accessibilityIdentifier("photos.more.freeUp")
     }

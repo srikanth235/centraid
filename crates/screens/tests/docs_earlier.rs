@@ -113,6 +113,20 @@ fn the_page_offers_the_entry_with_the_count_only_once_there_is_something_earlier
     assert_eq!(args.back_label, "Letter", "the page it came from");
 }
 
+/// THE PAGE UNDER THE EDITOR READS THE EDIT WITHOUT BEING OPENED AGAIN: the entry is there when the
+/// editor closes, with no `Appeared` in between (what a shell that never re-sends one shows).
+#[test]
+fn an_edit_made_while_the_page_is_open_shows_the_entry_without_a_refresh() {
+    let mut d = driver();
+    let id = text(&d, "Letter", "first");
+    let i = d.push(docs::TAB, routes::document(&id, "Letter", "Docs"));
+    assert!(document_data(d.view(i)).earlier.is_none());
+    edit(&d, &id, "second");
+    d.pump(std::time::Duration::from_millis(1500));
+    let entry = document_data(d.view(i)).earlier.clone();
+    assert_eq!(entry.map(|e| e.count_label), Some("1".to_owned()));
+}
+
 #[test]
 fn replaced_bytes_read_as_the_earlier_files_type_and_size_a_rename_as_its_name_a_move_as_its_folder()
  {

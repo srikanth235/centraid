@@ -90,7 +90,7 @@ dark_text = "#7FC4B8"
 # dark).
 [app.calendar]
 light = "#266FC4"
-dark_fill = "#3077CD"
+dark_fill = "#2761B2"
 dark_text = "#569EF7"
 tint = "#EEF3FA"
 dark_tint = "#202F41"
@@ -180,13 +180,13 @@ dark_tint = "#1B3A29"
 # They reach 3:1 on the light page and on dark cards, so they do not change in
 # dark. Dots, bars, tiles and big titles only; never small text.
 [list]
-blue = "#468DE5"
+blue = "#1E72DC"
 mustard = "#B08505"
 violet = "#AA71E3"
 petrol = "#1399B5"
 indigo = "#6785F5"
-graphite = "#808C9A"
-raspberry = "#E55D7E"
+graphite = "#66727F"
+raspberry = "#CC4268"
 orchid = "#D462B2"
 
 # The four brand colours of the app mark (`design/mockups/QuartersIcon.dc.html`):
@@ -515,6 +515,8 @@ iconChipRadiusRatio = 0.26
 iconChipTintDark = 0.2
 iconChipTintLight = 0.13
 pageMargin = 18
+# Wide screens (ruling 27): page content and the floating band stand in one column this wide (dp / pt), centred.
+readableWidth = 720
 targetMinCoarse = 44
 targetMinFine = 34
 
@@ -659,7 +661,7 @@ colors = [
   { light = "#1F4A36", text = "#A2D8BF" },
   { light = "#1F4A45", text = "#7FC4B8", fill = "#2E7268", line = "#7FC4B8" },
   { light = "#087668", text = "#4FD1BE", fill = "#12806F", line = "#4FD1BE" },
-  { light = "#266FC4", text = "#569EF7", fill = "#3077CD", line = "#569EF7" },
+  { light = "#266FC4", text = "#569EF7", fill = "#2761B2", line = "#569EF7" },
   { light = "#27388B", text = "#7C97F4", fill = "#536EDC", line = "#7C97F4" },
   { light = "#2B7B51", text = "#62D092", fill = "#2F8556", line = "#62D092" },
   { light = "#2D4BA8", text = "#9DB0F0" },
@@ -674,6 +676,7 @@ colors = [
   { light = "#6A5A99", text = "#9487B8" },
   { light = "#6E6B66", fill = "#5F5B55" },
   { light = "#6F6B64", text = "#A39E95" },
+  { light = "#6C6C69", text = "#878785" },
   { light = "#7638AD", text = "#BA82F5", fill = "#935BCB", line = "#BA82F5" },
   { light = "#85807A", text = "#75716A", line = "#75716A" },
   { light = "#874300", text = "#F2A64F", fill = "#964C04" },
@@ -759,7 +762,7 @@ keep = [
   "#3D5AA8",
   "#3D5E7A",
   "#3E6B36",
-  "#468DE5",
+  "#1E72DC",
   "#4A3F66",
   "#4A3F7A",
   "#4C7A3E",
@@ -775,7 +778,7 @@ keep = [
   "#7A6AB0",
   "#7FA3C0",
   "#7FA866",
-  "#808C9A",
+  "#66727F",
   "#8D8170",
   "#8E3B52",
   "#8F7A57",
@@ -803,7 +806,7 @@ keep = [
   "#D9A23A",
   "#D9C7A7",
   "#E0A060",
-  "#E55D7E",
+  "#CC4268",
   "#E8A3C0",
   "#E9F5F6",
   "#F0B23E",

@@ -5,15 +5,12 @@
 #
 # THE FLOW MAKES ITS OWN PROJECT. The onboarding starters hold no notebook,
 # project, group or folder, so the first run creates a Tasks project called
-# "Orchard" (Agenda's To-do place -> New project) and every later run finds it there
-# and skips the step. Re-runnable: it leaves that one project and a recent
-# search. The seed step expects an install with NO other project (the empty
-# Projects state offers "New project"); on a vault that already holds projects
-# but not this one, create "Orchard" by hand first.
+# "Orchard" (Reminders' lists page -> Add List) and every later run finds it there
+# and skips the step. Re-runnable: it leaves that one list and a recent search.
 #
 # The container's id is `search-container-<entity>-<id>`; a project's entity is
-# `schedule.project`, so the id is matched by its stem (Maestro matches an id as
-# a regular expression, `.` standing for the dot).
+# `project`, so the id is matched by its stem (Maestro matches an id as a regular
+# expression).
 appId: dev.centraid.Centraid
 name: search-containers
 ---
@@ -24,14 +21,29 @@ name: search-containers
     id: "reminders-band-reminders"
 - runFlow:
     when:
-      notVisible: "Orchard"
+      notVisible: "Orchard.*"
     commands:
-      - tapOn: "New project"
       - tapOn:
-          id: "tasks-new-project-field"
+          id: "agenda-new-project"
+      - tapOn:
+          id: "agenda-style-name"
       - inputText: "Orchard"
-      - tapOn: "Create project"
-- assertVisible: "Orchard"
+      # iOS's keyboard has a Done key that only puts the keyboard away (Maestro's hideKeyboard finds no
+      # dismiss action on it); Android hides it with hideKeyboard.
+      - runFlow:
+          when:
+            platform: iOS
+          commands:
+            - pressKey: Enter
+      - runFlow:
+          when:
+            platform: Android
+          commands:
+            - hideKeyboard
+      - tapOn:
+          id: "agenda-style-submit"
+# A list's row is one spoken element ("Orchard, 0 tasks"), so the name is matched at its start.
+- assertVisible: "Orchard.*"
 # Home's search: the project is a hit of the Agenda group, kind named, above the
 # tasks (none here, so it stands alone), and counted.
 - launchApp
@@ -45,15 +57,17 @@ name: search-containers
       id: "home-search-group-reminders"
     timeout: 5000
 - assertVisible:
-    id: "search-container-schedule.project-.*"
-- assertVisible: "Project"
-- assertVisible: "Orchard"
-# A tap opens the project's list through the one router; the search is behind it.
+    id: "search-container-project-.*"
+# The row is one spoken element on Android ("Project, Orchard"), two texts on iOS: match each word within.
+- assertVisible: ".*Project.*"
+- assertVisible: ".*Orchard.*"
+# A tap opens the project's list through the one router; the search is behind it. An empty list
+# draws its empty state in place of the rows (`tasks-project`), so the page is named by either id.
 - tapOn:
-    id: "search-container-schedule.project-.*"
+    id: "search-container-project-.*"
 - extendedWaitUntil:
     visible:
-      id: "tasks-project"
+      id: "tasks-project|tasks-project-edit"
     timeout: 5000
 - assertNotVisible:
     id: "home-search-field"
@@ -63,16 +77,16 @@ name: search-containers
 - tapOn:
     id: "home-tile-reminders"
 - tapOn:
-    id: "agenda-search-open"
+    id: "band-search"
 - inputText: "orchard"
 - extendedWaitUntil:
     visible:
-      id: "search-container-schedule.project-.*"
+      id: "search-container-project-.*"
     timeout: 5000
-- assertVisible: "Project"
+- assertVisible: ".*Project.*"
 - tapOn:
-    id: "search-container-schedule.project-.*"
+    id: "search-container-project-.*"
 - extendedWaitUntil:
     visible:
-      id: "tasks-project"
+      id: "tasks-project|tasks-project-edit"
     timeout: 5000

@@ -1,7 +1,7 @@
 //! MONEY'S HOME (`money.home`): Activity · Spending · Cash flow, and More as a
 //! sheet. One screen, the tab a parameter. Activity is home.
 //!
-//! Roots are places only. Search is the band's key and pushes `money.search`;
+//! Roots are places only. Search is the band's key and opens a field in place, as in every app (owner, 2026-11-19);
 //! the header's one trailing action is the Plus glyph, spoken "Import
 //! statement"; Activity's header holds the filter menu (account and category, no
 //! sort); the month is the title's second line on Activity and Spending, and a
@@ -20,11 +20,12 @@ use wire::screen_event::Kind as E;
 use wire::status_chip::Tone;
 
 use super::fold::{self, figure};
+use super::search::Search;
 use super::{routes, rows};
 use crate::catalog::load;
 use crate::kit::read::Page;
 use crate::kit::undo::Undo;
-use crate::kit::{export, menu, read};
+use crate::kit::{export, menu, read, reads_page};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{Locale, fill, money as words, shared};
 
@@ -69,6 +70,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         page: Page::loading(),
         asked: String::new(),
         undo: Undo::default(),
+        search: Search::default(),
     }))
 }
 
@@ -144,6 +146,8 @@ struct Home {
     asked: String,
     /// The line a page closed above this one left (a target saved), and its Undo.
     undo: Undo,
+    /// The band's search field and its answer; open, it replaces the tab's content.
+    search: Search,
 }
 
 impl Home {
@@ -153,6 +157,7 @@ impl Home {
             self.page = Page::loading();
         }
         fold::reread(&mut self.page, ctx.locale(), reading, |_| false);
+        self.search.reload(ctx);
         // THE MONTH THE ANSWER WAS FOR is the month in view from now on, so a
         // step is arithmetic over a month and never over "this month".
         if let Some(loaded) = self.page.data()
@@ -170,10 +175,22 @@ impl Home {
     fn nothing(&self, locale: Locale, loaded: &Loaded) -> Option<wire::EmptyState> {
         match loaded {
             Loaded::Spending(answer) if answer.empty => Some(day_one(locale)),
-            Loaded::Cashflow(answer) if used_series(answer).is_empty() => Some(day_one(locale)),
-            Loaded::Activity { activity, .. } => activity.rows.is_empty().then(|| {
+            // CASH FLOW READS TWELVE MONTHS and has no month chip, so its card never says "this month".
+            Loaded::Cashflow(answer) if used_series(answer).is_empty() => Some(wire::EmptyState {
+                headline: words::day_one_cashflow(locale),
+                ..day_one(locale)
+            }),
+            Loaded::Activity {
+                activity, accounts, ..
+            } => activity.rows.is_empty().then(|| {
                 let filtered = !self.account_id.is_empty() || !self.category_filter.is_empty();
-                activity_empty(locale, filtered)
+                // FIRST OPEN: no account at all, so nothing was ever imported (a month with nothing
+                // in it is another sentence).
+                if !filtered && accounts.on_budget.is_empty() && accounts.off_budget.is_empty() {
+                    first_open(locale)
+                } else {
+                    activity_empty(locale, filtered)
+                }
             }),
             _ => None,
         }
@@ -382,6 +399,10 @@ impl Home {
                     self.reload(ctx);
                 }
             }
+            // THE BAND'S SEARCH: the key opens the field, a term reads, close brings the tab back.
+            Some(H::SearchOpened(_)) => self.search.opened(),
+            Some(H::SearchTerm(typed)) => self.search.typed(ctx, typed.term),
+            Some(H::SearchClosed(_)) => self.search.closed(),
             Some(H::Refreshed(_)) | None => {}
         }
     }
@@ -608,6 +629,13 @@ impl Home {
             retry: words::retry(locale),
             more_title: words::more_title(locale),
             more_rows: vec![
+                // WHAT MONEY MAY READ (owner, 2026-11-19), first, as Health's is.
+                more(
+                    reads_page::title(locale, &title),
+                    String::new(),
+                    "Shield",
+                    routes::reads(),
+                ),
                 more(
                     words::more_accounts(locale),
                     words::more_accounts_meta(locale),
@@ -651,7 +679,7 @@ impl Home {
             month_sheet_title: words::month_sheet_title(locale),
             close_label: words::close(locale),
             import_route: Some(routes::import(&title)),
-            search_route: Some(routes::search(&title)),
+            search_close: shared::kit_close_search(locale),
         }
     }
 }
@@ -669,6 +697,15 @@ fn activity_empty(locale: Locale, filtered: bool) -> wire::EmptyState {
             action_label: words::import_action(locale),
             ..Default::default()
         }
+    }
+}
+
+/// FirstOpenMoney: what Money is for, and the one import.
+fn first_open(locale: Locale) -> wire::EmptyState {
+    wire::EmptyState {
+        headline: words::first_open(locale),
+        action_label: words::first_open_action(locale),
+        ..Default::default()
     }
 }
 
@@ -1408,9 +1445,13 @@ impl Screen for Home {
         let locale = ctx.locale();
         // The gate draws no band, filter or month.
         let drawing = !matches!(self.page, Page::Refused(_));
+        // OVER AN OPEN SEARCH the tab's content, the filter and the month give way to the answer,
+        // and the page's read is the search's.
+        let searching = drawing && self.search.open;
         let content = self
             .page
             .data()
+            .filter(|_| !searching)
             .map(|loaded| Content::Data(Box::new(self.data(locale, loaded))));
         // A tab with nothing to draw is the page's own empty state; the answer stays, because the
         // month and the filter in the header are built from it.
@@ -1418,9 +1459,13 @@ impl Screen for Home {
             .page
             .data()
             .and_then(|loaded| self.nothing(locale, loaded));
-        let page = fold::wire_page_keeping(&self.page, locale, nothing.is_some(), || {
-            nothing.clone().unwrap_or_default()
-        });
+        let page = if searching {
+            self.search.wire_page(locale)
+        } else {
+            fold::wire_page_keeping(&self.page, locale, nothing.is_some(), || {
+                nothing.clone().unwrap_or_default()
+            })
+        };
         wire::ViewState {
             kind: Some(wire::view_state::Kind::MoneyHome(wire::MoneyHomeState {
                 destination: self.destination as i32,
@@ -1434,13 +1479,22 @@ impl Screen for Home {
                 },
                 chrome: Some(Self::chrome(locale)),
                 month: self.month.clone(),
-                filter_menu: if drawing {
+                filter_menu: if drawing && !searching {
                     self.filter_menu(locale)
                 } else {
                     None
                 },
-                subtitle: if drawing { self.subtitle(locale) } else { None },
+                subtitle: if drawing && !searching {
+                    self.subtitle(locale)
+                } else {
+                    None
+                },
                 status: self.undo.status(),
+                search: Some(if searching {
+                    self.search.field(locale)
+                } else {
+                    wire::MoneySearchField::default()
+                }),
             })),
             ..wire::ViewState::default()
         }

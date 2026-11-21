@@ -52,6 +52,7 @@ struct LockerItemView: View {
                         }
                         .accessibilityLabel(state.chrome.menuLabel)
                         .accessibilityIdentifier("locker-item-menu")
+                        .headerKeyTarget()
                     }
                     if !state.chrome.editLabel.isEmpty {
                         ToolbarVerb(label: state.chrome.editLabel, identifier: "locker-item-edit") {
@@ -60,7 +61,7 @@ struct LockerItemView: View {
                     }
                 }
             } content: {
-                LockerShield(secure: state.secure) {
+                LockerShield(secure: state.secure, bleedsBottom: true) {
                     PageReadStateView(
                         page: state.page,
                         onRetry: { send(LockerItemEvents.make { $0.refreshed = .init() }) }
@@ -69,6 +70,7 @@ struct LockerItemView: View {
                             ScrollView {
                                 LazyVStack(alignment: .leading, spacing: 0) { page(item) }
                                     .padding(.bottom, 16)
+                                    .shieldFoot()
                             }
                             .accessibilityIdentifier("locker-item")
                         }
@@ -224,13 +226,17 @@ struct LockerItemView: View {
             }, open: open)
         }
         if !item.tags.isEmpty {
+            // FRAMED LIKE THE CARDS ABOVE (#1202), not a bare row on the page.
             FieldRow(key: item.tagsLabel, value: item.tags.joined(separator: " · "))
+                .kitCard()
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.vertical, 8)
         }
         if !item.memo.isEmpty || !item.memoAction.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 if !item.memo.isEmpty {
                     FieldRow(key: item.memoLabel, value: item.memo)
-                        .padding(.horizontal, -CentraidGeometry.pageMargin)
+                        .kitCard()
                 }
                 if !item.memoAction.isEmpty {
                     KitOutlineButton(label: item.memoAction) { send(LockerItemEvents.make { $0.memoOpened = .init() }) }
@@ -254,11 +260,17 @@ struct LockerFieldRowView: View {
     let onVerb: (Centraid_Core_V1_LockerVerb) -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         // THE BOARD'S ROW: the label over the value on the left, the verbs on the trailing edge of
-        // the same row (Copy, Hide, Open), so a field is one compact line, not a stack.
-        HStack(alignment: .center, spacing: 12) {
+        // the same row (Copy, Hide, Open), so a field is one compact line, not a stack. AT
+        // ACCESSIBILITY SIZES THE VERBS DROP UNDER THE VALUE (#1202): beside it the label was a
+        // column one letter wide and "Open" and "Copy" broke mid-word.
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+        layout {
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.label)
                     .kitType(.meta)
@@ -292,13 +304,15 @@ struct LockerFieldRowView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if !row.verbs.isEmpty {
-                HStack(spacing: 12) {
+                KitFlow(spacing: 12) {
                     ForEach(row.verbs, id: \.key) { verb in
                         if verb.pill {
                             // THE CODE CARD'S COPY: a green pill, as the board draws it.
                             Button(action: { onVerb(verb) }) {
                                 Text(verb.label)
                                     .centraidType("smallStrong")
+                                    .kitLineLimit(1)
+                                    .fixedSize(horizontal: true, vertical: false)
                                     .foregroundStyle(StateColor.green.text)
                                     .padding(.horizontal, 14)
                                     .frame(minHeight: 36)

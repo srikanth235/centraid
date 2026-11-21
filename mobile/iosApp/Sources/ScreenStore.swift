@@ -45,6 +45,8 @@ final class ScreenStore: ObservableObject {
     private let scheduleNotifications: NotificationScheduler
     private var startup: Task<Bool, Never>?
     private var closed: Set<UInt64> = []
+    /// The instances the core has closed (a closed one has no view left to draw).
+    var closedInstances: Set<UInt64> { closed }
     /// Instances this shell opened with `open`, so two opens never claim one entry.
     private var claimed: Set<UInt64> = []
     /// The phone stores being watched (`PhoneWatch`), each under the effect that asked.
@@ -673,16 +675,16 @@ final class ScreenStore: ObservableObject {
                 Task { @MainActor [weak self] in self?.answer(request, outcome) }
             }
         case .shareFile(let share)?:
-            if DocsShare.present(share) {
-                answer(request, done)
+            if let reason = DocsShare.present(share) {
+                answer(request, .failed(Self.failure(reason == EffectReason.storageFull ? reason : EffectReason.unreadable)))
             } else {
-                answer(request, .failed(Self.failure(EffectReason.unreadable)))
+                answer(request, done)
             }
         case .shareBytes(let share)?:
-            if DocsShare.presentBytes(share) {
-                answer(request, done)
+            if let reason = DocsShare.presentBytes(share) {
+                answer(request, .failed(Self.failure(reason == EffectReason.noWindow ? EffectReason.unwritable : reason)))
             } else {
-                answer(request, .failed(Self.failure(EffectReason.unwritable)))
+                answer(request, done)
             }
         case .followFolder?:
             DocsFollow.shared.request { [weak self] outcome in
@@ -882,6 +884,9 @@ final class ScreenStore: ObservableObject {
         else { return }
         while let next = top.presentedViewController { top = next }
         let sheet = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        // THE WORDS NEVER REACH THE CLIPBOARD (#1202): this sheet carries the recovery words ("Save a
+        // copy"), so its own Copy action is left off; Notes, Files and Mail stay.
+        sheet.excludedActivityTypes = [.copyToPasteboard]
         if !share.subject.isEmpty { sheet.setValue(share.subject, forKey: "subject") }
         sheet.popoverPresentationController?.sourceView = top.view
         top.present(sheet, animated: true)

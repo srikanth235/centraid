@@ -52,9 +52,13 @@ catalog! {
     plain count_many = ("{n} items", "{n} items");
     plain count_one = ("{n} item", "{n} item");
     plain created = ("Created", "Created");
-    plain day_one = ("Nothing is kept here yet", "Nothing is kept here yet");
     plain day_one_action = ("Add an item", "Add an item");
-    plain day_one_body = ("Add a login, card or note.", "Add a login, card or note.");
+    plain first_check_action = ("Confirm it's you", "Confirm it's you");
+    plain first_check_body = ("Locker opens with your face or your passcode, every time.", "Locker opens with your face or your passcode, every time.");
+    plain first_check_title = ("Your passwords and secure notes", "Your passwords and secure notes");
+    plain first_item = ("Add your first item.", "Add your first item.");
+    plain first_item_hint = ("A password, a card, a Wi-Fi network or a code.", "A password, a card, a Wi-Fi network or a code.");
+    plain step_of = ("Step {n} of {total}", "Step {n} of {total}");
     plain denied_body = ("Access to Locker's items was refused.", "Access to Locker's items was refused.");
     plain denied_scope = ("locker.item · read", "locker.item · read");
     plain denied_title = ("Locker cannot read this vault", "Locker cannot read this vault");
@@ -159,6 +163,7 @@ catalog! {
     plain import_discard = ("Discard", "Discard");
     plain import_discarded = ("Import discarded.", "Import discarded.");
     plain import_done_note = ("The file still holds every secret. Delete it when done.", "The file still holds every secret. Delete it when done.");
+    plain import_too_large = ("That file is too large to import.", "That file is too large to import.");
     plain import_failed = ("That file could not be read.", "That file could not be read.");
     plain import_failed_rows = (", {n} failed", ", {n} failed");
     plain import_file = ("A file", "A file");

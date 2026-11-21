@@ -918,7 +918,7 @@ mod tests {
         assert_eq!(tokens.brand["teal"], "#00AA98");
         assert_eq!(tokens.native.colors.light.len(), 55);
         assert_eq!(tokens.native.colors.dark.len(), 55);
-        assert_eq!(tokens.icons.len(), 152);
+        assert_eq!(tokens.icons.len(), 153);
         assert_eq!(tokens.native.app.len(), 9);
     }
 
@@ -965,6 +965,28 @@ mod tests {
     fn every_accent_and_list_colour_clears_its_floor() {
         let problems = committed().contrast_problems();
         assert!(problems.is_empty(), "{}", problems.join("\n"));
+    }
+
+    #[test]
+    fn the_today_and_scheduled_tiles_hold_white_text_at_four_and_a_half_to_one() {
+        // Reminders draws the Today tile in `blue` and the Scheduled tile in `raspberry`,
+        // each with white text on it.
+        for name in ["blue", "raspberry"] {
+            let fill = committed().list[name].clone();
+            let ratio = contrast_ratio("#FFFFFF", &fill).expect("hex pair");
+            assert!(ratio >= TEXT_CONTRAST, "{name} is {ratio:.2}:1 under white");
+        }
+    }
+
+    #[test]
+    fn the_logbook_tile_holds_white_text_at_four_and_a_half_to_one() {
+        // Reminders draws the Logbook tile in `graphite` with white text on it.
+        let graphite = committed().list["graphite"].clone();
+        let ratio = contrast_ratio("#FFFFFF", &graphite).expect("hex pair");
+        assert!(
+            ratio >= TEXT_CONTRAST,
+            "graphite is {ratio:.2}:1 under white"
+        );
     }
 
     #[test]

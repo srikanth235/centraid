@@ -23,11 +23,12 @@ catalog! {
     plain account_remove_number_confirm = ("Remove", "Remove");
     plain account_remove_number_title = ("Remove the bank number?", "Remove the bank number?");
     plain action_archive = ("Archive", "Archive");
-    plain action_category = ("Set category", "Set category");
+    plain action_category = ("Set a category", "Set a category");
     plain action_merge = ("Merge into another", "Merge into another");
-    plain action_name = ("Set name", "Set name");
+    plain action_name = ("Rename", "Rename");
     plain action_restore = ("Restore", "Restore");
     plain action_unlink = ("Not a transfer", "Not a transfer");
+    plain action_with = ("Set who it was with", "Set who it was with");
     plain activity_empty = ("Nothing this month.", "Nothing this month.");
     plain add_account = ("Add account", "Add account");
     plain all_accounts = ("All accounts", "All accounts");
@@ -88,6 +89,7 @@ catalog! {
     plain date_order_prompt = ("Which order does this file write dates in?", "Which order does this file write dates in?");
     plain days_left_many = ("{n} days left", "{n} days left");
     plain days_left_one = ("1 day left", "1 day left");
+    plain day_one_cashflow = ("Import a bank statement to see your cash flow.", "Import a bank statement to see your cash flow.");
     plain day_one = ("Import a bank statement to see this month.", "Import a bank statement to see this month.");
     plain def_balance_detail = ("Opening amount plus every row posted.", "Opening amount plus every row posted.");
     plain def_balance_label = ("Balance", "Balance");
@@ -138,6 +140,8 @@ catalog! {
         "Transactions in one .csv file, for any spreadsheet."
     );
     plain export_title = ("Export transactions", "Export transactions");
+    plain first_open = ("Your statements, sorted and searchable.", "Your statements, sorted and searchable.");
+    plain first_open_action = ("Import statement", "Import statement");
     plain fact_account = ("Account", "Account");
     plain fact_bank_type = ("Type", "Type");
     plain fact_bank_wrote = ("Bank wrote", "Bank wrote");
@@ -161,6 +165,7 @@ catalog! {
     plain import_discard = ("Start over", "Start over");
     plain import_done = ("Imported {rows}", "Imported {rows}");
     plain import_done_note = ("Your rows are in.", "Your rows are in.");
+    plain import_too_large = ("That file is too large to import.", "That file is too large to import.");
     plain import_failed = ("Couldn’t import this file. Try again.", "Couldn’t import this file. Try again.");
     plain import_file = ("File", "File");
     plain import_file_note = ("CSV, OFX or QFX from your bank.", "CSV, OFX or QFX from your bank.");
@@ -224,7 +229,7 @@ catalog! {
     plain note_needs_one = ("1 row needs a category", "1 row needs a category");
     plain note_transfer_many = ("{n} transfers are not counted", "{n} transfers are not counted");
     plain note_transfer_one = ("1 transfer is not counted", "1 transfer is not counted");
-    plain nothing_matches = ("Nothing matches {term}.", "Nothing matches {term}.");
+    plain nothing_matches = ("Nothing matches “{term}”.", "Nothing matches “{term}”.");
     plain not_now = ("Not now", "Not now");
     plain not_spending = ("Not counted as spending", "Not counted as spending");
     plain no_answer = ("No answer came back. Try again.", "No answer came back. Try again.");
@@ -290,7 +295,6 @@ catalog! {
     plain search_not_searched = ("Searches names, bank words, categories and memos.", "Searches names, bank words, categories and memos.");
     plain search_placeholder = ("Search transactions", "Search transactions");
     plain search_resting = ("Search by name, bank words or category.", "Search by name, bank words or category.");
-    plain search_title = ("Search", "Search");
     plain seen_times = ("Seen {n} times", "Seen {n} times");
     plain seen_times_short = ("seen {n} times", "seen {n} times");
     plain sign_label = ("Money out is", "Money out is");

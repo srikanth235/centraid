@@ -848,7 +848,7 @@ const MERGE: &str = r#"{
 // ---------------------------------------------------------------------------
 use crate::commands::contact_point::reach_key;
 use crate::commands::person_portable::{self as vcard, Card};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 /// The most cards one import takes.
 const VCARD_MAX: usize = 20_000;
@@ -987,13 +987,54 @@ fn adds_of(known: &Known, person: &str, card: &Card) -> Adds {
     }
 }
 
-fn vcards(ctx: &CommandCtx<'_, '_>) -> Vec<Card> {
-    ctx.optional_str("cards")
+/// The cards of the file, the repeats within it folded together, and how many were folded.
+fn vcards(ctx: &CommandCtx<'_, '_>) -> (Vec<Card>, usize) {
+    let cards = ctx
+        .optional_str("cards")
         .map(vcard::parse)
         .unwrap_or_default()
         .into_iter()
         .take(VCARD_MAX)
-        .collect()
+        .collect();
+    merge_repeats(cards)
+}
+
+/// A CARD THAT REPEATS AN EARLIER ONE'S NAME IN THE SAME FILE IS THAT PERSON (#1202), by the rule the
+/// vault is matched by. It is folded into the first: what that one leaves blank is filled and the
+/// points it lacks are added (capped at [`vcard::MAX_POINTS`]), so a second number is not lost with
+/// the card that carried it. A shared number alone is not a repeat (a household's landline is two
+/// people). Each card is looked up by hash, so a file of thousands is one pass.
+fn merge_repeats(cards: Vec<Card>) -> (Vec<Card>, usize) {
+    let mut kept: Vec<Card> = Vec::new();
+    let mut by_name: HashMap<String, usize> = HashMap::new();
+    let mut repeated = 0;
+    for card in cards {
+        let name_key = crate::model::fold_label(&card.name);
+        let Some(&index) = by_name.get(&name_key) else {
+            by_name.insert(name_key, kept.len());
+            kept.push(card);
+            continue;
+        };
+        repeated += 1;
+        let first = &mut kept[index];
+        first.nickname = first.nickname.take().or(card.nickname);
+        first.role = first.role.take().or(card.role);
+        first.birthday = first.birthday.take().or(card.birthday);
+        let mut held: BTreeSet<(&'static str, String)> = first
+            .points
+            .iter()
+            .map(|point| (point.kind, reach_key(point.kind, &point.value)))
+            .collect();
+        for point in card.points {
+            if first.points.len() >= vcard::MAX_POINTS {
+                break;
+            }
+            if held.insert((point.kind, reach_key(point.kind, &point.value))) {
+                first.points.push(point);
+            }
+        }
+    }
+    (kept, repeated)
 }
 
 fn write_points(
@@ -1032,13 +1073,12 @@ fn import_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         .get("merge")
         .and_then(Json::as_bool)
         .unwrap_or(true);
-    let cards = vcards(ctx);
+    let (cards, repeated) = vcards(ctx);
     // MATCHED AGAINST THE VAULT AS IT WAS, never against what this file has written, so the
     // preview and the write agree card for card.
     let known = known_people(ctx)?;
-    let (mut added, mut merged, mut unchanged, mut declined, mut repeated) = (0, 0, 0, 0, 0);
+    let (mut added, mut merged, mut unchanged, mut declined) = (0, 0, 0, 0);
     let mut proposals: Vec<String> = Vec::new();
-    let mut seen_new: BTreeSet<String> = BTreeSet::new();
     for card in &cards {
         let name_key = crate::model::fold_label(&card.name);
         match match_of(&known, card) {
@@ -1074,9 +1114,7 @@ fn import_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
                     }
                 }
             }
-            None if seen_new.contains(&name_key) => repeated += 1,
             None => {
-                seen_new.insert(name_key);
                 added += 1;
                 if !dry_run {
                     let id = found(
@@ -1099,7 +1137,7 @@ fn import_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         }
     }
     Ok(serde_json::json!({
-        "cards": cards.len(),
+        "cards": cards.len() + repeated,
         "added": added,
         "merged": merged,
         "unchanged": unchanged,
@@ -1220,7 +1258,7 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "required": ["cards"],
               "additionalProperties": false,
               "properties": {
-                "cards": { "type": "string" },
+                "cards": { "type": "string", "maxLength": 20971520 },
                 "dry_run": { "type": "boolean" },
                 "merge": { "type": "boolean" },
                 "#,

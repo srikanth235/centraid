@@ -55,6 +55,7 @@ import dev.centraid.android.kit.RoomTitle
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.KitChip
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SearchAskRow
@@ -129,7 +130,7 @@ internal fun HomeSearchScreen(
                     onEvent(HomeSearchEvent(suggestion = HomeSearchEvent.SuggestionPicked(term = term)))
                 }
             } else {
-                state.data_?.let { found -> Groups(found, onEvent, onOpen) }
+                state.data_?.let { found -> SearchGroups(found, { onEvent(HomeSearchEvent(committed = HomeSearchEvent.Committed())) }, onOpen) }
             }
         }
         // THE FIELD IS AT THE FOOT, the glass pill and its close key; the close key clears the
@@ -177,15 +178,19 @@ private fun Resting(resting: HomeSearchResting, onPick: (String) -> Unit) {
     }
 }
 
+/**
+ * THE ANSWER AS GROUPS, one per app, then the Ask row. Home's search and Health's in-place search
+ * draw it; [onCommit] is what acting on a row does first (Home remembers the term).
+ */
 @Composable
-private fun Groups(
+internal fun SearchGroups(
     data: HomeSearchData,
-    onEvent: (HomeSearchEvent) -> Unit,
+    onCommit: () -> Unit,
     onOpen: (Route) -> Unit,
 ) {
     // ACTING ON THE ANSWER remembers the term, then opens the page the row carried.
     val open: (Route?) -> Unit = { route ->
-        onEvent(HomeSearchEvent(committed = HomeSearchEvent.Committed()))
+        onCommit()
         route?.let(onOpen)
     }
     LazyColumn(Modifier.fillMaxSize()) {
@@ -244,26 +249,19 @@ private fun HitRow(row: HomeSearchRow, onTap: () -> Unit) {
                 role = Role.Button
             },
     ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = KitGeometry.ROW_MIN)
-                .padding(horizontal = KitGeometry.GUTTER),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                row.kind_label,
-                style = centraidType("small"),
-                color = centraidColor("textSoft"),
-                maxLines = 1,
-                modifier = Modifier.width(KIND_COLUMN),
-            )
-            Column(Modifier.padding(start = 8.dp)) {
+        // THE KIND OVER THE TITLE at the largest text (#1202): in a fixed 88dp column "Workout" was cut to
+        // "Worko" and the title left a sliver.
+        val stacked = rememberLargestText()
+        val kind: @Composable (Modifier) -> Unit = { mod ->
+            Text(row.kind_label, style = centraidType("small"), color = centraidColor("textSoft"), maxLines = 2, modifier = mod)
+        }
+        val body: @Composable (Modifier) -> Unit = { mod ->
+            Column(mod) {
                 Text(
                     row.title,
                     style = centraidType("body"),
                     color = centraidColor("text"),
-                    maxLines = 1,
+                    maxLines = if (stacked) 4 else 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 // The words only an earlier version of the item held (#1185): the row says so
@@ -273,9 +271,26 @@ private fun HitRow(row: HomeSearchRow, onTap: () -> Unit) {
                         row.earlier_label,
                         style = centraidType("small"),
                         color = centraidColor("textSoft"),
-                        maxLines = 1,
+                        maxLines = if (stacked) 3 else 1,
                     )
                 }
+            }
+        }
+        if (stacked) {
+            Column(Modifier.fillMaxWidth().heightIn(min = KitGeometry.ROW_MIN).padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp)) {
+                kind(Modifier)
+                body(Modifier)
+            }
+        } else {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = KitGeometry.ROW_MIN)
+                    .padding(horizontal = KitGeometry.GUTTER),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                kind(Modifier.width(KIND_COLUMN))
+                body(Modifier.padding(start = 8.dp))
             }
         }
         Box(

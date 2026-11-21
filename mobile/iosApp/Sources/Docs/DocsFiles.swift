@@ -30,6 +30,12 @@ final class DocsFiles: ObservableObject {
     /// The photo library's picker is up (`KIND_PHOTO`, images only).
     @Published var choosingPhoto = false
 
+    /// A LAUNCH SWEEPS WHAT A KILL LEFT (#1202): a copy waits in the temporary directory only for the
+    /// stage that follows it, so one found at launch belongs to a stage that never finished.
+    private init() {
+        Task.detached(priority: .utility) { DocsFileCopies.sweep() }
+    }
+
     /// The core the copy is staged into, given with the ask.
     private var core: (any ScreenCore)?
 
@@ -76,8 +82,10 @@ final class DocsFiles: ObservableObject {
             DispatchQueue.global(qos: .userInitiated).async {
                 let copied = DocsFileCopies.copy(url)
                 DispatchQueue.main.async {
-                    guard let copied else { return self.fail(EffectReason.unreadable) }
-                    self.stage(copied.path, name: copied.name, mediaType: copied.mediaType)
+                    switch copied {
+                    case let .success(copy): self.stage(copy.path, name: copy.name, mediaType: copy.mediaType)
+                    case let .failure(error): self.fail(DocsFileCopies.reason(of: error))
+                    }
                 }
             }
         }
@@ -86,11 +94,14 @@ final class DocsFiles: ObservableObject {
     // MARK: The photo picker
 
     /// The picker closed with a copy this app owns (staged like an upload), or with nothing.
-    func photoChosen(_ copied: DocsFileCopies.Copied?, cancelled: Bool) {
+    func photoChosen(_ copied: Result<DocsFileCopies.Copied, Swift.Error>?, cancelled: Bool) {
         choosingPhoto = false
         if cancelled { return done() }
-        guard let copied else { return fail(EffectReason.unreadable) }
-        stage(copied.path, name: copied.name, mediaType: copied.mediaType)
+        switch copied {
+        case let .success(copy): stage(copy.path, name: copy.name, mediaType: copy.mediaType)
+        case let .failure(error): fail(DocsFileCopies.reason(of: error))
+        case nil: fail(EffectReason.unreadable)
+        }
     }
 
     /// The sheet went without a pick (a swipe down): the same as closing it.
@@ -121,7 +132,11 @@ final class DocsFiles: ObservableObject {
     // MARK: Staging
 
     private func stage(_ path: String, name: String, mediaType: String) {
-        guard let core else { return fail(EffectReason.unavailable) }
+        // THE COPY IS THIS APP'S, so it goes on every path: a plaintext duplicate of the member's file.
+        guard let core else {
+            DocsFileCopies.discard(path)
+            return fail(EffectReason.unavailable)
+        }
         let answer = answer
         self.answer = nil
         Task {
@@ -141,10 +156,14 @@ final class DocsFiles: ObservableObject {
                 picked.name = name
                 picked.mediaType = mediaType
                 answer?(.filePicked(picked))
-            case .refused:
-                // The sentence is Rust's: a refusal is said by the screen that asked.
+            case let .refused(error):
+                // The core's own sentence rides as the reason, as on Android; the words the member reads
+                // are Rust's, said by the screen that asked.
                 var failed = Centraid_Core_V1_EffectFailed()
-                failed.reason = EffectReason.failed
+                let sentence = error?.sentence ?? ""
+                failed.reason = error?.code == .diskFull
+                    ? EffectReason.storageFull
+                    : (sentence.isEmpty ? EffectReason.failed : sentence)
                 answer?(.failed(failed))
             }
         }
@@ -191,7 +210,11 @@ struct DocsFilesRoot: View {
 }
 
 /// Where a picked or scanned file waits for the stage: this app's own temporary
-/// directory, under a name nothing else will pick. A copy is deleted once staged.
+/// directory, under a name nothing else will pick (a UUID, never the member's file
+/// name: a legal 255-byte name plus a prefix does not fit a path component). A
+/// copy is deleted once staged, and at launch if a kill left it; it is written
+/// under complete file protection, being a plaintext duplicate of the member's
+/// document.
 enum DocsFileCopies {
     struct Copied {
         let path: String
@@ -201,22 +224,47 @@ enum DocsFileCopies {
 
     static var directory: URL {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("docs-ingest", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(
+            at: dir,
+            withIntermediateDirectories: true,
+            attributes: [.protectionKey: FileProtectionType.complete]
+        )
         return dir
     }
 
-    static func copy(_ url: URL) -> Copied? {
+    /// Delete every copy an earlier launch left behind.
+    nonisolated static func sweep() {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("docs-ingest", isDirectory: true)
+        let left = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        for name in left {
+            try? FileManager.default.removeItem(at: folder.appendingPathComponent(name))
+        }
+    }
+
+    private static func protect(_ path: String) {
+        try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: path)
+    }
+
+    /// WHY A COPY FAILED, as a fact for the core to word: a full phone (`NSFileWriteOutOfSpaceError`,
+    /// `ENOSPC`) is its own reason; anything else is a file that would not read.
+    static func reason(of error: Swift.Error) -> String {
+        EffectReason.ofWrite(error, otherwise: EffectReason.unreadable)
+    }
+
+    static func copy(_ url: URL) -> Result<Copied, Swift.Error> {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let name = url.lastPathComponent
-        let target = directory.appendingPathComponent("\(UUID().uuidString)-\(name)")
+        let target = directory.appendingPathComponent(UUID().uuidString)
         do {
             try FileManager.default.copyItem(at: url, to: target)
         } catch {
-            return nil
+            try? FileManager.default.removeItem(at: target)
+            return .failure(error)
         }
+        protect(target.path)
         let mediaType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? ""
-        return Copied(path: target.path, name: name, mediaType: mediaType)
+        return .success(Copied(path: target.path, name: name, mediaType: mediaType))
     }
 
     static func discard(_ path: String) {
@@ -233,7 +281,9 @@ enum DocsFileCopies {
         }
         guard document.pageCount > 0 else { return nil }
         let target = directory.appendingPathComponent("\(UUID().uuidString).pdf")
-        return document.write(to: target) ? target.path : nil
+        guard document.write(to: target) else { return nil }
+        protect(target.path)
+        return target.path
     }
 }
 
@@ -285,7 +335,7 @@ struct DocsScanner: UIViewControllerRepresentable {
 /// THE SYSTEM PHOTO PICKER for exactly one image, answering once with a copy this app owns.
 struct DocsPhotoPicker: UIViewControllerRepresentable {
     /// The copy (nil when the photo would not read) and whether the member just closed the picker.
-    let onDone: (DocsFileCopies.Copied?, Bool) -> Void
+    let onDone: (Result<DocsFileCopies.Copied, Swift.Error>?, Bool) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -314,7 +364,7 @@ struct DocsPhotoPicker: UIViewControllerRepresentable {
             }
             // THE FILE IS LENT for the length of this callback: copy it before it returns.
             provider.loadFileRepresentation(forTypeIdentifier: UTType.image.identifier) { [weak self] url, _ in
-                let copied = url.flatMap { DocsFileCopies.copy($0) }
+                let copied = url.map { DocsFileCopies.copy($0) }
                 Task { @MainActor [weak self] in self?.parent.onDone(copied, false) }
             }
         }

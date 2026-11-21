@@ -137,6 +137,9 @@ pub struct Report {
     pub read: Option<(u32, Instant)>,
     /// The phone refused the store the last time a read was tried.
     pub denied: bool,
+    /// How the grant stood when it did: only a plain refusal is the member's to turn on in
+    /// Settings (a restricted or limited grant is another sentence).
+    pub grant: Option<crate::kit::permission::State>,
     /// The types the OS refused, as the last health read said.
     pub refused: Vec<String>,
     /// Health Connect would not let the app read in the background (D16): following works
@@ -151,6 +154,12 @@ pub struct Report {
 }
 
 impl Report {
+    /// The phone said no outright: the member can say yes in the phone's Settings.
+    #[must_use]
+    pub fn refused(&self) -> bool {
+        self.grant == Some(crate::kit::permission::State::Refused)
+    }
+
     /// The plain status line a store's screen draws when the last pass was doubted or
     /// incomplete (D12: a partial result shows what was read under a banner; it is not a
     /// failure). The same words in every store.
@@ -247,11 +256,22 @@ impl Follows {
         let report = inner.reports.entry(store).or_default();
         report.read = Some((count, Instant::now()));
         report.denied = false;
+        report.grant = None;
     }
 
     /// The phone refused (or allowed again) a read of `store`.
     pub fn denied(&self, store: Store, denied: bool) {
-        self.lock().reports.entry(store).or_default().denied = denied;
+        use crate::kit::permission::State;
+        self.grant(store, denied.then_some(State::Refused));
+    }
+
+    /// The phone's answer to a read of `store`: the grant's state when it said no, `None` when it
+    /// did not.
+    pub fn grant(&self, store: Store, grant: Option<crate::kit::permission::State>) {
+        let mut inner = self.lock();
+        let report = inner.reports.entry(store).or_default();
+        report.denied = grant.is_some();
+        report.grant = grant;
     }
 
     /// What the last pass over `store` found of its own reading: how many rows the vault doubted

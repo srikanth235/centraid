@@ -7,7 +7,7 @@ What every app owes a member, and the one rule each follows. A promise kept in s
 | Promise | The rule every app follows |
 | --- | --- |
 | **Keep** | Everything is one kind of record, offline, the member's. |
-| **Arrive** | Every item records how it arrived (typed, followed from the phone, imported from a file), and its detail screen says so in one quiet line. |
+| **Arrive** | Every item that was imported or followed from the phone records how it arrived, and its detail screen says so in one quiet line; a typed item has no arrival and shows no line (owner, 2026-11-18). |
 | **Change safely** | Every item can go to trash, be restored and be deleted forever; every trash can be emptied. Every action is undoable from the status line, or is confirmed first because it cannot be. Every record keeps its earlier values, listed on one screen with Restore. A save checks what it is replacing and says when it was stale. |
 | **Connect** | Every item can be linked to any other kind of item but a Locker item, through one picker. |
 | **When** | One timeline, with repeats from one engine. |

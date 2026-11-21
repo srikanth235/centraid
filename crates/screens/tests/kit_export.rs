@@ -64,6 +64,11 @@ fn staged(_: &Ctx, key: &str) -> Result<Made, String> {
         } else {
             Vec::new()
         },
+        left_out_why: if key == "all" {
+            "They are elsewhere.".to_owned()
+        } else {
+            String::new()
+        },
     }))
 }
 
@@ -357,7 +362,7 @@ fn a_saved_export_counts_what_it_saved_and_names_the_originals_it_left_out() {
     d.answer_effect(wire::effect_result::Outcome::Done(wire::EffectDone {}));
     assert_eq!(
         view(&d, i).status.clone().expect("a line").sentence,
-        "Export saved: 7 files. 5 originals were left out: A.pdf, B.pdf, C.pdf and 2 more"
+        "Export saved: 7 files. 5 originals were left out: A.pdf, B.pdf, C.pdf and 2 more. They are elsewhere."
     );
     // The next export starts clean.
     d.effects.clear();

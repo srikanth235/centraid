@@ -25,6 +25,8 @@ pub struct FakeShell {
     pub synced_works: bool,
     pub synchronizing: bool,
     pub restores_after_setup: bool,
+    /// A device store that takes no write: every set and delete answers `ok: false`.
+    pub refuse_device_writes: bool,
 }
 
 impl Default for FakeShell {
@@ -35,6 +37,7 @@ impl Default for FakeShell {
             synced_works: true,
             synchronizing: true,
             restores_after_setup: true,
+            refuse_device_writes: false,
         }
     }
 }
@@ -50,6 +53,12 @@ impl FakeShell {
             .map(|op| {
                 let synced_store = op.store == wire::SecretStore::Synced as i32;
                 if synced_store && !self.synced_works {
+                    return wire::SecretAnswer::default();
+                }
+                if !synced_store
+                    && self.refuse_device_writes
+                    && matches!(Op::try_from(op.op), Ok(Op::Set | Op::Delete))
+                {
                     return wire::SecretAnswer::default();
                 }
                 let store = if synced_store {
@@ -179,6 +188,65 @@ impl Driver {
     #[must_use]
     pub fn keyed(runtime: Runtime) -> Self {
         Self::opened(runtime, true, centraid_core::example::now_ms())
+    }
+
+    /// A FIRST VAULT, as a member's first launch founds it: the starter rows of
+    /// [`centraid_core::starters`] and nothing else (no example scenario).
+    ///
+    /// # Panics
+    /// When the scratch vault cannot be made.
+    #[must_use]
+    pub fn first_vault(runtime: Runtime) -> Self {
+        let dir = centraid_ontology::scratch::scratch_dir();
+        std::fs::create_dir_all(&dir).expect("the scratch directory is made");
+        let handle = Core::open(CoreConfig::new(dir.join("vault.db"))).expect("a core opens");
+        handle
+            .open_own_bytes(dir.join("vault.bytes"))
+            .expect("the byte store opens");
+        let found = handle
+            .call(&wire::Request {
+                kind: Some(wire::request::Kind::Found(wire::FoundRequest {
+                    display_name: "First".to_owned(),
+                    owner_name: "Me".to_owned(),
+                    content: wire::FoundContent::Starters as i32,
+                })),
+            })
+            .expect("the vault founds");
+        assert!(matches!(found.kind, Some(wire::response::Kind::Found(_))));
+        handle.attach_screens(std::sync::Arc::new(runtime));
+        Self {
+            handle,
+            views: BTreeMap::new(),
+            navigation: None,
+            effects: Vec::new(),
+            closed: Vec::new(),
+            scratch: Some(dir),
+        }
+    }
+
+    /// THE PROCESS DIES AND THE APP IS OPENED AGAIN: the core is closed and opened over the same
+    /// vault file with `runtime` attached, as a relaunch does. What lived in memory (every screen,
+    /// the runtime's boards, the pending effects) is gone; the vault stays. What the shell keeps
+    /// (a [`FakeShell`]) is the test's to carry across.
+    ///
+    /// # Panics
+    /// When this driver's vault directory was given by the caller, or the core cannot be opened
+    /// again.
+    #[must_use]
+    pub fn restarted(mut self, runtime: Runtime) -> Self {
+        let dir = self
+            .scratch
+            .clone()
+            .expect("only a driver that made its own vault restarts");
+        self.handle.close();
+        self.handle = Core::open(CoreConfig::new(dir.join("vault.db")))
+            .expect("the core opens the same vault again");
+        self.handle.attach_screens(std::sync::Arc::new(runtime));
+        self.views.clear();
+        self.navigation = None;
+        self.effects.clear();
+        self.closed.clear();
+        self
     }
 
     /// A core that holds no vault at all: the file is not there and is not

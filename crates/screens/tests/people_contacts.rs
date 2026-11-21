@@ -148,10 +148,8 @@ fn an_import_the_os_refuses_says_where_to_turn_it_on_and_an_empty_phone_says_add
         cancelled: false,
         ..Default::default()
     }));
-    assert_eq!(
-        status(&d, i),
-        "Contacts access is off. Turn it on in Settings."
-    );
+    // THE CARD SAYS IT (PeopleRefused), so the status line stays silent while no one is in People.
+    assert_eq!(status(&d, i), "");
     // Nothing is followed, and nothing is watched.
     assert!(d.effects.is_empty());
 

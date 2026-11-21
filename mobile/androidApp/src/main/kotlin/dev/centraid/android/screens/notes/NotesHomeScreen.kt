@@ -3,6 +3,7 @@ package dev.centraid.android.screens.notes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -63,6 +64,7 @@ import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.EmptyStateView
 import dev.centraid.android.kit.IconKey
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ReadStateView
@@ -98,7 +100,6 @@ public fun NotesHomeScreen(
     onHome: () -> Unit,
 ) {
     val chrome = state.chrome
-    val notesPlace = state.place != NotesPlace.NOTES_PLACE_NOTEBOOKS && state.place != NotesPlace.NOTES_PLACE_JOURNAL
     val search = state.search
     // The gate hides the header's actions (Rust left the band and More empty); nothing else is read here.
     val denied = state.page?.refused
@@ -117,7 +118,7 @@ public fun NotesHomeScreen(
                 RoomAction("Plus", chrome?.new_note.orEmpty(), "notes-new") { onOpen(route) }
             }
         },
-        search = if (notesPlace && search != null && denied == null) {
+        search = if (search != null && denied == null) {
             RoomSearch(
                 field = SearchField(open_ = search.open_, term = search.term, corrected = search.corrected, corrected_label = search.corrected),
                 placeholder = chrome?.search_placeholder.orEmpty(),
@@ -150,7 +151,7 @@ public fun NotesHomeScreen(
         statusLine = { StatusLine(state.status) },
         band = if (state.band.isEmpty()) null else ({ NotesBand(state.band, { key -> onEvent(NotesHomeEvent(band = NotesHomeEvent.BandPicked(key))) }, onHome) }),
     ) {
-        val searching = notesPlace && search?.open_ == true
+        val searching = search?.open_ == true
         Column(Modifier.fillMaxSize()) {
             ReadStateView(
                 page = state.page!!,
@@ -213,6 +214,8 @@ private fun LibraryList(
     onEvent: (NotesHomeEvent) -> Unit,
 ) {
     LazyColumn(Modifier.testTag("notes-library")) {
+        // FIRST OPEN (`first_open`): the card over the starter notes, then their small head.
+        data.first_open?.let { card -> item(key = "first-open") { EmptyStateView(card, onAction = null) } }
         sections(data, state, onOpen, onEvent)
         if (data.truncated) {
             item(key = "window") {
@@ -243,7 +246,18 @@ private fun LazyListScope.sections(
     data.sections.forEachIndexed { index, section ->
         val head = section.head
         if (head != null && head.title.isNotEmpty()) {
-            item(key = "head-$index") { NotesSectionTitle(head.title, pinned = section.rows.firstOrNull()?.pinned == true) }
+            if (data.first_open != null) {
+                item(key = "head-$index") {
+                    Text(
+                        head.title.uppercase(),
+                        style = kitTextStyle(KitType.Meta),
+                        color = Surface.meta,
+                        modifier = Modifier.padding(start = KitGeometry.GUTTER + 2.dp, top = 10.dp, bottom = 6.dp).semantics { heading() },
+                    )
+                }
+            } else {
+                item(key = "head-$index") { NotesSectionTitle(head.title, pinned = section.rows.firstOrNull()?.pinned == true) }
+            }
         }
         itemsIndexed(section.rows, key = { _, row -> "$index-" + row.note_id }) { at, row ->
             NoteTile(row, state, at, section.rows.size, onOpen, onEvent)
@@ -343,26 +357,28 @@ private fun NoteBody(row: NotesNoteRow) {
         Modifier.fillMaxWidth().heightIn(min = KitGeometry.ROW_MIN).padding(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            KitText(
-                row.title,
-                KitType.Row,
-                Surface.ink,
-                modifier = Modifier.weight(1f),
+        // TITLES AND PREVIEWS WRAP at the largest text (#1202), the done pill under the title; one line each before that.
+        val wrap = rememberLargestText()
+        val pill: @Composable () -> Unit = {
+            Text(
+                row.check_label,
+                style = kitTextStyle(KitType.Meta).copy(fontWeight = FontWeight.SemiBold),
+                color = accent.text,
                 maxLines = 1,
+                modifier = Modifier
+                    .padding(start = if (wrap) 0.dp else 8.dp, top = if (wrap) 4.dp else 0.dp)
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(Surface.page)
+                    .padding(horizontal = 10.dp, vertical = 3.dp),
             )
-            if (row.check_label.isNotEmpty()) {
-                Text(
-                    row.check_label,
-                    style = kitTextStyle(KitType.Meta).copy(fontWeight = FontWeight.SemiBold),
-                    color = accent.text,
-                    maxLines = 1,
-                    modifier = Modifier
-                        .padding(start = 8.dp)
-                        .clip(RoundedCornerShape(percent = 50))
-                        .background(Surface.page)
-                        .padding(horizontal = 10.dp, vertical = 3.dp),
-                )
+        }
+        if (wrap) {
+            KitText(row.title, KitType.Row, Surface.ink, maxLines = 4)
+            if (row.check_label.isNotEmpty()) pill()
+        } else {
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                KitText(row.title, KitType.Row, Surface.ink, modifier = Modifier.weight(1f), maxLines = 1)
+                if (row.check_label.isNotEmpty()) pill()
             }
         }
         // A SEARCH HIT'S SNIPPET, its matches emphasised as the index marked them.
@@ -381,8 +397,8 @@ private fun NoteBody(row: NotesNoteRow) {
                 }
             }
         }
-        Text(snippet, style = kitTextStyle(KitType.Meta), color = Surface.body, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-        if (row.meta.isNotEmpty()) KitText(row.meta, KitType.Meta, Surface.meta, maxLines = 1)
+        Text(snippet, style = kitTextStyle(KitType.Meta), color = Surface.body, maxLines = if (wrap) 4 else 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        if (row.meta.isNotEmpty()) KitText(row.meta, KitType.Meta, Surface.meta, maxLines = if (wrap) 3 else 1)
         AboutChips(row.about, Modifier.padding(top = 2.dp))
     }
 }
@@ -398,6 +414,7 @@ private fun NotebooksList(data: NotesNotebooksData, state: NotesHomeState, onEve
                 a11y = row.accessibility_label,
                 testTag = "notes-notebook-${row.id}",
                 onTap = { onEvent(NotesHomeEvent(notebook_picked = NotesHomeEvent.NotebookPicked(row.id))) },
+                hairline = false,
             ) {
                 if (row.manageable) {
                     IconKey(
@@ -441,6 +458,7 @@ private fun JournalList(
                         a11y = row.accessibility_label,
                         testTag = "notes-entry-${row.note_id}",
                         onTap = { row.route?.let(onOpen) },
+                        hairline = false,
                     )
                 }
             }

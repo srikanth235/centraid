@@ -231,10 +231,9 @@ message ImportsMadeState {
   bool running = 4;
   // Every import has run: the shell closes the service.
   bool finished = 5;
-  // The words of the import screen's reminders rows: the toggle ("Include completed reminders")
-  // and the action ("Import reminders").
-  string completed_label = 6;
-  string reminders_label = 7;
+  // The reminders import's option and verb are the Reminders sheet's, never this line's.
+  reserved 6, 7;
+  reserved "completed_label", "reminders_label";
 }
 
 // ---------------------------------------------------------------------------

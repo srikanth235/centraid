@@ -17,6 +17,7 @@ import centraid.core.v1.Envelope
 import centraid.core.v1.ExportOriginals
 import centraid.core.v1.LoadRequest
 import centraid.core.v1.OriginalsExported
+import dev.centraid.android.kit.writeFailureReason
 import centraid.core.v1.Request
 import centraid.core.v1.Value
 import dev.centraid.android.backup.LibraryRefs
@@ -62,14 +63,17 @@ internal suspend fun performExportOriginals(
 ): EffectResult {
     val located = withContext(Dispatchers.IO) { locateOriginals(context, core, export.photo_ids) }
     val missing = located.missing
+    val full = FullPhone()
     fun exported(status: OriginalsExported.Status, handed: Int = 0) = EffectResult(
         originals_exported = OriginalsExported(status = status, handed = handed, missing = missing),
     )
     if (located.originals.isEmpty()) return exported(OriginalsExported.Status.STATUS_NONE_HERE)
     return when (export.mode) {
         ExportOriginals.Mode.MODE_SEND -> {
-            val files = withContext(Dispatchers.IO) { prepare(context, located.originals, export.keep_location, export) }
-                ?: return exported(OriginalsExported.Status.STATUS_LOCATION_NOT_REMOVABLE)
+            val files = withContext(Dispatchers.IO) { prepare(context, located.originals, export.keep_location, export, full) }
+                ?: return exported(
+                    if (full.seen) OriginalsExported.Status.STATUS_STORAGE_FULL else OriginalsExported.Status.STATUS_LOCATION_NOT_REMOVABLE,
+                )
             val authority = context.packageName + COPIES_AUTHORITY_SUFFIX
             val uris = ArrayList(files.map { FileProvider.getUriForFile(context, authority, it) })
             val send = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
@@ -84,9 +88,9 @@ internal suspend fun performExportOriginals(
         }
 
         ExportOriginals.Mode.MODE_SAVE -> {
-            val saved = withContext(Dispatchers.IO) { saveToPhotos(context, located.originals, export) }
+            val saved = withContext(Dispatchers.IO) { saveToPhotos(context, located.originals, export, full) }
             if (saved < 0) {
-                exported(OriginalsExported.Status.STATUS_FAILED)
+                exported(if (full.seen) OriginalsExported.Status.STATUS_STORAGE_FULL else OriginalsExported.Status.STATUS_FAILED)
             } else {
                 exported(OriginalsExported.Status.STATUS_DONE, saved)
             }
@@ -180,14 +184,23 @@ private const val COPIES_FOLDER: String = "shared-copies/batch"
  * Copies under [COPIES_FOLDER], named by type, the location taken out unless
  * the member kept it. Null when a file's location could not be taken out.
  */
-private fun prepare(context: Context, originals: List<LocatedOriginal>, keepLocation: Boolean, export: ExportOriginals): List<File>? {
+private fun prepare(
+    context: Context,
+    originals: List<LocatedOriginal>,
+    keepLocation: Boolean,
+    export: ExportOriginals,
+    full: FullPhone,
+): List<File>? {
     val folder = File(context.cacheDir, COPIES_FOLDER)
     folder.deleteRecursively()
     folder.mkdirs()
     return originals.mapIndexed { index, original ->
         val target = File(folder, fileName(original, index, export))
-        val copied = runCatching { File(original.path).copyTo(target, overwrite = true) }.isSuccess
-        if (!copied) return null
+        val copied = runCatching { File(original.path).copyTo(target, overwrite = true) }
+        if (copied.isFailure) {
+            full.note(copied.exceptionOrNull())
+            return null
+        }
         if (!keepLocation && !stripLocation(target, original)) return null
         target
     }
@@ -241,7 +254,7 @@ private val GPS_TAGS: List<String> = listOf(
  * those devices the save is refused with the export-failed sentence rather
  * than a permission prompt nothing else in Photos needs.
  */
-private fun saveToPhotos(context: Context, originals: List<LocatedOriginal>, export: ExportOriginals): Int {
+private fun saveToPhotos(context: Context, originals: List<LocatedOriginal>, export: ExportOriginals, full: FullPhone): Int {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return -1
     val resolver = context.contentResolver
     var saved = 0
@@ -258,9 +271,11 @@ private fun saveToPhotos(context: Context, originals: List<LocatedOriginal>, exp
             put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
         val uri = resolver.insert(collection, values) ?: return -1
-        val written = runCatching {
+        val wrote = runCatching {
             resolver.openOutputStream(uri)?.use { out -> File(original.path).inputStream().use { it.copyTo(out) } }
-        }.getOrNull() != null
+        }
+        wrote.exceptionOrNull()?.let(full::note)
+        val written = wrote.getOrNull() != null
         if (!written) {
             resolver.delete(uri, null, null)
             return -1
@@ -277,4 +292,14 @@ private fun fileName(original: LocatedOriginal, index: Int, export: ExportOrigin
     val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(original.mediaType)
         ?: if (original.isVideo) "mp4" else "jpg"
     return "$stem ${index + 1}.$ext"
+}
+
+/** Whether a copy of this export stopped for lack of space: the shell's fact, worded by Rust. */
+private class FullPhone {
+    var seen = false
+        private set
+
+    fun note(why: Throwable?) {
+        if (why != null && why.writeFailureReason("") == EffectReason.STORAGE_FULL) seen = true
+    }
 }

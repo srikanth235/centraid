@@ -1,7 +1,7 @@
 //! MONEY'S SCREENS (#1135): spending, activity and cash flow, one transaction,
 //! the accounts, the categories, the rules, a category's target, recurring
-//! charges, search and the statement import. Every decision a person sees is
-//! made here; SwiftUI and Compose draw [`wire::ViewState`]. Every amount, its
+//! charges, and the statement import; search is the band's field on the home, in place. Every
+//! decision a person sees is made here; SwiftUI and Compose draw [`wire::ViewState`]. Every amount, its
 //! sign and its currency come from [`crate::kit::money`], and nothing here adds
 //! two amounts: the core's answers carry every figure, per currency.
 //!
@@ -10,7 +10,6 @@
 //! | Activity (home) · Spending · Cash flow, with More | [`HOME`] | [`home`] |
 //! | One transaction | [`TRANSACTION`] | [`transaction`] |
 //! | A category's plan for a month | [`TARGET`] | [`target`] |
-//! | Search | [`SEARCH`] | [`search`] |
 //! | Recurring charges | [`RECURRING`] | [`recurring`] |
 //! | Accounts | [`ACCOUNTS`] | [`accounts`] |
 //! | Categories | [`CATEGORIES`] | [`categories`] |
@@ -40,10 +39,11 @@ pub mod export;
 pub mod fold;
 pub mod home;
 pub mod import;
+pub mod reads;
 pub mod recurring;
 pub mod rows;
 pub mod rules;
-pub mod search;
+mod search;
 pub mod target;
 pub mod transaction;
 pub mod trash;
@@ -51,7 +51,6 @@ pub mod trash;
 pub const HOME: &str = "money.home";
 pub const TRANSACTION: &str = "money.transaction";
 pub const TARGET: &str = "money.target";
-pub const SEARCH: &str = "money.search";
 pub const RECURRING: &str = "money.recurring";
 pub const ACCOUNTS: &str = "money.accounts";
 pub const CATEGORIES: &str = "money.categories";
@@ -59,6 +58,8 @@ pub const RULES: &str = "money.rules";
 pub const IMPORT: &str = "money.import";
 /// The transactions in the trash (#1185).
 pub const TRASH: &str = "money.trash";
+/// "What Money may read": the kit's reads page, opened from More (owner, 2026-11-19).
+pub const READS: &str = "money.reads";
 /// Money's export of transactions as a spreadsheet file (#1185).
 pub const EXPORT: &str = "money.export";
 /// The earlier versions of a transaction (#1185).
@@ -74,13 +75,13 @@ pub fn registry() -> Registry {
         .with(HOME, home::build)
         .with(TRANSACTION, transaction::build)
         .with(TARGET, target::build)
-        .with(SEARCH, search::build)
         .with(RECURRING, recurring::build)
         .with(ACCOUNTS, accounts::build)
         .with(CATEGORIES, categories::build)
         .with(RULES, rules::build)
         .with(IMPORT, import::build)
         .with(TRASH, trash::build)
+        .with(READS, reads::build)
         .with(EARLIER, earlier::build)
         .with(EXPORT, export::build)
 }
@@ -102,7 +103,7 @@ pub fn runtime() -> crate::Runtime {
 /// The routes Money's own screens hand to a shell inside a view state.
 pub mod routes {
     use super::{
-        ACCOUNTS, CATEGORIES, HOME, IMPORT, RECURRING, RULES, SEARCH, TARGET, TRANSACTION, TRASH,
+        ACCOUNTS, CATEGORIES, HOME, IMPORT, READS, RECURRING, RULES, TARGET, TRANSACTION, TRASH,
         wire,
     };
 
@@ -160,11 +161,6 @@ pub mod routes {
     }
 
     #[must_use]
-    pub fn search(parent: &str) -> wire::Route {
-        route(SEARCH, wire::route::Args::MoneySearch(page(parent)))
-    }
-
-    #[must_use]
     pub fn recurring(parent: &str) -> wire::Route {
         route(RECURRING, wire::route::Args::MoneyRecurring(page(parent)))
     }
@@ -193,5 +189,11 @@ pub mod routes {
     #[must_use]
     pub fn trash() -> wire::Route {
         route(TRASH, wire::route::Args::Trash(wire::TrashRoute {}))
+    }
+
+    /// "What Money may read" (owner, 2026-11-19).
+    #[must_use]
+    pub fn reads() -> wire::Route {
+        crate::kit::reads_page::route(READS)
     }
 }

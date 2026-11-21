@@ -40,6 +40,7 @@ import dev.centraid.android.kit.AndroidHealth
 import dev.centraid.android.kit.ClipboardDeadline
 import dev.centraid.android.kit.EffectReason
 import dev.centraid.android.kit.SecretStores
+import dev.centraid.android.kit.StoreRefusal
 import dev.centraid.android.kit.effectAttempt
 import dev.centraid.android.notify.Notify
 import dev.centraid.android.screens.PhotoHandOff
@@ -228,7 +229,7 @@ internal class ShellEffects(
             effect.calendar_read != null -> {
                 val read = effect.calendar_read!!
                 if (!allowed(Manifest.permission.READ_CALENDAR, read.ask_permission)) {
-                    EffectResult(failed = EffectFailed(reason = EffectReason.DENIED, denied = true))
+                    EffectResult(failed = StoreRefusal.failure(StoreRefusal.asked(context, Manifest.permission.READ_CALENDAR)))
                 } else {
                     effectAttempt {
                         withContext(Dispatchers.IO) { readCalendarSnapshot(context, read.days_back, read.days_on, InstallId.of(context)) }
@@ -238,7 +239,7 @@ internal class ShellEffects(
             effect.contacts_read != null -> {
                 val read = effect.contacts_read!!
                 if (!allowed(Manifest.permission.READ_CONTACTS, read.ask_permission)) {
-                    EffectResult(failed = EffectFailed(reason = EffectReason.DENIED, denied = true))
+                    EffectResult(failed = StoreRefusal.failure(StoreRefusal.asked(context, Manifest.permission.READ_CONTACTS)))
                 } else {
                     effectAttempt {
                         withContext(Dispatchers.IO) { readContactsSnapshot(context, InstallId.of(context)) }
@@ -323,6 +324,10 @@ internal class ShellEffects(
             effect.open_url != null -> start(Intent(Intent.ACTION_VIEW, Uri.parse(effect.open_url!!.url)))
             effect.open_map != null ->
                 start(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=" + Uri.encode(effect.open_map!!.query))))
+            // THIS SHEET CARRIES THE RECOVERY WORDS (#1202). Android's chooser owns its Copy button and
+            // offers no way to remove it or to mark what it copies sensitive (`EXTRA_EXCLUDE_COMPONENTS`
+            // drops apps, not the chooser's own actions); the clip this shell sets itself is marked
+            // sensitive above, and the words are never put on the clipboard by the core.
             effect.share != null -> {
                 val share = effect.share!!
                 val send = Intent(Intent.ACTION_SEND).apply {
@@ -387,9 +392,16 @@ internal class ShellEffects(
     }
 
     /** Granted now, or asked at the member's own tap when [ask] and an activity is up. */
-    private suspend fun allowed(permission: String, ask: Boolean): Boolean =
-        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED ||
-            (ask && ui?.ask(permission) == true)
+    private suspend fun allowed(permission: String, ask: Boolean): Boolean {
+        if (ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED) return true
+        if (!ask || ui == null) return false
+        // "ASKED" IS RECORDED ONLY ONCE THE SYSTEM PROMPT HAS ANSWERED: an ask that is cancelled or
+        // interrupted (the activity went away) throws out of `ask` before this line, and a later read
+        // is then "never asked", not "refused".
+        val granted = ui?.ask(permission) == true
+        StoreRefusal.noteAsked(context, permission)
+        return granted
+    }
 
     /** The ribbon's doors into the system's settings (the backup's is a tab Rust selects itself). */
     private fun settingsDoor(door: HomeStatus.Destination): EffectResult = when (door) {

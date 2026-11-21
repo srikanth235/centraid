@@ -60,7 +60,10 @@ struct PeopleHomeView: View {
                     page: state.page,
                     loadingLabel: chrome.loading,
                     onRetry: { send(PeopleEvents.home { $0.refreshed = .init() }) },
-                    emptyExtra: emptyUnder
+                    // THE CARD'S ONE ACTION is Rust's to decide: Open Settings after a refused import, else Add person.
+                    onEmptyAction: offersImport ? nil : { send(PeopleEvents.home { $0.emptyActed = .init() }) },
+                    emptyExtra: emptyUnder,
+                    emptyAction: offersImport ? { AnyView(PeopleImportButton(label: state.chrome.importContacts, send: send)) } : nil
                 ) {
                     if state.search.open, state.search.hasResults {
                         searchResults
@@ -140,18 +143,15 @@ struct PeopleHomeView: View {
     /// the header).
     private var emptyUnder: (() -> AnyView)? {
         let asks = state.search.open && state.search.hasAsk && !state.search.hasResults
-        // Day one is the empty state that names the phone's contacts (reading it picks the extra).
-        var offersImport = false
-        if case let .empty(empty)? = state.page.state { offersImport = empty.importSource == .contacts }
-        guard asks || offersImport else { return nil }
-        return {
-            AnyView(VStack(spacing: 0) {
-                if asks { SearchAskRow(ask: state.search.ask) }
-                if offersImport {
-                    PeopleImportButton(label: state.chrome.importContacts, send: send)
-                }
-            })
-        }
+        guard asks else { return nil }
+        return { AnyView(SearchAskRow(ask: state.search.ask)) }
+    }
+
+    /// Day one is the empty state that names the phone's contacts: its import is the card's action
+    /// (`emptyAction`), inside the card with the hint under it.
+    private var offersImport: Bool {
+        if case let .empty(empty)? = state.page.state { return empty.importSource == .contacts }
+        return false
     }
 
     @ViewBuilder
@@ -238,7 +238,7 @@ struct PeopleListsView: View {
                                 let listID = row.listID
                                 CentraidRow(
                                     title: row.name,
-                                    meta: row.meta,
+                                    meta: row.meta.dotSafe,
                                     accessibility: row.accessibilityLabel,
                                     identifier: "people-list-row-\(listID)"
                                 ) { send(PeopleEvents.lists { $0.rowTapped = .with { $0.listID = listID } }) }
@@ -365,7 +365,7 @@ private struct PeopleRosterList: View {
                 }
             }
             // The index sits over the trailing edge: the rows give it its own gutter.
-            .padding(.trailing, roster.index.isEmpty || largestText ? 0 : 18)
+            .padding(.trailing, roster.index.isEmpty || largestText ? 0 : 30)
         }
         .refreshable { send(PeopleEvents.home { $0.refreshed = .init() }) }
         .accessibilityIdentifier("people-roster")
@@ -387,6 +387,7 @@ private struct PeopleSectionLetter: View {
             .padding(.bottom, 4)
             .background(Surface.page)
             .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("people-section-letter")
     }
 }
 
@@ -398,21 +399,38 @@ private struct PeopleIndexRail: View {
 
     @Environment(\.appAccent) private var accent
     @State private var current: String?
-    @ScaledMetric(relativeTo: .caption2) private var cell: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption2) private var cell: CGFloat = 18
+
+    /// THE LETTER A SCREEN READER IS ON: the one the member last touched or stepped to.
+    private var spoken: Centraid_Core_V1_PeopleIndexLetter? {
+        letters.first(where: { $0.letter == current }) ?? letters.first
+    }
+
+    /// Steps to the next (or previous) letter that has people, and jumps to its section.
+    private func step(_ direction: AccessibilityAdjustmentDirection) {
+        guard let at = letters.firstIndex(where: { $0.letter == spoken?.letter }) else { return }
+        let next: [Centraid_Core_V1_PeopleIndexLetter] = direction == .increment
+            ? Array(letters[(at + 1)...]) : Array(letters[..<at].reversed())
+        guard let letter = next.first(where: { $0.hasRows_p }) ?? next.first else { return }
+        current = letter.letter
+        jump(letter.sectionKey)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             ForEach(letters, id: \.letter) { letter in
+                // READABLE (#1202): 13 semibold, an empty letter in the quiet ink, not a 40% tint.
                 Text(letter.letter)
-                    .kitType(.badge)
-                    .foregroundStyle(accent.text.opacity(letter.hasRows_p ? 1 : 0.4))
-                    .frame(width: 18, height: cell)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(letter.accessibilityLabel)
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityAction { jump(letter.sectionKey) }
+                    .kitType(.meta)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(letter.hasRows_p ? accent.text : Surface.meta)
+                    .frame(width: 28, height: cell)
+                    .accessibilityHidden(true)
             }
         }
+        // THE TOUCH AREA IS A 44 PT-WIDE STRIP along the whole index, and a touch picks the nearest
+        // letter by its height, so a finger never has to land on a 13 pt glyph.
+        .frame(width: CentraidGeometry.targetMinCoarse)
         .contentShape(Rectangle())
         .gesture(
             DragGesture(minimumDistance: 0)
@@ -426,6 +444,13 @@ private struct PeopleIndexRail: View {
                 .onEnded { _ in current = nil }
         )
         .padding(.trailing, 2)
+        // ONE ADJUSTABLE STOP, NOT A STOP PER LETTER (#1202): twenty-seven 28 x 18 pt letters are
+        // each too small to hit, and a screen reader that stepped through them would take
+        // twenty-seven swipes to cross the list. The strip is one element, a swipe up or down moves
+        // to the next letter, and it says which letter it is on, as the system's own index does.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spoken?.accessibilityLabel ?? "")
+        .accessibilityAdjustableAction(step)
         .accessibilityIdentifier("people-index")
     }
 }
@@ -473,10 +498,16 @@ private struct PeopleReconnectLine: View {
 
     @Environment(\.appAccent) private var accent
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
+        // THE TOUCH VERB UNDER THE SENTENCE AT ACCESSIBILITY SIZES (#1202): beside it the
+        // sentence was a column too narrow for "reconnect".
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 12))
         Button(action: onTap) {
-            HStack(spacing: 12) {
+            layout {
                 CentraidIconView(iconKey: "Activity", tint: accent.text, size: 20)
                 Text(line.text)
                     .kitType(.row)
@@ -529,6 +560,7 @@ private struct PeopleRosterRowView: View {
     let open: (Centraid_Core_V1_Route) -> Void
 
     @Environment(\.appAccent) private var accent
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private func isReminder(_ chip: Centraid_Core_V1_StatusChip) -> Bool {
         switch chip.tone {
@@ -537,30 +569,35 @@ private struct PeopleRosterRowView: View {
         }
     }
 
-    private var meta: Text {
-        var line = Text([row.role, row.meta].filter { !$0.isEmpty }.joined(separator: " · "))
-        for chip in row.chips where isReminder(chip) {
-            line = line + Text(" · ") + Text(chip.label).foregroundStyle(accent.text)
-        }
-        return line
+    private var meta: MetaLine {
+        MetaLine(
+            parts: [row.role, row.meta],
+            accented: row.chips.filter(isReminder).map(\.label)
+        )
     }
 
     var body: some View {
         HStack(spacing: 0) {
             Button { open(row.route) } label: {
-                HStack(spacing: 12) {
+                // AT ACCESSIBILITY SIZES THE AVATAR SITS ABOVE THE WORDS (#1202): the scaled
+                // avatar beside them left a few letters of the name.
+                let rowLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                    : AnyLayout(HStackLayout(spacing: 12))
+                rowLayout {
                     PeopleAvatarView(avatar: row.avatar, size: 40)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(row.name)
                             .kitType(.row)
                             .foregroundStyle(Surface.ink)
-                            .lineLimit(1)
+                            .kitLineLimit(1)
+                            .accessibilityIdentifier("people-row-name")
                         meta
                             .kitType(.meta)
                             .foregroundStyle(Surface.meta)
-                            .lineLimit(2)
+                            .accessibilityIdentifier("people-row-meta")
                     }
-                    Spacer(minLength: 8)
+                    if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
                     ForEach(Array(row.chips.filter { !isReminder($0) }.enumerated()), id: \.offset) { _, chip in
                         StatusChipView(chip)
                     }
@@ -616,7 +653,7 @@ private struct PeopleTouchList: View {
                             .padding(.leading, CentraidGeometry.pageMargin)
                         CentraidRow(
                             title: card.name,
-                            meta: [card.role, card.detail].filter { !$0.isEmpty }.joined(separator: " · "),
+                            meta: [card.role, card.detail].filter { !$0.isEmpty }.joined(separator: " · ").dotSafe,
                             accessibility: card.accessibilityLabel,
                             identifier: "people-reconnect-\(card.partyID)",
                             onTap: { open(card.route) }
@@ -638,7 +675,7 @@ private struct PeopleTouchList: View {
                             .padding(.leading, CentraidGeometry.pageMargin)
                         CentraidRow(
                             title: row.name,
-                            meta: [row.label, row.dayLabel].filter { !$0.isEmpty }.joined(separator: " · "),
+                            meta: [row.label, row.dayLabel].filter { !$0.isEmpty }.joined(separator: " · ").dotSafe,
                             trailing: row.whenLabel,
                             accessibility: row.accessibilityLabel,
                             identifier: "people-upcoming-\(row.dateID)",
@@ -656,7 +693,7 @@ private struct PeopleTouchList: View {
                             .padding(.leading, CentraidGeometry.pageMargin)
                         CentraidRow(
                             title: row.name,
-                            meta: [row.kindLabel, row.text].filter { !$0.isEmpty }.joined(separator: " · "),
+                            meta: [row.kindLabel, row.text].filter { !$0.isEmpty }.joined(separator: " · ").dotSafe,
                             trailing: row.whenLabel,
                             accessibility: row.accessibilityLabel,
                             identifier: "people-recent-\(row.interactionID)",
@@ -759,7 +796,8 @@ struct PeopleAvatarView: View {
         Text(avatar.initials)
             .centraidType(size > 40 ? "title" : "annotLabelOn")
             .foregroundStyle(Theme.color("text", scheme))
-            .frame(width: size, height: size)
+            .accessibilityIdentifier("people-avatar-initials")
+            .kitScaledSquare(size, relativeTo: size > 40 ? .largeTitle : .footnote)
             .background(
                 Circle().fill(Theme.color(peopleHue(avatar.hueKey, else: "bgSunken"), scheme).opacity(0.28))
             )
@@ -822,4 +860,10 @@ struct PeopleStatusLine: View {
 /// `Theme.color` traps on an unknown role and an avatar must never crash.
 func peopleHue(_ role: String, else fallback: String) -> String {
     KitHue.role(role) ?? fallback
+}
+
+extension String {
+    /// A WRAPPED META LINE NEVER STARTS WITH "·" (#1202): the separator keeps to the part before it
+    /// (a no-break space ahead of the dot), so a break falls after the dot, never before it.
+    var dotSafe: String { replacingOccurrences(of: " · ", with: "\u{00A0}· ") }
 }

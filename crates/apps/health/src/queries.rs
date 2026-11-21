@@ -560,7 +560,7 @@ pub struct FollowView {
 }
 
 /// The newest followed workout's start: the newest activity of a workout kind that has its
-/// workout row (by construction every one does; the row is still asked for, not assumed).
+/// workout row and that a live health origin states (a hand-logged one does not count).
 fn latest_workout(door: &dyn PageDoor) -> KitResult<Option<String>> {
     let kinds = door::kinds(door)?;
     if kinds.is_empty() {
@@ -572,11 +572,12 @@ fn latest_workout(door: &dyn PageDoor) -> KitResult<Option<String>> {
         let page = door::workout_page(door, &ids, &request)?;
         let on_page: Vec<String> = page.rows.iter().map(|a| a.activity_id.clone()).collect();
         let measured = door::measures(door, &on_page)?;
-        if let Some(found) = page
-            .rows
-            .iter()
-            .find(|activity| measured.contains_key(&activity.activity_id))
-        {
+        // ONLY A WORKOUT A HEALTH STORE STATES: one the member logged by hand is no read of the
+        // store, and a window opened behind it would pass over the store's older workouts.
+        let followed = door::followed(door, &on_page)?;
+        if let Some(found) = page.rows.iter().find(|activity| {
+            measured.contains_key(&activity.activity_id) && followed.contains(&activity.activity_id)
+        }) {
             return Ok(Some(found.started_at.clone()));
         }
         match page.next {

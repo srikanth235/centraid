@@ -129,6 +129,10 @@ private struct PeoplePersonBody: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.appAccent) private var accent
 
+    /// A COUNT OF NOTHING IS NOT SHOWN (#1202): Rust always sends the count, and an empty head reads
+    /// "Notes", never "Notes 0".
+    private static func shownCount(_ n: UInt32) -> UInt32? { n > 0 ? n : nil }
+
     private func openSheet(_ which: Centraid_Core_V1_PeoplePersonEvent.SheetOpened.Which) {
         send(PeopleEvents.person { $0.sheetOpened = .with { $0.which = which } })
     }
@@ -144,14 +148,15 @@ private struct PeoplePersonBody: View {
 
                 SectionHeader(
                     title: person.channelsHead.title,
-                    count: person.channelsHead.count,
+                    count: Self.shownCount(person.channelsHead.count),
                     verb: person.channelsHead.verbLabel
                 ) { openSheet(.channel) }
                 if person.channels.isEmpty {
                     PeopleStatusLine(text: person.channelsEmpty)
                 } else {
                     VStack(spacing: 0) {
-                        ForEach(person.channels, id: \.channelID) { channel in
+                        ForEach(Array(person.channels.enumerated()), id: \.element.channelID) { index, channel in
+                            if index > 0 { KitHairline() }
                             channelRow(channel)
                         }
                     }
@@ -162,7 +167,7 @@ private struct PeoplePersonBody: View {
 
                 SectionHeader(
                     title: person.datesHead.title,
-                    count: person.datesHead.count,
+                    count: Self.shownCount(person.datesHead.count),
                     verb: person.datesHead.verbLabel
                 ) { openSheet(.date) }
                 if person.dates.isEmpty && person.facts.isEmpty {
@@ -187,12 +192,12 @@ private struct PeoplePersonBody: View {
                 }
 
                 if !person.relations.isEmpty {
-                    SectionHeader(title: person.relationsHead.title, count: person.relationsHead.count)
+                    SectionHeader(title: person.relationsHead.title, count: Self.shownCount(person.relationsHead.count))
                     VStack(spacing: 0) {
                         ForEach(Array(person.relations.enumerated()), id: \.offset) { _, relation in
                             CentraidRow(
                                 title: relation.name,
-                                meta: relation.meta,
+                                meta: relation.meta.dotSafe,
                                 accessibility: relation.accessibilityLabel,
                                 identifier: "people-relation-\(relation.partyID)"
                             )
@@ -212,7 +217,8 @@ private struct PeoplePersonBody: View {
                         idPrefix: "people-person-attachment",
                         headIdentifier: "people-person-attachments",
                         open: open,
-                        send: { attachment in send(PeopleEvents.person { $0.attachment = attachment }) }
+                        send: { attachment in send(PeopleEvents.person { $0.attachment = attachment }) },
+                        emptyInCard: true
                     )
                 }
 
@@ -225,11 +231,17 @@ private struct PeoplePersonBody: View {
 
                 SectionHeader(
                     title: person.notesHead.title,
-                    count: person.notesHead.count,
+                    count: Self.shownCount(person.notesHead.count),
                     verb: person.notesHead.verbLabel
                 ) { openSheet(.note) }
                 if person.notes.isEmpty {
-                    PeopleStatusLine(text: person.notesEmpty)
+                    // AN EMPTY SECTION IS A CARD, as Linked to is (#1202).
+                    Text(person.notesEmpty)
+                        .kitType(.row)
+                        .foregroundStyle(Surface.meta)
+                        .frame(maxWidth: .infinity, minHeight: CentraidGeometry.targetMinCoarse, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .peopleCard()
                 } else {
                     VStack(spacing: 0) {
                         ForEach(person.notes, id: \.annotationID) { note in
@@ -242,7 +254,7 @@ private struct PeoplePersonBody: View {
                 if !person.isMe {
                     SectionHeader(
                         title: person.touchesHead.title,
-                        count: person.touchesHead.count,
+                        count: Self.shownCount(person.touchesHead.count),
                         verb: person.touchesHead.verbLabel
                     ) { openSheet(.logTouch) }
                     if person.touches.isEmpty {
@@ -252,7 +264,7 @@ private struct PeoplePersonBody: View {
                             ForEach(person.touches, id: \.interactionID) { touch in
                                 CentraidRow(
                                     title: touch.kindLabel,
-                                    meta: touch.text,
+                                    meta: touch.text.dotSafe,
                                     trailing: touch.whenLabel,
                                     accessibility: touch.accessibilityLabel,
                                     identifier: "people-touch-\(touch.interactionID)"
@@ -316,7 +328,7 @@ private struct PeoplePersonBody: View {
                     .kitType(.meta)
                     .foregroundStyle(Surface.meta)
             } else if !person.cadenceLine.isEmpty {
-                Text(person.cadenceLine)
+                Text(person.cadenceLine.dotSafe)
                     .kitType(.meta)
                     .foregroundStyle(Surface.meta)
                     .multilineTextAlignment(.center)
@@ -337,9 +349,17 @@ private struct PeoplePersonBody: View {
     @ViewBuilder
     private var heroActions: some View {
         if !person.hero.isEmpty {
-            HStack(alignment: .top, spacing: 14) {
+            // AT THE LARGEST TEXT THE KEYS STACK, key then its word (#1202): four columns left each
+            // word a few letters ("mes...", "log t...").
+            let across = largestText
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                : AnyLayout(HStackLayout(alignment: .top, spacing: 14))
+            across {
                 ForEach(person.hero, id: \.key) { action in
-                    VStack(spacing: 4) {
+                    let perKey = largestText
+                        ? AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+                        : AnyLayout(VStackLayout(spacing: 4))
+                    perKey {
                         Button {
                             send(PeopleEvents.person { $0.hero = .with { $0.key = action.key } })
                         } label: {
@@ -365,12 +385,13 @@ private struct PeoplePersonBody: View {
                             .kitType(.meta)
                             .fontWeight(action.primary ? .semibold : .regular)
                             .foregroundStyle(Surface.body)
-                            .lineLimit(1)
+                            .kitLineLimit(1)
                             .accessibilityHidden(true)
                     }
                 }
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: largestText ? .leading : .center)
+            .padding(.horizontal, largestText ? CentraidGeometry.pageMargin : 0)
             .padding(.bottom, 8)
         }
     }
@@ -392,7 +413,7 @@ private struct PeoplePersonBody: View {
                         Text(row.kindLabel)
                             .kitType(.row)
                             .foregroundStyle(AppAccent(row.appKey).text)
-                        Text([row.title, row.whenLabel].filter { !$0.isEmpty }.joined(separator: " · "))
+                        Text([row.title, row.whenLabel].filter { !$0.isEmpty }.joined(separator: " · ").dotSafe)
                             .kitType(.row)
                             .foregroundStyle(Surface.ink)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -425,7 +446,7 @@ private struct PeoplePersonBody: View {
         HStack(spacing: 0) {
             CentraidRow(
                 title: date.label,
-                meta: [date.dayLabel, date.reminderLabel].filter { !$0.isEmpty }.joined(separator: " · "),
+                meta: [date.dayLabel, date.reminderLabel].filter { !$0.isEmpty }.joined(separator: " · ").dotSafe,
                 trailing: date.whenLabel,
                 accessibility: date.accessibilityLabel,
                 identifier: "people-date-\(date.dateID)"
@@ -445,15 +466,25 @@ private struct PeoplePersonBody: View {
         }
     }
 
+    /// AN ADDRESS BREAKS AT ITS "@", NEVER INSIDE A WORD (#1202): beside the verb and the remove key
+    /// a long address had no break point and the card cut "example.co" / "m". A zero-width space
+    /// after the "@" is the one place it may wrap; the row reads the same aloud (its accessibility
+    /// label is the core's own).
+    private static func breakable(_ value: String) -> String {
+        value.replacingOccurrences(of: "@", with: "@\u{200B}")
+    }
+
     private func channelRow(_ channel: Centraid_Core_V1_PeopleChannelRow) -> some View {
         HStack(spacing: 0) {
             CentraidRow(
-                title: channel.value,
+                title: Self.breakable(channel.value),
                 meta: [channel.kindLabel, channel.label, channel.preferredLabel, channel.duplicateNote]
                     .filter { !$0.isEmpty }
-                    .joined(separator: " · "),
+                    .joined(separator: " · ")
+                    .dotSafe,
                 accessibility: channel.accessibilityLabel,
                 identifier: "people-channel-\(channel.channelID)",
+                divider: false,
                 onTap: { send(PeopleEvents.person { $0.channel = .with { $0.channelID = channel.channelID } }) }
             )
             if !channel.actionLabel.isEmpty {
@@ -464,6 +495,8 @@ private struct PeoplePersonBody: View {
                 ) {
                     send(PeopleEvents.person { $0.channel = .with { $0.channelID = channel.channelID } })
                 }
+                // ONE COLUMN FOR THE VERBS (#1202): Call and Email end on the same edge, whatever their width.
+                .frame(minWidth: 64, alignment: .trailing)
             }
             if !channel.removeLabel.isEmpty {
                 KitIconKey(

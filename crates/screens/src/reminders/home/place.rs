@@ -56,9 +56,8 @@ pub fn fold_shaped(
     let day_one = counts.is_some_and(|counts| counts.open == 0 && counts.closed == 0)
         && board.projects.is_empty()
         && answer.projects.is_empty();
-    // NOTHING OPEN (day one, or the starters finished) is when the phone's
-    // reminders are offered: a first vault's starter tasks mean day one is
-    // never seen, and "all done" is the point of use.
+    // NOTHING OPEN (day one, or everything finished) is when the phone's
+    // reminders are offered: "all done" is the point of use as much as day one.
     let reminders = if open == Some(0) {
         wire::ImportSource::Reminders
     } else {
@@ -72,6 +71,8 @@ pub fn fold_shaped(
         wire::EmptyState {
             headline: words::day_one(locale),
             import_source: wire::ImportSource::Reminders as i32,
+            // FIRST OPEN (FirstImports): the way to add by hand, under the import.
+            hint: crate::strings::agenda::first_open_hint(locale),
             ..wire::EmptyState::default()
         }
     } else {
@@ -163,21 +164,31 @@ pub fn smart_counts(board: Option<&wire::AgendaTaskBoard>) -> SmartCounts {
 /// Scheduled raspberry, All the ink, Flagged the state amber, Completed graphite.
 fn smart_lists(locale: Locale, all: Option<&wire::AgendaTaskBoard>) -> Vec<wire::AgendaSmartList> {
     let counts = smart_counts(all);
+    let card_with =
+        |key: &str, label: String, icon: &str, color: &str, count_text: String, view| {
+            wire::AgendaSmartList {
+                key: key.to_owned(),
+                accessibility_label: if count_text.is_empty() {
+                    label.clone()
+                } else {
+                    format!("{label}, {count_text}")
+                },
+                label,
+                icon_key: icon.to_owned(),
+                color_key: color.to_owned(),
+                count: count_text,
+                route: Some(routes::todo_list(view)),
+            }
+        };
     let card = |key: &str, label: String, icon: &str, color: &str, count: Option<usize>, view| {
-        let count_text = count.map(|n| n.to_string()).unwrap_or_default();
-        wire::AgendaSmartList {
-            key: key.to_owned(),
-            accessibility_label: if count_text.is_empty() {
-                label.clone()
-            } else {
-                format!("{label}, {count_text}")
-            },
+        card_with(
+            key,
             label,
-            icon_key: icon.to_owned(),
-            color_key: color.to_owned(),
-            count: count_text,
-            route: Some(routes::todo_list(view)),
-        }
+            icon,
+            color,
+            count.map(|n| n.to_string()).unwrap_or_default(),
+            view,
+        )
     };
     vec![
         card(
@@ -212,12 +223,14 @@ fn smart_lists(locale: Locale, all: Option<&wire::AgendaTaskBoard>) -> Vec<wire:
             Some(counts.flagged),
             wire::TodoView::Flagged,
         ),
-        card(
+        // THE BOARD'S FIFTH TILE: "Completed" stands where the others carry a count, and the
+        // tile is named for the place it opens, the Logbook.
+        card_with(
             "completed",
-            reminders::smart_completed(locale),
+            words::view_logbook(locale),
             "Check",
             crate::reminders::list::smart_color(wire::TodoView::Logbook),
-            None,
+            reminders::smart_completed(locale),
             wire::TodoView::Logbook,
         ),
     ]
@@ -307,11 +320,14 @@ fn project_groups(
         .map(|(area, projects)| group(format!("area|{area}"), area.to_owned(), projects))
         .collect();
     if !unnamed.is_empty() {
-        out.push(group(
-            "area|".to_owned(),
-            words::projects_no_area(locale),
-            unnamed,
-        ));
+        // THE BOARD DRAWS NO "Projects" HEADING over My Lists: the unfiled projects carry one only
+        // where named areas stand beside them, so they are not read as the last area's.
+        let title = if out.is_empty() {
+            String::new()
+        } else {
+            words::projects_no_area(locale)
+        };
+        out.push(group("area|".to_owned(), title, unnamed));
     }
     out
 }
@@ -437,6 +453,7 @@ mod tests {
         assert_eq!(empty.headline, "Add the first thing you must not forget.");
         assert_eq!(empty.import_source, wire::ImportSource::Reminders as i32);
         assert_eq!(empty.action_label, "");
+        assert_eq!(empty.hint, "Or tap + to write one.");
     }
 
     #[test]

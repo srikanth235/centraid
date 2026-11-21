@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -112,6 +113,7 @@ internal fun NotesRichBody(
     onToggle: (Int) -> Unit,
     onLink: (NotesLinkChip, Int) -> Unit,
     modifier: Modifier = Modifier,
+    focusRequester: androidx.compose.ui.focus.FocusRequester? = null,
 ) {
     val typed = remember { TypedText(value) }
     var field by remember { mutableStateOf(TextFieldValue(value)) }
@@ -178,6 +180,7 @@ internal fun NotesRichBody(
             onTextLayout = { layout = it },
             modifier = Modifier
                 .fillMaxWidth()
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                 .onFocusChanged { onFocus(it.isFocused) }
                 .testTag("notes-body")
                 .semantics { contentDescription = placeholder },

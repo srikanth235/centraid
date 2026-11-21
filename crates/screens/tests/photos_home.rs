@@ -251,7 +251,7 @@ impl Rig {
 }
 
 fn banner_of(roll: &Roll, empty: bool) -> Option<wire::PhotosHomeImportBanner> {
-    roll.banner(Locale::En, empty)
+    roll.banner(Locale::En, empty, false)
 }
 
 // ---------------------------------------------------------------------------
@@ -718,6 +718,50 @@ fn import_now_over_an_emptied_library_asks_the_camera_roll_for_a_pass_and_the_sh
 }
 
 #[test]
+fn an_empty_library_before_the_first_ask_is_the_card_with_allow_as_its_button() {
+    use wire::photos_home_import_banner::Remedy;
+    let mut r = rig();
+    r.clear_library();
+    r.send(H::Permission(wire::PhotosPermissionChanged {
+        permission: Perm::NotAsked as i32,
+    }));
+    let empty = r.library_empty();
+    assert_eq!(empty.headline, "No photos on this phone yet.");
+    assert_eq!(empty.action_label, "Allow photo access");
+    // The card is the ask: no small link above it.
+    assert!(r.state().import_banner.is_none());
+    // Both shells send Settings from the card; before any ask it is the prompt, and no effect.
+    let update = r.send(H::Remedy(wire::PhotosBannerRemedy {
+        remedy: Remedy::Settings as i32,
+    }));
+    assert!(update.effects.is_empty(), "{:?}", update.effects);
+}
+
+#[test]
+fn an_empty_library_behind_a_refused_grant_is_the_card_with_open_settings_alone() {
+    let mut r = rig();
+    r.clear_library();
+    r.send(H::Permission(wire::PhotosPermissionChanged {
+        permission: Perm::Denied as i32,
+    }));
+    let empty = r.library_empty();
+    assert_eq!(empty.headline, "Photo access is off.");
+    assert_eq!(
+        empty.body,
+        "Turn it on in Settings to import your camera roll."
+    );
+    assert_eq!(empty.action_label, "Open Settings");
+    // NO SECOND ASK: the banner does not repeat the card.
+    assert!(r.state().import_banner.is_none());
+    // Granted again, the library is empty in its own words and the grant can fill it.
+    r.send(H::Permission(wire::PhotosPermissionChanged {
+        permission: Perm::Granted as i32,
+    }));
+    assert_eq!(r.library_empty().headline, "No photos on this phone yet.");
+    assert!(r.state().import_banner.is_some());
+}
+
+#[test]
 fn the_platforms_own_pages_are_effects_the_shell_performs_and_the_prompt_is_the_rolls() {
     use wire::camera_roll::Action;
     use wire::photos_home_import_banner::Remedy;
@@ -726,6 +770,10 @@ fn the_platforms_own_pages_are_effects_the_shell_performs_and_the_prompt_is_the_
         remedy: Remedy::Ask as i32,
     }));
     assert!(update.effects.is_empty(), "{:?}", update.effects);
+    // Settings is a refused grant's page; the card's button asks where nothing was asked yet.
+    r.send(H::Permission(wire::PhotosPermissionChanged {
+        permission: Perm::Denied as i32,
+    }));
     for (remedy, action) in [
         (Remedy::Settings, Action::OpenSettings),
         (Remedy::ManageSelection, Action::ManageSelection),
@@ -749,36 +797,53 @@ fn boxed(width: u32, height: u32) -> Boxed {
 }
 
 #[test]
-fn a_full_row_fills_the_width_to_the_point_folding_its_remainder_into_the_last_tile() {
-    let rows = layout::justify(&[boxed(3, 2); 8], 400.0, 120.0);
-    let first = &rows[0];
-    assert_eq!(
-        first.iter().map(|t| t.index).collect::<Vec<_>>(),
-        [0, 1, 2, 3]
-    );
-    assert!((first.iter().map(|t| t.width).sum::<f64>() + layout::GAP * 3.0 - 400.0).abs() < 1e-9);
-    let heights: Vec<f64> = first.iter().map(|t| t.height).collect();
-    assert!(heights.windows(2).all(|w| w[0] == w[1]));
-}
-
-#[test]
-fn a_lone_photograph_in_the_last_row_is_one_cell_the_size_of_every_other() {
-    let rows = layout::justify(&[boxed(1000, 1000); 6], 400.0, 100.0);
-    let cell = rows[0][0].height;
-    for tile in rows.iter().flatten().take(5) {
-        assert_eq!(tile.height, cell);
-        assert!((tile.width - cell).abs() < 5.0);
+fn every_row_ends_at_the_edge_and_keeps_one_height_across_it() {
+    let boxes = [
+        boxed(3, 2),
+        boxed(2, 3),
+        boxed(3, 2),
+        boxed(1, 1),
+        boxed(4, 3),
+        boxed(3, 2),
+        boxed(3, 2),
+        boxed(1, 1),
+        boxed(3, 2),
+        boxed(2, 3),
+    ];
+    let rows = layout::justify(&boxes, 400.0, 120.0);
+    assert!(rows.len() >= 2);
+    for row in &rows[..rows.len() - 1] {
+        let width: f64 =
+            row.iter().map(|t| t.width).sum::<f64>() + layout::GAP * (row.len() as f64 - 1.0);
+        assert!((width - 400.0).abs() < 1e-9, "{width}");
+        assert!(row.windows(2).all(|w| w[0].height == w[1].height));
+        // Within reach of the target: never a sliver and never a giant.
+        assert!((70.0..=200.0).contains(&row[0].height), "{}", row[0].height);
     }
-    assert_eq!(rows.len(), 2);
-    assert_eq!(rows[1].len(), 1);
-    assert_eq!((rows[1][0].width, rows[1][0].height), (cell, cell));
+    // Every photograph is placed once, in order.
+    let order: Vec<usize> = rows.iter().flatten().map(|t| t.index).collect();
+    assert_eq!(order, (0..boxes.len()).collect::<Vec<_>>());
 }
 
 #[test]
-fn every_photograph_packs_square_whatever_its_box_and_a_zero_width_packs_nothing() {
-    let rows = layout::justify(&[boxed(0, 0), boxed(3, 1)], 200.0, 100.0);
+fn a_days_short_last_row_fills_the_width_and_a_lone_photograph_is_not_blown_up() {
+    // Two landscape photographs fill the width: nothing is left empty on the right.
+    let rows = layout::justify(&[boxed(3, 2); 2], 400.0, 120.0);
+    assert_eq!(rows.len(), 1);
+    let width: f64 = rows[0].iter().map(|t| t.width).sum::<f64>() + layout::GAP;
+    assert!((width - 400.0).abs() < 1e-9, "{width}");
+    // One photograph alone would need a screen-wide height: it keeps the target and stands at the edge.
+    let rows = layout::justify(&[boxed(3, 2)], 400.0, 120.0);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0][0].height, 120.0);
+    assert!(rows[0][0].width < 400.0);
+}
+
+#[test]
+fn a_photograph_with_no_size_packs_square_and_a_zero_width_packs_nothing() {
+    let rows = layout::justify(&[boxed(0, 0), boxed(0, 0)], 200.0, 100.0);
     for tile in rows.iter().flatten() {
-        assert!((tile.width / tile.height - 1.0).abs() < 0.05);
+        assert!((tile.width / tile.height - 1.0).abs() < 0.1);
     }
     assert!(layout::justify(&[boxed(1, 1)], 0.0, 100.0).is_empty());
     assert!(layout::justify(&[boxed(1, 1)], 100.0, 0.0).is_empty());
@@ -864,10 +929,10 @@ fn another_years_day_carries_its_year_and_a_rung_past_the_table_is_clamped() {
         99,
         2026,
     );
-    // The largest rung is 168: seven columns of 141 fit a thousand points, and a
-    // lone photograph is one of them and not a stretched row.
-    assert_eq!(rows.last().unwrap().tiles[0].height, 141.0);
-    assert_eq!(rows.last().unwrap().tiles[0].width, 141.0);
+    // The largest rung is 168: a lone 3:2 photograph keeps that height at its own width and is
+    // not stretched across a thousand points.
+    assert_eq!(rows.last().unwrap().tiles[0].height, 168.0);
+    assert_eq!(rows.last().unwrap().tiles[0].width, 252.0);
 }
 
 #[test]

@@ -101,6 +101,7 @@ struct LockerHomeView: View {
                     SheetRow(
                         iconKey: row.iconKey,
                         label: row.label,
+                        detail: row.meta,
                         identifier: "locker-more-\(row.key)",
                         onTap: { more(row) }
                     )
@@ -127,6 +128,11 @@ struct LockerHomeView: View {
             if case let .data(home)? = state.content, !home.listTitle.isEmpty, drawsItems {
                 categoryHeader(home)
             }
+            // FIRST ITEM (LockerFirstItem): the open line and "Step 2 of 2" over the empty card.
+            if case let .data(first)? = state.content, first.steps > 0, drawsItems {
+                LockerNote(text: first.statusLine)
+                LockerStepRow(step: first.step, steps: first.steps, label: first.stepLabel)
+            }
             PageReadStateView(
                 page: state.page,
                 onRetry: { send(LockerHomeEvents.make { $0.refreshed = .init() }) },
@@ -148,6 +154,9 @@ struct LockerHomeView: View {
                 }
             }
         }
+        // THE PAGE STARTS AT THE TOP: a short page (the first run's note, step and card) is not
+        // centred in the frame, which left a blank gap under the title.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if state.hasStatus {
                 StatusLineView(status: state.status, identifier: "locker-home-status")
@@ -332,7 +341,9 @@ struct LockerGeneratorView: View {
                     .centraidType("small")
                     .foregroundStyle(Theme.color("textSoft", scheme))
             }
-            HStack(spacing: 8) {
+            // GENERATE ANOTHER AND COPY STACK at accessibility sizes (#1202): side by side the first
+            // broke as "Generat / e".
+            KitReflowRow(spacing: 8) {
                 KitOutlineButton(label: generator.regenerateLabel) {
                     send(LockerHomeEvents.make { $0.generatorRegenerate = .init() })
                 }

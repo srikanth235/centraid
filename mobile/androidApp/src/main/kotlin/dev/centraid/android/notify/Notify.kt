@@ -84,7 +84,8 @@ internal object Notify {
                 null -> NotificationPermission.NOTIFICATION_PERMISSION_NOT_ASKED
                 else -> {
                     store.markAsked()
-                    if (answer && manager.areNotificationsEnabled()) {
+                    // A "yes" is a grant (`NotifyPlan.afterAsk`): the OS can lag the answer.
+                    if (NotifyPlan.afterAsk(answer) == NotifyPlan.Gate.GRANTED) {
                         NotificationPermission.NOTIFICATION_PERMISSION_GRANTED
                     } else {
                         NotificationPermission.NOTIFICATION_PERMISSION_DENIED
@@ -143,6 +144,7 @@ internal object Notify {
             retainDelivered = request.retain_delivered,
             explicitIds = request.cancel_delivered_ids,
             seenImmediateIds = seen,
+            recorded = recorded,
         )
 
         manager.createNotificationChannel(
@@ -160,7 +162,7 @@ internal object Notify {
 
         // THE RECORD FIRST: an alarm that fires the moment it is set finds its words in it.
         val next = request.copy(
-            all = NotifyPlan.kept(request.all, now),
+            all = NotifyPlan.kept(request.all, now, plan.late),
             categories = request.categories,
             ask_permission = request.ask_permission,
             channel_name = request.channel_name,

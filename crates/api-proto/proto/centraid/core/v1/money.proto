@@ -619,6 +619,9 @@ message MoneyHomeTile {
   repeated MoneyAmount spent = 2;
   // Nothing to show yet: the tile says what to do, never a fabricated zero.
   bool empty = 3;
+  // The ledger holds an account (a statement was imported), whatever this month spent:
+  // Home's day zero ends here, and the tile says "nothing spent" instead of "import".
+  bool held = 4;
 }
 
 enum MoneySource {

@@ -3,6 +3,9 @@
 //! about. Ports the cases of the KMP `HomeMachineSpec`, `SpringboardPolicySpec`,
 //! `HomeReadsSpec` and the tile specs over a real vault; every sentence is Rust's.
 
+#[path = "locker_support/mod.rs"]
+mod locker_support;
+
 use centraid_api_proto::core_v1 as wire;
 use centraid_screens::shell;
 use centraid_screens::testing::Driver;
@@ -215,7 +218,7 @@ fn the_seeded_vault_fills_the_tiles_and_a_count_agrees_with_its_noun() {
     // Locker is empty in the example (no Locker), and says what to do.
     let locker = tile(&data, "locker");
     assert_eq!(locker.status, wire::HomeTileStatus::Empty as i32);
-    assert_eq!(locker.empty_copy, "Unlock to see your items");
+    assert_eq!(locker.empty_copy, "Set up Locker");
     assert_eq!(locker.count.map(|c| c.value), Some(0));
     assert_eq!(locker.count_label, "items");
 }
@@ -343,7 +346,8 @@ fn the_lockup_is_worded_from_the_vault_the_shell_names() {
         (front.name.as_str(), front.initial.as_str()),
         ("Personal", "P")
     );
-    assert_eq!(front.state_line, "On this phone");
+    // THE LINE UNDER THE NAME IS THE BACKUP'S SEAT, and empty until it has something to say.
+    assert_eq!(front.state_line, "");
     assert_eq!(bar.search_label, "Search everything");
     assert_eq!(bar.search_route, Some(shell::routes::search()));
     // The backup line is shown as given, for a vault that has not moved.
@@ -814,13 +818,9 @@ fn the_lockups_spoken_sentences_are_finished_by_rust() {
     let (mut d, i) = started();
     let front = vault("v1", "Personal");
     tell(&mut d, i, told(&front, std::slice::from_ref(&front)));
-    // No backup line: the vault's own state line stands in the sentence.
+    // No backup line and a vault that is simply here: the name alone.
     let bar = state(&d, i).bar.unwrap();
-    let state_line = bar.vault.as_ref().unwrap().state_line.clone();
-    assert_eq!(
-        bar.switch_label,
-        format!("Personal, {state_line}. Switch vault")
-    );
+    assert_eq!(bar.switch_label, "Personal. Switch vault");
     assert_eq!(bar.backup_open_label, "");
     // A backup line replaces the state line, and is a door of its own.
     tell(
@@ -832,10 +832,274 @@ fn the_lockups_spoken_sentences_are_finished_by_rust() {
                 tone: wire::HomeTone::Quiet as i32,
                 accessibility_label: "Backed up today".into(),
                 route: None,
+                action: String::new(),
             }),
         }),
     );
     let bar = state(&d, i).bar.unwrap();
     assert_eq!(bar.switch_label, "Personal. Switch vault");
     assert_eq!(bar.backup_open_label, "Backed up today. Open backup");
+}
+
+#[test]
+fn a_fresh_vault_is_day_zero_with_the_one_layout_and_the_first_add_ends_it() {
+    use centraid_screens::catalog::act;
+    use centraid_screens::field::Keyed;
+    let mut d = Driver::first_vault(shell::runtime());
+    d.start();
+    let i = d.navigation.as_ref().expect("navigation").tabs[0].entries[0].instance;
+    // A PHONE WITH NO REMINDERS STORE (anywhere but iOS) invites a first reminder, never an import
+    // that cannot read anything, and its tile opens Reminders plainly.
+    let by_hand = data(&d, i);
+    let reminders = tile_of(&by_hand, "reminders");
+    assert_eq!(reminders.empty_copy, "Write your first reminder");
+    assert_eq!(
+        reminders.route.as_ref().map(|route| route.screen.as_str()),
+        Some("reminders.home")
+    );
+    assert_eq!(
+        reminders.route,
+        Some(centraid_screens::reminders::routes::home())
+    );
+    d.call(wire::screen_request::Kind::Environment(wire::Environment {
+        locale: "en".to_owned(),
+        zone: "UTC".to_owned(),
+        platform: "ios".to_owned(),
+        ..Default::default()
+    }));
+    let day_zero = data(&d, i);
+    // THE STARTER NOTES ARE NOT THE MEMBER'S: the vault is day zero, with the welcome card's words.
+    assert_eq!(
+        day_zero.springboard,
+        wire::HomeSpringboard::FirstRun as i32,
+        "{:?}",
+        day_zero
+            .tiles
+            .iter()
+            .map(|t| (t.widget.clone(), t.status, t.holds))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        day_zero.welcome,
+        "Nothing in here yet. Start with what this phone already holds."
+    );
+    // One layout: the board's order, and every small glance small.
+    let order: Vec<&str> = day_zero.tiles.iter().map(|t| t.widget.as_str()).collect();
+    assert_eq!(
+        order,
+        [
+            "calendar",
+            "reminders",
+            "photos",
+            "money",
+            "health",
+            "people",
+            "locker",
+            "notes",
+            "docs"
+        ]
+    );
+    // Each empty widget says its one action, in the ruling's words.
+    for (widget, words) in [
+        ("calendar", "Import your calendar"),
+        ("reminders", "Import your reminders"),
+        ("photos", "Import your camera roll"),
+        ("money", "Import a statement"),
+        ("health", "Connect Apple Health"),
+        ("people", "Import contacts"),
+        ("locker", "Set up Locker"),
+        ("docs", "Add a document"),
+    ] {
+        assert_eq!(tile_of(&day_zero, widget).empty_copy, words, "{widget}");
+    }
+    // Notes shows its starter note, and starter rows exist nowhere else.
+    let notes = tile_of(&day_zero, "notes");
+    assert_eq!(notes.status, wire::HomeTileStatus::Content as i32);
+    assert!(!notes.holds);
+    let Some(wire::home_tile_body::Kind::Notes(body)) =
+        notes.body.as_ref().and_then(|b| b.kind.as_ref())
+    else {
+        panic!("no notes body");
+    };
+    assert_eq!(body.title, "This note is yours");
+    assert_eq!(
+        tile_of(&day_zero, "reminders").status,
+        wire::HomeTileStatus::Empty as i32
+    );
+    assert!(!tile_of(&day_zero, "reminders").holds);
+    // The first thing the member adds ends day zero, and the welcome card goes.
+    let response = d.act(
+        wire::ActRequest::from(act::notes::CreateNote {
+            title: "Groceries".to_owned(),
+            body: "Milk".to_owned(),
+            ..Default::default()
+        })
+        .keyed("day-zero-1"),
+    );
+    assert_eq!(response.status, wire::ActStatus::Executed as i32);
+    d.pump(std::time::Duration::from_secs(2));
+    let after = data(&d, i);
+    assert_eq!(after.springboard, wire::HomeSpringboard::Content as i32);
+    assert_eq!(after.welcome, "");
+    let after_order: Vec<&str> = after.tiles.iter().map(|t| t.widget.as_str()).collect();
+    assert_eq!(
+        after_order, order,
+        "the layout does not move as the vault fills"
+    );
+}
+
+/// AN EVENT THREE WEEKS OUT IS NOT AN EMPTY CALENDAR: Home's tile asks the question Calendar's first-open
+/// card asks (`calendar::holds_query`, a year either side), not a fortnight's.
+#[test]
+fn an_event_three_weeks_out_means_the_calendar_holds_something_on_home() {
+    use centraid_screens::catalog::act;
+    use centraid_screens::field::{Field, Keyed};
+    use centraid_screens::kit::civil;
+    let mut d = Driver::first_vault(shell::runtime());
+    d.start();
+    let i = d.navigation.as_ref().expect("navigation").tabs[0].entries[0].instance;
+    assert!(!tile_of(&data(&d, i), "calendar").holds);
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("a clock after 1970")
+        .as_secs();
+    let today = civil::civil_day_of(i64::try_from(secs / 86_400).expect("a day count"));
+    let later = civil::plus_days(&today, 21).expect("a day");
+    let response = d.act(
+        wire::ActRequest::from(act::calendar::Propose {
+            id: Some("three-weeks".to_owned()),
+            title: "Three weeks out".to_owned(),
+            starts: format!("{later}T09:00"),
+            busy: Some(false),
+            zone: Field::Is("UTC".to_owned()),
+            ..Default::default()
+        })
+        .keyed("three-weeks-1"),
+    );
+    assert_eq!(response.status, wire::ActStatus::Executed as i32);
+    d.pump(std::time::Duration::from_secs(2));
+    assert!(tile_of(&data(&d, i), "calendar").holds);
+}
+
+#[test]
+fn the_first_item_is_the_members_own_and_never_a_starter() {
+    use centraid_screens::catalog::act;
+    use centraid_screens::field::Keyed;
+    let d = Driver::first_vault(shell::runtime());
+    let first = |d: &Driver| {
+        let answer = d
+            .handle
+            .call(&wire::Request {
+                kind: Some(wire::request::Kind::BackupStatus(
+                    wire::BackupStatusRequest {},
+                )),
+            })
+            .expect("the status answers");
+        match answer.kind {
+            Some(wire::response::Kind::BackupStatus(status)) => status.first_item_ms,
+            other => panic!("not a status: {other:?}"),
+        }
+    };
+    // The starter notes and the founding person are not the member's first item.
+    assert_eq!(first(&d), None);
+    let told = d.act(
+        wire::ActRequest::from(act::notes::CreateNote {
+            title: "Groceries".to_owned(),
+            body: "Milk".to_owned(),
+            ..Default::default()
+        })
+        .keyed("first-item-1"),
+    );
+    assert_eq!(told.status, wire::ActStatus::Executed as i32);
+    assert!(first(&d).is_some_and(|at| at > 0));
+}
+
+#[test]
+fn a_refused_photo_grant_changes_only_the_photos_widget() {
+    let mut d = Driver::first_vault(shell::runtime());
+    d.start();
+    let i = d.navigation.as_ref().expect("navigation").tabs[0].entries[0].instance;
+    let before = data(&d, i);
+    assert_eq!(
+        tile_of(&before, "photos").empty_copy,
+        "Import your camera roll"
+    );
+    tell(
+        &mut d,
+        i,
+        H::PhotoAccessTold(wire::home_event::PhotoAccessTold {
+            permission: wire::PhotosMediaPermission::Denied as i32,
+        }),
+    );
+    let after = data(&d, i);
+    assert_eq!(
+        tile_of(&after, "photos").empty_copy,
+        "Photo access is off · Open Settings"
+    );
+    // Every other widget, and the welcome card, are as they were: no second ask, alert or badge.
+    for widget in [
+        "calendar",
+        "reminders",
+        "money",
+        "health",
+        "people",
+        "locker",
+        "docs",
+    ] {
+        assert_eq!(
+            tile_of(&after, widget).empty_copy,
+            tile_of(&before, widget).empty_copy,
+            "{widget}"
+        );
+    }
+    assert_eq!(after.welcome, before.welcome);
+    // The grant comes back: the invitation does too.
+    tell(
+        &mut d,
+        i,
+        H::PhotoAccessTold(wire::home_event::PhotoAccessTold {
+            permission: wire::PhotosMediaPermission::Granted as i32,
+        }),
+    );
+    assert_eq!(
+        tile_of(&data(&d, i), "photos").empty_copy,
+        "Import your camera roll"
+    );
+}
+
+/// ONCE LOCKER HOLDS AN ITEM its tile is the ordinary one, shut or open: "Set up Locker" is for a
+/// Locker that holds none.
+#[test]
+fn a_locker_with_an_item_is_no_longer_set_up_locker_on_home() {
+    let mut d = Driver::keyed(shell::runtime());
+    d.start();
+    let root = d.navigation.as_ref().expect("navigation").tabs[0].entries[0].instance;
+    // Nothing yet: the invitation.
+    let before = data(&d, root);
+    assert_eq!(tile(&before, "locker").empty_copy, "Set up Locker");
+    assert!(!tile(&before, "locker").holds);
+    // The first item is written while the Locker is open, and the Locker shuts again.
+    locker_support::login(&d, "i0", "Bank");
+    // THE HOME HEARS THE WRITE, as a shell's event thread delivers it.
+    d.pump(std::time::Duration::from_millis(300));
+    let after = data(&d, root);
+    let locker = tile(&after, "locker");
+    assert_eq!(locker.status, wire::HomeTileStatus::Content as i32);
+    assert!(locker.holds);
+    assert_eq!(locker.count.map(|count| count.value), Some(1));
+    assert_eq!(
+        locker.body.as_ref().and_then(|body| match &body.kind {
+            Some(wire::home_tile_body::Kind::Locker(body)) => Some(body.state_label.clone()),
+            _ => None,
+        }),
+        Some("Locked".to_owned())
+    );
+    // Open, it reads the same: an item, and its state.
+    locker_support::unlock_core(&d);
+    d.send(root, E::DataChanged(wire::DataChanged { tables: vec![] }));
+    let open = data(&d, root);
+    let locker = tile(&open, "locker");
+    assert_eq!(locker.status, wire::HomeTileStatus::Content as i32);
+    assert!(locker.holds);
+    assert_eq!(locker.count.map(|count| count.value), Some(1));
 }

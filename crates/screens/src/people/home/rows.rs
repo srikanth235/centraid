@@ -11,25 +11,87 @@ use crate::strings::{Locale, fill, people as words};
 /// A reminder is a roster chip when it is at most this many days away.
 const REMINDER_CHIP_DAYS: i64 = 30;
 
-/// DAY ONE: nobody in People at all. The phone already holds the member's
-/// people, so a shell that can read its contacts offers them here in place of
-/// "Add person".
-pub fn day_one(locale: Locale) -> wire::EmptyState {
-    wire::EmptyState {
-        headline: words::empty_roster_title(locale),
-        body: words::empty_roster_body(locale),
-        action_label: words::add_person(locale),
-        import_source: wire::ImportSource::Contacts as i32,
-        icon_key: String::new(),
+/// WHERE THE PHONE'S CONTACTS STAND for the cards that offer them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Access {
+    /// They can be read: the import is the card's one action.
+    Open,
+    /// The phone said no outright: the card says so with Open Settings alone (PeopleRefused).
+    Refused,
+    /// The phone restricts or limits them: the card offers the add and the status line says why.
+    Closed,
+}
+
+impl Access {
+    /// How the contacts' grant stands, from what the last read reported.
+    #[must_use]
+    pub fn of(report: &crate::follow::Report) -> Self {
+        if report.refused() {
+            Self::Refused
+        } else if report.denied {
+            Self::Closed
+        } else {
+            Self::Open
+        }
     }
 }
 
-/// A CHIP WITH NOTHING IN IT over a roster that holds people: day one's words,
-/// but not day one, so it does not offer the phone's contacts.
+/// Whether `empty` is the refusal card, so the status line need not say it again.
+#[must_use]
+pub fn is_refusal(locale: Locale, empty: &wire::EmptyState) -> bool {
+    empty.headline == words::refused_title(locale)
+}
+
+/// DAY ONE: nobody in People at all. The phone already holds the member's
+/// people, so a shell that can read its contacts offers them here in place of
+/// "Add person".
+///
+/// `access` is whether the phone's contacts can be read: the import is the card's one action
+/// and the hint under it names the plus. A phone that refused the contacts says so with Open Settings
+/// alone (PeopleRefused) and no hint: the plus in the header is the way to add by hand.
+pub fn day_one(locale: Locale, access: Access) -> wire::EmptyState {
+    match access {
+        Access::Refused => wire::EmptyState {
+            headline: words::refused_title(locale),
+            body: words::refused_body(locale),
+            action_label: words::refused_open_settings(locale),
+            ..wire::EmptyState::default()
+        },
+        Access::Closed => wire::EmptyState {
+            headline: words::first_open(locale),
+            action_label: words::add_person(locale),
+            ..wire::EmptyState::default()
+        },
+        Access::Open => wire::EmptyState {
+            headline: words::first_open(locale),
+            // The import is the card's one action where the phone holds contacts (the shell draws
+            // it from `import_source`); the plus is in the header, so no "Add person" button here.
+            hint: words::first_open_hint(locale),
+            import_source: wire::ImportSource::Contacts as i32,
+            ..wire::EmptyState::default()
+        },
+    }
+}
+
+/// TOUCH WITH NO ONE IN PEOPLE: its own words (what Touch is for), never the People card again, and
+/// the same one way in.
+pub fn touch_day_one(locale: Locale, access: Access) -> wire::EmptyState {
+    if access == Access::Refused {
+        return day_one(locale, access);
+    }
+    wire::EmptyState {
+        headline: words::touch_first_open(locale),
+        ..day_one(locale, access)
+    }
+}
+
+/// A CHIP WITH NOTHING IN IT over a roster that holds people: not first open, so its own
+/// sentence, the add and no import.
 fn chip_empty(locale: Locale) -> wire::EmptyState {
     wire::EmptyState {
-        import_source: wire::ImportSource::Unspecified as i32,
-        ..day_one(locale)
+        headline: words::empty_chip(locale),
+        action_label: words::add_person(locale),
+        ..wire::EmptyState::default()
     }
 }
 
@@ -497,10 +559,11 @@ pub fn roster_empty(
     locale: Locale,
     answer: &wire::PeopleRoster,
     current: wire::PeopleChipKey,
+    access: Access,
 ) -> wire::EmptyState {
     use wire::PeopleChipKey as K;
     if answer.count_all == 0 {
-        day_one(locale)
+        day_one(locale, access)
     } else if current == K::Starred {
         wire::EmptyState {
             headline: words::empty_starred(locale),
@@ -632,7 +695,7 @@ mod tests {
         let data = roster(EN, &nobody, K::All, wire::PeopleOrder::Name);
         assert!(data.sections.is_empty() && data.index.is_empty());
         assert_eq!(
-            roster_empty(EN, &nobody, K::All).import_source,
+            roster_empty(EN, &nobody, K::All, Access::Open).import_source,
             wire::ImportSource::Contacts as i32,
             "day one offers the phone's contacts"
         );

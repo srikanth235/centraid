@@ -78,43 +78,66 @@ struct HealthPinnedCard: View {
     let onTap: () -> Void
 
     @Environment(\.appAccent) private var accent
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// THE FIGURE FOLLOWS THE TEXT SIZE (#1202): the labels scaled while the number stayed at its
+    /// point size, so at the largest text the key number was the smallest thing on the card. It is
+    /// a system face on a text style (`Font.kitScaled`), which is what the audit reads as scaling.
+    private let scale: CGFloat = 1
 
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
+                let headLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                    : AnyLayout(HStackLayout(spacing: 6))
+                headLayout {
                     CentraidIconView(iconKey: line.iconKey, tint: accent.text, size: line.wide ? 16 : 14)
                         .accessibilityHidden(true)
                     Text(line.label)
                         .kitType(.meta)
                         .fontWeight(.semibold)
                         .foregroundStyle(accent.text)
-                        .lineLimit(1)
+                        .kitLineLimit(1, wide: 2)
                     if line.wide {
-                        Spacer(minLength: 8)
+                        if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
                         Text(line.whenLabel)
                             .kitType(.meta)
                             .foregroundStyle(Surface.meta)
                     }
                 }
                 if line.wide {
-                    HStack(alignment: .bottom) {
+                    let wideLayout = dynamicTypeSize.isAccessibilitySize
+                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                        : AnyLayout(HStackLayout(alignment: .bottom))
+                    wideLayout {
                         VStack(alignment: .leading, spacing: 2) {
-                            figure(size: CentraidScale.titleSize - 6, unitSize: CentraidScale.metaSize)
+                            figure(size: (CentraidScale.titleSize - 6) * scale, unitSize: CentraidScale.metaSize * scale)
                             if !line.typical.isEmpty {
                                 Text(line.typical)
                                     .kitType(.meta)
                                     .foregroundStyle(line.good ? StateColor.green.text : Surface.meta)
                             }
                         }
-                        Spacer(minLength: 8)
+                        if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
                         HealthSparkBars(points: line.sparkBp, label: line.sparkLabel)
                     }
                 } else {
-                    figure(size: 22, unitSize: CentraidScale.metaSize)
-                    Text(line.compactLine)
-                        .kitType(.meta)
-                        .foregroundStyle(Surface.meta)
+                    // NO VALUE YET says so in the figure's place, in the wide cards' words ("Nothing yet today").
+                    if line.value.isEmpty {
+                        Text(line.whenLabel)
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.meta)
+                        if !line.typical.isEmpty {
+                            Text(line.typical)
+                                .kitType(.meta)
+                                .foregroundStyle(Surface.meta)
+                        }
+                    } else {
+                        figure(size: 22 * scale, unitSize: CentraidScale.metaSize * scale)
+                        Text(line.compactLine)
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.meta)
+                    }
                 }
             }
             .padding(.horizontal, 14)
@@ -132,10 +155,10 @@ struct HealthPinnedCard: View {
 
     private func figure(size: CGFloat, unitSize: CGFloat) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Self.runs(line.value, size: size, unitSize: unitSize)
+            Self.runs(line.value, size: size, unitSize: unitSize, at: dynamicTypeSize)
             if !line.unit.isEmpty {
                 Text(line.unit)
-                    .font(.system(size: unitSize))
+                    .font(.kitScaled(unitSize, at: dynamicTypeSize))
                     .foregroundStyle(Surface.meta)
             }
         }
@@ -143,15 +166,15 @@ struct HealthPinnedCard: View {
 
     /// A FIGURE THAT CARRIES ITS OWN UNITS ("7 h 12 min", the core's words): the numbers in the
     /// figure's weight, every run of letters in the small meta unit, as the board draws it.
-    static func runs(_ value: String, size: CGFloat, unitSize: CGFloat) -> Text {
+    static func runs(_ value: String, size: CGFloat, unitSize: CGFloat, at category: DynamicTypeSize) -> Text {
         var text = Text("")
         var run = ""
         var isUnit = false
         func flush() {
             guard !run.isEmpty else { return }
             text = text + (isUnit
-                ? Text(run).font(.system(size: unitSize)).foregroundColor(Surface.meta)
-                : Text(run).font(.system(size: size, weight: .bold)).foregroundColor(Surface.ink))
+                ? Text(run).font(.kitScaled(unitSize, at: category)).foregroundColor(Surface.meta)
+                : Text(run).font(.kitScaled(size, weight: .bold, at: category)).foregroundColor(Surface.ink))
             run = ""
         }
         for ch in value {
@@ -178,6 +201,7 @@ struct HealthHighlightCard: View {
 
     @Environment(\.appAccent) private var accent
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         Button(action: onTap) {
@@ -186,7 +210,7 @@ struct HealthHighlightCard: View {
                     .frame(width: 32, height: 32)
                     .background(Circle().fill(accent.wash(dark: scheme == .dark)))
                     .accessibilityHidden(true)
-                (Text(highlight.lead) + Text(highlight.emphasis).font(.system(size: CentraidScale.rowSize, weight: .bold)) + Text(highlight.tail))
+                (Text(highlight.lead) + Text(highlight.emphasis).font(.kitScaled(CentraidScale.rowSize, weight: .bold, at: dynamicTypeSize)) + Text(highlight.tail))
                     .kitType(.row)
                     .foregroundStyle(Surface.ink)
                     .multilineTextAlignment(.leading)
@@ -216,9 +240,13 @@ struct HealthWorkoutRow: View {
 
     @Environment(\.appAccent) private var accent
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        Button(action: onTap) {
+        // THE DATE UNDER THE NAME AT ACCESSIBILITY SIZES (#1202): beside it the title was left a
+        // column a few letters wide and broke as "After/noon" and "Nigh/t".
+        let stacked = dynamicTypeSize.isAccessibilitySize
+        return Button(action: onTap) {
             HStack(spacing: 14) {
                 CentraidIconView(iconKey: row.iconKey, tint: accent.text, size: 20)
                     .frame(width: 40, height: 40)
@@ -229,17 +257,26 @@ struct HealthWorkoutRow: View {
                         .kitType(.row)
                         .fontWeight(.semibold)
                         .foregroundStyle(Surface.ink)
-                        .lineLimit(1)
+                        .kitLineLimit(1, wide: 4)
                     Text(row.meta)
                         .kitType(.meta)
                         .foregroundStyle(Surface.meta)
-                        .lineLimit(1)
+                        .kitLineLimit(1, wide: 4)
+                    if stacked {
+                        Text(row.whenLabel)
+                            .kitType(.meta)
+                            .monospacedDigit()
+                            .foregroundStyle(Surface.meta)
+                    }
                 }
-                Spacer(minLength: 8)
-                Text(row.whenLabel)
-                    .kitType(.meta)
-                    .monospacedDigit()
-                    .foregroundStyle(Surface.meta)
+                .frame(maxWidth: stacked ? .infinity : nil, alignment: .leading)
+                if !stacked {
+                    Spacer(minLength: 8)
+                    Text(row.whenLabel)
+                        .kitType(.meta)
+                        .monospacedDigit()
+                        .foregroundStyle(Surface.meta)
+                }
                 CentraidIconView(iconKey: "ChevronRight", tint: Surface.meta, size: 16)
                     .accessibilityHidden(true)
             }
@@ -316,10 +353,13 @@ struct HealthBarChart: View {
 
     @Environment(\.appAccent) private var accent
     @State private var scrubbed: Int?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// THE TYPICAL'S WORD HAS A GUTTER OF ITS OWN (HealthMetric): at the line's end, past the last
-    /// bar, never over it.
-    private var gutter: CGFloat { data.hasTypical_p && !data.typicalLabel.isEmpty ? 52 : 0 }
+    /// bar, never over it. At accessibility sizes a 52pt gutter held one letter of it ("t..."), so
+    /// the word sits over the line's end instead, on the chart's own width (#1202).
+    private var overLine: Bool { dynamicTypeSize.isAccessibilitySize }
+    private var gutter: CGFloat { data.hasTypical_p && !data.typicalLabel.isEmpty && !overLine ? 52 : 0 }
 
     var body: some View {
         let spacing: CGFloat = data.bars.count > 14 ? 3 : 8
@@ -353,13 +393,23 @@ struct HealthBarChart: View {
                             path.addLine(to: CGPoint(x: width, y: at))
                         }
                         .stroke(accent.text, style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
-                        Text(data.typicalLabel)
-                            .kitType(.meta)
-                            .foregroundStyle(accent.text)
-                            .lineLimit(1)
-                            .padding(.leading, 4)
-                            .frame(width: gutter, alignment: .leading)
-                            .offset(x: width, y: max(at - 9, 0))
+                        if overLine {
+                            Text(data.typicalLabel)
+                                .kitType(.meta)
+                                .foregroundStyle(accent.text)
+                                .padding(.horizontal, 4)
+                                .background(Surface.page.opacity(0.85))
+                                .frame(width: width, alignment: .trailing)
+                                .offset(y: max(at - 34, 0))
+                        } else {
+                            Text(data.typicalLabel)
+                                .kitType(.meta)
+                                .foregroundStyle(accent.text)
+                                .lineLimit(1)
+                                .padding(.leading, 4)
+                                .frame(width: gutter, alignment: .leading)
+                                .offset(x: width, y: max(at - 9, 0))
+                        }
                     }
                     if let index = scrubbed, data.bars.indices.contains(index), !data.bars[index].callout.isEmpty {
                         let slot = width / CGFloat(max(data.bars.count, 1))
@@ -401,7 +451,7 @@ struct HealthBarChart: View {
             }
             .kitType(.meta)
             .foregroundStyle(Surface.meta)
-            .lineLimit(1)
+            .kitLineLimit(1)
             .padding(.trailing, gutter)
             .accessibilityHidden(true)
         }

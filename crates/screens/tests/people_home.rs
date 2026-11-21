@@ -239,8 +239,12 @@ fn a_filter_with_nobody_says_so_and_day_one_offers_the_phones_contacts() {
     let i = begin(&mut d);
     // Day one: nobody at all.
     let empty = empty_of(&home_state(d.view(i)).page).clone();
-    assert_eq!(empty.headline, "Add people you keep up with");
-    assert_eq!(empty.action_label, "Add person");
+    assert_eq!(
+        empty.headline,
+        "The people you know, and what you write about them."
+    );
+    assert_eq!(empty.hint, "Or tap + to add one.");
+    assert_eq!(empty.action_label, "");
     assert_eq!(empty.import_source, wire::ImportSource::Contacts as i32);
 
     person(&d, "Dana");
@@ -357,7 +361,7 @@ fn search_is_a_field_over_the_roster_names_only_and_closing_clears_it() {
 }
 
 #[test]
-fn more_holds_lists_import_export_and_trash_and_is_an_ordinary_band_tab_last() {
+fn more_holds_reads_lists_import_export_and_trash_and_is_an_ordinary_band_tab_last() {
     let mut d = clean();
     person(&d, "Dana");
     let i = begin(&mut d);
@@ -371,11 +375,15 @@ fn more_holds_lists_import_export_and_trash_and_is_an_ordinary_band_tab_last() {
     let more = home_state(d.view(i));
     assert_eq!(more.sheet, wire::people_home_state::Sheet::More as i32);
     let labels: Vec<&str> = more.more_rows.iter().map(|r| r.label.as_str()).collect();
-    assert_eq!(labels, ["Lists", "Import", "Export", "Trash"]);
-    assert_eq!(more.more_rows[0].route, Some(routes::lists("People")));
-    assert_eq!(more.more_rows[3].route, Some(routes::trash()));
-    assert_eq!(more.more_rows[3].meta, "30 days, then erased");
-    assert!(more.more_rows[..3].iter().all(|row| row.meta.is_empty()));
+    assert_eq!(
+        labels,
+        ["What People may read", "Lists", "Import", "Export", "Trash"]
+    );
+    assert_eq!(more.more_rows[0].icon_key, "Shield");
+    assert_eq!(more.more_rows[1].route, Some(routes::lists("People")));
+    assert_eq!(more.more_rows[4].route, Some(routes::trash()));
+    assert_eq!(more.more_rows[4].meta, "30 days, then erased");
+    assert!(more.more_rows[..4].iter().all(|row| row.meta.is_empty()));
     send_home(&mut d, i, H::SheetClosed(ev::SheetClosed {}));
     assert_eq!(
         home_state(d.view(i)).sheet,
@@ -499,7 +507,12 @@ fn touch_on_an_empty_vault_is_day_one() {
     let state = home_state(d.view(i));
     assert!(state.content.is_none());
     let empty = empty_of(&state.page);
-    assert_eq!(empty.action_label, "Add person");
+    assert_eq!(
+        empty.headline,
+        "Who to reconnect with, and what is coming up."
+    );
+    assert_eq!(empty.action_label, "");
+    assert_eq!(empty.hint, "Or tap + to add one.");
     assert_eq!(
         empty.import_source,
         wire::ImportSource::Contacts as i32,
@@ -641,4 +654,127 @@ fn nobody_overdue_is_no_reconnect_line() {
     person(&d, "Dana Reyes");
     let i = begin(&mut d);
     assert!(roster_data(d.view(i)).reconnect.is_none());
+}
+
+/// THE FIRST-OPEN CARD OFFERS ITS IMPORT WHILE THE PHONE CAN DO IT, and Open Settings once the phone
+/// refused the contacts: no import that fails again, and no "Or tap +" hint.
+#[test]
+fn a_phone_that_refused_its_contacts_gets_open_settings_on_the_card_and_no_hint() {
+    let empty = first_open_after_failed_read(wire::EffectFailed {
+        denied: true,
+        ..Default::default()
+    });
+    assert_eq!(empty.import_source, wire::ImportSource::Unspecified as i32);
+    assert_eq!(empty.headline, "Contacts access is off.");
+    assert_eq!(empty.action_label, "Open Settings");
+    assert_eq!(empty.hint, "");
+}
+
+/// A PHONE THAT WAS NEVER ASKED IS NOT A PHONE THAT REFUSED: the silent read the first launch makes
+/// fails without a grant's state, and the card keeps the import and the hint.
+#[test]
+fn a_phone_never_asked_for_its_contacts_still_offers_the_import_and_the_hint() {
+    let empty = first_open_after_failed_read(wire::EffectFailed {
+        reason: "unavailable".to_owned(),
+        ..Default::default()
+    });
+    assert_eq!(empty.import_source, wire::ImportSource::Contacts as i32);
+    assert_eq!(empty.action_label, "");
+    assert_eq!(empty.hint, "Or tap + to add one.");
+}
+
+/// The first-open card after the phone answers a contacts read with `failed`.
+fn first_open_after_failed_read(failed: wire::EffectFailed) -> wire::EmptyState {
+    let mut d = clean();
+    let i = begin(&mut d);
+    let empty = empty_of(&home_state(d.view(i)).page).clone();
+    assert_eq!(empty.import_source, wire::ImportSource::Contacts as i32);
+    assert_eq!(empty.action_label, "");
+    assert_eq!(empty.hint, "Or tap + to add one.");
+    refuse_the_import(&mut d, i, failed);
+    empty_of(&home_state(d.view(i)).page).clone()
+}
+
+/// The member taps Import and the phone answers the read with `failed`.
+fn refuse_the_import(
+    d: &mut centraid_screens::testing::Driver,
+    i: u64,
+    failed: wire::EffectFailed,
+) {
+    // The member taps Import and the phone says no.
+    // THE HOME HAS ASKED WHETHER THIS DEVICE FOLLOWS: it does not.
+    while let Some(at) = d.effects.iter().position(|request| {
+        matches!(
+            request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::Keychain(_))
+        )
+    }) {
+        let request = d.effects.remove(at);
+        d.send(
+            request.instance,
+            wire::screen_event::Kind::EffectResult(wire::EffectResult {
+                effect_id: request.effect_id,
+                outcome: Some(wire::effect_result::Outcome::Keychain(
+                    wire::KeychainValue {
+                        found: false,
+                        value: Vec::new(),
+                    },
+                )),
+            }),
+        );
+    }
+    d.effects.clear();
+    send_home(d, i, H::ImportContacts(ev::ImportContactsTapped {}));
+    d.effects.retain(|request| {
+        matches!(
+            request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::ContactsRead(_))
+        )
+    });
+    d.answer_effect(wire::effect_result::Outcome::Failed(failed));
+}
+
+/// THE REFUSAL IS SAID ONCE: on the card while it is the page (no one in People yet), and on the
+/// status line when someone is there and the card is not.
+#[test]
+fn a_refusal_is_the_cards_when_it_is_on_screen_and_the_status_lines_when_it_is_not() {
+    let denied = || wire::EffectFailed {
+        denied: true,
+        ..Default::default()
+    };
+    // No one in People: the card says it and the line is silent.
+    let mut d = clean();
+    let i = begin(&mut d);
+    refuse_the_import(&mut d, i, denied());
+    let state = home_state(d.view(i));
+    assert_eq!(empty_of(&state.page).headline, "Contacts access is off.");
+    assert_eq!(
+        state
+            .status
+            .as_ref()
+            .map(|s| s.sentence.as_str())
+            .unwrap_or_default(),
+        ""
+    );
+    // The card's one action is Open Settings, sent through the one empty-acted event.
+    d.effects.clear();
+    send_home(&mut d, i, H::EmptyActed(ev::EmptyActed {}));
+    assert!(
+        d.effects.iter().any(|request| matches!(
+            request.effect.as_ref().and_then(|e| e.kind.as_ref()),
+            Some(wire::effect::Kind::VaultCommand(_))
+        )),
+        "Open Settings is asked of the shell"
+    );
+
+    // Someone is in People: the card is not drawn, so the line says it.
+    let mut d = clean();
+    person(&d, "Dana Reyes");
+    let i = begin(&mut d);
+    refuse_the_import(&mut d, i, denied());
+    let state = home_state(d.view(i));
+    assert_eq!(
+        state.status.as_ref().map(|s| s.sentence.as_str()),
+        Some("Contacts access is off. Turn it on in Settings.")
+    );
 }

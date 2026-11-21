@@ -72,6 +72,21 @@ final class ShellModel: ObservableObject {
     private var restoreAsked = false
     /// The instance Rust opened for each Rust entry on `path`, by entry token.
     @Published private(set) var rustInstances: [Int: UInt64] = [:]
+    /// Bumped to make the app's `NavigationStack` start again, empty, when it still draws a page the core closed.
+    @Published private(set) var stackEpoch = 0
+    /// A PAGE THE CORE CLOSED LEAVES THE STACK (#1202, S13): a restore closes every screen, and SwiftUI kept
+    /// drawing the words page as bare paper with a back key. The entry leaves `path` (and the sheet), and the
+    /// stack is rebuilt so it stops drawing what `path` no longer holds.
+    func dropClosedPage(_ entry: RustEntry) {
+        Self.dropClosed(entry, path: &path, sheet: &sheet, epoch: &stackEpoch)
+    }
+
+    /// The rule itself, on plain values so a test needs no core.
+    static func dropClosed(_ entry: RustEntry, path: inout [Route], sheet: inout RustEntry?, epoch: inout Int) {
+        if sheet == entry { sheet = nil }
+        path.removeAll { $0 == .rust(entry) }
+        epoch += 1
+    }
     private var rustOpening: Set<Int> = []
     /// THE SWITCHER MASK: painted on `.background`, so the snapshot iOS keeps
     /// for the app switcher shows no rows (`CentraidApp`).
@@ -120,9 +135,11 @@ final class ShellModel: ObservableObject {
     func putImportLineAway(_ summary: String) { importLinePutAway = summary }
 
     /// The member moved: a settled line has been read, and goes. A running import
-    /// keeps its line, since the work it describes is not done.
+    /// keeps its line, since the work it describes is not done. A line is settled once it is not
+    /// running, `finished` or not: the member's own Import reminders is never `finished` (it is not
+    /// a made vault's step), and its "No open reminders to import" stayed over Home and every app.
     private func importLineMoved() {
-        guard let line = screens?.madeLine, line.finished, !line.summary.isEmpty else { return }
+        guard let line = screens?.madeLine, !line.running, !line.summary.isEmpty else { return }
         importLinePutAway = line.summary
     }
 
@@ -206,6 +223,9 @@ final class ShellModel: ObservableObject {
         environmentChanges = [
             NSNotification.Name.NSSystemTimeZoneDidChange,
             UIApplication.significantTimeChangeNotification,
+            // The 12 or 24 hour switch in Settings posts this one (#1202), as Android's observer of
+            // `TIME_12_24` does: every time Rust words follows the phone's clock at once.
+            NSLocale.currentLocaleDidChangeNotification,
         ].map { name in
             NotificationObservation(NotificationCenter.default.addObserver(
                 forName: name,
@@ -236,6 +256,26 @@ final class ShellModel: ObservableObject {
     static var devSeedHex: String? {
         #if DEBUG
         ProcessInfo.processInfo.environment["CENTRAID_DEV_SEED"]
+        #else
+        nil
+        #endif
+    }
+
+    /// THE APPEARANCE A UI TEST ASKS FOR, HONOURED BY A DEBUG BUILD ONLY (#1202).
+    ///
+    /// `XCUIDevice.appearance` is a request to the simulator's system settings, and on a CI runner it
+    /// did not take (the dark audit drew a light app on every try). The audit hands the app the scheme
+    /// itself (`CENTRAID_UI_APPEARANCE` = `light` or `dark`, in the launch environment), and the app
+    /// holds it on its own window the way a member's Appearance choice does, so the audit audits what
+    /// it says whatever the simulator thinks. A member's own choice (Keychain) wins; a release build
+    /// compiles `nil` here and reads no environment.
+    static var uiTestScheme: ColorScheme? {
+        #if DEBUG
+        switch ProcessInfo.processInfo.environment["CENTRAID_UI_APPEARANCE"] {
+        case "light": .light
+        case "dark": .dark
+        default: nil
+        }
         #else
         nil
         #endif
@@ -329,7 +369,10 @@ final class ShellModel: ObservableObject {
             return
         }
         if path.isEmpty { returnsToChat = tab == .chat }
-        path.append(.rust(RustEntry.make(route)))
+        // A PAGE OPENED FROM BACKUP LIVES ON BACKUP'S STACK, as on Android (`push(tab = activeTab())`):
+        // on Home's it selected Home under the page, so Cancel or Done on the pairing page landed on Home
+        // and not back on Backup (#1202, S13).
+        path.append(.rust(RustEntry.make(route, tab: tab == .backup ? RustScreens.backupTab : RustScreens.homeTab)))
     }
 
     /// Open a Rust entry's route on Rust's stack, once, and remember its instance.

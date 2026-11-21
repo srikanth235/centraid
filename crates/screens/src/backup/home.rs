@@ -66,6 +66,8 @@ enum Job {
     NotifyDismissed,
     /// What the last check found, read again after the check page closes.
     CheckKept,
+    /// The device-store delete of a forgotten gateway's token (#1191 E12).
+    Forget(Vec<wire::SecretOp>),
     /// Moving the recovery key into the keychain, or out of it: the first batch,
     /// then (once it said whether the platform took it) the second.
     Seed {
@@ -241,6 +243,7 @@ impl Backup {
             Job::Prompt => vec![rule::write_key_prompt_answered()],
             Job::NotifyDismissed => vec![rule::write_notify_ask_dismissed()],
             Job::CheckKept => vec![rule::read_check()],
+            Job::Forget(ops) => ops.clone(),
             Job::Seed { write, stage, .. } => match stage {
                 Stage::First => write.first(),
                 // The second batch is built from the first's answers, in `answered`.
@@ -282,6 +285,7 @@ impl Backup {
             }
             Job::CheckKept => self.check_kept = rule::kept_check(answers.first()),
             Job::Prompt | Job::NotifyDismissed => {}
+            Job::Forget(_) => self.secrets.absorb(&ops, answers),
             Job::Rule(_) | Job::Videos => {
                 // Written as the member set it; a store that refused leaves the
                 // value on screen until the next load says what it holds.
@@ -524,9 +528,9 @@ impl Backup {
     }
 
     /// An off-thread job came back.
-    fn job_done(&mut self, done: &wire::OffThreadDone, ctx: &Ctx) {
+    fn job_done(&mut self, done: &wire::OffThreadDone, ctx: &Ctx) -> Vec<wire::Effect> {
         let Some(done) = doors::done(&done.tag, &done.bytes) else {
-            return;
+            return Vec::new();
         };
         match done {
             // WHETHER THE GATEWAY WILL REFUSE THIS PHONE NOW is said either way
@@ -536,6 +540,7 @@ impl Backup {
                 gateway_id,
                 forgotten,
                 revoked,
+                forget_token,
             } => {
                 let locale = ctx.locale();
                 let name = self.label_of(locale, &gateway_id);
@@ -547,6 +552,12 @@ impl Backup {
                     words::backup_forgotten_not_revoked(locale)
                 };
                 self.notice = Notice::Said(fill(&sentence, &[("name", &name)]));
+                // THE TOKEN THE SHELL KEPT GOES WITH THE GATEWAY (E12).
+                if let Some((vault_id, gateway_id)) = forget_token {
+                    return self.run(Job::Forget(
+                        self.secrets.token_delete(&vault_id, &gateway_id),
+                    ));
+                }
             }
             // NOTHING RESTORED IS NOT A SUCCESS: the holds had already gone or the door did not
             // answer, and the member is told so.
@@ -565,10 +576,18 @@ impl Backup {
             }
         }
         self.read(ctx);
+        Vec::new()
     }
 
     fn on_result(&mut self, result: wire::EffectResult, ctx: &Ctx) -> Vec<wire::Effect> {
         use wire::effect_result::Outcome as O;
+        // A SHELL THAT FAILS ITS EFFECTS NEVER ANSWERS THE SYNC PROBE, and the recovery-key prompt
+        // waits on that answer. A failure with the probe unanswered is the answer "does not
+        // synchronise": the key is not carried, so the prompt may be asked. (A failure cannot be told
+        // from the probe's own; a later real status replaces this one.)
+        if matches!(result.outcome, Some(O::Failed(_))) && self.synced.is_none() {
+            self.synced = Some(wire::SyncedSecretsStatus::default());
+        }
         match result.outcome {
             Some(O::Secrets(batched)) => self.secrets_answered(&batched, ctx),
             Some(O::SyncedStatus(status)) => {
@@ -754,6 +773,35 @@ impl Backup {
         }
     }
 
+    /// BEFORE PAIRING (BackupUnpaired): the card, the two steps and the footnote.
+    fn unpaired(locale: Locale) -> wire::BackupUnpaired {
+        let step = |sentence: String| {
+            // The command rides between curly quotes; the shell sets it in the mono face.
+            match (sentence.find('“'), sentence.find('”')) {
+                (Some(open), Some(close)) if open < close => wire::BackupPairStep {
+                    before: sentence[..open].to_owned(),
+                    command: sentence[open + '“'.len_utf8()..close].to_owned(),
+                    after: sentence[close + '”'.len_utf8()..].to_owned(),
+                },
+                _ => wire::BackupPairStep {
+                    before: sentence,
+                    ..wire::BackupPairStep::default()
+                },
+            }
+        };
+        wire::BackupUnpaired {
+            title: backup_home::unpaired_title(locale),
+            body: backup_home::unpaired_body(locale),
+            action_label: backup_home::unpaired_action(locale),
+            steps_heading: backup_home::unpaired_steps_heading(locale),
+            steps: vec![
+                step(backup_home::unpaired_step_one(locale)),
+                step(backup_home::unpaired_step_two(locale)),
+            ],
+            foot: backup_home::unpaired_foot(locale),
+        }
+    }
+
     fn data(&self, ctx: &Ctx) -> wire::BackupHomeData {
         let locale = ctx.locale();
         let frozen = self.frozen();
@@ -761,12 +809,21 @@ impl Backup {
         let destinations = self.destinations();
         let stood = line::backlog_stood(self.reading(), frozen, now);
         let key = self.key(ctx);
+        // EVERY DEVICE REFUSED THIS PHONE'S TOKEN (an upgrade, a gateway that lost it): "Back up now"
+        // cannot help, so the page's one action is the way back, pairing it again. The same pairing
+        // page as "Add backup device", worded for what it does here.
+        let all_pair_again = !destinations.is_empty() && destinations.iter().all(|d| d.pair_again);
         let add_label = if frozen {
             String::new()
+        } else if all_pair_again {
+            words::backup_dest_pair_again(locale)
         } else {
             words::backup_add_destination(locale)
         };
-        let back_up_now_label = if destinations.is_empty() {
+        // THE STATUS CARD'S OWN WAY BACK (ruling 28): when any device no longer knows this phone,
+        // the card that says "Pair it again" carries the button, and the row below keeps its own.
+        let any_pair_again = !frozen && destinations.iter().any(|d| d.pair_again);
+        let back_up_now_label = if destinations.is_empty() || all_pair_again {
             String::new()
         } else {
             words::backup_now(locale)
@@ -776,7 +833,10 @@ impl Backup {
         // sentence once the member said they saved a copy and a warning until then.
         let (key_heading, key_line, key_warning, key_show_label, key_sync_label) =
             if self.settled && key.held {
-                let warning = !key.synced && !key.saved;
+                // THE SAME TEST AS THE PROMPT: a key the platform will not carry (no place) is on
+                // this phone alone, synchronised store or not. The sentence stays the platform's own,
+                // which says why.
+                let warning = !key.carried() && !key.saved;
                 (
                     words::backup_key_heading(locale),
                     if key.synced {
@@ -816,7 +876,7 @@ impl Backup {
         };
         let ink = if key_warning && !key_show_label.is_empty() {
             wire::BackupInk::ShowKey
-        } else if destinations.is_empty() && !add_label.is_empty() {
+        } else if (destinations.is_empty() || all_pair_again) && !add_label.is_empty() {
             wire::BackupInk::AddDestination
         } else if !back_up_now_label.is_empty() {
             wire::BackupInk::BackUpNow
@@ -891,7 +951,7 @@ impl Backup {
         };
         let key_summary = if key_heading.is_empty() {
             String::new()
-        } else if key.synced {
+        } else if key.carried() {
             fill(
                 &words::backup_key_summary_synced(locale),
                 &[("place", &key.place)],
@@ -927,6 +987,12 @@ impl Backup {
                 .collect(),
             add_destination: (!add_label.is_empty()).then(routes::add_destination),
             add_destination_label: add_label,
+            pair_again_label: if any_pair_again {
+                words::backup_card_pair_again(locale)
+            } else {
+                String::new()
+            },
+            pair_again: any_pair_again.then(routes::add_destination),
             // NOR FORGOTTEN FROM HERE: the core refuses it, because the gateway's
             // row is where the moved mark lives (#1080, the sweep).
             forget_label: if frozen {
@@ -972,6 +1038,8 @@ impl Backup {
             key_sync_label,
             ink: ink as i32,
             condition: condition as i32,
+            unpaired: (condition == wire::BackupCondition::Unpaired && self.settled)
+                .then(|| Self::unpaired(locale)),
             last_good,
             reason,
             waiting_heading,
@@ -1010,7 +1078,11 @@ impl Backup {
             key_prompt: (!frozen
                 && !self.key_prompt_answered
                 && !key.saved
-                && !key.synced
+                // A KEY IN A STORE THAT DOES NOT SYNCHRONISE (Google's end-to-end encryption or
+                // iCloud Keychain off) is on this phone alone: the prompt is due. Not before the
+                // platform has said whether it synchronises.
+                && self.synced.is_some()
+                && !key.carried()
                 && self.reading().is_some_and(|r| r.last_ack_ms.is_some()))
             .then(|| wire::BackupKeyPrompt {
                 title: backup_home::key_prompt_title(locale),
@@ -1147,8 +1219,7 @@ impl Screen for Backup {
                     }
                     return Vec::new();
                 }
-                self.job_done(&done, ctx);
-                Vec::new()
+                self.job_done(&done, ctx)
             }
             _ => Vec::new(),
         }

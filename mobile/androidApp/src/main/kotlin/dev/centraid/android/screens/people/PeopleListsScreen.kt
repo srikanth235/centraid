@@ -47,7 +47,7 @@ internal fun PeopleListsScreen(
                 items(data?.rows.orEmpty(), key = { it.list_id }) { row ->
                     CentraidRow(
                         title = row.name,
-                        meta = row.meta,
+                        meta = row.meta.dotSafe(),
                         a11y = row.accessibility_label,
                         testTag = "people-list-row-${row.list_id}",
                         onTap = { onEvent(PeopleListsEvent(row_tapped = PeopleListsEvent.RowTapped(list_id = row.list_id))) },

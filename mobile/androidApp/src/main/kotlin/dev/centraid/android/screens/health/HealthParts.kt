@@ -62,6 +62,9 @@ import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.kitCard
 import dev.centraid.android.kit.kitTextStyle
+import dev.centraid.android.kit.rememberLargestText
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import dev.centraid.android.theme.LocalCentraidTokens
 
 /*
@@ -89,6 +92,14 @@ internal fun HealthNote(text: String) {
 @Composable
 internal fun HealthSection(title: String, note: String = "") {
     if (title.isEmpty()) return
+    // THE NOTE UNDER THE TITLE at the largest text (#1202): beside it "Pinned" broke as "Pinne / d".
+    if (rememberLargestText()) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER + 4.dp, vertical = 8.dp)) {
+            KitText(title, KitType.Section, Surface.ink)
+            if (note.isNotEmpty()) KitText(note, KitType.Meta, Surface.meta)
+        }
+        return
+    }
     Row(
         Modifier.fillMaxWidth().padding(horizontal = KitGeometry.GUTTER + 4.dp, vertical = 8.dp),
         verticalAlignment = Alignment.Bottom,
@@ -99,9 +110,12 @@ internal fun HealthSection(title: String, note: String = "") {
 }
 
 /** A figure and its unit, baseline to baseline. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun HealthFigureText(value: String, unit: String, size: Int, unitColor: Color = Surface.meta) {
-    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    // THE UNIT UNDER THE FIGURE WHEN IT HAS NO ROOM BESIDE IT (#1202): the figure is one word
+    // ("8,600"), never split, and the unit flows to the next line at the largest text.
+    FlowRow(verticalArrangement = Arrangement.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         // A FIGURE THAT CARRIES ITS OWN UNITS ("7 h 12 min", the core's words): the numbers in the
         // figure's weight, every run of letters in the small meta unit, as the board draws it.
         val ink = Surface.ink
@@ -130,6 +144,7 @@ private fun HealthFigureText(value: String, unit: String, size: Int, unitColor: 
             },
             style = kitTextStyle(KitType.Row).copy(fontSize = size.sp, fontWeight = FontWeight.Bold),
             color = Surface.ink,
+            softWrap = false,
         )
         if (unit.isNotEmpty()) KitText(unit, KitType.Meta, unitColor, Modifier.padding(bottom = 2.dp))
     }
@@ -197,8 +212,14 @@ internal fun HealthPinnedCard(line: HealthMetricLine, tag: String, onTap: () -> 
                 HealthSparkBars(line.spark_bp, line.spark_label)
             }
         } else {
-            HealthFigureText(line.value_, line.unit, 22)
-            KitText(line.typical.ifEmpty { line.when_label }, KitType.Meta, Surface.meta)
+            // NO VALUE YET says so in the figure's place, in the wide cards' words ("Nothing yet today").
+            if (line.value_.isEmpty()) {
+                KitText(line.when_label, KitType.Meta, Surface.meta)
+                if (line.typical.isNotEmpty()) KitText(line.typical, KitType.Meta, Surface.meta)
+            } else {
+                HealthFigureText(line.value_, line.unit, 22)
+                KitText(line.typical.ifEmpty { line.when_label }, KitType.Meta, Surface.meta)
+            }
         }
     }
 }
@@ -237,6 +258,9 @@ internal fun HealthHighlightCard(highlight: HealthHighlight, onTap: () -> Unit) 
 @Composable
 internal fun HealthWorkoutRow(line: HealthWorkoutLine, onTap: () -> Unit) {
     val accent = appAccent("health")
+    // THE DATE UNDER THE NAME AT THE LARGEST TEXT (#1202): beside it the title was left a column a
+    // few letters wide and broke as "After/noon".
+    val stacked = rememberLargestText()
     Row(
         Modifier
             .fillMaxWidth()
@@ -255,10 +279,12 @@ internal fun HealthWorkoutRow(line: HealthWorkoutLine, onTap: () -> Unit) {
             if (line.icon_key.isNotEmpty()) CentraidIcon(iconKey = line.icon_key, tint = accent.text, size = 18.dp)
         }
         Column(Modifier.weight(1f)) {
-            KitText(line.title, KitType.Row, Surface.ink, maxLines = 1)
-            if (line.meta.isNotEmpty()) KitText(line.meta, KitType.Meta, Surface.meta, maxLines = 1)
+            val lines = if (stacked) 4 else 1
+            KitText(line.title, KitType.Row, Surface.ink, maxLines = lines)
+            if (line.meta.isNotEmpty()) KitText(line.meta, KitType.Meta, Surface.meta, maxLines = lines)
+            if (stacked) KitText(line.when_label, KitType.Meta, Surface.meta)
         }
-        KitText(line.when_label, KitType.Meta, Surface.meta)
+        if (!stacked) KitText(line.when_label, KitType.Meta, Surface.meta)
     }
 }
 
@@ -266,26 +292,36 @@ internal fun HealthWorkoutRow(line: HealthWorkoutLine, onTap: () -> Unit) {
 @Composable
 internal fun HealthTrendRowView(row: HealthTrendRow, onTap: () -> Unit) {
     val accent = appAccent("health")
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .kitCard()
-            .clickable(onClick = onTap)
-            .padding(horizontal = 14.dp, vertical = 12.dp)
-            .testTag("health-trend-${row.metric}")
-            .clearAndSetSemantics {
-                contentDescription = row.accessibility_label
-                role = Role.Button
-            },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Column(Modifier.weight(1f)) {
+    // THE SPARKLINE UNDER THE FIGURES AT THE LARGEST TEXT (#1202): beside them the figure was left
+    // a column too narrow and "8,600" split as "8,60/0".
+    val stacked = rememberLargestText()
+    val figures: @Composable (Modifier) -> Unit = { m ->
+        Column(m) {
             KitText(row.label, KitType.Row, accent.text)
             HealthFigureText(row.value_, row.unit, 22)
             if (row.delta.isNotEmpty()) KitText(row.delta, KitType.Meta, Surface.meta)
         }
-        Sparkline(row.points_bp, row.average_bp, Modifier.width(120.dp).height(44.dp))
+    }
+    val frame = Modifier
+        .fillMaxWidth()
+        .kitCard()
+        .clickable(onClick = onTap)
+        .padding(horizontal = 14.dp, vertical = 12.dp)
+        .testTag("health-trend-${row.metric}")
+        .clearAndSetSemantics {
+            contentDescription = row.accessibility_label
+            role = Role.Button
+        }
+    if (stacked) {
+        Column(frame, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            figures(Modifier)
+            Sparkline(row.points_bp, row.average_bp, Modifier.width(120.dp).height(44.dp))
+        }
+    } else {
+        Row(frame, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            figures(Modifier.weight(1f))
+            Sparkline(row.points_bp, row.average_bp, Modifier.width(120.dp).height(44.dp))
+        }
     }
 }
 

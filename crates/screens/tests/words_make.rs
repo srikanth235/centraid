@@ -17,17 +17,49 @@ fn no_keychain(phone: &mut Phone) {
     phone.shell.synchronizing = false;
 }
 
-/// An iPhone with iCloud Keychain off opens the screen: the words are shown.
+/// A vault on its own words opens the screen: the words are shown (a vault on its own key is the
+/// one case that shows them at creation; every other key is asked for after the first backup).
 fn shown() -> Phone {
+    let mut phone = choosing();
+    phone.send_make(K::Own(wire::WordsOwnToggled { on: true }));
+    phone.send_make(K::Name(wire::WordsNameTyped {
+        text: "Family".to_owned(),
+    }));
+    phone.primary_make();
+    phone
+}
+
+/// A phone that will keep the key on itself alone, with no seed yet.
+fn no_keychain_phone() -> Phone {
     let mut phone = make_phone("ios");
     no_keychain(&mut phone);
-    phone.driver.start();
-    phone.serve();
     phone
 }
 
 #[test]
-fn a_phone_with_no_seed_mints_at_once_no_framing_screen_and_the_words_show_on_a_secure_screen() {
+fn a_phone_with_no_seed_mints_and_keeps_it_without_showing_the_words_even_with_no_keychain() {
+    // THE KEY IS ASKED FOR AFTER THE FIRST BACKUP, ON BOTH PLATFORMS (owner, 2026-11-18).
+    let mut phone = no_keychain_phone();
+    phone.driver.start();
+    phone.serve();
+    let state = phone.make();
+    assert!(state.finished, "{state:?}");
+    assert_ne!(state.phase, Phase::Show as i32);
+    assert!(state.words.is_empty() && !state.secure);
+    // NOT CLAIMED SAVED: the Backup tab asks for it after the first backup.
+    assert!(!phone.shell.device.contains_key(secrets::WORDS_SAVED));
+    assert!(phone.shell.device.contains_key(secrets::LOCAL_SEED));
+    assert!(phone.shell.device.contains_key(secrets::LOCAL_WORDS));
+    assert!(phone.shell.synced.is_empty());
+    assert!(phone.shell.device.contains_key(secrets::SEED_SETTLED));
+    assert_eq!(
+        phone.keeper.log(),
+        vec!["found own=None name=My vault seed=true".to_owned()]
+    );
+}
+
+#[test]
+fn the_words_of_a_vault_on_its_own_key_show_on_a_secure_screen() {
     let phone = shown();
     let state = phone.make();
     assert_eq!(state.phase, Phase::Show as i32);
@@ -37,10 +69,6 @@ fn a_phone_with_no_seed_mints_at_once_no_framing_screen_and_the_words_show_on_a_
     assert_eq!(
         state.words[0].accessibility_label,
         format!("Word 1, {}", state.words[0].word)
-    );
-    assert_eq!(
-        state.custody,
-        "iCloud Keychain is off, so your recovery key is only on this iPhone. Save a copy."
     );
     assert_eq!(state.save_label, "Save a copy");
     assert_eq!(state.primary_label, "I've saved it");
@@ -82,39 +110,8 @@ fn cancelling_or_swiping_away_the_shown_words_closes_and_drops_them_keeping_noth
         assert!(state.finished);
         assert!(state.words.is_empty() && !state.secure);
         assert!(state.made_line.is_empty());
-        assert!(phone.shell.device.is_empty() && phone.shell.synced.is_empty());
         assert!(phone.keeper.log().is_empty());
     }
-}
-
-#[test]
-fn i_have_saved_them_keeps_the_seed_settled_before_the_vault_is_founded() {
-    let mut phone = shown();
-    let minted: Vec<String> = phone.make().words.iter().map(|w| w.word.clone()).collect();
-    phone.primary_make();
-    let state = phone.make();
-    // NO "READY" SCREEN: the sheet closes, the sentence rides along for Home.
-    assert!(state.finished);
-    assert_eq!(
-        state.made_line,
-        "My vault is on this phone, and your recovery key brings it back."
-    );
-    assert!(state.words.is_empty());
-    // STORED AND SETTLED BEFORE THE FOUND: the shelf saw a seed.
-    assert_eq!(
-        phone.keeper.log(),
-        vec!["found own=None name=My vault seed=true".to_owned()]
-    );
-    assert!(phone.shell.device.contains_key(secrets::SEED_SETTLED));
-    // SHOWN AND KEPT counts as saved; the words are kept on this phone for Settings.
-    assert!(phone.shell.device.contains_key(secrets::WORDS_SAVED));
-    assert_eq!(
-        phone.shell.device.get(secrets::LOCAL_WORDS),
-        Some(&minted.join(" "))
-    );
-    // No keychain took it: it is on this phone only.
-    assert!(phone.shell.synced.is_empty());
-    assert!(phone.shell.device.contains_key(secrets::LOCAL_SEED));
 }
 
 #[test]
@@ -251,31 +248,10 @@ fn a_session_still_opening_is_not_a_failure_to_blame_on_the_member() {
 
 #[test]
 fn a_store_that_took_nothing_refuses_the_keep_and_try_again_keeps_the_same_words() {
-    let mut phone = shown();
-    let minted: Vec<String> = phone.make().words.iter().map(|w| w.word.clone()).collect();
-    phone.driver.send(
-        phone.id,
-        wire::screen_event::Kind::WordsMake(wire::WordsMakeEvent {
-            kind: Some(K::Primary(wire::WordsPrimary {})),
-        }),
-    );
-    // Every write the shell is asked for fails.
-    while !phone.driver.effects.is_empty() {
-        let request = phone.driver.effects.remove(0);
-        let count = match request.effect.and_then(|e| e.kind) {
-            Some(wire::effect::Kind::Secrets(batch)) => batch.ops.len(),
-            other => panic!("unexpected {other:?}"),
-        };
-        phone.driver.send(
-            request.instance,
-            wire::screen_event::Kind::EffectResult(wire::EffectResult {
-                effect_id: request.effect_id,
-                outcome: Some(wire::effect_result::Outcome::Secrets(wire::SecretBatched {
-                    answers: vec![wire::SecretAnswer::default(); count],
-                })),
-            }),
-        );
-    }
+    let mut phone = no_keychain_phone();
+    phone.shell.refuse_device_writes = true;
+    phone.driver.start();
+    phone.serve();
     let state = phone.make();
     assert_eq!(state.phase, Phase::Failed as i32);
     assert_eq!(
@@ -284,12 +260,10 @@ fn a_store_that_took_nothing_refuses_the_keep_and_try_again_keeps_the_same_words
     );
     assert!(phone.keeper.log().is_empty(), "nothing is founded unkept");
     // THE WORDS ARE STILL HELD, so "Try again" keeps the same ones and founds.
+    phone.shell.refuse_device_writes = false;
     phone.primary_make();
     assert!(phone.make().finished);
-    assert_eq!(
-        phone.shell.device.get(secrets::LOCAL_WORDS),
-        Some(&minted.join(" "))
-    );
+    assert!(phone.shell.device.contains_key(secrets::LOCAL_WORDS));
 }
 
 // --- a vault on its own words (R-1047-E18) ------------------------------------

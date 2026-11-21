@@ -68,8 +68,8 @@ fn the_band_moves_in_place_and_the_tab_you_are_on_is_nothing() {
     band(&mut d, i, "more");
     assert_eq!(
         sheet_keys(state(&d, i)),
-        ["recent", "export", "trash_shelf"],
-        "More lists Recently added, Export and Trash; Followed only once a folder is followed"
+        ["reads", "recent", "export", "trash_shelf"],
+        "More lists What Docs may read, Recently added, Export and Trash; Followed only once a folder is followed"
     );
 }
 
@@ -536,28 +536,18 @@ fn labels_add_tags_a_label_it_has_is_nothing_and_remove_untags() {
 }
 
 #[test]
-fn trash_asks_first_says_it_can_be_restored_and_dismissing_writes_nothing() {
+fn trash_asks_nothing_and_says_so_with_an_undo_on_the_status_line() {
     let mut d = driver();
     let i = root(&d);
     let id = text(&d, "Scratch", "x");
     drive_send(&mut d, i, D::Refreshed(de::Refreshed {}));
     row_menu(&mut d, i, &id);
     pick(&mut d, i, "trash");
-    let confirm_now = state(&d, i).confirm.as_ref().expect("a confirm");
-    assert_eq!(confirm_now.title, "Move to trash?");
+    assert!(state(&d, i).confirm.is_none(), "move to trash asks nothing");
     assert_eq!(
-        confirm_now.body,
-        "It can be restored from trash for 30 days."
+        state(&d, i).status.as_ref().expect("a status").sentence,
+        "Scratch moved to trash"
     );
-    assert_eq!(confirm_now.confirm_label, "Move to trash");
-    assert!(confirm_now.destructive);
-    drive_send(&mut d, i, D::Dismissed(de::Dismissed {}));
-    assert!(state(&d, i).confirm.is_none());
-    assert!(titles(d.view(i)).contains(&"Scratch".to_owned()));
-    row_menu(&mut d, i, &id);
-    pick(&mut d, i, "trash");
-    confirm(&mut d, i);
-    assert!(state(&d, i).confirm.is_none());
     assert!(!titles(d.view(i)).contains(&"Scratch".to_owned()));
 }
 
@@ -1122,4 +1112,20 @@ fn a_rename_over_a_document_that_changed_elsewhere_is_refused_and_reload_shows_i
     let rename = state(&d, i).rename.clone().expect("still open");
     assert_eq!(rename.title, "Elsewhere");
     assert_eq!(rename.status_label, "Your text is in Earlier versions.");
+}
+
+#[test]
+fn first_open_on_recents_says_what_docs_is_for_with_the_add_as_its_one_action() {
+    // A FIRST VAULT holds no document, and Docs opens on Recents.
+    let mut d = Driver::first_vault(docs::runtime());
+    d.start();
+    let i = root(&d);
+    let empty = drive_empty(d.view(i));
+    assert_eq!(empty.headline, "Documents you own, kept in your vault.");
+    assert_eq!(empty.body, "");
+    assert_eq!(empty.action_label, "Add a document");
+    assert_eq!(
+        state(&d, i).empty_action,
+        wire::docs_drive_data::EmptyAction::Add as i32
+    );
 }

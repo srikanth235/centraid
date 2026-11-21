@@ -151,7 +151,7 @@ fn the_detail_says_every_fact_in_words_the_screen_chose() {
         actions,
         [
             ("edit", "Edit"),
-            ("cancel", "Cancel…"),
+            ("cancel", "Cancel event…"),
             ("trash", "Move to trash")
         ]
     );
@@ -222,7 +222,7 @@ fn all_day_and_multi_day_occurrences_say_days_never_a_clock_time_and_a_series_sa
     let data = world.event_data(page);
     assert_eq!(data.facts[0].label, "Repeats");
     assert!(!data.facts[0].detail.is_empty());
-    assert_eq!(data.actions[data.actions.len() - 2].label, "Cancel…");
+    assert_eq!(data.actions[data.actions.len() - 2].label, "Cancel event…");
     assert_eq!(data.actions.last().expect("trash").label, "Move to trash");
     assert_eq!(
         data.rsvp.as_ref().expect("a guest").note,

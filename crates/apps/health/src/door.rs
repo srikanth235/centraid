@@ -176,6 +176,25 @@ pub fn origin_statement() -> PageQuery {
     )
 }
 
+/// `health.workouts.followed` — the health sources of a set of activities: one row per activity a
+/// health store's origin states (a workout the member logged by hand has none).
+///
+/// # Errors
+///
+/// An empty id list.
+pub fn followed_statement(activity_ids: &[String]) -> KitResult<PageQuery> {
+    let fragment = in_list("entity_id", activity_ids)?;
+    let mut bind = vec![PageBindValue::from(HEALTH_SYSTEM)];
+    bind.extend(fragment.bind);
+    Ok(PageQuery::new(
+        "health.workouts.followed",
+        "entity_id, origin_id",
+        "source",
+        PageOrder::asc("entity_id", "entity_id"),
+    )
+    .filter(&format!("system = ? AND {}", fragment.sql), bind))
+}
+
 /// `health.kinds` — every workout kind's key, seeded and minted.
 #[must_use]
 pub fn kinds_statement() -> PageQuery {
@@ -490,6 +509,35 @@ pub fn measures(
                 elevation_gain_m: real_of(row, "climb_m"),
             };
             found.insert(measure.activity_id.clone(), measure);
+        }
+    }
+    Ok(found)
+}
+
+/// The ids, of those asked about, that a live health origin follows: not a workout the member
+/// logged by hand, nor one whose store was stopped.
+///
+/// # Errors
+///
+/// A door failure.
+pub fn followed(door: &dyn PageDoor, activity_ids: &[String]) -> KitResult<Vec<String>> {
+    if activity_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let live: Vec<String> = read_pages(door, &origin_statement(), FanOutBound::new(50, 1))?
+        .iter()
+        .map(|row| text(row, "id"))
+        .collect();
+    let mut found = Vec::new();
+    for chunk in activity_ids.chunks(MEASURE_CHUNK) {
+        for row in &read_pages(
+            door,
+            &followed_statement(chunk)?,
+            FanOutBound::new(MEASURE_CHUNK, 1),
+        )? {
+            if live.contains(&text(row, "origin_id")) {
+                found.push(text(row, "entity_id"));
+            }
         }
     }
     Ok(found)

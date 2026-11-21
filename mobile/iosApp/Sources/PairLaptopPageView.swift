@@ -28,6 +28,23 @@ struct PairLaptopPageView: View {
 
     @Environment(\.colorScheme) private var scheme
 
+    /// The safety number's groups in rows of the given width; every group on one line, whole.
+    private func groupRows(_ rows: [[String]]) -> some View {
+        VStack(spacing: 8) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack(spacing: 16) {
+                    ForEach(Array(row.enumerated()), id: \.offset) { _, group in
+                        Text(group)
+                            .centraidType("title")
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.color("text", scheme))
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                }
+            }
+        }
+    }
+
     var body: some View {
         // THE LOOK (PairDevice, PairCheck): the words pages' frame, a round X to leave, a tinted
         // badge over a centred title, and the answers pinned at the foot, a tonal scan over the ink.
@@ -44,7 +61,7 @@ struct PairLaptopPageView: View {
                     tint: AppAccent.shell.text,
                     size: 28
                 )
-                .frame(width: 64, height: 64)
+                .kitScaledSquare(64, relativeTo: .title)
                 .background(AppAccent.shell.fill.opacity(0.14), in: RoundedRectangle(cornerRadius: Theme.radius("lg", scheme), style: .continuous))
                 .accessibilityHidden(true)
                 WordsHead(title: state.title, lead: state.body, centered: true)
@@ -58,8 +75,13 @@ struct PairLaptopPageView: View {
                     Text("$")
                         .foregroundStyle(Color.white.opacity(0.55))
                         .accessibilityHidden(true)
-                    Text(state.command)
+                    // A COMMAND BREAKS AT ITS SPACES, NEVER AT A HYPHEN (#1202): the display swaps
+                    // each hyphen for the non-breaking one; VoiceOver still reads the real command.
+                    Text(state.command.replacingOccurrences(of: "-", with: "\u{2011}"))
                         .foregroundStyle(Color.white)
+                        // ONE LINE THAT SHRINKS, NEVER ONE THAT BREAKS INSIDE A WORD (#1202).
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.4)
                 }
                 .centraidType("mono")
                 .padding(16)
@@ -68,7 +90,8 @@ struct PairLaptopPageView: View {
                     RoundedRectangle(cornerRadius: Theme.radius("md", scheme))
                         .fill(Color(red: 0.11, green: 0.11, blue: 0.10))
                 )
-                .accessibilityElement(children: .combine)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(state.command)
                 .accessibilityIdentifier("pair-command")
             }
 
@@ -78,10 +101,10 @@ struct PairLaptopPageView: View {
                         .centraidType("small")
                         .foregroundStyle(Theme.color("textSoft", scheme))
                         .accessibilityHidden(true)
-                    MachineTextField(placeholder: "", value: state.payload, axis: .vertical) { text in
+                    // THE WHOLE CODE: it has no word breaks, so it wraps anywhere and scrolls past five lines.
+                    MachineTextEditor(value: state.payload) { text in
                         send(PairLaptopEvents.make { $0.typed = .with { $0.text = text } })
                     }
-                    .lineLimit(2...5)
                     .keyboardType(.asciiCapable)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
@@ -97,6 +120,7 @@ struct PairLaptopPageView: View {
                     )
                     .accessibilityLabel(state.payloadLabel)
                     .accessibilityIdentifier("pair-payload")
+                    .wordsFocusTarget()
                 }
             }
 
@@ -114,17 +138,13 @@ struct PairLaptopPageView: View {
                     let rows = stride(from: 0, to: state.safetyGroups.count, by: 4).map {
                         Array(state.safetyGroups[$0 ..< min($0 + 4, state.safetyGroups.count)])
                     }
-                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                        HStack(spacing: 16) {
-                            ForEach(Array(row.enumerated()), id: \.offset) { _, group in
-                                Text(group)
-                                    .centraidType("title")
-                                    .monospacedDigit()
-                                    .foregroundStyle(Theme.color("text", scheme))
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.6)
-                            }
-                        }
+                    // WRAPS, NEVER SHORTENS (#1202): four groups to a row while they fit, then
+                    // two, then one, so a group is always whole and the number can be compared
+                    // digit by digit at the largest text.
+                    ViewThatFits(in: .horizontal) {
+                        groupRows(rows)
+                        groupRows(Array(state.safetyGroups).chunked(2))
+                        groupRows(Array(state.safetyGroups).chunked(1))
                     }
                     if !state.safetyHint.isEmpty {
                         Text(state.safetyHint)
@@ -170,5 +190,12 @@ struct PairLaptopPageView: View {
             }
         }
         .onChange(of: state.finished) { _, done in if done { onDone() } }
+    }
+}
+
+private extension Array {
+    /// The elements in consecutive runs of `size`; the last run may be shorter.
+    func chunked(_ size: Int) -> [[Element]] {
+        stride(from: 0, to: count, by: size).map { Array(self[$0 ..< Swift.min($0 + size, count)]) }
     }
 }

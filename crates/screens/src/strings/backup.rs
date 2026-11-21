@@ -45,6 +45,7 @@ catalog! {
     plain backup_bytes_none = ("{total} from {apps}, none of it backed up yet.", "{total} from {apps}, none of it backed up yet.");
     plain backup_bytes_some = ("{part} from {apps} is backed up.", "{part} from {apps} is backed up.");
     plain backup_bytes_of = ("{part} of {whole}", "{part} of {whole}");
+    plain backup_card_pair_again = ("Pair again", "Pair again");
     plain backup_dest_pair_again = ("Pair it again", "Pair it again");
     plain backup_devices_heading = ("Backup devices", "Backup devices");
     plain backup_held = ("Holds {size} \u{b7} can't open it", "Holds {size} \u{b7} can't open it");

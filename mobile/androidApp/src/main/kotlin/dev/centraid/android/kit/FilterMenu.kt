@@ -116,7 +116,7 @@ public fun FilterMenuButton(app: String, filter: RoomFilter) {
                 )
             }
         }
-        DropdownMenu(expanded = open, onDismissRequest = close, containerColor = Surface.card) {
+        DropdownMenu(expanded = open, onDismissRequest = close, modifier = Modifier.menuTestIds(), containerColor = Surface.card) {
             val section = menu.sections.firstOrNull { it.key == inside }
             if (section != null) {
                 DropdownMenuItem(

@@ -18,6 +18,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.PeopleContactsRow
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.KitText
 import dev.centraid.android.kit.KitTile
 import dev.centraid.android.kit.KitType
@@ -34,24 +35,9 @@ import dev.centraid.android.theme.centraidType
 @Composable
 internal fun PeopleContactsRowView(row: PeopleContactsRow, onAction: () -> Unit) {
     val accent = appAccent()
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = KitGeometry.ROW_MIN).padding(horizontal = 16.dp, vertical = 6.dp)
-            .testTag("people-contacts-row"),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        KitTile("Users", Modifier.padding(end = 12.dp), size = 30.dp)
-        Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = row.accessibility_label }) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                KitText(row.title, KitType.Row, Surface.ink)
-                KitText(
-                    row.state_label,
-                    KitType.Meta,
-                    if (row.state == PeopleContactsRow.State.STATE_DENIED) StateColor.Red.text else accent.text,
-                    modifier = Modifier.padding(start = 6.dp),
-                )
-            }
-            if (row.detail.isNotEmpty()) KitText(row.detail, KitType.Meta, Surface.meta, maxLines = 2)
-        }
+    // THE ACTION UNDER THE WORDS at the largest text (#1202).
+    val stackedAction = rememberLargestText()
+    val action: @Composable () -> Unit = {
         Text(
             row.action_label,
             style = centraidType("smallStrong"),
@@ -63,5 +49,28 @@ internal fun PeopleContactsRowView(row: PeopleContactsRow, onAction: () -> Unit)
                 .testTag("people-contacts-action")
                 .semantics { role = Role.Button },
         )
+    }
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = KitGeometry.ROW_MIN).padding(horizontal = KitGeometry.GUTTER, vertical = 6.dp)
+            .testTag("people-contacts-row"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        KitTile("Users", Modifier.padding(end = 12.dp), size = 32.dp)
+        Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = row.accessibility_label }) {
+            // THE STATE WRAPS AS A WORD (#1202): beside the title "Off" stacked O/f/f.
+            @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+            androidx.compose.foundation.layout.FlowRow(itemVerticalAlignment = Alignment.CenterVertically) {
+                KitText(row.title, KitType.Row, Surface.ink)
+                KitText(
+                    row.state_label,
+                    KitType.Meta,
+                    if (row.state == PeopleContactsRow.State.STATE_DENIED) StateColor.Red.text else accent.text,
+                    modifier = Modifier.padding(start = 6.dp),
+                )
+            }
+            if (row.detail.isNotEmpty()) KitText(row.detail.dotSafe(), KitType.Meta, Surface.meta, maxLines = if (stackedAction) 6 else 2)
+            if (stackedAction) action()
+        }
+        if (!stackedAction) action()
     }
 }

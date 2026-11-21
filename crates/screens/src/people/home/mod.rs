@@ -32,6 +32,7 @@ use crate::kit::act as kit_act;
 use crate::kit::export;
 use crate::kit::menu;
 use crate::kit::read::{self, Page};
+use crate::kit::reads_page;
 use crate::kit::search;
 use crate::kit::undo::Undo;
 use crate::screen::{Ctx, Screen};
@@ -397,11 +398,33 @@ impl Home {
             H::StopDismissed(_) => self.asking_stop = false,
             H::StopConfirmed(_) => return self.stop(ctx),
             H::Star(toggled) => self.star(ctx, &toggled.party_id),
+            // THE SHEET CLOSES WHEN THE IMPORT STARTS: its outcome is on the page, not behind a dimmed sheet.
             H::ImportContacts(_) => {
+                self.sheet = wire::people_home_state::Sheet::Unspecified;
                 self.undo.clear();
                 return self.contacts.import(ctx);
             }
+            // THE EMPTY CARD'S ONE ACTION: the phone's Settings after a refusal (PeopleRefused), else
+            // the add the plus also makes.
+            H::EmptyActed(_) => {
+                if rows::Access::of(&ctx.follows().report(Store::Contacts)) == rows::Access::Refused
+                {
+                    return vec![wire::Effect {
+                        kind: Some(wire::effect::Kind::VaultCommand(wire::VaultCommand {
+                            kind: Some(wire::vault_command::Kind::Open(
+                                wire::home_status::Destination::Phone as i32,
+                            )),
+                        })),
+                    }];
+                }
+                return vec![wire::Effect {
+                    kind: Some(wire::effect::Kind::OpenRoute(wire::OpenRoute {
+                        route: Some(routes::new_person()),
+                    })),
+                }];
+            }
             H::ContactsAction(_) => {
+                self.sheet = wire::people_home_state::Sheet::Unspecified;
                 self.undo.clear();
                 if self.contacts.needs_settings(ctx) {
                     // THE PHONE SAID NO: only its own Settings can say yes.
@@ -485,15 +508,19 @@ impl Home {
 
     /// The page's own sentence for having nothing to show: a term that matched no one, day one on
     /// Touch, or the roster's (day one, or the chip's own).
-    fn empty_state(&self, locale: Locale, searching: bool) -> wire::EmptyState {
+    fn empty_state(&self, ctx: &Ctx, searching: bool) -> wire::EmptyState {
+        let locale = ctx.locale();
+        // THE PHONE REFUSED ITS CONTACTS: day one says so with Open Settings, or offers the add and
+        // not an import that cannot work.
+        let access = rows::Access::of(&ctx.follows().report(Store::Contacts));
         if searching {
             rows::search_empty(locale)
         } else if self.destination == wire::PeopleDestination::Touch {
-            rows::day_one(locale)
+            rows::touch_day_one(locale, access)
         } else {
             self.held_roster.as_ref().map_or_else(
-                || rows::day_one(locale),
-                |roster| rows::roster_empty(locale, roster, self.chip),
+                || rows::day_one(locale, access),
+                |roster| rows::roster_empty(locale, roster, self.chip, access),
             )
         }
     }
@@ -522,10 +549,12 @@ impl Home {
         state
     }
 
-    fn status(&self, ctx: &Ctx) -> Option<wire::StatusLine> {
+    /// The status line; `refusal_card` says the empty card is already telling the member the phone
+    /// refused the contacts (with Open Settings), so the line does not say it again.
+    fn status(&self, ctx: &Ctx, refusal_card: bool) -> Option<wire::StatusLine> {
         self.undo
             .status()
-            .or_else(|| self.contacts.status().cloned())
+            .or_else(|| self.contacts.status().filter(|_| !refusal_card).cloned())
             .or_else(|| {
                 ctx.follows()
                     .report(Store::Contacts)
@@ -548,13 +577,18 @@ impl Screen for Home {
         match kind {
             E::Appeared(_) => {
                 self.reload(ctx);
+                self.undo.take_handed(ctx);
                 ctx.follows().changed(ctx, Store::Contacts);
                 if !self.attached {
                     self.attached = true;
                     return self.contacts.attach();
                 }
             }
-            E::DataChanged(_) | E::EnvironmentChanged(_) => self.reload(ctx),
+            E::DataChanged(_) | E::EnvironmentChanged(_) => {
+                self.reload(ctx);
+                // THE PERSON'S PAGE ABOVE CLOSED (moved to trash): its line and Undo are drawn here.
+                self.undo.take_handed(ctx);
+            }
             E::PeopleHome(home) => return self.event(home, ctx),
             E::StatusActed(_) => {
                 if self.undo.acted(ctx) {
@@ -573,7 +607,7 @@ impl Screen for Home {
         // The page the surface shows: the answer to the term while one is asked, else the
         // destination's own read.
         let searching = self.search.active() && self.search.held.is_some();
-        let empty = self.empty_state(locale, searching);
+        let empty = self.empty_state(ctx, searching);
         let gate = |denial: &wire::AppQueryDenial| denied(locale, denial);
         let wired = match (&self.search.held, searching) {
             (Some(held), true) => held.wire(locale, gate, || empty.clone()),
@@ -582,6 +616,8 @@ impl Screen for Home {
             }
             _ => self.roster.wire(locale, gate, || empty.clone()),
         };
+        let refusal_card = matches!(wired.state, Some(wire::page_state::State::Empty(_)))
+            && rows::is_refusal(locale, &empty);
         let content = if searching {
             None
         } else if self.destination == wire::PeopleDestination::Touch {
@@ -610,6 +646,15 @@ impl Screen for Home {
                 let back = words::app_title(locale);
                 let export = export::entry(locale, super::EXPORT);
                 vec![
+                    // WHAT PEOPLE MAY READ (owner, 2026-11-19), first, as Health's is; the
+                    // phone's address book is the Phone contacts row's, a different question.
+                    wire::PeopleMoreRow {
+                        key: "reads".to_owned(),
+                        label: reads_page::title(locale, &back),
+                        icon_key: "Shield".to_owned(),
+                        route: Some(routes::reads()),
+                        meta: String::new(),
+                    },
                     wire::PeopleMoreRow {
                         key: "lists".to_owned(),
                         label: crate::strings::people_lists::more_row(locale),
@@ -651,7 +696,7 @@ impl Screen for Home {
                 .collect()
             },
             sheet: self.sheet as i32,
-            status: self.status(ctx),
+            status: self.status(ctx, refusal_card),
             contacts: (!denied_now).then(|| self.contacts.row(ctx)),
             stop: (self.asking_stop && !denied_now).then(|| {
                 crate::kit::follow::stop_confirm(

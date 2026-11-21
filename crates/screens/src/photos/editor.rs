@@ -588,6 +588,12 @@ impl Editor {
         self.rendering = None;
         let rendered = match &result.outcome {
             Some(wire::effect_result::Outcome::EditRendered(done)) => done.clone(),
+            // A FULL PHONE SAYS SO (#1202), in the one sentence every full phone gets.
+            Some(wire::effect_result::Outcome::Failed(failed))
+                if failed.reason == crate::effect_reason::STORAGE_FULL =>
+            {
+                return self.refused(locale, &crate::strings::permission::storage_full(locale));
+            }
             _ => return self.refused(locale, &own::edit_no_vault(locale)),
         };
         let key = kit_act::key(

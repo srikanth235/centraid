@@ -211,6 +211,10 @@ pub const REGISTER: &[Entry] = &[
         platform(Shell::Ios, REMINDERS),
     ),
     (
+        "AgendaHomeEvent.import_reminders_requested",
+        platform(Shell::Ios, REMINDERS),
+    ),
+    (
         "AgendaHomeState.import_reminders",
         platform(Shell::Ios, REMINDERS),
     ),
@@ -247,23 +251,11 @@ pub const REGISTER: &[Entry] = &[
         ),
     ),
     (
-        "ImportsMadeEvent.reminders_requested",
-        platform(Shell::Ios, REMINDERS),
-    ),
-    (
-        "ImportsMadeEvent.Made.include_completed",
-        platform(Shell::Ios, REMINDERS),
-    ),
-    (
         "ImportsMadeEvent.RemindersRequested.include_completed",
         platform(Shell::Ios, REMINDERS),
     ),
     (
-        "ImportsMadeState.completed_label",
-        platform(Shell::Ios, REMINDERS),
-    ),
-    (
-        "ImportsMadeState.reminders_label",
+        "ImportsMadeEvent.Made.include_completed",
         platform(Shell::Ios, REMINDERS),
     ),
     (
@@ -332,6 +324,12 @@ pub const REGISTER: &[Entry] = &[
     ),
     ("PhotoTile.favorite", gap("F", Missing::Both)),
     // Rust only: Rust writes it and reads it back, or hands it from one screen or service to another.
+    (
+        "ImportsMadeEvent.reminders_requested",
+        rust_only(
+            "Reminders' home posts it by name (reminders/home/mod.rs to imports/made.rs) from the card, the tile or the sheet's verb; no shell sends it",
+        ),
+    ),
     ("AgendaDraft.guest_ids", rust_only(AGENDA_DRAFT)),
     ("AgendaDraft.reminder_key", rust_only(AGENDA_DRAFT)),
     ("AgendaDraft.repeat_key", rust_only(AGENDA_DRAFT)),
@@ -416,7 +414,25 @@ pub const REGISTER: &[Entry] = &[
         ),
     ),
     ("HomeEvent.outcome_told", rust_only(VAULT_TELLS_HOME)),
+    (
+        "HomeEvent.photo_access_told",
+        rust_only(
+            "the camera roll tells Home by name (`Ctx::post`, imports/camera_roll.rs to shell/home.rs) when the phone refuses photo access; no shell sends it",
+        ),
+    ),
     ("HomeEvent.vaults_told", rust_only(VAULT_TELLS_HOME)),
+    (
+        "HomeData.springboard",
+        rust_only(
+            "the springboard's grade is Rust's (policy::springboard): it picks the welcome card and Rust words it into `welcome`, which the shells draw; Rust's tests read the grade back",
+        ),
+    ),
+    (
+        "HomeTile.holds",
+        rust_only(
+            "whether the app holds anything of the member's is Rust's input to the springboard grade (policy::springboard reads it back off the tile); a shell draws `status` and `empty_copy`, never this",
+        ),
+    ),
     (
         "ImportsCameraRollEvent.BytesNeeded.needs",
         rust_only(PASS_TELLS_ROLL),

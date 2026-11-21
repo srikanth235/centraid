@@ -342,12 +342,16 @@ fn only_the_members_own_asks_and_the_app_leaving_force_a_snapshot() {
         (Reason::BackUpNow, 0),
         (Reason::EnteredBackground, 25_000),
         (Reason::Restored, 0),
+        (Reason::Paired, 0),
     ] {
         let actions = sim.conductor.trigger(reason, deadline);
         sim.run(actions);
     }
     let snapshots: Vec<_> = sim.requests().iter().map(|r| r.wants_snapshot).collect();
-    assert_eq!(snapshots, [false, false, false, false, true, true, true]);
+    assert_eq!(
+        snapshots,
+        [false, false, false, false, true, true, true, true]
+    );
     let forcing: Vec<_> = Reason::ALL
         .into_iter()
         .filter(|r| r.wants_snapshot())
@@ -357,7 +361,8 @@ fn only_the_members_own_asks_and_the_app_leaving_force_a_snapshot() {
         [
             Reason::BackUpNow,
             Reason::EnteredBackground,
-            Reason::Restored
+            Reason::Restored,
+            Reason::Paired
         ]
     );
 }
@@ -933,6 +938,25 @@ fn each_finished_task_settles_in_its_own_vaults_core_routed_by_the_vault_id() {
 }
 
 #[test]
+fn a_finished_task_that_names_its_vault_by_identity_settles_in_the_shelfs_id_for_it() {
+    // The OS reports the 64-hex identity a handed-off part carried; the shelf holds the vault under
+    // its own id, and the settle is routed by that one (#1202).
+    let conductor = ios(vec![held("shelf-1", true)]);
+    let report = wire::UploadSettled {
+        name: "a".to_owned(),
+        http_status: 201,
+        gateway_id: "gw-1".to_owned(),
+        vault_id: "ab".repeat(32),
+        ..Default::default()
+    };
+    // Looked up by the identity alone, it is a vault nobody holds.
+    assert!(conductor.upload_settled(&report).is_empty());
+    let actions = conductor.upload_settled_in("shelf-1", &report);
+    assert!(matches!(&actions[..], [Action::Settle { vault, settled }]
+        if vault == "shelf-1" && settled.vault_id == "ab".repeat(32)));
+}
+
+#[test]
 fn a_drained_session_hands_every_open_vaults_next_batch_off_one_vault_at_a_time() {
     let conductor = ios(vec![held("v1", true), held("v2", true)]);
     let first = conductor.uploads_drained();
@@ -1144,6 +1168,7 @@ fn every_reason_a_pass_is_named_for_has_a_trigger() {
             Reason::Restored,
             Box::new(|c| c.trigger(Reason::Restored, 0)),
         ),
+        (Reason::Paired, Box::new(|c| c.trigger(Reason::Paired, 0))),
     ];
     assert_eq!(entries.len(), Reason::ALL.len());
     for (reason, start) in entries {

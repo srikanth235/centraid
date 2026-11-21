@@ -476,8 +476,14 @@ impl Screen for WorkoutPage {
         );
         // A workout that is gone says so in its own words and offers no Retry.
         if self.gone && matches!(page.state, Some(wire::page_state::State::Failed(_))) {
+            // WHILE THE UNDO IS ON OFFER the workout is in the trash, not "no longer here".
+            let sentence = if self.undo.can_undo() {
+                shared::trash_here(locale)
+            } else {
+                words::workout_gone(locale)
+            };
             page.state = Some(wire::page_state::State::Failed(read::gone(
-                words::workout_gone(locale),
+                sentence,
                 String::new(),
             )));
         }

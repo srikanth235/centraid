@@ -63,11 +63,10 @@ name: health-connect
     timeout: 60000
 - assertNotVisible:
     id: "kit-empty-action"
-# Where the numbers come from, at the page's foot.
-- scrollUntilVisible:
-    element:
-      id: "health-today-foot"
-    direction: DOWN
+# Where the numbers come from: the title's second line says so (the revamp, #1173, replaced the foot).
+- assertVisible:
+    id: "room-subtitle"
+- assertVisible: ".*read from Apple Health"
 # A metric opens on its own page.
 - tapOn:
     id: "health-metric-active_energy_kcal"
@@ -81,4 +80,6 @@ name: health-connect
 - assertVisible:
     id: "health-trend-steps"
 - tapOn: "Workouts"
-- assertVisible: "All"
+# The workout kind is a filter in the header's funnel menu (#1173: it replaced the "All" chip).
+- assertVisible:
+    id: "health-filter-menu"

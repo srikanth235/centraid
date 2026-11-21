@@ -28,6 +28,10 @@ message Route {
   // table (#1146).
   reserved 403;
   reserved "locker_access";
+  // 503 was `money.search`, a page the search key pushed: Money searches in place now, as the
+  // other apps do (owner, 2026-11-19).
+  reserved 503;
+  reserved "money_search";
   // 806 and 807 were Photos' Duplicates and its review, retired (#1146 D5).
   reserved 806, 807;
   reserved "photos_duplicates", "photos_duplicate_review";
@@ -67,7 +71,6 @@ message Route {
     MoneyHomeRoute money_home = 500;
     MoneyTransactionRoute money_transaction = 501;
     MoneyTargetRoute money_target = 502;
-    MoneyPageRoute money_search = 503;
     MoneyPageRoute money_recurring = 504;
     MoneyPageRoute money_accounts = 505;
     MoneyPageRoute money_categories = 506;
@@ -92,6 +95,7 @@ message Route {
     PeopleListsRoute people_lists = 703;
     // ---- the kit (900-999) ----
     TrashRoute trash = 900;
+    ReadsRoute reads = 905;
     TransferRoute transfer = 901;
     EarlierRoute earlier = 903;
     // The full preview of one earlier version (#1185), pushed from a row of the list.
@@ -208,6 +212,9 @@ message AgendaHomeRoute {
   // (a widget's "New Reminder"). Nothing is written until the member taps Add.
   // It names To-do as the place, as naming words does.
   bool open_quick_add = 3;
+  // Start the phone's Reminders import as the page opens (Home's "Import your reminders" tile).
+  // It names To-do as the place, and does nothing where the phone has no Reminders to read.
+  bool open_import = 4;
 }
 
 // `agenda.event`: one occurrence of an event.
@@ -497,6 +504,10 @@ message PeopleListsRoute {
 // `<app>.trash`: the kit's one trash screen; the screen name says which app.
 message TrashRoute {}
 
+// `<app>.reads`: the kit's one "What <app> may read" page, opened from an app's More sheet; the
+// screen name says which app (owner, 2026-11-19).
+message ReadsRoute {}
+
 // `<app>.earlier` (#1185): the kit's one earlier-versions screen, for the record the page it
 // was pushed from shows; the screen name says which app.
 message EarlierRoute {
@@ -619,7 +630,7 @@ message MoneyTargetRoute {
 }
 
 // The pages that take no argument but the title of the page they were pushed
-// from (search, recurring, accounts, categories, rules, import).
+// from (recurring, accounts, categories, rules, import).
 message MoneyPageRoute {
   string parent = 1;
 }
@@ -657,8 +668,10 @@ message HomeSearchRoute {}
 message SettingsRoute {}
 
 // The Reconnect page (#1185): the phone stores a vault followed on another phone, offered one
-// by one. It takes no arguments.
-message ReconnectRoute {}
+// by one. `parent` names the page it was opened from, which its back control reads.
+message ReconnectRoute {
+  string parent = 1;
+}
 
 // What a tap on a search's Ask row opens: the assistant, asking `question` in
 // `scope` (an app's id, or empty for every app). The chat lane registers the

@@ -75,6 +75,9 @@ internal fun PhotosSearchScreen(
             page = search.page!!,
             onRetry = { onEvent(PhotosHomeEvent(refreshed = centraid.core.v1.PhotosRefreshed())) },
             modifier = Modifier.weight(1f),
+            // THE ASK ROW closes an answer that matched nothing too (#1097): under the empty card,
+            // where the eye is, never at the foot of the page under the search field.
+            emptyExtra = { SearchAskRow(search.ask, onOpen) },
             skeleton = { RowSkeleton() },
         ) {
             when {
@@ -113,9 +116,6 @@ internal fun PhotosSearchScreen(
                 )
             }
         }
-        // THE ASK ROW closes an answer that matched nothing too (#1097): with hits it rides at
-        // the foot of the grid above, so only an answer with no hits draws it here.
-        if (hits == null) SearchAskRow(search.ask, onOpen)
     }
 }
 

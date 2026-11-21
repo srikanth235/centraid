@@ -18,6 +18,42 @@ import java.io.File
  */
 @RunWith(RobolectricTestRunner::class)
 class NotifyPlanTest {
+    @Test
+    fun aYesToThePromptIsAGrantAndOnlyANoIsDenied() {
+        assertEquals(NotifyPlan.Gate.GRANTED, NotifyPlan.afterAsk(true))
+        assertEquals(NotifyPlan.Gate.DENIED, NotifyPlan.afterAsk(false))
+    }
+
+    @Test
+    fun anAlarmThatIsJustDueAndStillOpenAndNotYetSoundedSurvivesAResync() {
+        // 18:15 came and the inexact alarm has not run yet; Rust's set no longer names it, but its live ids do.
+        val due = item("task|due", at = 1_000L)
+        val now = 1_000L + 60_000L
+        val plan = NotifyPlan.reconcile(emptyList(), listOf("task|due"), listOf("task|due"), emptyList(), now, recorded = listOf(due))
+        assertEquals(emptyList<String>(), plan.removePending)
+        assertEquals(listOf(due), NotifyPlan.kept(emptyList(), now, plan.late))
+    }
+
+    @Test
+    fun anAlarmForAReminderCompletedAfterItsMomentIsTakenDownNotSounded() {
+        // Done, deleted or moved at 18:02: Rust's live ids no longer name it.
+        val due = item("task|done", at = 1_000L)
+        val now = 1_000L + 60_000L
+        val plan = NotifyPlan.reconcile(emptyList(), emptyList(), listOf("task|done"), emptyList(), now, recorded = listOf(due))
+        assertEquals(listOf("task|done"), plan.removePending)
+        assertTrue(plan.late.isEmpty())
+        assertEquals(emptyList<PendingNotification>(), NotifyPlan.kept(emptyList(), now, plan.late))
+    }
+
+    @Test
+    fun anAlarmOverdueByMoreThanTheGraceIsTakenDown() {
+        val old = item("task|old", at = 1_000L)
+        val now = 1_000L + NotifyPlan.LATE_GRACE_MS + 1
+        val plan = NotifyPlan.reconcile(emptyList(), listOf("task|old"), listOf("task|old"), emptyList(), now, recorded = listOf(old))
+        assertEquals(listOf("task|old"), plan.removePending)
+        assertEquals(emptyList<PendingNotification>(), NotifyPlan.kept(emptyList(), now, plan.late))
+    }
+
     private fun item(id: String, at: Long = 10_000L, immediate: Boolean = false, title: String = "t") =
         PendingNotification(notification_id = id, fire_at_ms = at, immediate = immediate, title = title)
 

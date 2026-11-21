@@ -25,7 +25,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -68,6 +71,7 @@ import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.screens.agenda.agendaListColor
 import dev.centraid.android.screens.agenda.gridHue
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.kit.KitStepper
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RoomSearch
@@ -154,9 +158,20 @@ public fun AgendaHomeScreen(
     // THE SHARED HEADER (Day, Week and Reminders) stands in the key row; Reminders keeps its title under it.
     val header = state.calendar_header?.takeIf { it.shown }
     val plusShown = state.add_label.isNotEmpty() && (!plusOpensBar || state.quick_add?.shown == true)
+    // A SENTENCE IS PUT AWAY WHEN THE MEMBER LEAVES THE PLACE IT WAS ABOUT (#1202): the import's "No calendars
+    // found" outlived a tab tap. The sentence in view at the change is the one hidden; a new one shows.
+    val sentenceNow = state.status?.sentence.orEmpty()
+    var putAway by remember { mutableStateOf("") }
+    var placeSeen by remember { mutableStateOf(state.destination) }
+    if (placeSeen != state.destination) {
+        placeSeen = state.destination
+        putAway = sentenceNow
+    }
     Box(Modifier.fillMaxSize().testTag("agenda-home")) {
         AppPlace(
             app = state.app_key,
+            // THE CALENDAR'S GRIDS (Day, Week, Month, Year) KEEP THE FULL WIDTH (ruling 27); the lists stand in the readable column.
+            readable = state.data_?.let { it.time_grid == null && it.month == null && it.year == null } ?: true,
             title = header?.title?.takeIf { it.isNotEmpty() } ?: chrome.title,
             meta = meta,
             barLeading = header?.let { { AgendaMonthChip(it, onEvent) } },
@@ -248,16 +263,24 @@ public fun AgendaHomeScreen(
                     ReadStateView(
                         page = page,
                         onRetry = { onEvent(AgendaHomeEvent(refreshed = AgendaHomeEvent.Refreshed())) },
-                        onEmptyAction = state.new_event?.takeUnless { offersImport }?.let { route -> { onOpen(route) } },
+                        // THE CARD'S ONE ACTION, when it has one, is Open Settings after a refused grant (Rust's
+                        // `empty.action_label`); "New event" is the header's plus.
+                        onEmptyAction = if (page.empty?.action_label.orEmpty().isNotEmpty()) {
+                            { onEvent(AgendaHomeEvent(todo_empty_acted = AgendaHomeEvent.TodoEmptyActed())) }
+                        } else {
+                            null
+                        },
                         retryLabel = chrome.retry,
-                        emptyExtra = {
-                            if (offersImport) {
+                        emptyAction = if (offersImport) {
+                            {
                                 OutlineButton(
                                     label = state.import_label,
                                     testTag = "agenda-empty-import",
-                                    modifier = Modifier.padding(start = KitGeometry.GUTTER, top = 4.dp),
+                                    modifier = Modifier.padding(top = 4.dp),
                                 ) { onEvent(AgendaHomeEvent(import_requested = AgendaHomeEvent.ImportRequested())) }
                             }
+                        } else {
+                            null
                         },
                         skeleton = { AgendaSkeleton(chrome) },
                     ) {
@@ -279,7 +302,7 @@ public fun AgendaHomeScreen(
                 // THE ASK ROW closes a search's answer (#1097); the state holds one only while it is drawn.
                 SearchAskRow(state.search_ask_row, onOpen)
                 // THE TASK WRITE'S STATUS LINE ("Task done", Undo) docks under whichever place's list.
-                StatusLine(state.status, actTag = "agenda-status-action") {
+                StatusLine(state.status.takeIf { sentenceNow != putAway }, actTag = "agenda-status-action") {
                     onEvent(AgendaHomeEvent(status_acted = AgendaHomeEvent.StatusActed()))
                 }
                 // THE PLUS OPENED THE BAR (To-do only): the keyboard-attached quick add, focus from `focused`.
@@ -654,14 +677,20 @@ private fun EventRow(row: AgendaEventRow, onOpen: (Route) -> Unit) {
                 .clip(RoundedCornerShape((LocalCentraidTokens.current.radii["xs"] ?: 0).dp))
                 .background(gridHue(row.calendar_hue_key)),
         )
-        Text(
-            row.time_label,
-            style = centraidType("annotLabel"),
-            color = timeInk,
-            maxLines = 2,
-            modifier = Modifier.width(60.dp).padding(start = 8.dp),
-        )
+        // THE TIME OVER THE TITLE at the largest text (#1202): in a fixed 60dp column "10:30" broke as
+        // "10:3 / 0".
+        val stackedTime = rememberLargestText()
+        if (!stackedTime) {
+            Text(
+                row.time_label,
+                style = centraidType("annotLabel"),
+                color = timeInk,
+                maxLines = 2,
+                modifier = Modifier.width(60.dp).padding(start = 8.dp),
+            )
+        }
         Column(Modifier.weight(1f).padding(start = 8.dp)) {
+            if (stackedTime) Text(row.time_label, style = centraidType("annotLabel"), color = timeInk)
             Text(
                 row.title,
                 style = centraidType("body"),

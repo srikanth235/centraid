@@ -53,6 +53,8 @@ import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.EditableFieldRow
 import dev.centraid.android.kit.FieldRow
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.IconKey
+import dev.centraid.android.kit.KitLink
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.EarlierEntryCard
 import dev.centraid.android.kit.PhoneSaysLine
@@ -61,6 +63,10 @@ import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
 import dev.centraid.android.kit.RowSkeleton
 import dev.centraid.android.kit.SectionHeader
+import dev.centraid.android.kit.SectionHead
+import dev.centraid.android.kit.kitBorderedCard
+import androidx.compose.foundation.layout.heightIn
+import centraid.core.v1.PeopleSectionHead
 import dev.centraid.android.kit.SheetPrimary
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.SheetRow
@@ -94,6 +100,7 @@ public fun PeoplePersonScreen(
         title = data?.name ?: state.name_hint,
         parentTitle = chrome?.back.orEmpty(),
         onBack = onBack,
+        app = "people",
         trailing = state.edit?.takeIf { data != null && !chrome?.edit.isNullOrEmpty() }?.let { route ->
             RoomAction("Pencil", chrome?.edit.orEmpty(), "people-person-edit") { onOpen(route) }
         },
@@ -147,34 +154,39 @@ private fun PersonBody(
         }
 
         person.channels_head?.let { head ->
-            item(key = "channels-head") { SectionHeader(head.toKit()) { open(Which.WHICH_CHANNEL) } }
+            item(key = "channels-head") { SectionHeader(head.toPersonKit()) { open(Which.WHICH_CHANNEL) } }
         }
         if (person.channels.isEmpty() && person.channels_empty.isNotEmpty()) {
             item(key = "channels-empty") { RailEmpty(person.channels_empty) }
         }
         items(person.channels, key = { "c-" + it.channel_id }) { channel ->
             CentraidRow(
-                title = channel.value_,
+                // A break may fall after a dot, an at sign or a dash, never inside a word.
+                title = channel.value_.replace(Regex("([@.\\-_])"), "$1\u200B"),
                 meta = listOf(channel.kind_label, channel.label, channel.preferred_label, channel.duplicate_note)
                     .filter { it.isNotEmpty() }
-                    .joinToString(" · "),
+                    .joinToString(" · ")
+                    .dotSafe(),
                 a11y = channel.accessibility_label,
                 testTag = "people-channel-${channel.channel_id}",
                 onTap = { onEvent(PeoplePersonEvent(channel = PeoplePersonEvent.ChannelTapped(channel.channel_id))) },
             ) {
+                // THE VERB IS A TEXT LINK AND REMOVE A QUIET X KEY, as on iOS: two outlined buttons (one red)
+                // took the row from the value.
                 if (channel.action_label.isNotEmpty()) {
-                    OutlineButton(
-                        channel.action_label,
-                        testTag = "people-channel-act-${channel.channel_id}",
-                        modifier = Modifier.padding(start = 8.dp),
-                    ) { onEvent(PeoplePersonEvent(channel = PeoplePersonEvent.ChannelTapped(channel.channel_id))) }
+                    KitLink(
+                        label = channel.action_label,
+                        dense = true,
+                        modifier = Modifier.testTag("people-channel-act-${channel.channel_id}"),
+                        onClick = { onEvent(PeoplePersonEvent(channel = PeoplePersonEvent.ChannelTapped(channel.channel_id))) },
+                    )
                 }
                 if (channel.remove_label.isNotEmpty()) {
-                    OutlineButton(
-                        channel.remove_label,
+                    IconKey(
+                        iconKey = "X",
+                        label = channel.remove_label,
                         testTag = "people-channel-remove-${channel.channel_id}",
-                        ink = "net",
-                        modifier = Modifier.padding(start = 8.dp),
+                        bordered = false,
                     ) {
                         onEvent(PeoplePersonEvent(remove_channel = PeoplePersonEvent.RemoveChannelTapped(channel.channel_id)))
                     }
@@ -190,14 +202,14 @@ private fun PersonBody(
             }
         }
 
-        person.dates_head?.let { head -> item(key = "dates-head") { SectionHeader(head.toKit()) { open(Which.WHICH_DATE) } } }
+        person.dates_head?.let { head -> item(key = "dates-head") { SectionHeader(head.toPersonKit()) { open(Which.WHICH_DATE) } } }
         if (person.dates.isEmpty() && person.dates_empty.isNotEmpty()) {
             item(key = "dates-empty") { RailEmpty(person.dates_empty) }
         }
         items(person.dates, key = { "d-" + it.date_id }) { date ->
             CentraidRow(
                 title = date.label,
-                meta = listOf(date.day_label, date.reminder_label).filter { it.isNotEmpty() }.joinToString(" · "),
+                meta = listOf(date.day_label, date.reminder_label).filter { it.isNotEmpty() }.joinToString(" · ").dotSafe(),
                 trailing = date.when_label,
                 a11y = date.accessibility_label,
                 testTag = "people-date-${date.date_id}",
@@ -217,11 +229,11 @@ private fun PersonBody(
         }
 
         if (person.relations.isNotEmpty()) {
-            person.relations_head?.let { head -> item(key = "relations-head") { SectionHeader(head.toKit()) } }
+            person.relations_head?.let { head -> item(key = "relations-head") { SectionHeader(head.toPersonKit()) } }
             items(person.relations, key = { "r-" + it.party_id + it.meta }) { relation ->
                 CentraidRow(
                     title = relation.name,
-                    meta = relation.meta,
+                    meta = relation.meta.dotSafe(),
                     a11y = relation.accessibility_label,
                     testTag = "people-relation-${relation.party_id}",
                 )
@@ -240,6 +252,7 @@ private fun PersonBody(
                     prefix = "people-person",
                     onEvent = { onEvent(PeoplePersonEvent(attachment = it)) },
                     onOpen = onOpen,
+                    emptyInCard = true,
                 )
             }
         }
@@ -251,23 +264,36 @@ private fun PersonBody(
             }
         }
 
-        person.notes_head?.let { head -> item(key = "notes-head") { SectionHeader(head.toKit()) { open(Which.WHICH_NOTE) } } }
+        person.notes_head?.let { head -> item(key = "notes-head") { SectionHeader(head.toPersonKit()) { open(Which.WHICH_NOTE) } } }
         if (person.notes.isEmpty() && person.notes_empty.isNotEmpty()) {
-            item(key = "notes-empty") { RailEmpty(person.notes_empty) }
+            // AN EMPTY SECTION IS A CARD, as Linked to is (#1202).
+            item(key = "notes-empty") {
+                KitText(
+                    person.notes_empty,
+                    KitType.Row,
+                    Surface.meta,
+                    Modifier
+                        .padding(horizontal = KitGeometry.GUTTER)
+                        .fillMaxWidth()
+                        .kitBorderedCard()
+                        .heightIn(min = 48.dp)
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                )
+            }
         }
         items(person.notes, key = { "n-" + it.annotation_id }) { note ->
             CentraidRow(title = note.text, meta = note.when_label, testTag = "people-note-${note.annotation_id}")
         }
 
         person.touches_head?.takeIf { !person.is_me }?.let { head ->
-            item(key = "touches-head") { SectionHeader(head.toKit()) { open(Which.WHICH_LOG_TOUCH) } }
+            item(key = "touches-head") { SectionHeader(head.toPersonKit()) { open(Which.WHICH_LOG_TOUCH) } }
         }
         if (!person.is_me && person.touches.isEmpty() && person.touches_empty.isNotEmpty()) {
             item(key = "touches-empty") { RailEmpty(person.touches_empty) }
         }
         items(if (person.is_me) emptyList() else person.touches, key = { "t-" + it.interaction_id }) { touch ->
             CentraidRow(
-                title = listOf(touch.kind_label, touch.text).filter { it.isNotEmpty() }.joinToString(" · "),
+                title = listOf(touch.kind_label, touch.text).filter { it.isNotEmpty() }.joinToString(" · ").dotSafe(),
                 meta = touch.when_label,
                 a11y = touch.accessibility_label,
                 testTag = "people-touch-${touch.interaction_id}",
@@ -331,7 +357,7 @@ private fun Hero(person: PeoplePersonData, onPhoneSays: (PhoneSaysTaken) -> Unit
         PhoneSaysLine(person.name_phone_says, onPhoneSays, centered = true)
         if (person.role.isNotEmpty()) KitText(person.role, KitType.Row, Surface.body)
         PhoneSaysLine(person.role_phone_says, onPhoneSays, centered = true)
-        val line = if (person.is_me) person.my_card_label else person.cadence_line
+        val line = if (person.is_me) person.my_card_label else person.cadence_line.dotSafe()
         if (line.isNotEmpty()) KitText(line, KitType.Meta, Surface.meta, modifier = Modifier.padding(top = 4.dp))
         person.due_chip?.let { chip ->
             Box(Modifier.padding(top = 6.dp)) {
@@ -410,7 +436,7 @@ private fun VaultCard(person: PeoplePersonData, onOpen: (Route) -> Unit) {
             ) {
                 KitText(row.kind_label, KitType.Row, appAccent(row.app_key).text)
                 KitText(
-                    listOf(row.title, row.when_label).filter { it.isNotEmpty() }.joinToString(" · "),
+                    listOf(row.title, row.when_label).filter { it.isNotEmpty() }.joinToString(" · ").dotSafe(),
                     KitType.Row,
                     Surface.ink,
                     modifier = Modifier.weight(1f),
@@ -555,3 +581,6 @@ private fun Kinds(kinds: List<PeopleKindChoice>, onPick: (String) -> Unit) {
         SheetRow(choice.label, selected = choice.selected, testTag = "people-kind-${choice.key}", onTap = { onPick(choice.key) })
     }
 }
+
+/** A COUNT OF NOTHING IS NOT SHOWN (#1202): Rust always sends the count, and an empty head reads "Notes", never "Notes · 0". */
+private fun PeopleSectionHead.toPersonKit(): SectionHead = SectionHead(title = title, count = count.takeIf { it > 0 }, verb_label = verb_label)

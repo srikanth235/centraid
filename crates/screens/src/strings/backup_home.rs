@@ -80,6 +80,15 @@ catalog! {
     plain device_paused = ("{name} is paused", "{name} is paused");
     plain device_too_old = ("{name} needs an update", "{name} needs an update");
     plain device_paused_reason = ("{name} is paused by whoever runs it. Centraid asks again at the next backup.", "{name} is paused by whoever runs it. Centraid asks again at the next backup.");
+    // BEFORE PAIRING (BackupUnpaired): the one card, the two steps and the footnote. The command is
+    // quoted, and the screen splits the sentence at the quotes so the shell can set it in mono.
+    plain unpaired_title = ("Not backed up yet", "Not backed up yet");
+    plain unpaired_body = ("This phone holds the only copy of your vault.", "This phone holds the only copy of your vault.");
+    plain unpaired_action = ("Pair a backup device", "Pair a backup device");
+    plain unpaired_steps_heading = ("To pair", "To pair");
+    plain unpaired_step_one = ("On a computer you own, run “centraid-gateway pair”.", "On a computer you own, run “centraid-gateway pair”.");
+    plain unpaired_step_two = ("Scan the QR code it shows.", "Scan the QR code it shows.");
+    plain unpaired_foot = ("The recovery key comes after the first backup.", "The recovery key comes after the first backup.");
     plain device_too_old_reason = ("{name} runs an older version. Update it, then pair again.", "{name} runs an older version. Update it, then pair again.");
     plain device_moved_reason = ("Not you? Ask whoever runs your backup device to pause it.", "Not you? Ask whoever runs your backup device to pause it.");
 

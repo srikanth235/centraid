@@ -120,7 +120,7 @@ struct PhotosLightboxView: View {
         ZStack(alignment: .bottom) {
             Surface.page.ignoresSafeArea()
             VStack(spacing: 0) {
-                lightHeader()
+                lightHeader(infoOpen: infoOpen)
                 // THE FIRST READ DRAWS THE BAND ALONE (the frame is already known from the film); a
                 // failed or refused one the shared failure or gate; a failed re-read keeps the
                 // photograph under the one-sentence note.
@@ -153,19 +153,34 @@ struct PhotosLightboxView: View {
     }
 
     /// The top row: close, the stamp (WHEN outranks WHAT), the menu.
-    private func lightHeader() -> some View {
+    private func lightHeader(infoOpen: Bool) -> some View {
         let stamp = { () -> (String, String) in
             if state.content != nil { return (state.photo.stampDate, state.photo.stampLine) }
             return ("", "")
         }()
         return HStack(alignment: .center) {
-            chip(icon: "ChevronLeft", label: state.words.close, light: true, action: onClose)
-                .accessibilityIdentifier("photos.lightbox.close")
+            // BACK WITH THE DETAILS OPEN CLOSES THE DETAILS FIRST, and only a second back leaves the viewer
+            // (design/behaviour.md § Rooms; Android's BackHandler does the same): the member who opened
+            // (i) to read a caption and pressed back was thrown out of the photograph (#1202).
+            chip(
+                icon: "ChevronLeft", label: state.words.close, light: true,
+                action: { if infoOpen { send(.sheet(.with { $0.sheet = .none })) } else { onClose() } }
+            )
+            .accessibilityIdentifier("photos.lightbox.close")
             Spacer()
+            // TWO LINES, THE DATE THEN THE TIME (#1202): each holds to its own line and shrinks
+            // before it would wrap, so at the largest text the date no longer ran to three lines.
             VStack(spacing: 2) {
-                if !stamp.0.isEmpty { Text(stamp.0).kitType(.row).fontWeight(.semibold).foregroundStyle(Surface.ink) }
-                if !stamp.1.isEmpty { Text(stamp.1).kitType(.meta).foregroundStyle(Surface.meta) }
+                if !stamp.0.isEmpty {
+                    Text(stamp.0).kitType(.row).fontWeight(.semibold).foregroundStyle(Surface.ink)
+                        .lineLimit(1).minimumScaleFactor(0.5)
+                }
+                if !stamp.1.isEmpty {
+                    Text(stamp.1).kitType(.meta).foregroundStyle(Surface.meta)
+                        .lineLimit(1).minimumScaleFactor(0.5)
+                }
             }
+            .multilineTextAlignment(.center)
             Spacer()
             moreMenu(light: true)
         }
@@ -259,13 +274,23 @@ struct PhotosLightboxView: View {
                 VStack(spacing: 2) {
                     let title = state.slideshow ? state.words.slideshow : photo.stampDate
                     let meta = state.slideshow ? state.slideshowMeta : photo.stampLine
-                    if !title.isEmpty { Text(title).centraidType("control") }
+                    // THE STAMP IS TWO LINES THAT SHRINK (#1202): at the largest text the date ran to
+                    // three lines beside the back key with the time centred under it.
+                    if !title.isEmpty {
+                        Text(title)
+                            .centraidType("control")
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                    }
                     if !meta.isEmpty {
                         Text(meta)
                             .centraidType("small")
                             .foregroundStyle(Theme.color("onStageSoft", scheme))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
                     }
                 }
+                .multilineTextAlignment(.center)
                 .foregroundStyle(Theme.color("onStage", scheme))
                 Spacer()
                 // THE ONE WAY OUT OF THE SLIDESHOW, named for what it does.
@@ -456,7 +481,8 @@ struct PhotosLightboxView: View {
                     // the page's disabled ink.
                     tint: ink,
                     size: 24,
-                    solid: verb.on
+                    // INFO'S i IS DRAWN INSIDE ITS RING: filled, the ring swallows the glyph.
+                    solid: verb.on && verb.kind != .info
                 )
                 if labelled {
                     Text(verb.label)
@@ -487,6 +513,8 @@ struct PhotosLightboxView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+        // THE CHIP'S FRAME IS 44 (#1202, S13): the glass drew 44, and the frame measured 20.
+        .headerKeyTarget()
     }
 
     private func chipFace(icon: String, light: Bool) -> some View {

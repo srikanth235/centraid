@@ -45,8 +45,6 @@ catalog! {
         "There is no undo for this one."
     );
     plain confirm_remove_channel_title = ("Remove this {kind}?", "Remove this {kind}?");
-    plain confirm_trash_body = ("Restorable for 30 days.", "Restorable for 30 days.");
-    plain confirm_trash_title = ("Move {name} to trash?", "Move {name} to trash?");
     plain date_a11y = ("{label}, {day}", "{label}, {day}");
     plain date_field = ("Date", "Date");
     plain date_invalid = ("Use month and day, like 08-14.", "Use month and day, like 08-14.");
@@ -68,11 +66,13 @@ catalog! {
     plain empty_no_match_body = ("Search looks at names.", "Search looks at names.");
     plain empty_recent = ("Nothing logged yet.", "Nothing logged yet.");
     plain empty_reconnect = ("Nobody is overdue.", "Nobody is overdue.");
-    plain empty_roster_body = (
-        "Add someone, set how often to reach out, and log a touch each time you do.",
-        "Add someone, set how often to reach out, and log a touch each time you do."
-    );
-    plain empty_roster_title = ("Add people you keep up with", "Add people you keep up with");
+    plain empty_chip = ("Nobody to show.", "Nobody to show.");
+    plain refused_title = ("Contacts access is off.", "Contacts access is off.");
+    plain refused_body = ("Turn it on in Settings to import your contacts.", "Turn it on in Settings to import your contacts.");
+    plain refused_open_settings = ("Open Settings", "Open Settings");
+    plain first_open = ("The people you know, and what you write about them.", "The people you know, and what you write about them.");
+    plain touch_first_open = ("Who to reconnect with, and what is coming up.", "Who to reconnect with, and what is coming up.");
+    plain first_open_hint = ("Or tap + to add one.", "Or tap + to add one.");
     plain empty_starred = ("Nobody is starred.", "Nobody is starred.");
     plain empty_touches = ("Nothing logged yet.", "Nothing logged yet.");
     plain empty_upcoming = ("No dates coming up.", "No dates coming up.");
@@ -127,10 +127,11 @@ catalog! {
     plain transfer_import_ready = ("Ready to import", "Ready to import");
     plain transfer_import_title = ("Import people", "Import people");
     plain transfer_row_added = ("New people", "New people");
+    plain transfer_row_left_out = ("Files not read", "Files not read");
     plain transfer_row_merged = ("Merge into someone you have", "Merge into someone you have");
     plain transfer_row_same = ("Already here", "Already here");
     plain transfer_row_proposal = ("Merges {name}", "Merges {name}");
-    plain import_contacts = ("Import contacts", "Import contacts");
+    plain import_contacts = ("Import from Contacts", "Import from Contacts");
     plain import_contacts_add_account = (
         "No contacts found. Add your Google or other account in your phone's Settings, then come back.",
         "No contacts found. Add your Google or other account in your phone's Settings, then come back."

@@ -48,8 +48,10 @@ catalog! {
         "Health reads the daily totals {store} keeps, from your watch, phone and apps, into your vault. Nothing is written back."
     );
     plain connect_depth_note = ("Health starts with a year of days and 90 days of workouts.", "Health starts with a year of days and 90 days of workouts.");
-    plain connect_empty = ("Bring in your steps, sleep and workouts from {store}.", "Bring in your steps, sleep and workouts from {store}.");
+    plain connect_empty = ("Steps, sleep and workouts, read from {store}.", "Steps, sleep and workouts, read from {store}.");
     plain connect_background_why = ("Health is read while Centraid is closed so new figures arrive.", "Health is read while Centraid is closed so new figures arrive.");
+    plain connect_empty_trends = ("Your week and month, read from {store}.", "Your week and month, read from {store}.");
+    plain connect_empty_workouts = ("Your workouts, read from {store}.", "Your workouts, read from {store}.");
     plain connect_failed = ("{store} didn’t answer. Try again.", "{store} didn’t answer. Try again.");
     plain connect_headline = ("Your daily totals, kept with you", "Your daily totals, kept with you");
     plain connect_install = ("Get Health Connect from Google Play, then connect again.", "Get Health Connect from Google Play, then connect again.");
@@ -140,7 +142,7 @@ catalog! {
     plain range_year = ("Year", "Year");
     plain read_incomplete = ("Couldn’t read this page. Try again.", "Couldn’t read this page. Try again.");
     plain reads_fact_reads = ("Reads", "Reads");
-    plain reads_fact_reads_value = ("daily totals and workouts", "daily totals and workouts");
+    plain reads_fact_reads_value = ("daily totals and workouts, documents, photos", "daily totals and workouts, documents, photos");
     plain reads_fact_writes = ("Writes", "Writes");
     plain reads_fact_writes_value = ("nothing to {store}", "nothing to {store}");
     plain reads_nothing = ("Nothing read", "Nothing read");
@@ -151,6 +153,8 @@ catalog! {
     plain reads_refused_value = ("{type}: change it in Health Connect", "{type}: change it in Health Connect");
     plain reads_title = ("What Health may read", "What Health may read");
     plain retry = ("Try again", "Try again");
+    plain search_nothing = ("Nothing in Health matches “{term}”.", "Nothing in Health matches “{term}”.");
+    plain search_resting = ("Search by metric, workout kind or date.", "Search by metric, workout kind or date.");
     plain section_this_week = ("This week", "This week");
     plain show_more = ("Show more", "Show more");
     plain span_hours = ("{h} h {m} min", "{h} h {m} min");

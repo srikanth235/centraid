@@ -198,6 +198,18 @@ pub struct RestoreAnswer {
     /// A newest backup the restore could not prove is the newest (#1191, E8). When set, nothing
     /// was restored or claimed; the member decides.
     pub unproven: Vec<UnprovenAt>,
+    /// The tokens the restore's claims minted. The shell keeps them in the device store (#1191 E12);
+    /// the core holds none on disk.
+    pub tokens: Vec<MintedToken>,
+}
+
+/// One token a claim minted, with the path of the vault file it belongs to. Never printed.
+#[derive(Clone, PartialEq, Eq)]
+pub struct MintedToken {
+    pub path: String,
+    pub vault_id: String,
+    pub gateway_id: String,
+    pub token: String,
 }
 
 /// The newest backup a restore could read for a vault, when it cannot prove it holds the newest.
@@ -268,6 +280,7 @@ impl RestoreAnswer {
                 .collect(),
             offers: self.offers.clone(),
             unproven: self.unproven.clone(),
+            tokens: self.tokens.clone(),
         }
     }
 
@@ -283,6 +296,7 @@ impl RestoreAnswer {
             unclaimed: answers.iter().flat_map(|a| a.unclaimed.clone()).collect(),
             offers: answers.iter().flat_map(|a| a.offers.clone()).collect(),
             unproven: answers.iter().flat_map(|a| a.unproven.clone()).collect(),
+            tokens: answers.iter().flat_map(|a| a.tokens.clone()).collect(),
         }
     }
 }
@@ -340,6 +354,22 @@ pub fn restore_answer(response: &wire::RestoreResponse) -> RestoreAnswer {
             })
             .collect(),
         gap_scanned: response.gap_scanned,
+        tokens: response
+            .tokens
+            .iter()
+            .filter_map(|token| {
+                let vault = response
+                    .vaults
+                    .iter()
+                    .find(|vault| vault.vault_id == token.vault_id)?;
+                Some(MintedToken {
+                    path: vault.path.clone(),
+                    vault_id: token.vault_id.clone(),
+                    gateway_id: token.gateway_id.clone(),
+                    token: token.token.clone(),
+                })
+            })
+            .collect(),
         offers: response
             .older_offers
             .iter()

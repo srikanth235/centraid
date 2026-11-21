@@ -357,7 +357,11 @@ fn the_reminders_read_reaches_the_oldest_task_past_the_boards_window() {
     }));
     scratch.run("entity.trash", serde_json::json!({ "id": trashed }));
     scratch.add(serde_json::json!({
-        "title": "No reminder", "due": "2099-06-08T14:00:00.000Z",
+        "title": "No reminder", "due": "2099-06-08",
+    }));
+    // A TIMED DUE WITH NO EARLY REMINDER ALERTS AT ITS TIME, so it is a reminder (owner, 2026-11-18).
+    scratch.add(serde_json::json!({
+        "title": "At the time", "due": "2099-06-09T14:00:00.000Z",
     }));
     scratch.add(serde_json::json!({
         "title": "Long past", "due": "2099-05-01T14:00:00.000Z", "remind_before_min": 5,
@@ -376,7 +380,7 @@ fn the_reminders_read_reaches_the_oldest_task_past_the_boards_window() {
     assert_eq!(answer.groups.len(), 1);
     assert_eq!(
         titles(&answer.groups[0]),
-        ["Daily", "Earlier", "Oldest", "Subtask"]
+        ["Daily", "Earlier", "At the time", "Oldest", "Subtask"]
     );
     assert!(!answer.truncated);
     assert_eq!(answer.window, 20);
@@ -390,8 +394,9 @@ fn the_reminders_read_reaches_the_oldest_task_past_the_boards_window() {
     assert_eq!(tasks[0].remind_at_local, "2099-06-02T09:00");
     assert_eq!(tasks[1].task_id, earlier);
     assert_eq!(tasks[1].remind_at_local, "2099-06-05T09:45");
-    assert_eq!(tasks[2].task_id, oldest);
-    assert_eq!(tasks[3].remind_before_min, Some(10));
+    assert_eq!(tasks[2].remind_at_local, "2099-06-09T10:00");
+    assert_eq!(tasks[3].task_id, oldest);
+    assert_eq!(tasks[4].remind_before_min, Some(10));
     assert!(
         tasks
             .iter()

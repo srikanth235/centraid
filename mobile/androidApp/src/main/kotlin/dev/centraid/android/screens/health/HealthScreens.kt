@@ -31,10 +31,16 @@ import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomFilter
 import dev.centraid.android.kit.RoomSearch
+import dev.centraid.android.kit.SearchAskRow
 import dev.centraid.android.kit.SearchField
 import dev.centraid.android.kit.SheetOption
 import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.ShowMoreFooter
+import dev.centraid.android.kit.Surface
+import dev.centraid.android.kit.KitType
+import dev.centraid.android.kit.KitText
+import androidx.compose.ui.platform.testTag
+import dev.centraid.android.screens.SearchGroups
 
 // ---------------------------------------------------------------------------
 // health.home: Summary · Trends · Workouts, More as a sheet (#1129, #1135, #1173)
@@ -58,15 +64,16 @@ internal fun HealthHomeScreen(
         app = "health",
         title = chrome?.title.orEmpty(),
         meta = state.data_?.day_label.orEmpty(),
-        // A DOOR, NOT A FIELD (R-CHROME-2, #1173): Health's search is a page of its own, reached
-        // from the band's search key.
+        // THE BAND'S SEARCH KEY opens the field in place (R-CHROME-2): its term and answer are Rust's.
         search = chrome?.search_placeholder?.takeIf { it.isNotEmpty() && state.page?.refused == null }?.let { placeholder ->
+            val field = state.search
             RoomSearch(
-                field = SearchField(),
+                field = SearchField(open_ = field?.open_ == true, term = field?.term.orEmpty()),
                 placeholder = placeholder,
-                onTerm = {},
-                onClose = {},
-                onOpen = { chrome?.search_route?.let(onOpen) },
+                closeLabel = chrome?.search_close.orEmpty(),
+                onTerm = { term -> onEvent(HealthHomeEvent(search_term = HealthHomeEvent.SearchTermChanged(term = term))) },
+                onClose = { onEvent(HealthHomeEvent(search_closed = HealthHomeEvent.SearchClosed())) },
+                onOpen = { onEvent(HealthHomeEvent(search_opened = HealthHomeEvent.SearchOpened())) },
             )
         },
         // THE HEADER'S FILTER BUTTON: Workouts' kind, Rust's menu.
@@ -107,7 +114,21 @@ internal fun HealthHomeScreen(
                 onEmptyAction = { state.connect?.let(onOpen) },
                 retryLabel = chrome?.retry.orEmpty().ifEmpty { KitWords.RETRY },
                 modifier = Modifier.weight(1f),
+                // A term that found nothing still offers the Ask row under the empty sentence.
+                emptyExtra = { state.search?.ask?.takeIf { state.search?.open_ == true }?.let { ask -> SearchAskRow(ask, onOpen) } },
             ) {
+                val found = state.search
+                if (found?.open_ == true) {
+                    // THE ANSWER over an open search: the hint while nothing is typed, then Health's
+                    // group (metrics by name, workouts) and the Ask row.
+                    val results = found.results
+                    if (results != null) {
+                        SearchGroups(results, onCommit = {}, onOpen = onOpen)
+                    } else if (found.hint.isNotEmpty()) {
+                        KitText(found.hint, KitType.Meta, Surface.meta, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp).testTag("health-search-hint"))
+                    }
+                    return@ReadStateView
+                }
                 LazyColumn {
                     when (state.destination) {
                         HealthDestination.HEALTH_DESTINATION_TRENDS -> trends(state, onOpen)

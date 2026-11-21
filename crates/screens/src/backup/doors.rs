@@ -30,6 +30,8 @@ pub(super) enum Done {
         gateway_id: String,
         forgotten: bool,
         revoked: bool,
+        /// The vault and gateway ids whose token the device store drops.
+        forget_token: Option<(String, String)>,
     },
     /// The deletes a gateway was holding were lifted (`restored` names), or the door did not
     /// answer (`None`): the signed undo reached nobody, so nothing is claimed.
@@ -80,5 +82,9 @@ pub(super) fn done(tag: &str, bytes: &[u8]) -> Option<Done> {
         // NO ANSWER (no core, or a refusal) IS NOT FORGOTTEN.
         forgotten: answer.as_ref().is_some_and(|answer| answer.forgotten),
         revoked: answer.as_ref().is_some_and(|answer| answer.revoked),
+        forget_token: answer
+            .as_ref()
+            .and_then(|answer| answer.forget_token.as_ref())
+            .map(|token| (token.vault_id.clone(), token.gateway_id.clone())),
     })
 }

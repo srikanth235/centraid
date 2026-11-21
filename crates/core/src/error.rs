@@ -293,6 +293,7 @@ pub fn sentence_for_code(code: ErrorCode) -> &'static str {
         C::UpgradeRequired => "This vault needs a newer Centraid.",
         C::NotYetAvailable => "Not available yet.",
         C::Internal => "Something went wrong. Restart Centraid.",
+        C::DiskFull => "The phone is full. Free up space and try again.",
         // The Backup screens' words for a damaged vault are lane B's (B16); until then the
         // generic sentence.
         C::VaultDamaged => "Something went wrong. Restart Centraid.",
@@ -318,11 +319,9 @@ pub fn sentence_for_code(code: ErrorCode) -> &'static str {
 fn vault_code(error: &centraid_vault::VaultError) -> ErrorCode {
     use centraid_vault::VaultError as V;
     if error.is_disk_full() {
-        // No dedicated code: a full disk is the file refusing, and the shell's
-        // remedy (tell the member to clear space) is the same as for any other
-        // internal failure of the file. Named here rather than left implicit so
-        // the choice is a choice.
-        return ErrorCode::Internal;
+        // A FULL DISK HAS ITS OWN CODE (#1202): the member's remedy is to free space, which no
+        // other internal failure of the file shares, so the sentence says so.
+        return ErrorCode::DiskFull;
     }
     match error {
         V::RebootstrapRequired { .. } => ErrorCode::RebootstrapRequired,
@@ -354,6 +353,18 @@ pub type Result<T> = std::result::Result<T, CoreError>;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_full_disk_is_its_own_code_and_the_core_words_it() {
+        let error = CoreError::from(centraid_vault::VaultError::DiskFull {
+            context: "stage".to_owned(),
+        });
+        assert_eq!(error.code(), ErrorCode::DiskFull);
+        assert_eq!(
+            error.to_wire().sentence,
+            "The phone is full. Free up space and try again."
+        );
+    }
 
     #[test]
     fn a_closed_handle_is_a_typed_error_and_not_a_hang() {

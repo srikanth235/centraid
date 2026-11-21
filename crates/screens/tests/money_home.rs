@@ -66,12 +66,13 @@ fn a_category_row_opens_its_target_for_the_month_in_view() {
 }
 
 #[test]
-fn the_header_search_and_recurring_rows_are_routes() {
+fn the_import_and_recurring_rows_are_routes_and_search_is_in_place() {
     let mut d = driver();
     let i = land_on(&mut d, wire::MoneyDestination::Spending);
     let chrome = home_state(d.view(i)).chrome.as_ref().unwrap();
     assert_eq!(chrome.import_route.as_ref().unwrap().screen, "money.import");
-    assert_eq!(chrome.search_route.as_ref().unwrap().screen, "money.search");
+    // SEARCH IS NO ROUTE: the band key opens a field in place (owner, 2026-11-19).
+    assert_eq!(chrome.search_placeholder, "Search transactions");
     let spending = home_data(d.view(i)).spending.as_ref().unwrap();
     assert_eq!(
         spending.recurring_route.as_ref().unwrap().screen,
@@ -85,6 +86,7 @@ fn the_header_search_and_recurring_rows_are_routes() {
     assert_eq!(
         more,
         [
+            "money.reads",
             "money.accounts",
             "money.rules",
             "money.categories",
@@ -481,4 +483,16 @@ fn moving_a_tab_reads_that_tab_and_keeps_the_month() {
     assert_eq!(state.month, month);
     assert_eq!(state.band[1].key, "spending");
     assert!(state.band[1].current);
+}
+
+#[test]
+fn first_open_says_what_money_is_for_and_a_month_with_nothing_is_another_sentence() {
+    // A FIRST VAULT holds no account: the card is FirstOpenMoney's.
+    let mut d = Driver::first_vault(centraid_screens::money::runtime());
+    d.start();
+    let i = land_on(&mut d, wire::MoneyDestination::Activity);
+    let empty = home_empty(d.view(i));
+    assert_eq!(empty.headline, "Your statements, sorted and searchable.");
+    assert_eq!(empty.action_label, "Import statement");
+    assert_eq!(empty.body, "");
 }

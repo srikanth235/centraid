@@ -349,7 +349,7 @@ impl Coordinator {
             }
             // A refusal or a shell that cannot read: nothing was read, so nothing changes.
             (_, O::Failed(failed)) => {
-                follows.denied(store, crate::kit::permission::State::of(&failed).is_some())
+                follows.grant(store, crate::kit::permission::State::of(&failed))
             }
             _ => {}
         }

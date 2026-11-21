@@ -318,14 +318,25 @@ fn reminders_name_a_moment_when_the_core_supplies_one_else_the_day() {
             ..Default::default()
         },
     );
+    // A REMINDER AT THE DUE MOMENT SAYS THE MOMENT ONCE (#1202): the due label carries it.
+    add(
+        &d,
+        act::reminders::AddTask {
+            title: "Exact".into(),
+            due: due(&format!("{tomorrow}T14:30")),
+            remind_before_min: Field::Is(0),
+            ..Default::default()
+        },
+    );
     let i = d.push(agenda::TAB, routes::todo_list(wire::TodoView::Reminders));
     let data = list_data(d.view(i));
     let call = row_titled(&data.groups, "Call");
-    assert!(
-        call.meta.contains("reminder Tomorrow 08:30"),
-        "{}",
-        call.meta
-    );
+    // The due label names the day, so an early reminder on the same day names only its clock.
+    assert!(call.meta.contains("reminder 08:30"), "{}", call.meta);
+    assert!(!call.meta.contains("Tomorrow"), "{}", call.meta);
+    let exact = row_titled(&data.groups, "Exact");
+    assert!(exact.meta.contains("reminder"), "{}", exact.meta);
+    assert!(!exact.meta.contains("14:30"), "{}", exact.meta);
     let bins = row_titled(&data.groups, "Bins");
     // A DATE-ONLY DUE SOUNDS AT 09:00 THAT DAY (#1188, NA6): the row says when it will sound.
     assert!(bins.meta.contains("reminder"), "{}", bins.meta);

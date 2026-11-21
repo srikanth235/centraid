@@ -32,6 +32,7 @@ import androidx.compose.ui.text.input.ImeAction
 import dev.centraid.android.kit.KitGeometry
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -47,6 +48,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.NotesEditorEvent
 import centraid.core.v1.NotesEditorState
@@ -78,7 +81,7 @@ import dev.centraid.android.kit.StatusLine
  * AUTOSAVE, CLOSE = DONE (#1015 D3). There is no Save button: Rust saves after
  * the last keystroke, a pin saves at once, and leaving by any road is the
  * page's pop, which Rust sees as `Left` and flushes. The close key's word
- * ("Cancel" before a keystroke, "Done" after) and the status line are Rust's
+ * ("Cancel" on a new note before a keystroke, "Done" otherwise) and the status line are Rust's
  * `chrome`. History and Send to Agenda are routes the state carries; the
  * powerbox is a sheet the state opens (`link`), also on a typed `[[`.
  *
@@ -101,6 +104,7 @@ public fun NotesEditorScreen(
     // take the core's body even while it has the keyboard.
     val pending = remember(state.note_id) { CoreEditPending() }
     val bodyFocused = remember(state.note_id) { mutableStateOf(false) }
+    val bodyFocus = remember(state.note_id) { androidx.compose.ui.focus.FocusRequester() }
     val linkOpen = state.link != null
     val send: (NotesEditorEvent) -> Unit = { event ->
         if (event.checklist_requested != null || event.checklist_toggled != null || event.return_pressed != null ||
@@ -145,7 +149,10 @@ public fun NotesEditorScreen(
             skeleton = { RowSkeleton(rows = 4, meta = false) },
         ) {
             val note = draft ?: return@ReadStateView
-            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+            // THE WORDS SCROLL AND THE TOOLS STAY AT THE FOOT (above the keyboard when it is up), not
+            // floating under the last line wherever the text happens to end.
+            Column(Modifier.fillMaxSize()) {
+            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
                 // ABOUT, above the words (#1173): who or what the note is about; a tap opens it.
                 AboutChips(state.about, Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 2.dp), onOpen)
                 // THE LINE OVER THE TITLE: the pin when pinned, then "Travel · Edited Wed 4 November".
@@ -168,6 +175,8 @@ public fun NotesEditorScreen(
                     placeholder = chrome?.title_placeholder.orEmpty(),
                     style = "title",
                     testTag = "notes-title",
+                    // RETURN IN THE TITLE moves to the body; the title stays one line (#1202, S2-3).
+                    onNext = { bodyFocus.requestFocus() },
                     onEdit = { value -> onEvent(NotesEditorEvent(title = NotesEditorEvent.TitleEdited(value))) },
                 )
                 TagsRow(state, onEvent)
@@ -180,6 +189,7 @@ public fun NotesEditorScreen(
                     placeholder = chrome?.body_placeholder.orEmpty(),
                     onEdit = { value -> onEvent(NotesEditorEvent(body = NotesEditorEvent.BodyEdited(value))) },
                     onFocus = { bodyFocused.value = it },
+                    focusRequester = bodyFocus,
                     onReturn = { caret -> send(NotesEditorEvent(return_pressed = NotesEditorEvent.ReturnPressed(caret = caret))) },
                     onToggle = { at -> send(NotesEditorEvent(checklist_toggled = NotesEditorEvent.ChecklistToggled(at = at))) },
                     onLink = { chip, at ->
@@ -194,21 +204,36 @@ public fun NotesEditorScreen(
                     },
                     modifier = Modifier.padding(horizontal = KitGeometry.GUTTER).padding(top = 4.dp),
                 )
-                // THE TOOLS under the words: checklist and link are Rust's events.
-                if (chrome != null) {
-                    Row(
-                        Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        IconKey("ListChecks", chrome.checklist_label, "notes-tool-checklist") {
-                            send(NotesEditorEvent(checklist_requested = NotesEditorEvent.ChecklistRequested()))
-                        }
-                        IconKey("Link", chrome.link_label, "notes-tool-link") {
-                            onEvent(NotesEditorEvent(link_requested = NotesEditorEvent.LinkRequested()))
-                        }
-                        IconKey("ChevronDown", chrome.keyboard_label, "notes-tool-keyboard") { focus.clearFocus() }
-                    }
+                // WHERE IT CAME FROM (#1185, #1202): an imported note ends its words with a quiet
+                // "From <file>" line, as Docs' Details do; a typed note has none.
+                state.origin?.takeIf { dev.centraid.android.kit.originLineDrawn(it) }?.let { line ->
+                    KitText(
+                        line.text,
+                        KitType.Meta,
+                        Surface.meta,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp)
+                            .testTag(dev.centraid.android.kit.ORIGIN_LINE_TAG)
+                            .semantics { contentDescription = line.accessibility_label.ifEmpty { line.text } },
+                    )
                 }
+            }
+            // THE TOOLS: checklist and link are Rust's events.
+            if (chrome != null) {
+                Row(
+                    Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    IconKey("ListChecks", chrome.checklist_label, "notes-tool-checklist") {
+                        send(NotesEditorEvent(checklist_requested = NotesEditorEvent.ChecklistRequested()))
+                    }
+                    IconKey("Link", chrome.link_label, "notes-tool-link") {
+                        onEvent(NotesEditorEvent(link_requested = NotesEditorEvent.LinkRequested()))
+                    }
+                    IconKey("ChevronDown", chrome.keyboard_label, "notes-tool-keyboard") { focus.clearFocus() }
+                }
+            }
             }
         }
     }
@@ -228,12 +253,10 @@ public fun NotesEditorScreen(
             state.earlier?.takeIf { dev.centraid.android.kit.earlierEntryDrawn(it) }?.let { entry ->
                 add(SheetOption(key = MENU_EARLIER, label = entry.label, detail = entry.count_label))
             }
-            // WHERE IT CAME FROM (#1185): a quiet line in the menu; picking it only closes the menu.
-            state.origin?.takeIf { dev.centraid.android.kit.originLineDrawn(it) }?.let { line ->
-                add(SheetOption(key = MENU_ORIGIN, label = line.text))
-            }
             if (state.send_to_agenda != null) add(SheetOption(key = MENU_SEND, label = chrome.send_to_agenda_label))
             add(SheetOption(key = MENU_SHARE, label = chrome.share_label))
+            // MOVE TO TRASH asks nothing (`behaviour.md`): the last row, red; the page closes with an Undo beneath.
+            add(SheetOption(key = MENU_TRASH, label = chrome.trash_label, destructive = true))
         }.filter { it.label.isNotEmpty() }
         OptionSheet(
             title = chrome.menu_label,
@@ -248,6 +271,7 @@ public fun NotesEditorScreen(
                     MENU_EARLIER -> state.earlier?.route?.let(onOpen)
                     MENU_SEND -> state.send_to_agenda?.let(onOpen)
                     MENU_SHARE -> onEvent(NotesEditorEvent(share_requested = NotesEditorEvent.ShareRequested()))
+                    MENU_TRASH -> onEvent(NotesEditorEvent(trash_tapped = NotesEditorEvent.TrashTapped()))
                 }
             },
             onDismiss = { menuOpen = false },
@@ -357,7 +381,7 @@ private fun TagsRow(state: NotesEditorState, onEvent: (NotesEditorEvent) -> Unit
 @Composable
 private fun LinkSheet(sheet: NotesLinkSheet, onEvent: (NotesEditorEvent) -> Unit) {
     val dismiss = { onEvent(NotesEditorEvent(link_dismissed = NotesEditorEvent.LinkDismissed())) }
-    SheetRoom(title = sheet.title, onDismiss = dismiss, status = sheet.foot) {
+    SheetRoom(title = sheet.title, onDismiss = dismiss, status = sheet.foot, scrolls = false) {
         CentraidSearchField(
             field = SearchField(open_ = true, term = sheet.term),
             placeholder = sheet.search_placeholder,
@@ -400,6 +424,6 @@ private const val MENU_LINK = "link"
 private const val MENU_LINKS = "linked-to"
 private const val MENU_ATTACHMENTS = "attachments"
 private const val MENU_EARLIER = "earlier-entry"
-private const val MENU_ORIGIN = "origin-line"
 private const val MENU_SEND = "send-to-agenda"
 private const val MENU_SHARE = "share"
+private const val MENU_TRASH = "trash"

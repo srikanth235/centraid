@@ -1336,7 +1336,21 @@ pub fn backup_status(
         left_out_bytes: held.left_out_bytes,
         apps: held.apps,
         oldest_waiting_ms: standing.oldest_waiting_ms,
+        first_item_ms: vault.and_then(first_item_ms),
     })
+}
+
+/// THE MEMBER'S FIRST ITEM: the earliest `created_at` of a row they made or imported. One bounded
+/// read, a `MIN` per kind over the `entity_by_created` index (nothing is scanned or counted). The
+/// starter notes and the retired starter tasks are not the member's, and nor is the founding person.
+fn first_item_ms(vault: &Vault) -> Option<i64> {
+    let titles: Vec<&str> = crate::starters::NOTES
+        .iter()
+        .map(|(title, _)| *title)
+        .chain(crate::starters::RETIRED_TASKS.iter().copied())
+        .collect();
+    centraid_vault::first_item::first_item_at(vault, &titles)
+        .and_then(|at| centraid_vault::clock::parse_iso_ms(&at))
 }
 
 // ─── free up space ──────────────────────────────────────────────────────────
@@ -1573,6 +1587,49 @@ mod asked_tests {
         assert!(plane.asking());
         drop(asked);
         assert!(!plane.asking(), "a pass that ended is not still asking");
+    }
+}
+
+#[cfg(test)]
+mod first_item_tests {
+    use centraid_vault::clock::{FixedClock, SeededIds};
+    use centraid_vault::model::Kind;
+
+    fn note(vault: &centraid_vault::Vault, id: &str, title: &str, at: &str) {
+        vault
+            .commit(|tx| {
+                tx.set_producer("test.note");
+                tx.insert_entity(id, Kind::Note, title, at)?;
+                Ok(())
+            })
+            .expect("a note");
+    }
+
+    /// **THE STATUS'S `first_item_ms`**: only the starter notes and the founding person give none;
+    /// the member's first note gives its own time.
+    #[test]
+    fn the_first_item_is_the_first_note_in_milliseconds_and_never_a_starter() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = centraid_vault::Vault::create_with(
+            dir.path().join("vault.db"),
+            Box::new(FixedClock::frozen()),
+            Box::new(SeededIds::new("first-item-core")),
+        )
+        .expect("a vault");
+        vault.found("Test", "Test Owner").expect("founded");
+        for (at, (title, _)) in ["2026-01-01T00:00:00.000Z", "2026-01-01T00:00:01.000Z"]
+            .iter()
+            .zip(crate::starters::NOTES)
+        {
+            note(&vault, &format!("starter-{at}"), title, at);
+        }
+        assert_eq!(super::first_item_ms(&vault), None);
+        note(&vault, "mine", "Groceries", "2026-02-03T04:05:06.000Z");
+        note(&vault, "later", "Later", "2026-03-01T00:00:00.000Z");
+        assert_eq!(
+            super::first_item_ms(&vault),
+            centraid_vault::clock::parse_iso_ms("2026-02-03T04:05:06.000Z")
+        );
     }
 }
 

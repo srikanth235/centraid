@@ -13,6 +13,26 @@ import UIKit
 // `SystemPlace` is the vault/settings sheets; the four every app port needs
 // live here.
 
+extension View {
+    /// THE READABLE COLUMN (ruling 27): on a wide screen (an iPad) the page's content and the floating band
+    /// stand in one column `CentraidGeometry.readableWidth` wide, centred, with the page colour either side. A
+    /// phone is narrower than the cap, so nothing changes there. Applied once, by the rooms below; `enabled`
+    /// false is the opt-out (Photos' justified rows, the Calendar's grids), which keeps the full width.
+    ///
+    /// `alignment` is where content narrower than the column sits inside it (the leading edge for a header
+    /// and an editor, the middle for a list page, as each already stood).
+    @ViewBuilder
+    func readableColumn(_ enabled: Bool = true, alignment: Alignment = .center) -> some View {
+        if enabled {
+            frame(maxWidth: .infinity, alignment: alignment)
+                .frame(maxWidth: CentraidGeometry.readableWidth)
+                .frame(maxWidth: .infinity)
+        } else {
+            self
+        }
+    }
+}
+
 /// THE SEARCH SLOT an `AppPlace` carries. The field's state is the machine's `SearchField`;
 /// the words are the app's copy.
 ///
@@ -134,6 +154,10 @@ struct RootBarTitle: ToolbarContent {
             .lineLimit(1)
             .fixedSize()
             .accessibilityAddTraits(.isHeader)
+            // A BAR ITEM STOPS GROWING AT THE BAR'S OWN CAP (UIKit sizes a bar's items itself: "Recents" grows
+            // 1.1x from the default to the largest size while the page's text grows 1.7x), so a long press shows
+            // it at the size the member chose, as every system bar's items do (#1202).
+            .accessibilityShowsLargeContentViewer { Text(title) }
             .accessibilityIdentifier("kit-header-title")
     }
 }
@@ -271,6 +295,8 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
     /// A bar of the place's own: no drawn title, its leading view and keys in the system bar.
     var bar: PlaceBar? = nil
     var showsBand: Bool = true
+    /// False keeps the content's full width (Photos, the Calendar's grids); the band stays in the readable column.
+    var readable: Bool = true
     let trailing: () -> Trailing
     let band: () -> Band
     let content: () -> Content
@@ -290,6 +316,7 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         subtitle: SubtitleSlot? = nil,
         bar: PlaceBar? = nil,
         showsBand: Bool = true,
+        readable: Bool = true,
         @ViewBuilder trailing: @escaping () -> Trailing,
         @ViewBuilder band: @escaping () -> Band,
         @ViewBuilder content: @escaping () -> Content
@@ -302,6 +329,7 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
         self.subtitle = subtitle
         self.bar = bar
         self.showsBand = showsBand
+        self.readable = readable
         self.trailing = trailing
         self.band = band
         self.content = content
@@ -315,16 +343,23 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
             // (the glass filter and the filled accent `+`) at the trailing, nothing else.
             // THE TITLE IS IN THE BAR'S TOP ROW (`RootBarTitle`); the scope line is first here, and a
             // place's own bar (the Calendar's month chip) is one control row under it.
-            if showsBarTitle { KitHeader(title: "", subtitle: subtitle) }
+            if showsBarTitle { KitHeader(title: "", subtitle: subtitle).readableColumn(readable, alignment: .leading) }
             if let bar, showsBarTitle {
                 HStack(spacing: 0) {
                     bar.leading.environment(\.appAccent, AppAccent(app))
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, CentraidGeometry.pageMargin)
+                .readableColumn(readable, alignment: .leading)
             }
             content()
+                .readableColumn(readable)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                // THE FOOT OF EVERY LIST CLEARS THE BAND AND FADES UNDER IT (#1202): a last row sits
+                // fully above the plates, and rows that scroll beneath them dissolve instead of
+                // colliding with the glass keys.
+                .contentMargins(.bottom, 12, for: .scrollContent)
+                .softBottomScrollEdge()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Surface.page.ignoresSafeArea())
@@ -388,6 +423,8 @@ struct AppPlace<Trailing: View, Band: View, Content: View>: View {
                         )
                 }
             }
+            // THE BAND STANDS IN THE READABLE COLUMN (ruling 27), whatever the content does.
+            .readableColumn()
             // GLASS STANDS ON NOTHING: the content scrolls under the plates and shows
             // through them. Under Reduce Transparency or Increase Contrast the strip is the
             // page's colour again (`BandStrip`).
@@ -415,6 +452,7 @@ extension AppPlace where Trailing == RoomTrailing {
         subtitle: SubtitleSlot? = nil,
         bar: PlaceBar? = nil,
         showsBand: Bool = true,
+        readable: Bool = true,
         @ViewBuilder band: @escaping () -> Band,
         @ViewBuilder content: @escaping () -> Content
     ) {
@@ -427,6 +465,7 @@ extension AppPlace where Trailing == RoomTrailing {
             subtitle: subtitle,
             bar: bar,
             showsBand: showsBand,
+            readable: readable,
             trailing: { RoomTrailing(action: trailing, app: app) },
             band: band,
             content: content
@@ -447,6 +486,8 @@ struct PushedPage<Trailing: View, Content: View>: View {
     var titleColor: Color? = nil
     var titleIcon: String = ""
     var titleIdentifier: String? = nil
+    /// False keeps the full width (a Photos shelf); see `readableColumn`.
+    var readable: Bool = true
     let trailing: () -> Trailing
     let content: () -> Content
 
@@ -460,9 +501,11 @@ struct PushedPage<Trailing: View, Content: View>: View {
         titleColor: Color? = nil,
         titleIcon: String = "",
         titleIdentifier: String? = nil,
+        readable: Bool = true,
         @ViewBuilder trailing: @escaping () -> Trailing,
         @ViewBuilder content: @escaping () -> Content
     ) {
+        self.readable = readable
         self.title = title
         self.parentTitle = parentTitle
         self.onBack = onBack
@@ -476,9 +519,14 @@ struct PushedPage<Trailing: View, Content: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !meta.isEmpty { KitHeader(title: "", meta: meta) }
+            if !meta.isEmpty { KitHeader(title: "", meta: meta).readableColumn(readable, alignment: .leading) }
             content()
+                .readableColumn(readable)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                // A FLOATING BAR AT THE FOOT (Docs' quick look, a Locker verb row) fades what scrolls
+                // under it instead of cutting through its text (#1202).
+                .contentMargins(.bottom, 12, for: .scrollContent)
+                .softBottomScrollEdge()
         }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Surface.page.ignoresSafeArea())
@@ -499,18 +547,22 @@ struct PushedPage<Trailing: View, Content: View>: View {
                     .accessibilityLabel(KitWords.backTo(parent: parentTitle))
                     .accessibilityIdentifier("kit-pushed-back")
                 }
-                if let titleColor {
-                    // THE TITLE IN THE PAGE'S OWN COLOUR, still inline in the top row.
+                if titleColor != nil || titleIdentifier != nil {
+                    // THE TITLE IN THE PAGE'S OWN COLOUR (ink when it has none, so a page that names its title
+                    // by id, the Inbox's `tasks-list-title`, draws it on both shells), still inline in the top row.
                     ToolbarItem(placement: .principal) {
                         HStack(spacing: 6) {
-                            if !titleIcon.isEmpty { CentraidIconView(iconKey: titleIcon, tint: titleColor, size: 20) }
+                            if !titleIcon.isEmpty { CentraidIconView(iconKey: titleIcon, tint: titleColor ?? Surface.ink, size: 20) }
                             Text(title)
                                 .kitType(.section)
-                                .foregroundStyle(titleColor)
+                                .foregroundStyle(titleColor ?? Surface.ink)
                                 .lineLimit(1)
                                 .accessibilityAddTraits(.isHeader)
-                                .accessibilityIdentifier(titleIdentifier ?? "kit-header-title")
                         }
+                        // THE ID IS ON THE ROW, not the text: a toolbar item drops an id set on a view inside it
+                        // (the flows' `tasks-list-title` found nothing on iOS, #1202).
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier(titleIdentifier ?? "kit-header-title")
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) { trailing() }
@@ -562,8 +614,10 @@ struct EditorRoom<Trailing: View, Content: View>: View {
                 AutosaveStatus(status)
                     .padding(.horizontal, CentraidGeometry.pageMargin)
                     .padding(.bottom, 4)
+                    .readableColumn(alignment: .leading)
             }
             content()
+                .readableColumn(alignment: .topLeading)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .background(Theme.color("bg", scheme).ignoresSafeArea())
@@ -583,6 +637,7 @@ struct EditorRoom<Trailing: View, Content: View>: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityShowsLargeContentViewer { Text(closeLabel) }
                 .accessibilityIdentifier("kit-editor-close")
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -641,10 +696,16 @@ struct SheetRoom<Content: View>: View {
     /// measured height of the room, and the platform's own sheet ground on iOS 26. A list taller
     /// than the screen scrolls inside it.
     var fit: Bool = false
+    /// THE CONTENT IS A LIST OR A SCROLL VIEW THAT SCROLLS ITSELF (#1202): at accessibility sizes the
+    /// room is not wrapped in a `ScrollView` of its own, in which a `List` has no height and
+    /// collapsed to nothing (the Vaults sheet drew its title over a blank sheet). A sheet that
+    /// holds a list says so here; one that holds only fields and rows does not.
+    var scrollsItself: Bool = false
     let content: () -> Content
 
     @Environment(\.colorScheme) private var scheme
     @Environment(\.appAccent) private var accent
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var natural: CGFloat = 0
     @State private var floor: CGFloat = 0
 
@@ -655,6 +716,7 @@ struct SheetRoom<Content: View>: View {
         outlines: [SheetOutline] = [],
         titleIdentifier: String = "",
         fit: Bool = false,
+        scrollsItself: Bool = false,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.title = title
@@ -663,6 +725,7 @@ struct SheetRoom<Content: View>: View {
         self.outlines = outlines
         self.titleIdentifier = titleIdentifier
         self.fit = fit
+        self.scrollsItself = scrollsItself
         self.content = content
     }
 
@@ -675,6 +738,13 @@ struct SheetRoom<Content: View>: View {
             .scrollBounceBehavior(.basedOnSize)
             .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { floor = $0 }
             .modifier(SheetPresentation(detents: natural > 0 ? [.height(natural + floor)] : [.medium]))
+        } else if dynamicTypeSize.isAccessibilitySize, !scrollsItself {
+            // A SHEET TALLER THAN ITS DETENT SCROLLS AT ACCESSIBILITY SIZES (#1202): squeezed into
+            // the half sheet, the title was cut to "New entry fo..." and the fields under it with it.
+            ScrollView { room }
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .modifier(SheetPresentation())
         } else {
             room
                 // THE ROOM FILLS ITS SHEET, top-aligned: sized to its content, it
@@ -693,6 +763,7 @@ struct SheetRoom<Content: View>: View {
                 Text(title)
                     .kitType(.section)
                     .foregroundStyle(Surface.ink)
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier(titleIdentifier.isEmpty ? "kit-sheet-title" : titleIdentifier)
                     .padding(.top, 20)
@@ -802,14 +873,50 @@ struct SheetPresentation: ViewModifier {
 }
 
 /// THE GROUND UNDER EVERY SHEET: the system's own on iOS 26 (Liquid Glass), and the kit's cream
-/// `sheet` surface only before it. Fixed here, once, so no sheet states its own ground and none
-/// lays a slab of its own colour on the glass (the owner's ruling, #1173).
+/// `sheet` surface before it. Fixed here, once, so no sheet states its own ground and none
+/// lays a slab of its own colour on the glass (the owner's ruling, #1173). UNDER REDUCE
+/// TRANSPARENCY OR INCREASE CONTRAST the ground is the `sheet` surface on any version (owner
+/// ruling 26, 20 November): the sheet stays compact glass for everyone else, and text on it
+/// never sits over a blurred page for a member who asked for none.
 private struct SheetGround: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
     func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
+        if #available(iOS 26.0, *), !(reduceTransparency || contrast == .increased) {
             content
         } else {
             content.presentationBackground(Surface.sheet)
+        }
+    }
+}
+
+private struct SheetCardGround<S: Shape>: ViewModifier {
+    let shape: S
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *), !(reduceTransparency || contrast == .increased) {
+            content.background(Color(uiColor: .secondarySystemGroupedBackground).opacity(0.6), in: shape)
+        } else {
+            content.background(Surface.sheetCard, in: shape)
+        }
+    }
+}
+
+private struct SheetPageGround: ViewModifier {
+    let edges: Edge.Set
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *), !(reduceTransparency || contrast == .increased) {
+            content
+        } else {
+            content.background(Surface.sheet.ignoresSafeArea(edges: edges))
         }
     }
 }
@@ -829,6 +936,7 @@ struct KitInkButton: View {
 
     @Environment(\.isEnabled) private var enabled
     @Environment(\.appAccent) private var accent
+    @ScaledMetric(relativeTo: .body) private var glyph: CGFloat = 20
 
     /// THE ONE FILLED ELEMENT (#1173): a full-width pill in the app's fill under a white label;
     /// a destructive one is the outlined state-red pill at the same width. Disabled is still
@@ -843,25 +951,29 @@ struct KitInkButton: View {
             // `sheetKey` IS THE BOARD'S 16/600: `.fontWeight` does not reach a custom face.
             HStack(spacing: 10) {
                 if !iconKey.isEmpty {
-                    CentraidIconView(iconKey: iconKey, tint: ink, size: 20)
+                    CentraidIconView(iconKey: iconKey, tint: ink, size: min(glyph, 40))
                         .accessibilityHidden(true)
                 }
                 Text(label)
                     .centraidType("sheetKey")
                     .foregroundStyle(ink)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
                 .frame(maxWidth: .infinity, minHeight: sheetButtonHeight)
                 .background {
                     if !destructive {
-                        Capsule().fill(enabled ? accent.fill : Surface.fill)
+                        KitPillShape().fill(enabled ? accent.fill : Surface.fill)
                     }
                 }
                 .overlay {
                     if destructive {
-                        Capsule().strokeBorder(enabled ? StateColor.red.text : Surface.border, lineWidth: 1.5)
+                        KitPillShape().strokeBorder(enabled ? StateColor.red.text : Surface.border, lineWidth: 1.5)
                     }
                 }
-                .contentShape(Capsule())
+                .contentShape(KitPillShape())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(identifier.isEmpty ? (destructive ? "kit-destructive" : "kit-primary") : identifier)
@@ -870,25 +982,15 @@ struct KitInkButton: View {
 
 extension View {
     /// A SHEET PAGE'S GROUND: the system's glass on iOS 26 (nothing drawn), the kit's `sheet`
-    /// surface before it.
-    @ViewBuilder
+    /// surface before it and under Reduce Transparency or Increase Contrast.
     func sheetPageGround(edges: Edge.Set = .all) -> some View {
-        if #available(iOS 26, *) {
-            self
-        } else {
-            self.background(Surface.sheet.ignoresSafeArea(edges: edges))
-        }
+        modifier(SheetPageGround(edges: edges))
     }
 
     /// A GROUPED CARD INSIDE A SHEET: on iOS 26 the system's own grouped fill over the glass (no
     /// cream slab), the kit's `sheetCard` before it.
-    @ViewBuilder
     func sheetCardGround(_ shape: some Shape = RoundedRectangle(cornerRadius: CentraidScale.cardRadius, style: .continuous)) -> some View {
-        if #available(iOS 26, *) {
-            self.background(Color(uiColor: .secondarySystemGroupedBackground).opacity(0.6), in: shape)
-        } else {
-            self.background(Surface.sheetCard, in: shape)
-        }
+        modifier(SheetCardGround(shape: shape))
     }
 
     /// A PAGE THAT SCROLLS UNDER GLASS KEYS WITH CONTENT OF ITS OWN (a hero's round keys) takes a
@@ -898,6 +1000,18 @@ extension View {
     func hardTopScrollEdge() -> some View {
         if #available(iOS 26, *) {
             scrollEdgeEffectStyle(.hard, for: .top)
+        } else {
+            self
+        }
+    }
+
+    /// THE SCRIM UNDER THE BAND: on iOS 26 the content that scrolls beneath the glass band takes a
+    /// soft edge (a fade into the page), so a row's text never runs through the keys. Earlier
+    /// systems draw the band on the page's own strip (`BandStrip`), so nothing changes.
+    @ViewBuilder
+    func softBottomScrollEdge() -> some View {
+        if #available(iOS 26, *) {
+            scrollEdgeEffectStyle(.soft, for: .bottom)
         } else {
             self
         }

@@ -179,7 +179,8 @@ fn an_existing_note_opens_on_its_words_and_saves_the_title_alone() {
     assert_eq!(draft(d.view(i)).body, "first draft");
     assert_eq!(
         editor_state(d.view(i)).chrome.as_ref().unwrap().close,
-        "Cancel"
+        "Done",
+        "a note that exists closes with Done, edited or not"
     );
     type_title(&mut d, i, "Plans v2");
     settle(&mut d);
@@ -433,6 +434,48 @@ fn a_pin_is_its_own_write_sent_at_once() {
 }
 
 #[test]
+fn move_to_trash_asks_nothing_trashes_at_once_and_closes_the_page_with_an_undo_beneath() {
+    let mut d = driver();
+    let id = note(&d, "Plans", "x");
+    let i = open(&mut d, &id);
+    let chrome = editor_state(d.view(i)).chrome.clone().unwrap();
+    assert_eq!(chrome.trash_label, "Move to trash");
+    assert!(!editor_state(d.view(i)).finished);
+    send_editor(&mut d, i, N::TrashTapped(ev::TrashTapped {}));
+    let state = editor_state(d.view(i));
+    assert!(state.finished, "the shell closes the page");
+    assert!(
+        note_of(&d, &id).deleted_at.is_some(),
+        "the note is in the trash"
+    );
+}
+
+#[test]
+fn move_to_trash_hands_its_line_and_undo_to_the_notes_page_beneath() {
+    let mut d = driver();
+    let id = note(&d, "Plans", "x");
+    let home = home(&mut d, wire::NotesPlace::Notes);
+    let i = open(&mut d, &id);
+    send_editor(&mut d, i, N::TrashTapped(ev::TrashTapped {}));
+    assert!(editor_state(d.view(i)).finished);
+    d.pop(notes::TAB, i);
+    let line = home_state(d.view(home))
+        .status
+        .clone()
+        .expect("the page beneath says it was trashed");
+    assert_eq!(
+        (line.sentence.as_str(), line.action_label.as_str()),
+        ("Plans moved to trash", "Undo")
+    );
+    // The Undo brings the note back.
+    d.send(
+        home,
+        wire::screen_event::Kind::StatusActed(wire::StatusActed {}),
+    );
+    assert!(note_of(&d, &id).deleted_at.is_none());
+}
+
+#[test]
 fn a_pin_chosen_before_the_note_exists_lands_once_its_create_does() {
     let mut d = driver();
     let i = open_new(&mut d);
@@ -570,10 +613,7 @@ fn the_powerbox_reads_link_targets_grouped_by_domain() {
     let sheet = link(d.view(i));
     assert_eq!(sheet.title, "Link to");
     assert_eq!(sheet.search_placeholder, "Search everything");
-    assert_eq!(
-        sheet.foot,
-        "Locker items link by name; their secrets stay locked."
-    );
+    assert_eq!(sheet.foot, "Any item can be linked except Locker items.");
     send_editor(
         &mut d,
         i,

@@ -236,10 +236,16 @@ public fun KitLink(
         Text(
             label,
             style = centraidType(if (dense) "annotLabelOn" else "smallStrong"),
-            color = centraidColor(if (enabled) "link" else "textDisabled"),
+            // A LINK IS THE APP'S OWN COLOUR where an app's place states one; the shell's links keep the link ink.
+            color = if (enabled) linkInk() else centraidColor("textDisabled"),
         )
     }
 }
+
+/** The ink of a link: the accent's text colour inside an app, the kit's link ink outside one. */
+@Composable
+internal fun linkInk(): Color =
+    if (LocalAppAccentId.current.isEmpty()) centraidColor("link") else appAccent().text
 
 /**
  * A CHECK BOX: a 20dp box (`sm` radius) in a 44dp target. Off is a 1.5dp
@@ -407,6 +413,8 @@ public fun StageKey(
     destructive: Boolean = false,
     /** On the light viewer page: the page's ink and the app's text colour, not the stage's. */
     light: Boolean = false,
+    /** Fill the glyph while [on]; a glyph with a mark inside it (Info's i) is lit by its ink and plate, not filled. */
+    solid: Boolean = on,
 ) {
     // A LIT TOGGLE (the favourite) wears the app's colour, never amber: amber only means a state.
     val ink = if (enabled && on && !destructive) {
@@ -430,7 +438,7 @@ public fun StageKey(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        CentraidIcon(iconKey = iconKey, tint = ink, size = 24.dp, solid = on)
+        CentraidIcon(iconKey = iconKey, tint = ink, size = 24.dp, solid = solid)
         if (showLabel) Text(text = label, color = ink, style = centraidType("small"), maxLines = 1)
     }
 }

@@ -60,7 +60,12 @@ struct AgendaHomeView: View {
                     showsTitle: !header.title.isEmpty
                 )
             },
-            showsBand: !denied && !state.band.isEmpty && !quickAddTyping
+            // A bar Rust has put away holds no keyboard, whatever the field last said: its view went with
+            // the focus, so the callback that clears `quickAddTyping` never came (the band stayed away
+            // after a task was added and the bar closed, #1202).
+            showsBand: !denied && !state.band.isEmpty && !(quickAddTyping && state.quickAdd.shown && state.quickAdd.drawn),
+            // THE CALENDAR'S GRIDS (Day, Week, Month, Year) KEEP THE FULL WIDTH (ruling 27); the lists stand in the readable column.
+            readable: !isCalendarGrid(state)
         ) {
             AppBand(
                 app: state.appKey,
@@ -108,14 +113,22 @@ struct AgendaHomeView: View {
                         page: state.page,
                         loadingLabel: state.chrome.loading,
                         onRetry: { send(AgendaEvents.make { $0.refreshed = .init() }) },
-                        onEmptyAction: offersImport(state) ? nil : { if state.hasNewEvent { open(state.newEvent) } },
-                        emptyExtra: { AnyView(emptyUnder(state)) }
+                        // THE CARD'S ONE ACTION, when it has one, is Open Settings after a refused grant; "New event" is the header's plus.
+                        onEmptyAction: offersImport(state) ? nil : {
+                            if case let .empty(empty)? = state.page.state, !empty.actionLabel.isEmpty {
+                                send(AgendaEvents.make { $0.todoEmptyActed = .init() })
+                            }
+                        },
+                        emptyExtra: { AnyView(emptyUnder(state)) },
+                        emptyAction: offersImport(state) ? { AnyView(CalendarImportButton(label: state.importLabel, identifier: "kit-empty-import", send: send)) } : nil
                     ) {
                         if case let .data(home)? = state.content {
                             homeContent(home, state: state)
                         }
                     }
                 }
+                // THE PAGE ENDS WHERE THE QUICK ADD BEGINS: tiles scrolled under its glass never show through.
+                .clipped()
                 // THE FLOATING TODAY KEY, bottom-leading above the band, while the anchor is not today.
                 .overlay(alignment: .bottomLeading) {
                     if let header {
@@ -151,6 +164,7 @@ struct AgendaHomeView: View {
                         onLink: { link in send(AgendaEvents.make { $0.quickLink = link }) },
                         onStagedRemove: { key in send(AgendaEvents.make { $0.quickStagedRemoved = .with { $0.key = key } }) }
                     )
+                    .background(Surface.page)
                 }
             }
         }
@@ -264,14 +278,11 @@ struct AgendaHomeView: View {
         return false
     }
 
-    /// WHAT THE EMPTY PAGE DRAWS UNDER ITS WORDS: where the phone holds a calendar, its import is day one's
-    /// action (sent to Rust as `ImportRequested`; "Add" stays in the header), and a search that found
-    /// nothing gets the Ask row.
+    /// WHAT THE EMPTY PAGE DRAWS UNDER ITS WORDS: a search that found nothing gets the Ask row. (Where
+    /// the phone holds a calendar, its import is day one's action, drawn inside the card by `emptyAction`;
+    /// sent to Rust as `ImportRequested`, and "Add" stays in the header.)
     @ViewBuilder
     private func emptyUnder(_ state: Centraid_Core_V1_AgendaHomeState) -> some View {
-        if offersImport(state) {
-            CalendarImportButton(label: state.importLabel, identifier: "kit-empty-import", send: send)
-        }
         if state.hasSearchAskRow { SearchAskRow(ask: state.searchAskRow) }
     }
 
@@ -328,6 +339,12 @@ struct AgendaHomeView: View {
     private func monthGrid(_ state: Centraid_Core_V1_AgendaHomeState) -> Centraid_Core_V1_AgendaMonthGrid? {
         if case let .data(home)? = state.content, home.hasMonth { return home.month }
         return nil
+    }
+
+    /// Day, Week, Month and Year are grids: they keep the full width on a wide screen (ruling 27).
+    private func isCalendarGrid(_ state: Centraid_Core_V1_AgendaHomeState) -> Bool {
+        if case let .data(home)? = state.content { return home.hasTimeGrid || home.hasMonth || home.hasYear }
+        return false
     }
 
     /// MONTH AND YEAR STEP BY THEIR OWN PERIOD (`PeriodStepped`); the lists by days. Day and Week
@@ -403,6 +420,22 @@ private struct CalendarImportButton: View {
             send(AgendaEvents.make { $0.importRequested = .init() })
         }
         .accessibilityIdentifier(identifier)
+        .padding(.top, 4)
+    }
+}
+
+/// THE PHONE REMINDERS' IMPORT: the verb is the app's, the tap is Rust's (`ImportRemindersRequested`,
+/// which asks this shell to read the reminders through the `RemindersRead` effect).
+private struct RemindersImportButton: View {
+    /// Rust's words (`import_label`, "Import from Reminders").
+    let label: String
+    let send: (Centraid_Core_V1_AgendaHomeEvent) -> Void
+
+    var body: some View {
+        KitOutlineButton(label: label) {
+            send(AgendaEvents.make { $0.importRemindersRequested = .init() })
+        }
+        .accessibilityIdentifier("kit-empty-import")
         .padding(.top, 4)
     }
 }
@@ -611,7 +644,15 @@ private struct AgendaTodoList: View {
                     TodoCountLine(count: todo.countLabel, window: todo.windowLabel)
                 }
                 if !todo.empty.headline.isEmpty {
-                    EmptyStateView(todo.empty, onAction: { send(AgendaEvents.make { $0.todoEmptyActed = .init() }) })
+                    // THE PHONE'S REMINDERS, where Rust names the import (day one, or all done): the
+                    // card's one action, with the add under it as the board draws it.
+                    EmptyStateView(
+                        todo.empty,
+                        actionSlot: todo.empty.importSource == .reminders && !state.importLabel.isEmpty
+                            ? AnyView(RemindersImportButton(label: state.importLabel, send: send))
+                            : nil,
+                        onAction: { send(AgendaEvents.make { $0.todoEmptyActed = .init() }) }
+                    )
                 }
             }
             .todoPlainRow()
@@ -663,11 +704,8 @@ private struct AgendaTodoList: View {
                     }
                 }
                 if !todo.newProjectLabel.isEmpty {
-                    HStack {
-                        KitLink(label: todo.addListLabel.isEmpty ? todo.newProjectLabel : todo.addListLabel, identifier: "agenda-new-project") {
-                            send(AgendaEvents.make { $0.sheetOpened = .with { $0.sheet = .newProject } })
-                        }
-                        Spacer(minLength: 0)
+                    KitLink(label: todo.addListLabel.isEmpty ? todo.newProjectLabel : todo.addListLabel, identifier: "agenda-new-project", fillsRow: true) {
+                        send(AgendaEvents.make { $0.sheetOpened = .with { $0.sheet = .newProject } })
                     }
                     .padding(.horizontal, CentraidGeometry.pageMargin)
                     .padding(.top, 12)
@@ -693,10 +731,19 @@ struct AgendaSectionView: View {
     /// Month's list below its grid keeps the stack.
     var inList = false
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// AT ACCESSIBILITY SIZES THE DATE SITS ABOVE ITS ROWS (#1202): a 44pt gutter beside the
+    /// rows cut the day number to dots and left the times a column of letters.
+    private var stacked: Bool { dynamicTypeSize.isAccessibilitySize }
 
     /// The date column's width and the gap to the rows beside it.
     private static let dateWidth: CGFloat = 44
     private static let dateGap: CGFloat = 8
+    /// THE DATE COLUMN'S OWN HEIGHT (#1202): the number over its weekday. A row that carries it
+    /// (a one-line birthday ribbon, an all-day event) stands at least this tall, or "Sun" ran into
+    /// the next day's "30".
+    @ScaledMetric(relativeTo: .caption) private var dateColumnHeight: CGFloat = 44
 
     var body: some View {
         if inList {
@@ -712,7 +759,7 @@ struct AgendaSectionView: View {
     @ViewBuilder
     private var listRows: some View {
         let margin = CentraidGeometry.pageMargin
-        let gutter = Self.dateWidth + Self.dateGap
+        let gutter = stacked ? 0 : Self.dateWidth + Self.dateGap
         VStack(alignment: .leading, spacing: 0) {
             if section.hasMonthHeading {
                 Text(section.monthHeading)
@@ -729,15 +776,22 @@ struct AgendaSectionView: View {
         }
         .id(section.day)
         .todoPlainRow()
-        if section.hasRibbon {
-            ribbon
-                .padding(.leading, gutter)
-                .overlay(alignment: .topLeading) { dateColumn.padding(.top, 8) }
+        if stacked {
+            dateColumn
                 .padding(.horizontal, margin)
                 .padding(.top, 8)
                 .todoPlainRow()
         }
-        if section.items.isEmpty && !section.hasRibbon {
+        if section.hasRibbon {
+            ribbon
+                .padding(.leading, gutter)
+                .frame(minHeight: stacked ? 0 : dateColumnHeight, alignment: .topLeading)
+                .overlay(alignment: .topLeading) { if !stacked { dateColumn.padding(.top, 8) } }
+                .padding(.horizontal, margin)
+                .padding(.top, 8)
+                .todoPlainRow()
+        }
+        if section.items.isEmpty && !section.hasRibbon && !stacked {
             // A day with nothing on it still shows its date.
             Color.clear
                 .frame(height: Self.dateWidth)
@@ -748,11 +802,12 @@ struct AgendaSectionView: View {
                 .todoPlainRow()
         }
         ForEach(Array(section.items.enumerated()), id: \.offset) { index, item in
-            let lead: AnyView? = index == 0 && !section.hasRibbon ? AnyView(dateColumn) : nil
+            let lead: AnyView? = index == 0 && !section.hasRibbon && !stacked ? AnyView(dateColumn) : nil
             switch item.kind {
             case let .event(row):
                 AgendaEventRowView(row: row, open: open)
                     .padding(.leading, gutter)
+                    .frame(minHeight: lead == nil ? 0 : dateColumnHeight, alignment: .topLeading)
                     .overlay(alignment: .topLeading) { if let lead { lead.padding(.top, 8) } }
                     .padding(.horizontal, margin)
                     .todoPlainRow()
@@ -807,7 +862,7 @@ struct AgendaSectionView: View {
             Rectangle()
                 .fill(Surface.line)
                 .frame(height: CentraidGeometry.hairline)
-            HStack(alignment: .top, spacing: Self.dateGap) {
+            dayLayout {
                 dateColumn
                 VStack(alignment: .leading, spacing: 0) {
                     if section.hasRibbon {
@@ -846,8 +901,18 @@ struct AgendaSectionView: View {
         }
     }
 
+    /// The date beside its rows, or above them at accessibility sizes.
+    private var dayLayout: AnyLayout {
+        stacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Self.dateGap))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: Self.dateGap))
+    }
+
     private var dateColumn: some View {
-        VStack(spacing: 0) {
+        let layout = stacked
+            ? AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
+            : AnyLayout(VStackLayout(spacing: 0))
+        return layout {
             Text(section.dayNumber)
                 .centraidType(section.isToday ? "title" : "smallStrong")
                 .foregroundStyle(
@@ -866,7 +931,8 @@ struct AgendaSectionView: View {
                 .centraidType("eyebrow")
                 .foregroundStyle(Theme.color(section.isPast ? "textFaint" : "textSoft", scheme))
         }
-        .frame(width: Self.dateWidth)
+        .frame(width: stacked ? nil : Self.dateWidth)
+        .frame(maxWidth: stacked ? .infinity : nil, alignment: .leading)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(section.heading)
         .accessibilityAddTraits(.isHeader)
@@ -893,29 +959,38 @@ private struct AgendaEventRowView: View {
     let row: Centraid_Core_V1_AgendaEventRow
     let open: (Centraid_Core_V1_Route) -> Void
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var rowLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
+    }
 
     var body: some View {
         // THE ROW CARRIES ITS PAGE: this occurrence, drawn under the section's day.
         Button {
             open(row.route)
         } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            // THE TIME ABOVE THE TITLE AT ACCESSIBILITY SIZES (#1202): a 52pt time column split
+            // "10:00 - 11:00" into a letter a line.
+            rowLayout {
                 Text(row.timeLabel)
                     .centraidType("annotLabel")
                     .foregroundStyle(Theme.color(row.isPast ? "textFaint" : "textSoft", scheme))
-                    .frame(width: 52, alignment: .leading)
+                    .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 52, alignment: .leading)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(row.title)
                         .centraidType("body")
                         .foregroundStyle(Theme.color(row.isPast ? "textFaint" : "text", scheme))
-                        .lineLimit(2)
+                        .kitLineLimit(2, wide: 5)
                     // A search hit whose words only an earlier version of the event held
                     // (#1185): the row says so and opens Earlier versions.
                     if !row.earlierLabel.isEmpty {
                         Text(row.earlierLabel)
                             .centraidType("annotLabel")
                             .foregroundStyle(Theme.color("textSoft", scheme))
-                            .lineLimit(1)
+                            .kitLineLimit(1)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -958,7 +1033,8 @@ private struct AgendaNowLineView: View {
             Text(now.label)
                 .centraidType("annotLabelOn")
                 .foregroundStyle(Theme.color("net", scheme))
-                .frame(width: 52, alignment: .leading)
+                .fixedSize()
+                .frame(minWidth: 52, alignment: .leading)
             Circle().fill(Theme.color("net", scheme)).frame(width: 6, height: 6)
             Rectangle().fill(Theme.color("net", scheme)).frame(height: 1)
         }

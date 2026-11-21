@@ -5,13 +5,13 @@ use centraid_api_proto::core_v1 as wire;
 use wire::docs_sheet::{Body, Kind};
 
 use super::{
-    Drive, KEY_EXPORT, KEY_FOLLOW_FOLDER, KEY_FOLLOWED, KEY_NEW_FOLDER, KEY_RECENT, KEY_SCAN,
-    KEY_STOP_PREFIX, KEY_TEXT, KEY_TRASH_SHELF, KEY_UPLOAD,
+    Drive, KEY_EXPORT, KEY_FOLLOW_FOLDER, KEY_FOLLOWED, KEY_NEW_FOLDER, KEY_READS, KEY_RECENT,
+    KEY_SCAN, KEY_STOP_PREFIX, KEY_TEXT, KEY_TRASH_SHELF, KEY_UPLOAD,
 };
 use crate::docs::fold::{self, TRASH_ICON};
 use crate::docs::{folders, routes};
-use crate::kit::export;
 use crate::kit::permission::{self, Resource, State};
+use crate::kit::{export, reads_page};
 use crate::strings::{Locale, docs as words, shared};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -67,11 +67,18 @@ pub(super) fn view(drive: &Drive, locale: Locale) -> wire::DocsSheet {
     match &drive.sheet {
         Sheet::None => none(),
         Sheet::More => {
-            let mut rows = vec![fold::action(
-                KEY_RECENT,
-                words::more_recent(locale),
-                "Clock",
-            )];
+            // WHAT DOCS MAY READ (owner, 2026-11-19), first, as Health's is.
+            let mut rows = vec![
+                wire::DocsAction {
+                    route: Some(crate::docs::routes::reads()),
+                    ..fold::action(
+                        KEY_READS,
+                        reads_page::title(locale, &words::app_title(locale)),
+                        "Shield",
+                    )
+                },
+                fold::action(KEY_RECENT, words::more_recent(locale), "Clock"),
+            ];
             if !drive.followed.is_empty() {
                 rows.push(fold::action(
                     KEY_FOLLOWED,

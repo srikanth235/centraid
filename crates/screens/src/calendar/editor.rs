@@ -1,12 +1,20 @@
 //! MAKE AN EVENT, OR CHANGE ONE (`calendar.editor`, #1046, #1135).
 //!
-//! ## Save is explicit
+//! ## Save is explicit, and a new event's draft is kept
 //!
 //! Not autosave (#1015 D3's exception, ruled for this screen): a start time
-//! typed half-way and saved is a wrong date on a calendar other people read,
-//! which is worse than a lost draft. So Save is a button, armed only when the
-//! draft is whole (a title, a calendar, an end after its start), and leaving
-//! with changes asks. `Left` therefore writes nothing.
+//! typed half-way and saved is a wrong date on a calendar other people read.
+//! So Save is a button, armed only when the draft is whole (a title, a calendar,
+//! an end after its start), and leaving with changes asks. `Left` writes nothing
+//! to the vault.
+//!
+//! The words typed into a NEW event are not lost with the process (owner ruling
+//! 29, #1202): the editor keeps them on the draft board and the draft service
+//! (`super::draft`) holds them in the phone's device store, never in the vault, so
+//! the draft is not an event until Save. A relaunch reopens this editor with them
+//! (the route's `instance_key` is `draft::RESTORE`). Save and a confirmed discard
+//! clear the draft; a vault switch does too. An edit of an existing event keeps no
+//! draft: its save must name the revision it replaces.
 //!
 //! ## Which command
 //!
@@ -54,6 +62,7 @@ use wire::agenda_editor_state::{Asking, Mode, Sheet};
 use wire::app_query_response::Answer;
 use wire::screen_event::Kind as E;
 
+use super::draft as draft_store;
 use super::event::{
     calendar_hue, is_series_occurrence, person_hue, reminder_label, scope_word, scopes,
 };
@@ -108,6 +117,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         rev: None,
         saving_day: None,
         undo: Undo::default(),
+        kept: false,
         dismissed: false,
     }))
 }
@@ -155,6 +165,9 @@ struct Editor {
     /// The vault's refusal of the last Save, over the draft that stays.
     /// The status line: a refusal, over the draft as it still is (a save ends the sitting).
     undo: Undo,
+    /// This editor has put its draft on the board (`super::draft`), so it clears it when the
+    /// draft stops being one.
+    kept: bool,
     dismissed: bool,
 }
 
@@ -247,6 +260,85 @@ impl Editor {
                 }),
             };
             self.draft.clone_from(&self.baseline);
+            if self.mode == Mode::Create && self.route.instance_key == draft_store::RESTORE {
+                self.restore(ctx);
+            }
+        }
+    }
+
+    /// THE DRAFT THE PHONE KEPT comes back over the fresh new event: what was typed, with
+    /// whatever the vault no longer holds (a calendar, a person, a place that went) put back to
+    /// the new event's own. The baseline stays the fresh event, so leaving still asks.
+    fn restore(&mut self, ctx: &Ctx) {
+        let (Some(stored), Some(loaded)) = (ctx.drafts().get(), &self.loaded) else {
+            return;
+        };
+        if draft_store::vault_in_front(ctx).as_deref() != Some(stored.vault.as_str()) {
+            return;
+        }
+        let Some(fresh) = self.baseline.clone() else {
+            return;
+        };
+        let mut draft = stored.draft;
+        if !loaded
+            .upcoming
+            .calendars
+            .iter()
+            .any(|calendar| calendar.calendar_id == draft.calendar_id)
+        {
+            draft.calendar_id = fresh.calendar_id;
+        }
+        draft.guest_ids.retain(|id| {
+            loaded
+                .parties
+                .parties
+                .iter()
+                .any(|party| !party.is_you && &party.party_id == id)
+        });
+        if !draft.place_id.is_empty()
+            && !loaded.places.iter().any(|place| place.id == draft.place_id)
+        {
+            draft.place_id.clear();
+        }
+        self.draft = Some(draft);
+        self.typed_place = stored.typed_place;
+        self.kept = true;
+    }
+
+    /// KEEP THE DRAFT OF A NEW EVENT on the board after a change: the service writes it to the
+    /// device store when the app goes to the background and shortly after the last change. An
+    /// editor put back to what a new event starts as has no draft.
+    fn keep(&mut self, ctx: &Ctx) {
+        if self.mode != Mode::Create || self.dismissed {
+            return;
+        }
+        if self.dirty() {
+            let (Some(draft), Some(vault)) = (&self.draft, draft_store::vault_in_front(ctx)) else {
+                return;
+            };
+            let changed = ctx.drafts().set(draft_store::Stored {
+                vault,
+                draft: draft.clone(),
+                typed_place: self.typed_place.clone(),
+            });
+            self.kept = true;
+            if changed {
+                ctx.start_timer(draft_store::DEBOUNCE_TIMER, draft_store::DEBOUNCE);
+            }
+        } else {
+            self.release(ctx);
+        }
+    }
+
+    /// THE DRAFT ENDS: saved, discarded or put back. Only a draft this editor kept is cleared.
+    fn release(&mut self, ctx: &Ctx) {
+        if !self.kept {
+            return;
+        }
+        self.kept = false;
+        ctx.cancel_timer(draft_store::DEBOUNCE_TIMER);
+        if ctx.drafts().clear() {
+            draft_store::wake(ctx);
         }
     }
 
@@ -456,6 +548,7 @@ impl Editor {
         let settled = self.undo.act_handing_down(ctx, request, key, said);
         if settled.committed {
             self.dismissed = true;
+            self.release(ctx);
         } else if let Some(stale) = settled.stale() {
             self.stale(ctx, stale);
         }
@@ -665,7 +758,10 @@ impl Editor {
                 }
             }
             K::Confirmed(_) => match std::mem::replace(&mut self.asking, Asking::None) {
-                Asking::Discard => self.dismissed = true,
+                Asking::Discard => {
+                    self.dismissed = true;
+                    self.release(ctx);
+                }
                 Asking::Skip => self.skip(ctx),
                 _ => {}
             },
@@ -807,9 +903,17 @@ impl Screen for Editor {
                 self.reload(ctx);
                 Vec::new()
             }
-            Some(E::AgendaEditor(event)) => event
-                .kind
-                .map_or_else(Vec::new, |kind| self.on_editor_event(kind, ctx)),
+            Some(E::AgendaEditor(event)) => {
+                let effects = event
+                    .kind
+                    .map_or_else(Vec::new, |kind| self.on_editor_event(kind, ctx));
+                self.keep(ctx);
+                effects
+            }
+            Some(E::TimerFired(fired)) if fired.timer == draft_store::DEBOUNCE_TIMER => {
+                draft_store::wake(ctx);
+                Vec::new()
+            }
             _ => Vec::new(),
         }
     }
@@ -1084,7 +1188,13 @@ impl Editor {
             reminders,
             // AN ALERT NEEDS A MOMENT: an all-day event never sounds one, and the row says so.
             reminder_note: if draft.all_day {
-                notify_words::all_day_event_alert(locale)
+                fill(
+                    &notify_words::all_day_event_alert(locale),
+                    &[(
+                        "time",
+                        &civil::time_for(locale, centraid_vault::alerts::DAY_ALERT_TIME, cycle),
+                    )],
+                )
             } else if draft.reminder_key == REMINDER_NONE {
                 String::new()
             } else {

@@ -526,7 +526,14 @@ fn task_alerts(connection: &Connection, id: &str, now: i64) -> Result<Vec<Alert>
             },
         )
         .optional()?;
-    let Some((Some(due), rule, anchor, zone, Some(lead), snoozed)) = fields else {
+    let Some((Some(due), rule, anchor, zone, stored_lead, snoozed)) = fields else {
+        return Ok(Vec::new());
+    };
+    let date_only = due.len() == 10;
+    // A TIMED DUE ALERTS AT ITS TIME BY DEFAULT (owner ruling, 2026-11-18): no lead is an alert at
+    // the time, and "Early reminder" only ADDS an earlier one. A date-only due has no moment, so
+    // it alerts (at 09:00) only when a lead was set.
+    let Some(lead) = stored_lead.or_else(|| (!date_only).then_some(0)) else {
         return Ok(Vec::new());
     };
     // A SNOOZE MOVES THE ALERT, NOT THE DUE (#1188, NA5): while one is set it is the task's only
@@ -545,13 +552,15 @@ fn task_alerts(connection: &Connection, id: &str, now: i64) -> Result<Vec<Alert>
     }
     // A DAY HAS NO MOMENT: a date-only due sounds at 09:00 that day, wherever the member is, and
     // its lead time means nothing. The due itself is never given the time.
-    let date_only = due.len() == 10;
-    let offset = lead;
-    let (due, lead) = if date_only {
-        (format!("{due}T{DAY_ALERT_TIME}"), 0)
+    let due = if date_only {
+        format!("{due}T{DAY_ALERT_TIME}")
     } else {
-        (due, lead)
+        due
     };
+    // The alerts, earliest lead first: the early one, then the one at the time.
+    let mut leads = if date_only { vec![0] } else { vec![lead, 0] };
+    leads.dedup();
+    let offsets = if date_only { vec![lead] } else { leads.clone() };
     let space = if has_zone_designator(&due) {
         Timing::Fixed
     } else {
@@ -560,36 +569,40 @@ fn task_alerts(connection: &Connection, id: &str, now: i64) -> Result<Vec<Alert>
     let Some(due_ms) = ms_in(space, &due) else {
         return Ok(Vec::new());
     };
-    let lead_ms = lead * MINUTE_MS;
     let reference = reference(connection, space, now);
-    let mut at = due_ms;
-    let mut repeats = false;
-    if let (Some(rule), "scheduled") = (rule.as_deref(), anchor.as_str()) {
-        repeats = true;
-        if due_ms - lead_ms < reference {
-            let zone = zone.as_deref().and_then(|name| FireZone::named(name).ok());
-            let after = text_in(space, reference + lead_ms);
-            let found = next_occurrence(&NextOccurrenceInput {
-                rrule: rule,
-                scheduled_start: &due,
-                after: &after,
-                zone: zone.as_ref(),
-                anchor: RecurrenceAnchor::Scheduled,
-            })
-            .and_then(|start| ms_in(space, &start));
-            match found {
-                Some(start) => at = start,
-                None => return Ok(Vec::new()),
+    let mut alerts = Vec::new();
+    for (lead, offset) in leads.into_iter().zip(offsets) {
+        let lead_ms = lead * MINUTE_MS;
+        let mut at = due_ms;
+        let mut repeats = false;
+        if let (Some(rule), "scheduled") = (rule.as_deref(), anchor.as_str()) {
+            repeats = true;
+            if due_ms - lead_ms < reference {
+                let zone = zone.as_deref().and_then(|name| FireZone::named(name).ok());
+                let after = text_in(space, reference + lead_ms);
+                let found = next_occurrence(&NextOccurrenceInput {
+                    rrule: rule,
+                    scheduled_start: &due,
+                    after: &after,
+                    zone: zone.as_ref(),
+                    anchor: RecurrenceAnchor::Scheduled,
+                })
+                .and_then(|start| ms_in(space, &start));
+                match found {
+                    Some(start) => at = start,
+                    None => return Ok(Vec::new()),
+                }
             }
         }
+        alerts.push(Alert {
+            entity_id: id.to_owned(),
+            offset_min: offset,
+            timing: space,
+            fire_key: space.key_of(at - lead_ms),
+            repeats,
+        });
     }
-    Ok(vec![Alert {
-        entity_id: id.to_owned(),
-        offset_min: offset,
-        timing: space,
-        fire_key: space.key_of(at - lead_ms),
-        repeats,
-    }])
+    Ok(alerts)
 }
 
 /// Whether [`advance`] has anything to do.

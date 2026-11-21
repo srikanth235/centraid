@@ -170,15 +170,10 @@ struct DocsDocumentView: View {
                     Text(reader.emptyBody)
                         .centraidType("small")
                         .foregroundStyle(Theme.color("textSoft", scheme))
-                } else if reader.format == .markdown,
-                          let rich = try? AttributedString(
-                              markdown: reader.body,
-                              options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-                          ) {
-                    Text(rich)
-                        .centraidType("reading")
-                        .foregroundStyle(Theme.color("text", scheme))
-                        .textSelection(.enabled)
+                } else if reader.format == .markdown {
+                    // MARKDOWN IS READ, NOT SHOWN (#1202): headings, lists, emphasis, tables and code
+                    // come out as formatted text, the way a chat answer's do, never as `#` and `-`.
+                    ChatMarkdownText(text: reader.body, spoken: "", reading: true)
                 } else {
                     Text(reader.body)
                         .centraidType("reading")
@@ -450,6 +445,8 @@ struct DocsEditorView: View {
     /// THE ONLY PLACE A KEYSTROKE EXISTS BEFORE RUST HEARS IT — seeded
     /// once from the draft, never again (see `NotesEditorView`).
     @State private var typedTitle = ""
+    /// Return moves from the title to the body (`FocusChain`).
+    @FocusState private var editorField: Int?
     @State private var typedBody = ""
     @State private var seeded = false
     @Environment(\.colorScheme) private var scheme
@@ -489,6 +486,7 @@ struct DocsEditorView: View {
                         .centraidType("title")
                         .foregroundStyle(Theme.color("text", scheme))
                         .accessibilityIdentifier("docs-editor-title")
+                        .focusChain(FocusChain(focus: $editorField, index: 0, last: 1))
                         .onChange(of: typedTitle) { _, typed in
                             guard seeded, typed != draft.title else { return }
                             send(Self.event { $0.title = .with { $0.title = typed } })
@@ -508,6 +506,7 @@ struct DocsEditorView: View {
                             .scrollContentBackground(.hidden)
                             .accessibilityLabel(chrome.bodyPlaceholder)
                             .accessibilityIdentifier("docs-editor-body")
+                            .focused($editorField, equals: 1)
                             .onChange(of: typedBody) { _, typed in
                                 guard seeded, typed != draft.body else { return }
                                 send(Self.event { $0.body = .with { $0.body = typed } })

@@ -679,6 +679,23 @@ impl Shelf {
         files::delete_vault(&front.dir, &going.path);
         let mut writes = vec![VaultSecrets::forget_vault_index(vault_id)];
         writes.extend(self.secrets.forget_own_vault(vault_id));
+        // THE TOKENS ARE KEYED BY THE VAULT'S IDENTITY, not by the shelf's id for it (E12).
+        if let Some(identity) = self.secrets.identity_of(vault_id) {
+            writes.extend(self.secrets.forget_vault_tokens(&identity));
+        } else {
+            // NEVER OPENED KEYED THIS SESSION, so its identity was never noted: what is left is every
+            // token no remaining vault owns. That is only known when every remaining vault's identity
+            // is; otherwise the tokens stay (a vault not yet opened may own them).
+            let kept: Option<Vec<String>> = inner
+                .holdings
+                .iter()
+                .map(|holding| self.secrets.identity_of(&holding.vault_id))
+                .collect();
+            if let Some(kept) = kept {
+                writes.extend(self.secrets.forget_tokens_outside(&kept));
+            }
+        }
+        self.secrets.forget_identity(vault_id);
         if inner.foreground.as_deref() == Some(vault_id) {
             let next = inner
                 .holdings
@@ -1111,6 +1128,26 @@ impl Shelf {
     /// what a background vault says (a screen reads the vault in front, and a
     /// switch reopens every screen).
     fn pump(&self, vault_id: &str, core: &Handle) {
+        // THE TOKENS THE SHELL KEEPS (#1191 E12): every open hands the core what the device store
+        // holds for this vault. The core holds them in memory only, so without this a core opened
+        // after the process died would call every paired gateway "pair again".
+        //
+        // THE TOKENS ARE KEYED BY THE VAULT'S IDENTITY (the core's `vault_hex`, 64 hex), which is not
+        // the shelf's own id for the vault (the owner's person row): asking the store for `vault_id`
+        // finds nothing, and the core is then handed no token at all (#1202). A core opened without
+        // its keys has no identity and is handed none.
+        let tokens = match core.vault_hex() {
+            Some(identity) => {
+                self.secrets.note_identity(vault_id, &identity);
+                self.secrets.tokens_for(&identity)
+            }
+            None => Vec::new(),
+        };
+        let _ = core.call(&wire::Request {
+            kind: Some(wire::request::Kind::GatewayTokens(
+                wire::GatewayTokensRequest { tokens },
+            )),
+        });
         let shelf = self.me.clone();
         let vault_id = vault_id.to_owned();
         let core = core.clone();

@@ -2,6 +2,10 @@ package dev.centraid.android.screens.money
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
+import dev.centraid.android.kit.CellsRow
+import dev.centraid.android.kit.SplitRow
+import dev.centraid.android.kit.rememberLargestText
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -83,6 +87,7 @@ internal fun MoneyImportScreen(
         title = chrome?.title.orEmpty(),
         parentTitle = chrome?.back_label.orEmpty(),
         onBack = onBack,
+        app = "money",
         statusLine = { StatusLine(state.status) },
     ) {
         ReadStateView(
@@ -152,19 +157,19 @@ internal fun MoneyImportScreen(
                                         )
                                         KitText(statement.span, KitType.Meta, Surface.meta, maxLines = 1)
                                     }
-                                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    CellsRow {  cell ->
                                         (statement.totals + listOfNotNull(statement.checkpoint)).forEach { figure ->
                                             Column(
-                                                Modifier.weight(1f).clearAndSetSemantics { contentDescription = spoken(figure.label, figure.amount) },
+                                                cell.clearAndSetSemantics { contentDescription = spoken(figure.label, figure.amount) },
                                             ) {
-                                                KitText(figure.label, KitType.Meta, Surface.meta, maxLines = 2)
-                                                KitText(figure.amount, KitType.Row, moneyInk(figure.positive, figure.tone), maxLines = 1)
+                                                KitText(figure.label, KitType.Meta, Surface.meta, maxLines = if (rememberLargestText()) Int.MAX_VALUE else 2)
+                                                KitText(figure.amount, KitType.Row, moneyInk(figure.positive, figure.tone), maxLines = if (rememberLargestText()) Int.MAX_VALUE else 1)
                                             }
                                         }
                                     }
                                 }
                                 MoneyHairline()
-                                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                CellsRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 12.dp), gap = 4.dp) { cell ->
                                     statement.counts.forEach { fact ->
                                         val ink = when (fact.tone) {
                                             centraid.core.v1.StatusChip.Tone.TONE_NET -> StateColor.Red.text
@@ -172,11 +177,11 @@ internal fun MoneyImportScreen(
                                             else -> null
                                         }
                                         Column(
-                                            Modifier.weight(1f).clearAndSetSemantics { contentDescription = "${fact.label}, ${fact.detail}" },
+                                            cell.clearAndSetSemantics { contentDescription = "${fact.label}, ${fact.detail}" },
                                             horizontalAlignment = Alignment.CenterHorizontally,
                                         ) {
-                                            KitText(fact.detail, KitType.Section, ink ?: Surface.ink, maxLines = 1)
-                                            KitText(fact.label, KitType.Meta, ink ?: Surface.meta, maxLines = 2)
+                                            KitText(fact.detail, KitType.Section, ink ?: Surface.ink, maxLines = if (rememberLargestText()) Int.MAX_VALUE else 1)
+                                            KitText(fact.label, KitType.Meta, ink ?: Surface.meta, maxLines = if (rememberLargestText()) Int.MAX_VALUE else 2)
                                         }
                                     }
                                 }
@@ -308,6 +313,7 @@ internal fun MoneyImportScreen(
 // money.accounts
 // ---------------------------------------------------------------------------
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun MoneyAccountsScreen(state: MoneyAccountsState, onEvent: (MoneyAccountsEvent) -> Unit, onBack: () -> Unit) {
     val chrome = state.chrome
@@ -335,7 +341,8 @@ internal fun MoneyAccountsScreen(state: MoneyAccountsState, onEvent: (MoneyAccou
                             MoneyPageCard {
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     KitText(accounts.net_worth_label, KitType.Meta, Surface.meta)
-                                    Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                                    // THE FIGURES WRAP, EACH WHOLE (#1202): a total is never cut to fit beside another.
+                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         accounts.net_worth.forEach { figure ->
                                             Column(Modifier.clearAndSetSemantics { contentDescription = spoken(figure.label, figure.amount) }) {
                                                 KitText(figure.label, KitType.Meta, Surface.meta)
@@ -371,11 +378,13 @@ internal fun MoneyAccountsScreen(state: MoneyAccountsState, onEvent: (MoneyAccou
                                                 },
                                             verticalArrangement = Arrangement.spacedBy(2.dp),
                                         ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                KitText(row.name, KitType.Row, Surface.ink, Modifier.weight(1f), maxLines = 1)
-                                                KitText(if (row.has_balance) row.balance else row.balance_note, KitType.Row, Surface.ink, maxLines = 1)
-                                            }
-                                            if (row.meta.isNotEmpty()) KitText(row.meta, KitType.Meta, Surface.meta, maxLines = 1)
+                                            val largest = rememberLargestText()
+                                            SplitRow(
+                                                Modifier.fillMaxWidth(),
+                                                start = { m -> KitText(row.name, KitType.Row, Surface.ink, m, maxLines = if (largest) Int.MAX_VALUE else 1) },
+                                                end = { m -> KitText(if (row.has_balance) row.balance else row.balance_note, KitType.Row, Surface.ink, m, maxLines = if (largest) Int.MAX_VALUE else 1) },
+                                            )
+                                            if (row.meta.isNotEmpty()) KitText(row.meta, KitType.Meta, Surface.meta, maxLines = if (largest) Int.MAX_VALUE else 1)
                                             val check = if (row.has_delta) "${row.delta} ${row.checkpoint_line}" else row.checkpoint_line
                                             if (check.isNotEmpty()) {
                                                 KitText(check, KitType.Meta, if (warn) StateColor.Amber.text else Surface.meta, maxLines = 2)

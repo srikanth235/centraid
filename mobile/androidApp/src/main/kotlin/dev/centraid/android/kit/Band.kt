@@ -81,7 +81,9 @@ public fun HomeBand(
 ) {
     Row(
         modifier
-            .fillMaxWidth()
+            // CAPPED AND CENTRED ON A WIDE SCREEN (ruling 27, #1202): Home and the Backup tab draw this band
+            // outside a room, so the cap must be here as well as in the rooms.
+            .readableColumn()
             // THE BAND FLOATS (§G), never a flush bar. Its ground is the page's
             // elevated surface — not `bg`, because a page colour does not
             // float, and not `bgChrome`, which sinks on dark — and its edge is
@@ -528,7 +530,8 @@ private fun AppBandTabView(
     modifier: Modifier = Modifier,
     locked: Boolean = false,
 ) {
-    val ink = if (locked) centraidColor("textDisabled") else if (selected) Surface.ink else Surface.meta
+    // A LOCKED PLATE is pressable and dimmed, but legible in both schemes (the faint ink, never the disabled one).
+    val ink = if (locked) centraidColor("textFaint") else if (selected) Surface.ink else Surface.meta
     Column(
         modifier
             .fillMaxHeight()

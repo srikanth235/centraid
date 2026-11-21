@@ -7,18 +7,25 @@ appId: dev.centraid.HealthSeeder
 name: health-seed
 ---
 - launchApp
-# The sheet slides up; a tap before it settles lands on nothing.
+# Either the sheet is up or the seeder already holds the access and writes straight away.
 - extendedWaitUntil:
-    visible: "Turn On All"
+    visible: "Turn On All|Seeded.*"
     timeout: 15000
-- waitForAnimationToEnd
-# HEALTHKIT'S SHEET IS ANOTHER PROCESS'S VIEW: a tap found by its text reports
-# COMPLETED and lands on nothing, so the two buttons are tapped where they are
-# drawn (iPhone 17 Pro, iOS 26.5): Turn On All, then Allow.
-- tapOn:
-    point: "30%,54%"
-- tapOn:
-    point: "50%,85%"
+# THE SHEET IS ASKED ONCE PER INSTALL: a seeder that already holds the access (a second run, or a
+# phone already answered) writes at launch and shows none, so the taps are conditional.
+- runFlow:
+    when:
+      visible: "Turn On All"
+    commands:
+      # The sheet slides up; a tap before it settles lands on nothing.
+      - waitForAnimationToEnd
+      # HEALTHKIT'S SHEET IS ANOTHER PROCESS'S VIEW: a tap found by its text reports COMPLETED and
+      # lands on nothing, so the two buttons are tapped where they are drawn (iPhone 17 Pro, iOS 26.5):
+      # Turn On All, then Allow.
+      - tapOn:
+          point: "30%,54%"
+      - tapOn:
+          point: "50%,85%"
 - extendedWaitUntil:
     visible: "Seeded.*"
     timeout: 120000

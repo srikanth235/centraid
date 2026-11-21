@@ -42,6 +42,7 @@ import dev.centraid.android.kit.KitType
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.kitTextStyle
+import dev.centraid.android.kit.menuTestIds
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
 
@@ -74,7 +75,7 @@ internal fun AgendaSmartLists(lists: List<AgendaSmartList>, onOpen: (Route) -> U
         Modifier.padding(horizontal = KitGeometry.GUTTER, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        lists.chunked(2).forEach { pair ->
+        lists.filter { it.key != "completed" }.chunked(2).forEach { pair ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 pair.forEach { list ->
                     val shape = RoundedCornerShape(CentraidScale.cardRadius.dp)
@@ -100,6 +101,36 @@ internal fun AgendaSmartLists(lists: List<AgendaSmartList>, onOpen: (Route) -> U
                     }
                 }
                 if (pair.size == 1) Box(Modifier.weight(1f))
+            }
+        }
+        // COMPLETED (the Logbook) IS ONE BAR ACROSS BOTH COLUMNS, as the board draws it: its word is on
+        // one line and never breaks mid-word at a large text size.
+        lists.filter { it.key == "completed" }.forEach { list ->
+            val shape = RoundedCornerShape(CentraidScale.cardRadius.dp)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 64.dp)
+                    .clip(shape)
+                    .background(agendaTokenColor(list.color_key) ?: centraidColor("text"))
+                    .clickable { list.route?.let(onOpen) }
+                    .padding(horizontal = 16.dp)
+                    .testTag("agenda-smart-${list.key}")
+                    .clearAndSetSemantics { contentDescription = list.accessibility_label },
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CentraidIcon(list.icon_key, tint = Color.White, size = 24.dp)
+                Text(
+                    list.label,
+                    style = centraidType("bodyStrong"),
+                    color = Color.White,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
+                )
+                if (list.count.isNotEmpty()) {
+                    Text(list.count, style = centraidType("bodyStrong"), color = Color.White)
+                }
             }
         }
     }
@@ -134,6 +165,7 @@ internal fun AgendaViewMenu(
         DropdownMenu(
             expanded = open,
             onDismissRequest = { open = false },
+            modifier = Modifier.menuTestIds(),
             containerColor = Surface.card,
             shape = RoundedCornerShape(CentraidScale.cardRadius.dp),
         ) {

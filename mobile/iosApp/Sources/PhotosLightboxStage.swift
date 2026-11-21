@@ -1,4 +1,5 @@
 import AVFoundation
+import Combine
 import ImageIO
 import SwiftUI
 import UIKit
@@ -369,10 +370,14 @@ final class LightboxPlayer: ObservableObject {
     private var playbackLifetime: PlayerPlaybackLifetime?
     private var ended: NotificationObservation?
     private var metadataLoad: Task<Void, Never>?
+    private var itemWatch: [AnyCancellable] = []
 
     @Published var playing = false
     @Published var position: Double = 0
     @Published var duration: Double = 0
+    /// Why the media's length or the item itself could not be read, in words for a log; nil while
+    /// nothing has failed. Never shown to the member: the transport simply keeps its zero.
+    @Published private(set) var failure: String?
     /// A Live Photo's movie shows only while it plays, then gives the still back.
     @Published var showing = false
 
@@ -409,13 +414,36 @@ final class LightboxPlayer: ObservableObject {
         // A paused player need not tick after its metadata becomes ready. Read the length
         // independently of playback, so the transport does not keep calling a real clip 0:00.
         metadataLoad = Task { @MainActor [weak self] in
-            guard let time = try? await asset.load(.duration), !Task.isCancelled else { return }
-            let length = time.seconds
-            if length.isFinite, length > 0 { self?.duration = length }
+            do {
+                let time = try await asset.load(.duration)
+                guard !Task.isCancelled else { return }
+                let length = time.seconds
+                if length.isFinite, length > 0 { self?.duration = length }
+            } catch {
+                guard !Task.isCancelled else { return }
+                self?.failure = "the length would not load: \(error)"
+            }
+        }
+        // THE ITEM SAYS IT TOO (#1202): its own duration and status are published when it is ready,
+        // whichever of the two paths answers first, and a failure of the item is kept, not lost.
+        if let item = player.currentItem {
+            itemWatch = [
+                item.publisher(for: \.duration).receive(on: DispatchQueue.main).sink { [weak self] time in
+                    let length = time.seconds
+                    if length.isFinite, length > 0 { self?.duration = length }
+                },
+                item.publisher(for: \.status).receive(on: DispatchQueue.main).sink { [weak self] status in
+                    if status == .failed { self?.failure = "the item failed: \(item.error.map { "\($0)" } ?? "no error")" }
+                },
+            ]
         }
     }
 
     deinit { metadataLoad?.cancel() }
+
+    /// Returns once the asset's own length read has answered, with a length or a failure; the
+    /// item's path may have answered earlier. Lets a caller wait on the read itself, not a clock.
+    func lengthRead() async { await metadataLoad?.value }
 
     func toggle() {
         if player.timeControlStatus == .playing {

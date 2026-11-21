@@ -25,11 +25,13 @@ use wire::docs_ingest_view::Phase;
 
 use crate::catalog::act;
 use crate::docs::routes;
+use crate::effect_reason::STORAGE_FULL;
 use crate::kit::act as kit_act;
+use crate::kit::file_name;
 use crate::kit::permission::{self, Resource};
 use crate::kit::undo::Undo;
 use crate::screen::Ctx;
-use crate::strings::{Locale, docs as words, fill};
+use crate::strings::{Locale, docs as words, fill, permission as permission_words};
 
 const PERMILLE: u64 = 1000;
 const OCTET_STREAM: &str = "application/octet-stream";
@@ -327,10 +329,12 @@ fn upload_request(
 }
 
 /// The file's name as its title; a scan with none is "Scanned document".
+///
+/// THE NAME IS CLEANED AND FITTED (#1202): a title the vault would refuse for its length can never be
+/// filed, and one with a right-to-left override or a newline would be drawn as something it is not.
 fn title_of(locale: Locale, kind: Kind, name: &str) -> String {
-    let name = name.trim();
-    if !name.is_empty() {
-        name.to_owned()
+    if let Some(label) = file_name::label_of(name) {
+        label
     } else if kind == Kind::Scan {
         words::ingest_scan_title(locale)
     } else {
@@ -349,6 +353,8 @@ fn refusal_of(locale: Locale, kind: Kind, failed: &wire::EffectFailed) -> String
     };
     if let Some(sentence) = permission::refusal(locale, resource, failed) {
         sentence
+    } else if failed.reason == STORAGE_FULL {
+        permission_words::storage_full(locale)
     } else if failed.reason == UNAVAILABLE {
         words::ingest_no_picker(locale)
     } else {
@@ -436,5 +442,19 @@ mod tests {
         assert_eq!(title_of(Locale::En, Kind::Scan, " "), "Scanned document");
         assert_eq!(title_of(Locale::En, Kind::Upload, ""), "Untitled");
         assert_eq!(title_of(Locale::En, Kind::Upload, " a.pdf "), "a.pdf");
+    }
+
+    /// A file named with 201 to 255 characters, a newline or an override is still filed (#1202):
+    /// the title and the arrival label fit `document.add`'s 200 and show what the name spells.
+    #[test]
+    fn a_long_or_hostile_name_is_made_fit_to_file() {
+        let long = format!("{}.pdf", "n".repeat(250));
+        let title = title_of(Locale::En, Kind::Upload, &long);
+        assert_eq!(title.chars().count(), 200);
+        assert!(title.ends_with("….pdf"));
+        assert_eq!(
+            title_of(Locale::En, Kind::Upload, "invoice\u{202E}gpj.exe\n"),
+            "invoicegpj.exe"
+        );
     }
 }

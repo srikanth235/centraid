@@ -478,6 +478,55 @@ fn a_phone_with_no_room_to_copy_its_vault_says_so_in_a_row_of_its_own() {
     );
 }
 
+/// A PAIRED GATEWAY WHOSE TOKEN THIS PHONE LACKS (an upgrade) must be able to pair again: the page's one
+/// action is the pairing route, and "Back up now", which would do nothing, is not offered.
+#[test]
+fn a_paired_gateway_with_no_stored_token_offers_the_pairing_action() {
+    let mut refused = steady();
+    refused.destinations[0].pair_again = true;
+    let mut page = Page::over(refused);
+    page.send(E::Appeared(wire::Appeared {}));
+    page.serve();
+    let data = page.data();
+    assert_eq!(
+        data.add_destination_label,
+        words::backup_dest_pair_again(EN)
+    );
+    assert_eq!(data.add_destination, Some(routes::add_destination()));
+    assert_eq!(data.back_up_now_label, "");
+    assert_eq!(data.ink, wire::BackupInk::AddDestination as i32);
+}
+
+/// RULING 28: THE STATUS CARD THAT SAYS "PAIR IT AGAIN" CARRIES THE BUTTON, routed to the pairing page
+/// the row uses; a phone every device knows carries none, and the row keeps its own words.
+#[test]
+fn the_status_card_offers_pair_again_when_a_device_does_not_know_the_phone() {
+    let healthy = steady();
+    let mut page = Page::over(healthy);
+    page.send(E::Appeared(wire::Appeared {}));
+    page.serve();
+    let data = page.data();
+    assert_eq!(data.pair_again_label, "");
+    assert_eq!(data.pair_again, None);
+
+    let mut refused = steady();
+    refused.destinations[0].pair_again = true;
+    let mut page = Page::over(refused);
+    page.send(E::Appeared(wire::Appeared {}));
+    page.serve();
+    let data = page.data();
+    assert_eq!(data.pair_again_label, words::backup_card_pair_again(EN));
+    assert_eq!(data.pair_again_label, "Pair again");
+    assert_eq!(data.pair_again, Some(routes::add_destination()));
+    assert_eq!(data.pair_again, data.add_destination);
+    assert_eq!(
+        data.destinations[0].detail.matches("Pair it again").count(),
+        1,
+        "the row stays: {:?}",
+        data.destinations[0].detail
+    );
+}
+
 #[test]
 fn every_gateway_refusing_this_phones_token_reads_pair_again_never_all_backed_up() {
     // THE LEDGER STILL SAYS EVERYTHING IS ACKNOWLEDGED: nothing waits, so no row
@@ -490,7 +539,14 @@ fn every_gateway_refusing_this_phones_token_reads_pair_again_never_all_backed_up
     assert!(!line.sentence.starts_with("Backed up"));
     assert!(!line.status.starts_with("Backed up"));
     assert_eq!(line.tone, Tone::Attention as i32);
-    assert_eq!(line.detail, "All 1,240 photos and files");
+    // A DEVICE THAT DOES NOT KNOW THIS PHONE CONFIRMS NOTHING: no "All ... is backed up" beside it,
+    // and the reason under the card is not the headline said again.
+    assert_eq!(line.detail, "");
+    assert!(!line.accessibility_label.contains("backed up"));
+    assert_eq!(
+        line::behind_reason(EN, "UTC", &reading(&refused), NOW),
+        None
+    );
 
     // ONE OF TWO REFUSING: the other carries the backup, so the line is the
     // ordinary one and only its tone earns a look.
@@ -1658,7 +1714,8 @@ fn a_forget_names_the_gateway_and_its_answer_finds_it_by_tag() {
         Some(doors::Done::Forgot {
             gateway_id: "gw-7".to_owned(),
             forgotten: false,
-            revoked: false
+            revoked: false,
+            forget_token: None,
         })
     );
     assert_eq!(
@@ -1666,7 +1723,8 @@ fn a_forget_names_the_gateway_and_its_answer_finds_it_by_tag() {
         Some(doors::Done::Forgot {
             gateway_id: "gw-7".to_owned(),
             forgotten: false,
-            revoked: false
+            revoked: false,
+            forget_token: None,
         })
     );
 }
@@ -2018,6 +2076,36 @@ fn condition_of(status: wire::BackupStatusResponse) -> wire::BackupCondition {
 }
 
 #[test]
+fn before_pairing_the_page_is_one_card_two_steps_and_a_footnote() {
+    let unpaired = Page::open(status(Vec::new())).data();
+    let card = unpaired.unpaired.as_ref().expect("the unpaired page");
+    assert_eq!(card.title, "Not backed up yet");
+    assert_eq!(card.body, "This phone holds the only copy of your vault.");
+    assert_eq!(card.action_label, "Pair a backup device");
+    assert_eq!(card.steps_heading, "To pair");
+    assert_eq!(card.steps.len(), 2);
+    assert_eq!(card.steps[0].before, "On a computer you own, run ");
+    assert_eq!(card.steps[0].command, "centraid-gateway pair");
+    assert_eq!(card.steps[0].after, ".");
+    assert_eq!(card.steps[1].before, "Scan the QR code it shows.");
+    assert_eq!(card.steps[1].command, "");
+    assert_eq!(card.foot, "The recovery key comes after the first backup.");
+    // The card's action is the page's pairing route.
+    assert!(unpaired.add_destination.is_some());
+    // A paired vault, and a vault that moved, draw the ordinary page.
+    assert!(Page::open(both()).data().unpaired.is_none());
+    assert!(
+        Page::open(wire::BackupStatusResponse {
+            frozen: true,
+            ..both()
+        })
+        .data()
+        .unpaired
+        .is_none()
+    );
+}
+
+#[test]
 fn the_page_names_where_the_backup_stands_in_one_condition() {
     use wire::BackupCondition as C;
     assert_eq!(condition_of(both()), C::UpToDate);
@@ -2323,6 +2411,16 @@ mod one_device_behind {
         }
     }
 
+    /// ONE TRUTH ON A ROW: a device that never acknowledged a backup says it is catching up, beside
+    /// "Not backed up yet", and is never "Up to date" in the same breath.
+    #[test]
+    fn a_device_that_never_acknowledged_a_backup_is_not_up_to_date() {
+        let data = Page::open(office(|d| d.last_ack_ms = 0)).data();
+        let row = &data.destinations[1];
+        assert_eq!(row.backed_up, "Not backed up yet");
+        assert!(row.held.starts_with("Catching up"), "{}", row.held);
+    }
+
     #[test]
     fn a_silent_device_is_named_with_the_day_it_last_answered() {
         let data = Page::open(office(|d| {
@@ -2477,6 +2575,67 @@ mod recovery_key_prompt {
         page.send(E::Appeared(wire::Appeared {}));
         page.serve();
         assert!(page.data().key_prompt.is_none());
+    }
+
+    /// A KEY THE PLATFORM'S STORE HOLDS BUT WILL NOT CARRY (no end-to-end encryption, iCloud Keychain
+    /// off) IS ON THIS PHONE ALONE: the prompt is due, and the summary names no empty place.
+    #[test]
+    fn it_is_asked_when_the_store_holding_the_key_does_not_synchronise() {
+        let mut page = Page::over(steady());
+        page.shell.synchronizing = false;
+        page.env.platform = "android".to_owned();
+        page.send(E::Appeared(wire::Appeared {}));
+        page.serve();
+        let data = page.data();
+        assert!(data.key_prompt.is_some(), "the prompt is due");
+        assert!(
+            !data.key_summary.starts_with("Saved in"),
+            "{}",
+            data.key_summary
+        );
+        assert!(!data.key_summary.trim().is_empty());
+    }
+
+    /// A SHELL THAT CANNOT ANSWER THE PROBE does not leave a phone-only key unasked for ever: the failed
+    /// effect is the answer "not carried".
+    #[test]
+    fn it_is_asked_when_the_probe_fails_and_never_answers() {
+        let mut page = Page::over(steady());
+        page.shell.synced.clear();
+        page.send(E::Appeared(wire::Appeared {}));
+        let at = page
+            .effects
+            .iter()
+            .position(|effect| matches!(effect.kind, Some(wire::effect::Kind::SyncedProbe(_))))
+            .expect("the page probes");
+        page.effects.remove(at);
+        page.serve();
+        assert!(
+            page.data().key_prompt.is_none(),
+            "not before the probe has been answered or failed"
+        );
+        page.send(E::EffectResult(wire::EffectResult {
+            effect_id: 0,
+            outcome: Some(wire::effect_result::Outcome::Failed(wire::EffectFailed {
+                reason: "unavailable".to_owned(),
+                ..Default::default()
+            })),
+        }));
+        assert!(page.data().key_prompt.is_some(), "the prompt is due");
+    }
+
+    /// THE KEY ROW AND THE PROMPT SAY THE SAME THING: a key in the synchronised store that the platform
+    /// will not carry is warned about on the row too.
+    #[test]
+    fn the_key_row_warns_for_a_key_the_platform_does_not_carry() {
+        let mut page = Page::over(steady());
+        page.shell.synchronizing = false;
+        page.env.platform = "android".to_owned();
+        page.send(E::Appeared(wire::Appeared {}));
+        page.serve();
+        let data = page.data();
+        assert!(data.key_prompt.is_some());
+        assert!(data.key_warning, "the row reads the same as the prompt");
     }
 
     #[test]

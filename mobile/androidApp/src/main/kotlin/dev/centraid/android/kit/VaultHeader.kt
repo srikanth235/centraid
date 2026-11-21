@@ -144,32 +144,50 @@ public fun VaultHeader(
                     // colour when it wants the member, then the few words, in
                     // the same mono line the state line was; the Backup tab's
                     // door (iOS `VaultHeader.statusLine`).
-                    Row(
-                        Modifier
-                            .heightIn(min = 18.dp)
-                            .clickable(onClick = onOpenBackup)
-                            .testTag("home-backup-status")
-                            .semantics(mergeDescendants = true) {
-                                contentDescription = bar.backup_open_label
-                            },
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        if (loud) {
-                            Box(
-                                Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        centraidColor(if (backup?.tone == HomeTone.HOME_TONE_URGENT) "danger" else "attention"),
-                                    ),
+                    // TWO CLEAN LINES AT THE LARGEST TEXT (#1202): the state, then its one verb under it;
+                    // in one wrapping row "Not backed up yet · Pair" interleaved word by word.
+                    val stacked = rememberLargestText()
+                    val door = Modifier
+                        .heightIn(min = 18.dp)
+                        .clickable(onClick = onOpenBackup)
+                        .testTag("home-backup-status")
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = bar.backup_open_label
+                        }
+                    val action = backup?.action.orEmpty()
+                    val state: @Composable () -> Unit = {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (loud) {
+                                Box(
+                                    Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            centraidColor(if (backup?.tone == HomeTone.HOME_TONE_URGENT) "danger" else "attention"),
+                                        ),
+                                )
+                            }
+                            Text(
+                                status,
+                                style = centraidType("mono"),
+                                color = centraidColor(if (loud) "text" else "textFaint"),
                             )
                         }
-                        Text(
-                            status,
-                            style = centraidType("mono"),
-                            color = centraidColor(if (loud) "text" else "textFaint"),
-                        )
+                    }
+                    if (stacked) {
+                        Column(door) {
+                            state()
+                            if (action.isNotEmpty()) Text(action, style = centraidType("mono"), color = centraidColor("link"))
+                        }
+                    } else {
+                        Row(door, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            state()
+                            // THE LINE'S ONE QUIET VERB ("Not backed up yet · Pair"): Rust's words.
+                            if (action.isNotEmpty()) {
+                                Text("·", style = centraidType("mono"), color = centraidColor("textFaint"))
+                                Text(action, style = centraidType("mono"), color = centraidColor("link"))
+                            }
+                        }
                     }
                 } else if (line.isNotEmpty()) {
                     Text(

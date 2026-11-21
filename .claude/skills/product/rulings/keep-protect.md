@@ -31,6 +31,6 @@ Locker is the one place where reading is itself the sensitive act. It is deliber
 ## Identity and enrollment
 
 - **One owner per vault, no roles, no password, no session.** A device is proved by its key. Enrollment is full trust: no companion tier or per-device attenuation.
-- **The 24 words are the only recovery.** A fresh phone mints them in the core, shows them at once on a secure screen, and the shell has no word list or checksum. A restore takes the words or the seed, exactly one. A comparison number (safety number), never a hex id, is what the member verifies at pairing.
+- **The 24 words are the only recovery.** A fresh phone mints them in the core and keeps them without showing them; on both platforms the first backup asks for them (`RecoveryKeyPrompt`), and only a vault on its own key shows them at creation (owner, 2026-11-18). The shell has no word list or checksum. A restore takes the words or the seed, exactly one. A comparison number (safety number), never a hex id, is what the member verifies at pairing.
 - **A member can read their words again on this phone,** and can keep a vault on its own words by opting in. Refusals never quote a word.
 - **Keys cross the boundary borrowed and are written nowhere by the core.** The seed lives in the platform's secure store; absent seed is a state, not a fault.

@@ -327,6 +327,63 @@ fn a_refusal_is_a_failure_with_try_again_a_held_file_refiles_none_repicks() {
 }
 
 #[test]
+fn a_full_phone_says_so_in_the_core_words_not_that_a_file_failed() {
+    let mut d = driver();
+    let i = root(&d);
+    add(&mut d, i, "upload");
+    result(
+        &mut d,
+        i,
+        O::Failed(wire::EffectFailed {
+            reason: centraid_screens::effect_reason::STORAGE_FULL.to_owned(),
+            ..Default::default()
+        }),
+    );
+    assert_eq!(ingest(&d, i).phase, Phase::Failed as i32);
+    assert_eq!(
+        ingest(&d, i).status_label,
+        "The phone is full. Free up space and try again."
+    );
+}
+
+#[test]
+fn a_file_that_could_not_be_read_does_not_wedge_the_next_upload() {
+    let mut d = driver();
+    let i = root(&d);
+    // The first pick fails outright: the shell could not read the file.
+    add(&mut d, i, "upload");
+    result(
+        &mut d,
+        i,
+        O::Failed(wire::EffectFailed {
+            reason: "unreadable".to_owned(),
+            denied: false,
+            ..Default::default()
+        }),
+    );
+    assert_eq!(ingest(&d, i).phase, Phase::Failed as i32);
+    assert!(opened(&d).is_none());
+    // The member puts the failure away and adds another file: the picker is asked again
+    // (not refused as "one at a time") and the second file is filed and opened.
+    drive_send(&mut d, i, D::IngestDismissed(de::IngestDismissed {}));
+    assert_eq!(ingest(&d, i).phase, Phase::Idle as i32);
+    d.effects.clear();
+    add(&mut d, i, "upload");
+    assert!(matches!(
+        waiting(&d).first().and_then(|e| e.kind.as_ref()),
+        Some(Fx::PickFile(_))
+    ));
+    result(&mut d, i, picked(&"c".repeat(64), 1024, "Second.pdf", ""));
+    assert_eq!(ingest(&d, i).phase, Phase::Filed as i32);
+    assert_eq!(ingest(&d, i).status_label, "Second.pdf added");
+    assert_eq!(row(d.view(i), "Second.pdf").kind_label, "PDF");
+    assert_eq!(
+        opened(&d).map(|route| route.screen),
+        Some(docs::DOCUMENT.to_owned())
+    );
+}
+
+#[test]
 fn a_scanner_refused_the_camera_says_where_to_turn_it_on_not_that_a_file_failed() {
     let mut d = driver();
     let i = root(&d);

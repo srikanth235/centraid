@@ -123,7 +123,8 @@ fn a_skipped_day_is_not_the_next_firing() {
 }
 
 #[test]
-fn a_task_with_a_moment_and_a_lead_time_holds_one_row_and_done_removes_it() {
+fn a_task_with_a_moment_and_a_lead_time_holds_an_early_row_and_one_at_the_time_and_done_removes_them()
+ {
     let w = World::new();
     let id = w.ok(
         "task.add",
@@ -132,11 +133,31 @@ fn a_task_with_a_moment_and_a_lead_time_holds_one_row_and_done_removes_it() {
         .as_str()
         .unwrap()
         .to_owned();
-    let rows = w.rows();
-    assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].fire_key, "2026-03-01T08:45:00.000Z");
+    // "EARLY REMINDER" ONLY ADDS an earlier alert: the one at the time stays (owner, 2026-11-18).
+    let mut keys: Vec<String> = w.rows().iter().map(|r| r.fire_key.clone()).collect();
+    keys.sort();
+    assert_eq!(
+        keys,
+        ["2026-03-01T08:45:00.000Z", "2026-03-01T09:00:00.000Z"]
+    );
     w.ok("task.complete", json!({ "id": id }));
     assert!(w.rows().is_empty(), "a done task fires nothing");
+}
+
+#[test]
+fn a_timed_task_with_no_early_reminder_alerts_at_its_time_by_default() {
+    let w = World::new();
+    w.ok(
+        "task.add",
+        json!({ "title": "Call", "due": "2026-03-01T09:00:00Z" }),
+    );
+    let rows = w.rows();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].fire_key, "2026-03-01T09:00:00.000Z");
+    // A date alone has no moment: it alerts only when a lead was set.
+    let w = World::new();
+    w.ok("task.add", json!({ "title": "Bins", "due": "2026-03-01" }));
+    assert!(w.rows().is_empty());
 }
 
 /// NA5: A SNOOZE MOVES THE ALERT, NOT THE DUE. While one is set it is the task's one row; editing
@@ -282,7 +303,7 @@ fn a_followed_phone_reminder_holds_no_alert_and_stopping_the_follow_changes_noth
         "task.add",
         json!({ "title": "Mine", "due": "2026-03-01T09:00:00Z", "remind_before_min": 10 }),
     );
-    assert_eq!(w.rows().len(), 1, "an item Centraid owns still alerts");
+    assert_eq!(w.rows().len(), 2, "an item Centraid owns still alerts");
     w.ok(
         "follow.stop",
         json!({ "system": "phone_reminders", "ref": "list:1" }),
@@ -303,16 +324,16 @@ fn a_followed_phone_reminder_holds_no_alert_and_stopping_the_follow_changes_noth
     w.ok("task.edit", json!({ "id": id, "title": "Milk and eggs" }));
     assert_eq!(
         w.rows().len(),
-        1,
+        2,
         "a retired origin's untouched alert stays silent"
     );
     // THE MEMBER CHANGED THE ALERT: it is Centraid's own now, and it fires.
     w.ok("task.edit", json!({ "id": id, "remind_before_min": 5 }));
-    assert_eq!(w.rows().len(), 2, "an alert the member set notifies");
+    assert_eq!(w.rows().len(), 4, "an alert the member set notifies");
     w.ok("task.edit", json!({ "id": id, "remind_before_min": 10 }));
     assert_eq!(
         w.rows().len(),
-        1,
+        2,
         "put back to what the phone stated, it is silent again"
     );
 }
@@ -345,7 +366,7 @@ fn a_followed_reminder_whose_due_moved_is_centraids_until_it_agrees_again() {
         "task.edit",
         json!({ "id": id, "due": "2026-03-02T09:00:00Z" }),
     );
-    assert_eq!(w.rows().len(), 1, "a moved due fires");
+    assert_eq!(w.rows().len(), 2, "a moved due fires");
     w.ok(
         "task.edit",
         json!({ "id": id, "due": "2026-03-01T09:00:00Z" }),
@@ -417,7 +438,7 @@ fn the_rows_equal_a_rebuild_from_the_items() {
         json!({ "title": "Walk", "due": "2026-03-01T09:00", "remind_before_min": 0 }),
     );
     let before = w.rows();
-    assert_eq!(before.len(), 5);
+    assert_eq!(before.len(), 6);
     let ids: std::collections::BTreeSet<String> = w
         .scratch
         .vault
@@ -478,4 +499,154 @@ fn a_repeating_all_day_event_sounds_each_day_at_nine_and_a_skipped_day_is_passed
         json!({ "id": id, "original_start": "2026-01-01", "scope": "occurrence", "action": "skip" }),
     );
     assert_eq!(w.rows()[0].fire_key, "2026-01-02T09:00");
+}
+
+// ---------------------------------------------------------------------------------------------
+// DST AND ZONES (#1202, S12): a zoned alert is an instant that follows its zone's offset; a
+// floating or all-day one is a wall-clock key that no zone changes. No alert is skipped or
+// doubled by a clock change, and no assertion is on a duration: only on keys and counts.
+// ---------------------------------------------------------------------------------------------
+
+impl World {
+    fn at(&self, iso: &str) {
+        let at: jiff::Timestamp = iso.parse().expect("an instant");
+        self.scratch.clock.set_ms(at.as_millisecond());
+    }
+
+    /// A daily zoned event written when the clock reads `now`, so its next row is the one after.
+    fn zoned_daily(&self, now: &str, zone: &str, starts: &str) {
+        self.at(now);
+        self.event(json!({
+            "starts": starts, "zone": zone, "rule": "FREQ=DAILY", "reminders": [0],
+        }));
+    }
+
+    /// Every firing from the clock on, taken one at a time: the key, then advance past it.
+    fn firings(&self, count: usize) -> Vec<String> {
+        let mut keys = Vec::new();
+        for _ in 0..count {
+            let rows = self.rows();
+            assert_eq!(rows.len(), 1, "one next firing, never two: {rows:?}");
+            let key = rows[0].fire_key.clone();
+            // The clock passes the firing, so the next advance moves the row on.
+            let instant = key.parse::<jiff::Timestamp>().expect("a fixed key");
+            self.scratch.clock.set_ms(instant.as_millisecond() + 1_000);
+            assert_eq!(self.scratch.vault.advance_alerts().expect("advance"), 1);
+            keys.push(key);
+        }
+        keys
+    }
+}
+
+#[test]
+fn a_zoned_alert_follows_its_zones_offset_through_the_spring_forward() {
+    let w = World::new();
+    w.zoned_daily(
+        "2026-03-06T15:00:00Z",
+        "America/New_York",
+        "2026-03-05T09:00",
+    );
+    assert_eq!(
+        w.firings(4),
+        [
+            "2026-03-07T14:00:00.000Z",
+            // The clocks sprang forward on the 8th: 09:00 is 13:00Z from then, one alert a day.
+            "2026-03-08T13:00:00.000Z",
+            "2026-03-09T13:00:00.000Z",
+            "2026-03-10T13:00:00.000Z",
+        ]
+    );
+}
+
+#[test]
+fn an_alert_in_the_spring_gap_moves_forward_once_and_the_next_day_is_back_on_its_clock() {
+    let w = World::new();
+    w.zoned_daily(
+        "2026-03-06T12:00:00Z",
+        "America/New_York",
+        "2026-03-05T02:30",
+    );
+    assert_eq!(
+        w.firings(3),
+        [
+            "2026-03-07T07:30:00.000Z",
+            // 02:30 does not exist on the 8th: it sounds at 03:30 EDT, once.
+            "2026-03-08T07:30:00.000Z",
+            "2026-03-09T06:30:00.000Z",
+        ]
+    );
+}
+
+#[test]
+fn an_alert_in_the_fall_back_fold_sounds_once_at_the_earlier_instant() {
+    let w = World::new();
+    w.zoned_daily(
+        "2026-10-30T12:00:00Z",
+        "America/New_York",
+        "2026-10-29T01:30",
+    );
+    assert_eq!(
+        w.firings(3),
+        [
+            "2026-10-31T05:30:00.000Z",
+            // 01:30 happens twice on 1 November: the earlier (EDT) only.
+            "2026-11-01T05:30:00.000Z",
+            "2026-11-02T06:30:00.000Z",
+        ]
+    );
+}
+
+#[test]
+fn an_all_day_alert_stays_on_its_date_through_both_changes_and_a_floating_one_on_its_wall_clock() {
+    let w = World::new();
+    w.at("2026-03-06T12:00:00Z");
+    w.ok(
+        "event.propose",
+        json!({ "title": "Bins", "timing": "all-day", "starts": "2026-03-06", "ends": "2026-03-07",
+                "rule": "FREQ=DAILY", "reminders": [0] }),
+    );
+    let mut keys = Vec::new();
+    for _ in 0..4 {
+        let rows = w.rows();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].timing, Timing::Floating, "a date is not an instant");
+        keys.push(rows[0].fire_key.clone());
+        // A floating key is read on the phone's clock, so the vault only moves it on by day.
+        w.scratch.clock.advance_days(1);
+        assert_eq!(w.scratch.vault.advance_alerts().expect("advance"), 1);
+    }
+    assert_eq!(
+        keys,
+        [
+            "2026-03-07T09:00",
+            "2026-03-08T09:00",
+            "2026-03-09T09:00",
+            "2026-03-10T09:00"
+        ]
+    );
+    // A wall-clock task keeps its key whatever zone the phone is in: the key names no zone.
+    w.ok(
+        "task.add",
+        json!({ "title": "Walk", "due": "2026-11-01T01:30", "remind_before_min": 0 }),
+    );
+    let walk = w
+        .rows()
+        .into_iter()
+        .find(|r| r.timing == Timing::Floating && r.fire_key.starts_with("2026-11-01"))
+        .expect("the floating row");
+    assert_eq!(walk.fire_key, "2026-11-01T01:30");
+}
+
+#[test]
+fn the_same_wall_time_is_a_different_instant_in_each_zone_and_travel_changes_nothing_stored() {
+    let w = World::new();
+    w.event(json!({ "starts": "2026-03-10T09:00", "zone": "America/New_York", "reminders": [0] }));
+    w.event(json!({ "starts": "2026-03-10T09:00", "zone": "Asia/Kolkata", "reminders": [0] }));
+    let mut keys: Vec<String> = w.rows().into_iter().map(|r| r.fire_key).collect();
+    keys.sort();
+    assert_eq!(
+        keys,
+        ["2026-03-10T03:30:00.000Z", "2026-03-10T13:00:00.000Z"],
+        "09:00 in Kolkata is 03:30Z and in New York (EDT) 13:00Z; the phone's zone is not an input"
+    );
 }

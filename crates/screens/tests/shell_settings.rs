@@ -239,6 +239,11 @@ fn the_rows_say_where_things_stand_and_open_the_pages_that_own_them() {
         .find(|row| row.id == "reconnect")
         .expect("a Reconnect row");
     assert_eq!(reconnect.route.as_ref().unwrap().screen, "follow.reconnect");
+    // Its back control names Settings, the page it is pushed from (#1202).
+    assert!(matches!(
+        &reconnect.route.as_ref().unwrap().args,
+        Some(wire::route::Args::Reconnect(args)) if args.parent == "Settings"
+    ));
     assert_eq!(row(2).title, "Show recovery key");
     assert_eq!(row(2).route.as_ref().unwrap().screen, "words.show");
     // Until the platform says, the key's sentence is the cautious one.

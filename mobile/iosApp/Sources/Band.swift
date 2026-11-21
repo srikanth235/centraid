@@ -60,6 +60,9 @@ struct HomeBand: View {
         .padding(.horizontal, BandMetrics.inset)
         .padding(.top, BandMetrics.topGap)
         .padding(.bottom, BandMetrics.floorPadding)
+        // THE SHELL'S BAND CAPS AT THE READABLE COLUMN and centres (ruling 27, #1202): on an iPad it
+        // stood the screen's whole width under Home, Chat and Backup while the apps' bands were capped.
+        .readableColumn()
         // `.contain`, or the plate's identifier REPLACES each tab's own: the
         // hierarchy showed every tab as `home-band`, so no flow could select
         // Chat or More by id.
@@ -397,7 +400,8 @@ private struct AppBandTab: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        let ink = locked ? Theme.color("textDisabled", scheme) : (selected ? Surface.ink : Surface.meta)
+        // A locked plate is pressable and dimmed, but legible in both schemes (the faint ink, never the disabled one).
+        let ink = locked ? Theme.color("textFaint", scheme) : (selected ? Surface.ink : Surface.meta)
         Button(action: onPress) {
             VStack(spacing: BandMetrics.labelGap) {
                 CentraidIconView(
@@ -416,6 +420,10 @@ private struct AppBandTab: View {
                     .centraidType(selected ? "control" : "band", scales: false)
                     .foregroundStyle(ink)
                     .lineLimit(1)
+                    // A LONG PLACE ("Calendars", "Summary") ON THE SMALLEST PHONE shrinks to fit its tab
+                    // and is never cut to an ellipsis (#1202, S13): four places and More share the
+                    // plate's 255 pt on an iPhone SE, and the segments below already shrink the same way.
+                    .minimumScaleFactor(0.7)
             }
             .padding(.top, BandMetrics.tabTop)
             .padding(.bottom, BandMetrics.tabBottom)

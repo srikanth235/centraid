@@ -1,5 +1,5 @@
 //! THE LIBRARY'S LAYOUT RULES, ONCE (#1029; v0's `justify.ts`, `timeline-rows.ts`,
-//! `PhotoGrainView.tsx`, `photos-rungs.ts`): uniform square packing, the rows a width makes of the cells, the cards a grain draws, how
+//! `PhotoGrainView.tsx`, `photos-rungs.ts`): justified rows, the rows a width makes of the cells, the cards a grain draws, how
 //! months pair, the tile sizes, and the pinch table.
 //!
 //! The cells arrive newest first and already grouped by the read's order, so a
@@ -34,8 +34,7 @@ pub fn clamp_rung(rung: u32) -> u32 {
     rung.min(RUNG_HEIGHTS.len() as u32 - 1)
 }
 
-/// One photograph's pixel box. The grid draws every photograph in the same
-/// square, so the box only counts the tile.
+/// One photograph's pixel box: its shape (clamped) sets the width it takes in a justified row.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Boxed {
     pub width: u32,
@@ -50,17 +49,86 @@ pub struct Packed {
     pub height: f64,
 }
 
-/// The rows `boxes` pack into at `container`: one square size, the same number of
-/// tiles to every row (the last may hold fewer), in the order given.
+/// How tall a short last row may grow to fill the width, in rungs: past this it keeps its own
+/// size and stands at the leading edge, so one photograph is never blown up to the screen.
+const LAST_ROW_STRETCH: f64 = 1.35;
+/// The aspect a tile may take, so a panorama or a sliver cannot make a row of one.
+const ASPECT_MIN: f64 = 0.6;
+const ASPECT_MAX: f64 = 1.8;
+
+/// THE ROWS `boxes` JUSTIFY INTO at `container` (the board's, `PhotosLibrary`): every photograph
+/// keeps its own shape within a clamp, a row takes tiles until it reaches the width and is then
+/// scaled so it ends exactly at the edge, whichever side of the target height that lands on. A
+/// day's short last row fills the width too, unless that would stretch it past
+/// [`LAST_ROW_STRETCH`] rungs, and then it keeps the target height.
 #[must_use]
 pub fn justify(boxes: &[Boxed], container: f64, target: f64) -> Vec<Vec<Packed>> {
-    pack(boxes.len(), container, target)
+    if container <= 0.0 || target <= 0.0 || boxes.is_empty() {
+        return Vec::new();
+    }
+    let aspects: Vec<f64> = boxes
+        .iter()
+        .map(|b| {
+            if b.width == 0 || b.height == 0 {
+                1.0
+            } else {
+                (f64::from(b.width) / f64::from(b.height)).clamp(ASPECT_MIN, ASPECT_MAX)
+            }
+        })
+        .collect();
+    // The height a run of tiles must have to end exactly at the edge.
+    let fit = |from: usize, to: usize| -> f64 {
+        let gaps = GAP * (to - from - 1) as f64;
+        (container - gaps) / aspects[from..to].iter().sum::<f64>()
+    };
+    let mut rows = Vec::new();
+    let mut start = 0;
+    while start < boxes.len() {
+        let mut end = start + 1;
+        while end < boxes.len() && fit(start, end) > target {
+            // Taking one more tile: keep whichever of the two heights is nearer the target.
+            if (fit(start, end + 1) - target).abs() <= (fit(start, end) - target).abs() {
+                end += 1;
+            } else {
+                break;
+            }
+        }
+        let last = end == boxes.len();
+        let natural = fit(start, end);
+        // A LAST ROW THAT WOULD NEED A HUGE HEIGHT STAYS AT ITS OWN: it is not stretched to the edge.
+        let stretched = !last || natural <= target * LAST_ROW_STRETCH;
+        let height = if stretched { natural } else { target }.floor();
+        let reach = stretched;
+        let mut widths: Vec<f64> = aspects[start..end]
+            .iter()
+            .map(|aspect| (aspect * height).floor())
+            .collect();
+        if reach {
+            // The pixels the flooring left go to the last tile, so the row ends at the edge.
+            let used: f64 = widths.iter().sum::<f64>() + GAP * (end - start - 1) as f64;
+            if let Some(tail) = widths.last_mut() {
+                *tail += container - used;
+            }
+        }
+        rows.push(
+            (start..end)
+                .zip(widths)
+                .map(|(index, width)| Packed {
+                    index,
+                    width,
+                    height,
+                })
+                .collect(),
+        );
+        start = end;
+    }
+    rows
 }
 
-/// THE GRID IS ONE SIZE: every tile is the same square, `columns` to a row, so a
-/// photograph alone in its row is one cell and not a stretched one, and the first
-/// row is the height of every other (the tile's shape is the grid's, never the
-/// photograph's: a photograph is cropped to fill its cell).
+/// THE PLACEHOLDERS ARE ONE SIZE: only the loading state packs equal squares,
+/// `columns` to a row (there is no photograph yet whose shape could size a cell).
+/// The library itself is justified rows ([`justify`]), sized by each photograph's
+/// shape; owner ruling 2026-11-19 replaced #1174's uniform squares with them.
 fn pack(count: usize, container: f64, target: f64) -> Vec<Vec<Packed>> {
     if container <= 0.0 || target <= 0.0 || count == 0 {
         return Vec::new();

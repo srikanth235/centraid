@@ -7,8 +7,9 @@ import SwiftUI
 /// events. `AppPlace` owns the header, the search door and the band;
 /// `PageReadStateView` owns loading, failure and the denied gate (no band while
 /// denied). The header's Plus is the app's create verb: rows enter by import.
-/// Search is a door (R-CHROME-2): the bar never opens in place, it pushes the
-/// search page. Where each intent leads is Rust's (`crates/screens`).
+/// Search is the band's key, in place like every app's (owner, 2026-11-19): the field takes the
+/// band's place at the foot and its answer replaces the tab. Where each intent leads is Rust's
+/// (`crates/screens`).
 struct MoneyHomeView: View {
     let state: Centraid_Core_V1_MoneyHomeState
     let send: (Centraid_Core_V1_MoneyHomeEvent) -> Void
@@ -16,6 +17,7 @@ struct MoneyHomeView: View {
     let onHome: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private func event(_ build: (inout Centraid_Core_V1_MoneyHomeEvent) -> Void) -> Centraid_Core_V1_MoneyHomeEvent {
         var event = Centraid_Core_V1_MoneyHomeEvent()
@@ -58,6 +60,62 @@ struct MoneyHomeView: View {
         return false
     }
 
+    /// The field as Rust holds it: open or closed, the term typed so far and the corrected line.
+    private var searchSlot: SearchSlot {
+        var field = KitSearchField()
+        field.open = state.search.open
+        field.term = state.search.term
+        field.corrected = state.search.corrected
+        // Rust's `corrected` here is the finished sentence, so the field says it as it is.
+        field.correctedLabel = state.search.corrected
+        return SearchSlot(
+            field: field,
+            placeholder: state.chrome.searchPlaceholder,
+            closeLabel: state.chrome.searchClose,
+            onOpen: { send(event { $0.searchOpened = .init() }) },
+            onTerm: { term in send(event { $0.searchTerm = .with { $0.term = term } }) },
+            onClose: { send(event { $0.searchClosed = .init() }) }
+        )
+    }
+
+    /// THE ANSWER over an open search: the hint while nothing is typed, then the count, the lines
+    /// (each routes to its transaction) and the Ask row.
+    private var searchResults: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                if state.search.hasResults {
+                    let found = state.search.results
+                    if !found.hint.isEmpty {
+                        Text(found.hint)
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.meta)
+                            .padding(.horizontal, 4)
+                    }
+                    if !found.countLabel.isEmpty {
+                        Text(found.countLabel)
+                            .kitType(.meta)
+                            .foregroundStyle(Surface.meta)
+                            .padding(.horizontal, 4)
+                            .accessibilityIdentifier("money-search-count")
+                    }
+                    if !found.rows.isEmpty {
+                        MoneyCardStack {
+                            ForEach(Array(found.rows.enumerated()), id: \.offset) { index, row in
+                                if index > 0 { KitHairline(inset: 64) }
+                                MoneyTxnRow(row: row) { open(row.route) }
+                            }
+                        }
+                    }
+                }
+                if state.search.hasAsk { SearchAskRow(ask: state.search.ask) }
+            }
+            .padding(.horizontal, CentraidGeometry.pageMargin)
+            .padding(.top, 8)
+            .padding(.bottom, 16)
+        }
+        .accessibilityIdentifier("money-search-results")
+    }
+
     var body: some View {
         let chrome = state.chrome
         let sheetBinding = moneySheetBinding(sheetIsOpen(state)) { send(event { $0.sheetClosed = .init() }) }
@@ -65,76 +123,111 @@ struct MoneyHomeView: View {
             app: "money",
             title: chrome.title,
             // THE HEADER'S ONE ACTION is the app's create verb (R-CHROME-1).
-            trailing: chrome.addLabel.isEmpty
-                ? nil
-                : RoomAction(iconKey: "Plus", label: chrome.addLabel, identifier: "money-add", action: addStatement),
-            // A DOOR, NOT A FIELD (R-CHROME-2): the band's key pushes the search page; the field is
-            // never open here.
-            search: isDenied || chrome.searchPlaceholder.isEmpty ? nil : SearchSlot(
-                field: KitSearchField(),
-                placeholder: chrome.searchPlaceholder,
-                onOpen: { open(chrome.searchRoute) },
-                onTerm: { _ in },
-                onClose: {}
-            ),
+            trailing: headerAction,
+            // THE BAND'S SEARCH KEY opens the field in place (R-CHROME-2): its term and answer are Rust's.
+            search: isDenied || chrome.searchPlaceholder.isEmpty ? nil : searchSlot,
             // THE HEADER'S FILTER BUTTON is account and category, no sort (R-CHROME-3); the month
             // stays under the title and opens its sheet.
             filter: filter,
             subtitle: subtitle,
             showsBand: !isDenied && !state.band.isEmpty
         ) {
-            AppBand(
-                app: "money",
-                tabs: state.band.map { tab in
-                    BandView(
-                        label: tab.label,
-                        event: Data(tab.key.utf8),
-                        iconKey: tab.iconKey,
-                        selected: tab.current,
-                        key: tab.key
-                    )
-                },
-                onSelect: { picked in
-                    let key = String(decoding: picked, as: UTF8.self)
-                    send(event { $0.band = .with { $0.key = key } })
-                },
-                onHome: onHome
-            )
+            band
         } content: {
-            PageReadStateView(
-                page: state.page,
-                onRetry: { send(event { $0.refreshed = .init() }) },
-                onEmptyAction: addStatement
-            ) {
-                if case let .data(home)? = state.content {
-                ScrollView {
-                    // SPENDING AND CASH FLOW ARE BOUNDED AND EAGER; ACTIVITY IS THE
-                    // LONG LIST AND STAYS LAZY. A `LazyVStack` here drew the
-                    // Spending page with its "In" row missing and a blank band in
-                    // its place (a figure row among sibling `ForEach(…, id:
-                    // \.offset)` blocks), so only the page that can hold hundreds
-                    // of rows pays for laziness.
-                    if state.destination == .activity {
-                        LazyVStack(alignment: .leading, spacing: 0) { page(home, state: state) }
-                            .padding(.bottom, 16)
-                    } else {
-                        VStack(alignment: .leading, spacing: 0) { page(home, state: state) }
-                            .padding(.bottom, 16)
-                    }
-                }
-                .refreshable { send(event { $0.refreshed = .init() }) }
-                .accessibilityIdentifier("money-home-list")
-            }
-            }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                MoneyStatusFoot(
-                    status: MoneyWords.line(state.hasStatus ? state.status : nil),
-                    identifier: "money-home-status"
-                )
-            }
+            pageContent
         }
         .sheet(isPresented: sheetBinding) {
             sheetContent(state, home: state.loaded)
+        }
+    }
+
+    // The body's parts live apart: one expression holding all of them was more than the Swift
+    // type checker could solve ("failed to produce diagnostic").
+    private var headerAction: RoomAction? {
+        let label = state.chrome.addLabel
+        if label.isEmpty { return nil }
+        return RoomAction(iconKey: "Plus", label: label, identifier: "money-add", action: addStatement)
+    }
+
+    private var band: AppBand {
+        AppBand(
+            app: "money",
+            tabs: state.band.map { tab in
+                BandView(
+                    label: tab.label,
+                    event: Data(tab.key.utf8),
+                    iconKey: tab.iconKey,
+                    selected: tab.current,
+                    key: tab.key
+                )
+            },
+            onSelect: { picked in
+                let key = String(decoding: picked, as: UTF8.self)
+                send(event { $0.band = .with { $0.key = key } })
+            },
+            onHome: onHome
+        )
+    }
+
+    /// A term that found nothing still offers the Ask row under the empty sentence.
+    private func emptyExtra() -> AnyView {
+        if state.search.open, state.search.hasAsk {
+            return AnyView(SearchAskRow(ask: state.search.ask))
+        }
+        return AnyView(EmptyView())
+    }
+
+    /// The most rows of Activity drawn eagerly; a longer month is a lazy list.
+    private static let eagerRowLimit = 150
+
+    @ViewBuilder
+    private var homeList: some View {
+        if case let .data(home)? = state.content {
+            ScrollView {
+                // SPENDING AND CASH FLOW ARE BOUNDED AND EAGER; ACTIVITY IS EAGER UP TO A MONTH'S
+                // WORTH OF ROWS (#1202) AND LAZY BEYOND IT. A `LazyVStack` here drew the Spending page
+                // with its "In" row missing and a blank band in its place (a figure row among sibling
+                // `ForEach(…, id: \.offset)` blocks), and under the audit's text-size sweep a lazy
+                // Activity page lost every one of its words ("partially unsupported", 28 of them on
+                // the first screen), so only a page that can hold hundreds of rows pays for laziness.
+                if state.destination == .activity, home.activity.sections.reduce(0, { $0 + $1.rows.count }) > Self.eagerRowLimit {
+                    LazyVStack(alignment: .leading, spacing: 0) { page(home, state: state) }
+                        .padding(.bottom, 16)
+                } else {
+                    VStack(alignment: .leading, spacing: 0) { page(home, state: state) }
+                        .padding(.bottom, 16)
+                }
+            }
+            .refreshable { send(event { $0.refreshed = .init() }) }
+            .accessibilityIdentifier("money-home-list")
+        }
+    }
+
+    /// The empty card's action: the statement import, unless a search is open (a ternary of `nil`
+    /// and a method reference defeats the type checker in the initializer below).
+    private var emptyAction: (() -> Void)? {
+        if state.search.open { return nil }
+        return { addStatement() }
+    }
+
+    private var pageContent: some View {
+        PageReadStateView(
+            page: state.page,
+            onRetry: { send(event { $0.refreshed = .init() }) },
+            onEmptyAction: emptyAction,
+            emptyExtra: emptyExtra
+        ) {
+            if state.search.open {
+                searchResults
+            } else {
+                homeList
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            MoneyStatusFoot(
+                status: MoneyWords.line(state.hasStatus ? state.status : nil),
+                identifier: "money-home-status"
+            )
         }
     }
 
@@ -165,7 +258,13 @@ struct MoneyHomeView: View {
                 if !bars.heading.isEmpty {
                     Text(bars.heading).kitType(.group).foregroundStyle(Surface.meta)
                 }
-                HStack(alignment: .top) {
+                // THE WEEK / MONTH CONTROL UNDER THE TOTAL AT ACCESSIBILITY SIZES (#1202): beside it
+                // the amount was cut to "$2,745...." and the control to "W...". The total shrinks
+                // before it would ever be cut.
+                let heroLayout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+                    : AnyLayout(HStackLayout(alignment: .top))
+                heroLayout {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(hero?.spentLabel ?? "")
                             .kitType(.meta)
@@ -174,16 +273,17 @@ struct MoneyHomeView: View {
                             .kitType(.title)
                             .monospacedDigit()
                             .foregroundStyle(Surface.ink)
-                            .minimumScaleFactor(0.7)
+                            .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 0.4 : 0.7)
                             .lineLimit(1)
                     }
                     .accessibilityElement(children: .combine)
                     .accessibilityIdentifier("money-hero")
-                    Spacer(minLength: 8)
+                    if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
                     KitSegmented(
                         options: bars.modes.map { (key: $0.key, label: $0.label) },
                         selected: bars.modes.first(where: { $0.selected })?.key ?? "",
                         identifier: "money-bars-mode",
+                        fills: dynamicTypeSize.isAccessibilitySize,
                         onSelect: { key in send(event { $0.barsModePicked = .with { $0.key = key } }) }
                     )
                 }
@@ -296,17 +396,23 @@ struct MoneyHomeView: View {
                 outgoing: series.outLabel,
                 partial: series.partialLabel
             )
-            HStack(spacing: 8) {
-                Spacer(minLength: 0)
-                ForEach([series.inLabel, series.outLabel, series.netLabel], id: \.self) { label in
-                    Text(label).kitType(.meta).foregroundStyle(Surface.meta)
-                        .frame(width: 68, alignment: .trailing)
+            if !dynamicTypeSize.isAccessibilitySize {
+                HStack(spacing: 8) {
+                    Spacer(minLength: 0)
+                    ForEach([series.inLabel, series.outLabel, series.netLabel], id: \.self) { label in
+                        Text(label).kitType(.meta).foregroundStyle(Surface.meta)
+                            .frame(width: 68, alignment: .trailing)
+                    }
                 }
+                .padding(.horizontal, CentraidGeometry.pageMargin)
             }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
             // NEWEST FIRST under the chart, which runs oldest to newest.
             ForEach(Array(series.months.reversed().enumerated()), id: \.offset) { _, month in
-                MoneyMonthRow(month: month, identifier: "money-month-\(month.month)")
+                MoneyMonthRow(
+                    month: month,
+                    identifier: "money-month-\(month.month)",
+                    labels: [series.inLabel, series.outLabel, series.netLabel]
+                )
             }
         }
         ForEach(Array(flow.definitions.enumerated()), id: \.offset) { _, fact in

@@ -54,6 +54,7 @@ import dev.centraid.android.R
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.appAccent
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.screens.decodeUpright
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
@@ -148,6 +149,10 @@ internal fun DocsDocTile(
             val bitmap = picture
             if (bitmap != null) {
                 Image(bitmap, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize()) // decorative: the tile names the document
+                // A PAGE IS WHITE PAPER (#1202): on the dark grid it is dimmed, so it sits in the page.
+                if (row.badge == "PDF" && androidx.compose.foundation.isSystemInDarkTheme()) {
+                    Box(Modifier.matchParentSize().background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f)))
+                }
             } else {
                 Box(Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
                     CentraidIcon(row.kind_icon_key.ifEmpty { "FileText" }, tint = centraidColor("textSoft"), size = 30.dp)
@@ -167,10 +172,19 @@ internal fun DocsDocTile(
                     .padding(horizontal = 4.dp, vertical = 1.dp),
             )
         }
-        Text(row.title, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+        val lines = if (rememberLargestText()) 4 else 2
+        Text(row.title, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = lines, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             if (row.dot_color_key.isNotEmpty()) DocsDot(row.dot_color_key, 6.dp)
-            Text(row.meta, style = centraidType("annotLabel"), color = centraidColor("textSoft"), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // THE SIZE MUST SHOW (#1202): the meta wraps by word to three lines instead of one line cut after the kind.
+            Text(
+                dev.centraid.android.kit.unitsJoined(row.meta),
+                style = centraidType("annotLabel"),
+                color = centraidColor("textSoft"),
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }
@@ -202,8 +216,9 @@ internal fun DocsFolderTile(folder: DocsFolderNode, modifier: Modifier = Modifie
         Box(Modifier.width(96.dp).height(120.dp), contentAlignment = Alignment.Center) {
             CentraidIcon("Folder", tint = appAccent("docs").fill, size = 56.dp)
         }
-        Text(folder.name, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
-        Text(folder.count_label, style = centraidType("annotLabel"), color = centraidColor("textSoft"), maxLines = 1)
+        val lines = if (rememberLargestText()) 4 else 2
+        Text(folder.name, style = centraidType("smallStrong"), color = centraidColor("text"), maxLines = lines, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+        Text(folder.count_label, style = centraidType("annotLabel"), color = centraidColor("textSoft"), maxLines = if (lines > 2) 2 else 1)
     }
 }
 

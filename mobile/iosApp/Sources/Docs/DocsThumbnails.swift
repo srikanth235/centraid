@@ -59,6 +59,7 @@ struct DocsThumbnail: View {
 
     @State private var image: UIImage?
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         ZStack {
@@ -66,6 +67,11 @@ struct DocsThumbnail: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
+                // A PAGE IS WHITE PAPER (#1202): on the dark grid it is dimmed, so it sits in the
+                // page instead of glaring out of it.
+                if pdf, scheme == .dark {
+                    Color.black.opacity(0.45)
+                }
             }
         }
         .task(id: path) {
@@ -90,8 +96,10 @@ struct DocsBadge: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 9, weight: .bold))
+            .kitSystemFont(9, weight: .bold)
+            .kitHeld()
             .foregroundStyle(Color.white)
+            .accessibilityIdentifier("docs-tile-badge")
             .padding(.horizontal, 4)
             .padding(.vertical, 1)
             .background(RoundedRectangle(cornerRadius: Theme.radius("sm", scheme)).fill(Color.black.opacity(0.78)))
@@ -116,35 +124,49 @@ struct DocsLabelChips: View {
     let chips: [Centraid_Core_V1_DocsLabelChip]
     let onPick: (String) -> Void
 
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(chips, id: \.tagID) { chip in
-                    Button { onPick(chip.label) } label: {
-                        HStack(spacing: 6) {
-                            DocsDot(colorKey: chip.colorKey)
-                            Text(chip.label)
-                                .centraidType("annotLabel")
-                                .foregroundStyle(chip.selected ? AppAccent("docs").text : Color(CentraidAsset.textBody))
-                                .lineLimit(1)
-                        }
-                        .padding(.horizontal, 10)
-                        .frame(minHeight: 32)
-                        .background(
-                            Capsule().fill(chip.selected
-                                ? AppAccent("docs").fill.opacity(0.16)
-                                : Color(CentraidAsset.surfaceLine))
-                        )
-                        .contentShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(chip.label)
-                    .accessibilityAddTraits(chip.selected ? [.isButton, .isSelected] : .isButton)
-                    .accessibilityIdentifier("docs-label-chip-\(chip.label)")
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @ViewBuilder
+    private var chipViews: some View {
+        ForEach(chips, id: \.tagID) { chip in
+            Button { onPick(chip.label) } label: {
+                HStack(spacing: 6) {
+                    DocsDot(colorKey: chip.colorKey)
+                    Text(chip.label)
+                        .centraidType("annotLabel")
+                        .foregroundStyle(chip.selected ? AppAccent("docs").text : Color(CentraidAsset.textBody))
+                        .kitLineLimit(1)
                 }
+                .padding(.horizontal, 10)
+                .frame(minHeight: 32)
+                .background(
+                    Capsule().fill(chip.selected
+                        ? AppAccent("docs").fill.opacity(0.16)
+                        : Color(CentraidAsset.surfaceLine))
+                )
+                .contentShape(Capsule())
             }
-            .padding(.horizontal, CentraidGeometry.pageMargin)
-            .padding(.vertical, 4)
+            .buttonStyle(.plain)
+            .accessibilityLabel(chip.label)
+            .accessibilityAddTraits(chip.selected ? [.isButton, .isSelected] : .isButton)
+            .accessibilityIdentifier("docs-label-chip-\(chip.label)")
+        }
+    }
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            // THE CHIPS WRAP AT ACCESSIBILITY SIZES (#1202): a row that scrolled sideways ran a
+            // chip ("receipts") off the edge with nothing to say there was more.
+            KitFlow(spacing: 8) { chipViews }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, CentraidGeometry.pageMargin)
+                .padding(.vertical, 4)
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) { chipViews }
+                    .padding(.horizontal, CentraidGeometry.pageMargin)
+                    .padding(.vertical, 4)
+            }
         }
     }
 }
@@ -188,13 +210,15 @@ struct DocsGridTile: View {
                     .centraidType("smallStrong")
                     .foregroundStyle(Theme.color("text", scheme))
                     .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                HStack(spacing: 4) {
-                    if !row.dotColorKey.isEmpty { DocsDot(colorKey: row.dotColorKey, size: 6) }
-                    Text(row.meta)
+                    .accessibilityIdentifier("docs-tile-text")
+                // THE SIZE MUST SHOW (#1202): a tile is about 100 pt wide, so the parts of the meta
+                // take a line each (kind, then size) instead of one line cut after the kind.
+                HStack(alignment: .top, spacing: 4) {
+                    if !row.dotColorKey.isEmpty { DocsDot(colorKey: row.dotColorKey, size: 6).padding(.top, 4) }
+                    MetaLine(row.meta, lines: 2, alignment: .center)
                         .centraidType("annotLabel")
                         .foregroundStyle(Theme.color("textFaint", scheme))
-                        .lineLimit(1)
+                        .accessibilityIdentifier("docs-tile-text")
                 }
             }
             .frame(maxWidth: .infinity)
@@ -228,11 +252,12 @@ struct DocsFolderTile: View {
                     .centraidType("smallStrong")
                     .foregroundStyle(Theme.color("text", scheme))
                     .multilineTextAlignment(.center)
-                    .lineLimit(2)
+                    .accessibilityIdentifier("docs-tile-text")
                 Text(node.countLabel)
                     .centraidType("annotLabel")
                     .foregroundStyle(Theme.color("textFaint", scheme))
-                    .lineLimit(1)
+                    .kitLineLimit(1)
+                    .accessibilityIdentifier("docs-tile-text")
             }
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())

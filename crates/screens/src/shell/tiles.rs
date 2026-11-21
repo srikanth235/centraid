@@ -55,6 +55,10 @@ const AMOUNT_LOCALE: &str = "en-US";
 /// What one tile's read came to, before it is dressed as a [`wire::HomeTile`].
 pub struct Made {
     pub status: Status,
+    /// THE APP HOLDS SOMETHING OF THE MEMBER'S, even when the widget has nothing to show now
+    /// (no event in the next fortnight, nothing owed today, no spending this month). This, and
+    /// not `status`, is what ends day zero and picks the import invitation over a quiet line.
+    pub holds: bool,
     pub count: Option<wire::HomeTileCount>,
     pub count_label: String,
     pub body: Option<Body>,
@@ -65,6 +69,7 @@ pub struct Made {
 pub fn unknown() -> Made {
     Made {
         status: Status::Unknown,
+        holds: false,
         count: None,
         count_label: String::new(),
         body: None,
@@ -105,6 +110,7 @@ fn empty_with(count: u32, one: String, many: String) -> Made {
     let (count, count_label) = counted(count, false, one, many);
     Made {
         status: Status::Empty,
+        holds: false,
         count,
         count_label,
         body: None,
@@ -115,6 +121,7 @@ fn content(count: u32, capped: bool, one: String, many: String, body: Body) -> M
     let (count, count_label) = counted(count, capped, one, many);
     Made {
         status: Status::Content,
+        holds: true,
         count,
         count_label,
         body: Some(body),
@@ -350,7 +357,7 @@ fn event_title(locale: Locale, event: &wire::AgendaEvent) -> String {
 }
 
 /// The core's own today, in the device's zone: the day-context query.
-fn today_of(ctx: &Ctx) -> Option<String> {
+pub(crate) fn today_of(ctx: &Ctx) -> Option<String> {
     match read::read(
         ctx,
         load::calendar::DayContext::default(),
@@ -387,7 +394,22 @@ fn calendar(ctx: &Ctx) -> Made {
     ) else {
         return unknown();
     };
-    calendar_tile(ctx.locale(), ctx.hour_cycle(), &upcoming)
+    let mut made = calendar_tile(ctx.locale(), ctx.hour_cycle(), &upcoming);
+    // NOTHING IN THE FORTNIGHT IS NOT AN EMPTY CALENDAR: a member who imported only events further out
+    // or past ones holds a calendar. Looked for only when the window is empty, by the question
+    // Calendar's own first-open card asks (`calendar::holds_query`), so the two agree.
+    if made.status == Status::Empty {
+        made.holds = !upcoming.events.is_empty()
+            || crate::calendar::holds_query(&today).is_some_and(|query| {
+                read::read(ctx, query, |answer| match answer {
+                    Answer::AgendaUpcoming(wide) => Some(wide),
+                    _ => None,
+                })
+                .data()
+                .is_some_and(|wide| !wide.events.is_empty())
+            });
+    }
+    made
 }
 
 /// THE REMINDERS WIDGET, from Reminders' own Today board (round 10 of #1173: Reminders is an app,
@@ -405,10 +427,19 @@ fn reminders(ctx: &Ctx) -> Made {
             _ => None,
         },
     );
-    match board.data() {
-        Some(board) => reminders_tile(ctx.locale(), board),
-        None => unknown(),
+    let Some(board) = board.data() else {
+        return unknown();
+    };
+    let mut made = reminders_tile(ctx.locale(), board);
+    // NOTHING OWED TODAY IS NOT AN EMPTY APP: the board's true counts say whether any reminder
+    // is held, open or done.
+    if made.status == Status::Empty {
+        made.holds = board
+            .counts
+            .as_ref()
+            .is_some_and(|counts| counts.open > 0 || counts.closed > 0);
     }
+    made
 }
 
 /// The day's full name, "Wednesday", or empty for a day that does not parse.
@@ -465,7 +496,17 @@ fn calendar_tile(locale: Locale, cycle: HourCycle, upcoming: &wire::AgendaUpcomi
         words::tile_agenda_count(locale),
     );
     if live.is_empty() {
-        return empty_with(0, one, many);
+        // AN EMPTY CALENDAR KEEPS ITS DATE (FirstHome): the weekday and the day, then its invitation.
+        return Made {
+            body: Some(Body::Agenda(wire::home_tile_body::Agenda {
+                weekday: weekday_long(locale, today),
+                day: civil::day_of_month_of(today)
+                    .map(|day| day.to_string())
+                    .unwrap_or_default(),
+                ..Default::default()
+            })),
+            ..empty_with(0, one, many)
+        };
     }
     // TODAY'S: what is still to come on the day, or still running (an all-day
     // run that covers it).
@@ -568,7 +609,7 @@ fn notes(ctx: &Ctx) -> Made {
 
 /// "Edited yesterday", "Edited today", else "Edited Wed 11 March"; empty for a
 /// note with no edit day. `today` is the core's day; without it the day is named.
-fn edited_line(locale: Locale, day: &str, today: Option<&str>) -> String {
+pub(crate) fn edited_line(locale: Locale, day: &str, today: Option<&str>) -> String {
     if day.is_empty() {
         return String::new();
     }
@@ -594,23 +635,44 @@ fn notes_tile(locale: Locale, library: &wire::NotesLibrary, today: Option<&str>)
     let Some(newest) = library.notes.first() else {
         return empty_with(0, one, many);
     };
-    content(
+    // THE STARTER NOTES ALONE ARE DAY ZERO (2026-11-17): the tile shows the one that says whose
+    // the note is, and the app still holds nothing of the member's.
+    let starters = crate::notes::fold::starters_only(library);
+    let shown = if starters {
+        library
+            .notes
+            .iter()
+            .find(|row| row.title.as_deref() == STARTER_TITLE)
+            .unwrap_or(newest)
+    } else {
+        newest
+    };
+    let mut made = content(
         total,
         library.truncated,
         one,
         many,
         Body::Notes(wire::home_tile_body::Notes {
-            note_id: newest.note_id.clone(),
-            title: note_title(locale, newest),
-            edited: edited_line(locale, &newest.updated_local_day, today),
-            next_title: library
-                .notes
-                .get(1)
-                .map(|next| note_title(locale, next))
-                .unwrap_or_default(),
+            note_id: shown.note_id.clone(),
+            title: note_title(locale, shown),
+            edited: edited_line(locale, &shown.updated_local_day, today),
+            next_title: if starters {
+                String::new()
+            } else {
+                library
+                    .notes
+                    .get(1)
+                    .map(|next| note_title(locale, next))
+                    .unwrap_or_default()
+            },
         }),
-    )
+    );
+    made.holds = !starters;
+    made
 }
+
+/// The starter note the Home tile shows on day zero.
+const STARTER_TITLE: Option<&str> = Some(centraid_core::starters::NOTES[0].0);
 
 // -- money --------------------------------------------------------------------
 
@@ -636,6 +698,7 @@ fn money_tile(locale: Locale, tile: &wire::MoneyHomeTile) -> Made {
     if tile.empty || tile.spent.is_empty() {
         return Made {
             status: Status::Empty,
+            holds: tile.held,
             count: None,
             count_label: String::new(),
             body: None,
@@ -654,6 +717,7 @@ fn money_tile(locale: Locale, tile: &wire::MoneyHomeTile) -> Made {
     };
     Made {
         status: Status::Content,
+        holds: true,
         count: None,
         count_label: String::new(),
         body: Some(Body::Money(wire::home_tile_body::Money {
@@ -706,6 +770,7 @@ fn health_tile(locale: Locale, today: &wire::HealthToday) -> Made {
     if !today.connected {
         return Made {
             status: Status::Empty,
+            holds: false,
             count: None,
             count_label: String::new(),
             body: None,
@@ -727,6 +792,7 @@ fn health_tile(locale: Locale, today: &wire::HealthToday) -> Made {
         .unwrap_or_default();
     Made {
         status: Status::Content,
+        holds: true,
         count: None,
         count_label: String::new(),
         body: Some(Body::Health(wire::home_tile_body::Health {
@@ -1141,7 +1207,10 @@ mod tests {
         let made = calendar_tile(Locale::En, HourCycle::default(), &upcoming(vec![]));
         assert_eq!(made.status, Status::Empty);
         assert_eq!(count(&made), 0);
-        assert!(made.body.is_none());
+        // IT KEEPS ITS DATE (FirstHome): the weekday and the day, no event and no foot.
+        let date = agenda_body(&made);
+        assert_eq!((date.weekday.as_str(), date.day.as_str()), ("Monday", "15"));
+        assert!(date.events.is_empty() && date.foot.is_empty());
         assert_eq!(made.count_label, "upcoming events");
         // An event that is over leaves the same: nothing to say.
         let over = agenda_of(vec![timed(
@@ -1230,6 +1299,39 @@ mod tests {
         assert_eq!(body.next_title, "Older");
         let alone = notes_of(vec![note("n1", Some("Grocery run"), "milk")], false, None);
         assert_eq!(notes_body(&alone).next_title, "");
+    }
+
+    #[test]
+    fn the_starter_notes_alone_show_the_one_note_and_hold_nothing_of_the_members() {
+        let starters = centraid_core::starters::NOTES;
+        // Newest first, as the library lists a first vault.
+        let library = vec![
+            note("n2", Some(starters[1].0), ""),
+            note("n1", Some(starters[0].0), ""),
+        ];
+        let made = notes_of(library, false, None);
+        assert_eq!(made.status, Status::Content);
+        assert!(!made.holds, "the starter notes are not the member's");
+        let body = notes_body(&made);
+        assert_eq!(body.title, "This note is yours");
+        assert_eq!(body.note_id, "n1");
+        assert_eq!(body.next_title, "");
+        // One note of the member's beside them ends day zero, and the tile is the newest as ever.
+        let mine = notes_of(
+            vec![
+                note("n3", Some("Groceries"), ""),
+                note("n2", Some(starters[1].0), ""),
+                note("n1", Some(starters[0].0), ""),
+            ],
+            false,
+            None,
+        );
+        assert!(mine.holds);
+        assert_eq!(notes_body(&mine).title, "Groceries");
+        // A window that says more exist is the member's.
+        assert!(notes_of(vec![note("n1", Some(starters[0].0), "")], true, None).holds);
+        // None at all (the starters trashed) is empty and holds nothing.
+        assert!(!notes_of(Vec::new(), false, None).holds);
     }
 
     #[test]
@@ -1381,6 +1483,7 @@ mod tests {
                 month: "2026-10".to_owned(),
                 spent: vec![amount(331_458, "USD"), amount(12_000, "CAD")],
                 empty: false,
+                held: true,
             },
         );
         assert_eq!(made.status, Status::Content);
@@ -1398,7 +1501,18 @@ mod tests {
             },
         );
         assert_eq!(empty.status, Status::Empty);
+        assert!(!empty.holds);
         assert!(empty.body.is_none());
+        // A ledger with an account and no spending this month still holds something.
+        let quiet = money_tile(
+            Locale::En,
+            &wire::MoneyHomeTile {
+                empty: true,
+                held: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!((quiet.status, quiet.holds), (Status::Empty, true));
         // A month the core did not name draws the plain caption.
         let plain = money_tile(
             Locale::En,

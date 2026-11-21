@@ -55,6 +55,44 @@ fn clear_notebooks(d: &Driver) {
     }
 }
 
+/// THE SEARCH KEY IS IN EVERY PLACE of the band: opened over Notebooks or Journal it takes the
+/// field, answers a term with the library's own page, and closing it brings the place back.
+#[test]
+fn search_opens_over_notebooks_and_journal_and_closing_it_brings_the_place_back() {
+    for (key, place) in [
+        ("notebooks", wire::NotesPlace::Notebooks),
+        ("journal", wire::NotesPlace::Journal),
+    ] {
+        let mut d = clean();
+        let i = home(&mut d, wire::NotesPlace::Notes);
+        send_home(&mut d, i, H::Band(ev::BandPicked { key: key.into() }));
+        assert_eq!(home_state(d.view(i)).place, place as i32);
+        assert!(
+            home_state(d.view(i)).search.is_some(),
+            "{key} has the field"
+        );
+        send_home(&mut d, i, H::SearchOpened(ev::SearchOpened {}));
+        send_home(
+            &mut d,
+            i,
+            H::SearchTerm(ev::SearchTerm {
+                term: "zzzzqq".into(),
+            }),
+        );
+        let state = home_state(d.view(i));
+        assert!(state.search.as_ref().is_some_and(|search| search.open));
+        // The answer is the library's: no notebooks or entries drawn over it.
+        assert!(
+            state.content.is_none(),
+            "{key}: the answer replaces the place"
+        );
+        send_home(&mut d, i, H::SearchClosed(ev::SearchClosed {}));
+        let state = home_state(d.view(i));
+        assert_eq!(state.place, place as i32);
+        assert!(state.search.as_ref().is_some_and(|search| !search.open));
+    }
+}
+
 #[test]
 fn the_band_swaps_the_place_and_never_a_stack_entry() {
     let mut d = clean();
@@ -91,7 +129,8 @@ fn the_band_swaps_the_place_and_never_a_stack_entry() {
     );
     // No menu and no scope off the Notes place: nothing there to filter.
     assert!(state.filter_menu.is_none() && state.subtitle.is_none());
-    assert!(state.search.is_none());
+    // SEARCH IS THE BAND'S KEY IN EVERY PLACE (NotesJournalEmpty): Notebooks has its field too.
+    assert!(state.search.is_some());
     assert_eq!(state.new_note, Some(routes::new_note()));
     // A stale pick from the Notes place changes nothing here.
     let unchanged = d.view(i).clone();
@@ -434,10 +473,7 @@ fn the_empty_journal_is_one_sentence() {
     let i = home(&mut d, wire::NotesPlace::Journal);
     let empty = empty_of(d.view(i)).clone();
     assert_eq!(empty.headline, "No journal entries yet");
-    assert_eq!(
-        empty.body,
-        "Entries you write about people in People appear here."
-    );
+    assert_eq!(empty.body, "A mood and a few lines about your day.");
     assert!(home_state(d.view(i)).content.is_none());
 }
 

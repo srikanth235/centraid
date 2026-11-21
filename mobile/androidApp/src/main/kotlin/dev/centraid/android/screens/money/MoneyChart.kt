@@ -25,6 +25,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import centraid.core.v1.MoneyCashflowMonth
 import dev.centraid.android.kit.KitGeometry
+import dev.centraid.android.kit.rememberLargestText
+import dev.centraid.android.kit.HoldGridText
 import dev.centraid.android.kit.toneInk
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
@@ -68,19 +70,22 @@ internal fun MoneyCashflowChart(months: List<MoneyCashflowMonth>, summary: Strin
             }
         }
         MoneyHairline(inset = 0.dp)
-        Row(
-            Modifier.fillMaxWidth().padding(top = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(MONTH_GAP),
-        ) {
-            months.forEach { month ->
-                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                    FitText(
-                        month.label,
-                        role = "eyebrow",
-                        ink = centraidColor(if (month.partial) "text" else "textFaint"),
-                        minScale = LABEL_MIN_SCALE,
-                        align = TextAlign.Center,
-                    )
+        // THE AXIS WORDS HOLD AT 1.3 (#1202): a column per month cannot grow with the font.
+        HoldGridText {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(MONTH_GAP),
+            ) {
+                months.forEach { month ->
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        FitText(
+                            month.label,
+                            role = "eyebrow",
+                            ink = centraidColor(if (month.partial) "text" else "textFaint"),
+                            minScale = LABEL_MIN_SCALE,
+                            align = TextAlign.Center,
+                        )
+                    }
                 }
             }
         }
@@ -108,17 +113,21 @@ private fun CashflowBar(basisPoints: Int, ink: Color, partial: Boolean) {
 /** THE CHART'S KEY: a swatch and its word, from copy the state's rows already use. */
 @Composable
 internal fun MoneyLegend(incoming: String, outgoing: String, partial: String) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = KitGeometry.GUTTER)
-            .padding(top = 8.dp)
-            .clearAndSetSemantics { },
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
+    val frame = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = KitGeometry.GUTTER)
+        .padding(top = 8.dp)
+        .clearAndSetSemantics { }
+    val items: @Composable () -> Unit = {
         LegendItem(incoming, filled = true, ink = centraidColor("textSoft"))
         LegendItem(outgoing, filled = true, ink = centraidColor("textGhost"))
         LegendItem(partial, filled = false, ink = centraidColor("textSoft"))
+    }
+    // ONE KEY PER LINE at the largest text (#1202): in a row "month not over" wrapped a word at a time.
+    if (rememberLargestText()) {
+        Column(frame, verticalArrangement = Arrangement.spacedBy(6.dp)) { items() }
+    } else {
+        Row(frame, horizontalArrangement = Arrangement.spacedBy(16.dp)) { items() }
     }
 }
 
@@ -155,7 +164,7 @@ private fun LegendItem(text: String, filled: Boolean, ink: Color) {
  * Out and Net as three columns. A month that is not over reads in the soft ink.
  */
 @Composable
-internal fun MoneyMonthRow(month: MoneyCashflowMonth, testTag: String) {
+internal fun MoneyMonthRow(month: MoneyCashflowMonth, testTag: String, labels: List<String> = emptyList()) {
     Box(
         Modifier
             .fillMaxWidth()
@@ -178,19 +187,41 @@ internal fun MoneyMonthRow(month: MoneyCashflowMonth, testTag: String) {
                     style = centraidType("body"),
                     color = centraidColor(if (month.partial) "textSoft" else "text"),
                 )
+                if (rememberLargestText()) {
+                    // THE FIGURES UNDER THE MONTH, each whole on its line with its word (#1202): three
+                    // columns left each amount a few letters wide and cut it.
+                    val words = labels.ifEmpty { listOf("", "", "") }
+                    listOf(
+                        words.getOrElse(0) { "" } to (month.incoming to "text"),
+                        words.getOrElse(1) { "" } to (month.outgoing to "text"),
+                        words.getOrElse(2) { "" } to (month.net to null),
+                    ).forEach { (word, figure) ->
+                        Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(word, style = centraidType("annotLabel"), color = centraidColor("textSoft"), modifier = Modifier.weight(1f))
+                            Text(
+                                money(figure.first),
+                                style = centraidType("annotLabel"),
+                                color = if (figure.second == null) toneInk(month.net_tone, neutral = "text") else centraidColor("text"),
+                                textAlign = TextAlign.End,
+                            )
+                        }
+                    }
+                }
                 if (month.meta.isNotEmpty()) {
                     Text(
                         month.meta,
                         style = centraidType("annotLabel"),
                         color = centraidColor("textFaint"),
-                        maxLines = 1,
+                        maxLines = if (rememberLargestText()) Int.MAX_VALUE else 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
-            MoneyColumnFigure(money(month.incoming), ink = centraidColor("text"))
-            MoneyColumnFigure(money(month.outgoing), ink = centraidColor("text"))
-            MoneyColumnFigure(money(month.net), ink = toneInk(month.net_tone, neutral = "text"))
+            if (!rememberLargestText()) {
+                MoneyColumnFigure(money(month.incoming), ink = centraidColor("text"))
+                MoneyColumnFigure(money(month.outgoing), ink = centraidColor("text"))
+                MoneyColumnFigure(money(month.net), ink = toneInk(month.net_tone, neutral = "text"))
+            }
         }
     }
 }

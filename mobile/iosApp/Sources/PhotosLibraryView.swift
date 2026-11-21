@@ -147,6 +147,8 @@ struct PhotosLibraryBody: View {
         PageReadStateView(
             page: library.page,
             onRetry: { send(PhotosHomeEvents.make { $0.refreshed = .init() }) },
+            // THE REFUSED CARD'S "Open Settings" (PhotosRefused) is the banner's own remedy.
+            onEmptyAction: { send(PhotosHomeEvents.make { $0.remedy = .with { $0.remedy = .settings } }) },
             flat: true,
             // THE GRID IS THE LOADING STATE (v0 §14): skeleton tiles at the rung's
             // real geometry, so nothing reflows when the bytes land. Never a spinner.
@@ -234,6 +236,10 @@ struct LibraryTimelineRows: View {
 
     @State private var sweep: Bool?
     @State private var swept: String?
+    /// THE HEADERS' ROWS GROW WITH THEIR TEXT (#1202): a fixed 46 and 34 held a month and a day
+    /// the height of the default text, so at the largest size the month ran over the day label.
+    @ScaledMetric(relativeTo: .title3) private var monthRow = LibraryMetrics.monthRow
+    @ScaledMetric(relativeTo: .footnote) private var dayRow = LibraryMetrics.dayRow
 
     /// The rows grouped under their month: a month row opens a section.
     private var sections: [(month: Centraid_Core_V1_PhotosTimelineRow?, rows: [Centraid_Core_V1_PhotosTimelineRow])] {
@@ -263,10 +269,14 @@ struct LibraryTimelineRows: View {
                     Text(month.title)
                         .kitType(.section)
                         .foregroundStyle(Surface.ink)
+                        // ONE LINE THAT SHRINKS, NEVER ONE THAT TRUNCATES (#1202): the row's height is
+                        // exact (the sweep walks it), so a second line cannot be given room, and
+                        // "November 2026" read "November 2..." at the largest text.
                         .lineLimit(1)
+                        .minimumScaleFactor(0.5)
                         .padding(.top, 12)
                         .padding(.horizontal, CentraidGeometry.pageMargin)
-                        .frame(maxWidth: .infinity, minHeight: LibraryMetrics.monthRow, maxHeight: LibraryMetrics.monthRow, alignment: .leading)
+                        .frame(maxWidth: .infinity, minHeight: monthRow, maxHeight: monthRow, alignment: .leading)
                         .background(Surface.page)
                         .accessibilityAddTraits(.isHeader)
                 }
@@ -330,7 +340,7 @@ struct LibraryTimelineRows: View {
                 .kitType(.meta)
                 .fontWeight(.semibold)
                 .foregroundStyle(Surface.meta)
-                .lineLimit(1)
+                .kitLineLimit(1, wide: 2)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
             if selecting, !row.toggleLabel.isEmpty {
@@ -348,7 +358,7 @@ struct LibraryTimelineRows: View {
             }
         }
         .padding(.horizontal, CentraidGeometry.pageMargin)
-        .frame(height: LibraryMetrics.dayRow)
+        .frame(height: dayRow)
     }
 
     private func sweepGesture(from rowID: String) -> some Gesture {
@@ -375,8 +385,8 @@ struct LibraryTimelineRows: View {
     /// A row's height in the flow, EXACTLY as drawn.
     private func height(_ row: Centraid_Core_V1_PhotosTimelineRow) -> CGFloat {
         switch row.kind {
-        case .month: return LibraryMetrics.monthRow
-        case .day: return LibraryMetrics.dayRow
+        case .month: return monthRow
+        case .day: return dayRow
         default: return CGFloat(row.packed.first?.height ?? 0) + PhotoTileMetrics.gap
         }
     }
