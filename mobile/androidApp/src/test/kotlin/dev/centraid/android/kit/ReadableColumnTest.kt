@@ -84,4 +84,28 @@ class ReadableColumnTest {
 
     @Test @Config(qualifiers = "w411dp-h891dp-xhdpi", sdk = [34])
     fun aPhonePushedPageIsUnchanged() = full(readable = true, pushed = true)
+
+    @Test @Config(qualifiers = "w1280dp-h800dp-mdpi", sdk = [34])
+    fun theShellBandOutsideARoomIsCappedAndCentredOnATablet() {
+        var cap = 0f
+        rule.setContent {
+            CentraidTheme(dark = false) {
+                cap = with(LocalDensity.current) { KitGeometry.READABLE_WIDTH.toPx() }
+                Box(Modifier.fillMaxSize()) {
+                    HomeBand(
+                        tabs = listOf(
+                            centraid.core.v1.ShellBandTab(tab = "home", label = "Home", spoken = "Home", icon_key = "Home", selected = true),
+                            centraid.core.v1.ShellBandTab(tab = "backup", label = "Backup", spoken = "Backup", icon_key = "Backup"),
+                        ),
+                        onSelect = {},
+                    )
+                }
+            }
+        }
+        rule.waitForIdle()
+        val band = rule.onNodeWithTag("home-band").fetchSemanticsNode().boundsInRoot
+        val screen = rule.onRoot().fetchSemanticsNode().boundsInRoot.width
+        assertTrue("band ${band.width} over the cap $cap", band.width <= cap + 0.5f)
+        assertEquals((screen - band.width) / 2f, band.left, 1f)
+    }
 }
