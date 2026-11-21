@@ -45,6 +45,7 @@ struct AgendaEventView: View {
                 }
                 .accessibilityLabel(d.menuLabel)
                 .accessibilityIdentifier("agenda-event-menu")
+                .headerKeyTarget()
             }
         } content: {
             // THE READ IS THE KIT'S PAGE STATE (#1185): an event that is gone is its final failure, and

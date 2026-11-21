@@ -185,6 +185,7 @@ struct PhotoShelfView: View {
                     }
                     .accessibilityLabel(state.album.optionsLabel)
                     .accessibilityIdentifier("photos.shelf.albumMenu")
+                    .headerKeyTarget()
                 }
             }
             if selecting {

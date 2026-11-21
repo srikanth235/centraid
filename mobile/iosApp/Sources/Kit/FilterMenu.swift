@@ -69,6 +69,7 @@ struct FilterMenuButton: View {
         }
         .accessibilityLabel(menu.spoken)
         .accessibilityIdentifier("\(app)-filter-menu")
+        .headerKeyTarget()
     }
 
     @Environment(\.colorScheme) private var scheme

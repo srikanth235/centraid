@@ -115,6 +115,7 @@ struct NotesEditorView: View {
                 }
                 .accessibilityLabel(chrome.menuLabel)
                 .accessibilityIdentifier("note-editor-menu")
+                .headerKeyTarget()
             }
         } content: {
             PageReadStateView(

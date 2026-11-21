@@ -104,6 +104,7 @@ struct KitAccentKey: View {
                 .frame(width: 30, height: 30)
         }
         .buttonStyle(.borderedProminent)
+        .headerKeyTarget()
         .buttonBorderShape(.circle)
         .tint(accent.fill)
         .disabled(!enabled)
