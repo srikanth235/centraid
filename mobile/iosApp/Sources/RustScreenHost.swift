@@ -535,7 +535,19 @@ struct RustScreenView: View {
             ChatPageView(shell: shell, store: store, instance: instance, onBack: pop, open: open)
         // HOME is the root of the `home` tab, drawn by `HomeView`, never pushed.
         default:
+            // A PAGE THE CORE CLOSED LEAVES THE STACK (#1202, S13): a restore closes every screen, the
+            // words page's own among them, and the page stayed on screen as bare paper with a back key
+            // although `path` was already empty (SwiftUI kept the pushed destination while the root
+            // beneath it changed from the welcome screen to Home). Nothing is left to draw for a closed
+            // instance, so its entry leaves `path` and, when the stack still shows it, the stack is
+            // rebuilt. A page still opening is untouched.
             BarePaper()
+                .onAppear {
+                    guard let entry, store.closedInstances.contains(instance) else { return }
+                    if shell.sheet == entry { shell.sheet = nil }
+                    shell.path.removeAll { $0 == .rust(entry) }
+                    DispatchQueue.main.async { shell.rebuildStack() }
+                }
         }
     }
 }

@@ -129,6 +129,8 @@ struct BackupHomeView: View {
             .padding(.top, 4)
             .padding(.bottom, 32)
             .frame(maxWidth: .infinity, alignment: .leading)
+            // THE READABLE COLUMN (ruling 27, #1202): Backup stood the iPad's whole width.
+            .readableColumn(alignment: .leading)
         }
         // THE ROWS STOP AT THE BAR'S EDGE (#1202, S2-5): without it they scroll under the clock and
         // the status icons with nothing between. The Android page is laid out inside the safe area.
@@ -170,6 +172,8 @@ struct BackupHomeView: View {
                 // THE FLOATING BAND STANDS OVER THE FOOT: the last rows scroll clear of it.
                 .padding(.bottom, 120)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                // THE READABLE COLUMN (ruling 27, #1202): Backup stood the iPad's whole width.
+                .readableColumn(alignment: .leading)
                 .id(Self.top)
             }
             // THE PAGE OPENS AT ITS TOP AND STAYS THERE as the read fills it in.

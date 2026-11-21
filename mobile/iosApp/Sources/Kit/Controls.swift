@@ -220,6 +220,10 @@ struct KitSegmented<Key: Hashable>: View {
                 segment(option.key, option.label)
             }
         }
+        // A FILLING TRACK TAKES THE HEIGHT OF ITS TALLEST SEGMENT (#1202, S13): a label too long for its
+        // third ("Phone's setting" on an iPhone SE) wraps whole onto a second line, and the others stand
+        // as tall as it, so the lit one is never a short card beside a tall one.
+        .fixedSize(horizontal: false, vertical: fills && !stacked)
         .padding(3)
         .background(Surface.fill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityElement(children: .contain)
@@ -233,12 +237,17 @@ struct KitSegmented<Key: Hashable>: View {
                 .kitType(.row)
                 .fontWeight(active ? .semibold : .regular)
                 .foregroundStyle(active ? Surface.ink : Surface.meta)
-                .lineLimit(1)
+                .lineLimit(fills ? 2 : 1)
+                .multilineTextAlignment(.center)
                 // ONE SIZE FOR EVERY SEGMENT (#1202): a track that fills gives each the same width
                 // and a slim pad, and a label never shrinks alone ("6 months" came out smaller).
                 .minimumScaleFactor(fills ? 1 : 0.8)
                 .padding(.horizontal, fills ? 4 : 14)
-                .frame(maxWidth: fills ? .infinity : nil, minHeight: CentraidGeometry.targetMinCoarse)
+                .frame(
+                    maxWidth: fills ? .infinity : nil,
+                    minHeight: CentraidGeometry.targetMinCoarse,
+                    maxHeight: fills ? .infinity : nil
+                )
                 .background(active ? Surface.card : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .contentShape(Rectangle())
         }

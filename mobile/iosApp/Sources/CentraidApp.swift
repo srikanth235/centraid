@@ -56,6 +56,7 @@ struct CentraidApp: App {
                         .modifier(ShellLineHost(shell: shell))
                     }
             }
+            .id(shell.stackEpoch)
             // A SCREEN RUST SAYS IS A SHEET (`Route.sheet`), over the page that opened it.
             .sheet(item: $shell.sheet) { entry in
                 RustScreenHost(shell: shell, entry: entry)
