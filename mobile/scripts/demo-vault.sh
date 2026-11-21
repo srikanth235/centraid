@@ -62,6 +62,8 @@ vaults=("$staging/demo-vault.sqlite3" "$staging/work-vault.sqlite3")
 
 place_android() {
   local adb="${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}/platform-tools/adb"
+  # An SDK without platform-tools still has adb on PATH (Homebrew's, say).
+  [ -x "$adb" ] || adb="$(command -v adb || echo "$adb")"
   if ! "$adb" get-state >/dev/null 2>&1; then
     echo "==> no android device; skipping"
     return
