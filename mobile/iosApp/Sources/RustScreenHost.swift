@@ -544,9 +544,7 @@ struct RustScreenView: View {
             BarePaper()
                 .onAppear {
                     guard let entry, store.closedInstances.contains(instance) else { return }
-                    if shell.sheet == entry { shell.sheet = nil }
-                    shell.path.removeAll { $0 == .rust(entry) }
-                    DispatchQueue.main.async { shell.rebuildStack() }
+                    DispatchQueue.main.async { shell.dropClosedPage(entry) }
                 }
         }
     }
