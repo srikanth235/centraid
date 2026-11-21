@@ -224,6 +224,31 @@ impl Driver {
         }
     }
 
+    /// THE PROCESS DIES AND THE APP IS OPENED AGAIN: the core is closed and opened over the same
+    /// vault file with `runtime` attached, as a relaunch does. What lived in memory (every screen,
+    /// the runtime's boards, the pending effects) is gone; the vault stays. What the shell keeps
+    /// (a [`FakeShell`]) is the test's to carry across.
+    ///
+    /// # Panics
+    /// When this driver's vault directory was given by the caller, or the core cannot be opened
+    /// again.
+    #[must_use]
+    pub fn restarted(mut self, runtime: Runtime) -> Self {
+        let dir = self
+            .scratch
+            .clone()
+            .expect("only a driver that made its own vault restarts");
+        self.handle.close();
+        self.handle = Core::open(CoreConfig::new(dir.join("vault.db")))
+            .expect("the core opens the same vault again");
+        self.handle.attach_screens(std::sync::Arc::new(runtime));
+        self.views.clear();
+        self.navigation = None;
+        self.effects.clear();
+        self.closed.clear();
+        self
+    }
+
     /// A core that holds no vault at all: the file is not there and is not
     /// made, as on a phone that has not made one yet. A screen that needs the
     /// vault is refused `Unpaired`.
