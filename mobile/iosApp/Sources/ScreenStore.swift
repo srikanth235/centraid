@@ -45,6 +45,8 @@ final class ScreenStore: ObservableObject {
     private let scheduleNotifications: NotificationScheduler
     private var startup: Task<Bool, Never>?
     private var closed: Set<UInt64> = []
+    /// The instances the core has closed (a closed one has no view left to draw).
+    var closedInstances: Set<UInt64> { closed }
     /// Instances this shell opened with `open`, so two opens never claim one entry.
     private var claimed: Set<UInt64> = []
     /// The phone stores being watched (`PhoneWatch`), each under the effect that asked.

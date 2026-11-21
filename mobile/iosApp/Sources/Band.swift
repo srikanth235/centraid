@@ -60,6 +60,9 @@ struct HomeBand: View {
         .padding(.horizontal, BandMetrics.inset)
         .padding(.top, BandMetrics.topGap)
         .padding(.bottom, BandMetrics.floorPadding)
+        // THE SHELL'S BAND CAPS AT THE READABLE COLUMN and centres (ruling 27, #1202): on an iPad it
+        // stood the screen's whole width under Home, Chat and Backup while the apps' bands were capped.
+        .readableColumn()
         // `.contain`, or the plate's identifier REPLACES each tab's own: the
         // hierarchy showed every tab as `home-band`, so no flow could select
         // Chat or More by id.

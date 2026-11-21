@@ -72,6 +72,9 @@ final class ShellModel: ObservableObject {
     private var restoreAsked = false
     /// The instance Rust opened for each Rust entry on `path`, by entry token.
     @Published private(set) var rustInstances: [Int: UInt64] = [:]
+    /// Bumped to make the app's `NavigationStack` start again, empty, when it still draws a page the core closed.
+    @Published private(set) var stackEpoch = 0
+    func rebuildStack() { stackEpoch += 1 }
     private var rustOpening: Set<Int> = []
     /// THE SWITCHER MASK: painted on `.background`, so the snapshot iOS keeps
     /// for the app switcher shows no rows (`CentraidApp`).
