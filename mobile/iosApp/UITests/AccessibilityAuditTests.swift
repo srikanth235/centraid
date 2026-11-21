@@ -74,13 +74,15 @@ final class AccessibilityAuditTests: XCTestCase {
         let tile: String
         let more: String?
         let add: String?
+        /// An element only the Add screen has, which proves it is up before it is audited.
+        var addProof: String? = nil
     }
 
     private static let roots: [Root] = [
         Root(name: "Calendar", tile: "home-tile-calendar", more: "calendar-band-more", add: "agenda-new-event"),
         Root(name: "Reminders", tile: "home-tile-reminders", more: "reminders-band-more", add: "agenda-add-task"),
         Root(name: "Notes", tile: "home-tile-notes", more: "notes-band-more", add: "notes-new-note"),
-        Root(name: "People", tile: "home-tile-people", more: "people-band-more", add: "people-add-person"),
+        Root(name: "People", tile: "home-tile-people", more: "people-band-more", add: "people-add-person", addProof: "kit-editor-close"),
         Root(name: "Docs", tile: "home-tile-docs", more: "docs-band-more", add: "docs-add"),
         Root(name: "Money", tile: "home-tile-money", more: "money-band-more", add: "money-add"),
         Root(name: "Health", tile: "home-tile-health", more: "health-band-more", add: nil),
@@ -113,7 +115,16 @@ final class AccessibilityAuditTests: XCTestCase {
             }
             if let add = root.add, app.el(add).exists {
                 app.el(add).tap()
-                audit(app, mode: mode, screen: "\(root.name) Add")
+                // AN ADD THAT OPENED NOTHING must not file the page's issues under "Add" (People Add once
+                // audited the roster, 23 issues of a screen that was not up: the editor opens through the core).
+                // Waits are bounded: one retap, then a failure that names the screen.
+                var up = true
+                if let proof = root.addProof, !app.el(proof).waitForExistence(timeout: 10) {
+                    if app.el(add).exists && app.el(add).isHittable { app.el(add).tap() }
+                    up = app.el(proof).waitForExistence(timeout: 20)
+                    if !up { XCTFail("\(mode) / \(root.name): Add did not open its screen (\(proof) is not there)") }
+                }
+                if up { audit(app, mode: mode, screen: "\(root.name) Add") }
                 dismissSheet(app)
             }
             try goHome(app)
@@ -781,22 +792,27 @@ final class AccessibilityAuditTests: XCTestCase {
         var issues = 0
         for attempt in 0..<5 {
             issues = 0
+            // BOUNDED BY CONSTRUCTION (#1202): every read of the app or of an issue's element is a query over
+            // XCUITest's channel to the app (`app.frame` was read once per exemption, ~70 times an issue, so
+            // a screen with 60 issues cost minutes). The frame and the two anchors are read ONCE per audit,
+            // and an issue's element is read ONCE, as a snapshot.
+            let appFrame = app.frame
+            var barTop: CGFloat?
+            if screen.hasPrefix("Reminders Add") { let bar = app.el("agenda-quick-tool-date"); barTop = bar.exists ? bar.frame.minY - 8 : nil }
+            var laneBottom: CGFloat?
+            if screen == "Calendar" { let lane = app.el("agenda-all-day-lane"); laneBottom = lane.exists ? lane.frame.maxY : nil }
             do {
                 try app.performAccessibilityAudit { issue in
-                    let id = issue.element?.identifier ?? ""
-                    let label = issue.element?.label ?? ""
-                    print("A11Y-ISSUE|\(mode)|\(screen)|\(issue.auditType.rawValue)|\(issue.compactDescription)|id=\(id)|label=\(label)|type=\(issue.element?.elementType.rawValue ?? 0)|frame=\(issue.element?.frame ?? .zero)|\(issue.detailedDescription)")
-                    let frame = issue.element?.frame ?? .zero
-                    let under = (issue.element?.frame).map { $0.height > 0 && $0.maxY > app.frame.height - 96 } ?? true // no element: the audit could not place it, and the only unplaced contrast reads are of the blurred page under the band
-                    // The anchors are looked up only where an exemption reads them: each lookup is a query of the app.
-                    var barTop: CGFloat?
-                    if screen.hasPrefix("Reminders Add") { let bar = app.el("agenda-quick-tool-date"); barTop = bar.exists ? bar.frame.minY - 8 : nil }
-                    var laneBottom: CGFloat?
-                    if screen == "Calendar" { let lane = app.el("agenda-all-day-lane"); laneBottom = lane.exists ? lane.frame.maxY : nil }
-                    if Self.exemptions.contains(where: { $0.matches(screen: screen, type: issue.auditType, id: id, label: label, frame: frame, in: app.frame, barTop: barTop, underBand: under, laneBottom: laneBottom, detail: issue.detailedDescription) }) {
+                    let snap = try? issue.element?.snapshot()
+                    let id = snap?.identifier ?? ""
+                    let label = snap?.label ?? ""
+                    let frame = snap?.frame ?? .zero
+                    print("A11Y-ISSUE|\(mode)|\(screen)|\(issue.auditType.rawValue)|\(issue.compactDescription)|id=\(id)|label=\(label)|type=\(snap?.elementType.rawValue ?? 0)|frame=\(frame)|\(issue.detailedDescription)")
+                    let under = snap.map { $0.frame.height > 0 && $0.frame.maxY > appFrame.height - 96 } ?? true // no element: the audit could not place it, and the only unplaced contrast reads are of the blurred page under the band
+                    if Self.exemptions.contains(where: { $0.matches(screen: screen, type: issue.auditType, id: id, label: label, frame: frame, in: appFrame, barTop: barTop, underBand: under, laneBottom: laneBottom, detail: issue.detailedDescription) }) {
                         return true
                     }
-                    print("A11Y-OPEN|\(mode)|\(screen)|\(issue.auditType.rawValue)|id=\(id)|label=\(label)|frame=\(issue.element?.frame ?? .zero)|\(issue.detailedDescription)")
+                    print("A11Y-OPEN|\(mode)|\(screen)|\(issue.auditType.rawValue)|id=\(id)|label=\(label)|frame=\(frame)|\(issue.detailedDescription)")
                     issues += 1
                     self.found["\(mode)|\(screen)|\(Self.typeName(issue.auditType))", default: 0] += 1
                     // Handled here: whether the count is acceptable is `settle`'s to say.
