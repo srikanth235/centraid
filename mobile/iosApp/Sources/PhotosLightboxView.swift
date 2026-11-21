@@ -120,7 +120,7 @@ struct PhotosLightboxView: View {
         ZStack(alignment: .bottom) {
             Surface.page.ignoresSafeArea()
             VStack(spacing: 0) {
-                lightHeader()
+                lightHeader(infoOpen: infoOpen)
                 // THE FIRST READ DRAWS THE BAND ALONE (the frame is already known from the film); a
                 // failed or refused one the shared failure or gate; a failed re-read keeps the
                 // photograph under the one-sentence note.
@@ -153,14 +153,20 @@ struct PhotosLightboxView: View {
     }
 
     /// The top row: close, the stamp (WHEN outranks WHAT), the menu.
-    private func lightHeader() -> some View {
+    private func lightHeader(infoOpen: Bool) -> some View {
         let stamp = { () -> (String, String) in
             if state.content != nil { return (state.photo.stampDate, state.photo.stampLine) }
             return ("", "")
         }()
         return HStack(alignment: .center) {
-            chip(icon: "ChevronLeft", label: state.words.close, light: true, action: onClose)
-                .accessibilityIdentifier("photos.lightbox.close")
+            // BACK WITH THE DETAILS OPEN CLOSES THE DETAILS FIRST, and only a second back leaves the viewer
+            // (design/behaviour.md § Rooms; Android's BackHandler does the same): the member who opened
+            // (i) to read a caption and pressed back was thrown out of the photograph (#1202).
+            chip(
+                icon: "ChevronLeft", label: state.words.close, light: true,
+                action: { if infoOpen { send(.sheet(.with { $0.sheet = .none })) } else { onClose() } }
+            )
+            .accessibilityIdentifier("photos.lightbox.close")
             Spacer()
             // TWO LINES, THE DATE THEN THE TIME (#1202): each holds to its own line and shrinks
             // before it would wrap, so at the largest text the date no longer ran to three lines.
@@ -507,6 +513,8 @@ struct PhotosLightboxView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+        // THE CHIP'S FRAME IS 44 (#1202, S13): the glass drew 44, and the frame measured 20.
+        .headerKeyTarget()
     }
 
     private func chipFace(icon: String, light: Bool) -> some View {
