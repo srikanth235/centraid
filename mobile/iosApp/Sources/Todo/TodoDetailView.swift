@@ -19,6 +19,8 @@ struct TodoDetailView: View {
     /// THE ONLY PLACE A KEYSTROKE EXISTS BEFORE THE MACHINE HEARS IT —
     /// seeded once from the draft, never re-seeded (`NotesEditorView`'s rule).
     @State private var typedTitle = ""
+    /// Return moves from the title to the notes (`FocusChain`).
+    @FocusState private var detailField: Int?
     @State private var typedNotes = ""
     @State private var typedTag = ""
     @State private var typedSubtask = ""
@@ -131,8 +133,16 @@ struct TodoDetailView: View {
                     .padding(.vertical, 8)
                     .accessibilityLabel(detail.titlePlaceholder)
                     .accessibilityIdentifier("tasks-title-field")
+                    .focusChain(FocusChain(focus: $detailField, index: 0, last: 1))
                     // AN EDIT IS A DIFFERENCE FROM THE DRAFT, not an assignment.
                     .onChange(of: typedTitle) { _, typed in
+                        // A VERTICAL FIELD TAKES RETURN AS A NEWLINE: a title is one line, so Return moves to
+                        // the notes (the key says "next", `FocusChain`) and the break never lands in it.
+                        if typed.contains("\n") {
+                            typedTitle = typed.replacingOccurrences(of: "\n", with: "")
+                            detailField = 1
+                            return
+                        }
                         guard seeded, typed != detail.draft.title else { return }
                         send(event { $0.title = .with { $0.title = typed } })
                     }
@@ -144,6 +154,7 @@ struct TodoDetailView: View {
                     .padding(.bottom, 8)
                     .accessibilityLabel(detail.notesPlaceholder)
                     .accessibilityIdentifier("tasks-notes-field")
+                    .focused($detailField, equals: 1)
                     .onChange(of: typedNotes) { _, typed in
                         guard seeded, typed != detail.draft.notes else { return }
                         send(event { $0.notes = .with { $0.notes = typed } })

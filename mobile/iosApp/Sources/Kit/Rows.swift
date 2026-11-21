@@ -393,6 +393,8 @@ struct EditableFieldRow: View {
     @Binding var text: String
     var placeholder: String = ""
     var identifier: String = ""
+    /// The editor's focus chain: Return moves to the next field (see `FocusChain`).
+    var chain: FocusChain? = nil
     let onEdit: (String) -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -406,6 +408,7 @@ struct EditableFieldRow: View {
             TextField(placeholder, text: $text)
                 .centraidType("body")
                 .foregroundStyle(Theme.color("text", scheme))
+                .focusChain(chain)
                 .onChange(of: text) { _, typed in onEdit(typed) }
                 .accessibilityLabel(key)
                 .modifier(OptionalIdentifier(identifier: identifier))
