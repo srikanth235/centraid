@@ -205,6 +205,11 @@ private fun LightViewer(
     onClose: () -> Unit,
 ) {
     val infoOpen = state.sheet == PhotosLightboxState.Sheet.SHEET_INFO
+    // BACK CLOSES THE DETAILS BEFORE IT CLOSES THE VIEWER (#1202), as (i) and a swipe down do: the
+    // shell's own back handler pops the whole page, so the open details must claim the gesture first.
+    androidx.activity.compose.BackHandler(enabled = infoOpen) {
+        onEvent(sheetEvent(PhotosLightboxState.Sheet.SHEET_NONE))
+    }
     Column(Modifier.fillMaxSize().background(Surface.page).statusBarsPadding().navigationBarsPadding()) {
         Row(
             modifier = Modifier
