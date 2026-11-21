@@ -42,6 +42,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import centraid.core.v1.BackupCondition
 import centraid.core.v1.BackupLine
 import dev.centraid.android.R
+import dev.centraid.android.kit.readableColumn
 import dev.centraid.android.kit.CentraidIcon
 import dev.centraid.android.kit.KitTile
 import dev.centraid.android.kit.WholeTokensText
@@ -137,6 +138,7 @@ private fun BackupUnpairedPage(model: BackupHomeData, onOpen: (Route) -> Unit) {
             .fillMaxSize()
             .background(Surface.page)
             .verticalScroll(rememberScrollState())
+            .readableColumn()
             .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp, vertical = 16.dp)
             .testTag("backup-screen"),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -228,6 +230,7 @@ private fun BackupPage(
             .background(Surface.page)
             .imePadding()
             .verticalScroll(rememberScrollState())
+            .readableColumn()
             .padding(horizontal = CentraidGeometry.PAGE_MARGIN.dp, vertical = 16.dp)
             .testTag("backup-screen"),
         verticalArrangement = Arrangement.spacedBy(8.dp),

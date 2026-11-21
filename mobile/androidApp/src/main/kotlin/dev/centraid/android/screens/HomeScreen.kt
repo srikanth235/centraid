@@ -522,6 +522,26 @@ private fun StatusRibbon(
 /** `R.margin.m` — the phone's page margin, emitted beside the tokens. */
 private val PAGE_MARGIN = CentraidGeometry.PAGE_MARGIN.dp
 
+/** Where Home was scrolled to when it last left the screen (#1202): one springboard per process. */
+internal object HomeScrollMemory {
+    var offset: Int = 0
+}
+
+/**
+ * HOME'S SCROLL SURVIVES AN APP BEING OPENED OVER IT (#1202). Home leaves the composition when a page
+ * is pushed, and a plain `rememberScrollState` starts at the top again on the way back; at large text,
+ * where the tiles run below the fold, the member lost their place every time. The offset is kept when
+ * the springboard leaves and restored when it returns.
+ */
+@Composable
+internal fun rememberHomeScroll(): androidx.compose.foundation.ScrollState {
+    val state = rememberScrollState(HomeScrollMemory.offset)
+    androidx.compose.runtime.DisposableEffect(state) {
+        onDispose { HomeScrollMemory.offset = state.value }
+    }
+    return state
+}
+
 /** THE WIDGET GRID in the page's scroll (`WidgetGrid`), with the board's margin. */
 @Composable
 private fun SpringboardGrid(data: HomeData, loading: String, onOpen: (Route) -> Unit, header: (@Composable () -> Unit)? = null) {
@@ -529,7 +549,7 @@ private fun SpringboardGrid(data: HomeData, loading: String, onOpen: (Route) -> 
     // is the machine's packing over every widget, so this file looks each id up
     // and draws it. Nothing here is allowed to disagree with `HomeView.swift`,
     // because neither of them chooses.
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberHomeScroll())) {
         header?.invoke()
         Column(Modifier.padding(horizontal = PAGE_MARGIN).padding(top = 10.dp, bottom = 24.dp)) {
             // THE WELCOME CARD: day zero only, one sentence, gone after the first add or import.

@@ -81,7 +81,9 @@ public fun HomeBand(
 ) {
     Row(
         modifier
-            .fillMaxWidth()
+            // CAPPED AND CENTRED ON A WIDE SCREEN (ruling 27, #1202): Home and the Backup tab draw this band
+            // outside a room, so the cap must be here as well as in the rooms.
+            .readableColumn()
             // THE BAND FLOATS (§G), never a flush bar. Its ground is the page's
             // elevated surface — not `bg`, because a page colour does not
             // float, and not `bgChrome`, which sinks on dark — and its edge is
