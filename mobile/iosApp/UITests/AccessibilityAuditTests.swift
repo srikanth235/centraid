@@ -91,7 +91,18 @@ final class AccessibilityAuditTests: XCTestCase {
 
     @MainActor private func tour(mode: String, appearance: XCUIDevice.Appearance, textSize: String?) throws {
         XCUIDevice.shared.appearance = appearance
-        let app = launch(textSize: textSize)
+        var app = launch(textSize: textSize)
+        // THE APPEARANCE IS PROVED, NOT ASSUMED (#1202): `XCUIDevice.appearance` can be a no-op, and a "dark"
+        // audit of a light app proves nothing (the screenshots of testAuditDark were light). Home's own pixels
+        // say which it is; two more tries (set it again, start the app afresh), then a failure that says so.
+        for attempt in 1...2 where Self.rendersDark(app) != (appearance == .dark) {
+            print("APPEARANCE-RETRY|\(mode)|\(attempt)")
+            XCUIDevice.shared.appearance = appearance
+            Thread.sleep(forTimeInterval: 2)
+            app.terminate()
+            app = launch(textSize: textSize)
+        }
+        XCTAssertEqual(Self.rendersDark(app), appearance == .dark, "\(mode): the app renders in \(appearance == .dark ? "dark" : "light"), so the audit audits what it says")
         // `CENTRAID_UI_ONLY` (comma-separated screen names) narrows a run to those roots, to iterate on one
         // screen; unset, the whole tour runs, which is what the gate does.
         let only = ProcessInfo.processInfo.environment["CENTRAID_UI_ONLY"].flatMap { $0.isEmpty ? nil : $0 }.map { Set($0.split(separator: ",").map(String.init)) }
@@ -109,6 +120,10 @@ final class AccessibilityAuditTests: XCTestCase {
             }
             audit(app, mode: mode, screen: root.name)
             if let more = root.more, app.el(more).exists {
+                // CALENDAR MORE, WITH THE DEMO'S 2 PM BLOCK AT THE TOP OF THE PAGE (#1202): where the hour grid sits
+                // depends on the clock, and CI reached the state where a block shows above the sheet; the audit
+                // puts it there every time, so that state is audited whatever time the run starts.
+                if root.name == "Calendar" { scrollFocusBlockToTop(app) }
                 app.el(more).tap()
                 audit(app, mode: mode, screen: "\(root.name) More")
                 dismissSheet(app)
@@ -331,6 +346,28 @@ final class AccessibilityAuditTests: XCTestCase {
         return app
     }
 
+    /// Whether the app is drawn dark: the page ground at the left margin of Home, 6 pt in, half way down, is
+    /// near black in dark (about 0.05) and cream in light (about 0.95).
+    @MainActor private static func rendersDark(_ app: XCUIApplication) -> Bool {
+        guard let image = app.screenshot().image.cgImage,
+              let pixel = image.cropping(to: CGRect(x: 8, y: image.height / 2, width: 4, height: 4)),
+              let data = pixel.dataProvider?.data, let bytes = CFDataGetBytePtr(data), pixel.bitsPerPixel >= 24
+        else { return false }
+        // Channel order does not matter to an average of the three.
+        return (Double(bytes[0]) + Double(bytes[1]) + Double(bytes[2])) / 765 < 0.4
+    }
+
+    /// Drags the Day grid up (at most 10 steps) until the "Focus block" title is near the top of the page.
+    @MainActor private func scrollFocusBlockToTop(_ app: XCUIApplication) {
+        let title = app.descendants(matching: .any).matching(identifier: "agenda-grid-block-title")
+            .matching(NSPredicate(format: "label == 'Focus block'")).firstMatch
+        for step in 0..<10 {
+            print("FOCUS-BLOCK|\(step)|exists=\(title.exists)|frame=\(title.exists ? title.frame : .zero)")
+            if title.exists, title.frame.minY < 220 { return }
+            app.swipeUp()
+        }
+    }
+
     @MainActor private func open(_ app: XCUIApplication, tile: String?, id: String? = nil) throws {
         let key = app.el(tile ?? id ?? "")
         // The grid is lazy: at the largest sizes a tile off the screen is not in the
@@ -499,13 +536,15 @@ final class AccessibilityAuditTests: XCTestCase {
         /// Only an element that starts above the foot of the Calendar's all-day lane (its fade included, 32pt): the hour grid scrolls
         /// under that lane's wash, so what sits there is covered, not shown.
         var underLane = false
+        /// Only an element the Day grid's now line passes through (its minute lies within the element's frame, 2pt either side).
+        var underNow = false
         /// The element's identifier starts with this (a family of ids that end in a key).
         var idPrefix: String? = nil
         /// The element's identifier matches this expression (a few ids of one kind).
         var idRegex: String? = nil
         /// The audit's own description of the element (its class, for a system view).
         var detail: String? = nil
-        func matches(screen: String, type: XCUIAccessibilityAuditType, id: String, label: String, frame: CGRect, in screenFrame: CGRect, barTop: CGFloat?, underBand under: Bool, laneBottom: CGFloat?, detail text: String) -> Bool {
+        func matches(screen: String, type: XCUIAccessibilityAuditType, id: String, label: String, frame: CGRect, in screenFrame: CGRect, barTop: CGFloat?, underBand under: Bool, laneBottom: CGFloat?, nowY: CGFloat?, detail text: String) -> Bool {
             (!underBand || under)
                 && (self.detail.map { text.range(of: $0, options: .regularExpression) != nil } ?? true)
                 && (self.screen.map { exactScreen ? $0 == screen : ($0 == screen || screen.hasPrefix($0 + " ")) } ?? true)
@@ -514,6 +553,7 @@ final class AccessibilityAuditTests: XCTestCase {
                 && (idPrefix.map { id.hasPrefix($0) } ?? true)
                 && (idRegex.map { id.range(of: $0, options: .regularExpression) != nil } ?? true)
                 && (!underLane || (laneBottom.map { frame.minY < $0 + 32 } ?? false))
+                && (!underNow || (nowY.map { frame.minY - 2 <= $0 && $0 <= frame.maxY + 2 } ?? false))
                 && (self.label.map { label.range(of: $0, options: .regularExpression) != nil } ?? true)
                 && (self.frame.map { $0(frame, screenFrame) } ?? true)
                 && (!underBar || (barTop.map { frame.maxY > $0 } ?? false))
@@ -582,6 +622,13 @@ final class AccessibilityAuditTests: XCTestCase {
         // chips' wash). The same words pass once scrolled into the grid: s4-proof/calendar-lane-covers-grid.png.
         Exemption(screen: "Calendar", type: .contrast, id: "agenda-grid-block-title", label: nil, underLane: true),
         Exemption(screen: "Calendar", type: .contrast, id: "agenda-grid-block-detail", label: nil, underLane: true),
+        // CALENDAR, THE NOW LINE THROUGH A BLOCK'S WORDS: for the first minutes of an event the accent's 2pt now rule
+        // is drawn across the head of its block, over the title and time, and the audit reads the rule's pixels as
+        // the words' ground. It is the clock's doing (the demo's events sit at fixed hours, the run at whatever
+        // time it starts), and it is the design (the line is over the blocks, as in every calendar); only the block
+        // the line is inside is excused, by its minute. The words are whole: s4-proof/dark-Calendar.png ("Design
+        // review" with the line through its head, read in full).
+        Exemption(screen: "Calendar", type: .contrast, id: nil, label: nil, exactScreen: true, underNow: true, idRegex: "^agenda-grid-block-(title|detail)$"),
         // CALENDAR, THE FOOT GRIP OF A MOVABLE BLOCK: a drag on the foot moves the block's end, over a 16pt
         // strip of the block's own foot. It is not a control to aim at: the block is the target, and VoiceOver
         // adjusts the end through the grip's adjustable action (`agenda-grid-block-resize-*`, "Change end time").
@@ -700,10 +747,6 @@ final class AccessibilityAuditTests: XCTestCase {
         // CALENDAR MORE. Proof: light-Calendar-More.png, dark-Calendar-More.png, accessibility-xxxl-Calendar-More.png.
         Exemption(screen: "Calendar More", type: .contrast, id: nil, label: "^(Calendar|Calendars|Family|New Calendar|What Calendar may read|Work)$", exactScreen: true),
         Exemption(screen: "Calendar More", type: .textClipped, id: nil, label: "^(Calendar|Family|New Calendar|What Calendar may read|Work)$", exactScreen: true),
-        // CALENDAR MORE, THE PAGE'S BLOCKS BEHIND THE SHEET (#1202): the sheet's scrim dims the page, and a block's title and
-        // time that show above the sheet are read at the dimmed ink. The same block passes on the page (Calendar, dark). Proof:
-        // dark-Calendar-More.png (the dimmed page above the sheet).
-        Exemption(screen: "Calendar More", type: .contrast, id: nil, label: nil, exactScreen: true, idRegex: "^agenda-grid-block-(title|detail)$"),
         // REMINDERS MORE. Proof: light-Reminders-More.png, dark-Reminders-More.png, accessibility-xxxl-Reminders-More.png.
         Exemption(screen: "Reminders More", type: .contrast, id: nil, label: "^(30 days, then erased|Anytime|Export|Turn on Phone reminders|What Reminders may read|done and won't do|no date, still yours|open work with a reminder)$", exactScreen: true),
         Exemption(screen: "Reminders More", type: .textClipped, id: nil, label: "^(30 days, then erased|Anytime|Export|Turn on Phone reminders|What Reminders may read|done and won't do|no date, still yours|open work with a reminder)$", exactScreen: true),
@@ -806,6 +849,8 @@ final class AccessibilityAuditTests: XCTestCase {
             if screen.hasPrefix("Reminders Add") { let bar = app.el("agenda-quick-tool-date"); barTop = bar.exists ? bar.frame.minY - 8 : nil }
             var laneBottom: CGFloat?
             if screen == "Calendar" { let lane = app.el("agenda-all-day-lane"); laneBottom = lane.exists ? lane.frame.maxY : nil }
+            var nowY: CGFloat?
+            if screen == "Calendar" { let now = app.el("agenda-now-line"); nowY = now.exists ? now.frame.midY : nil }
             do {
                 try app.performAccessibilityAudit { issue in
                     let snap = try? issue.element?.snapshot()
@@ -814,7 +859,7 @@ final class AccessibilityAuditTests: XCTestCase {
                     let frame = snap?.frame ?? .zero
                     print("A11Y-ISSUE|\(mode)|\(screen)|\(issue.auditType.rawValue)|\(issue.compactDescription)|id=\(id)|label=\(label)|type=\(snap?.elementType.rawValue ?? 0)|frame=\(frame)|\(issue.detailedDescription)")
                     let under = snap.map { $0.frame.height > 0 && $0.frame.maxY > appFrame.height - 96 } ?? true // no element: the audit could not place it, and the only unplaced contrast reads are of the blurred page under the band
-                    if Self.exemptions.contains(where: { $0.matches(screen: screen, type: issue.auditType, id: id, label: label, frame: frame, in: appFrame, barTop: barTop, underBand: under, laneBottom: laneBottom, detail: issue.detailedDescription) }) {
+                    if Self.exemptions.contains(where: { $0.matches(screen: screen, type: issue.auditType, id: id, label: label, frame: frame, in: appFrame, barTop: barTop, underBand: under, laneBottom: laneBottom, nowY: nowY, detail: issue.detailedDescription) }) {
                         return true
                     }
                     print("A11Y-OPEN|\(mode)|\(screen)|\(issue.auditType.rawValue)|id=\(id)|label=\(label)|frame=\(frame)|\(issue.detailedDescription)")
