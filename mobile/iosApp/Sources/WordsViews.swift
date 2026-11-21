@@ -231,7 +231,10 @@ struct WordsEntryView: View {
                             .kitType(.meta)
                             .foregroundStyle(Surface.meta)
                             .fixedSize(horizontal: false, vertical: true)
-                        HStack(spacing: 8) {
+                        // THE SCAN KEY STANDS AT THE FIELD'S TOP (#1202, S13): centred on a field that grows to
+                        // five lines it sat at the field's middle, and with the keyboard up the field is cut at
+                        // the foot of the scroller, so the key was cut with it.
+                        HStack(alignment: .top, spacing: 8) {
                             // THE WHOLE CODE: it has no word breaks, so it wraps anywhere in a field that
                             // grows (#1202, S2-6), as pairing's does.
                             MachineTextEditor(value: state.endpoint, minHeight: 56, maxHeight: 140, placeholder: state.endpointPlaceholder) { text in

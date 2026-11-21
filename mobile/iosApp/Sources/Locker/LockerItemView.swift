@@ -52,6 +52,7 @@ struct LockerItemView: View {
                         }
                         .accessibilityLabel(state.chrome.menuLabel)
                         .accessibilityIdentifier("locker-item-menu")
+                        .headerKeyTarget()
                     }
                     if !state.chrome.editLabel.isEmpty {
                         ToolbarVerb(label: state.chrome.editLabel, identifier: "locker-item-edit") {

@@ -74,7 +74,19 @@ final class ShellModel: ObservableObject {
     @Published private(set) var rustInstances: [Int: UInt64] = [:]
     /// Bumped to make the app's `NavigationStack` start again, empty, when it still draws a page the core closed.
     @Published private(set) var stackEpoch = 0
-    func rebuildStack() { stackEpoch += 1 }
+    /// A PAGE THE CORE CLOSED LEAVES THE STACK (#1202, S13): a restore closes every screen, and SwiftUI kept
+    /// drawing the words page as bare paper with a back key. The entry leaves `path` (and the sheet), and the
+    /// stack is rebuilt so it stops drawing what `path` no longer holds.
+    func dropClosedPage(_ entry: RustEntry) {
+        Self.dropClosed(entry, path: &path, sheet: &sheet, epoch: &stackEpoch)
+    }
+
+    /// The rule itself, on plain values so a test needs no core.
+    static func dropClosed(_ entry: RustEntry, path: inout [Route], sheet: inout RustEntry?, epoch: inout Int) {
+        if sheet == entry { sheet = nil }
+        path.removeAll { $0 == .rust(entry) }
+        epoch += 1
+    }
     private var rustOpening: Set<Int> = []
     /// THE SWITCHER MASK: painted on `.background`, so the snapshot iOS keeps
     /// for the app switcher shows no rows (`CentraidApp`).
@@ -337,7 +349,10 @@ final class ShellModel: ObservableObject {
             return
         }
         if path.isEmpty { returnsToChat = tab == .chat }
-        path.append(.rust(RustEntry.make(route)))
+        // A PAGE OPENED FROM BACKUP LIVES ON BACKUP'S STACK, as on Android (`push(tab = activeTab())`):
+        // on Home's it selected Home under the page, so Cancel or Done on the pairing page landed on Home
+        // and not back on Backup (#1202, S13).
+        path.append(.rust(RustEntry.make(route, tab: tab == .backup ? RustScreens.backupTab : RustScreens.homeTab)))
     }
 
     /// Open a Rust entry's route on Rust's stack, once, and remember its instance.

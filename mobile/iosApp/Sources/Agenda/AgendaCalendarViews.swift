@@ -259,6 +259,7 @@ struct AgendaLayoutKey: View {
         }
         .accessibilityLabel(header.layoutLabel)
         .accessibilityIdentifier("agenda-layout-key")
+        .headerKeyTarget()
     }
 
     private var selection: Binding<String> {

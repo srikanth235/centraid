@@ -427,6 +427,17 @@ struct ToolbarIcon: View {
         }
         .accessibilityLabel(label)
         .accessibilityIdentifier(identifier)
+        .headerKeyTarget()
+    }
+}
+
+extension View {
+    /// A HEADER KEY IS A 44 PT TARGET (#1202, S13): the bar's keys laid out 36 to 42 pt (the funnel, the
+    /// filled key, the "…" menus), and the frame is what is measured. Applied to the key itself, outside
+    /// its label, so the glass the bar draws around it keeps the size it has.
+    func headerKeyTarget() -> some View {
+        frame(minWidth: CentraidGeometry.targetMinCoarse, minHeight: CentraidGeometry.targetMinCoarse)
+            .contentShape(Rectangle())
     }
 }
 
