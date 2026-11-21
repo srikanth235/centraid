@@ -1296,7 +1296,7 @@ impl World {
 
         let started = door.table_where(
             "activity",
-            "id, starts",
+            "id, starts, ends",
             "starts",
             "id",
             "type_kind = ? AND starts >= ?",
@@ -1373,6 +1373,15 @@ impl World {
                     .find(|activity| text(activity, "id").as_deref() == Some(id.as_str()))
                     .and_then(|activity| text(activity, "starts"))
                     .and_then(|starts| local_stamp(&zone, &starts));
+                // when it ended, if it did: the vault's instant on the member's clock
+                if let Some(ends) = started
+                    .iter()
+                    .find(|activity| text(activity, "id").as_deref() == Some(id.as_str()))
+                    .and_then(|activity| text(activity, "ends"))
+                    .and_then(|ends| local_stamp(&zone, &ends))
+                {
+                    row.extra.insert("end", ends.vault());
+                }
                 self.insert(row);
             }
         }

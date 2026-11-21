@@ -2832,6 +2832,38 @@ impl Session {
         }
     }
 
+    /// A workout's end as the member said it: an instant, on the day the workout started when
+    /// the message names no day (`row`, for an edit, settles it as a reschedule does; a new
+    /// workout has the `started` day alone). A day without a time is no end.
+    fn workout_end(
+        &mut self,
+        value: &Value,
+        started: jiff::civil::Date,
+        row: Option<&Row>,
+    ) -> Result<jiff::civil::DateTime, String> {
+        let expr = self.date_expr(value)?;
+        let resolved = dates::evaluate(&expr, self.now, row.and_then(|row| row.date))
+            .map_err(|why| dates::rejection(&why))?;
+        let resolved = match row {
+            Some(row) => self.settle_by_the_row(row, &expr, resolved).0,
+            None => resolved,
+        };
+        match resolved {
+            dates::Resolved::At(at) => {
+                let day_less = self.time_words().is_some_and(|words| words.day_less);
+                Ok(if row.is_none() && day_less && !dates::uses_row(&expr) {
+                    started.to_datetime(at.time())
+                } else {
+                    at
+                })
+            }
+            other => Err(format!(
+                "error: a workout's end is a time, or a day and a time; {} is not one.",
+                other.echo()
+            )),
+        }
+    }
+
     /// WHAT THE ROW SETTLES OF A RESCHEDULE'S CLOCK (SPEC §14.1, "time only" and "at N"):
     /// the message names a time and no day, so the row keeps its day (a call that is not
     /// anchored on the row and puts another day, the model's today, is moved back to the row's);
@@ -3130,6 +3162,57 @@ impl Session {
                 } else {
                     typed_secrets.push((column, typed));
                     changed = true;
+                }
+                continue;
+            }
+            // A WORKOUT'S END is an instant the member says as a time or a day and time; the
+            // vault keeps it as `ends`, and an end it never had cannot be cleared again
+            if (kind, field) == (Kind::Workout, "end") {
+                let action = meta::edit_action(kind, field);
+                let command = action.map_or("", |action| action.command);
+                if let Some(action) = action {
+                    note_call(&mut calls, action);
+                }
+                let begun = row
+                    .date
+                    .ok_or("error: that workout has no start to end after.")?;
+                let at = self.workout_end(value, begun.date, Some(row))?;
+                if at < begun.at() {
+                    return Err("error: a workout cannot end before it starts.".to_owned());
+                }
+                let zone = self.world.zone.clone();
+                let spell = |at: jiff::civil::DateTime| {
+                    crate::native::world::utc_instant(&zone, at)
+                        .ok_or_else(|| format!("error: {at} is not a time in {zone}."))
+                };
+                let new_end = dates::Stamp {
+                    date: at.date(),
+                    time: Some(at.time()),
+                };
+                let old_end = row
+                    .extra
+                    .get("end")
+                    .and_then(|end| dates::Stamp::parse(end));
+                changed |= old_end != Some(new_end);
+                let param = action
+                    .and_then(|action| action.property_named(field))
+                    .unwrap_or("ends");
+                forward
+                    .entry(command)
+                    .or_default()
+                    .insert(param.to_owned(), json!(spell(at)?));
+                match old_end {
+                    Some(was) => {
+                        backward
+                            .entry(command)
+                            .or_default()
+                            .insert(param.to_owned(), json!(spell(was.at())?));
+                    }
+                    None => {
+                        not_undoable.get_or_insert_with(|| {
+                            "an end that was not set cannot be cleared again".to_owned()
+                        });
+                    }
                 }
                 continue;
             }
@@ -3788,6 +3871,23 @@ impl Session {
             }
             None => None,
         };
+        // A WORKOUT'S END is a time (on the start's day when the message names no other) or an
+        // instant; it is read here, with the date, so a bad one refuses before any write
+        let mut workout_end = None;
+        if kind == Kind::Workout
+            && let (Some(value), Some(resolved)) = (args.get("end"), date)
+        {
+            let begun = match resolved {
+                dates::Resolved::At(at) => at,
+                dates::Resolved::Days { from, .. } => from.at(0, 0, 0, 0),
+                dates::Resolved::Between { from, .. } => from,
+            };
+            let at = self.workout_end(value, begun.date(), None)?;
+            if at < begun {
+                return Err("error: a workout cannot end before it starts.".to_owned());
+            }
+            workout_end = Some(at);
+        }
         // EVERY REFERENCE RESOLVES BEFORE THE FIRST WRITE: a bad `list: #n`
         // must refuse the whole create, not leave the row behind it.
         let list = if kind == Kind::Task {
@@ -4066,12 +4166,22 @@ impl Session {
                     crate::native::world::utc_instant(&zone, at)
                         .ok_or_else(|| format!("error: {at} is not a time in {zone}."))
                 };
-                let (starts, ends) = match resolved {
+                let (starts, mut ends) = match resolved {
                     dates::Resolved::Between { from, to } => (spell(from)?, Some(spell(to)?)),
                     dates::Resolved::At(at) => (spell(at)?, None),
                     // a day alone is that day's midnight, which is what the vault keeps of it
                     dates::Resolved::Days { from, .. } => (spell(from.at(0, 0, 0, 0))?, None),
                 };
+                // WHEN IT ENDED, said apart from the start (`workout_end`, resolved above)
+                if let Some(at) = workout_end {
+                    if ends.is_some() {
+                        return Err(
+                            "error: date already carries the end of a span; give a span or end:, not both."
+                                .to_owned(),
+                        );
+                    }
+                    ends = Some(spell(at)?);
+                }
                 let mut input = json!({"id": mint(), "title": name, "starts": starts});
                 if let Some(ends) = ends {
                     input["ends"] = json!(ends);
@@ -4702,6 +4812,12 @@ pub(crate) fn snapshot(row: &Row) -> BTreeMap<String, Value> {
     for (name, value) in &row.fields {
         out.insert((*name).to_owned(), value.json());
     }
+    // a workout's end sits beside its start, not among its fields
+    if row.kind == Kind::Workout
+        && let Some(end) = row.extra.get("end")
+    {
+        out.insert("end".to_owned(), json!(end));
+    }
     out.insert("trashed".to_owned(), json!(row.trashed));
     out
 }
@@ -4832,6 +4948,23 @@ fn row_changes(old: &Row, new: &Row, today: jiff::civil::Date) -> Vec<FieldMove>
             from: old.date.map(|stamp| render::card_when(stamp, today)),
             to: new.date.map(|stamp| render::card_when(stamp, today)),
             text: format!("{} → {}", show(old.date), show(new.date)),
+        });
+    }
+    // a workout's end sits beside its start, not among its fields
+    if new.kind == Kind::Workout && old.extra.get("end") != new.extra.get("end") {
+        let show = |row: &Row| {
+            row.extra
+                .get("end")
+                .and_then(|end| Stamp::parse(end))
+                .map(|stamp| render::card_when(stamp, today))
+        };
+        let spelled = |shown: &Option<String>| shown.clone().unwrap_or_else(|| "none".to_owned());
+        let (from, to) = (show(old), show(new));
+        out.push(FieldMove {
+            field: "end".to_owned(),
+            text: format!("end {} → {}", spelled(&from), spelled(&to)),
+            from,
+            to,
         });
     }
     let spec = new.kind.spec();
