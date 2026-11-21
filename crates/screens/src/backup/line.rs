@@ -10,8 +10,11 @@
 use centraid_api_proto::core_v1 as wire;
 use wire::backup_line::Tone;
 
+use centraid_vault::time::FireZone;
+
 use super::claim::bytes;
 use super::reading::{Footing, Reading};
+use crate::kit::civil::{HourCycle, time_for};
 use crate::strings::{Locale, backup as words, backup_home as words_home, fill};
 
 const MINUTE_MS: i64 = 60_000;
@@ -321,7 +324,13 @@ pub fn behind_last_good(locale: Locale, reading: &Reading, now_ms: i64) -> Strin
 /// The one sentence under the card for the device that is behind: why, in words a member can act
 /// on. No sentence names a command.
 #[must_use]
-pub fn behind_reason(locale: Locale, zone: &str, reading: &Reading, now_ms: i64) -> Option<String> {
+pub fn behind_reason(
+    locale: Locale,
+    zone: &str,
+    cycle: HourCycle,
+    reading: &Reading,
+    now_ms: i64,
+) -> Option<String> {
     // EVERY DEVICE REFUSING THIS PHONE is the headline already: said once, never twice.
     if !reading.destinations.is_empty() && reading.destinations.iter().all(|d| d.pair_again) {
         return None;
@@ -357,7 +366,10 @@ pub fn behind_reason(locale: Locale, zone: &str, reading: &Reading, now_ms: i64)
         _ if worst.reach == wire::WaitReason::Gateway as i32 => match worst.last_seen_ms {
             Some(at) => fill(
                 &words_home::device_silent_since(locale),
-                &[("name", &name), ("day", &since(locale, zone, at, now_ms))],
+                &[
+                    ("name", &name),
+                    ("day", &since(locale, zone, cycle, at, now_ms)),
+                ],
             ),
             None => fill(&words::backup_unreachable(locale), &[("name", &name)]),
         },
@@ -365,8 +377,15 @@ pub fn behind_reason(locale: Locale, zone: &str, reading: &Reading, now_ms: i64)
     })
 }
 
-/// "Friday" within the week, else "Friday 30 October".
-fn since(locale: Locale, zone: &str, at_ms: i64, now_ms: i64) -> String {
+/// "9:14 AM" on the same day (a weekday would read as a week ago), "Friday" within the week, else
+/// "Friday 30 October".
+fn since(locale: Locale, zone: &str, cycle: HourCycle, at_ms: i64, now_ms: i64) -> String {
+    if let Ok(fire) = FireZone::named(zone).or_else(|_| FireZone::named("UTC")) {
+        let (at, now) = (fire.wall_clock(at_ms), fire.wall_clock(now_ms));
+        if (at.year, at.month, at.day) == (now.year, now.month, now.day) {
+            return time_for(locale, &format!("{:02}:{:02}", at.hour, at.minute), cycle);
+        }
+    }
     let day = super::stale::since_day(locale, zone, at_ms);
     if now_ms - at_ms < 6 * DAY_MS {
         day.split(' ').next().unwrap_or_default().to_owned()
@@ -628,5 +647,31 @@ mod pair_tests {
         };
         assert!(!pair_owed(&reading, at + 23 * HOUR));
         assert!(pair_owed(&reading, at + 25 * HOUR));
+    }
+}
+
+#[cfg(test)]
+mod since_tests {
+    use super::*;
+    use crate::strings::Locale;
+
+    // 2026-11-21 is a Saturday; 03:30 UTC.
+    const SAT_0330: i64 = 1_795_231_800_000;
+
+    #[test]
+    fn the_same_day_is_said_as_a_time_not_a_weekday() {
+        let at = SAT_0330;
+        let now = at + 6 * HOUR_MS;
+        assert_eq!(since(Locale::En, "UTC", HourCycle::H24, at, now), "03:30");
+        assert_eq!(since(Locale::En, "UTC", HourCycle::H12, at, now), "3:30 AM");
+    }
+
+    #[test]
+    fn an_earlier_day_keeps_its_weekday() {
+        let at = SAT_0330 - DAY_MS;
+        assert_eq!(
+            since(Locale::En, "UTC", HourCycle::H24, at, SAT_0330),
+            "Friday"
+        );
     }
 }
