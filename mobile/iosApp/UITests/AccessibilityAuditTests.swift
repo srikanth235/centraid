@@ -106,10 +106,9 @@ final class AccessibilityAuditTests: XCTestCase {
         for root in Self.roots where only?.contains(root.name) ?? true {
             try open(app, tile: root.tile)
             // A TAP THAT OPENED NOTHING must not file Home's issues under this screen's name.
-            let grid = app.el("home-grid")
             let end = Date().addingTimeInterval(15)
-            while grid.exists && grid.isHittable && Date() < end { Thread.sleep(forTimeInterval: 0.3) }
-            guard !(grid.exists && grid.isHittable) else {
+            while homeShowing(app) && Date() < end { Thread.sleep(forTimeInterval: 0.3) }
+            guard !(homeShowing(app)) else {
                 XCTFail("\(mode) / \(root.name): the page did not open (Home is still showing)")
                 continue
             }
@@ -421,13 +420,21 @@ final class AccessibilityAuditTests: XCTestCase {
         press()
         // At the largest sizes a tap can land while the grid is still settling and open nothing:
         // an audit of "the app" would then read Home under another screen's name.
-        let grid = app.el("home-grid")
         for _ in 0..<3 {
             let end = Date().addingTimeInterval(6)
-            while grid.exists && grid.isHittable && Date() < end { Thread.sleep(forTimeInterval: 0.3) }
-            if !(grid.exists && grid.isHittable) { return }
+            while homeShowing(app) && Date() < end { Thread.sleep(forTimeInterval: 0.3) }
+            if !(homeShowing(app)) { return }
             if key.exists && key.isHittable { press() }
         }
+    }
+
+    /// WHETHER HOME IS THE PAGE ON SCREEN, asked of a key, never of the grid (#1202): `isHittable` of the
+    /// grid (a scroll container as tall as the screen) throws "Activation point invalid" while a cover is
+    /// sliding over or off it, and the throw fails the run whatever it was asked for. The band's Backup
+    /// key is small, always on Home's glass, and not hittable under any page or sheet that covers Home.
+    @MainActor private func homeShowing(_ app: XCUIApplication) -> Bool {
+        let key = app.el("home-band-backup")
+        return key.exists && key.isHittable
     }
 
     /// Back to Home by the way a member goes: the home capsule of an app's band,
@@ -436,7 +443,7 @@ final class AccessibilityAuditTests: XCTestCase {
     /// hide every screen after it.
     @MainActor private func goHome(_ app: XCUIApplication) throws {
         for _ in 0..<4 {
-            if app.el("home-grid").exists && app.el("home-grid").isHittable { return }
+            if homeShowing(app) { return }
             let capsule = app.descendants(matching: .any)
                 .matching(NSPredicate(format: "identifier ENDSWITH '-band-home'"))
                 .firstMatch
@@ -445,7 +452,7 @@ final class AccessibilityAuditTests: XCTestCase {
                 app.navigationBars.buttons.firstMatch.tap()
             }
         }
-        if app.el("home-grid").waitForExistence(timeout: 3) && app.el("home-grid").isHittable { return }
+        if app.el("home-grid").waitForExistence(timeout: 3) && homeShowing(app) { return }
         print("NAV-FALLBACK|\(outline(app))")
         app.terminate()
         app.launch()
@@ -835,8 +842,9 @@ final class AccessibilityAuditTests: XCTestCase {
             try? app.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: "\(dir)/\(name).png"))
         }
         var issues = 0
+        var flagged: [(XCUIAccessibilityAuditType, String)] = []
         for attempt in 0..<5 {
-            issues = 0
+            flagged = []
             // BOUNDED BY CONSTRUCTION (#1202): every read of the app or of an issue's element is a query over
             // XCUITest's channel to the app (`app.frame` was read once per exemption, ~70 times an issue, so
             // a screen with 60 issues cost minutes). The frame and the two anchors are read ONCE per audit,
@@ -860,8 +868,7 @@ final class AccessibilityAuditTests: XCTestCase {
                         return true
                     }
                     print("A11Y-OPEN|\(mode)|\(screen)|\(issue.auditType.rawValue)|id=\(id)|label=\(label)|frame=\(frame)|\(issue.detailedDescription)")
-                    issues += 1
-                    self.found["\(mode)|\(screen)|\(Self.typeName(issue.auditType))", default: 0] += 1
+                    flagged.append((issue.auditType, "\(id)|\(label)"))
                     // Handled here: whether the count is acceptable is `settle`'s to say.
                     return true
                 }
@@ -885,6 +892,39 @@ final class AccessibilityAuditTests: XCTestCase {
                 }
                 XCTFail("\(mode) / \(screen): \(error)")
             }
+        }
+        // THE TEXT-SIZE SWEEP IS CONFIRMED BEFORE IT COUNTS (#1202). `.dynamicType` changes the system's text size
+        // under the app and reads what the app drew; a runner that is slow to relayout hands it a page it has
+        // only half redrawn, and it reports whole pages of text as "partially unsupported": the same app failed
+        // Money (28 issues) and the Locker wall in one CI run and Notes in the next, each clean in the other
+        // run. A flag that is real is there every time, so a `.dynamicType` issue stands only when the element
+        // is flagged again by up to two more sweeps of the settled screen; the other audit types are single reads.
+        var sweep = flagged.filter { $0.0 == .dynamicType }.map(\.1)
+        var again = 0
+        while !sweep.isEmpty, again < 2 {
+            again += 1
+            Thread.sleep(forTimeInterval: 3)
+            let appFrame = app.frame
+            var seen: [String] = []
+            _ = try? app.performAccessibilityAudit(for: .dynamicType) { issue in
+                let snap = try? issue.element?.snapshot()
+                let id = snap?.identifier ?? ""
+                let label = snap?.label ?? ""
+                let frame = snap?.frame ?? .zero
+                let under = snap.map { $0.frame.height > 0 && $0.frame.maxY > appFrame.height - 96 } ?? true
+                if !Self.exemptions.contains(where: { $0.matches(screen: screen, type: issue.auditType, id: id, label: label, frame: frame, in: appFrame, barTop: nil, underBand: under, laneBottom: nil, nowY: nil, detail: issue.detailedDescription) }) {
+                    seen.append("\(id)|\(label)")
+                }
+                return true
+            }
+            let before = sweep.count
+            sweep = sweep.filter { seen.contains($0) }
+            print("A11Y-CONFIRM|\(mode)|\(screen)|sweep \(again + 1): \(before) -> \(sweep.count)")
+        }
+        let standing = Set(sweep)
+        for (type, key) in flagged where type != .dynamicType || standing.contains(key) {
+            issues += 1
+            found["\(mode)|\(screen)|\(Self.typeName(type))", default: 0] += 1
         }
         print(issues == 0 ? "A11Y-PASS|\(mode)|\(screen)" : "A11Y-FAIL|\(mode)|\(screen)|\(issues)")
     }
