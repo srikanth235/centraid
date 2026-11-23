@@ -130,7 +130,7 @@ private fun MarkTile() {
             .clearAndSetSemantics {},
         contentAlignment = Alignment.Center,
     ) {
-        CentraidMark(size = (TILE * 76 / 120).dp)
+        CentraidMark(size = (TILE * 92 / 120).dp)
     }
 }
 

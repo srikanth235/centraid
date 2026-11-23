@@ -102,7 +102,7 @@ struct FirstLaunchView: View {
                 .fill(Color.white)
             RoundedRectangle(cornerRadius: Self.tileRadius, style: .continuous)
                 .strokeBorder(Color(CentraidAsset.surfaceBorder), lineWidth: 1)
-            CentraidMark(size: 104 * 76 / 120)
+            CentraidMark(size: 104 * 92 / 120)
         }
         .frame(width: 104, height: 104)
         .accessibilityHidden(true)

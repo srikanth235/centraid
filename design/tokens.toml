@@ -189,25 +189,25 @@ graphite = "#66727F"
 raspberry = "#CC4268"
 orchid = "#D462B2"
 
-# The four brand colours of the app mark (`design/mockups/QuartersIcon.dc.html`):
-# a squared circle of four quarters around an open square heart. One family at
-# even brightness, brighter than the in-app colours, which stay dark enough for
+# The four brand colours of the app mark (`design/mockups/CourtyardIcon.dc.html`):
+# four interlocking rooms in a 3×3 courtyard around an open square heart. Zero-grey
+# luminous pigments, brighter than the in-app colours, which stay dark enough for
 # text. Brand colours, not app keys: they draw the mark (the assistant's avatar
 # in Chat, the app icon) and nothing else. They do not change in dark.
 [brand]
-teal = "#00AA98"
-orange = "#F48E04"
-blue = "#5698F8"
-pink = "#F83F6E"
+teal = "#00CEBE"
+violet = "#783CFF"
+gold = "#FFB800"
+rose = "#FF2D6C"
 
-# The app icon (`design/mockups/QuartersIcon.dc.html`): the tiles the mark sits
+# The app icon (`design/mockups/CourtyardIcon.dc.html`): the tiles the mark sits
 # on, and the two quiet variants. `cargo xtask design` draws every icon file from
 # these and `[brand]` (design/icon/, the iOS AppIcon set, the Android adaptive
 # icon). `light_edge` is the hairline round the white tile, drawn in the master
 # SVG only (iOS and Android mask their own edge). `tinted_*` is iOS's tinted
 # appearance, which the system recolours: ONE neutral grey for the mark (the system
 # maps luminance to its tint, so a second step would only be recoloured oddly); the
-# cuts between the quarters keep them apart. `light_tile`/`light_tile_bottom` and
+# 6-unit gaps between the rooms keep them apart. `light_tile`/`light_tile_bottom` and
 # `dark_ground_top`/`dark_ground_bottom` are the two grounds of the layered iOS 26 icon
 # (`AppIcon.icon`): the system adds the glass, rim and shadows, the artwork is only
 # flat colour. The flat PNGs use `light_tile` and `dark_tile`. `themed_*` is Android's themed icon: one
@@ -224,15 +224,13 @@ tinted_tile = "#1B1B1B"
 tinted_mark = "#D9D9D9"
 themed_tile = "#DCE5EE"
 themed_glyph = "#22374A"
-# The mark's disc as a share of the iOS tile's width: 0.76 is an outer radius of 45.6
-# on the 120 grid, today's proportions (inner edge and cuts included) scaled uniformly.
-# It matches Apple's Watch icon, measured on the iOS 26 home screen: its artwork spans
-# 76% of the tile tall (70% wide with the side button), a margin of about 12%. 91% and
-# 82% left too little white gap once iOS masked the tile and added its glass rim. The
-# masters and the three flat AppIcon PNGs (the pre-iOS-26 fallback) follow it, and so
-# does the layered iOS 26 icon `AppIcon.icon`; Android's adaptive icon keeps its own
-# rule, the 66dp safe zone.
-ios_mark_share = 0.76
+# The mark's outer span as a share of the iOS tile's width: 0.70 is 84 units on
+# the 120 grid (18 units margin on every side), matching the optical weight of a
+# 76%-diameter circle once iOS masks the tile and adds its glass rim. The masters,
+# the three flat AppIcon PNGs (the pre-iOS-26 fallback) and the layered iOS 26
+# icon `AppIcon.icon` follow it; Android's adaptive icon keeps its own rule,
+# inscribing the rounded outer corners inside the 66dp circular safe zone.
+ios_mark_share = 0.70
 
 # Type scale, in points (sp on Android). `caps` means the text is drawn in upper case.
 [type.title]
@@ -654,7 +652,6 @@ title_suffix = " (dark)"
 # `stop-color`; `line` is `border*` and `outline*`; `shadow` is `box-shadow`
 # and `text-shadow`. A role left out keeps the light value.
 colors = [
-  { light = "#00AA98", ink = "#00F6DC" },
   { light = "#087990", text = "#30A9C6", fill = "#01819B" },
   { light = "#1C1B19", text = "#F2EFEA", fill = "#3A3733", line = "#F2EFEA" },
   { light = "#1E4C80", text = "#2D71BE" },
@@ -671,7 +668,6 @@ colors = [
   { light = "#454E58", text = "#939DA8", fill = "#6A7888" },
   { light = "#4A4741", text = "#C9C4BA", fill = "#3A3733" },
   { light = "#4E3C86", text = "#705AB5" },
-  { light = "#5698F8", ink = "#85B4FA" },
   { light = "#5A3200", text = "#E4C195" },
   { light = "#6A5A99", text = "#9487B8" },
   { light = "#6E6B66", fill = "#5F5B55" },
@@ -730,11 +726,9 @@ colors = [
   { light = "#F0ECF7", fill = "#2B1D44" },
   { light = "#F2EFEA", fill = "#2A2826" },
   { light = "#F3EFF8", fill = "#2E1D43" },
-  { light = "#F48E04", ink = "#FCB048" },
   { light = "#F4F2EE", fill = "#0E0D0C" },
   { light = "#F6E3D6", fill = "#442D1D" },
   { light = "#F6EFD8", fill = "#443B1D" },
-  { light = "#F83F6E", ink = "#FB84A2" },
   { light = "#F8E4EA", fill = "#441D29" },
   { light = "#FBE7E4", fill = "#44221D" },
   { light = "#FBE7ED", fill = "#441D29" },
@@ -748,6 +742,7 @@ colors = [
 # light colour that is in neither `colors` nor here is an error, so a new
 # colour in a light screen forces a decision about its dark value.
 keep = [
+  "#00CEBE",
   "#1399B5",
   "#2E4F2A",
   "#2E6A60",
@@ -775,6 +770,7 @@ keep = [
   "#6B5A40",
   "#6785F5",
   "#6E8DB5",
+  "#783CFF",
   "#7A6AB0",
   "#7FA3C0",
   "#7FA866",
@@ -816,6 +812,8 @@ keep = [
   "#F2D57A",
   "#F3E8B8",
   "#F3EDE2",
+  "#FF2D6C",
+  "#FFB800",
 ]
 
 # A document page is content, so it and everything inside it stay light: a

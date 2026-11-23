@@ -18,7 +18,7 @@
   ],
   "groups" : [
     {
-      "name" : "teal-blue",
+      "name" : "teal-gold",
       "layers" : [
         {
           "glass" : true,
@@ -27,8 +27,8 @@
         },
         {
           "glass" : true,
-          "image-name" : "blue.svg",
-          "name" : "blue"
+          "image-name" : "gold.svg",
+          "name" : "gold"
         }
       ],
       "shadow" : {
@@ -37,17 +37,17 @@
       }
     },
     {
-      "name" : "orange-pink",
+      "name" : "violet-rose",
       "layers" : [
         {
           "glass" : true,
-          "image-name" : "orange.svg",
-          "name" : "orange"
+          "image-name" : "violet.svg",
+          "name" : "violet"
         },
         {
           "glass" : true,
-          "image-name" : "pink.svg",
-          "name" : "pink"
+          "image-name" : "rose.svg",
+          "name" : "rose"
         }
       ],
       "shadow" : {

@@ -1,18 +1,19 @@
 //! THE APP ICON, FROM `design/tokens.toml` (#1173), by `cargo xtask design`.
 //!
-//! The board is `design/mockups/QuartersIcon.dc.html`: a squared circle of four
-//! quarters around an open square heart, on a tile. The geometry is the board's,
-//! on a 120 grid centred on (60, 60):
+//! The board is `design/mockups/CourtyardIcon.dc.html`: four interlocking
+//! rounded rooms in a 3×3 courtyard around an open square heart, on a tile.
+//! The geometry is the board's, on a 120 grid centred on (60, 60):
 //!
-//! * a circle of radius 34, cut on the diagonals by 5-unit gaps (the iOS icon grows all of it by `ios_mark_share`);
-//! * an open square heart, 21.2 on a side with a 2-unit round-joined edge, whose
-//!   corners sit on the cuts;
-//! * the cuts and the heart are NOT drawn in a tile colour: each quarter is one
-//!   polygon with the cuts and the heart already taken out, so the mark is
-//!   see-through and sits on any surface (the same thing `CentraidMark` draws in
-//!   Swift and Kotlin by erasing).
+//! * an 84×84 courtyard spanning `[18..102]` (`ios_mark_share = 0.70` scales it
+//!   about the centre when changed);
+//! * four 54×24 rounded rooms (`rx = 8`), each a 90° clockwise turn of the top
+//!   room, separated by 6-unit gaps around an open 24×24 square heart
+//!   (`[48..72]`);
+//! * the gaps and the heart are genuine empty space, never painted in a tile
+//!   colour, so the mark is see-through and sits on any surface (the same thing
+//!   `CentraidMark` draws in Swift and Kotlin).
 //!
-//! The colours are `[brand]` (teal top, orange right, blue bottom, pink left)
+//! The colours are `[brand]` (teal top, violet right, gold bottom, rose left)
 //! and `[icon]` (the tiles, the tinted greys, the themed glyph).
 //!
 //! WHAT IS EMITTED
@@ -25,20 +26,20 @@
 //!   white tile's hairline is a master-SVG detail only.
 //! * `mobile/iosApp/Resources/AppIcon.icon`: the layered Icon Composer icon iOS 26
 //!   draws with Liquid Glass (#1173): a cool-white ground (a navy-to-black one in
-//!   dark), the four quarters as flat brand-colour SVG layers in two depth groups
-//!   (teal and blue in front of orange and pink), glass on, layer-colour shadows.
-//!   The system adds the frosted tile, lit rim, specular and the shadows between
-//!   layers; the artwork is flat colour only. Xcode's `actool` also writes the
-//!   pre-iOS-26 fallback from it, and the flat appiconset above is what an OS
+//!   dark), the four rooms as flat brand-colour SVG layers in two diagonal depth
+//!   groups (teal and gold in front of violet and rose), glass on, layer-colour
+//!   shadows. The system adds the frosted tile, lit rim, specular and the shadows
+//!   between layers; the artwork is flat colour only. Xcode's `actool` also writes
+//!   the pre-iOS-26 fallback from it, and the flat appiconset above is what an OS
 //!   without Liquid Glass shows. Same geometry as the PNGs (`ios_mark_share`).
 //! * Android, all vector, no raster: an adaptive icon (`mipmap-anydpi-v26`) with
 //!   a foreground drawable, a background colour and a `monochrome` layer for
 //!   themed icons, and a vector fallback for API 24 and 25 (`mipmap-anydpi`),
 //!   the app's `minSdk`, which have no adaptive icons.
 //!
-//! The PNGs are rasterised here by supersampling the same shape test the
-//! polygons describe, and written with the `png` crate (already in the lock, via
-//! `image`), so the gate needs no system tool.
+//! The PNGs are rasterised here by supersampling the same rounded-rectangle
+//! containment test the SVG paths describe, and written with the `png` crate
+//! (already in the lock, via `image`), so the gate needs no system tool.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -48,10 +49,13 @@ use centraid_design::tokens::Tokens;
 
 const GRID: f64 = 120.0;
 const CENTRE: f64 = 60.0;
-const RADIUS: f64 = 34.0;
-const CUT_WIDTH: f64 = 5.0;
-const HEART_SIDE: f64 = 21.2;
-const HEART_STROKE: f64 = 2.0;
+const MARK_SPAN: f64 = 84.0;
+const HALF_SPAN: f64 = MARK_SPAN / 2.0;
+const CELL: f64 = 24.0;
+const GAP: f64 = 6.0;
+const ROOM_LONG: f64 = 2.0 * CELL + GAP;
+const ROOM_SHORT: f64 = CELL;
+const ROOM_RADIUS: f64 = 8.0;
 const TILE_RADIUS: f64 = 27.0;
 const ICON_PX: u32 = 1024;
 /// Supersampling per axis for the PNGs: 4 x 4 samples a pixel.
@@ -65,30 +69,24 @@ const ANDROID_RES: &str = "mobile/androidApp/src/main/res";
 /// The directories whose every file this module writes.
 pub const OWNED: [&str; 3] = [SVG_DIR, APPICON_SET, ICON_BUNDLE];
 
-/// The four quarters, in the board's drawing order, with the `[brand]` key of
-/// each and its quarter turns clockwise from the right-hand quarter.
-const QUARTERS: [(&str, u32); 4] = [("orange", 0), ("blue", 1), ("pink", 2), ("teal", 3)];
+/// The four rooms, clockwise from the top, with the `[brand]` key of each and
+/// its quarter turns clockwise from the top room.
+const ROOMS: [(&str, u32); 4] = [("teal", 0), ("violet", 1), ("gold", 2), ("rose", 3)];
 
-/// Half of a cut, measured along an axis: a cut 5 wide on a diagonal is 2.5 either
-/// side of it, which is `2.5 * sqrt(2)` along a horizontal or vertical line.
-fn cut_offset() -> f64 {
-    CUT_WIDTH / 2.0 * std::f64::consts::SQRT_2
-}
-
-/// How far the heart reaches from the centre: half its side, plus half its edge.
-fn heart_reach() -> f64 {
-    HEART_SIDE / 2.0 + HEART_STROKE / 2.0
-}
-
-/// The right-hand quarter's four corners in grid units about the centre, y down:
-/// the two on the heart, and the two where the cuts meet the circle. Between the
-/// last two the edge is the circle's arc.
-fn right_quarter() -> [(f64, f64); 4] {
-    let d = cut_offset();
-    let h = heart_reach();
-    // Where the line v = u - d meets u^2 + v^2 = r^2.
-    let u = (d + (2.0 * RADIUS * RADIUS - d * d).sqrt()) / 2.0;
-    [(h, -(h - d)), (u, -(u - d)), (u, u - d), (h, h - d)]
+/// Axis-aligned bounds `(x0, y0, x1, y1)` of a room, in grid units about the
+/// centre `(0, 0)` with y down.
+fn room_bounds(turns: u32) -> (f64, f64, f64, f64) {
+    // Top room: [-42..12] x [-42..-18] (54 wide, 24 tall).
+    let top = [
+        (-HALF_SPAN, -HALF_SPAN),
+        (-HALF_SPAN + ROOM_LONG, -HALF_SPAN + ROOM_SHORT),
+    ];
+    let rotated = top.map(|point| turn(point, turns));
+    let x0 = rotated[0].0.min(rotated[1].0);
+    let y0 = rotated[0].1.min(rotated[1].1);
+    let x1 = rotated[0].0.max(rotated[1].0);
+    let y1 = rotated[0].1.max(rotated[1].1);
+    (x0, y0, x1, y1)
 }
 
 /// Turn a point `turns` quarter turns clockwise on the screen (y down).
@@ -96,28 +94,21 @@ fn turn((x, y): (f64, f64), turns: u32) -> (f64, f64) {
     (0..turns).fold((x, y), |(x, y), _| (-y, x))
 }
 
-/// A quarter's corners about the centre, in grid units.
-fn quarter(turns: u32) -> [(f64, f64); 4] {
-    right_quarter().map(|point| turn(point, turns))
+/// Whether `(x, y)` lies inside the rounded rectangle `[x0..x1] x [y0..y1]` of corner radius `r`.
+fn in_rounded_rect(x: f64, y: f64, (x0, y0, x1, y1): (f64, f64, f64, f64), r: f64) -> bool {
+    if x < x0 || x > x1 || y < y0 || y > y1 {
+        return false;
+    }
+    let dx = (x0 + r - x).max(0.0).max(x - (x1 - r));
+    let dy = (y0 + r - y).max(0.0).max(y - (y1 - r));
+    dx * dx + dy * dy <= r * r
 }
 
-/// Which quarter holds the point `(u, v)` about the centre, if any: inside the
-/// circle, outside the cuts, outside the heart. The same shape as [`quarter`].
-fn quarter_at(u: f64, v: f64) -> Option<usize> {
-    if u * u + v * v > RADIUS * RADIUS
-        || (u.abs() - v.abs()).abs() < cut_offset()
-        || u.abs().max(v.abs()) < heart_reach()
-    {
-        return None;
-    }
-    let turns = if u.abs() > v.abs() {
-        if u > 0.0 { 0 } else { 2 }
-    } else if v > 0.0 {
-        1
-    } else {
-        3
-    };
-    QUARTERS.iter().position(|(_, quarter)| *quarter == turns)
+/// Which room holds the point `(u, v)` about the centre, if any.
+fn room_at(u: f64, v: f64) -> Option<usize> {
+    ROOMS
+        .iter()
+        .position(|(_, turns)| in_rounded_rect(u, v, room_bounds(*turns), ROOM_RADIUS))
 }
 
 // --- Colours ---------------------------------------------------------------
@@ -129,11 +120,11 @@ pub enum Variant {
     Tinted,
 }
 
-/// A tile and its four quarter colours, in [`QUARTERS`] order.
+/// A tile and its four room colours, in [`ROOMS`] order.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Palette {
     pub tile: String,
-    pub quarters: [String; 4],
+    pub rooms: [String; 4],
 }
 
 fn brand(tokens: &Tokens, key: &str) -> Result<String> {
@@ -149,25 +140,25 @@ pub fn palette(tokens: &Tokens, variant: Variant) -> Result<Palette> {
     let icon = &tokens.icon;
     let brands = || -> Result<[String; 4]> {
         Ok([
-            brand(tokens, QUARTERS[0].0)?,
-            brand(tokens, QUARTERS[1].0)?,
-            brand(tokens, QUARTERS[2].0)?,
-            brand(tokens, QUARTERS[3].0)?,
+            brand(tokens, ROOMS[0].0)?,
+            brand(tokens, ROOMS[1].0)?,
+            brand(tokens, ROOMS[2].0)?,
+            brand(tokens, ROOMS[3].0)?,
         ])
     };
     Ok(match variant {
         Variant::Light => Palette {
             tile: icon.light_tile.clone(),
-            quarters: brands()?,
+            rooms: brands()?,
         },
         Variant::Dark => Palette {
             tile: icon.dark_tile.clone(),
-            quarters: brands()?,
+            rooms: brands()?,
         },
         Variant::Tinted => Palette {
             tile: icon.tinted_tile.clone(),
-            // ONE GREY: the system recolours by luminance, and the cuts keep the quarters apart.
-            quarters: [
+            // ONE GREY: the system recolours by luminance, and the gaps keep the rooms apart.
+            rooms: [
                 icon.tinted_mark.clone(),
                 icon.tinted_mark.clone(),
                 icon.tinted_mark.clone(),
@@ -177,10 +168,9 @@ pub fn palette(tokens: &Tokens, variant: Variant) -> Result<Palette> {
     })
 }
 
-/// How much the iOS icon's mark is grown: its disc (a circle of radius [`RADIUS`]) to
-/// `ios_mark_share` of the tile.
+/// How much the iOS icon's mark is scaled relative to its canonical 84-unit span.
 fn ios_scale(tokens: &Tokens) -> f64 {
-    tokens.icon.ios_mark_share * GRID / (2.0 * RADIUS)
+    tokens.icon.ios_mark_share * GRID / MARK_SPAN
 }
 
 fn rgb(hex: &str) -> Result<[u8; 3]> {
@@ -204,23 +194,50 @@ fn num(value: f64) -> String {
     }
 }
 
-/// A quarter's outline as SVG path data, mapped `grid -> offset + scale * grid`.
+/// A room's rounded rectangle as SVG / Android VectorDrawable path data,
+/// mapped `grid -> offset + scale * grid`.
 fn path_data(turns: u32, offset: f64, scale: f64) -> String {
-    let at = |(x, y): (f64, f64)| {
-        format!(
-            "{} {}",
-            num(offset + (CENTRE + x) * scale),
-            num(offset + (CENTRE + y) * scale)
-        )
-    };
-    let [a, b, c, d] = quarter(turns);
-    let r = num(RADIUS * scale);
+    let (x0, y0, x1, y1) = room_bounds(turns);
+    let left = offset + (CENTRE + x0) * scale;
+    let top = offset + (CENTRE + y0) * scale;
+    let right = offset + (CENTRE + x1) * scale;
+    let bottom = offset + (CENTRE + y1) * scale;
+    let r = ROOM_RADIUS * scale;
+    let rs = num(r);
     format!(
-        "M{} L{} A{r} {r} 0 0 1 {} L{} Z",
-        at(a),
-        at(b),
-        at(c),
-        at(d)
+        "M{} {} H{} A{rs} {rs} 0 0 1 {} {} V{} A{rs} {rs} 0 0 1 {} {} H{} A{rs} {rs} 0 0 1 {} {} V{} A{rs} {rs} 0 0 1 {} {} Z",
+        num(left + r),
+        num(top),
+        num(right - r),
+        num(right),
+        num(top + r),
+        num(bottom - r),
+        num(right - r),
+        num(bottom),
+        num(left + r),
+        num(left),
+        num(bottom - r),
+        num(top + r),
+        num(left + r),
+        num(top),
+    )
+}
+
+/// A room as an SVG `<rect>` element, mapped `grid -> offset + scale * grid`.
+fn rect_svg(turns: u32, offset: f64, scale: f64, colour: &str) -> String {
+    let (x0, y0, x1, y1) = room_bounds(turns);
+    let x = offset + (CENTRE + x0) * scale;
+    let y = offset + (CENTRE + y0) * scale;
+    let w = (x1 - x0) * scale;
+    let h = (y1 - y0) * scale;
+    let r = ROOM_RADIUS * scale;
+    format!(
+        "  <rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" rx=\"{}\" fill=\"{colour}\"/>",
+        num(x),
+        num(y),
+        num(w),
+        num(h),
+        num(r),
     )
 }
 
@@ -234,7 +251,7 @@ fn svg_open(view_box: &str, size: Option<u32>) -> String {
 }
 
 /// One master SVG: the tile (rounded, 27 radius), the hairline when given, and
-/// the four see-through quarters, grown about the centre by `scale`.
+/// the four see-through rooms, scaled about the centre by `scale`.
 fn tile_svg(palette: &Palette, edge: Option<&str>, scale: f64) -> String {
     let mut out = svg_open("0 0 120 120", Some(1024));
     let _ = writeln!(
@@ -250,33 +267,26 @@ fn tile_svg(palette: &Palette, edge: Option<&str>, scale: f64) -> String {
             num(TILE_RADIUS - 0.5)
         );
     }
-    for ((_, turns), colour) in QUARTERS.iter().zip(&palette.quarters) {
-        let _ = writeln!(
-            out,
-            "  <path d=\"{}\" fill=\"{colour}\"/>",
-            path_data(*turns, CENTRE * (1.0 - scale), scale)
-        );
+    let offset = CENTRE * (1.0 - scale);
+    for ((_, turns), colour) in ROOMS.iter().zip(&palette.rooms) {
+        let _ = writeln!(out, "{}", rect_svg(*turns, offset, scale, colour));
     }
     out.push_str("</svg>\n");
     out
 }
 
-/// The bare mark, cropped to its own extent (the viewBox `22 22 76 76`).
+/// The bare mark, cropped to its own extent with a 4-unit margin (`14 14 92 92`).
 fn mark_svg(palette: &Palette) -> String {
-    let mut out = svg_open("22 22 76 76", Some(1024));
-    for ((_, turns), colour) in QUARTERS.iter().zip(&palette.quarters) {
-        let _ = writeln!(
-            out,
-            "  <path d=\"{}\" fill=\"{colour}\"/>",
-            path_data(*turns, 0.0, 1.0)
-        );
+    let mut out = svg_open("14 14 92 92", Some(1024));
+    for ((_, turns), colour) in ROOMS.iter().zip(&palette.rooms) {
+        let _ = writeln!(out, "{}", rect_svg(*turns, 0.0, 1.0, colour));
     }
     out.push_str("</svg>\n");
     out
 }
 
-/// A vector drawable of `viewport` units holding the quarters mapped by
-/// `offset` and `scale`, each in its own colour.
+/// A vector drawable of `viewport` units holding the rooms mapped by `offset`
+/// and `scale`, each in its own colour.
 fn vector_xml(
     viewport: u32,
     leading: &str,
@@ -291,7 +301,7 @@ fn vector_xml(
         "<vector xmlns:android=\"http://schemas.android.com/apk/res/android\"\n    android:width=\"{viewport}dp\"\n    android:height=\"{viewport}dp\"\n    android:viewportWidth=\"{viewport}\"\n    android:viewportHeight=\"{viewport}\">"
     );
     out.push_str(leading);
-    for ((_, turns), colour) in QUARTERS.iter().zip(colours) {
+    for ((_, turns), colour) in ROOMS.iter().zip(colours) {
         let _ = writeln!(
             out,
             "    <path\n        android:fillColor=\"{colour}\"\n        android:pathData=\"{}\" />",
@@ -310,14 +320,16 @@ fn fill_path(colour: &str, data: &str) -> String {
     )
 }
 
-/// The adaptive icon: a 108dp canvas, the mark sized to the 66dp SAFE ZONE at its centre. The
-/// system masks the outer 18dp on every side as it likes (a circle, a squircle), and never clips
-/// the 66dp circle, so the mark's disc (a circle of radius [`RADIUS`] on the board's grid) is
-/// drawn exactly that wide, centred on (54, 54).
-const ADAPTIVE_SAFE_DP: f64 = 66.0;
+/// The adaptive icon: a 108dp canvas, with the courtyard's rounded outer
+/// corners inscribed cleanly inside the 66dp circular SAFE ZONE (radius 33dp)
+/// centred at (54, 54). The furthest point on the rounded square lies at
+/// `(HALF_SPAN - ROOM_RADIUS) * sqrt(2) + ROOM_RADIUS` from the centre.
+const ADAPTIVE_SAFE_RADIUS_DP: f64 = 33.0;
 const ADAPTIVE_CANVAS_DP: f64 = 108.0;
-const ADAPTIVE_SCALE: f64 = ADAPTIVE_SAFE_DP / (2.0 * RADIUS);
+const CORNER_REACH: f64 = (HALF_SPAN - ROOM_RADIUS) * std::f64::consts::SQRT_2 + ROOM_RADIUS;
+const ADAPTIVE_SCALE: f64 = ADAPTIVE_SAFE_RADIUS_DP / CORNER_REACH;
 const ADAPTIVE_OFFSET: f64 = ADAPTIVE_CANVAS_DP / 2.0 - CENTRE * ADAPTIVE_SCALE;
+const LEGACY_ROUND_SCALE: f64 = 0.88;
 
 fn adaptive_xml() -> String {
     format!(
@@ -334,24 +346,30 @@ fn background_xml(tile: &str) -> String {
 /// The icon for API 24 and 25, which have no adaptive icons: the whole tile as
 /// one vector, rounded or, for the round icon, a circle.
 fn legacy_xml(palette: &Palette, round: bool) -> String {
-    let tile = if round {
-        "M60,0 A60,60 0 1 1 60,120 A60,60 0 1 1 60,0 Z".to_owned()
+    let (tile, scale) = if round {
+        (
+            "M60,0 A60,60 0 1 1 60,120 A60,60 0 1 1 60,0 Z".to_owned(),
+            LEGACY_ROUND_SCALE,
+        )
     } else {
         let r = num(TILE_RADIUS);
-        format!(
-            "M{r},0 H{} A{r},{r} 0 0 1 120,{r} V{} A{r},{r} 0 0 1 {},120 H{r} A{r},{r} 0 0 1 0,{} V{r} A{r},{r} 0 0 1 {r},0 Z",
-            num(GRID - TILE_RADIUS),
-            num(GRID - TILE_RADIUS),
-            num(GRID - TILE_RADIUS),
-            num(GRID - TILE_RADIUS),
+        (
+            format!(
+                "M{r},0 H{} A{r},{r} 0 0 1 120,{r} V{} A{r},{r} 0 0 1 {},120 H{r} A{r},{r} 0 0 1 0,{} V{r} A{r},{r} 0 0 1 {r},0 Z",
+                num(GRID - TILE_RADIUS),
+                num(GRID - TILE_RADIUS),
+                num(GRID - TILE_RADIUS),
+                num(GRID - TILE_RADIUS),
+            ),
+            1.0,
         )
     };
     vector_xml(
         120,
         &fill_path(&palette.tile, &tile),
-        0.0,
-        1.0,
-        &palette.quarters,
+        CENTRE * (1.0 - scale),
+        scale,
+        &palette.rooms,
     )
 }
 
@@ -367,18 +385,19 @@ fn srgb(hex: &str) -> Result<String> {
     Ok(format!("srgb:{},{},{},1.00000", part(r), part(g), part(b)))
 }
 
-/// One quarter's layer: a 1024 canvas with the quarter in its flat colour, the
-/// mark grown about the centre by `grown`.
+/// One room's layer: a 1024 canvas with the room in its flat colour, scaled
+/// about the centre by `grown`.
 fn layer_svg(turns: u32, colour: &str, grown: f64) -> String {
     let scale = grown * LAYER_PX / GRID;
     let offset = LAYER_PX / 2.0 - CENTRE * scale;
     format!(
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1024\" height=\"1024\" viewBox=\"0 0 1024 1024\">\n  <path d=\"{}\" fill=\"{colour}\"/>\n</svg>\n",
-        path_data(turns, offset, scale)
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1024\" height=\"1024\" viewBox=\"0 0 1024 1024\">\n{}\n</svg>\n",
+        rect_svg(turns, offset, scale, colour)
     )
 }
 
-/// `icon.json`: the ground (light, with a dark specialization) and two depth groups.
+/// `icon.json`: the ground (light, with a dark specialization) and two diagonal
+/// depth groups (`teal-gold` forward, `violet-rose` behind).
 fn icon_json(tokens: &Tokens) -> Result<String> {
     let gradient = |top: &str, bottom: &str| -> Result<String> {
         Ok(format!(
@@ -407,27 +426,27 @@ fn icon_json(tokens: &Tokens) -> Result<String> {
         "{{\n  \"fill\" : {},\n  \"fill-specializations\" : [\n    {{\n      \"appearance\" : \"dark\",\n      \"value\" : {}\n    }}\n  ],\n  \"groups\" : [\n{},\n{}\n  ],\n  \"supported-platforms\" : {{\n    \"squares\" : \"shared\"\n  }}\n}}\n",
         gradient(&icon.light_tile, &icon.light_tile_bottom)?,
         gradient(&icon.dark_ground_top, &icon.dark_ground_bottom)?,
-        group(["teal", "blue"]),
-        group(["orange", "pink"]),
+        group(["teal", "gold"]),
+        group(["violet", "rose"]),
     ))
 }
 
 // --- The PNGs --------------------------------------------------------------
 
-/// The colour of one sample at a grid point, tile when the point is on no quarter.
+/// The colour of one sample at a grid point, tile when the point is on no room.
 fn sample(palette: &[[u8; 3]; 5], scale: f64, x: f64, y: f64) -> [u8; 3] {
-    match quarter_at((x - CENTRE) / scale, (y - CENTRE) / scale) {
+    match room_at((x - CENTRE) / scale, (y - CENTRE) / scale) {
         Some(at) => palette[at + 1],
         None => palette[0],
     }
 }
 
 /// An opaque, full-bleed square of `size` pixels in `palette`: the tile fills the
-/// canvas (iOS masks it) and the mark sits on the 120 grid grown about the centre by `scale`.
+/// canvas (iOS masks it) and the mark sits on the 120 grid scaled about the centre by `scale`.
 pub fn render(palette: &Palette, scale: f64, size: u32) -> Result<Vec<u8>> {
     let mut colours = [[0u8; 3]; 5];
     colours[0] = rgb(&palette.tile)?;
-    for (slot, hex) in colours[1..].iter_mut().zip(&palette.quarters) {
+    for (slot, hex) in colours[1..].iter_mut().zip(&palette.rooms) {
         *slot = rgb(hex)?;
     }
     let step = GRID / f64::from(size);
@@ -460,7 +479,6 @@ pub fn render(palette: &Palette, scale: f64, size: u32) -> Result<Vec<u8>> {
             }
             let count = SAMPLES * SAMPLES;
             for total in sum {
-                // Rounded to nearest; at most 255.
                 pixels.push(u8::try_from((total + count / 2) / count).unwrap_or(u8::MAX));
             }
         }
@@ -500,7 +518,7 @@ pub fn files(tokens: &Tokens) -> Result<BTreeMap<String, Vec<u8>>> {
     let tinted = palette(tokens, Variant::Tinted)?;
     let themed = Palette {
         tile: tokens.icon.themed_tile.clone(),
-        quarters: std::array::from_fn(|_| tokens.icon.themed_glyph.clone()),
+        rooms: std::array::from_fn(|_| tokens.icon.themed_glyph.clone()),
     };
 
     let grown = ios_scale(tokens);
@@ -518,12 +536,12 @@ pub fn files(tokens: &Tokens) -> Result<BTreeMap<String, Vec<u8>>> {
     );
     text(
         format!("{SVG_DIR}/centraid-themed.svg"),
-        tile_svg(&themed, None, 1.0),
+        tile_svg(&themed, None, LEGACY_ROUND_SCALE),
     );
     text(format!("{SVG_DIR}/centraid-mark.svg"), mark_svg(&light));
 
     text(format!("{ICON_BUNDLE}/icon.json"), icon_json(tokens)?);
-    for (key, turns) in QUARTERS {
+    for (key, turns) in ROOMS {
         text(
             format!("{ICON_BUNDLE}/Assets/{key}.svg"),
             layer_svg(turns, &brand(tokens, key)?, grown),
@@ -545,7 +563,7 @@ pub fn files(tokens: &Tokens) -> Result<BTreeMap<String, Vec<u8>>> {
     };
     text(
         format!("{ANDROID_RES}/drawable/ic_launcher_foreground.xml"),
-        vector_xml(108, "", ADAPTIVE_OFFSET, ADAPTIVE_SCALE, &light.quarters),
+        vector_xml(108, "", ADAPTIVE_OFFSET, ADAPTIVE_SCALE, &light.rooms),
     );
     text(
         format!("{ANDROID_RES}/drawable/ic_launcher_monochrome.xml"),
@@ -606,7 +624,6 @@ mod tests {
     }
 
     fn pixel(pixels: &[u8], size: u32, x: f64, y: f64) -> String {
-        // x and y in grid units.
         let scale = f64::from(size) / GRID;
         let at = ((y * scale) as usize * size as usize + (x * scale) as usize) * 3;
         format!(
@@ -618,67 +635,42 @@ mod tests {
     }
 
     #[test]
-    fn the_heart_corners_sit_on_the_cuts() {
-        // The heart's corners, (+-10.6, +-10.6), are on the diagonals, which are
-        // the cuts' middle lines.
-        let half = HEART_SIDE / 2.0;
-        for (sx, sy) in [(1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-1.0, -1.0)] {
-            let (u, v) = (sx * half, sy * half);
-            assert!((u.abs() - v.abs()).abs() < 1e-9, "({u}, {v}) is off a cut");
-            // ...and the heart's rounded corner stays inside the cut's width.
-            let reach = half * std::f64::consts::SQRT_2 + HEART_STROKE / 2.0;
-            let across = (u.abs() - v.abs()).abs() / std::f64::consts::SQRT_2;
-            assert!(across <= CUT_WIDTH / 2.0, "the corner leaves the cut");
-            assert!(reach < RADIUS, "the heart reaches the rim");
-        }
-        // The quarter's inner corners are where the heart's edge meets a cut's
-        // edge: on the line v = u - d, at u = the heart's reach.
-        let d = cut_offset();
-        let [inner_top, _, _, inner_bottom] = right_quarter();
-        for (u, v) in [inner_top, inner_bottom] {
-            assert!((u - heart_reach()).abs() < 1e-9);
-            assert!(
-                (v.abs() - (u - d)).abs() < 1e-9,
-                "({u}, {v}) is off the cut"
-            );
-        }
-        // The outer corners are on the circle.
-        let [_, outer_top, outer_bottom, _] = right_quarter();
-        for (u, v) in [outer_top, outer_bottom] {
-            assert!((u.hypot(v) - RADIUS).abs() < 1e-9);
-            assert!((v.abs() - (u - d)).abs() < 1e-9);
-        }
-    }
-
-    #[test]
-    fn there_are_four_quarters_turned_a_quarter_apart() {
-        let spots = [(20.0, 0.0), (0.0, 20.0), (-20.0, 0.0), (0.0, -20.0)];
-        let held: Vec<_> = spots.iter().map(|(u, v)| quarter_at(*u, *v)).collect();
-        // Right, bottom, left, top: four different quarters.
-        assert_eq!(held, vec![Some(0), Some(1), Some(2), Some(3)]);
-        // Each is the first turned by 90 degrees.
-        let first = quarter(0);
-        for turns in 1..4 {
-            let next = quarter(turns);
-            for (a, b) in first.iter().zip(next) {
-                let (x, y) = turn(*a, turns);
-                assert!((x - b.0).abs() < 1e-9 && (y - b.1).abs() < 1e-9);
-            }
-        }
-        // The cuts, the heart and the outside are no quarter.
+    fn the_four_rooms_frame_an_open_square_heart_with_equal_gaps() {
+        // Four rooms around an open 24x24 square heart ([-12..12] x [-12..12]),
+        // separated by 6-unit gaps.
+        assert_eq!(room_bounds(0), (-42.0, -42.0, 12.0, -18.0));
+        assert_eq!(room_bounds(1), (18.0, -42.0, 42.0, 12.0));
+        assert_eq!(room_bounds(2), (-12.0, 18.0, 42.0, 42.0));
+        assert_eq!(room_bounds(3), (-42.0, -12.0, -18.0, 42.0));
+        // Each room is 54 x 24 (or 24 x 54), and adjacent gaps are 6 units wide.
+        let top = room_bounds(0);
+        let right = room_bounds(1);
+        let bottom = room_bounds(2);
+        let left = room_bounds(3);
+        assert!((right.0 - top.2 - GAP).abs() < 1e-9);
+        assert!((bottom.1 - right.3 - GAP).abs() < 1e-9);
+        assert!((bottom.0 - left.2 - GAP).abs() < 1e-9);
+        assert!((left.1 - top.3 - GAP).abs() < 1e-9);
+        // Sample inside each room, in the open heart, in every gap and outside.
+        assert_eq!(room_at(-15.0, -30.0), Some(0)); // top (teal)
+        assert_eq!(room_at(30.0, -15.0), Some(1)); // right (violet)
+        assert_eq!(room_at(15.0, 30.0), Some(2)); // bottom (gold)
+        assert_eq!(room_at(-30.0, 15.0), Some(3)); // left (rose)
         for (u, v) in [
-            (20.0, 20.0),
-            (-20.0, 20.0),
             (0.0, 0.0),
-            (5.0, -5.0),
-            (40.0, 0.0),
+            (10.0, -10.0),
+            (15.0, -30.0),
+            (30.0, 15.0),
+            (-15.0, 30.0),
+            (-30.0, -15.0),
+            (45.0, 0.0),
         ] {
-            assert_eq!(quarter_at(u, v), None, "({u}, {v})");
+            assert_eq!(room_at(u, v), None, "({u}, {v})");
         }
     }
 
     #[test]
-    fn the_quarters_wear_the_brand_colours_and_the_tiles_the_icon_colours() {
+    fn the_rooms_wear_the_brand_colours_and_the_tiles_the_icon_colours() {
         let tokens = tokens();
         let files = emitted();
         let text = |path: &str| {
@@ -691,7 +683,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("{error}"))
         };
         let light = text("design/icon/centraid-light.svg");
-        for key in ["teal", "orange", "blue", "pink"] {
+        for key in ["teal", "violet", "gold", "rose"] {
             let hex = &tokens.brand[key];
             assert!(light.contains(&format!("fill=\"{hex}\"")), "{key} {hex}");
             let foreground = text(&format!(
@@ -707,8 +699,6 @@ mod tests {
                 .contains(&tokens.icon.light_tile)
         );
 
-        // The PNGs hold those colours at the quarters' middles and the tile in the
-        // heart, the cuts and the corners.
         let grown = ios_scale(&tokens);
         for (name, tile) in [
             ("AppIcon-Light.png", &tokens.icon.light_tile),
@@ -717,10 +707,10 @@ mod tests {
             let (size, pixels) = decode(&files[&format!("{APPICON_SET}/{name}")]);
             assert_eq!(size, ICON_PX);
             for (key, (u, v)) in [
-                ("orange", (20.0, 0.0)),
-                ("blue", (0.0, 20.0)),
-                ("pink", (-20.0, 0.0)),
-                ("teal", (0.0, -20.0)),
+                ("teal", (-15.0, -30.0)),
+                ("violet", (30.0, -15.0)),
+                ("gold", (15.0, 30.0)),
+                ("rose", (-30.0, 15.0)),
             ] {
                 assert_eq!(
                     pixel(&pixels, size, CENTRE + u * grown, CENTRE + v * grown),
@@ -728,7 +718,7 @@ mod tests {
                     "{name} {key}"
                 );
             }
-            for (u, v) in [(0.0, 0.0), (20.0, 20.0), (-33.0, -33.0), (0.0, 35.0)] {
+            for (u, v) in [(0.0, 0.0), (15.0, -30.0), (-30.0, -15.0), (45.0, 0.0)] {
                 assert_eq!(
                     pixel(&pixels, size, CENTRE + u * grown, CENTRE + v * grown),
                     *tile,
@@ -740,8 +730,6 @@ mod tests {
 
     #[test]
     fn the_ios_mark_spans_its_share_of_the_tile() {
-        // The disc runs from the tile's left edge by (1 - share) / 2 to the same on the right:
-        // measure the widest row of non-tile pixels in each appearance.
         let tokens = tokens();
         for (name, tile) in [
             ("AppIcon-Light.png", &tokens.icon.light_tile),
@@ -750,6 +738,7 @@ mod tests {
         ] {
             let (size, pixels) = decode(&emitted()[&format!("{APPICON_SET}/{name}")]);
             let tile = rgb(tile).unwrap_or_default();
+            // Sample across the middle row (which crosses both left and right vertical rooms).
             let middle = size as usize / 2;
             let row = &pixels[middle * size as usize * 3..(middle + 1) * size as usize * 3];
             let marked: Vec<usize> = row
@@ -771,7 +760,6 @@ mod tests {
     fn the_tinted_icons_are_neutral_and_the_themed_layer_is_one_colour() {
         let tokens = tokens();
         let files = emitted();
-        // iOS tinted: the system recolours it, so every pixel is a grey.
         let (_, pixels) = decode(&files[&format!("{APPICON_SET}/AppIcon-Tinted.png")]);
         assert!(
             pixels
@@ -779,8 +767,6 @@ mod tests {
                 .all(|rgb| rgb[0] == rgb[1] && rgb[1] == rgb[2]),
             "a tinted pixel is not neutral"
         );
-        // IT IS ONE GREY, as iOS expects: the mark's pixels are the tile or the mark and no third
-        // value (the cuts between the quarters, not four greys, keep them apart).
         let (tile, mark) = (
             rgb(&tokens.icon.tinted_tile).unwrap_or_default(),
             rgb(&tokens.icon.tinted_mark).unwrap_or_default(),
@@ -798,7 +784,7 @@ mod tests {
             flat * 100 >= pixels.len() / 3 * 95,
             "the tinted icon is two flat greys; only edge pixels blend"
         );
-        // Android monochrome: one fill colour on every path.
+
         let layer = String::from_utf8(
             files[&format!("{ANDROID_RES}/drawable/ic_launcher_monochrome.xml")].clone(),
         )
@@ -810,19 +796,21 @@ mod tests {
         assert_eq!(fills.len(), 4);
         assert!(fills.iter().all(|fill| *fill == fills[0]));
         assert!(fills[0].starts_with(&tokens.icon.themed_glyph));
-        // The brand colours appear nowhere in it.
         for hex in tokens.brand.values() {
             assert!(!layer.contains(hex.as_str()));
         }
     }
 
     #[test]
-    fn the_android_mark_fills_the_adaptive_safe_zone_and_no_more() {
-        // The mark's disc is 66dp across, centred on the 108dp canvas's centre.
-        assert!((2.0 * RADIUS * ADAPTIVE_SCALE - 66.0).abs() < 1e-9);
+    fn the_android_mark_stays_inside_the_66dp_circular_safe_zone() {
+        // The furthest point of the rounded outer corners lies exactly on the
+        // 33dp safe circle centred at (54, 54).
+        assert!((CORNER_REACH * ADAPTIVE_SCALE - ADAPTIVE_SAFE_RADIUS_DP).abs() < 1e-9);
         assert!((CENTRE * ADAPTIVE_SCALE + ADAPTIVE_OFFSET - 54.0).abs() < 1e-9);
-        // Every coordinate of the foreground sits inside the safe circle's bounding box
-        // (21..87), and its arcs have the safe circle's radius, 33dp.
+        let half_dp = HALF_SPAN * ADAPTIVE_SCALE;
+        let corner_r = ROOM_RADIUS * ADAPTIVE_SCALE;
+        assert!(((half_dp - corner_r) * std::f64::consts::SQRT_2 + corner_r - 33.0).abs() < 1e-9);
+        // Every path coordinate stays strictly inside [21..87] (the 66dp circle's bounding box).
         let layer = String::from_utf8(
             emitted()[&format!("{ANDROID_RES}/drawable/ic_launcher_foreground.xml")].clone(),
         )
@@ -837,14 +825,11 @@ mod tests {
                     .collect::<Vec<_>>()
             })
             .collect();
+        let r_rounded = (ROOM_RADIUS * ADAPTIVE_SCALE * 1000.0).round() / 1000.0;
         assert!(
-            numbers.contains(&33.0),
-            "no arc has the safe circle's radius"
-        );
-        assert!(
-            numbers
-                .iter()
-                .all(|n| (20.9..=87.1).contains(n) || [0.0, 1.0, 33.0].contains(n)),
+            numbers.iter().all(|n| (21.0..=87.0).contains(n)
+                || (*n - r_rounded).abs() < 1e-3
+                || [0.0, 1.0].contains(n)),
             "the mark leaves the 66dp safe zone: {numbers:?}"
         );
     }
@@ -861,9 +846,9 @@ mod tests {
             "design/icon/centraid-mark.svg",
             "mobile/iosApp/Resources/AppIcon.icon/icon.json",
             "mobile/iosApp/Resources/AppIcon.icon/Assets/teal.svg",
-            "mobile/iosApp/Resources/AppIcon.icon/Assets/orange.svg",
-            "mobile/iosApp/Resources/AppIcon.icon/Assets/blue.svg",
-            "mobile/iosApp/Resources/AppIcon.icon/Assets/pink.svg",
+            "mobile/iosApp/Resources/AppIcon.icon/Assets/violet.svg",
+            "mobile/iosApp/Resources/AppIcon.icon/Assets/gold.svg",
+            "mobile/iosApp/Resources/AppIcon.icon/Assets/rose.svg",
             "mobile/iosApp/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json",
             "mobile/iosApp/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-Light.png",
             "mobile/iosApp/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-Dark.png",

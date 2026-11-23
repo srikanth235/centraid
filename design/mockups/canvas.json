@@ -1961,12 +1961,20 @@
       "x": 1410,
       "y": 16240
     },
-    "QuartersIcon.dc.html": {
+    "CourtyardIcon.dc.html": {
       "h": 1060,
       "page": "icon",
-      "title": "Centraid icon · four quarters",
+      "title": "Centraid icon · courtyard",
       "w": 1200,
       "x": 0,
+      "y": 0
+    },
+    "QuartersIcon.dc.html": {
+      "h": 1060,
+      "page": "archive",
+      "title": "Centraid icon · four quarters (replaced by Courtyard)",
+      "w": 1200,
+      "x": 1260,
       "y": 0
     },
     "Reconnect.dc.html": {
@@ -4371,6 +4379,7 @@
     "CodeMap.dc.html",
     "CradlePalettes.dc.html",
     "QuartersIcon.dc.html",
+    "CourtyardIcon.dc.html",
     "Backup.dc.html",
     "Welcome.dc.html",
     "HomeWidgets.dc.html",
