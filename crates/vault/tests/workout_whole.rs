@@ -42,7 +42,7 @@ fn measures(scratch: &common::Scratch, id: &str) -> (Option<i64>, Option<i64>) {
 fn whole_measures_take_integer_valued_floats_on_log_and_edit() {
     let scratch = common::Scratch::founded("workout-whole").expect("a vault");
     let registry = Registry::with_system_commands().expect("a registry");
-    for (moving, heart) in [(json!(1800), json!(142))] {
+    for (moving, heart) in [(json!(1800), json!(142)), (json!(1800.0), json!(142.0))] {
         let id = run(
             &scratch,
             &registry,
