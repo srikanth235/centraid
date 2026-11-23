@@ -25,7 +25,7 @@ use centraid_gateway::rules::ids::VaultId;
 use centraid_gateway::rules::state::{ObjectRecord, State as _};
 use centraid_gateway::server::harness::{self, Spawned};
 use centraid_gateway::server::serve::Cable;
-use centraid_vault::backup::naming::Name;
+use centraid_media::sealed::Name;
 use centraid_vault::backup::state::DeviceState;
 
 /// The BIP-39 test vector: the whole input to a restore.
@@ -230,11 +230,6 @@ pub fn reopen(path: &Path) -> Handle {
 /// The device state beside the vault at `path`, opened on its own connection.
 pub fn state(path: &Path) -> DeviceState {
     DeviceState::open_beside(path).expect("the device state opens")
-}
-
-/// What `gateway_id` is still owed, by name.
-pub fn owed(path: &Path, gateway_id: &str) -> Vec<centraid_vault::backup::state::Outbox> {
-    state(path).outbox(gateway_id).expect("reads")
 }
 
 pub fn try_ask(
@@ -460,6 +455,7 @@ pub fn at_home() -> wire::DrainRequest {
         wants_snapshot: true,
         exclude_videos: false,
         asked: false,
+        os_uploads: false,
     }
 }
 
@@ -581,158 +577,118 @@ pub fn forget(handle: &Handle, gateway_id: &str) -> wire::ForgetDestinationRespo
     forgot
 }
 
-/// The gateway's name for part `index` of the file `hash_hex`: what a test
-/// needs to damage one object on purpose.
-pub fn gateway_name(hash_hex: &str, index: u32) -> centraid_gateway::rules::ids::Name {
-    let h = centraid_vault::backup::naming::PlaintextHash::from_bytes(
-        <[u8; 32]>::try_from(hex::decode(hash_hex).expect("hex")).expect("32 bytes"),
-    );
-    let name = centraid_vault::backup::naming::name(&keys().backup, &h, index);
-    centraid_gateway::rules::ids::Name::from_bytes(*name.as_bytes())
-}
-
-/// Every name the vault at `path`'s files imply.
-pub fn file_names(handle: &Handle) -> BTreeSet<Name> {
+/// Every chunk name the vault's files seal to under the test keys, by class: the names a
+/// gateway holds once the vault is backed up whole. Read from the vault's own bytes, the way the
+/// engine rebuilds them.
+pub fn chunk_names(handle: &Handle) -> BTreeSet<Name> {
+    use centraid_media::sealed::{self, Class};
     let keys = keys();
+    let store = handle.bytes().expect("a content store");
     handle
         .with_vault(|vault| {
-            Ok(centraid_vault::backup::files::content_files(vault)
-                .expect("lists")
-                .iter()
-                .flat_map(|file| {
-                    centraid_vault::backup::naming::names_of(&keys.backup, &file.h, file.len)
-                })
-                .collect())
+            let mut names = BTreeSet::new();
+            for file in centraid_vault::backup::files::content_files(vault).expect("lists") {
+                let class = if file.is_original() {
+                    Class::Originals
+                } else {
+                    Class::Thumbnails
+                };
+                let Some(path) = store
+                    .store()
+                    .path_of(centraid_blobs::ContentHash::from_bytes(*file.h.as_bytes()))
+                    .expect("reads")
+                else {
+                    continue;
+                };
+                let bytes = std::fs::read(path).expect("reads the file");
+                for chunk in bytes.chunks(sealed::CHUNK_BYTES) {
+                    names.insert(sealed::name_of(&keys.backup, class, chunk));
+                }
+            }
+            Ok(names)
         })
         .expect("reads")
 }
 
-/// **THE OPERATING SYSTEM MOVES WHAT THE PHONE HANDED IT, AND SETTLE RECORDS
-/// IT** (#1080 ruling 2), as iOS's background session does while the app is
-/// suspended: every part a handoff names is `PUT` to the gateway by the test
-/// under the headers it was handed, and the answers are settled. Answers how
-/// many parts the operating system moved.
-pub fn the_os_moves_what_was_handed_off(phone: &Handle, gateway: &Gateway) -> usize {
-    let wire::response::Kind::Handoff(batch) = ask(
-        phone,
-        wire::request::Kind::Handoff(wire::HandoffRequest {
-            max_bytes: 256 << 20,
-            max_parts: 64,
-        }),
-    ) else {
-        panic!("a handoff answers");
-    };
-    let mut settled = Vec::new();
-    for part in &batch.parts {
-        let header = |name: &str| {
-            part.headers
-                .iter()
-                .find(|header| header.name == name)
-                .map(|header| header.value.clone())
-                .unwrap_or_else(|| panic!("no {name} header"))
-        };
-        let token: centraid_gateway::rules::ids::Token = header("authorization")
-            .strip_prefix("Bearer ")
+/// **THE OS UPLOADS WHAT THE PHONE HANDED IT, AND ONLY WAKES A PASS** (#1209, §6.5): every bundle
+/// file a pass named is `POST`ed to its gateway by the test under the headers it was handed, as
+/// iOS's background session or WorkManager would. The test records nothing as stored: the next
+/// pass re-reads the head and diffs. Answers how many bundle files the OS moved.
+pub fn the_os_uploads(gateway: &Gateway, bundles: &[wire::HandoffPart]) -> usize {
+    use centraid_gateway::rules::bundle;
+    let mut moved = 0;
+    for part in bundles {
+        let token: centraid_gateway::rules::ids::Token = part
+            .headers
+            .iter()
+            .find(|header| header.name == "authorization")
+            .and_then(|header| header.value.strip_prefix("Bearer "))
             .expect("a bearer token")
             .parse()
             .expect("a token");
-        let digest = centraid_gateway::rules::ids::Digest::from_header(&header("content-digest"))
-            .expect("a digest");
         let vault = centraid_gateway::rules::ids::VaultId::from_bytes(
             hex::decode(&part.vault_id)
                 .expect("hex")
                 .try_into()
                 .expect("32 bytes"),
         );
-        let name: centraid_gateway::rules::ids::Name = part.name.parse().expect("a name");
+        let body = std::fs::read(&part.path).expect("the bundle file is there");
+        assert_eq!(part.method, "POST");
+        assert_eq!(part.size, body.len() as u64);
+        let frames = bundle::decode(&body).expect("the bundle file is a bundle");
         gateway
             .runtime
-            .block_on(gateway.spawned.client(token).put_file(
-                &vault,
-                &name,
-                &digest,
-                Path::new(&part.path),
-            ))
-            .expect("the gateway takes it");
-        settled.push(wire::Settled {
-            name: part.name.clone(),
-            http_status: 201,
-            error: String::new(),
-            gateway_id: part.gateway_id.clone(),
-            vault_id: part.vault_id.clone(),
-        });
+            .block_on(gateway.spawned.client(token).bundle(&vault, &frames))
+            .expect("the gateway takes the bundle");
+        moved += 1;
     }
-    let moved = settled.len();
-    let wire::response::Kind::Settle(answer) = ask(
-        phone,
-        wire::request::Kind::Settle(wire::SettleRequest { settled }),
-    ) else {
-        panic!("a settle answers");
-    };
-    assert_eq!(
-        answer.confirmed as usize, moved,
-        "every part the operating system moved is confirmed"
-    );
     moved
 }
 
-/// The parts a pass that took a snapshot moved besides files (R-1080-C15 makes a pass that
-/// confirms files take one): what the gateway holds now that it did not in `before`, less the
-/// phone's file parts. A pass's `confirmed_parts` counts every part acknowledged, ranges and
-/// manifest included, so a test that means "each file part once" takes these off.
-pub fn snapshot_parts_after(gateway: &Gateway, phone: &Handle, before: &BTreeSet<Name>) -> u32 {
-    let files = file_names(phone);
-    let now = gateway.held(&vault_id());
-    u32::try_from(
-        now.iter()
-            .filter(|name| !before.contains(name) && !files.contains(name))
-            .count(),
-    )
-    .expect("fits")
-}
-
-/// The head the phone last set at `id`, from its device state.
-pub fn head_of(path: &Path, id: &str) -> Name {
+/// The root the phone last confirmed at `id` (`conf`), from its device state.
+pub fn conf_of(path: &Path, id: &str) -> Option<Name> {
     state(path)
         .gateway(id)
         .expect("reads")
         .expect("paired")
-        .head
-        .expect("a head")
+        .conf
+        .map(|(name, _)| name)
 }
 
-/// A snapshot's manifest, read out of the gateway's store and opened under the test keys.
-pub fn manifest_at(gateway: &Gateway, name: &Name) -> centraid_vault::backup::snapshot::Manifest {
-    let store = gateway.spawned.shared().store();
-    let keys = keys();
-    centraid_vault::backup::snapshot::Manifest::read(&keys.backup, name, &mut |part| {
-        let file = store.path(
-            &vault_id(),
-            &centraid_gateway::rules::ids::Name::from_bytes(*part.as_bytes()),
-        );
-        std::fs::read(file).map_err(|error| {
-            centraid_vault::backup::store::StoreError::Unreachable(error.to_string())
-        })
-    })
-    .expect("the manifest opens")
+/// The gateway-side name of chunk `index` of `plaintext` as class `class`, under the test keys:
+/// what a test needs to damage or lose one object on purpose.
+pub fn chunk_of(
+    plaintext: &[u8],
+    index: usize,
+    class: centraid_media::sealed::Class,
+) -> centraid_gateway::rules::ids::Name {
+    let chunk = plaintext
+        .chunks(centraid_media::sealed::CHUNK_BYTES)
+        .nth(index)
+        .expect("the chunk is there");
+    let name = centraid_media::sealed::name_of(&keys().backup, class, chunk);
+    centraid_gateway::rules::ids::Name::from_bytes(*name.as_bytes())
 }
 
-/// Everything every gateway is owed.
-pub fn owed_any(path: &Path) -> Vec<centraid_vault::backup::state::Outbox> {
-    let book = state(path);
-    book.gateways()
+/// The root the phone last confirmed at `id`: the head it set there.
+pub fn head_of(path: &Path, id: &str) -> Name {
+    conf_of(path, id).expect("a head")
+}
+
+/// Every records object the tree rooted at `root` lists (the root itself, its leaves, its ranges,
+/// its blobs nodes and its directory), read from the phone's own cached nodes.
+pub fn records_at(path: &Path, root: &Name) -> BTreeSet<Name> {
+    use centraid_media::sealed::{self, Class};
+    let state = state(path);
+    let plaintext = state
+        .get_node(root)
         .expect("reads")
-        .into_iter()
-        .flat_map(|gateway| book.outbox(&gateway.gateway_id).expect("reads"))
+        .expect("the tree is cached");
+    let reference = sealed::seal(&keys().backup, Class::Records, &plaintext)
+        .expect("seals")
+        .reference();
+    centraid_vault::backup::tree::records_of(&state, &reference)
+        .expect("the tree reads")
+        .into_keys()
         .collect()
-}
-
-/// The head the phone last set at its first gateway.
-pub fn first_head(path: &Path) -> Name {
-    state(path)
-        .gateways()
-        .expect("reads")
-        .first()
-        .and_then(|row| row.head)
-        .expect("a head")
 }

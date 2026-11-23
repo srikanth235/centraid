@@ -13,26 +13,29 @@
 //! 1. **A phone pairs and backs up a real library**: a JPEG the core derives
 //!    its own thumbnail and preview from, a photograph and a film whose
 //!    derivatives the shell staged, a photograph the operating system's
-//!    library holds, and a film above 64 MiB, so one file is several parts.
-//!    The pass runs to completion, every name every file implies is confirmed
-//!    in the ledger AND held by the gateway (asked with `exists`), and the
+//!    library holds (asked for with `need_bytes`, streamed again through the
+//!    stage door, which seals it into staging), and a film above three 4 MiB
+//!    chunks, so one file is several objects. The pass runs to completion,
+//!    every name every file implies is held by the gateway (asked with
+//!    `exists`) and the status says every class is backed up, and the
 //!    gateway's data directory holds no plaintext, no plaintext hash and no
 //!    key (the canary, over real media).
 //! 2. **Fifty more commits and a second snapshot**, so the head the restore
 //!    finds is not the first one.
-//! 3. **The phone is lost.** A new phone holds nothing — no vault, no ledger,
-//!    no spool, no bytes — and restores from the 24 words and the gateway's
-//!    pairing payload, claiming the vault at writer epoch 2 (the pairing was
-//!    epoch 1).
-//! 4. **It is the vault that was lost**: every row of every table equals the
-//!    lost vault's, every derivative is back (fetched in bundles by the
-//!    restore), and the 64 MiB-plus original fetched by name verifies against
-//!    its hash.
+//! 3. **The phone is lost.** A new phone holds nothing (no vault, no device
+//!    state, no staging, no bytes) and restores from the 24 words and the
+//!    gateway's pairing payload, claiming the vault at writer epoch 2 (the
+//!    pairing was epoch 1).
+//! 4. **It is the vault that was lost, in the order R3 says**: the records
+//!    first (every row of every table equals the lost vault's, the vault
+//!    opens), then every derivative (fetched by the restore), then the
+//!    originals, which are not there when the vault opens and arrive with the
+//!    passes after, newest first, each verifying against its hash.
 //! 5. **The lost phone freezes**: its next pass is refused `VAULT_MOVED`.
 //!
 //! The lost phone is kept rather than deleted, because #1029 F1 is about a
-//! phone that is still there; the destruction of a vault, its ledger and its
-//! spool is the vault drill's half.
+//! phone that is still there; the destruction of a vault, its device state and
+//! its staging is the vault drill's half.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -40,7 +43,7 @@ use std::path::{Path, PathBuf};
 use centraid_api_proto::core_v1 as wire;
 use centraid_core::{Core, CoreConfig, Handle};
 use centraid_gateway::server::harness::{self, Spawned};
-use centraid_vault::backup::naming::names_of;
+use centraid_media::sealed::{self, CHUNK_BYTES, Class, Name};
 use centraid_vault::backup::state::DeviceState;
 
 /// The BIP-39 test vector: the whole input to a restore.
@@ -48,8 +51,8 @@ const WORDS: &str = "abandon abandon abandon abandon abandon abandon abandon aba
                      abandon abandon abandon abandon abandon abandon abandon abandon \
                      abandon abandon abandon abandon abandon abandon abandon art";
 
-/// Above one 64 MiB part, so the file is two parts and is fetched as two.
-const LARGE_FILM_BYTES: usize = 64 * 1024 * 1024 + 1024 * 1024 + 7;
+/// Above two 4 MiB chunks, so the file is three objects and is fetched as three.
+const LARGE_FILM_BYTES: usize = 2 * CHUNK_BYTES + 1024 * 1024 + 7;
 
 fn seed() -> centraid_core::Seed {
     centraid_identity::RecoveryPhrase::parse(WORDS)
@@ -237,6 +240,7 @@ fn at_home() -> wire::DrainRequest {
         wants_snapshot: true,
         exclude_videos: false,
         asked: false,
+        os_uploads: false,
     }
 }
 
@@ -289,7 +293,6 @@ fn found_in(haystacks: &[(PathBuf, Vec<u8>)], needles: &[(String, Vec<u8>)]) -> 
 
 #[test]
 fn lose_the_phone_restore_from_the_words_and_the_old_phone_freezes() {
-    let started = std::time::Instant::now();
     let gateway = gateway();
     let old_dir = tempfile::tempdir().expect("a directory");
     let old_path = old_dir.path().join("vault.db");
@@ -337,6 +340,12 @@ fn lose_the_phone_restore_from_the_words_and_the_old_phone_freezes() {
     let poster = bytes_of("the film's poster", 12_000);
     stage(&old, derivative(&film_handle, "poster", &poster), &poster);
 
+    // NOTHING IS SEALED AT IMPORT: the pass asks for the library's photograph, the shell streams
+    // it again, and the stage door seals its chunks into staging.
+    let asked = drain(&old);
+    assert_eq!(asked.stopped, wire::DrainStop::Empty as i32, "{asked:?}");
+    assert_eq!(asked.need_bytes.len(), 1, "{asked:?}");
+    stage(&old, library("image/heic", "lib-still", &still), &still);
     let first = drain(&old);
     assert_eq!(first.stopped, wire::DrainStop::Empty as i32, "{first:?}");
     assert!(first.acked_at_ms.is_some(), "the head moved: {first:?}");
@@ -357,21 +366,38 @@ fn lose_the_phone_restore_from_the_words_and_the_old_phone_freezes() {
         derivatives.len() >= 5,
         "the core derived the JPEG's tiers beside the shell's: {files:?}"
     );
-    let names: Vec<_> = files
+    let door = old.bytes().expect("a door");
+    let plaintext_of = |file: &centraid_vault::backup::files::ContentFile| {
+        door.store()
+            .read(centraid_blobs::ContentHash::from_bytes(*file.h.as_bytes()))
+            // The library's photograph is not in the app's store; its bytes are the test's own.
+            .unwrap_or_else(|_| still.clone())
+    };
+    let names: Vec<Name> = files
         .iter()
-        .flat_map(|file| names_of(&keys.backup, &file.h, file.len))
+        .flat_map(|file| {
+            let class = if file.variant.is_none() {
+                Class::Originals
+            } else {
+                Class::Thumbnails
+            };
+            plaintext_of(file)
+                .chunks(CHUNK_BYTES)
+                .map(|chunk| sealed::name_of(&keys.backup, class, chunk))
+                .collect::<Vec<_>>()
+        })
         .collect();
     assert!(
         names.len() > files.len(),
-        "the film above 64 MiB is more than one part"
+        "the film of more than two chunks is more than one object"
     );
     let state = DeviceState::open_beside(&old_path).expect("the device state opens");
-    assert!(
-        state.outbox(&gateway_id).expect("reads").is_empty(),
-        "nothing is owed: every name was acknowledged"
-    );
     let destination = state.gateway(&gateway_id).expect("reads").expect("paired");
     assert_eq!(destination.epoch, 1, "pairing is the first claim");
+    assert!(
+        status(&old).classes.iter().all(|class| class.backed_up && class.owed == 0),
+        "every class is backed up"
+    );
     let token = old.plane().tokens()[&gateway_id];
     // The gateway's own name type: the same 32 bytes, declared by the protocol.
     let asked: Vec<centraid_gateway::rules::Name> = names
@@ -390,7 +416,6 @@ fn lose_the_phone_restore_from_the_words_and_the_old_phone_freezes() {
     assert!(missing.is_empty(), "the gateway lacks {missing:?}");
 
     // THE CANARY, OVER REAL MEDIA: no plaintext, no plaintext hash, no key.
-    let door = old.bytes().expect("a door");
     let mut needles: Vec<(String, Vec<u8>)> = Vec::new();
     for file in &files {
         let label = format!("{} {:?}", file.media_type, file.variant);
@@ -400,15 +425,7 @@ fn lose_the_phone_restore_from_the_words_and_the_old_phone_freezes() {
             format!("{label}'s hash in hex"),
             hash.to_hex().as_bytes().to_vec(),
         ));
-        let plaintext = match door
-            .store()
-            .read(centraid_blobs::ContentHash::from_bytes(*file.h.as_bytes()))
-        {
-            Ok(bytes) => bytes,
-            // The library's photograph is not in the app's store; its bytes
-            // are the test's own.
-            Err(_) => still.clone(),
-        };
+        let plaintext = plaintext_of(file);
         if plaintext.len() >= 64 {
             let middle = plaintext.len() / 2;
             needles.push((
@@ -505,10 +522,14 @@ fn lose_the_phone_restore_from_the_words_and_the_old_phone_freezes() {
             file.media_type
         );
     }
+    assert_eq!(
+        restored.vaults[0].derivatives_landed, restored.vaults[0].derivatives_total,
+        "every thumbnail came back with the records: {restored:?}"
+    );
     let film_hash = centraid_blobs::ContentHash::parse_hex(&film_handle.content_hash).expect("hex");
     assert!(
         !bytes.is_complete(film_hash).expect("answers"),
-        "an original waits for the rule or a tap"
+        "the vault opens before the originals: they arrive after (R3)"
     );
     let phone = Core::open(CoreConfig::new(&path).with_seed(seed(), 0)).expect("opens");
     phone
@@ -522,6 +543,11 @@ fn lose_the_phone_restore_from_the_words_and_the_old_phone_freezes() {
             tokens: restored.tokens.clone(),
         }),
     );
+    // R3, PHASE 3: the pass after the restore brings the originals back, and it owes the gateway
+    // nothing (the restored tree is the head it holds).
+    let after = drain(&phone);
+    assert_eq!(after.stopped, wire::DrainStop::Empty as i32, "{after:?}");
+    assert!(after.need_bytes.is_empty(), "{after:?}");
     let wire::response::Kind::FetchOriginal(fetched) = ask(
         &phone,
         wire::request::Kind::FetchOriginal(wire::FetchOriginalRequest {
@@ -530,13 +556,17 @@ fn lose_the_phone_restore_from_the_words_and_the_old_phone_freezes() {
     ) else {
         panic!("a fetch answers");
     };
-    assert_eq!(fetched.outcome, wire::FetchOutcome::Landed as i32);
+    assert_eq!(fetched.outcome, wire::FetchOutcome::AlreadyHeld as i32);
     let landed = std::fs::read(&fetched.path).expect("reads");
     assert_eq!(landed.len(), LARGE_FILM_BYTES);
     assert_eq!(
         blake3::hash(&landed).to_hex().as_str(),
         film_handle.content_hash,
         "the original verifies against its hash"
+    );
+    assert!(
+        bytes.is_complete(film_hash).expect("answers"),
+        "the original arrived after the vault opened"
     );
 
     // ---- 5. THE LOST PHONE FREEZES ----------------------------------------
@@ -549,13 +579,11 @@ fn lose_the_phone_restore_from_the_words_and_the_old_phone_freezes() {
     assert!(status(&old).frozen);
 
     eprintln!(
-        "restore drill across the gateway: {} files ({} derivatives, {} names), {} tables, \
-         {} rows, in {:.1}s",
+        "restore drill across the gateway: {} files ({} derivatives, {} objects), {} tables, {} rows",
         files.len(),
         derivatives.len(),
         names.len(),
         lost.len(),
         lost.values().map(Vec::len).sum::<usize>(),
-        started.elapsed().as_secs_f64()
     );
 }

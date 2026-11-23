@@ -111,7 +111,14 @@ fn a_damaged_thumbnail_costs_a_restore_that_thumbnail_alone() {
     let (damaged, _) = thumbs.last().expect("three").clone();
     gateway
         .spawned
-        .corrupt(&vault_id(), &gateway_name(&damaged, 0))
+        .corrupt(
+            &vault_id(),
+            &chunk_of(
+                &thumbs.last().expect("three").1,
+                0,
+                centraid_media::sealed::Class::Thumbnails,
+            ),
+        )
         .expect("a bit flips");
 
     let new_dir = tempfile::tempdir().expect("a directory");
@@ -301,10 +308,13 @@ fn damage_on_the_gateway_is_refused_before_any_claim() {
     note(&old, "Before", "a note the damage must not cost");
     drain(&old, at_home());
     let head = head_of(&old_path, &id);
-    let manifest = manifest_at(&gateway, &head);
-    let range = manifest.ranges[manifest.ranges.len() / 2].name;
+    let records: Vec<_> = records_at(&old_path, &head)
+        .into_iter()
+        .filter(|name| *name != head)
+        .collect();
+    let range = records[records.len() / 2];
     let store = gateway.spawned.shared().store();
-    let file_of = |name: centraid_vault::backup::naming::Name| {
+    let file_of = |name: centraid_media::sealed::Name| {
         store.path(
             &vault_id(),
             &centraid_gateway::rules::ids::Name::from_bytes(*name.as_bytes()),
@@ -581,7 +591,7 @@ fn a_chain_of_restores_freezes_every_phone_but_the_last() {
 }
 
 /// **THE OLD PHONE AFTER A MOVE CHANGES NOTHING AT THE GATEWAY** (#1080, R6).
-/// A pass and Back up now are refused `MOVED`, a handoff too, and the status
+/// A pass and Back up now are refused `MOVED`, the OS's bundles too, and the status
 /// says frozen; the gateway's head, epoch and objects are what the new phone
 /// left.
 #[test]
@@ -612,15 +622,16 @@ fn the_old_phone_after_a_move_changes_nothing_at_the_gateway() {
         let refused = try_drain(&old, request).expect_err("a moved phone's pass");
         assert_eq!(refused.code(), wire::ErrorCode::VaultMoved, "{refused}");
     }
-    let handoff = try_ask(
+    // THE OS'S BUNDLE FILES ARE ASKED FOR WITH THE PASS, so a moved phone hands the OS nothing.
+    let bundles = try_drain(
         &old,
-        wire::request::Kind::Handoff(wire::HandoffRequest {
-            max_bytes: 1 << 20,
-            max_parts: 4,
-        }),
+        wire::DrainRequest {
+            os_uploads: true,
+            ..at_home()
+        },
     )
-    .expect_err("a moved phone hands nothing off");
-    assert_eq!(handoff.code(), wire::ErrorCode::VaultMoved, "{handoff}");
+    .expect_err("a moved phone hands nothing to the OS");
+    assert_eq!(bundles.code(), wire::ErrorCode::VaultMoved, "{bundles}");
     assert!(status(&old).frozen);
     assert_eq!(gateway.writer(&vault_id()), writer);
     assert_eq!(gateway.held(&vault_id()), held, "no object moved");
@@ -633,7 +644,7 @@ fn the_old_phone_after_a_move_changes_nothing_at_the_gateway() {
 fn moved_on(
     gateway: &Gateway,
     dir: &std::path::Path,
-) -> (centraid_core::Handle, centraid_vault::backup::naming::Name) {
+) -> (centraid_core::Handle, centraid_media::sealed::Name) {
     let new = reopen(&PathBuf::from(&restore(dir, gateway).vaults[0].path));
     let photo = bytes_of("a photograph only the new phone took", 50_000);
     let staged = stage(&new, owned("image/heic", &photo), &photo);
@@ -641,8 +652,8 @@ fn moved_on(
     note(&new, "Newer", "written on the new phone after the restore");
     let backed = drain(&new, at_home());
     assert!(backed.acked_at_ms.is_some(), "{backed:?}");
-    let object = centraid_vault::backup::naming::Name::from_bytes(
-        *gateway_name(&staged.content_hash, 0).as_bytes(),
+    let object = centraid_media::sealed::Name::from_bytes(
+        *chunk_of(&photo, 0, centraid_media::sealed::Class::Originals).as_bytes(),
     );
     assert!(gateway.held(&vault_id()).contains(&object));
     (new, object)
@@ -854,42 +865,30 @@ fn after_a_restore_only_what_is_new_is_sent() {
     let fresh = bytes_of("taken on the restored phone", 80_000);
     let fresh_handle = stage(&phone, owned("image/heic", &fresh), &fresh);
     add_asset(&phone, &fresh_handle, "photo");
-    let next = drain(&phone, quietly());
-    // THE PASS THAT MOVED THE PHOTOGRAPH ALSO TOOK THE SNAPSHOT ITS ROW NEEDS
-    // (R-1080-C15): its new ranges and manifest are the only other parts.
-    assert_eq!(
-        next.confirmed_parts - snapshot_parts_after(&gateway, &phone, &before),
-        1,
-        "the new photograph alone, besides the snapshot: {next:?}"
-    );
-    let snapshot_names = {
-        let newest = head_of(
-            &path,
-            &state(&path).gateways().expect("reads")[0].gateway_id,
-        );
-        // THE SNAPSHOT'S OWN PARTS: its ranges and leaves, not the blobs its rows name.
-        let manifest = manifest_at(&gateway, &newest);
-        let mut names = manifest.range_names();
-        names.extend(manifest.leaf_names());
-        names.insert(newest);
-        names
-    };
+    let commits_before = gateway.spawned.commit_order().len();
+    let next = drain(&phone, at_home());
+    assert_eq!(next.stopped, wire::DrainStop::Empty as i32, "{next:?}");
+    // THE NEW PHOTOGRAPH AND THE RECORDS THAT CHANGED, AND NOTHING THE GATEWAY HOLDS GOES AGAIN
+    // (§8, bounded work): one chunk, and the records the command dirtied (a root, a leaf, the
+    // ranges `photo.add` touched, a blobs node): a dozen at most, never the vault again.
     let added: Vec<_> = gateway
         .held(&vault_id())
         .difference(&before)
         .copied()
-        .filter(|name| !snapshot_names.contains(name))
         .collect();
-    let fresh_name = centraid_vault::backup::naming::name(
-        &keys().backup,
-        &centraid_vault::backup::naming::PlaintextHash::from_hex(&fresh_handle.content_hash)
-            .expect("a hash"),
-        0,
+    let fresh_name = centraid_media::sealed::Name::from_bytes(
+        *chunk_of(&fresh, 0, centraid_media::sealed::Class::Originals).as_bytes(),
+    );
+    assert!(added.contains(&fresh_name), "the new photograph went");
+    assert!(
+        added.len() <= 12,
+        "{} objects for one photograph",
+        added.len()
     );
     assert_eq!(
-        added,
-        vec![fresh_name],
-        "the new photograph and nothing else"
+        gateway.spawned.commit_order().len() - commits_before,
+        added.len(),
+        "every object committed once, none again"
     );
 
     let fetch = |hash: &str| {
@@ -903,6 +902,23 @@ fn after_a_restore_only_what_is_new_is_sent() {
         };
         fetched
     };
+    // R3, PHASE 3: the restore left the originals owed, and the pass above brought them back,
+    // newest first, so the photograph is held and a fetch of it answers where it is.
+    let landed = fetch(&photo_handle.content_hash);
+    assert_eq!(landed.outcome, wire::FetchOutcome::AlreadyHeld as i32);
+    assert!(
+        !phone.plane().originals_marker().exists(),
+        "nothing is owed once every original is back"
+    );
+    // AN ORIGINAL THE PHONE DOES NOT HOLD COMES BACK BY ITS REF, as it was.
+    let store = centraid_blobs::ByteStore::open(path.with_extension("bytes")).expect("opens");
+    assert!(
+        store
+            .remove(
+                centraid_blobs::ContentHash::parse_hex(&photo_handle.content_hash).expect("hash")
+            )
+            .expect("removes")
+    );
     let landed = fetch(&photo_handle.content_hash);
     assert_eq!(landed.outcome, wire::FetchOutcome::Landed as i32);
     assert_eq!(
@@ -912,14 +928,18 @@ fn after_a_restore_only_what_is_new_is_sent() {
         photo_handle.content_hash,
         "the source's BLAKE3"
     );
-    std::fs::remove_file(
-        gateway
-            .spawned
-            .shared()
-            .store()
-            .path(&vault_id(), &gateway_name(&gone_handle.content_hash, 0)),
-    )
+    std::fs::remove_file(gateway.spawned.shared().store().path(
+        &vault_id(),
+        &chunk_of(&gone, 0, centraid_media::sealed::Class::Originals),
+    ))
     .expect("the gateway loses it");
+    assert!(
+        store
+            .remove(
+                centraid_blobs::ContentHash::parse_hex(&gone_handle.content_hash).expect("hash")
+            )
+            .expect("removes")
+    );
     assert_eq!(
         fetch(&gone_handle.content_hash).outcome,
         wire::FetchOutcome::NotInBackup as i32
@@ -1275,7 +1295,7 @@ fn an_older_backup_is_offered_when_the_newest_will_not_open() {
     assert_ne!(older, newest, "two backups");
 
     let store = gateway.spawned.shared().store();
-    let file_of = |name: centraid_vault::backup::naming::Name| {
+    let file_of = |name: centraid_media::sealed::Name| {
         store.path(
             &vault_id(),
             &centraid_gateway::rules::ids::Name::from_bytes(*name.as_bytes()),
