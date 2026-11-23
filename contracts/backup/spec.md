@@ -93,7 +93,7 @@ Client (`crates/gateway/src/client/`): HTTP/2 over the pinned TLS with HTTP/1.1 
 
 ### 6.1 State (`<stem>.state.db`, derived; a reset is a re-pair and a re-ask)
 
-Per gateway: pairing (id, addresses, pin, label), epoch, `conf` (the head this phone last confirmed there), `troot` and `oroot` (roots whose thumbnails and originals are confirmed whole there), reach, sample counter, scrub cursor. Plus `node(name PK, plaintext)` holding the tree nodes of every root named by `conf`, `troot`, `oroot`, the newest snapshot and the snapshots retention keeps, and `staged(name, path, size)` for staging. **No outbox.**
+Per gateway: pairing (id, addresses, pin, label), epoch, `conf` (the head this phone last confirmed there), `troot` and `oroot` (roots whose thumbnails and originals are confirmed whole there), reach, sample counter, scrub cursor. Plus `node(name PK, plaintext)` holding the tree nodes of every root named by `conf`, `troot`, `oroot`, the newest snapshot and the snapshots retention keeps, `staged(name, path, size)` for staging, and `local_bytes` (where a content hash's bytes are on this device; `crates/blobs` reads it). **No outbox.**
 
 ### 6.2 A pass, per gateway (a pure state machine; I/O through `Store`)
 
@@ -101,7 +101,8 @@ Per gateway: pairing (id, addresses, pin, label), epoch, `conf` (the head this p
 2. **Records.** Owed = the new tree's records refs minus those reachable from `conf` (incremental) or minus those `exists` reports (recovery). Send owed objects in bundles. `taken` with another digest and `state: damaged` → one signed delete frees it, then resend; `taken` live or held with another digest → wait with that reason (cannot happen with deterministic sealing unless the gateway is wrong).
 3. **Commit rule (asserted).** Before the compare-and-set: every records ref reachable from the new root is either reachable from `conf` with the head unchanged, or answered `stored`/`there`/`held` in this pass, or reported held by `exists`. A violation is a bug, not a refusal: debug builds panic, release builds abort the pass and log.
 4. **Set the head** (signed compare-and-set, E2/E3), then persist `conf`. The status may now say records are backed up at that gateway.
-5. **Thumbnails, then originals** (newest first), each a phase like 2–3 for its class, ending in persisting `troot`, then `oroot`.
+5. **Thumbnails, then originals** (newest first), each a phase like 2–3 for its class, ending in persisting `troot`, then `oroot`. A media phase first asks `exists` about its owed names, so a pass cut off mid-phase never resends gigabytes the gateway already holds; records never do.
+   If an owed range is no longer staged, the engine stops with `Restage` and the driver takes a snapshot that stages every range again.
 6. **While past records,** re-read the head at records priority every `max(4, ceil(2 × gateways / W))` windows (W = calls the window allows); if it moved, restart at 1.
 7. **Read-back and retention** (E10 sampling over the kept trees; retention 7 daily, 4 weekly, 6 monthly). Collection lists the gateway's names and deletes, by one head-bound signed delete (§4), every name not reachable from: the head, `conf`, `troot`, `oroot`, every kept snapshot, the newest snapshot, and anything Undo restored this week. A kept root whose nodes will not open stops collection: doubt never deletes.
 
@@ -136,7 +137,7 @@ The core writes up to `OS_BUNDLES` (4) bundle files of at most 32 MiB each for o
 - **Commit rule** (§6.2 step 3).
 - **Never delete needed data:** no delete removes a name reachable from a claimed root or the current head.
 - **Convergence:** with faults off, every gateway reaches the current root within a bounded number of passes.
-- **Bounded work:** a one-page edit stores 3 objects and makes 0 `exists` calls; a new photo of k chunks stores at most k + 5 objects.
+- **Bounded work:** a one-page edit stores 3 objects and makes 0 `exists` calls; a new photo of k chunks stores at most k + r + 4 objects, r the vault ranges its rows moved (k + 5 when one range moves), and asks `exists` once per media phase.
 - **Vault scope:** two vaults on one gateway: no name or connection is shared, and one vault's actions change nothing of the other's.
 
 Planted bugs (each a feature flag in the test, each must be caught): acknowledge `taken` regardless of digest; trust an OS report; skip the head check; no periodic full read; the gateway commits a truncated frame; set the head before records are confirmed; a delete not bound to its head; one sealing key for two vaults; a namespace or head not scoped per vault. A fixed seed set runs in `pr`; `nightly` runs more.
