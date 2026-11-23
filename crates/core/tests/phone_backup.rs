@@ -15,7 +15,7 @@
 //! | [`a_library_item_is_asked_for_streamed_through_the_stage_door_and_backed_up`] | C2/C3: nothing is sealed at import; `need_bytes` asks, the stage door seals into staging, the next pass confirms, staging is released |
 //! | [`a_library_film_larger_than_staging_backs_up_a_window_at_a_time`] | staging is a budget: a film of three chunks through a staging area of one goes a window per round, and never stages more than its ceiling |
 //! | [`os_bundle_files_are_uploaded_by_the_os_and_only_wake_a_pass`] | §6.5, R7: the pass names bundle files, the OS uploads them, and nothing is confirmed until a pass re-reads the head |
-//! | [`a_gateway_older_than_this_build_is_told_to_be_updated`] | C1: protocol below the required one is `too_old`, `DRAIN_STOP_TOO_OLD` and `WAIT_REASON_GATEWAY_OLD` |
+//! | [`a_gateway_older_than_this_build_is_told_to_be_updated`] | C1: protocol below the required one is `too_old`, `DRAIN_STOP_TOO_OLD` and `DESTINATION_REACH_GATEWAY_OLD` |
 //! | [`held_whole_names_the_gateways_that_hold_an_original_and_says_none_before_the_pass`] | R4: the delete warning's read |
 //! | [`a_gateway_that_moved_is_found_again_by_its_identity_and_only_by_it`] | `refresh_destination` (Q-1080-D3) |
 //! | [`forgetting_a_gateway_revokes_this_phones_token_there`] | `forget_destination` revokes first |
@@ -568,11 +568,12 @@ mod older {
     use centraid_gateway::server::tls::Identity;
 
     pub struct Stub {
+        /// Kept alive: the stub serves on it.
+        #[allow(dead_code)]
         pub runtime: tokio::runtime::Runtime,
         pub addr: std::net::SocketAddr,
         pub gateway_id: GatewayId,
         pub cert_der: Vec<u8>,
-        pub pin: centraid_gateway::rules::ids::Pin,
         pub paths: Arc<std::sync::Mutex<Vec<String>>>,
         _dir: tempfile::TempDir,
     }
@@ -608,7 +609,7 @@ mod older {
         let gateway_id = GatewayId::from_bytes([5; 16]);
         let identity = Identity::load_or_mint(dir.path(), || gateway_id).expect("a certificate");
         let paths: Arc<std::sync::Mutex<Vec<String>>> = Arc::default();
-        let (addr, cert_der, pin) = runtime.block_on(async {
+        let (addr, cert_der) = runtime.block_on(async {
             let listener = TlsListener::new(
                 bind("127.0.0.1:0").await.expect("binds"),
                 identity.server_config().expect("a TLS config"),
@@ -620,14 +621,13 @@ mod older {
                 answer(uri, Arc::clone(&seen), gateway_id)
             }));
             tokio::spawn(run_router(listener, router, std::future::pending()));
-            (addr, identity.cert_der().to_vec(), identity.pin())
+            (addr, identity.cert_der().to_vec())
         });
         Stub {
             runtime,
             addr,
             gateway_id,
             cert_der,
-            pin,
             paths,
             _dir: dir,
         }
@@ -694,16 +694,11 @@ fn a_gateway_older_than_this_build_is_told_to_be_updated() {
     let status = status(&phone);
     let destination = &status.destinations[0];
     assert_eq!(
-        destination.reach,
-        wire::WaitReason::GatewayOld as i32,
-        "{destination:?}"
-    );
-    assert_eq!(
         destination.reach_state,
         wire::DestinationReach::GatewayOld as i32
     );
     assert!(
-        waiting(&status, wire::WaitReason::GatewayOld) > 0,
+        waiting(&status, wire::WaitReason::Gateway) > 0,
         "{status:?}"
     );
     assert_eq!(status.pending_bytes, 10_000);

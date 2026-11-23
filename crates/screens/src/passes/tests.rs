@@ -710,12 +710,12 @@ fn a_moved_vault_is_an_answer_dated_by_the_gateway_and_reported_for_the_shelf_to
         }),
         ..Default::default()
     }));
-    let mut sim = Sim::new(vec![held("a", true), held("b", true)]);
+    let mut sim = Sim::new(vec![held("a", true)]);
     sim.answer = Box::new(move |_| moved.clone());
     let actions = sim.conductor.trigger(Reason::Scheduled, 10_000);
     sim.run(actions);
     let facts = sim.conductor.facts();
-    assert_eq!(facts.moved.iter().cloned().collect::<Vec<_>>(), ["a", "b"]);
+    assert_eq!(facts.moved.iter().cloned().collect::<Vec<_>>(), ["a"]);
     let Some(Pass::Ran(answer)) = facts.last.get("a").cloned() else {
         panic!("ran");
     };
@@ -736,13 +736,13 @@ fn a_moved_vault_is_an_answer_dated_by_the_gateway_and_reported_for_the_shelf_to
 }
 
 #[test]
-fn a_run_reports_each_outcome_with_its_reason() {
+fn a_run_reports_its_outcome() {
     let mut sim = Sim::new(vec![held("a", true), held("b", true)]);
     let actions = sim.conductor.trigger(Reason::Scheduled, 60_000);
     sim.run(actions);
     let facts = sim.conductor.facts();
     let reasons: BTreeMap<_, _> = facts.last.keys().map(|k| (k.clone(), ())).collect();
-    assert_eq!(reasons.len(), 2);
+    assert_eq!(reasons.len(), 1, "one vault in v0");
 }
 
 #[test]
@@ -854,7 +854,9 @@ fn a_pass_that_names_bundle_files_asks_the_os_how_many_it_holds_and_enqueues_the
     }
     assert!(asked.contains(&Action::UploadsPending), "{asked:?}");
     assert!(
-        !asked.iter().any(|action| matches!(action, Action::UploadsEnqueue(_))),
+        !asked
+            .iter()
+            .any(|action| matches!(action, Action::UploadsEnqueue(_))),
         "nothing is enqueued before the OS says how many tasks it holds"
     );
     // THE OS HOLDS NONE: the files go over whole.
@@ -881,7 +883,10 @@ fn bundle_files_are_asked_for_only_where_the_os_carries_them() {
     let mut android = Sim::new(vec![held("a", true)]);
     let actions = android.conductor.trigger(Reason::Scheduled, 20_000);
     android.run(actions);
-    assert!(!android.requests()[0].os_uploads, "nobody carries files here");
+    assert!(
+        !android.requests()[0].os_uploads,
+        "nobody carries files here"
+    );
 }
 
 #[test]
@@ -902,7 +907,10 @@ fn what_the_os_reports_only_wakes_one_pass_and_records_nothing() {
             .any(|action| matches!(action, Action::Drain { request, .. } if !request.wants_snapshot && !request.asked)),
         "a pass runs: {first:?}"
     );
-    assert!(conductor.uploads_drained().is_empty(), "the burst is one pass");
+    assert!(
+        conductor.uploads_drained().is_empty(),
+        "the burst is one pass"
+    );
     assert!(
         conductor
             .upload_settled(&wire::UploadSettled::default())

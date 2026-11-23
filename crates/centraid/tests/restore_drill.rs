@@ -395,7 +395,10 @@ fn lose_the_phone_restore_from_the_words_and_the_old_phone_freezes() {
     let destination = state.gateway(&gateway_id).expect("reads").expect("paired");
     assert_eq!(destination.epoch, 1, "pairing is the first claim");
     assert!(
-        status(&old).classes.iter().all(|class| class.backed_up && class.owed == 0),
+        status(&old)
+            .classes
+            .iter()
+            .all(|class| class.backed_up && class.owed == 0),
         "every class is backed up"
     );
     let token = old.plane().tokens()[&gateway_id];

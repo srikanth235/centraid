@@ -93,6 +93,7 @@ fn drain_when_free(phone: &mut Phone, core: &Handle) -> wire::DrainResponse {
         wants_snapshot: true,
         exclude_videos: false,
         asked: false,
+        os_uploads: false,
     });
     for _ in 0..200 {
         match core.call(&wire::Request {

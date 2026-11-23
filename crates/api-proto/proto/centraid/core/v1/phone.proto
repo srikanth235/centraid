@@ -689,9 +689,6 @@ enum WaitReason {
   // The gateway refused a write for a reason that is neither: a code this build does not know.
   // Only that gateway's pass stops; the others are fed.
   WAIT_REASON_REFUSED_OTHER = 13;
-  // The gateway runs a protocol older than this build needs (#1209, `too_old`): the member
-  // updates the gateway. Not time, and not the member's phone.
-  WAIT_REASON_GATEWAY_OLD = 14;
 }
 
 // ----------------------------------------------------------- destinations --

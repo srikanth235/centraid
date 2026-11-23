@@ -47,7 +47,9 @@ const fn wait_reason_of(reach: Reach) -> Option<wire::WaitReason> {
         Reach::Untrusted => Some(W::Untrusted),
         Reach::PairAgain => Some(W::PairAgain),
         Reach::Moved => None,
-        Reach::TooOld => Some(W::GatewayOld),
+        // "Update your gateway" is drawn from `DestinationReach::GatewayOld`; as a wait it is the
+        // gateway's.
+        Reach::TooOld => Some(W::Gateway),
     }
 }
 

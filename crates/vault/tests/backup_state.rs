@@ -58,10 +58,11 @@ fn the_schema_has_no_outbox_and_one_rung() {
             "gateway",
             "local_bytes",
             "node",
+            "os_chunk",
             "staged",
             "undone"
         ],
-        "pairings, what each confirmed, the node cache, staging, the device row, undone names, local bytes"
+        "pairings, what each confirmed, the node cache, staging, the device row, undone names, local bytes, the chunks handed to the OS"
     );
     assert!(!tables.iter().any(|table| table.contains("outbox")));
     let (application_id, version): (i64, i64) = (

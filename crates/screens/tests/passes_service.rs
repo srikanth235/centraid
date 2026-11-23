@@ -281,15 +281,6 @@ impl Rig {
         !self.calls.is_empty()
     }
 
-    /// The oldest door asked and not answered.
-    fn front(&mut self) -> wire::request::Kind {
-        self.pull();
-        self.calls
-            .front()
-            .and_then(|(_, request)| request.kind.clone())
-            .expect("a door was asked")
-    }
-
     /// The `drain` the service asked for, without answering it.
     fn drain(&mut self) -> (wire::DrainRequest, String) {
         self.pull();
@@ -763,18 +754,20 @@ fn a_granted_window_runs_inside_its_budget_and_is_told_whether_the_spool_emptied
 }
 
 #[test]
-fn the_deadline_is_divided_over_the_vaults_the_shell_says_it_holds() {
+fn one_vault_gets_the_whole_deadline_the_first_the_shell_says_can_be_drained() {
+    // ONE VAULT PER PHONE IN V0 (#1209, R1): a resting holding is skipped, and the first vault
+    // that can be drained has the whole window.
     let mut rig = Rig::new();
     rig.first_pass(empty());
     rig.fact(wire::shell_fact::Fact::Held(wire::VaultsHeld {
         vaults: vec![
             wire::Held {
-                vault_id: "aa".to_owned(),
-                drainable: true,
-            },
-            wire::Held {
                 vault_id: "resting".to_owned(),
                 drainable: false,
+            },
+            wire::Held {
+                vault_id: "aa".to_owned(),
+                drainable: true,
             },
             wire::Held {
                 vault_id: "bb".to_owned(),
@@ -787,12 +780,10 @@ fn the_deadline_is_divided_over_the_vaults_the_shell_says_it_holds() {
         deadline_ms: 60_000,
     }));
     let (first, vault) = rig.drain();
-    assert_eq!((vault.as_str(), first.deadline_ms), ("aa", 30_000));
+    assert_eq!((vault.as_str(), first.deadline_ms), ("aa", 60_000));
     rig.answer_drain(empty());
-    let (second, vault) = rig.drain();
-    assert_eq!((vault.as_str(), second.deadline_ms), ("bb", 30_000));
-    rig.answer_drain(empty());
-    assert!(rig.last("resting").is_none());
+    assert!(!rig.has_call(), "nobody else is driven");
+    assert!(rig.last("resting").is_none() && rig.last("bb").is_none());
 }
 
 #[test]
@@ -1027,10 +1018,6 @@ fn bundle(name: &str) -> wire::HandoffPart {
     }
 }
 
-fn request_of(rig: &mut Rig) -> wire::request::Kind {
-    rig.front()
-}
-
 fn pending_asked(effect: &wire::Effect) -> bool {
     matches!(uploads_op(effect), Some(wire::uploads_op::Op::Pending(_)))
 }
@@ -1087,7 +1074,10 @@ fn on_ios_what_the_os_reports_only_wakes_a_pass() {
             drainable: true,
         }],
     }));
-    assert!(!rig.has_call(), "no pass is owed before the OS says anything");
+    assert!(
+        !rig.has_call(),
+        "no pass is owed before the OS says anything"
+    );
     // A FINISHED TASK AND THE SESSION'S END ARE ONE WAKE (R7): a pass, and no door that records
     // anything as stored.
     rig.fact(wire::shell_fact::Fact::Settled(wire::UploadSettled {
@@ -1101,7 +1091,10 @@ fn on_ios_what_the_os_reports_only_wakes_a_pass() {
     let (drain, vault) = rig.drain();
     assert_eq!(vault, "aa");
     assert!(!drain.wants_snapshot && !drain.asked, "{drain:?}");
-    assert!(drain.os_uploads, "the pass writes the next files for the OS");
+    assert!(
+        drain.os_uploads,
+        "the pass writes the next files for the OS"
+    );
     rig.answer_drain(empty());
     assert!(!rig.has_call(), "one wake, one pass");
 }

@@ -315,7 +315,7 @@ fn pair_in_the_ledger(phone: &mut Phone, vault: &str, acked_at_ms: Option<u64>) 
         .expect("the vault's core is open");
     let ledger = core.plane().state().expect("the device state opens");
     let now = u64::try_from(centraid_core::example::now_ms()).expect("a clock");
-    let mut row = Gateway::paired(
+    let row = Gateway::paired(
         "gw-zq".to_owned(),
         vec!["127.0.0.1:8443".to_owned()],
         vec![1, 2, 3],
