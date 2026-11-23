@@ -2,7 +2,7 @@
 
 The one design document for the backup rewrite tracked in [#1209](https://github.com/srikanth235/centraid/issues/1209). Every session working on #1209 reads this file and the seams it names, and nothing else of the old plane: the code it replaces is deleted, not read, migrated or fixed. v0 has nothing to stay compatible with: no reading old backups, no upgrade path.
 
-Where this file and [`decisions.md`](decisions.md) disagree, this file wins. `decisions.md` sections that stay in force are named in §9; wave 3 folds them into the `backup` skill and deletes `decisions.md`.
+The decisions that outlive this design (E1 to E14: keys and signed records, ordering, takeover, held deletes, the directory, sampling, token storage, housekeeping) live in the [`backup` skill](../../.claude/skills/backup/SKILL.md), cited here by their old numbers.
 
 ## 1. Rulings
 
@@ -59,7 +59,7 @@ BlobsNode   depth, prefix, either children: [Ref] (≤ 256, by the next byte of 
             or entries: [Entry] (≤ 1024, sorted by h); a leaf over 1024 splits by the next byte
 Entry       h (content hash), size, media_type, taken_at_ms,
             original: [Ref] (class originals), thumbnail: [Ref] (class thumbnails, may be empty)
-Directory   as decisions.md E8 (gateways, addresses, pins, labels; never a token)
+Directory   as the skill's E8 (phone.md, "Restore"; gateways, addresses, pins, labels; never a token)
 ```
 
 - Classes: `records` = root, leaves, range chunks, blobs nodes, directory; `thumbnails` = derivative chunks; `originals` = original chunks.
@@ -148,7 +148,7 @@ The Python model this is ported from is attached to the design doc linked in #12
 
 **Kept (read these, nothing else of the old plane):** `centraid_media::sealed::BackupKeys` and its derivations; `crates/vault/src/pagesource.rs`; `crates/vault/src/file.rs` (adds `wal_autocheckpoint = 0`); `naming::claims_after` and `content_hashes`; `crates/gateway/src/rules/signing.rs` (delete preimage changes), `ids.rs`, `nonce.rs`, `code.rs`, `state.rs`, `engine.rs` and `memory.rs` (revised, not rewritten); the gateway server skeleton, its SQL ladder and `server::harness`; `crates/gateway/src/client/tls.rs`; pairing (`phone/pair.rs`, `phone/phrase.rs`); the shell bridge envelope.
 
-`decisions.md` sections in force: E1, E2, E3, E4, E5, E6 (delete preimage per §4), E7, E8, E10, E12, E13, E14. Replaced: E9 (by §3), E11 (by §6.1).
+Decisions in force, now in the backup skill ([gateway.md](../../.claude/skills/backup/gateway.md), [phone.md](../../.claude/skills/backup/phone.md)): E1, E2, E3, E4, E5, E6 (delete preimage per §4), E7, E8, E10, E12, E13, E14. Replaced: E9 (by §3), E11 (by §6.1).
 
 **Deleted:** `backup/mover.rs`, `backup/spool.rs` (replaced by staging), `backup/holdings.rs` and the outbox tables in `backup/state.rs`, `backup/snapshot.rs`, `backup/retention.rs`, `backup/verify.rs`, `backup/restore.rs`, `backup/drill.rs` (rewritten from this spec), the `PUT` route, `phone/drain/` (`os.rs` handoff, `settle`, `reconcile`, `media.rs`, `records.rs`, `plan.rs`, `policy.rs` rewritten as the engine and its driver), the vault shelf and vault switch.
 

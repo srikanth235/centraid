@@ -86,7 +86,7 @@ The `store/` cases of the suite hold these, and the vault's `MemoryStore` models
 
 ### Bodies stream at both ends
 
-A backup is thousands of sealed chunks (at most 4 MiB and 47 bytes each) sent through `bundle` and restored through `fetch`, in bodies of up to 256 MiB (the root's ruling A14). The gateway stages each arriving frame to its own file while hashing it and commits it before it reads the next, and serves `fetch` and `GET` from the files. The client sends `bundle_parts` from memory or straight from spool files and hands a `fetch_each` answer over one verified frame at a time. `tests/store_client.rs` sends 252 MiB up and back while the process grows by a few MiB.
+A backup is thousands of sealed chunks (at most 4 MiB and 47 bytes each) sent through `bundle` and restored through `fetch`, in bodies of up to 256 MiB (the root's ruling A14). The gateway stages each arriving frame to its own file while hashing it and commits it before it reads the next, and serves `fetch` and `GET` from the files. The client sends `bundle_parts` from memory or straight from staged files and hands a `fetch_each` answer over one verified frame at a time. `tests/store_client.rs` sends 252 MiB up and back while the process grows by a few MiB.
 
 ## The data directory
 
