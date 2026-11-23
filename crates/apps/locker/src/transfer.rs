@@ -46,30 +46,14 @@ pub const MAX_IMPORT_ROWS: usize = 5_000;
 /// The six types the phone makes; an import lands anything else as a note.
 pub const PHONE_TYPES: [&str; 6] = ["login", "card", "note", "identity", "wifi", "password"];
 
-/// Which columns each type owns — the vault's `type_fields`, which
-/// `locker.add_item` and `locker.edit_item` write and null the rest of.
-#[must_use]
-pub fn type_columns(item_type: &str) -> &'static [&'static str] {
-    match item_type {
-        "login" => &["username", "password", "url", "otp_seed", "notes"],
-        "card" => &["cardholder", "card_number", "expiry", "cvv", "brand"],
-        "note" => &["content"],
-        "identity" => &["fullname", "email", "phone", "address"],
-        "wifi" => &["network", "password"],
-        "password" => &["password"],
-        _ => &["notes"],
-    }
-}
-
-/// The custom field kinds the vault stores (`locker_item_field.kind`).
-pub const FIELD_KINDS: [&str; 5] = ["text", "sealed", "url", "date", "otp"];
+/// Which columns each type owns — re-exported from the vault's `type_fields`.
+pub use centraid_apps_kit::rules::locker::{
+    FIELD_KINDS, SEALED_ITEM_CELLS as SEALED_CELLS, type_fields as type_columns,
+};
 
 /// The cells an import keeps exactly as the file holds them: a password with a space at its end
 /// is a different password, and a note's text is the member's own.
 const VERBATIM_CELLS: [&str; 2] = ["password", "content"];
-
-/// The five sealed item cells.
-pub const SEALED_CELLS: [&str; 5] = ["password", "otp_seed", "card_number", "cvv", "content"];
 
 /// One custom field. `value` is the plaintext of a sealed one.
 #[derive(Clone, PartialEq, Eq, Default)]

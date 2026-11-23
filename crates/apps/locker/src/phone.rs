@@ -42,18 +42,8 @@ pub const RECENT_ROWS: usize = 5;
 pub const REVIEW_ROWS: usize = 2_000;
 
 /// The sealed item cells each of the six original types carries, in the order
-/// the item pane draws them. The nine template types (L-type) carry none of
-/// their own: their secrets are sealed FIELDS.
-#[must_use]
-pub fn secret_cells(item_type: &str) -> &'static [&'static str] {
-    match item_type {
-        "login" => &["password", "otp_seed"],
-        "card" => &["card_number", "cvv"],
-        "note" => &["content"],
-        "wifi" | "password" => &["password"],
-        _ => &[],
-    }
-}
+/// the item pane draws them (re-exported from the vault's schema).
+pub use centraid_apps_kit::rules::locker::secret_cells;
 
 /// Every sealed item cell, as the presence projection names it.
 const PRESENCE_COLUMNS: &str = "id, password IS NOT NULL AS has_password, \

@@ -17,24 +17,8 @@
 //! `locker_item_field` by `locker.add_item`. That is the same mechanism the
 //! degradation relies on, which is why the rule works at all.
 
-/// The fifteen, in the CHECK constraint's own order.
-pub const ITEM_TYPES: [&str; 15] = [
-    "login",
-    "card",
-    "note",
-    "identity",
-    "wifi",
-    "password",
-    "ssh_key",
-    "api_credential",
-    "passport",
-    "bank_account",
-    "driving_licence",
-    "software_licence",
-    "crypto_wallet",
-    "membership",
-    "document",
-];
+/// The fifteen, in the CHECK constraint's own order (re-exported from the vault's schema).
+pub use centraid_apps_kit::rules::locker::ITEM_TYPES;
 
 /// What an unknown type reads as.
 pub const DEGRADED_TYPE: &str = "note";

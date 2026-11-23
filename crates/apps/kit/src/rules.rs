@@ -25,6 +25,15 @@ use centraid_vault::time::zone::FireZone;
 
 pub use centraid_vault::commands::entity::TRASH_DAYS;
 
+/// Locker item types, columns, and sealed cells — re-exported from the vault's
+/// one schema module so `centraid-apps-locker` never restates them.
+pub mod locker {
+    pub use centraid_vault::commands::locker::{
+        ALL_FIELDS, FIELD_KINDS, ITEM_TYPES, SEALED_ITEM_CELLS, SEALED_PLACEHOLDER, is_sealed_kind,
+        secret_cells, type_fields,
+    };
+}
+
 use crate::error::KitResult;
 use crate::reads::{FanOutBound, PageDoor, Read, read_pages, read_pages_by_predicate};
 use crate::row::{Row, text_of};

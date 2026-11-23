@@ -47,8 +47,7 @@ pub const KIND_COLUMNS: &str = "id, type, username, url, notes, cardholder, expi
 
 /// The five columns of `locker_item` that hold ciphertext under `K`, named here
 /// only so [`tests`] can assert none of them is in [`ITEM_COLUMNS`].
-pub const SEALED_ITEM_COLUMNS: [&str; 5] =
-    ["password", "otp_seed", "card_number", "cvv", "content"];
+pub use centraid_apps_kit::rules::locker::SEALED_ITEM_CELLS as SEALED_ITEM_COLUMNS;
 
 /// The default and the bounds of the `items` window (`items.ts`, and the
 /// manifest's own input schema: 20…2,000, default 300).

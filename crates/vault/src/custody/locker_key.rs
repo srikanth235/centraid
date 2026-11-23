@@ -66,7 +66,7 @@ pub const LOCKER_ENCRYPTED_COLUMNS: &[(&str, &str, &[&str])] = &[
     (
         "locker_item",
         "id",
-        &["password", "otp_seed", "card_number", "cvv", "content"],
+        &crate::commands::locker::SEALED_ITEM_CELLS,
     ),
     ("locker_item_field", "id", &["value_sealed"]),
     ("locker_item_passkey", "item_id", &["private_key"]),
