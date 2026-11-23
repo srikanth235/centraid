@@ -10,7 +10,7 @@
 //!
 //! ## THE PIN COVERS READING, HASHING AND SEALING, AND NEVER NETWORK I/O
 //!
-//! [`PinnedPages`] holds no store, no socket and no spool. The caller reads a
+//! [`PinnedPages`] holds no store, no socket and no staging area. The caller reads a
 //! range, hashes it, compares its name with the previous head's, seals it if it
 //! changed, and drops the pin before it talks to a gateway. While the pin is open
 //! the WAL cannot be checkpointed past its mark, so the `-wal` file grows by the

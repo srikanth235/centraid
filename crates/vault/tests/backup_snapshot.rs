@@ -360,7 +360,7 @@ fn a_snapshot_taken_while_another_thread_commits_is_exactly_a_committed_state() 
         .records(&dir.path().join("final.db"))
         .expect("restores");
     assert_eq!(
-        dump(&Vault::open(&dir.path().join("final.db")).expect("opens")).expect("dumps"),
+        dump(&Vault::open(dir.path().join("final.db")).expect("opens")).expect("dumps"),
         after
     );
 }

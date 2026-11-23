@@ -30,7 +30,8 @@ pub use locker_key::{
 ///
 /// One helper, so there is exactly one place to look when asking "where does
 /// a nonce come from". Every nonce in this module is random
-/// per value, as every nonce of `centraid-sealed/2` is (#1080).
+/// per value. (Backup objects are the other way round: their nonces are derived, so the same
+/// chunk seals to the same object, `centraid-sealed/3`, #1209.)
 pub(crate) fn random_bytes<const N: usize>() -> [u8; N] {
     use rand::RngCore as _;
     let mut bytes = [0_u8; N];

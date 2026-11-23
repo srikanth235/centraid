@@ -223,10 +223,12 @@ fn a_pass_killed_after_any_step_resumes_and_ends_the_same() {
     );
 }
 
+type Event = (String, &'static str, Option<Name>);
+
 #[derive(Clone)]
 struct Observed {
     inner: MemoryStore,
-    events: Rc<RefCell<Vec<(String, &'static str, Option<Name>)>>>,
+    events: Rc<RefCell<Vec<Event>>>,
 }
 
 impl Store for Observed {
@@ -329,12 +331,12 @@ fn records_of_every_gateway_go_before_thumbnails_of_any_before_originals_of_any(
     let sequence: Vec<(String, u8)> = events
         .borrow()
         .iter()
-        .filter_map(|(gateway, kind, name)| {
+        .map(|(gateway, kind, name)| {
             let class = match *kind {
                 "head" => 0,
                 _ => class_of(&name.expect("a frame")),
             };
-            Some((gateway.clone(), class))
+            (gateway.clone(), class)
         })
         .collect();
     let classes: Vec<u8> = sequence.iter().map(|(_, class)| *class).collect();

@@ -205,7 +205,7 @@ impl<'a> Restore<'a> {
             }
             this.nodes.insert(reference.name, plaintext);
         }
-        this.root = root;
+        this.root = *root;
         Ok(this)
     }
 

@@ -201,7 +201,7 @@ fn a_new_photo_of_k_chunks_makes_at_most_k_plus_five_objects() {
         "{} new objects for a photo of {k} chunks",
         new_objects.len()
     );
-    assert!(new_objects.len() >= k as usize + 1);
+    assert!(new_objects.len() > k as usize);
 }
 
 #[test]
@@ -244,7 +244,7 @@ fn a_node_the_encoder_would_not_write_is_refused() {
     let assembled = build(&ranges, &[]);
     let mut root = tree::root_of(&assembled.source(), &assembled.root).expect("a root");
     root.db_hash = Some([9; 32]);
-    let encoded = Node::Root(Root { ..root }).encode();
+    let encoded = Node::Root(Box::new(Root { ..root })).encode();
     assert!(Node::decode(&encoded).is_ok());
 }
 

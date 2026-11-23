@@ -133,6 +133,27 @@ impl Rig {
         PlaintextHash::from_hex(&id).expect("a hash")
     }
 
+    /// The phone is killed and its device state and staging area are gone: a re-pair and a
+    /// re-ask. The vault, the keys and the gateways are what is left.
+    pub fn lose_state(&mut self, gateways: &[&MemoryStore]) {
+        let path = DeviceState::path_for(self.vault().path());
+        let stand_in =
+            DeviceState::open(self.scratch.join("stand-in.state.db")).expect("a stand-in");
+        drop(std::mem::replace(&mut self.state, stand_in));
+        for suffix in ["", "-wal", "-shm"] {
+            let mut file = path.clone().into_os_string();
+            file.push(suffix);
+            let _ = std::fs::remove_file(file);
+        }
+        self.state = DeviceState::open_beside(self.vault().path()).expect("a fresh state");
+        let staging = self.scratch.join("vault.staging");
+        let _ = std::fs::remove_dir_all(&staging);
+        self.staging = Staging::open(staging, 512 * 1024 * 1024).expect("staging");
+        for store in gateways {
+            self.pair(store);
+        }
+    }
+
     /// Grow the vault so it holds many ranges.
     pub fn grow(&self, rounds: usize, tag: &str) {
         for round in 0..rounds {

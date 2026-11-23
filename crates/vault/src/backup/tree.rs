@@ -133,7 +133,7 @@ pub enum BlobsBody {
 /// Any node.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Node {
-    Root(Root),
+    Root(Box<Root>),
     Leaf(RangeLeaf),
     Blobs(BlobsNode),
 }
@@ -351,7 +351,7 @@ impl Node {
                 }
                 let blobs = r.reference(Class::Records)?;
                 let directory = r.reference(Class::Records)?;
-                Self::Root(Root {
+                Self::Root(Box::new(Root {
                     writes,
                     user_version,
                     page_size,
@@ -362,7 +362,7 @@ impl Node {
                     range_leaves,
                     blobs,
                     directory,
-                })
+                }))
             }
             KIND_LEAF => {
                 let first = r.int()?;
@@ -580,7 +580,7 @@ fn node_of(source: &dyn NodeSource, reference: &Ref) -> Result<Node> {
 /// A missing node, or one that is not a root.
 pub fn root_of(source: &dyn NodeSource, reference: &Ref) -> Result<Root> {
     match node_of(source, reference)? {
-        Node::Root(root) => Ok(root),
+        Node::Root(root) => Ok(*root),
         _ => Err(invariant("a root's name is not a root")),
     }
 }
@@ -759,7 +759,7 @@ pub fn assemble(
     let mut nodes = Vec::new();
     let range_leaves = build_leaves(keys, ranges, &mut nodes)?;
     let blobs = build_blobs(keys, entries, &mut nodes)?;
-    let root = Node::Root(Root {
+    let root = Node::Root(Box::new(Root {
         writes: header.writes,
         user_version: header.user_version,
         page_size: header.page_size,
@@ -770,7 +770,7 @@ pub fn assemble(
         range_leaves,
         blobs,
         directory,
-    });
+    }));
     let root_ref = make(keys, &root, &mut nodes)?;
     Ok(Assembled {
         root: root_ref,

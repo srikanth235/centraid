@@ -479,6 +479,15 @@ impl<'e, 's> GatewayPass<'e, 's> {
         }
     }
 
+    /// Why the pass stopped, when it did.
+    #[must_use]
+    pub const fn stop_reason(&self) -> Option<&Stop> {
+        match &self.stage {
+            Stage::Stopped(stop) => Some(stop),
+            _ => None,
+        }
+    }
+
     /// Whether the pass has ended, one way or the other.
     #[must_use]
     pub const fn is_over(&self) -> bool {
