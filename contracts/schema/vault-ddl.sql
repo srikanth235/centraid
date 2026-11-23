@@ -447,10 +447,7 @@ CREATE TABLE locker_item_field (
   item_id      TEXT NOT NULL REFERENCES locker_item(id) ON DELETE CASCADE,
   -- Non-null for a type's built-in named fields (`username`, `password`, `url`, `otp_seed`, ...),
   -- NULL for custom and expansion-template fields.
-  field_key    TEXT CHECK (field_key IS NULL OR field_key IN (
-    'username','password','url','otp_seed','notes',
-    'cardholder','card_number','expiry','cvv','brand',
-    'content','fullname','email','phone','address','network')),
+  field_key    TEXT CHECK (field_key IS NULL OR length(field_key) > 0),
   section      TEXT NOT NULL DEFAULT '',
   label        TEXT NOT NULL,
   kind         TEXT NOT NULL CHECK (kind IN ('text','sealed','url','date','otp')),

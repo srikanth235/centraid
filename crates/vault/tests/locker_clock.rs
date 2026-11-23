@@ -202,7 +202,7 @@ fn the_file_refuses_a_second_key_a_foreign_type_column_and_a_host_stamp() {
     assert!(!schema.contains("TRIGGER"), "no Locker trigger remains");
 }
 
-/// Every built-in `field_key` is enforced by the file's CHECK constraints: unknown keys are
+/// Every built-in `field_key` is enforced by the file's CHECK constraints: empty keys are
 /// refused, secret keys (`password`, `card_number`, `cvv`, `content`, `otp_seed`) cannot be stored
 /// as plain kinds, and plain keys cannot be stored as sealed kinds.
 #[test]
@@ -257,11 +257,11 @@ fn every_built_in_field_key_enforces_its_secret_boundary() {
             })
             .unwrap_or_else(|error| panic!("{key} should succeed: {error}"));
     }
-    // An unknown field_key is refused by CHECK.
+    // An empty field_key is refused by CHECK.
     let why = w.refuses(&format!(
         "INSERT INTO locker_item_field
            (id, item_id, field_key, section, label, kind, value_text, created_at, updated_at)
-         VALUES ('bad-unknown', 'item-1', 'not_a_key', '', 'x', 'text', 'v', '{at}', '{at}')"
+         VALUES ('bad-empty', 'item-1', '', '', 'x', 'text', 'v', '{at}', '{at}')"
     ));
     assert!(why.contains("CHECK constraint failed"), "{why}");
 }
