@@ -320,7 +320,6 @@ fn save(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             rusqlite::params![id, person, kind, value, key, label, i64::from(preferred)],
         )?;
     }
-    ctx.touch(person)?;
     Ok(json!({ "point_id": id }))
 }
 
@@ -343,7 +342,6 @@ fn remove(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         "DELETE FROM contact_point WHERE id = ?1",
         [ctx.required_str("point_id")?],
     )?;
-    ctx.touch(&person)?;
     Ok(json!({ "id": person }))
 }
 

@@ -106,8 +106,53 @@ use crate::error::Result;
 /// before the commit (`NULL` for one born or being deleted in it).
 pub(crate) const SEEN: &str = "centraid_history_seen";
 
+/// The scratch table the commit-touch triggers fill: every entity whose own row, host row,
+/// child row or edge changed in this commit.
+pub(crate) const COMMIT_TOUCHED: &str = "centraid_commit_touched";
+
 /// The view of every entity's state now.
 pub(crate) const STATE_VIEW: &str = "centraid_entity_state";
+
+/// Entities whose rows changed during a commit, as collected by the TEMP triggers.
+#[derive(Debug, Default)]
+pub(crate) struct CommitTouched {
+    /// Entities whose `updated_at` should be stamped (changed and not born in this commit).
+    pub stamp: std::collections::BTreeSet<String>,
+    /// Entities owed a search re-index and alert refresh.
+    pub reindex: std::collections::BTreeSet<String>,
+}
+
+/// Drain `temp.centraid_commit_touched`, returning the entities touched by SQL in this commit.
+/// Returns empty when the temp table is not installed yet (e.g. a commit before founding).
+pub(crate) fn take_touched(connection: &Connection) -> Result<CommitTouched> {
+    let exists: bool = connection
+        .query_row(
+            "SELECT EXISTS (SELECT 1 FROM sqlite_temp_master WHERE type = 'table' AND name = ?1)",
+            [COMMIT_TOUCHED],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
+    if !exists {
+        return Ok(CommitTouched::default());
+    }
+    let rows: Vec<(String, bool, bool)> = {
+        let mut statement = connection.prepare_cached(&format!(
+            "SELECT entity_id, stamp != 0, born != 0 FROM temp.{COMMIT_TOUCHED}"
+        ))?;
+        statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+            .collect::<rusqlite::Result<_>>()?
+    };
+    connection.execute_batch(&format!("DELETE FROM temp.{COMMIT_TOUCHED}"))?;
+    let mut out = CommitTouched::default();
+    for (id, stamp, born) in rows {
+        if stamp && !born {
+            out.stamp.insert(id.clone());
+        }
+        out.reindex.insert(id);
+    }
+    Ok(out)
+}
 
 /// Install the history's door on a connection: the scratch table, the state view and the
 /// triggers. Idempotent. Tables the schema does not have yet are skipped (a file at an earlier

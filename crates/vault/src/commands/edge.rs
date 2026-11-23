@@ -180,27 +180,6 @@ pub(crate) fn put(
     )?;
     if rel.belongs_to_note() && is_note(ctx, from)? {
         ctx.touch(from)?;
-        ctx.mark_for_index(to);
-    }
-    mark_labelled(ctx, from, rel, to)?;
-    Ok(())
-}
-
-/// A list or an album is part of the text of what it holds, and a relation's
-/// label of both people it joins ([`crate::index::text_of`]): putting such an
-/// edge in place or taking it away changes their text without changing them.
-/// A participant is also found by the notes about the activity they were with.
-fn mark_labelled(ctx: &CommandCtx<'_, '_>, from: &str, rel: Rel, to: &str) -> Result<()> {
-    match rel {
-        Rel::Contains => ctx.mark_for_index(to),
-        // Only a touch's participants are found by the notes about it; a line
-        // or a Locker item that is `with` someone adds nothing to their text.
-        Rel::With if is_kind(ctx, from, Kind::Activity)? => ctx.mark_for_index(to),
-        Rel::Related => {
-            ctx.mark_for_index(from);
-            ctx.mark_for_index(to);
-        }
-        _ => {}
     }
     Ok(())
 }
@@ -274,7 +253,6 @@ fn remove(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     )?;
     if removed > 0 && rel.belongs_to_note() && is_note(ctx, from)? {
         ctx.touch(from)?;
-        ctx.mark_for_index(to);
     }
     // A link is taken off from either end (#1185): the edge the other way, if that is how it was
     // made, goes too.
@@ -286,12 +264,8 @@ fn remove(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         )?;
         if back > 0 && is_note(ctx, to)? {
             ctx.touch(to)?;
-            ctx.mark_for_index(from);
         }
         removed += back;
-    }
-    if removed > 0 {
-        mark_labelled(ctx, from, rel, to)?;
     }
     Ok(serde_json::json!({ "removed": removed > 0 }))
 }

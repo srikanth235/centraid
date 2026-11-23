@@ -278,21 +278,32 @@ impl Vault {
                 pending: &self.pending,
             };
             let value = body(&tx)?;
+            let now = self.clock().now_text();
+            // Auto-derive touched entities from the connection's TEMP triggers: every direct
+            // mutation to an entity, host row, child row, or edge stamps `updated_at` (when
+            // appropriate) and joins `owed` for search + alerts automatically.
+            let auto = crate::history::take_touched(&connection)?;
+            {
+                let mut pending = self.pending.borrow_mut();
+                let mut stamp_stmt =
+                    connection.prepare_cached("UPDATE entity SET updated_at = ?2 WHERE id = ?1")?;
+                for id in auto.stamp {
+                    if pending.stamped.insert(id.clone()) {
+                        stamp_stmt.execute(rusqlite::params![id, &now])?;
+                    }
+                }
+            }
             // The index is part of the commit: a change and its search rows
             // land together or not at all.
-            let owed = std::mem::take(&mut self.pending.borrow_mut().reindex);
+            let mut owed = std::mem::take(&mut self.pending.borrow_mut().reindex);
+            owed.extend(auto.reindex);
             crate::index::reindex(&connection, &owed)?;
             // The alerts are part of the commit too: what an item fires next lands with it.
-            crate::alerts::refresh(
-                &connection,
-                &owed,
-                crate::alerts::now_ms(&self.clock().now_text()),
-            )?;
+            crate::alerts::refresh(&connection, &owed, crate::alerts::now_ms(&now))?;
             // The history is part of the commit too: the states it replaced are kept with the
             // change that replaced them, or neither lands.
             let producer = std::mem::take(&mut self.pending.borrow_mut().producer);
             let quiet = self.pending.borrow().quiet;
-            let now = self.clock().now_text();
             crate::history::settle(
                 &connection,
                 &now,
@@ -303,7 +314,7 @@ impl Vault {
                 },
                 quiet,
             )?;
-            bump_writes(&connection, &census, &self.clock().now_text())?;
+            bump_writes(&connection, &census, &now)?;
             Ok(value)
         })();
 
@@ -395,6 +406,8 @@ pub(crate) fn is_reportable(table: &str) -> bool {
     !table.starts_with("sqlite_")
         && table != "action_key"
         && table != WITHOUT_ROWID_TOUCHED
+        && table != crate::history::SEEN
+        && table != crate::history::COMMIT_TOUCHED
         && !is_index(table)
 }
 

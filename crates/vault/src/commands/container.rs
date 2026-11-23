@@ -277,26 +277,9 @@ fn move_container(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
           WHERE id = ?1",
         rusqlite::params![id, parent, position, kind],
     )?;
-    ctx.touch(id)?;
-    // A SECTION TAKES ITS TASKS WITH IT. A task names its project and its
-    // section, and the baseline's trigger refuses a task whose section is in
-    // another project; it fires on a write to the task, so moving the section
-    // alone would leave its tasks (trashed ones too) pointing at the old
-    // project, a state no task command could then edit.
-    if kind.as_deref() == Some("section") {
-        let tasks: Vec<String> = ctx
-            .connection()
-            .prepare("SELECT id FROM task WHERE section_id = ?1 AND project_id IS NOT ?2")?
-            .query_map(rusqlite::params![id, parent], |row| row.get(0))?
-            .collect::<rusqlite::Result<_>>()?;
-        for task in tasks {
-            ctx.connection().execute(
-                "UPDATE task SET project_id = ?2 WHERE id = ?1",
-                rusqlite::params![task, parent],
-            )?;
-            ctx.touch(&task)?;
-        }
-    }
+    // When `kind = 'section'`, the baseline's `container_section_takes_its_tasks` trigger moves
+    // every task in the section to the new project, and the `task` auto-touch TEMP trigger
+    // stamps `updated_at` and re-indexes each moved task automatically.
     Ok(serde_json::json!({ "id": id }))
 }
 
@@ -318,17 +301,14 @@ pub(crate) fn follow_calendar(
         if found.deleted_at.is_some() {
             return Ok(fills.to_owned());
         }
-        if let Some(color) = home.color
-            && connection.execute(
+        if let Some(color) = home.color {
+            connection.execute(
                 "UPDATE container SET color = ?2 WHERE id = ?1 AND color IS NOT ?2",
                 [fills, color],
-            )? > 0
-        {
-            ctx.touch(fills)?;
+            )?;
         }
         if home.was == Some(found.title.as_str()) && found.title != title {
             connection.execute("UPDATE entity SET title = ?2 WHERE id = ?1", [fills, title])?;
-            ctx.touch(fills)?;
         }
         return Ok(fills.to_owned());
     }
@@ -340,22 +320,14 @@ pub(crate) fn follow_calendar(
              WHERE kind = 'calendar' AND parent_id IS NULL))",
         rusqlite::params![id, home.color],
     )?;
-    let filed: Vec<String> = connection
-        .prepare(
-            "SELECT e.id FROM source s JOIN event e ON e.id = s.entity_id
-              WHERE s.origin_id = ?1 AND e.calendar_id = ?2",
-        )?
-        .query_map([home.origin, crate::model::DEFAULT_CALENDAR_ID], |row| {
-            row.get(0)
-        })?
-        .collect::<rusqlite::Result<_>>()?;
-    for event in filed {
-        connection.execute(
-            "UPDATE event SET calendar_id = ?2 WHERE id = ?1",
-            [&event, &id],
-        )?;
-        ctx.touch(&event)?;
-    }
+    connection.execute(
+        "UPDATE event SET calendar_id = ?2
+          WHERE id IN (
+            SELECT e.id FROM source s JOIN event e ON e.id = s.entity_id
+             WHERE s.origin_id = ?1 AND e.calendar_id = ?3
+          )",
+        [home.origin, id.as_str(), crate::model::DEFAULT_CALENDAR_ID],
+    )?;
     Ok(id)
 }
 

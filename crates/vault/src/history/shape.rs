@@ -773,6 +773,135 @@ impl Shape {
                 );
             }
         }
+        // Also install auto-touch / auto-reindex triggers so every write to an entity, its host
+        // row, its child rows, or its edges automatically lands in `updated_at`, `search`, and
+        // `alert` at commit — without relying on every command handler remembering `ctx.touch`.
+        sql.push_str(&format!(
+            "CREATE TEMP TABLE IF NOT EXISTS {COMMIT_TOUCHED}
+               (entity_id TEXT PRIMARY KEY, stamp INTEGER NOT NULL DEFAULT 0, born INTEGER NOT NULL DEFAULT 0)
+               WITHOUT ROWID;\n",
+            COMMIT_TOUCHED = super::COMMIT_TOUCHED,
+        ));
+        let mark_stamp = |id: &str| {
+            format!(
+                "INSERT INTO temp.{t} (entity_id, stamp, born) VALUES ({id}, 1, 0)
+                   ON CONFLICT (entity_id) DO UPDATE SET stamp = 1;",
+                t = super::COMMIT_TOUCHED,
+            )
+        };
+        let mark_reindex = |id: &str| {
+            format!(
+                "INSERT OR IGNORE INTO temp.{t} (entity_id, stamp, born) VALUES ({id}, 0, 0);",
+                t = super::COMMIT_TOUCHED,
+            )
+        };
+        let mut touch_trigger = |name: &str, when: &str, table: &str, body: String| {
+            sql.push_str(&format!(
+                "CREATE TEMP TRIGGER IF NOT EXISTS centraid_commit_{name}
+                   {when} ON main.{table} BEGIN {body} END;\n",
+                table = quoted(table),
+            ));
+        };
+        touch_trigger(
+            "entity_born",
+            "AFTER INSERT",
+            "entity",
+            format!(
+                "INSERT INTO temp.{t} (entity_id, stamp, born) VALUES (new.id, 0, 1)
+                   ON CONFLICT (entity_id) DO UPDATE SET born = 1;",
+                t = super::COMMIT_TOUCHED,
+            ),
+        );
+        touch_trigger(
+            "entity_gone",
+            "AFTER DELETE",
+            "entity",
+            mark_reindex("old.id"),
+        );
+        touch_trigger(
+            "entity_update",
+            "AFTER UPDATE OF title, deleted_at, purge_at",
+            "entity",
+            mark_stamp("new.id"),
+        );
+        let mut edge_installed = false;
+        for part in &self.parts {
+            if part.name == "edge" {
+                if !edge_installed {
+                    edge_installed = true;
+                    // Edges re-index both endpoints without bumping `updated_at` (tagging or
+                    // filing an item changes its search text without editing the item itself).
+                    touch_trigger(
+                        "edge_insert",
+                        "AFTER INSERT",
+                        "edge",
+                        format!(
+                            "{} {}",
+                            mark_reindex("new.from_id"),
+                            mark_reindex("new.to_id")
+                        ),
+                    );
+                    touch_trigger(
+                        "edge_update",
+                        "AFTER UPDATE",
+                        "edge",
+                        format!(
+                            "{} {}",
+                            mark_reindex("new.from_id"),
+                            mark_reindex("new.to_id")
+                        ),
+                    );
+                    touch_trigger(
+                        "edge_delete",
+                        "AFTER DELETE",
+                        "edge",
+                        format!(
+                            "{} {}",
+                            mark_reindex("old.from_id"),
+                            mark_reindex("old.to_id")
+                        ),
+                    );
+                }
+                continue;
+            }
+            match part.role {
+                Role::Host => {
+                    // `part.columns` excludes `OMITTED` columns (such as `locker_item.last_used_at`
+                    // and immutable columns), so a reveal stamp never bumps `updated_at` or re-indexes.
+                    if !part.columns.is_empty() {
+                        let cols: Vec<String> = part.columns.iter().map(|c| quoted(c)).collect();
+                        touch_trigger(
+                            &format!("{}_update", part.alias),
+                            &format!("AFTER UPDATE OF {}", cols.join(", ")),
+                            part.name,
+                            mark_stamp("new.id"),
+                        );
+                    }
+                }
+                Role::Child { .. } => {
+                    let via = quoted(part.via());
+                    touch_trigger(
+                        &format!("{}_insert", part.alias),
+                        "AFTER INSERT",
+                        part.name,
+                        mark_stamp(&format!("new.{via}")),
+                    );
+                    touch_trigger(
+                        &format!("{}_update", part.alias),
+                        "AFTER UPDATE",
+                        part.name,
+                        mark_stamp(&format!("new.{via}")),
+                    );
+                    touch_trigger(
+                        &format!("{}_delete", part.alias),
+                        "AFTER DELETE",
+                        part.name,
+                        mark_stamp(&format!("old.{via}")),
+                    );
+                }
+                Role::Entity | Role::Outside(_) => {}
+            }
+        }
         sql
     }
 

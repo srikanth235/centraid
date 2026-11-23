@@ -613,22 +613,22 @@ fn an_edge_joins_exactly_the_kinds_edge_shape_names_for_every_relation_and_pair_
                 tx.insert_entity(&format!("to:{}", kind.as_str()), kind, "t", AT)?;
             }
             let c = tx.connection();
+            let mut insert_edge = c.prepare(
+                "INSERT INTO edge (from_id, rel, to_id, label_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            )?;
             let mut tried = 0;
             for rel in Rel::ALL {
                 for from in Kind::ALL {
                     for to in Kind::ALL {
                         c.execute_batch("SAVEPOINT shape")?;
                         let label = (rel == Rel::Related).then_some("to:relation");
-                        let attempt = c.execute(
-                            "INSERT INTO edge (from_id, rel, to_id, label_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-                            rusqlite::params![
-                                format!("from:{}", from.as_str()),
-                                rel.as_str(),
-                                format!("to:{}", to.as_str()),
-                                label,
-                                AT
-                            ],
-                        );
+                        let attempt = insert_edge.execute(rusqlite::params![
+                            format!("from:{}", from.as_str()),
+                            rel.as_str(),
+                            format!("to:{}", to.as_str()),
+                            label,
+                            AT
+                        ]);
                         c.execute_batch("ROLLBACK TO shape; RELEASE shape")?;
                         assert_eq!(
                             attempt.is_ok(),
@@ -1212,31 +1212,60 @@ fn the_word_list_gains_a_word_on_index_and_loses_it_on_a_purge_or_a_rebuild() {
 }
 
 #[test]
-fn an_edit_that_forgets_to_touch_is_caught_by_the_same_comparison() {
-    // The seeded red: write a body and never touch, and the comparison fails.
-    let scratch = founded("c6-red");
+fn an_edit_without_explicit_touch_still_updates_search_and_timestamp() {
+    use centraid_vault::Clock as _;
+
+    // Auto-touch TEMP triggers guarantee that a raw SQL write without calling `ctx.touch`
+    // still advances `updated_at` and keeps the incremental search index equal to a rebuild,
+    // while an omitted column (`locker_item.last_used_at`) leaves `updated_at` untouched.
+    let scratch = founded("c6-auto");
     scratch
         .vault
         .commit(|tx| {
             tx.insert_entity("n", Kind::Note, "Note", AT)?;
             tx.connection()
                 .execute("INSERT INTO note (id, body) VALUES ('n', 'before')", [])?;
+            tx.insert_entity("l", Kind::LockerItem, "Login", AT)?;
+            tx.connection().execute(
+                "INSERT INTO locker_item (id, type) VALUES ('l', 'login')",
+                [],
+            )?;
             Ok(())
         })
         .expect("creates");
+    scratch.clock.advance_ms(60_000);
     scratch
         .vault
         .commit(|tx| {
             tx.connection()
                 .execute("UPDATE note SET body = 'after' WHERE id = 'n'", [])?;
+            tx.connection().execute(
+                "UPDATE locker_item SET last_used_at = ?1 WHERE id = 'l'",
+                [scratch.clock.now_text()],
+            )?;
             Ok(())
         })
         .expect("edits without touching");
     let incremental = index_dump(&scratch.vault);
-    assert_ne!(
+    assert_eq!(
         incremental,
         rebuilt(&scratch.vault),
-        "an untouched edit leaves the index stale, and the comparison sees it"
+        "auto-touch keeps the incremental index equal to a rebuild without manual ctx.touch"
+    );
+    let (note_updated, locker_updated): (String, String) = read(&scratch.vault, |c| {
+        Ok((
+            c.query_row("SELECT updated_at FROM entity WHERE id = 'n'", [], |r| {
+                r.get(0)
+            })?,
+            c.query_row("SELECT updated_at FROM entity WHERE id = 'l'", [], |r| {
+                r.get(0)
+            })?,
+        ))
+    });
+    assert_eq!(note_updated, scratch.clock.now_text());
+    assert_eq!(
+        locker_updated, AT,
+        "a reveal stamp must not move updated_at"
     );
 }
 

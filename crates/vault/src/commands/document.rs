@@ -297,7 +297,6 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             [id, title.trim()],
         )?;
     }
-    ctx.touch(id)?;
     with_rev(ctx, id, serde_json::json!({ "id": id }))
 }
 
@@ -316,7 +315,6 @@ fn replace(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             [id, title.trim()],
         )?;
     }
-    ctx.touch(id)?;
     Ok(serde_json::json!({ "id": id, "replaced": replaced }))
 }
 
@@ -326,7 +324,6 @@ fn move_document(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         "UPDATE document SET folder_id = ?2 WHERE id = ?1",
         rusqlite::params![id, ctx.optional_str("folder_id")],
     )?;
-    ctx.touch(id)?;
     Ok(serde_json::json!({ "id": id }))
 }
 

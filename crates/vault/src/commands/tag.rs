@@ -119,9 +119,6 @@ pub(crate) fn set_tagged(
             [id, concept],
         )?
     };
-    if changed > 0 {
-        ctx.mark_for_index(id);
-    }
     Ok(changed > 0)
 }
 

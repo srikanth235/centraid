@@ -418,7 +418,6 @@ pub(crate) fn trash_one(
         "UPDATE entity SET deleted_at = ?2, purge_at = ?3 WHERE id = ?1",
         rusqlite::params![id, stamp.0, stamp.1],
     )?;
-    ctx.touch(id)?;
     trashed.push(id.to_owned());
     for member in members(ctx.connection(), &found)? {
         if !is_self(ctx.connection(), &member)?
@@ -460,43 +459,21 @@ pub(crate) fn purge_one(
         if *holder != found.kind {
             continue;
         }
-        // A day of a series is named by its series, which is what is touched.
-        let named = if *table == "occurrence" {
-            "series_id"
-        } else {
-            "id"
-        };
-        let referrers = ids(
-            connection,
-            &format!("SELECT {named} FROM {table} WHERE {column} = ?1"),
-            id,
-        )?;
+        // The host/child auto-touch TEMP triggers stamp `updated_at` and re-index every detached
+        // referrer (including `occurrence` → `series_id`) automatically.
         connection.execute(
             &format!("UPDATE {table} SET {set} WHERE {column} = ?1"),
             [id],
         )?;
-        for referrer in referrers {
-            // A container or a concept is an entity too; a row of any of the
-            // kind tables is.
-            ctx.touch(&referrer)?;
-        }
     }
     // An album's cover is a photograph's bytes: once those are purged the cover
     // goes, so the bytes are not held by a picture of something that is gone.
     if found.kind == Kind::Photo {
-        let albums = ids(
-            connection,
-            "SELECT c.id FROM container c JOIN photo p ON p.blob = c.cover WHERE p.id = ?1",
-            id,
-        )?;
         connection.execute(
             "UPDATE container SET cover = NULL
               WHERE cover = (SELECT blob FROM photo WHERE id = ?1)",
             [id],
         )?;
-        for album in albums {
-            ctx.touch(&album)?;
-        }
     }
     // WHAT AN ORIGIN FILLS IS THE TARGET OF ITS FOLLOW, for whatever kind it
     // is (an account, a calendar, a folder): the follow stops with it, as
@@ -580,7 +557,6 @@ fn retitle(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let title = ctx.required_str("title")?.trim();
     ctx.connection()
         .execute("UPDATE entity SET title = ?2 WHERE id = ?1", [id, title])?;
-    ctx.touch(id)?;
     with_rev(ctx, id, serde_json::json!({ "id": id, "title": title }))
 }
 
@@ -670,7 +646,6 @@ pub(crate) fn restore_one(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Vec<Stri
             "UPDATE entity SET deleted_at = NULL, purge_at = NULL WHERE id = ?1",
             [&target],
         )?;
-        ctx.touch(&target)?;
         restored.push(target);
     }
     Ok(restored)
