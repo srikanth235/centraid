@@ -53,24 +53,15 @@ blake3 = "1.8"
 unicode-normalization = "0.1"
 jsonschema = "0.30"
 proptest = "1"
-# `session` is the log plane's capture mechanism and it requires `bundled`
-# (#1020, D-1020-D1-3): the amalgamation is compiled with SQLITE_ENABLE_SESSION
-# and the preupdate hook, which a system libsqlite3 almost never carries.
-# `hooks` gives the commit/rollback hooks the commit guard needs; `functions`
-# the applier's scalar helpers.
+# `bundled` gives a known SQLite amalgamation compiled with FTS5 and
+# `SQLITE_ENABLE_DBPAGE_VTAB` (which `pagesource::walk` reads pages through);
+# `hooks` provides `update_hook` (the commit guard's change census),
+# `commit_hook` (backup device state) and `authorizer` (read-only connections).
+# `backup` is enabled only in `centraid-vault`'s `[dev-dependencies]` for
+# `tests/page_source.rs`'s comparison against SQLite's online-backup API.
 rusqlite = { version = "0.41", features = [
   "bundled",
-  "session",
   "hooks",
-  "functions",
-  # THE ONLINE BACKUP API, and it is a durability requirement (#1029 B4).
-  # A backup snapshot must be PAGE-IDENTICAL: `VACUUM INTO` rebuilds the file
-  # from its logical content and renumbers every page, so every 64 KiB range
-  # would change and none would match a name the gateway already holds.
-  # `rusqlite::backup` copies page 1 to page 1 and page N to page N, which is
-  # what lets an unchanged range keep its name (#1080,
-  # `crates/vault/src/backup/snapshot.rs`).
-  "backup",
 ] }
 serde = { version = "1", features = ["derive"] }
 # `float_roundtrip` is NOT optional here (#1020, D-1020-D1-18). serde_json's

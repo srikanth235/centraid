@@ -317,7 +317,7 @@ fn forge(store: &MemoryStore, snapshot: &Snapshot, edit: impl FnOnce(&mut Manife
             &name,
             Some(&snapshot.manifest_name),
             manifest.taken_at_ms,
-            0,
+            manifest.writes,
         )
         .expect("moves the head");
     name
@@ -375,7 +375,12 @@ fn a_restore_refuses_every_file_that_is_not_the_snapshots_and_leaves_nothing() {
         other => panic!("the census did not refuse: {other:?}"),
     }
     store
-        .set_head(&snapshot.manifest_name, Some(&counted), 1, 0)
+        .set_head(
+            &snapshot.manifest_name,
+            Some(&counted),
+            snapshot.manifest.taken_at_ms,
+            snapshot.manifest.writes,
+        )
         .expect("moves back");
     forge(&store, &snapshot, |manifest| {
         manifest.db_hash = PlaintextHash::of(b"another file");
@@ -394,14 +399,15 @@ fn a_restore_refuses_every_file_that_is_not_the_snapshots_and_leaves_nothing() {
     // that began before retention dropped it reads on. Once purged it is
     // missing, and named; and a restore never writes over a file.
     let fresh = MemoryStore::new("other");
-    fresh.set_clock_ms(1_000);
-    let _ = back_up(&scratch.vault, &fresh);
+    let fresh_snap = back_up(&scratch.vault, &fresh);
+    let base_ms = fresh_snap.manifest.taken_at_ms;
+    fresh.set_clock_ms(base_ms);
     fresh
-        .delete(&[snapshot.ranges[0].name])
+        .delete(&[fresh_snap.ranges[0].name])
         .expect("tombstones");
     let served = restore_head(&fresh, &keys, &out).expect("a tombstone is still served");
     std::fs::remove_file(&served.path).expect("clears the way");
-    fresh.set_clock_ms(1_000 + TOMBSTONE_GRACE_MS);
+    fresh.set_clock_ms(base_ms + TOMBSTONE_GRACE_MS);
     assert_eq!(fresh.purge(), 1, "the tombstone's bytes go");
     assert!(matches!(
         restore_head(&fresh, &keys, &out),

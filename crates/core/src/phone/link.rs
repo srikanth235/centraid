@@ -52,69 +52,32 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use centraid_gateway::client::{Client, ClientError, Destination as Pinned, Part, Source};
 use centraid_gateway::rules::code::Refusal as WireRefusal;
-use centraid_gateway::rules::ids::{
-    Digest as WireDigest, GatewayId, Name as WireName, Token, VaultId,
-};
+use centraid_gateway::rules::ids::{GatewayId, Name as WireName, Token, VaultId};
 use centraid_gateway::rules::limits::MAX_OBJECT_BYTES;
 use centraid_gateway::rules::signing::{
     HeadFields, sign_check, sign_delete, sign_head, sign_undo, verify_claim,
 };
 use centraid_gateway::rules::wire::{
-    CheckRequest, CheckState, ClaimView, DeleteRequest, HeadView, HeldKind as WireHeldKind, Info,
-    NameState as WireState, SetHead, UndoRequest,
+    CheckRequest, ClaimView, DeleteRequest, Info, SetHead, UndoRequest,
 };
 use centraid_vault::backup::naming::{Digest, Name};
 use centraid_vault::backup::state::{DeviceState, Gateway, Reach};
 use centraid_vault::backup::store::{
-    Deleted, Head, HeldEntry, HeldKind, NameCheck, NameState, ObjectEntry, Outgoing, PartAnswer,
-    Put, Refusal, SnapshotEntry, Store, StoreError,
+    Deleted, Head, HeldEntry, NameCheck, NameState, ObjectEntry, Outgoing, PartAnswer, Put,
+    Refusal, SnapshotEntry, Store, StoreError, check_of_state, error_of_wire_refusal, head_of_view,
+    held_of_view, object_of_view, plane_digest, plane_name, snapshot_of_view, wire_digest,
+    wire_name as store_wire_name,
 };
 
 use crate::error::{CoreError, Result};
 
 /// The plane's name as the protocol's: both are the same 32 bytes.
-pub(crate) fn wire_name(name: &Name) -> WireName {
-    WireName::from_bytes(*name.as_bytes())
-}
-
-fn plane_name(name: &WireName) -> Name {
-    Name::from_bytes(*name.as_bytes())
-}
-
-fn wire_digest(digest: &Digest) -> WireDigest {
-    WireDigest::from_bytes(*digest.as_bytes())
-}
-
-fn plane_digest(digest: &WireDigest) -> Digest {
-    Digest::from_bytes(*digest.as_bytes())
-}
-
-fn unsigned(ms: i64) -> u64 {
-    u64::try_from(ms).unwrap_or(0)
+pub(crate) const fn wire_name(name: &Name) -> WireName {
+    store_wire_name(name)
 }
 
 fn signed(ms: u64) -> i64 {
     i64::try_from(ms).unwrap_or(i64::MAX)
-}
-
-const fn plane_state(state: WireState) -> NameState {
-    match state {
-        WireState::Live => NameState::Live,
-        WireState::Held => NameState::Held,
-        WireState::Damaged => NameState::Damaged,
-    }
-}
-
-fn head_of(view: &HeadView) -> Head {
-    Head {
-        name: plane_name(&view.name),
-        prev: view.prev.as_ref().map(plane_name),
-        taken_at_ms: unsigned(view.taken_at_ms),
-        epoch: view.epoch,
-        generation: view.generation,
-        writes: view.writes,
-        set_at_ms: unsigned(view.set_at_ms),
-    }
 }
 
 /// A gateway id in its one spelling, 32 lower-case hex, as the protocol's.
@@ -136,21 +99,7 @@ pub(crate) fn gateway_of(gateway_id: &str) -> Result<GatewayId> {
 /// by its code, never a takeover.
 fn plain_error(error: ClientError) -> StoreError {
     match error {
-        ClientError::Refused(WireRefusal::HeadConflict { head, .. }) => StoreError::HeadConflict {
-            current: head.as_deref().map(head_of),
-        },
-        ClientError::Refused(WireRefusal::NotFound { name: Some(name) }) => {
-            StoreError::Missing(plane_name(&name))
-        }
-        ClientError::Refused(WireRefusal::NameTaken { digest, state }) => {
-            StoreError::Refused(Refusal::NameTaken {
-                held: plane_digest(&digest),
-                state: plane_state(state),
-            })
-        }
-        ClientError::Refused(refusal) => {
-            StoreError::Refused(Refusal::from_code(refusal.code().as_str()))
-        }
+        ClientError::Refused(refusal) => error_of_wire_refusal(&refusal),
         ClientError::GatewayFault => {
             StoreError::Unreachable("INTERNAL: the gateway's own store failed".to_owned())
         }
@@ -399,7 +348,7 @@ impl GatewayStore {
             .runtime
             .block_on(self.client.head_state(&self.vault, &self.gateway))
             .map_err(|error| self.store_error(error))?;
-        let head = state.head.as_ref().map(head_of);
+        let head = state.head.as_ref().map(head_of_view);
         if let Some(head) = &head
             && head.epoch == self.epoch
         {
@@ -483,7 +432,7 @@ impl Store for GatewayStore {
                 } else {
                     Err(StoreError::Refused(Refusal::NameTaken {
                         held: plane_digest(&held),
-                        state: plane_state(state),
+                        state,
                     }))
                 }
             }
@@ -526,17 +475,17 @@ impl Store for GatewayStore {
         out.extend(answer.refused.iter().map(|refused| {
             let name = plane_name(&refused.name);
             let refusal = match (refused.digest, refused.state) {
-                (Some(held), state) if refused.code.as_str() == "NAME_TAKEN" => {
+                (Some(held), state) if refused.code == centraid_gateway::rules::Code::NameTaken => {
                     let held = plane_digest(&held);
                     if sent_digest.get(&name) == Some(&held) {
                         return (name, Ok(Put::AlreadyStored));
                     }
                     Refusal::NameTaken {
                         held,
-                        state: plane_state(state.unwrap_or(WireState::Live)),
+                        state: state.unwrap_or(NameState::Live),
                     }
                 }
-                _ => Refusal::from_code(refused.code.as_str()),
+                _ => Refusal::from_wire_code(refused.code),
             };
             (name, Err(refusal))
         }));
@@ -636,7 +585,7 @@ impl Store for GatewayStore {
             {
                 Ok(view) => {
                     self.saw_generation(view.generation);
-                    return Ok(head_of(&view));
+                    return Ok(head_of_view(&view));
                 }
                 Err(error) if !retried && self.absorb_out_of_order(&error) => retried = true,
                 Err(ClientError::Refused(WireRefusal::ClockAhead { skew_ms })) if !retried => {
@@ -654,18 +603,7 @@ impl Store for GatewayStore {
             .runtime
             .block_on(self.client.snapshots_all(&self.vault))
             .map_err(|error| self.store_error(error))?;
-        let mut entries: Vec<SnapshotEntry> = views
-            .iter()
-            .map(|view| SnapshotEntry {
-                name: plane_name(&view.name),
-                taken_at_ms: unsigned(view.taken_at_ms),
-                registered_at_ms: unsigned(view.registered_at_ms),
-                epoch: view.epoch,
-                generation: view.generation,
-                held_at_ms: view.held_at_ms.map(unsigned),
-                purge_after_ms: view.purge_after_ms.map(unsigned),
-            })
-            .collect();
+        let mut entries: Vec<SnapshotEntry> = views.iter().map(snapshot_of_view).collect();
         entries.sort_by_key(|entry| (entry.taken_at_ms, entry.name));
         Ok(entries)
     }
@@ -681,15 +619,7 @@ impl Store for GatewayStore {
             .runtime
             .block_on(self.client.objects(&self.vault, after.as_ref(), limit))
             .map_err(|error| self.store_error(error))?;
-        Ok(entries
-            .iter()
-            .map(|entry| ObjectEntry {
-                name: plane_name(&entry.name),
-                size: entry.size,
-                digest: plane_digest(&entry.digest),
-                stored_at_ms: unsigned(entry.stored_at_ms),
-            })
-            .collect())
+        Ok(entries.iter().map(object_of_view).collect())
     }
 
     /// Signed at the next generation, retried once above an `OUT_OF_ORDER`.
@@ -731,7 +661,7 @@ impl Store for GatewayStore {
                 .map(|refused| {
                     (
                         plane_name(&refused.name),
-                        Refusal::from_code(refused.code.as_str()),
+                        Refusal::from_wire_code(refused.code),
                     )
                 })
                 .collect(),
@@ -767,11 +697,7 @@ impl Store for GatewayStore {
                 Err(error) => return Err(self.store_error(error)),
             }
         };
-        Ok(match answer.state {
-            CheckState::Intact => NameCheck::Intact,
-            CheckState::Damaged => NameCheck::Damaged,
-            CheckState::Missing => NameCheck::Missing,
-        })
+        Ok(check_of_state(answer.state))
     }
 
     fn held(
@@ -785,20 +711,7 @@ impl Store for GatewayStore {
             .runtime
             .block_on(self.client.held(&self.vault, after.as_ref(), limit))
             .map_err(|error| self.store_error(error))?;
-        Ok(entries
-            .iter()
-            .map(|entry| HeldEntry {
-                name: plane_name(&entry.name),
-                size: entry.size,
-                digest: plane_digest(&entry.digest),
-                kind: match entry.kind {
-                    WireHeldKind::Object => HeldKind::Object,
-                    WireHeldKind::Snapshot => HeldKind::Snapshot,
-                },
-                held_at_ms: unsigned(entry.held_at_ms),
-                purge_after_ms: unsigned(entry.purge_after_ms),
-            })
-            .collect())
+        Ok(entries.iter().map(held_of_view).collect())
     }
 
     /// Signed at the next generation, retried once above an `OUT_OF_ORDER`.
