@@ -818,3 +818,52 @@ fn os_bundles_are_at_most_four_files_of_at_most_32_mib() {
     let frames = centraid_gateway::rules::bundle::decode(&body).expect("decodes");
     assert_eq!(frames.len(), bundles[0].names.len());
 }
+
+#[test]
+fn retention_keeps_seven_daily_four_weekly_six_monthly_and_always_the_newest() {
+    const DAY: u64 = 24 * 60 * 60 * 1000;
+    let snapshot = |day: u64, held: bool| SnapshotEntry {
+        name: Name::from_bytes([u8::try_from(day).expect("a byte"); 32]),
+        taken_at_ms: T0 + day * DAY,
+        registered_at_ms: T0 + day * DAY,
+        epoch: 1,
+        generation: day,
+        held_at_ms: held.then_some(T0),
+        purge_after_ms: held.then_some(T0 + 7 * DAY),
+    };
+    // Names are one byte of the day, so keep the history under 256 days of distinct names.
+    let entries: Vec<SnapshotEntry> = (0..250).map(|day| snapshot(day, false)).collect();
+    let kept = retention::keep(&entries);
+    let day_of = |name: &Name| u64::from(name.as_bytes()[0]);
+    let kept_days: BTreeSet<u64> = kept.iter().map(day_of).collect();
+    assert!(kept_days.contains(&249), "the newest is always kept");
+    for day in 243..250 {
+        assert!(
+            kept_days.contains(&day),
+            "the last seven days are kept: {day}"
+        );
+    }
+    assert!(
+        (7..=17).contains(&kept.len()),
+        "7 daily + 4 weekly + 6 monthly, overlapping: {}",
+        kept.len()
+    );
+    assert!(
+        kept_days.iter().all(|day| *day >= 60),
+        "nothing older than the sixth month back: {kept_days:?}"
+    );
+    assert!(
+        kept_days.iter().any(|day| (60..243).contains(day)),
+        "weekly and monthly reach back"
+    );
+
+    // A snapshot already held for deletion is never kept, even as the newest.
+    let mut with_held = entries;
+    with_held.push(snapshot(250, true));
+    let kept = retention::keep(&with_held);
+    assert!(!kept.contains(&Name::from_bytes([250; 32])));
+    assert!(
+        kept.contains(&Name::from_bytes([249; 32])),
+        "the newest that is not held stands"
+    );
+}
