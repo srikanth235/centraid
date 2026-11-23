@@ -16,17 +16,26 @@ pub const REQUIRED_PROTOCOL: u32 = 1;
 /// One day, in milliseconds.
 pub const DAY_MS: i64 = 86_400_000;
 
-/// THE LARGEST OBJECT A `PUT` OR A BUNDLE FRAME MAY CARRY: 80 MiB.
+/// The plaintext of one chunk: 4 MiB (`CHUNK_BYTES`, spec §1 R2).
+pub const CHUNK_BYTES: u64 = 4 * 1024 * 1024;
+
+/// What sealing adds to a chunk (`centraid-sealed/3`, spec §2):
+/// the header `"CSB3"` (4) ‖ `u8(3)` (1) ‖ `flags` (1) ‖ `class` (1) = 7,
+/// the XChaCha20 nonce (24) and the Poly1305 tag (16) = 47 bytes.
+pub const SEAL_OVERHEAD_BYTES: u64 = (4 + 1 + 1 + 1) + 24 + 16;
+
+/// THE LARGEST OBJECT A BUNDLE FRAME MAY CARRY: one sealed chunk.
 ///
-/// A file is uploaded as parts of at most 64 MiB of plaintext; sealing adds a
-/// header and a nonce, a length and a tag per 4 MiB chunk. 80 MiB is that
-/// part with room to spare, and anything above it is refused `TOO_LARGE`.
-pub const MAX_OBJECT_BYTES: u64 = 80 * 1024 * 1024;
+/// The body is `zstd(p)` only when strictly shorter than `p`, so it never
+/// exceeds the chunk; the object is that body plus [`SEAL_OVERHEAD_BYTES`]:
+/// 4 MiB + 47 bytes. One object per chunk, no parts; anything above it is
+/// refused `TOO_LARGE`.
+pub const MAX_OBJECT_BYTES: u64 = CHUNK_BYTES + SEAL_OVERHEAD_BYTES;
 
 /// THE LARGEST BUNDLE, either way: 256 MiB of framing and bytes.
 ///
 /// It bounds a `POST bundle` body and a `POST fetch` answer alike, so the
-/// derivatives a restore pulls in bulk come back in pieces a phone can hold.
+/// chunks a restore pulls in bulk come back in pieces a phone can hold.
 pub const MAX_BUNDLE_BYTES: u64 = 256 * 1024 * 1024;
 
 /// The most names one `exists`, `fetch` or `delete` may carry.
@@ -103,3 +112,17 @@ pub const MAX_CLOCK_AHEAD_MS: i64 = 300_000;
 /// A file in `objects/` with no row is an orphan only once it is this old, so
 /// a bundle in flight is never taken for one: an hour (E14).
 pub const ORPHAN_MIN_AGE_MS: i64 = 3_600_000;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The object cap is exactly the largest sealed 4 MiB chunk: 7 header
+    /// bytes, 24 of nonce, 16 of tag, and a body of at most the chunk.
+    #[test]
+    fn the_object_cap_is_the_largest_sealed_chunk() {
+        assert_eq!(SEAL_OVERHEAD_BYTES, 47);
+        assert_eq!(MAX_OBJECT_BYTES, 4_194_304 + 47);
+        const { assert!(MAX_OBJECT_BYTES < MAX_BUNDLE_BYTES) };
+    }
+}

@@ -9,11 +9,12 @@
 //! told the name was held, and a phone that sent it again anyway was told
 //! "already stored" while nothing was written — until a quarterly scrub.
 
-use centraid_gateway::client::{Client, Part, Put, Source};
+use centraid_gateway::client::{Client, Part, Source};
 use centraid_gateway::rules::ids::{Digest, Name, VaultId};
 
+use centraid_gateway::rules::wire::FrameResult;
 use centraid_gateway::server::harness::pair_secret;
-use centraid_gateway::server::harness::{Spawned, spawn};
+use centraid_gateway::server::harness::{Spawned, put, spawn};
 
 /// A vault paired with `gateway`, and the client holding its token.
 async fn paired(gateway: &Spawned, seed: u8) -> (VaultId, Client) {
@@ -52,8 +53,7 @@ async fn a_name_whose_file_is_gone_reads_missing_and_a_put_brings_it_back() {
     let (vault, client) = paired(&gateway, 7).await;
     let (kept, lost) = (name("kept"), name("lost"));
     for (name, bytes) in [(kept, sealed("kept")), (lost, sealed("lost"))] {
-        client
-            .put(&vault, &name, &Digest::of(&bytes), bytes)
+        put(&client, &vault, &name, &Digest::of(&bytes), bytes)
             .await
             .expect("stores");
     }
@@ -69,18 +69,22 @@ async fn a_name_whose_file_is_gone_reads_missing_and_a_put_brings_it_back() {
     // took any bytes over a name it holds a row for would let a writer token
     // swap garbage in: it is NAME_TAKEN, and nothing changes.
     let again = sealed("lost, sealed again");
-    let answer = client
-        .put(&vault, &lost, &Digest::of(&again), again.clone())
+    let answer = put(&client, &vault, &lost, &Digest::of(&again), again.clone())
         .await
         .expect("answers");
-    assert!(matches!(answer, Put::NameTaken { .. }), "{answer:?}");
+    assert!(matches!(answer, FrameResult::Taken { .. }), "{answer:?}");
     assert!(!file.exists(), "and no file was written");
     let original = sealed("lost");
-    let answer = client
-        .put(&vault, &lost, &Digest::of(&original), original.clone())
-        .await
-        .expect("answers");
-    assert!(matches!(answer, Put::Stored(_)), "{answer:?}");
+    let answer = put(
+        &client,
+        &vault,
+        &lost,
+        &Digest::of(&original),
+        original.clone(),
+    )
+    .await
+    .expect("answers");
+    assert!(matches!(answer, FrameResult::Stored { .. }), "{answer:?}");
     assert_eq!(std::fs::read(&file).expect("the bytes are back"), original);
     assert!(
         client
@@ -98,8 +102,7 @@ async fn a_bundle_brings_back_a_name_whose_file_is_gone() {
     let (vault, client) = paired(&gateway, 8).await;
     let lost = name("a range");
     let first = sealed("a range");
-    client
-        .put(&vault, &lost, &Digest::of(&first), first.clone())
+    put(&client, &vault, &lost, &Digest::of(&first), first.clone())
         .await
         .expect("stores");
     let file = gateway.shared().store().path(&vault, &lost);
@@ -116,6 +119,10 @@ async fn a_bundle_brings_back_a_name_whose_file_is_gone() {
         )
         .await
         .expect("answers");
-    assert_eq!(answer.stored, vec![lost], "{answer:?}");
+    assert_eq!(
+        answer.results,
+        vec![FrameResult::Stored { name: lost }],
+        "{answer:?}"
+    );
     assert_eq!(std::fs::read(&file).expect("the bytes are back"), first);
 }

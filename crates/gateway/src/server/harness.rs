@@ -30,6 +30,34 @@ use crate::server::serve::{Cable, TlsListener, bind, run};
 use crate::server::sweeps::scrub_once;
 use crate::server::{Announcer, Handle, OpenError, Shared, system_now_ms};
 
+/// One object as a bundle of one frame: the only way in, so a test that
+/// stores one thing says so here. `digest` is what the frame declares, which a
+/// test may make a lie.
+///
+/// # Errors
+///
+/// As [`Client::bundle_parts`].
+pub async fn put(
+    client: &Client,
+    vault: &VaultId,
+    name: &Name,
+    digest: &crate::rules::ids::Digest,
+    bytes: impl Into<bytes::Bytes>,
+) -> Result<crate::rules::wire::FrameResult, crate::client::ClientError> {
+    let part = crate::client::Part {
+        name: *name,
+        digest: *digest,
+        source: crate::client::Source::Bytes(bytes.into()),
+    };
+    let mut answer = client.bundle_parts(vault, vec![part]).await?;
+    match (answer.results.pop(), answer.results.is_empty()) {
+        (Some(result), true) => Ok(result),
+        _ => Err(crate::client::ClientError::Protocol(
+            "a one-frame bundle was not answered with one result".to_owned(),
+        )),
+    }
+}
+
 /// A gateway serving on `127.0.0.1`, and the handles a test needs.
 #[derive(Debug)]
 pub struct Spawned {
@@ -67,7 +95,17 @@ pub async fn spawn_with(
     data_dir: &Path,
     announcer: Option<Announcer>,
 ) -> Result<Spawned, OpenError> {
-    serve_on(data_dir, announcer, "127.0.0.1:0", false).await
+    serve_on(data_dir, announcer, "127.0.0.1:0", false, None).await
+}
+
+/// [`spawn`], offering `http/1.1` alone in ALPN: a gateway whose stack does
+/// not speak HTTP/2, which a client must fall back to.
+///
+/// # Errors
+///
+/// As [`spawn`].
+pub async fn spawn_http1_only(data_dir: &Path) -> Result<Spawned, OpenError> {
+    serve_on(data_dir, None, "127.0.0.1:0", false, Some(&[b"http/1.1"])).await
 }
 
 /// [`spawn`] on `address`, where a gateway that stopped was listening: the
@@ -78,7 +116,7 @@ pub async fn spawn_with(
 ///
 /// As [`spawn`].
 pub async fn spawn_on(data_dir: &Path, address: SocketAddr) -> Result<Spawned, OpenError> {
-    serve_on(data_dir, None, &address.to_string(), true).await
+    serve_on(data_dir, None, &address.to_string(), true, None).await
 }
 
 /// Open `data_dir` as `serve` does and serve it on `address`. `again` is a
@@ -89,6 +127,7 @@ async fn serve_on(
     announcer: Option<Announcer>,
     address: &str,
     again: bool,
+    alpn: Option<&[&[u8]]>,
 ) -> Result<Spawned, OpenError> {
     // THE GATEWAY'S CLOCK IS THE TEST'S: it starts at the wall clock's reading
     // and then moves only when the test moves it, so no assertion depends on
@@ -116,9 +155,12 @@ async fn serve_on(
             Err(error) => return Err(OpenError::Io(address.to_owned(), error)),
         }
     };
-    let config = shared
-        .identity()
-        .server_config()
+    let identity = shared.identity();
+    let config = alpn
+        .map_or_else(
+            || identity.server_config(),
+            |alpn| identity.server_config_offering(alpn),
+        )
         .map_err(|error| OpenError::Tls(error.to_string()))?;
     let cable = Arc::new(Cable::default());
     let listener = TlsListener::cabled(listener, config, Arc::clone(&cable))

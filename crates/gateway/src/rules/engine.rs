@@ -15,7 +15,7 @@
 //!
 //! # BYTES ARE THE ADAPTER'S, AND ARRIVE THROUGH A CALLBACK
 //!
-//! The rules never hold an object. A `PUT` is judged on an [`Arrival`] — the
+//! The rules never hold an object. A bundle frame is judged on an [`Arrival`] — the
 //! digest and size the adapter measured while it staged the bytes — and the
 //! adapter's `commit` runs only when the verdict is "store", between the
 //! judgement and the row that records it. A purge's `remove` runs the same
@@ -64,8 +64,8 @@ pub struct Caller {
     pub writer_epoch: u64,
 }
 
-/// What a `PUT` or a bundle frame brought, as the adapter measured it while
-/// staging the bytes.
+/// What a bundle frame brought, as the adapter measured it while staging the
+/// bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Arrival {
     pub name: Name,
@@ -76,13 +76,16 @@ pub struct Arrival {
     pub size: u64,
 }
 
-/// A `PUT` that was admitted.
+/// A bundle frame that was admitted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PutOutcome {
-    /// New bytes, now held: `201`.
+    /// New bytes, now held.
     Stored(ObjectEntry),
-    /// The name was already held with this digest; nothing moved: `200`.
+    /// The name was already held with this digest, live; nothing moved.
     AlreadyStored(ObjectEntry),
+    /// The name was held for deletion under this digest: the hold is lifted
+    /// and the file is not replaced.
+    Lifted(ObjectEntry),
 }
 
 impl PutOutcome {
@@ -90,7 +93,7 @@ impl PutOutcome {
     #[must_use]
     pub const fn entry(&self) -> ObjectEntry {
         match self {
-            Self::Stored(entry) | Self::AlreadyStored(entry) => *entry,
+            Self::Stored(entry) | Self::AlreadyStored(entry) | Self::Lifted(entry) => *entry,
         }
     }
 }
@@ -504,40 +507,20 @@ impl<S: State> Gateway<S> {
         Ok(missing)
     }
 
-    /// `PUT /v1/v/{vault}/o/{name}`.
+    /// The frames of `POST /v1/v/{vault}/bundle` the adapter has staged, each
+    /// judged on its own by **write-once by name and digest**: a live name
+    /// with this digest is `AlreadyStored`; a live name with another digest
+    /// is `NAME_TAKEN`; a name held for deletion under this digest is
+    /// `Lifted` (the hold is lifted, the file stays); a name held under
+    /// another digest or damaged is `NAME_TAKEN`; and an absent name, or a
+    /// damaged one sent its own bytes again, is stored. `commit(i)` moves
+    /// frame `i`'s staged bytes into place just before its row is written, so
+    /// a crash leaves unlisted files (the orphan sweep takes them), never a
+    /// row without bytes.
     ///
-    /// **Write-once by name and digest.** A live name with this digest is
-    /// `AlreadyStored` and nothing moves; a live name with another digest is
-    /// `NAME_TAKEN`; a name that is absent, held for deletion or damaged is
-    /// stored — **replacing the held bytes and lifting the hold** — and
-    /// `commit` (the adapter moving the staged bytes into place) runs before
-    /// the row is written.
-    ///
-    /// # Errors
-    ///
-    /// `UNAUTHORIZED`, `MOVED`, `FROZEN`, `TOO_LARGE`, `DIGEST_MISMATCH`,
-    /// `NAME_TAKEN`, whatever `commit` returns (`DISK_FULL`, a store fault),
-    /// or a store fault.
-    pub fn put(
-        &mut self,
-        vault: &VaultId,
-        token: &Token,
-        arrival: &Arrival,
-        now_ms: i64,
-        commit: impl FnOnce() -> Result<(), Fault>,
-    ) -> Result<PutOutcome, Fault> {
-        self.state.atomically(|state| {
-            authorize(state, vault, token, Access::Write)?;
-            put_one(state, vault, arrival, now_ms, commit)
-        })
-    }
-
-    /// `POST /v1/v/{vault}/bundle`: every frame judged as its own `PUT`
-    /// would be, **in one transaction**: the rows of the frames that were
-    /// stored land together or not at all. `commit(i)` moves frame `i`'s
-    /// staged bytes into place just before its row is written, so a crash
-    /// leaves unlisted files (the orphan sweep takes them), never a row
-    /// without bytes.
+    /// The adapter calls this with **one frame per call as each frame
+    /// arrives**, so a frame is committed on its own and a connection that
+    /// drops leaves every finished frame in place (spec §4).
     ///
     /// # Errors
     ///
@@ -725,6 +708,7 @@ impl<S: State> Gateway<S> {
                 vault,
                 caller.epoch,
                 request.generation,
+                request.head_root.as_ref(),
                 &request.names,
                 &request.signature,
             ) {
@@ -732,7 +716,20 @@ impl<S: State> Gateway<S> {
             }
             let mut record = state.vault(vault)?.ok_or(Refusal::Unauthorized)?;
             ordered(&record, request.generation)?;
-            let head = state.head(vault)?.map(|head| head.name);
+            // BOUND TO ITS HEAD AT ACCEPT TIME (spec §4): the keep set the
+            // phone computed was read at the head it names. A gateway whose
+            // head is any other (a data directory rolled back, or a head
+            // that moved) refuses, and answers the head it has.
+            let current = state.head(vault)?;
+            if current.map(|head| head.name) != request.head_root {
+                let claim = standing_claim(state, vault)?;
+                return Err(Refusal::HeadConflict {
+                    epoch: caller.writer_epoch,
+                    head: current.map(|head| Box::new(view(&head, claim))),
+                }
+                .into());
+            }
+            let head = current.map(|head| head.name);
             let mut answer = DeleteAnswer::default();
             for name in distinct(&request.names) {
                 if head == Some(name) {
@@ -935,7 +932,7 @@ impl<S: State> Gateway<S> {
     }
 
     /// Purge one hold if it is still due. `remove` — the adapter unlinking
-    /// the bytes — runs inside the same step, so a `PUT` that stored the name
+    /// the bytes — runs inside the same step, so a bundle frame that stored the name
     /// again in the meantime is never unlinked. A frozen vault is skipped,
     /// and the head's manifest is never purged.
     ///
@@ -995,7 +992,7 @@ impl<S: State> Gateway<S> {
     /// [`ORPHAN_MIN_AGE_MS`] by the gateway's clock. **The check and the
     /// removal are one step** — `remove` runs inside the same transaction as
     /// the look at the index, and the adapter holds its one lock across both —
-    /// so a `PUT` of the same name cannot slip in between and lose its file
+    /// so a frame of the same name cannot slip in between and lose its file
     /// (#1191, R5). Answers whether it removed.
     ///
     /// # Errors
@@ -1035,7 +1032,7 @@ impl<S: State> Gateway<S> {
     }
 
     /// Record what the scrub found at one object it read as `scrubbed`. If
-    /// the row changed since — a `PUT` replaced it — the finding is about
+    /// the row changed since — a frame replaced it — the finding is about
     /// bytes that are gone and is dropped.
     ///
     /// # Errors
@@ -1355,7 +1352,7 @@ fn ordered(record: &VaultRecord, generation: u64) -> Result<(), Fault> {
     Ok(())
 }
 
-/// One `PUT`'s whole decision, inside a transaction the caller opened and
+/// One bundle frame's whole decision, inside a transaction the caller opened and
 /// authorised.
 fn put_one<S: State>(
     state: &mut S,
@@ -1407,7 +1404,7 @@ fn put_one<S: State>(
             // Held, and its file is not known to be damaged: the name is
             // live again, and the file is not replaced.
             state.set_hold(vault, &arrival.name, None)?;
-            return Ok(PutOutcome::Stored(row.entry()));
+            return Ok(PutOutcome::Lifted(row.entry()));
         }
     }
     commit()?;

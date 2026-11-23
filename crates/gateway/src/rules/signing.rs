@@ -18,7 +18,7 @@
 //! | --- | --- | --- |
 //! | claim, read grant | `centraid-gateway-claim-v1` | `epoch`, `head_seen` (or empty), `nonce` |
 //! | head | `centraid-gateway-head-v1` | `epoch`, `generation`, `writes`, `taken_at_ms`, `manifest_name`, `prev` (or empty) |
-//! | delete | `centraid-gateway-delete-v1` | `epoch`, `generation`, `names_digest` |
+//! | delete | `centraid-gateway-delete-v1` | `epoch`, `generation`, `head_root` (or empty), `names_digest` |
 //! | undo | `centraid-gateway-undo-v1` | `epoch`, `generation`, `names_digest` (empty for "every hold") |
 //! | check | `centraid-gateway-check-v1` | `epoch`, `generation`, `name` |
 //! | pairing by secret | `centraid-gateway-pair-v1` | `blake3(secret)`, `nonce` |
@@ -136,18 +136,22 @@ pub fn head_preimage(gateway: &GatewayId, vault: &VaultId, head: &HeadFields) ->
     out
 }
 
-/// The exact bytes a delete covers.
+/// The exact bytes a delete covers: bound to the head it was computed
+/// against (`head_root`, empty when the vault has no head), so a delete is
+/// void at a gateway whose head is any other (spec §4).
 #[must_use]
 pub fn delete_preimage(
     gateway: &GatewayId,
     vault: &VaultId,
     epoch: u64,
     generation: u64,
+    head_root: Option<&Name>,
     names: &[Name],
 ) -> Vec<u8> {
     let mut out = opening(DELETE_CONTEXT, gateway, vault);
     push(&mut out, &epoch.to_be_bytes());
     push(&mut out, &generation.to_be_bytes());
+    push(&mut out, optional(head_root));
     push(&mut out, &names_digest(names));
     out
 }
@@ -262,11 +266,19 @@ pub fn sign_delete(
     gateway: &GatewayId,
     epoch: u64,
     generation: u64,
+    head_root: Option<&Name>,
     names: &[Name],
 ) -> Signature {
     sign(
         identity,
-        &delete_preimage(gateway, &vault_of(identity), epoch, generation, names),
+        &delete_preimage(
+            gateway,
+            &vault_of(identity),
+            epoch,
+            generation,
+            head_root,
+            names,
+        ),
     )
 }
 
@@ -350,12 +362,13 @@ pub fn verify_delete(
     vault: &VaultId,
     epoch: u64,
     generation: u64,
+    head_root: Option<&Name>,
     names: &[Name],
     signature: &Signature,
 ) -> bool {
     verify(
         vault,
-        &delete_preimage(gateway, vault, epoch, generation, names),
+        &delete_preimage(gateway, vault, epoch, generation, head_root, names),
         signature,
     )
 }
@@ -506,8 +519,36 @@ mod tests {
     #[test]
     fn a_signature_is_good_for_its_own_kind_only() {
         let names = [Name::from_bytes([5; 32])];
-        let delete = sign_delete(&identity(), &gateway(), 2, 6, &names);
-        assert!(verify_delete(&gateway(), &vault(), 2, 6, &names, &delete));
+        let root = Name::from_bytes([6; 32]);
+        let delete = sign_delete(&identity(), &gateway(), 2, 6, Some(&root), &names);
+        assert!(verify_delete(
+            &gateway(),
+            &vault(),
+            2,
+            6,
+            Some(&root),
+            &names,
+            &delete
+        ));
+        // A delete is void at any other head.
+        assert!(!verify_delete(
+            &gateway(),
+            &vault(),
+            2,
+            6,
+            Some(&Name::from_bytes([7; 32])),
+            &names,
+            &delete
+        ));
+        assert!(!verify_delete(
+            &gateway(),
+            &vault(),
+            2,
+            6,
+            None,
+            &names,
+            &delete
+        ));
         assert!(!verify_undo(
             &gateway(),
             &vault(),
@@ -519,7 +560,15 @@ mod tests {
         let undo = sign_undo(&identity(), &gateway(), 2, 6, Some(&names));
         assert!(verify_undo(&gateway(), &vault(), 2, 6, Some(&names), &undo));
         assert!(!verify_undo(&gateway(), &vault(), 2, 6, None, &undo));
-        assert!(!verify_delete(&gateway(), &vault(), 2, 6, &names, &undo));
+        assert!(!verify_delete(
+            &gateway(),
+            &vault(),
+            2,
+            6,
+            Some(&root),
+            &names,
+            &undo
+        ));
     }
 
     /// A HEAD IS BOUND TO EVERY FIELD IT SIGNS.

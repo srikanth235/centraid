@@ -116,8 +116,8 @@ async fn the_gateway_completes_tls_1_2_and_tls_1_3() {
         assert_eq!(stream.get_ref().1.protocol_version(), Some(expected));
         assert_eq!(
             stream.get_ref().1.alpn_protocol(),
-            Some(&b"http/1.1"[..]),
-            "HTTP/1.1 and nothing else"
+            Some(&b"h2"[..]),
+            "a client offering h2 and http/1.1 is served h2"
         );
     }
     gateway.shutdown().await;

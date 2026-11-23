@@ -46,9 +46,9 @@ use crate::rules::signing::{
     HeadFields, sign_claim, sign_delete, sign_head, sign_pair, sign_read, sign_undo,
 };
 use crate::rules::wire::{
-    BundleAnswer, ClaimBody, DeleteAnswer, DeleteRequest, HeadView, HeldEntry, HeldKind, Info,
-    NameRefusal, NameState, NonceAnswer, ObjectEntry, PairKind, PairRequest, Paired, ReadBody,
-    SecretBody, SetHead, SnapshotView, UndoRequest, Undone,
+    BundleAnswer, ClaimBody, DeleteAnswer, DeleteRequest, FrameResult, HeadView, HeldEntry,
+    HeldKind, Info, NameRefusal, NameState, NonceAnswer, ObjectEntry, PairKind, PairRequest,
+    Paired, ReadBody, SecretBody, SetHead, SnapshotView, UndoRequest, Undone,
 };
 
 /// One case's verdict.
@@ -117,12 +117,13 @@ impl From<Refusal> for Failure {
     }
 }
 
-/// What a `PUT` answered.
+/// What a one-frame bundle answered, as the cases that store one object read
+/// it. `held` (a hold lifted) reads as `Stored`: the name is live again.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PutAnswer {
-    /// `201`: new bytes, now held.
+    /// `stored` or `held`: these bytes are now held and live.
     Stored(ObjectEntry),
-    /// `200`: held already with this digest.
+    /// `there`: held already with this digest, live.
     AlreadyStored(ObjectEntry),
 }
 
@@ -200,6 +201,8 @@ pub trait Target {
         vault: &VaultId,
         names: &[Name],
     ) -> Result<Vec<Name>, Failure>;
+    /// One object as a bundle of one frame: there is no other way in. A frame
+    /// that is not stored is the refusal a single upload would have been.
     async fn put(
         &mut self,
         token: &Token,
@@ -207,7 +210,42 @@ pub trait Target {
         name: &Name,
         digest: &Digest,
         bytes: &[u8],
-    ) -> Result<PutAnswer, Failure>;
+    ) -> Result<PutAnswer, Failure> {
+        let frame = Frame {
+            name: *name,
+            digest: *digest,
+            bytes: bytes.to_vec(),
+        };
+        let answer = self.bundle(token, vault, &[frame]).await?;
+        let entry = ObjectEntry {
+            name: *name,
+            size: bytes.len() as u64,
+            digest: Digest::of(bytes),
+            stored_at_ms: 0,
+        };
+        match answer.results.as_slice() {
+            [FrameResult::Stored { .. } | FrameResult::Held { .. }] => Ok(PutAnswer::Stored(entry)),
+            [FrameResult::There { .. }] => Ok(PutAnswer::AlreadyStored(entry)),
+            [FrameResult::Taken { digest, state, .. }] => {
+                Err(Failure::Refused(Refusal::NameTaken {
+                    digest: *digest,
+                    state: *state,
+                }))
+            }
+            [FrameResult::Full { .. }] => Err(Failure::Refused(Refusal::DiskFull)),
+            [FrameResult::TooLarge { .. }] => Err(Failure::Refused(Refusal::TooLarge {
+                limit: MAX_OBJECT_BYTES,
+            })),
+            [FrameResult::Refused { code, .. }] if *code == Code::DigestMismatch => {
+                Err(Failure::Refused(Refusal::DigestMismatch {
+                    computed: Digest::of(bytes),
+                }))
+            }
+            other => Err(Failure::Broken(format!(
+                "a one-frame bundle answered {other:?}"
+            ))),
+        }
+    }
     async fn get(
         &mut self,
         token: &Token,
@@ -259,26 +297,26 @@ pub trait Target {
 
 /// Every case, by name, in the order [`run`] runs them. A target's test
 /// asserts its report names exactly these, so a dropped case is a failure.
-pub const CASES: [&str; 64] = [
+pub const CASES: [&str; 67] = [
     "info/answers-before-anything-is-paired",
     "pair/a-secret-admits-one-new-vault-once",
     "pair/a-known-vault-is-refused-and-the-secret-is-not-spent",
     "pair/an-expired-or-unknown-secret-is-unauthorized",
     "pair/a-malformed-pairing-is-a-bad-request",
     "auth/a-stranger-a-wrong-vault-and-an-unknown-vault-are-one-answer",
-    "objects/put-is-write-once-by-name-and-digest",
+    "objects/a-frame-is-write-once-by-name-and-digest",
     "objects/a-digest-that-is-not-the-bytes-stores-nothing",
-    "objects/over-eighty-mebibytes-is-too-large",
+    "objects/over-the-sealed-chunk-cap-is-too-large",
     "objects/exists-names-what-is-missing",
     "objects/get-serves-bytes-ranges-and-a-digest",
     "objects/the-listing-is-sorted-and-pages",
-    "bundle/each-frame-is-answered-as-its-own-put-would-be",
+    "bundle/each-frame-is-answered-and-committed-on-its-own",
     "fetch/answers-the-bundle-framing-for-what-is-held",
     "head/moves-only-by-compare-and-set-and-registers-snapshots",
     "delete/a-tombstone-keeps-its-bytes-until-the-grace-ends",
     "delete/the-head-is-in-use-and-a-tombstone-can-be-stored-again",
     "store/exists-reads-a-tombstoned-name-as-missing",
-    "store/a-put-over-a-tombstone-brings-the-name-back",
+    "store/a-frame-over-a-tombstone-brings-the-name-back",
     "store/a-head-naming-a-manifest-not-held-is-not-found",
     "store/deleting-an-absent-name-succeeds",
     "store/the-listing-leaves-tombstones-out",
@@ -319,11 +357,14 @@ pub const CASES: [&str; 64] = [
     "operator/a-gap-between-sweeps-is-not-counted",
     "nonce/the-nonce-route-writes-nothing",
     "nonce/a-nonce-is-checked",
-    "store/a-put-over-a-held-or-damaged-name-must-match-its-digest",
+    "store/a-frame-over-a-held-or-damaged-name-must-match-its-digest",
     "takeover/a-claim-keeps-the-superseded-writers-tombstone",
     "signed/the-extremes-of-every-number-are-refused-cleanly",
     "pair/a-claim-or-a-read-grant-made-for-another-gateway-or-vault-moves-nothing",
     "store/a-signed-delete-frees-a-damaged-name-and-a-token-alone-cannot",
+    "bundle/a-held-name-is-lifted-by-its-own-frame-and-an-oversize-frame-is-read-past",
+    "delete/a-delete-is-bound-to-the-head-it-was-computed-under",
+    "delete/a-delete-computed-under-a-newer-head-is-refused-after-a-rollback",
 ];
 
 /// **The names tests.md gives, and the case each runs.** `tests/conformance.rs`
@@ -436,7 +477,7 @@ pub const NAMED: &[(&str, &str)] = &[
     ),
     (
         "a_put_of_garbage_over_a_held_or_damaged_name_is_refused",
-        "store/a-put-over-a-held-or-damaged-name-must-match-its-digest",
+        "store/a-frame-over-a-held-or-damaged-name-must-match-its-digest",
     ),
     (
         "a_claim_keeps_the_superseded_writers_tombstone_among_a_hundred_readers",
@@ -475,196 +516,232 @@ pub async fn run<T: Target>(target: &mut T) -> Report {
 async fn run_named<T: Target>(target: &mut T, only: Option<&str>) -> Report {
     let mut report = Report::default();
     if only.is_none_or(|case| case == CASES[0]) {
-        report.record(CASES[0], info(target).await);
+        report.record(CASES[0], Box::pin(info(target)).await);
     }
     if only.is_none_or(|case| case == CASES[1]) {
-        report.record(CASES[1], secret_admits_once(target).await);
+        report.record(CASES[1], Box::pin(secret_admits_once(target)).await);
     }
     if only.is_none_or(|case| case == CASES[2]) {
-        report.record(CASES[2], known_vault(target).await);
+        report.record(CASES[2], Box::pin(known_vault(target)).await);
     }
     if only.is_none_or(|case| case == CASES[3]) {
-        report.record(CASES[3], dead_secret(target).await);
+        report.record(CASES[3], Box::pin(dead_secret(target)).await);
     }
     if only.is_none_or(|case| case == CASES[4]) {
-        report.record(CASES[4], malformed_pairing(target).await);
+        report.record(CASES[4], Box::pin(malformed_pairing(target)).await);
     }
     if only.is_none_or(|case| case == CASES[5]) {
-        report.record(CASES[5], tenancy(target).await);
+        report.record(CASES[5], Box::pin(tenancy(target)).await);
     }
     if only.is_none_or(|case| case == CASES[6]) {
-        report.record(CASES[6], write_once(target).await);
+        report.record(CASES[6], Box::pin(write_once(target)).await);
     }
     if only.is_none_or(|case| case == CASES[7]) {
-        report.record(CASES[7], digest_mismatch(target).await);
+        report.record(CASES[7], Box::pin(digest_mismatch(target)).await);
     }
     if only.is_none_or(|case| case == CASES[8]) {
-        report.record(CASES[8], too_large(target).await);
+        report.record(CASES[8], Box::pin(too_large(target)).await);
     }
     if only.is_none_or(|case| case == CASES[9]) {
-        report.record(CASES[9], exists(target).await);
+        report.record(CASES[9], Box::pin(exists(target)).await);
     }
     if only.is_none_or(|case| case == CASES[10]) {
-        report.record(CASES[10], get(target).await);
+        report.record(CASES[10], Box::pin(get(target)).await);
     }
     if only.is_none_or(|case| case == CASES[11]) {
-        report.record(CASES[11], listing(target).await);
+        report.record(CASES[11], Box::pin(listing(target)).await);
     }
     if only.is_none_or(|case| case == CASES[12]) {
-        report.record(CASES[12], bundle(target).await);
+        report.record(CASES[12], Box::pin(bundle(target)).await);
     }
     if only.is_none_or(|case| case == CASES[13]) {
-        report.record(CASES[13], fetch(target).await);
+        report.record(CASES[13], Box::pin(fetch(target)).await);
     }
     if only.is_none_or(|case| case == CASES[14]) {
-        report.record(CASES[14], head(target).await);
+        report.record(CASES[14], Box::pin(head(target)).await);
     }
     if only.is_none_or(|case| case == CASES[15]) {
-        report.record(CASES[15], grace(target).await);
+        report.record(CASES[15], Box::pin(grace(target)).await);
     }
     if only.is_none_or(|case| case == CASES[16]) {
-        report.record(CASES[16], head_in_use(target).await);
+        report.record(CASES[16], Box::pin(head_in_use(target)).await);
     }
     if only.is_none_or(|case| case == CASES[17]) {
-        report.record(CASES[17], exists_skips_tombstones(target).await);
+        report.record(CASES[17], Box::pin(exists_skips_tombstones(target)).await);
     }
     if only.is_none_or(|case| case == CASES[18]) {
-        report.record(CASES[18], put_revives_tombstone(target).await);
+        report.record(CASES[18], Box::pin(put_revives_tombstone(target)).await);
     }
     if only.is_none_or(|case| case == CASES[19]) {
-        report.record(CASES[19], head_needs_held_manifest(target).await);
+        report.record(CASES[19], Box::pin(head_needs_held_manifest(target)).await);
     }
     if only.is_none_or(|case| case == CASES[20]) {
-        report.record(CASES[20], delete_absent(target).await);
+        report.record(CASES[20], Box::pin(delete_absent(target)).await);
     }
     if only.is_none_or(|case| case == CASES[21]) {
-        report.record(CASES[21], listing_skips_tombstones(target).await);
+        report.record(CASES[21], Box::pin(listing_skips_tombstones(target)).await);
     }
     if only.is_none_or(|case| case == CASES[22]) {
-        report.record(CASES[22], name_taken(target).await);
+        report.record(CASES[22], Box::pin(name_taken(target)).await);
     }
     if only.is_none_or(|case| case == CASES[23]) {
-        report.record(CASES[23], scrub(target).await);
+        report.record(CASES[23], Box::pin(scrub(target)).await);
     }
     if only.is_none_or(|case| case == CASES[24]) {
-        report.record(CASES[24], claim_refusals(target).await);
+        report.record(CASES[24], Box::pin(claim_refusals(target)).await);
     }
     if only.is_none_or(|case| case == CASES[25]) {
-        report.record(CASES[25], read_grant(target).await);
+        report.record(CASES[25], Box::pin(read_grant(target)).await);
     }
     if only.is_none_or(|case| case == CASES[26]) {
-        report.record(CASES[26], fence(target).await);
+        report.record(CASES[26], Box::pin(fence(target)).await);
     }
     if only.is_none_or(|case| case == CASES[27]) {
-        report.record(CASES[27], stale_claim(target).await);
+        report.record(CASES[27], Box::pin(stale_claim(target)).await);
     }
     if only.is_none_or(|case| case == CASES[28]) {
-        report.record(CASES[28], blindness_canary(target).await);
+        report.record(CASES[28], Box::pin(blindness_canary(target)).await);
     }
     if only.is_none_or(|case| case == CASES[29]) {
-        report.record(CASES[29], credential_canary(target).await);
+        report.record(CASES[29], Box::pin(credential_canary(target)).await);
     }
     if only.is_none_or(|case| case == CASES[30]) {
-        report.record(CASES[30], revoked(target).await);
+        report.record(CASES[30], Box::pin(revoked(target)).await);
     }
     if only.is_none_or(|case| case == CASES[31]) {
-        report.record(CASES[31], head_needs_signature(target).await);
+        report.record(CASES[31], Box::pin(head_needs_signature(target)).await);
     }
     if only.is_none_or(|case| case == CASES[32]) {
-        report.record(CASES[32], head_never_falls(target).await);
+        report.record(CASES[32], Box::pin(head_never_falls(target)).await);
     }
     if only.is_none_or(|case| case == CASES[33]) {
-        report.record(CASES[33], generation_bound(target).await);
+        report.record(CASES[33], Box::pin(generation_bound(target)).await);
     }
     if only.is_none_or(|case| case == CASES[34]) {
-        report.record(CASES[34], claim_resets_generation(target).await);
+        report.record(CASES[34], Box::pin(claim_resets_generation(target)).await);
     }
     if only.is_none_or(|case| case == CASES[35]) {
-        report.record(CASES[35], claim_revokes_every_older_token(target).await);
+        report.record(
+            CASES[35],
+            Box::pin(claim_revokes_every_older_token(target)).await,
+        );
     }
     if only.is_none_or(|case| case == CASES[36]) {
-        report.record(CASES[36], moved_claim_is_bound(target).await);
+        report.record(CASES[36], Box::pin(moved_claim_is_bound(target)).await);
     }
     if only.is_none_or(|case| case == CASES[37]) {
-        report.record(CASES[37], revoked_tombstones(target).await);
+        report.record(CASES[37], Box::pin(revoked_tombstones(target)).await);
     }
     if only.is_none_or(|case| case == CASES[38]) {
-        report.record(CASES[38], claim_cancels_holds(target).await);
+        report.record(CASES[38], Box::pin(claim_cancels_holds(target)).await);
     }
     if only.is_none_or(|case| case == CASES[39]) {
-        report.record(CASES[39], delete_needs_signature(target).await);
+        report.record(CASES[39], Box::pin(delete_needs_signature(target)).await);
     }
     if only.is_none_or(|case| case == CASES[40]) {
-        report.record(CASES[40], delete_is_held(target).await);
+        report.record(CASES[40], Box::pin(delete_is_held(target)).await);
     }
     if only.is_none_or(|case| case == CASES[41]) {
-        report.record(CASES[41], delete_replay(target).await);
+        report.record(CASES[41], Box::pin(delete_replay(target)).await);
     }
     if only.is_none_or(|case| case == CASES[42]) {
-        report.record(CASES[42], head_and_snapshot_keep_manifest(target).await);
+        report.record(
+            CASES[42],
+            Box::pin(head_and_snapshot_keep_manifest(target)).await,
+        );
     }
     if only.is_none_or(|case| case == CASES[43]) {
-        report.record(CASES[43], undo_lifts_holds(target).await);
+        report.record(CASES[43], Box::pin(undo_lifts_holds(target)).await);
     }
     if only.is_none_or(|case| case == CASES[44]) {
-        report.record(CASES[44], pair_needs_signature(target).await);
+        report.record(CASES[44], Box::pin(pair_needs_signature(target)).await);
     }
     if only.is_none_or(|case| case == CASES[45]) {
-        report.record(CASES[45], pair_signature_binds(target).await);
+        report.record(CASES[45], Box::pin(pair_signature_binds(target)).await);
     }
     if only.is_none_or(|case| case == CASES[46]) {
-        report.record(CASES[46], nonce_single_use(target).await);
+        report.record(CASES[46], Box::pin(nonce_single_use(target)).await);
     }
     if only.is_none_or(|case| case == CASES[47]) {
-        report.record(CASES[47], claim_not_replayable(target).await);
+        report.record(CASES[47], Box::pin(claim_not_replayable(target)).await);
     }
     if only.is_none_or(|case| case == CASES[48]) {
-        report.record(CASES[48], nonce_expires(target).await);
+        report.record(CASES[48], Box::pin(nonce_expires(target)).await);
     }
     if only.is_none_or(|case| case == CASES[49]) {
-        report.record(CASES[49], nonces_bounded(target).await);
+        report.record(CASES[49], Box::pin(nonces_bounded(target)).await);
     }
     if only.is_none_or(|case| case == CASES[50]) {
-        report.record(CASES[50], canary_nonce(target).await);
+        report.record(CASES[50], Box::pin(canary_nonce(target)).await);
     }
     if only.is_none_or(|case| case == CASES[51]) {
-        report.record(CASES[51], taken_at_bounded(target).await);
+        report.record(CASES[51], Box::pin(taken_at_bounded(target)).await);
     }
     if only.is_none_or(|case| case == CASES[52]) {
-        report.record(CASES[52], secrets_bounded(target).await);
+        report.record(CASES[52], Box::pin(secrets_bounded(target)).await);
     }
     if only.is_none_or(|case| case == CASES[53]) {
-        report.record(CASES[53], frozen_vault(target).await);
+        report.record(CASES[53], Box::pin(frozen_vault(target)).await);
     }
     if only.is_none_or(|case| case == CASES[54]) {
-        report.record(CASES[54], unfreeze_gives_time_back(target).await);
+        report.record(CASES[54], Box::pin(unfreeze_gives_time_back(target)).await);
     }
     if only.is_none_or(|case| case == CASES[55]) {
-        report.record(CASES[55], operator_undo_all(target).await);
+        report.record(CASES[55], Box::pin(operator_undo_all(target)).await);
     }
     if only.is_none_or(|case| case == CASES[56]) {
-        report.record(CASES[56], gap_not_counted(target).await);
+        report.record(CASES[56], Box::pin(gap_not_counted(target)).await);
     }
     if only.is_none_or(|case| case == CASES[57]) {
-        report.record(CASES[57], nonce_route_writes_nothing(target).await);
+        report.record(
+            CASES[57],
+            Box::pin(nonce_route_writes_nothing(target)).await,
+        );
     }
     if only.is_none_or(|case| case == CASES[58]) {
-        report.record(CASES[58], nonce_is_checked(target).await);
+        report.record(CASES[58], Box::pin(nonce_is_checked(target)).await);
     }
     if only.is_none_or(|case| case == CASES[59]) {
-        report.record(CASES[59], put_over_held_must_match(target).await);
+        report.record(CASES[59], Box::pin(put_over_held_must_match(target)).await);
     }
     if only.is_none_or(|case| case == CASES[60]) {
-        report.record(CASES[60], claim_keeps_the_writers_tombstone(target).await);
+        report.record(
+            CASES[60],
+            Box::pin(claim_keeps_the_writers_tombstone(target)).await,
+        );
     }
     if only.is_none_or(|case| case == CASES[61]) {
-        report.record(CASES[61], extremes_are_refused_cleanly(target).await);
+        report.record(
+            CASES[61],
+            Box::pin(extremes_are_refused_cleanly(target)).await,
+        );
     }
     if only.is_none_or(|case| case == CASES[62]) {
-        report.record(CASES[62], foreign_claim_or_read_moves_nothing(target).await);
+        report.record(
+            CASES[62],
+            Box::pin(foreign_claim_or_read_moves_nothing(target)).await,
+        );
     }
     if only.is_none_or(|case| case == CASES[63]) {
-        report.record(CASES[63], signed_delete_frees_damaged(target).await);
+        report.record(
+            CASES[63],
+            Box::pin(signed_delete_frees_damaged(target)).await,
+        );
+    }
+    if only.is_none_or(|case| case == CASES[64]) {
+        report.record(
+            CASES[64],
+            held_frame_lifts_and_oversize_is_read_past(target).await,
+        );
+    }
+    if only.is_none_or(|case| case == CASES[65]) {
+        report.record(
+            CASES[65],
+            Box::pin(delete_is_bound_to_its_head(target)).await,
+        );
+    }
+    if only.is_none_or(|case| case == CASES[66]) {
+        report.record(CASES[66], Box::pin(delete_after_rollback(target)).await);
     }
     report
 }
@@ -776,6 +853,9 @@ struct Phone {
     key: SigningKey,
     gateway: GatewayId,
     generation: Cell<u64>,
+    /// The root of the head this phone last built, which its deletes are
+    /// bound to (spec §4).
+    root: Cell<Option<Name>>,
 }
 
 impl Deref for Phone {
@@ -793,7 +873,13 @@ impl Phone {
             key: key.clone(),
             gateway,
             generation: Cell::new(0),
+            root: Cell::new(None),
         }
+    }
+
+    /// The head root the next delete is bound to.
+    fn bound_to(&self) -> Option<Name> {
+        self.root.get()
     }
 
     /// The generation the next signed record will carry.
@@ -808,6 +894,7 @@ impl Phone {
 
     /// A signed head at the next generation; `writes` follows it.
     fn head(&self, name: Name, prev: Option<Name>, taken_at_ms: i64) -> SetHead {
+        self.root.set(Some(name));
         self.head_at(name, prev, taken_at_ms, self.next())
     }
 
@@ -849,15 +936,22 @@ impl Phone {
 
     /// A signed delete at the next generation.
     fn delete(&self, names: &[Name]) -> DeleteRequest {
+        self.delete_under(self.bound_to(), names)
+    }
+
+    /// A signed delete at the next generation, bound to `head_root`.
+    fn delete_under(&self, head_root: Option<Name>, names: &[Name]) -> DeleteRequest {
         let generation = self.next();
         DeleteRequest {
             names: names.to_vec(),
             generation,
+            head_root,
             signature: sign_delete(
                 &self.key,
                 &self.gateway,
                 self.paired.epoch,
                 generation,
+                head_root.as_ref(),
                 names,
             ),
         }
@@ -1029,6 +1123,156 @@ async fn store<T: Target>(
         ),
         other @ PutAnswer::AlreadyStored(_) => Err(format!("a new object answered {other:?}")),
     }
+}
+
+/// SPEC §4: a frame whose name is held under the same digest lifts the hold
+/// and is answered `held`; the frame is not stored again, `exists` says the
+/// name is back, and a frame over the object cap is read past, answered
+/// `too_large` while the frames around it are answered as they would be alone.
+async fn held_frame_lifts_and_oversize_is_read_past<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let (kept, fresh) = (object("held and sent again"), object("a new frame"));
+    store(target, &phone, &vault, &kept).await?;
+    tombstone(target, &phone, &vault, &[kept.0]).await?;
+    ensure(
+        ok(
+            target.exists(&phone.token, &vault, &[kept.0]).await,
+            "exists",
+        )? == vec![kept.0],
+        || "a held name reads as missing, which is what sends it again".to_owned(),
+    )?;
+    let big_name = object("over the cap").0;
+    let big = vec![0_u8; usize::try_from(MAX_OBJECT_BYTES).unwrap_or(usize::MAX) + 1];
+    let frames = vec![
+        Frame::of(kept.0, kept.1.clone()),
+        Frame::of(big_name, big),
+        Frame::of(fresh.0, fresh.1.clone()),
+        Frame::of(fresh.0, fresh.1.clone()),
+    ];
+    let answer = ok(target.bundle(&phone.token, &vault, &frames).await, "bundle")?;
+    let expected = vec![
+        FrameResult::Held { name: kept.0 },
+        FrameResult::TooLarge { name: big_name },
+        FrameResult::Stored { name: fresh.0 },
+        FrameResult::There { name: fresh.0 },
+    ];
+    ensure(answer.results == expected, || {
+        format!("{:?}", answer.results)
+    })?;
+    ensure(
+        ok(
+            target
+                .exists(&phone.token, &vault, &[kept.0, fresh.0, big_name])
+                .await,
+            "exists",
+        )? == vec![big_name],
+        || "the lifted and the new name are held; the oversize one is not".to_owned(),
+    )?;
+    let purged = watch(target, GRACE_MS + 1).await?;
+    ensure(purged == 0, || {
+        format!("the purge took {purged} object(s) after the hold was lifted")
+    })
+}
+
+/// SPEC §4: a delete names the head it was computed under, and the gateway
+/// takes it only while that is its current head. Signed under the head it has,
+/// it holds the name; signed under any other, or under none while a head
+/// stands, it is refused `HEAD_CONFLICT` carrying the head the gateway has,
+/// and holds nothing.
+async fn delete_is_bound_to_its_head<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let (root, victim) = (object("the root"), object("a name to delete"));
+    store(target, &phone, &vault, &root).await?;
+    store(target, &phone, &vault, &victim).await?;
+    ok(
+        target
+            .set_head(&phone.token, &vault, &phone.head(root.0, None, 1))
+            .await,
+        "the head",
+    )?;
+    for (what, bound) in [
+        ("a delete bound to no head while one stands", None),
+        (
+            "a delete bound to another root",
+            Some(object("another root").0),
+        ),
+    ] {
+        let refusal = refused(
+            target
+                .delete(
+                    &phone.token,
+                    &vault,
+                    &phone.delete_under(bound, &[victim.0]),
+                )
+                .await,
+            Code::HeadConflict,
+            what,
+        )?;
+        ensure(
+            matches!(refusal, Refusal::HeadConflict { head: Some(ref head), .. } if head.name == root.0),
+            || format!("the refusal must carry the gateway's head: {refusal:?}"),
+        )?;
+    }
+    ensure(
+        ok(target.held(&phone.token, &vault, None, 10).await, "held")?.is_empty(),
+        || "a refused delete held something".to_owned(),
+    )?;
+    let answer = ok(
+        target
+            .delete(
+                &phone.token,
+                &vault,
+                &phone.delete_under(Some(root.0), &[victim.0]),
+            )
+            .await,
+        "a delete bound to the current head",
+    )?;
+    ensure(answer.deleted == vec![victim.0], || format!("{answer:?}"))
+}
+
+/// SPEC §4, THE ROLLBACK: a gateway whose state went back to an older head
+/// (a restored data directory) is shown a delete the phone computed under the
+/// newer head it had made there. The gateway does not have that head, so it
+/// refuses, and the keep set the phone computed is never applied to a vault
+/// it was not read from. (`tests/delete_rollback.rs` does the same over a
+/// real data directory put back.)
+async fn delete_after_rollback<T: Target>(target: &mut T) -> Outcome {
+    target.reset().await?;
+    let key = identity(1);
+    let phone = paired(target, &key).await?;
+    let vault = vault_of(&key);
+    let (old, newer, victim) = (object("old root"), object("newer root"), object("victim"));
+    for blob in [&old, &newer, &victim] {
+        store(target, &phone, &vault, blob).await?;
+    }
+    ok(
+        target
+            .set_head(&phone.token, &vault, &phone.head(old.0, None, 1))
+            .await,
+        "the older head",
+    )?;
+    // The phone then made `newer` somewhere the rollback lost; this gateway
+    // never heard of it. Its delete is bound to `newer`.
+    let request = phone.delete_under(Some(newer.0), &[victim.0]);
+    refused(
+        target.delete(&phone.token, &vault, &request).await,
+        Code::HeadConflict,
+        "a delete computed under a head this gateway never had",
+    )?;
+    let listed = ok(target.objects(&phone.token, &vault, None, 10).await, "list")?;
+    ensure(listed.len() == 3, || {
+        format!("the refused delete changed what is held: {listed:?}")
+    })?;
+    ensure(
+        ok(target.held(&phone.token, &vault, None, 10).await, "held")?.is_empty(),
+        || "the refused delete held a name".to_owned(),
+    )
 }
 
 fn ok<T>(answer: Result<T, Failure>, what: &str) -> Result<T, String> {
@@ -1527,27 +1771,22 @@ async fn bundle<T: Target>(target: &mut T) -> Outcome {
         Frame::of(taken.0, taken.1.clone()),
     ];
     let answer = ok(target.bundle(&phone.token, &vault, &frames).await, "bundle")?;
-    ensure(answer.stored == vec![good.0], || {
-        format!(
-            "only new bytes are stored, as a PUT's 201: {:?}",
-            answer.stored
-        )
+    let expected = vec![
+        FrameResult::Stored { name: good.0 },
+        FrameResult::Refused {
+            name: lying.0,
+            code: Code::DigestMismatch,
+        },
+        FrameResult::Taken {
+            name: taken.0,
+            digest: Digest::of(&taken.1),
+            state: NameState::Live,
+        },
+        FrameResult::There { name: taken.0 },
+    ];
+    ensure(answer.results == expected, || {
+        format!("one result per frame, in order: {:?}", answer.results)
     })?;
-    ensure(answer.already == vec![taken.0], || {
-        format!(
-            "held bytes are already, as a PUT's 200: {:?}",
-            answer.already
-        )
-    })?;
-    let refused_codes: Vec<(Name, Code)> = answer
-        .refused
-        .iter()
-        .map(|refusal| (refusal.name, refusal.code))
-        .collect();
-    ensure(
-        refused_codes == vec![(lying.0, Code::DigestMismatch), (taken.0, Code::NameTaken)],
-        || format!("refused {refused_codes:?}"),
-    )?;
     ensure(
         answer.acknowledged() == vec![good.0, taken.0]
             && answer
@@ -1868,7 +2107,7 @@ async fn put_revives_tombstone<T: Target>(target: &mut T) -> Outcome {
     )?;
     ensure(
         matches!(answer, PutAnswer::Stored(entry) if entry.digest == Digest::of(&resealed)),
-        || format!("a PUT over a tombstone must store the new bytes: {answer:?}"),
+        || format!("a frame over a tombstone must store the new bytes: {answer:?}"),
     )?;
     let missing = ok(
         target.exists(&phone.token, &vault, &[part.0]).await,
@@ -1886,14 +2125,14 @@ async fn put_revives_tombstone<T: Target>(target: &mut T) -> Outcome {
     // the new bytes alone.
     let purged = watch(target, GRACE_MS).await?;
     ensure(purged == 0, || {
-        format!("the purge took {purged} object(s) a PUT had brought back")
+        format!("the purge took {purged} object(s) a frame had brought back")
     })?;
     let back = ok(
         target.get(&phone.token, &vault, &part.0, None).await,
         "reading it back after the grace",
     )?;
     ensure(back == resealed, || {
-        "the bytes a PUT brought back changed".to_owned()
+        "the bytes a frame brought back changed".to_owned()
     })
 }
 
@@ -2022,8 +2261,7 @@ async fn name_taken<T: Target>(target: &mut T) -> Outcome {
     ensure(
         answer.acknowledged().is_empty()
             && answer.taken() == vec![(held.0, Digest::of(&held.1), NameState::Live)]
-            && answer.refused.len() == 1
-            && answer.refused[0].code == Code::NameTaken,
+            && answer.results.len() == 1,
         || format!("a bundled NAME_TAKEN is refused, typed, and not acknowledged: {answer:?}"),
     )?;
     let back = ok(target.get(&phone.token, &vault, &held.0, None).await, "get")?;
@@ -2339,7 +2577,7 @@ async fn stale_claim<T: Target>(target: &mut T) -> Outcome {
 /// Builds an object the way a phone does — a plaintext with a known marker,
 /// its BLAKE3 `h`, a name keyed off the backup key, a key derived for that
 /// name — seals it with a stand-in that leaves no run of the plaintext, puts
-/// it through `PUT` and a bundle, makes it a head, tombstones another, and
+/// it through a bundle, makes it a head, tombstones another, and
 /// then scans every byte the gateway keeps at rest, file names included, for
 /// the marker, `h` and every key, raw and hex.
 ///
@@ -2383,7 +2621,7 @@ async fn blindness_canary<T: Target>(target: &mut T) -> Outcome {
         .map(|(name, sealed)| Frame::of(*name, sealed.clone()))
         .collect();
     let answer = ok(target.bundle(&phone.token, &vault, &frames).await, "bundle")?;
-    ensure(answer.refused.is_empty(), || format!("{answer:?}"))?;
+    ensure(answer.stored() == frames.len(), || format!("{answer:?}"))?;
     ok(
         target
             .set_head(&phone.token, &vault, &phone.head(stored[0].0, None, 1))
@@ -2903,16 +3141,33 @@ async fn delete_needs_signature<T: Target>(target: &mut T) -> Outcome {
     let by_stranger = DeleteRequest {
         names: vec![part.0],
         generation,
-        signature: sign_delete(&identity(9), &gateway, 1, generation, &[part.0]),
+        head_root: phone.bound_to(),
+        signature: sign_delete(
+            &identity(9),
+            &gateway,
+            1,
+            generation,
+            phone.bound_to().as_ref(),
+            &[part.0],
+        ),
     };
     let for_other_names = DeleteRequest {
         names: vec![part.0],
         generation,
-        signature: sign_delete(&key, &gateway, 1, generation, &[other.0]),
+        head_root: phone.bound_to(),
+        signature: sign_delete(
+            &key,
+            &gateway,
+            1,
+            generation,
+            phone.bound_to().as_ref(),
+            &[other.0],
+        ),
     };
     let unsigned = DeleteRequest {
         names: vec![part.0],
         generation,
+        head_root: phone.bound_to(),
         signature: Signature::from_bytes([0; 64]),
     };
     for (what, request) in [
@@ -3737,7 +3992,7 @@ async fn gap_not_counted<T: Target>(target: &mut T) -> Outcome {
     })
 }
 
-/// R3 (tightens E6): a `PUT` over a held or damaged name is accepted only with
+/// R3 (tightens E6): a frame over a held or damaged name is accepted only with
 /// the digest the row records; anything else is `NAME_TAKEN` and nothing
 /// changes. A writer token can no longer swap a held manifest, or a damaged
 /// part, for garbage. The phone's own bytes still bring the name back.
@@ -3982,7 +4237,15 @@ async fn extremes_are_refused_cleanly<T: Target>(target: &mut T) -> Outcome {
                     &DeleteRequest {
                         names: names.to_vec(),
                         generation: extreme,
-                        signature: sign_delete(&key, &gateway, 1, extreme, &names),
+                        head_root: phone.bound_to(),
+                        signature: sign_delete(
+                            &key,
+                            &gateway,
+                            1,
+                            extreme,
+                            phone.bound_to().as_ref(),
+                            &names,
+                        ),
                     },
                 )
                 .await,
@@ -4144,7 +4407,7 @@ async fn foreign_claim_or_read_moves_nothing<T: Target>(target: &mut T) -> Outco
 
 /// Decision 30: a signed delete that names an object the gateway has marked
 /// damaged removes its row and file at once (no hold: an undo would restore
-/// nothing), the name is free, and a re-sealed `PUT` is a normal first write.
+/// nothing), the name is free, and a re-sealed frame is a normal first write.
 /// A caller with only a token cannot free it. Reported apart from the held
 /// names in the answer's `freed`; the head's manifest still refuses.
 async fn signed_delete_frees_damaged<T: Target>(target: &mut T) -> Outcome {
@@ -4195,11 +4458,25 @@ async fn signed_delete_frees_damaged<T: Target>(target: &mut T) -> Outcome {
         ("an empty signature", Signature::from_bytes([0; 64])),
         (
             "a signature over other names",
-            sign_delete(&key, &gateway, 1, generation, &[live.0]),
+            sign_delete(
+                &key,
+                &gateway,
+                1,
+                generation,
+                phone.bound_to().as_ref(),
+                &[live.0],
+            ),
         ),
         (
             "another key's signature",
-            sign_delete(&identity(9), &gateway, 1, generation, &[rotten.0]),
+            sign_delete(
+                &identity(9),
+                &gateway,
+                1,
+                generation,
+                phone.bound_to().as_ref(),
+                &[rotten.0],
+            ),
         ),
     ] {
         refused(
@@ -4210,6 +4487,7 @@ async fn signed_delete_frees_damaged<T: Target>(target: &mut T) -> Outcome {
                     &DeleteRequest {
                         names: vec![rotten.0],
                         generation,
+                        head_root: phone.bound_to(),
                         signature,
                     },
                 )

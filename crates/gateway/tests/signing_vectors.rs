@@ -94,9 +94,9 @@ fn vectors() -> Value {
             ),
             entry(
                 "delete",
-                json!({"epoch": 2, "generation": 6, "names": names.iter().map(Name::hex).collect::<Vec<_>>()}),
-                delete_preimage(&gateway, &vault, 2, 6, &names),
-                sign_delete(&key, &gateway, 2, 6, &names).hex(),
+                json!({"epoch": 2, "generation": 6, "head_root": manifest.hex(), "names": names.iter().map(Name::hex).collect::<Vec<_>>()}),
+                delete_preimage(&gateway, &vault, 2, 6, Some(&manifest), &names),
+                sign_delete(&key, &gateway, 2, 6, Some(&manifest), &names).hex(),
             ),
             entry(
                 "undo of names",

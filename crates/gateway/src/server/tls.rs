@@ -33,10 +33,12 @@
 //! The Subject Key Identifier is BLAKE3 of the public key, so every identifier
 //! this crate derives from the certificate is BLAKE3 (ONE HASH).
 //!
-//! # TLS 1.3 AND 1.2, `http/1.1` ONLY
+//! # TLS 1.3 AND 1.2, `h2` THEN `http/1.1`
 //!
 //! Both versions, through `ring`: an older phone's stack may offer only 1.2.
-//! ALPN offers `http/1.1` alone, so a stack that would try HTTP/2 does not.
+//! ALPN offers `h2` first and `http/1.1` after it, so a client that speaks
+//! HTTP/2 gets one connection for many streams and a client that does not is
+//! served HTTP/1.1 on the same port.
 
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -244,6 +246,19 @@ impl Identity {
     ///
     /// A rustls error if the key and certificate do not form a usable pair.
     pub fn server_config(&self) -> Result<Arc<ServerConfig>, tokio_rustls::rustls::Error> {
+        self.server_config_offering(&[b"h2", b"http/1.1"])
+    }
+
+    /// [`Self::server_config`] offering exactly `alpn`, in order: how a test
+    /// plays a gateway that speaks HTTP/1.1 only.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::server_config`].
+    pub fn server_config_offering(
+        &self,
+        alpn: &[&[u8]],
+    ) -> Result<Arc<ServerConfig>, tokio_rustls::rustls::Error> {
         let mut config = ServerConfig::builder_with_provider(crate::client::tls::provider())
             .with_protocol_versions(&[&TLS13, &TLS12])?
             .with_no_client_auth()
@@ -251,7 +266,7 @@ impl Identity {
                 vec![CertificateDer::from(self.cert_der.clone())],
                 PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(self.key_der.clone())),
             )?;
-        config.alpn_protocols = vec![b"http/1.1".to_vec()];
+        config.alpn_protocols = alpn.iter().map(|protocol| protocol.to_vec()).collect();
         Ok(Arc::new(config))
     }
 }

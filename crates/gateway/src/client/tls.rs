@@ -120,7 +120,7 @@ impl ServerCertVerifier for PinnedVerifier {
 }
 
 /// The TLS configuration for a client that trusts `trust` and nothing else:
-/// TLS 1.3 and 1.2, ALPN `http/1.1`.
+/// TLS 1.3 and 1.2, ALPN `h2` then `http/1.1`.
 #[must_use]
 pub fn client_config(trust: Trust) -> Arc<ClientConfig> {
     client_config_for(trust, &[&TLS13, &TLS12])
@@ -148,7 +148,7 @@ pub fn client_config_for(
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(verifier))
         .with_no_client_auth();
-    config.alpn_protocols = vec![b"http/1.1".to_vec()];
+    config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
     Arc::new(config)
 }
 

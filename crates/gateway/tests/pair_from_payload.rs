@@ -4,16 +4,17 @@
 //! The QR's text is what `pair` prints; the phone parses it, dials the
 //! addresses trusting the pin, pairs with the secret, and stores a
 //! [`Destination`]: the addresses, the certificate's bytes and the token.
-//! Every later contact trusts those bytes. `presign_put` then prepares a
-//! `PUT` the way the iPhone's background session will perform it — URL,
-//! method, headers, a file as the body — and this test performs it with a bare
-//! HTTP client, not ours, so the handoff is proved complete on its own.
+//! Every later contact trusts those bytes. `presign_bundle` then prepares a
+//! bundle `POST` the way the iPhone's background session will perform it —
+//! URL, method, headers, a staged file as the body — and this test performs it
+//! with a bare HTTP client, not ours, so the handoff is proved complete on its
+//! own.
 
 use bytes::Bytes;
 use centraid_gateway::client::tls::{Trust, client_config};
 use centraid_gateway::client::{Client, ClientError};
 use centraid_gateway::rules::code::Refusal;
-use centraid_gateway::rules::ids::{Digest, Name, VaultId};
+use centraid_gateway::rules::ids::{Name, VaultId};
 use centraid_gateway::rules::payload::PairPayload;
 
 use centraid_gateway::rules::wire::PairKind;
@@ -71,15 +72,19 @@ async fn a_phone_pairs_from_the_text_of_a_qr_and_hands_off_an_upload() {
     // The handoff, performed by a client that is not ours.
     let sealed = b"a sealed part the OS uploads while the app sleeps".to_vec();
     let name = Name::from_bytes([0x42; 32]);
-    let digest = Digest::of(&sealed);
+    let body =
+        centraid_gateway::rules::bundle::encode(&[centraid_gateway::rules::bundle::Frame::of(
+            name,
+            sealed.clone(),
+        )]);
     let handoff = later
-        .presign_put(&vault, &name, &digest, sealed.len() as u64)
+        .presign_bundle(&vault, body.len() as u64)
         .expect("prepared");
-    assert_eq!(handoff.method, "PUT");
+    assert_eq!(handoff.method, "POST");
     let rest = handoff.url.strip_prefix("https://").expect("https");
     let (authority, path) = rest.split_at(rest.find('/').expect("a path"));
     assert_eq!(authority, gateway.addr.to_string());
-    assert_eq!(path, format!("/v1/v/{vault}/o/{name}"));
+    assert_eq!(path, format!("/v1/v/{vault}/bundle"));
 
     let socket = tokio::net::TcpStream::connect(authority)
         .await
@@ -102,13 +107,22 @@ async fn a_phone_pairs_from_the_text_of_a_qr_and_hands_off_an_upload() {
     let response = sender
         .send_request(
             request
-                .body(Full::new(Bytes::from(sealed.clone())))
+                .body(Full::new(Bytes::from(body)))
                 .expect("a request"),
         )
         .await
         .expect("answered");
-    assert_eq!(response.status(), 201, "the handoff stored the object");
-    let _ = response.into_body().collect().await;
+    assert_eq!(response.status(), 200, "the handoff was answered");
+    let answer: centraid_gateway::rules::wire::BundleAnswer = serde_json::from_slice(
+        &response
+            .into_body()
+            .collect()
+            .await
+            .expect("a body")
+            .to_bytes(),
+    )
+    .expect("a bundle answer");
+    assert_eq!(answer.stored(), 1, "the handoff stored the object");
 
     let stored = later.get(&vault, &name, None).await.expect("reads back");
     assert_eq!(stored, sealed);

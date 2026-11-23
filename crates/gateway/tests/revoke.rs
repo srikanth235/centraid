@@ -12,7 +12,7 @@ use centraid_gateway::rules::Refusal;
 use centraid_gateway::rules::ids::{Digest, Name, Token, VaultId};
 
 use centraid_gateway::server::harness::pair_secret;
-use centraid_gateway::server::harness::{Spawned, spawn};
+use centraid_gateway::server::harness::{Spawned, put, spawn};
 use centraid_gateway::server::report;
 
 async fn paired(gateway: &Spawned, seed: u8) -> (VaultId, Client, Token) {
@@ -50,8 +50,7 @@ async fn a_phone_revokes_its_own_token_and_its_put_and_get_are_refused() {
     let gateway = spawn(dir.path()).await.expect("spawned");
     let (vault, phone, _) = paired(&gateway, 3).await;
     let (name, bytes) = object("before");
-    phone
-        .put(&vault, &name, &Digest::of(&bytes), bytes.clone())
+    put(&phone, &vault, &name, &Digest::of(&bytes), bytes.clone())
         .await
         .expect("stores");
 
@@ -59,9 +58,14 @@ async fn a_phone_revokes_its_own_token_and_its_put_and_get_are_refused() {
 
     let (late, late_bytes) = object("after");
     unauthorized(
-        phone
-            .put(&vault, &late, &Digest::of(&late_bytes), late_bytes.clone())
-            .await,
+        put(
+            &phone,
+            &vault,
+            &late,
+            &Digest::of(&late_bytes),
+            late_bytes.clone(),
+        )
+        .await,
         "a revoked token's put",
     );
     unauthorized(
@@ -78,7 +82,7 @@ async fn the_operator_revokes_a_lost_phone_by_the_id_pairings_prints() {
     let (vault, lost, token) = paired(&gateway, 4).await;
     let (_, kept, _) = paired(&gateway, 5).await;
     let (name, bytes) = object("the lost phone's");
-    lost.put(&vault, &name, &Digest::of(&bytes), bytes.clone())
+    put(&lost, &vault, &name, &Digest::of(&bytes), bytes.clone())
         .await
         .expect("stores");
 
@@ -112,8 +116,7 @@ async fn the_operator_revokes_a_lost_phone_by_the_id_pairings_prints() {
     );
     unauthorized(lost.get(&vault, &name, None).await, "the lost phone's get");
     unauthorized(
-        lost.put(&vault, &name, &Digest::of(&bytes), bytes.clone())
-            .await,
+        put(&lost, &vault, &name, &Digest::of(&bytes), bytes.clone()).await,
         "the lost phone's put",
     );
     let other = VaultId::from_bytes(

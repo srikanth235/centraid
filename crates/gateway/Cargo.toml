@@ -64,6 +64,18 @@ required-features = ["server"]
 name = "bundle_commit"
 required-features = ["server"]
 
+[[test]]
+name = "frames"
+required-features = ["server"]
+
+[[test]]
+name = "delete_rollback"
+required-features = ["server"]
+
+[[test]]
+name = "transport"
+required-features = ["server"]
+
 # TWO FEATURES, SO THE PHONE LINKS NO SERVER (#1080). `rules` is always built
 # and reaches no runtime, no socket, no file and no clock; `client` adds the
 # pinned HTTPS client a phone links; `server` adds the gateway a member runs.

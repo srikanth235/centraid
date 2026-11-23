@@ -291,7 +291,7 @@ impl Shared {
 
     /// Run one operation of the rules. The lock is a plain mutex held for one
     /// operation and never across an `await`: every call under it is a few
-    /// SQLite statements and, for a `PUT`, one rename.
+    /// SQLite statements and, for a bundle frame, one rename.
     ///
     /// # Errors
     ///

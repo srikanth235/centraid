@@ -38,6 +38,7 @@ fn tiny() -> Limits {
         header: Duration::from_millis(20),
         idle: Duration::from_millis(20),
         poll: Duration::from_millis(1),
+        ..Limits::default()
     }
 }
 
@@ -81,6 +82,7 @@ async fn a_cancel_is_observed_while_a_call_waits_on_a_silent_gateway() {
         header: Duration::from_secs(3600),
         idle: Duration::from_secs(3600),
         poll: Duration::from_millis(1),
+        ..Limits::default()
     });
     let looks = Arc::new(AtomicUsize::new(0));
     let seen = Arc::clone(&looks);

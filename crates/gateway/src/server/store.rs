@@ -12,7 +12,7 @@
 //! a rename, then a sync of the directory, so the name a `201` acknowledged is
 //! on disk before the answer leaves. A crash before the rename leaves a staged
 //! file [`ObjectStore::clear_staged`] removes when `serve` next starts; a
-//! crash after it leaves a file with no row, which the next `PUT` of that name
+//! crash after it leaves a file with no row, which the next frame of that name
 //! replaces.
 //!
 //! # A FULL DISK IS A CODE
