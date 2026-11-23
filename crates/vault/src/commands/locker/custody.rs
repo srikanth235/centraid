@@ -399,13 +399,14 @@ pub(super) fn totp_code() -> CommandDefinition {
                 );
             }
             // THE PRESENCE OF A SEALED CELL IS A FACT THE COMMAND PLANE KNOWS.
-            // `otp_seed IS NOT NULL` reads a column without reading a value,
+            // `value_sealed IS NOT NULL` reads a column without reading a value,
             // which is exactly the line the trust premise draws: the command
             // plane serves ciphertext and knows it is there.
             let found = count(
                 ctx,
-                "SELECT COUNT(*) FROM locker_item i JOIN entity e ON e.id = i.id
-                  WHERE i.id = ?1 AND e.deleted_at IS NULL AND i.otp_seed IS NOT NULL",
+                "SELECT COUNT(*) FROM locker_item_field f JOIN entity e ON e.id = f.item_id
+                  WHERE f.item_id = ?1 AND f.field_key = 'otp_seed' AND f.kind = 'otp'
+                    AND f.value_sealed IS NOT NULL AND e.deleted_at IS NULL",
                 &[item_id],
             )?;
             Ok((found != 1).then(|| "that item carries no one-time-code seed".to_owned()))

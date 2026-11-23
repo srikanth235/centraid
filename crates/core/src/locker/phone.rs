@@ -51,7 +51,7 @@
 use std::sync::Mutex;
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_vault::commands::locker::{SEALED_ITEM_CELLS, SEALED_PLACEHOLDER};
+use centraid_vault::commands::locker::{SEALED_ITEM_CELLS, SEALED_PLACEHOLDER, built_in_field_id};
 use centraid_vault::commands::{Command, CommandStatus, Registry};
 use centraid_vault::custody::{LockerKeyError, decrypt_under_locker_key, encrypt_under_locker_key};
 use centraid_vault::{Principal, Vault};
@@ -417,7 +417,7 @@ fn reveal(
             } else {
                 vault.locker_sealed_field_cell(&asked.item_id, &asked.field_id)?
             },
-            asked.field_id.as_str(),
+            asked.field_id.clone(),
         )
     } else {
         (
@@ -431,7 +431,7 @@ fn reveal(
             } else {
                 vault.locker_sealed_item_cell(&asked.item_id, &asked.column)?
             },
-            asked.item_id.as_str(),
+            built_in_field_id(&asked.item_id, &asked.column),
         )
     };
     let Some(sealed) = sealed else {
@@ -455,7 +455,7 @@ fn reveal(
     // generation was sealed under a key this phone does not derive, and its
     // AAD makes that a clean `DID_NOT_OPEN`, never a wrong plaintext.
     let generation = sealed.key_id.unwrap_or(live_id);
-    let opened = decrypt_under_locker_key(&live_key, &generation, bound_to, &ciphertext).ok();
+    let opened = decrypt_under_locker_key(&live_key, &generation, &bound_to, &ciphertext).ok();
     let Some(value) = opened else {
         return Ok(refused(wire::LockerRevealRefusal::DidNotOpen));
     };
@@ -512,13 +512,20 @@ fn totp(
     let Some((live_id, live_key)) = open_key(cell, now_ms) else {
         return Ok(refused(wire::LockerRevealRefusal::Locked));
     };
-    // A CUSTOM FIELD'S SEED is sealed against the field's own id and stamped through the same
-    // command, naming the field; the login's own is bound to the item.
+    // Every one-time-code seed lives in `locker_item_field` bound to its own
+    // row id: the built-in login seed uses `built_in_field_id(item_id, "otp_seed")`,
+    // and a custom `otp` field uses its own `field_id`.
     let field_id = asked.field_id.as_str();
     let (sealed, bound_to) = if field_id.is_empty() {
-        (vault.locker_sealed_item_cell(item_id, "otp_seed")?, item_id)
+        (
+            vault.locker_sealed_item_cell(item_id, "otp_seed")?,
+            built_in_field_id(item_id, "otp_seed"),
+        )
     } else {
-        (vault.locker_otp_field_cell(item_id, field_id)?, field_id)
+        (
+            vault.locker_otp_field_cell(item_id, field_id)?,
+            field_id.to_owned(),
+        )
     };
     let Some(sealed) = sealed else {
         return Ok(refused(wire::LockerRevealRefusal::NotSealed));
@@ -532,7 +539,7 @@ fn totp(
     }
     run(vault, registry, owner, "locker.totp_code", stamp, changes)?;
     let generation = sealed.key_id.unwrap_or(live_id);
-    let Ok(seed) = decrypt_under_locker_key(&live_key, &generation, bound_to, &ciphertext) else {
+    let Ok(seed) = decrypt_under_locker_key(&live_key, &generation, &bound_to, &ciphertext) else {
         return Ok(refused(wire::LockerRevealRefusal::DidNotOpen));
     };
     let Some(code) = centraid_apps_locker::totp::code_at(&seed, now_ms, hmac_sha1) else {
@@ -577,11 +584,11 @@ pub fn locked_for(vault: &Vault, cell: &Cell, name: &str, input: &serde_json::Va
 /// So every sealed item cell carrying a value — anything but empty and the round-tripped
 /// placeholder, INCLUDING a value that happens to look like `lk1:` ciphertext,
 /// because a shell never holds `K` and so never sends ciphertext — is sealed
-/// here under the live generation against the item's own id, and `key_id` is
-/// stated. On an edit that carries a password, `password_rotated` is computed
-/// here by opening the stored one, because only the holder of `K` can tell a
-/// changed password from a re-typed one (D-1020-L10b); a shell's own claim is
-/// replaced.
+/// here under the live generation against its built-in field row id
+/// (`built_in_field_id(item_id, column)`), and `key_id` is stated. On an edit
+/// that carries a password, `password_rotated` is computed here by opening the
+/// stored one, because only the holder of `K` can tell a changed password from
+/// a re-typed one (D-1020-L10b); a shell's own claim is replaced.
 ///
 /// A one-time-code seed is read once, here, through
 /// `centraid_apps_locker::totp::seed_of` — a bare key in any spelling or an
@@ -658,20 +665,22 @@ pub fn seal_command(
     if name == "locker.edit_item"
         && let Some((_, typed)) = carried.iter().find(|(column, _)| *column == "password")
     {
+        let field_id = built_in_field_id(&item_id, "password");
         let stored = vault
             .locker_sealed_item_cell(&item_id, "password")?
             .and_then(|cell| {
                 let generation = cell.key_id.unwrap_or_else(|| key_id.clone());
                 let ciphertext = cell.ciphertext?;
                 (generation == key_id)
-                    .then(|| decrypt_under_locker_key(&key, &key_id, &item_id, &ciphertext).ok())
+                    .then(|| decrypt_under_locker_key(&key, &key_id, &field_id, &ciphertext).ok())
                     .flatten()
             });
         input["password_rotated"] = serde_json::Value::Bool(stored.as_deref() != Some(typed));
     }
     for (column, value) in carried {
+        let field_id = built_in_field_id(&item_id, column);
         let sealed =
-            encrypt_under_locker_key(&key, &key_id, &item_id, &value).map_err(|error| {
+            encrypt_under_locker_key(&key, &key_id, &field_id, &value).map_err(|error| {
                 CoreError::Invariant {
                     context: format!("a Locker cell would not seal: {error}"),
                 }

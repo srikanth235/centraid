@@ -813,49 +813,28 @@ CREATE INDEX message_attachment_by_entity ON message_attachment(entity_id) WHERE
 CREATE INDEX message_attachment_by_thumb  ON message_attachment(thumb) WHERE thumb IS NOT NULL;
 
 -- ---------------------------------------------------------------------------------------------
--- Locker: an entity of its own kind, whose secrets stay in sealed cells nothing entity-wide
--- reads. An item's title, stamps and trash window live on its `entity` row like every kind's;
--- its tags, star and archive are the vault's (`edge tagged`), and a note may link it. What this
--- section keeps is what only Locker has: the typed columns, the five sealed cells (`lk1:`
--- ciphertext), custom fields, addresses, aliases and passkeys.
+-- Locker: an entity of its own kind, whose secrets stay in sealed field/passkey cells nothing
+-- entity-wide reads. An item's title, stamps and trash window live on its `entity` row like every
+-- kind's; its tags, star and archive are the vault's (`edge tagged`), and a note may link it.
+-- Every type's fields — built-in (`field_key IS NOT NULL`), template, and custom — live uniformly
+-- in `locker_item_field`, alongside addresses, aliases and passkeys.
 -- ---------------------------------------------------------------------------------------------
 
 CREATE TABLE locker_item (
-  id           TEXT PRIMARY KEY,
-  kind         TEXT GENERATED ALWAYS AS ('locker_item') VIRTUAL,
-  type         TEXT NOT NULL CHECK (type IN (
+  id              TEXT PRIMARY KEY,
+  kind            TEXT GENERATED ALWAYS AS ('locker_item') VIRTUAL,
+  type            TEXT NOT NULL CHECK (type IN (
     'login','card','note','identity','wifi','password',
     'ssh_key','api_credential','passport','bank_account','driving_licence',
     'software_licence','crypto_wallet','membership','document')),
-  -- A type owns the typed columns it names (`type_fields` in commands/locker.rs) and no others: the
-  -- command nulls the rest on write, and the database refuses a row that keeps one.
-  username     TEXT CHECK (username IS NULL OR type = 'login'),
-  password     TEXT CHECK (password IS NULL OR type IN ('login','wifi','password')),
-  url          TEXT CHECK (url IS NULL OR type = 'login'),
-  otp_seed     TEXT CHECK (otp_seed IS NULL OR type = 'login'),
-  notes        TEXT CHECK (notes IS NULL OR type NOT IN ('card','note','identity','wifi','password')),
-  cardholder   TEXT CHECK (cardholder IS NULL OR type = 'card'),
-  card_number  TEXT CHECK (card_number IS NULL OR type = 'card'),
-  expiry       TEXT CHECK (expiry IS NULL OR type = 'card'),
-  cvv          TEXT CHECK (cvv IS NULL OR type = 'card'),
-  brand        TEXT CHECK (brand IS NULL OR type = 'card'),
-  content      TEXT CHECK (content IS NULL OR type = 'note'),
-  fullname     TEXT CHECK (fullname IS NULL OR type = 'identity'),
-  email        TEXT CHECK (email IS NULL OR type = 'identity'),
-  phone        TEXT CHECK (phone IS NULL OR type = 'identity'),
-  address      TEXT CHECK (address IS NULL OR type = 'identity'),
-  network      TEXT CHECK (network IS NULL OR type = 'wifi'),
-  compromised  INTEGER NOT NULL DEFAULT 0 CHECK (compromised IN (0,1)),
+  compromised     INTEGER NOT NULL DEFAULT 0 CHECK (compromised IN (0,1)),
   password_set_at TEXT CHECK (password_set_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', password_set_at) IS password_set_at),
-  memo         TEXT,
-  -- The generation of the Locker key the item's sealed cells were sealed under.
-  key_id       TEXT REFERENCES locker_key(key_id) DEFERRABLE INITIALLY DEFERRED,
+  memo            TEXT,
   -- When the core last opened one of this item's sealed cells (#1146). A use is not an edit:
   -- stamping it does not move the entity's `updated_at`, and makes no revision.
-  last_used_at TEXT CHECK (last_used_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', last_used_at) IS last_used_at),
+  last_used_at    TEXT CHECK (last_used_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ', last_used_at) IS last_used_at),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
-CREATE INDEX locker_item_by_key ON locker_item(key_id) WHERE key_id IS NOT NULL;
 
 CREATE TABLE locker_item_address (
   id           TEXT PRIMARY KEY,
@@ -876,6 +855,12 @@ CREATE INDEX locker_item_alias_by_item ON locker_item_alias(item_id);
 CREATE TABLE locker_item_field (
   id           TEXT PRIMARY KEY,
   item_id      TEXT NOT NULL REFERENCES locker_item(id) ON DELETE CASCADE,
+  -- Non-null for a type's built-in named fields (`username`, `password`, `url`, `otp_seed`, ...),
+  -- NULL for custom and expansion-template fields.
+  field_key    TEXT CHECK (field_key IS NULL OR field_key IN (
+    'username','password','url','otp_seed','notes',
+    'cardholder','card_number','expiry','cvv','brand',
+    'content','fullname','email','phone','address','network')),
   section      TEXT NOT NULL DEFAULT '',
   label        TEXT NOT NULL,
   kind         TEXT NOT NULL CHECK (kind IN ('text','sealed','url','date','otp')),
@@ -889,9 +874,15 @@ CREATE TABLE locker_item_field (
   -- a rolling code, but its value lives only as `lk1:` ciphertext, never in the plain column.
   CHECK (kind IN ('sealed', 'otp') OR value_sealed IS NULL),
   CHECK (kind NOT IN ('sealed', 'otp') OR value_text IS NULL),
-  CHECK (kind <> 'otp' OR value_sealed IS NOT NULL)
+  CHECK (kind <> 'otp' OR value_sealed IS NOT NULL),
+  -- Built-in secret keys stay sealed/otp and built-in plain keys stay plain.
+  CHECK (field_key IS NULL
+    OR (field_key IN ('password','card_number','cvv','content') AND kind = 'sealed')
+    OR (field_key = 'otp_seed' AND kind = 'otp')
+    OR (field_key NOT IN ('password','otp_seed','card_number','cvv','content') AND kind NOT IN ('sealed','otp')))
 ) STRICT;
-CREATE INDEX locker_item_field_by_item ON locker_item_field(item_id, section, position);
+CREATE INDEX locker_item_field_by_item ON locker_item_field(item_id, id);
+CREATE UNIQUE INDEX locker_item_field_by_item_key ON locker_item_field(item_id, field_key) WHERE field_key IS NOT NULL;
 CREATE INDEX locker_item_field_by_key ON locker_item_field(key_id) WHERE key_id IS NOT NULL;
 
 CREATE TABLE locker_item_passkey (

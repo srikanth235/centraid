@@ -1728,46 +1728,17 @@ const CENSUS: &[(&str, &str, Reach)] = &[
         "cause",
         Reach::Not("the name of the command that made the change"),
     ),
-    // Locker: the plain cells a member sees in the list are found by; every
-    // sealed cell is `lk1:` ciphertext and is never text (`SEALED_ITEM_CELLS`).
-    ("locker_item", "username", Reach::Own),
-    ("locker_item", "url", Reach::Own),
-    ("locker_item", "notes", Reach::Own),
-    ("locker_item", "fullname", Reach::Own),
-    ("locker_item", "email", Reach::Own),
-    ("locker_item", "phone", Reach::Own),
-    ("locker_item", "brand", Reach::Own),
+    // Locker: `locker_item.memo`, extra addresses, and plain built-in fields
+    // in `locker_item_field.value_text` are findable; every sealed cell lives
+    // in `locker_item_field.value_sealed` or `locker_item_passkey.private_key`
+    // as `lk1:` ciphertext and is never text.
     ("locker_item", "memo", Reach::Own),
     ("locker_item_address", "url", Reach::Own),
-    (
-        "locker_item",
-        "password",
-        Reach::Not("a sealed cell: ciphertext"),
-    ),
-    (
-        "locker_item",
-        "otp_seed",
-        Reach::Not("a sealed cell: ciphertext"),
-    ),
-    (
-        "locker_item",
-        "card_number",
-        Reach::Not("a sealed cell: ciphertext"),
-    ),
-    (
-        "locker_item",
-        "cvv",
-        Reach::Not("a sealed cell: ciphertext"),
-    ),
-    (
-        "locker_item",
-        "content",
-        Reach::Not("a sealed cell: ciphertext"),
-    ),
+    ("locker_item_field", "value_text", Reach::Own),
     (
         "locker_item_field",
         "value_sealed",
-        Reach::Not("a sealed custom field's value: ciphertext"),
+        Reach::Not("a sealed field's value: ciphertext"),
     ),
     (
         "locker_item_passkey",
@@ -1775,35 +1746,14 @@ const CENSUS: &[(&str, &str, Reach)] = &[
         Reach::Not("a passkey's private key: ciphertext"),
     ),
     (
-        "locker_item",
-        "cardholder",
-        Reach::Not("argued out: a card's face is read in the item, not searched for"),
-    ),
-    (
-        "locker_item",
-        "expiry",
-        Reach::Not("a date on a card, not prose"),
-    ),
-    (
-        "locker_item",
-        "address",
-        Reach::Not("a postal address of an identity; an owner question whether it is searched"),
-    ),
-    ("locker_item", "network", Reach::Not("a wifi network type")),
-    (
         "locker_item_field",
         "section",
-        Reach::Not("a custom field's group name; out of search by owner decision D11"),
+        Reach::Not("a field's group name; out of search by owner decision D11"),
     ),
     (
         "locker_item_field",
         "label",
-        Reach::Not("a custom field's name; out of search by owner decision D11"),
-    ),
-    (
-        "locker_item_field",
-        "value_text",
-        Reach::Not("a custom field's plain value; out of search by owner decision D11"),
+        Reach::Not("a field's name; out of search by owner decision D11"),
     ),
     (
         "locker_item_passkey",

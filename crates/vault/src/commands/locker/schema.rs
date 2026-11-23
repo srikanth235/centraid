@@ -81,9 +81,8 @@ pub fn secret_cells(item_type: &str) -> &'static [&'static str] {
     }
 }
 
-/// Every column a `fieldValues` pass may name — the union of every type's
-/// own columns, so a type claiming one outside it is a red rather than a
-/// silently dropped field.
+/// Every built-in named field across the 15 item types — the union of every type's
+/// own built-in `field_key`s, stored uniformly in `locker_item_field`.
 pub const ALL_FIELDS: [&str; 16] = [
     "username",
     "password",
@@ -102,6 +101,46 @@ pub const ALL_FIELDS: [&str; 16] = [
     "address",
     "network",
 ];
+
+/// Metadata for a built-in named field stored as a keyed row in `locker_item_field`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BuiltInField {
+    pub key: &'static str,
+    pub label: &'static str,
+    pub kind: &'static str,
+}
+
+/// Look up the `locker_item_field` metadata for one built-in `field_key`.
+#[must_use]
+pub fn built_in_field(key: &str) -> Option<BuiltInField> {
+    let (key, label, kind) = match key {
+        "username" => ("username", "Username", "text"),
+        "password" => ("password", "Password", "sealed"),
+        "url" => ("url", "Website", "url"),
+        "otp_seed" => ("otp_seed", "One-time code", "otp"),
+        "notes" => ("notes", "Notes", "text"),
+        "cardholder" => ("cardholder", "Cardholder", "text"),
+        "card_number" => ("card_number", "Card number", "sealed"),
+        "expiry" => ("expiry", "Expiry", "text"),
+        "cvv" => ("cvv", "CVV", "sealed"),
+        "brand" => ("brand", "Brand", "text"),
+        "content" => ("content", "Content", "sealed"),
+        "fullname" => ("fullname", "Full name", "text"),
+        "email" => ("email", "Email", "text"),
+        "phone" => ("phone", "Phone", "text"),
+        "address" => ("address", "Address", "text"),
+        "network" => ("network", "Network", "text"),
+        _ => return None,
+    };
+    Some(BuiltInField { key, label, kind })
+}
+
+/// Deterministic `locker_item_field.id` for a built-in keyed field, used as both
+/// the row primary key and the AAD `row_id` when sealing secret built-in fields.
+#[must_use]
+pub fn built_in_field_id(item_id: &str, field_key: &str) -> String {
+    format!("{item_id}:{field_key}")
+}
 
 /// One template field: its section, its label, its kind.
 pub(super) type TemplateField = (&'static str, &'static str, &'static str);

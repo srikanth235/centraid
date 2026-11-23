@@ -124,8 +124,8 @@ use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempoten
 use crate::error::Result;
 
 pub use schema::{
-    ALL_FIELDS, FIELD_KINDS, ITEM_TYPES, SEALED_ITEM_CELLS, SEALED_PLACEHOLDER, is_sealed_kind,
-    secret_cells, type_fields,
+    ALL_FIELDS, BuiltInField, FIELD_KINDS, ITEM_TYPES, SEALED_ITEM_CELLS, SEALED_PLACEHOLDER,
+    built_in_field, built_in_field_id, is_sealed_kind, secret_cells, type_fields,
 };
 
 use custody::{invalid, mark_unlock_failed, mark_unlocked, mark_used, totp_code};

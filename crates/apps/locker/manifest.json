@@ -1590,17 +1590,17 @@
         {
           "name": "username",
           "type": "text",
-          "source": ["locker_item", "username"]
+          "source": ["locker_item_field", "value_text"]
         },
         {
           "name": "url",
           "type": "text",
-          "source": ["locker_item", "url"]
+          "source": ["locker_item_field", "value_text"]
         },
         {
           "name": "notes",
           "type": "text",
-          "source": ["locker_item", "notes"]
+          "source": ["locker_item_field", "value_text"]
         },
         {
           "name": "starred",

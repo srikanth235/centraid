@@ -45,11 +45,6 @@ pub const REVIEW_ROWS: usize = 2_000;
 /// the item pane draws them (re-exported from the vault's schema).
 pub use centraid_apps_kit::rules::locker::secret_cells;
 
-/// Every sealed item cell, as the presence projection names it.
-const PRESENCE_COLUMNS: &str = "id, password IS NOT NULL AS has_password, \
-     otp_seed IS NOT NULL AS has_otp_seed, card_number IS NOT NULL AS has_card_number, \
-     cvv IS NOT NULL AS has_cvv, content IS NOT NULL AS has_content";
-
 // ---------------------------------------------------------------------------
 // Statements.
 // ---------------------------------------------------------------------------
@@ -108,18 +103,23 @@ const KIND: &str = "locker_item";
 const STARRED: &str = "flag:starred";
 const ARCHIVED: &str = "flag:archived";
 
-/// The kind columns plus whether a code seed is stored, as its presence only.
-const KIND_WITH_CODE_PRESENCE: &str = "id, type, username, url, notes, cardholder, expiry, brand, \
-     fullname, email, phone, address, network, compromised, password_set_at, memo, last_used_at, \
-     otp_seed IS NOT NULL AS has_otp_seed";
-
-/// The kind rows of a set of items (their typed columns and the memo).
+/// The kind rows of a set of items (universal metadata and the memo; no secrets).
 const KIND_ROWS: Read = Read {
     name: "locker.phone.rows",
     table: "locker_item",
-    select: KIND_WITH_CODE_PRESENCE,
+    select: crate::queries::KIND_COLUMNS,
     order: ("id", "id"),
     column: "id",
+};
+
+/// Built-in fields of a set of items (`locker_item_field` rows carrying `field_key`),
+/// reading `value_sealed` only as its presence bit (`has_sealed`).
+const KEYED_FIELDS: Read = Read {
+    name: "locker.phone.keyed_fields",
+    table: "locker_item_field",
+    select: "id, item_id, field_key, value_text, value_sealed IS NOT NULL AS has_sealed",
+    order: ("item_id", "id"),
+    column: "item_id",
 };
 
 /// The entity rows of a set of items: the ranked hits of a search, read back by id.
@@ -198,28 +198,19 @@ pub fn aliases_statement() -> PageQuery {
     )
 }
 
-/// One item's secrets, as presence.
-#[must_use]
-pub fn presence_statement(item_id: &str) -> PageQuery {
-    PageQuery::new(
-        "locker.phone.presence",
-        PRESENCE_COLUMNS,
-        "locker_item",
-        PageOrder::asc("id", "id"),
-    )
-    .filter("id = ?", vec![PageBindValue::Text(item_id.to_owned())])
-}
-
-/// One item's custom fields, a sealed value as its presence.
+/// One item's custom and expansion-template fields (`field_key IS NULL`), a sealed value as its presence.
 #[must_use]
 pub fn fields_statement(item_id: &str) -> PageQuery {
-    by_item(
+    PageQuery::new(
         "locker.phone.fields",
         "id, item_id, section, label, kind, value_text, \
          value_sealed IS NOT NULL AS has_sealed, position",
         "locker_item_field",
-        "id",
-        item_id,
+        PageOrder::asc("id", "id"),
+    )
+    .filter(
+        "item_id = ? AND field_key IS NULL",
+        vec![PageBindValue::Text(item_id.to_owned())],
     )
 }
 
@@ -483,16 +474,16 @@ pub fn load_item(door: &dyn PageDoor, item_id: &str) -> KitResult<Option<ItemDat
     let Some(row) = rows.pop() else {
         return Ok(None);
     };
-    let presence = door
-        .page(&presence_statement(item_id), &first(1))?
-        .rows
-        .into_iter()
-        .next()
-        .unwrap_or_default();
     let rendered = degrade_type(&row.item_type).to_owned();
+    let held = decorations.sealed_presence.get(item_id);
     let secrets = secret_cells(&rendered)
         .iter()
-        .map(|column| (*column, truthy(&presence, &format!("has_{column}"))))
+        .map(|column| {
+            (
+                *column,
+                held.is_some_and(|columns| columns.contains(*column)),
+            )
+        })
         .collect();
     let fields = read_window(door, &fields_statement(item_id), DECORATION_ROWS)?
         .rows
@@ -754,36 +745,13 @@ pub fn load_review(door: &dyn PageDoor, today: &str) -> KitResult<ReviewData> {
 /// sealed cells hold a value (#1047 T2). The window is the shelves' ceiling.
 pub fn load_import_targets(door: &dyn PageDoor) -> KitResult<Vec<Existing>> {
     let shelf = read_shelf(door, ITEMS_MAX)?;
-    let ids: Vec<String> = shelf.rows.iter().map(|row| row.item_id.clone()).collect();
-    let presence: BTreeMap<String, Row> = read_chunked(
-        &Read {
-            name: "locker.phone.presence_all",
-            table: "locker_item",
-            select: PRESENCE_COLUMNS,
-            order: ("id", "id"),
-            column: "id",
-        },
-        door,
-        &ids,
-        None,
-    )?
-    .into_iter()
-    .filter_map(|row| text_of(&row, "id").map(|id| (id, row)))
-    .collect();
+    let presence = shelf.decorations.sealed_presence;
     Ok(shelf
         .rows
         .into_iter()
         .map(|row| {
             let item_type = degrade_type(&row.item_type).to_owned();
-            let sealed = presence
-                .get(&row.item_id)
-                .map_or_else(BTreeSet::new, |found| {
-                    SEALED_ITEM_COLUMNS
-                        .iter()
-                        .filter(|column| truthy(found, &format!("has_{column}")))
-                        .map(|column| (*column).to_owned())
-                        .collect()
-                });
+            let sealed = presence.get(&row.item_id).cloned().unwrap_or_default();
             Existing {
                 plain: plain_columns(&row),
                 sealed,
@@ -826,16 +794,11 @@ pub fn load_export(door: &dyn PageDoor) -> KitResult<Vec<ExportSource>> {
     for row in rows {
         let item_id = row.item_id.clone();
         let item_type = degrade_type(&row.item_type).to_owned();
-        let presence = door
-            .page(&presence_statement(&item_id), &first(1))?
-            .rows
-            .into_iter()
-            .next()
-            .unwrap_or_default();
+        let held = decorations.sealed_presence.get(&item_id);
         let sealed_cells: Vec<&'static str> = secret_cells(&item_type)
             .iter()
             .copied()
-            .filter(|column| truthy(&presence, &format!("has_{column}")))
+            .filter(|column| held.is_some_and(|columns| columns.contains(*column)))
             .collect();
         let mut fields: Vec<PhoneField> =
             read_window(door, &fields_statement(&item_id), DECORATION_ROWS)?
@@ -942,7 +905,7 @@ fn plain_columns(row: &ItemRow) -> BTreeMap<String, String> {
 // The decorations every shelf folds over.
 // ---------------------------------------------------------------------------
 
-/// Tags and aliases, keyed by item id.
+/// Tags, aliases, and built-in secret presence, keyed by item id.
 #[derive(Debug, Clone, Default)]
 pub struct PhoneDecorations {
     pub tags: BTreeMap<String, Vec<String>>,
@@ -950,6 +913,8 @@ pub struct PhoneDecorations {
     /// Every alias of an item, for a search (`alias` keeps the one the item
     /// page draws).
     pub aliases: BTreeMap<String, Vec<String>>,
+    /// Built-in secret `field_key`s present (`value_sealed IS NOT NULL`) on each item.
+    pub sealed_presence: BTreeMap<String, BTreeSet<String>>,
 }
 
 impl PhoneDecorations {
@@ -962,7 +927,7 @@ impl PhoneDecorations {
     }
 }
 
-/// The shelf: every item not in the trash, folded from its three places, with
+/// The shelf: every item not in the trash, folded from its places, with
 /// the tags and aliases, and whether the walk reached its window.
 #[derive(Debug, Clone)]
 pub struct Shelf {
@@ -982,12 +947,14 @@ pub fn read_shelf(door: &dyn PageDoor, window: usize) -> KitResult<Shelf> {
     })
 }
 
-/// Fold item ENTITY rows with their kind rows and their `tagged` edges.
+/// Fold item ENTITY rows with their kind rows, built-in `locker_item_field` rows,
+/// and `tagged` edges.
 ///
-/// A Locker item is read from three places and the answer is one row: the
-/// entity (title, stamps, trash), the kind row (typed columns, memo) and the
-/// vault's flags and tags. An entity with no kind row is not a Locker item and
-/// is dropped, so the order of `entities` is the order of the rows.
+/// A Locker item is read from its entity (title, stamps, trash), kind row
+/// (type, compromised, password_set_at, memo, last_used_at), keyed built-in
+/// fields (plain values + secret presence bits), and vault flags/tags. An entity
+/// with no kind row is not a Locker item and is dropped, so the order of
+/// `entities` is the order of the rows.
 fn fold_items(
     door: &dyn PageDoor,
     entities: Vec<Row>,
@@ -1000,6 +967,28 @@ fn fold_items(
         .into_iter()
         .filter_map(|row| text_of(&row, "id").map(|id| (id, row)))
         .collect();
+    let mut plain_fields: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
+    let mut sealed_presence: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for field in read_chunked(&KEYED_FIELDS, door, &ids, None)? {
+        let (Some(item_id), Some(field_key)) =
+            (text_of(&field, "item_id"), text_of(&field, "field_key"))
+        else {
+            continue;
+        };
+        if SEALED_ITEM_COLUMNS.contains(&field_key.as_str()) {
+            if truthy(&field, "has_sealed") {
+                sealed_presence
+                    .entry(item_id)
+                    .or_default()
+                    .insert(field_key);
+            }
+        } else if let Some(value) = text_of(&field, "value_text") {
+            plain_fields
+                .entry(item_id)
+                .or_default()
+                .insert(field_key, value);
+        }
+    }
     let edges = read_chunked(
         &TAGGED_EDGES,
         door,
@@ -1038,7 +1027,10 @@ fn fold_items(
     .into_iter()
     .filter_map(|row| Some((text_of(&row, "id")?, text_of(&row, "title")?)))
     .collect();
-    let mut decorations = PhoneDecorations::default();
+    let mut decorations = PhoneDecorations {
+        sealed_presence,
+        ..PhoneDecorations::default()
+    };
     for (item, concept) in tagged {
         if let Some(word) = words.get(&concept) {
             decorations.tags.entry(item).or_default().push(word.clone());
@@ -1067,6 +1059,19 @@ fn fold_items(
             let mut folded: Row = kind.clone();
             folded.remove("id");
             folded.insert("item_id".to_owned(), Cell::Text(id.clone()));
+            if let Some(fields) = plain_fields.get(&id) {
+                for (key, value) in fields {
+                    folded.insert(key.clone(), Cell::Text(value.clone()));
+                }
+            }
+            let has_code = decorations
+                .sealed_presence
+                .get(&id)
+                .is_some_and(|keys| keys.contains("otp_seed"));
+            folded.insert(
+                "has_otp_seed".to_owned(),
+                Cell::Integer(i64::from(has_code)),
+            );
             for column in [
                 "title",
                 "created_at",
@@ -1225,12 +1230,18 @@ mod tests {
         let statements = [
             shelves_statement(),
             trashed_statement(),
-            presence_statement("x"),
             fields_statement("x"),
             passkey_statement("x"),
         ];
-        for statement in statements {
-            for column in statement.select.split(',').map(str::trim) {
+        for (name, select) in statements
+            .iter()
+            .map(|statement| (statement.name.as_str(), statement.select.as_str()))
+            .chain([
+                (KIND_ROWS.name, KIND_ROWS.select),
+                (KEYED_FIELDS.name, KEYED_FIELDS.select),
+            ])
+        {
+            for column in select.split(',').map(str::trim) {
                 for sealed in crate::queries::SEALED_ITEM_COLUMNS
                     .iter()
                     .chain(["value_sealed", "private_key"].iter())
@@ -1238,8 +1249,7 @@ mod tests {
                     if column.split_whitespace().next() == Some(*sealed) {
                         assert!(
                             column.contains("IS NOT NULL AS"),
-                            "{} projects {column}",
-                            statement.name
+                            "{name} projects {column}"
                         );
                     }
                 }

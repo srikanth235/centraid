@@ -996,17 +996,40 @@ pub fn year3_search_corpus(
                 let notes = notes.filter(|_| kind == "login");
                 connection
                     .execute(
-                        "INSERT INTO locker_item (id, type, username, url, notes)
-                         VALUES (?1, ?2, ?3, ?4, ?5)",
-                        params![
-                            key,
-                            kind,
-                            username,
-                            host.map(|host| format!("https://{host}.example.com")),
-                            notes
-                        ],
+                        "INSERT INTO locker_item (id, type) VALUES (?1, ?2)",
+                        params![key, kind],
                     )
                     .map_err(door)?;
+                let url = host.map(|host| format!("https://{host}.example.com"));
+                for (pos, (field_key, label, field_kind, val)) in [
+                    ("username", "Username", "text", username.as_deref()),
+                    ("url", "Website", "url", url.as_deref()),
+                    ("notes", "Notes", "text", notes.as_deref()),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    if let Some(val) = val {
+                        connection
+                            .execute(
+                                "INSERT INTO locker_item_field
+                                   (id, item_id, field_key, section, label, kind, value_text,
+                                    position, created_at, updated_at)
+                                 VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, ?8, ?8)",
+                                params![
+                                    format!("{key}:{field_key}"),
+                                    key,
+                                    field_key,
+                                    label,
+                                    field_kind,
+                                    val,
+                                    pos as i64,
+                                    at
+                                ],
+                            )
+                            .map_err(door)?;
+                    }
+                }
                 counts.locker_items += 1;
             }
             Item::Activity => {

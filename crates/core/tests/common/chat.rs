@@ -219,8 +219,10 @@ pub fn with_a_locker_item(sample: &Sample) -> String {
                 })
         })
         .expect("the key plane lands");
-    let seal = |plaintext: &str| {
-        encrypt_under_locker_key(&[0x5a_u8; 32], &key, "lk-vaultbank", plaintext)
+    let seal = |field_key: &str, plaintext: &str| {
+        let field_id =
+            centraid_vault::commands::locker::built_in_field_id("lk-vaultbank", field_key);
+        encrypt_under_locker_key(&[0x5a_u8; 32], &key, &field_id, plaintext)
             .expect("the cell seals")
     };
     let ran = sample
@@ -236,8 +238,8 @@ pub fn with_a_locker_item(sample: &Sample) -> String {
                             "item_id": "lk-vaultbank", "type": "login",
                             "title": "Vaultbank login", "username": "ada.vault",
                             "url": "https://vaultbank.example",
-                            "password": seal(PLANTED_SECRETS[0]),
-                            "otp_seed": seal(PLANTED_SECRETS[1]),
+                            "password": seal("password", PLANTED_SECRETS[0]),
+                            "otp_seed": seal("otp_seed", PLANTED_SECRETS[1]),
                             "password_rotated": true, "key_id": key
                         }),
                     ),

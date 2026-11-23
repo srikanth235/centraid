@@ -94,11 +94,13 @@ pub(super) fn export(
     let mut unopened = 0_u32;
     for source in &mut sources {
         for column in &source.sealed_cells {
+            let field_id =
+                centraid_vault::commands::locker::built_in_field_id(&source.item_id, column);
             let opened = vault
                 .locker_sealed_item_cell(&source.item_id, column)?
                 .and_then(|sealed| {
                     let ciphertext = sealed.ciphertext?;
-                    open(sealed.key_id, &source.item_id, &ciphertext)
+                    open(sealed.key_id, &field_id, &ciphertext)
                 });
             match opened {
                 Some(value) => {

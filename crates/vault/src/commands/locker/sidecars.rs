@@ -9,7 +9,10 @@ use super::custody::{
     ITEM_LIVE, NONE, SET_FIELD_PRE, SET_PASSKEY_PRE, assert_key_generation, assert_sealed_cell,
     invalid,
 };
-use super::schema::{SEALED_PLACEHOLDER, is_sealed_kind, item_id_only, template_for};
+use super::schema::{
+    SEALED_PLACEHOLDER, built_in_field, built_in_field_id, is_sealed_kind, item_id_only,
+    template_for,
+};
 use super::{count, definition, item_id_output};
 
 /// Set or clear (`''`) the connector alias (#298).
@@ -156,6 +159,62 @@ pub(super) fn write_field(
         ],
     )?;
     Ok(field_id)
+}
+
+/// Upsert or clear one built-in named field (`field_key IS NOT NULL`) in
+/// `locker_item_field`. Absent/empty values remove the row so sparse fields
+/// occupy no rows and `otp` fields always carry ciphertext.
+pub(super) fn write_built_in_field(
+    ctx: &CommandCtx<'_, '_>,
+    item_id: &str,
+    field_key: &str,
+    value: Option<&str>,
+    key_id: Option<&str>,
+    position: i64,
+) -> Result<()> {
+    let Some(supplied) = value.filter(|value| !value.is_empty()) else {
+        ctx.connection().execute(
+            "DELETE FROM locker_item_field WHERE item_id = ?1 AND field_key = ?2",
+            rusqlite::params![item_id, field_key],
+        )?;
+        return Ok(());
+    };
+    let meta = built_in_field(field_key)
+        .ok_or_else(|| invalid(field_key, format!("unknown Locker field `{field_key}`")))?;
+    let id = built_in_field_id(item_id, field_key);
+    let sealed = is_sealed_kind(meta.kind);
+    let (value_text, value_sealed, stored_key_id) = if sealed {
+        (None, Some(supplied), key_id)
+    } else {
+        (Some(supplied), None, None)
+    };
+    ctx.connection().execute(
+        "INSERT INTO locker_item_field
+           (id, item_id, field_key, section, label, kind, value_text, value_sealed,
+            position, created_at, updated_at, key_id)
+         VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, ?8, ?9, ?9, ?10)
+         ON CONFLICT(id) DO UPDATE SET
+           label = excluded.label,
+           kind = excluded.kind,
+           value_text = excluded.value_text,
+           value_sealed = excluded.value_sealed,
+           position = excluded.position,
+           updated_at = excluded.updated_at,
+           key_id = excluded.key_id",
+        rusqlite::params![
+            id,
+            item_id,
+            field_key,
+            meta.label,
+            meta.kind,
+            value_text,
+            value_sealed,
+            position,
+            ctx.now,
+            stored_key_id
+        ],
+    )?;
+    Ok(())
 }
 
 /// The template rows a type arrives with, as **empty** fields the member fills.
@@ -322,7 +381,7 @@ pub(super) fn remove_field() -> CommandDefinition {
             let item_id = ctx.required_str("item_id")?.to_owned();
             let field_id = ctx.required_str("field_id")?.to_owned();
             ctx.connection().execute(
-                "DELETE FROM locker_item_field WHERE id = ?1 AND item_id = ?2",
+                "DELETE FROM locker_item_field WHERE id = ?1 AND item_id = ?2 AND field_key IS NULL",
                 rusqlite::params![field_id, item_id],
             )?;
             Ok(serde_json::json!({ "field_id": field_id, "item_id": item_id }))

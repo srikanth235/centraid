@@ -1381,28 +1381,61 @@ impl World {
     /// closed (#1135), on the phone and in the harness alike.
     fn load_locker(&mut self, door: &dyn Door, flags: &Flags, scope: &Scope) -> Result<(), String> {
         let entities = &scope.entities;
-        let plain = "id, type, username, url, notes, key_id, cardholder, expiry, brand, fullname, \
-                     email, phone, address, network";
-        let sealed = "password IS NOT NULL AS has_password, otp_seed IS NOT NULL AS has_otp_seed, \
-                      card_number IS NOT NULL AS has_card_number, cvv IS NOT NULL AS has_cvv, \
-                      content IS NOT NULL AS has_content";
-        let items = by_ids(
-            door,
-            "locker_item",
-            &format!("{plain}, {sealed}"),
-            &scope.ids(),
-        )?;
-        let spec = Kind::LockerItem.spec();
-        // A sealed cell as the world holds it: the vault's placeholder ("a secret is here, leave it
-        // alone") on the presence bit.
-        let held = |item: &VaultRow, column: &str| -> Option<String> {
-            (int(item, &format!("has_{column}")) == Some(1))
-                .then(|| centraid_vault::commands::locker::SEALED_PLACEHOLDER.to_owned())
+        let ids = scope.ids();
+        let items = by_ids(door, "locker_item", "id, type", &ids)?;
+        let field_rows = if ids.is_empty() {
+            Vec::new()
+        } else {
+            let mut rows = Vec::new();
+            for chunk in ids.chunks(64) {
+                let placeholders = vec!["?"; chunk.len()].join(", ");
+                rows.extend(door.table_where(
+                    "locker_item_field",
+                    "id, item_id, field_key, value_text, key_id, value_sealed IS NOT NULL AS has_sealed",
+                    "item_id",
+                    "id",
+                    &format!("item_id IN ({placeholders})"),
+                    chunk,
+                )?);
+            }
+            rows
         };
+        let mut plain_by_item: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
+        let mut sealed_by_item: BTreeMap<String, std::collections::BTreeSet<String>> =
+            BTreeMap::new();
+        let mut key_by_item: BTreeMap<String, String> = BTreeMap::new();
+        for row in &field_rows {
+            let (Some(item_id), Some(field_key)) = (text(row, "item_id"), text(row, "field_key"))
+            else {
+                continue;
+            };
+            if let Some(key) = text(row, "key_id") {
+                key_by_item.entry(item_id.clone()).or_insert(key);
+            }
+            if int(row, "has_sealed") == Some(1) {
+                sealed_by_item.entry(item_id).or_default().insert(field_key);
+            } else if let Some(val) = text(row, "value_text") {
+                plain_by_item
+                    .entry(item_id)
+                    .or_default()
+                    .insert(field_key, val);
+            }
+        }
+        let spec = Kind::LockerItem.spec();
         for item in &items {
             let id = text(item, "id").unwrap_or_default();
             let Some(entity) = entities.get(&id) else {
                 continue;
+            };
+            let plain = plain_by_item.get(&id);
+            let sealed_set = sealed_by_item.get(&id);
+            let plain_of = |column: &str| -> Option<String> {
+                plain.and_then(|fields| fields.get(column)).cloned()
+            };
+            let held = |column: &str| -> Option<String> {
+                sealed_set
+                    .is_some_and(|keys| keys.contains(column))
+                    .then(|| centraid_vault::commands::locker::SEALED_PLACEHOLDER.to_owned())
             };
             let mut fields = BTreeMap::new();
             let kind = text(item, "type").unwrap_or_default();
@@ -1412,31 +1445,31 @@ impl World {
             {
                 fields.insert("type", Val::Enum(value));
             }
-            put(&mut fields, "username", nonempty(text(item, "username")));
-            put(&mut fields, "url", nonempty(text(item, "url")));
-            put(&mut fields, "notes", nonempty(text(item, "notes")));
+            put(&mut fields, "username", nonempty(plain_of("username")));
+            put(&mut fields, "url", nonempty(plain_of("url")));
+            put(&mut fields, "notes", nonempty(plain_of("notes")));
             // A NOTE ITEM'S NOTES ARE ITS SEALED `content`: the row says it
             // has them, and `reveal field: notes` opens them.
-            if kind == "note" && nonempty(held(item, "content")).is_some() {
+            if kind == "note" && nonempty(held("content")).is_some() {
                 fields.insert("notes", Val::Text(SEALED.to_owned()));
             }
             fields.insert("starred", Val::Bool(flags.starred.contains(&id)));
             let mut extra = BTreeMap::new();
-            if let Some(key) = text(item, "key_id") {
-                extra.insert("key_id", key);
+            if let Some(key) = key_by_item.get(&id) {
+                extra.insert("key_id", key.clone());
             }
             if let Some(purge) = text(entity, "purge_at") {
                 extra.insert("purge_at", purge);
             }
             for (_, column) in crate::native::meta::REVEAL_FIELDS {
-                if let Some(sealed) = held(item, column) {
+                if let Some(sealed) = held(column) {
                     extra.insert(column, sealed);
                 }
             }
             // The type's other plain columns, which an edit must send back
             // unchanged (the vault rewrites every column of the type).
             for column in LOCKER_PLAIN {
-                if let Some(value) = text(item, column).filter(|value| !value.is_empty()) {
+                if let Some(value) = plain_of(column).filter(|value| !value.is_empty()) {
                     extra.insert(column, value);
                 }
             }

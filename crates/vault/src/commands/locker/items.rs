@@ -1,6 +1,8 @@
 //! Item lifecycle commands: `locker.add_item`, `locker.edit_item`, `locker.duplicate_item`,
 //! `locker.counts`, and `locker.export`.
 
+use std::collections::BTreeMap;
+
 use crate::commands::{CommandCondition, CommandDefinition, Idempotency, Risk, arrival};
 use crate::error::Result;
 use crate::model::Kind;
@@ -11,9 +13,12 @@ use super::custody::{
     password_rotated,
 };
 use super::schema::{
-    SEALED_ITEM_CELLS, SEALED_PLACEHOLDER, field_schema, field_values, is_sealed_kind, type_enum,
+    ALL_FIELDS, SEALED_ITEM_CELLS, SEALED_PLACEHOLDER, field_schema, field_values, is_sealed_kind,
+    type_enum, type_fields,
 };
-use super::sidecars::{FieldWrite, mint_template_fields, set_addresses, set_alias, write_field};
+use super::sidecars::{
+    FieldWrite, mint_template_fields, set_addresses, set_alias, write_built_in_field, write_field,
+};
 use super::{count, definition, item_type_of};
 
 pub(super) fn add_item() -> CommandDefinition {
@@ -66,46 +71,41 @@ pub(super) fn add_item() -> CommandDefinition {
                 .iter()
                 .find(|(column, _)| *column == "password")
                 .and_then(|(_, value)| value.clone());
-
-            // Only the type's own columns are written; everything else stays
-            // NULL, so a member who filled a login and switched to Wi-Fi never
-            // stores the login's fields.
-            // THE ENTITY FIRST, under the caller's id (D-1020-L9): the kind row
-            // joins it by `(id, kind)`, and the title, the stamps and the trash
-            // window are the entity's, like every kind's.
-            ctx.insert_entity_as(&item_id, Kind::LockerItem, &title)?;
-            let mut columns: Vec<&str> = vec!["id", "type"];
-            let mut binds: Vec<Box<dyn rusqlite::ToSql>> =
-                vec![Box::new(item_id.clone()), Box::new(item_type.clone())];
-            for (column, value) in &values {
-                columns.push(column);
-                binds.push(Box::new(value.clone()));
-            }
-            columns.push("compromised");
-            binds.push(Box::new(i64::from(
+            let compromised = i64::from(
                 ctx.input
                     .get("compromised")
                     .and_then(serde_json::Value::as_bool)
                     .unwrap_or(false),
-            )));
+            );
             // PASSWORD AGE IS SET-TIME, NEVER `updated_at`: a retag must not
             // make a three-year-old password look fresh (GAPS §3.3 #6d).
-            columns.push("password_set_at");
-            binds.push(Box::new(password.as_ref().map(|_| ctx.now.clone())));
-            columns.push("key_id");
-            binds.push(Box::new(key_id));
+            let password_set_at = password.as_ref().map(|_| ctx.now.clone());
 
-            let placeholders: Vec<String> = (1..=columns.len())
-                .map(|index| format!("?{index}"))
-                .collect();
-            let sql = format!(
-                "INSERT INTO locker_item ({}) VALUES ({})",
-                columns.join(", "),
-                placeholders.join(", ")
-            );
-            let params: Vec<&dyn rusqlite::ToSql> =
-                binds.iter().map(std::convert::AsRef::as_ref).collect();
-            ctx.connection().execute(&sql, params.as_slice())?;
+            // THE ENTITY FIRST, under the caller's id (D-1020-L9): the kind row
+            // joins it by `(id, kind)`, and the title, the stamps and the trash
+            // window are the entity's, like every kind's.
+            ctx.insert_entity_as(&item_id, Kind::LockerItem, &title)?;
+            ctx.connection().execute(
+                "INSERT INTO locker_item (id, type, compromised, password_set_at)
+                 VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![item_id, item_type, compromised, password_set_at],
+            )?;
+
+            // Only the type's own built-in fields are stored, uniformly in
+            // `locker_item_field` keyed by `field_key`, so a member who filled
+            // a login and switched to Wi-Fi never stores the login's fields.
+            for (position, (column, value)) in values.iter().enumerate() {
+                if let Some(value) = value.as_deref() {
+                    write_built_in_field(
+                        ctx,
+                        &item_id,
+                        column,
+                        Some(value),
+                        key_id.as_deref(),
+                        i64::try_from(position).unwrap_or(0),
+                    )?;
+                }
+            }
 
             if let Some(alias) = ctx.optional_str("alias") {
                 set_alias(ctx, &item_id, alias)?;
@@ -130,7 +130,7 @@ pub(super) fn edit_item() -> CommandDefinition {
         concat!(
             r#"{
           "type": "object",
-          "description": "REPLACES, does not patch. Every field of the item's type (username, url, password, one-time-code seed, notes, and the rest of its type's columns) is rewritten from this input, and each one the input leaves out or leaves empty is CLEARED: an edit carrying only a password erases the username, address, seed and notes. Send the whole draft; a sealed secret you are keeping goes as the placeholder «sealed». Only the title, the alias (an empty one clears it) and the compromised flag (a changed password clears it) are left alone when omitted. Tags, the star and the archive are the vault's own (`tag.add`, `flag.set`); custom fields, addresses, the passkey and the memo are their own commands. None is touched here.",
+          "description": "REPLACES, does not patch. Every field of the item's type (username, url, password, one-time-code seed, notes, and the rest of its type's fields) is rewritten from this input, and each one the input leaves out or leaves empty is CLEARED: an edit carrying only a password erases the username, address, seed and notes. Send the whole draft; a sealed secret you are keeping goes as the placeholder «sealed». Only the title, the alias (an empty one clears it) and the compromised flag (a changed password clears it) are left alone when omitted. Tags, the star and the archive are the vault's own (`tag.add`, `flag.set`); custom fields, addresses, the passkey and the memo are their own commands. None is touched here.",
           "required": ["item_id"],
           "additionalProperties": false,
           "properties": {
@@ -155,6 +155,7 @@ pub(super) fn edit_item() -> CommandDefinition {
             let secret = carries_secret(ctx, &SEALED_ITEM_CELLS);
             assert_key_generation(ctx, secret)?;
             let rotated = password_rotated(ctx)?;
+            let key_id = ctx.optional_str("key_id").map(str::to_owned);
 
             let mut sets: Vec<String> = Vec::new();
             let mut binds: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
@@ -189,41 +190,6 @@ pub(super) fn edit_item() -> CommandDefinition {
                     Box::new(i64::from(compromised)),
                 );
             }
-
-            // EDIT REPLACES THE TYPE'S FIELDS; IT DOES NOT PATCH THEM, AND SAYS SO
-            // (L4, ruled 2026-10-15).
-            //
-            // `field_values` returns **every** column of the item's type,
-            // `None` for the ones the input omits, and the handler writes all
-            // of them. So an edit carrying only a password clears the
-            // username, the url, the OTP seed and the notes.
-            //
-            // It is the contract and not an accident: the editor always sends
-            // the whole draft (every key the type owns, a sealed one
-            // round-tripped as the placeholder), so a replace is invisible to
-            // it. A caller reading the optional fields as a patch API loses
-            // data, which is why the semantics are stated where callers read:
-            // this command's schema (`describe` serves it), the manifest's
-            // `edit-item` description, the editor's proto comment and the
-            // Locker README. A patch, if it is ever wanted, is a new command
-            // and a proposal (#1047), not a quiet change to this one. The
-            // title, the alias and the compromised flag are the
-            // exceptions: omitted, they are left alone.
-            // `an_edit_rewrites_the_types_fields_rather_than_patching_them`
-            // pins it.
-            //
-            // A round-tripped placeholder is the one exception to the
-            // clearing and is SKIPPED: that is what "leave this secret alone"
-            // means, and it is the mechanism that lets an edit form exist
-            // without holding the password.
-            let mut changed: Vec<&str> = Vec::new();
-            for (column, value) in field_values(ctx, &item_type) {
-                if ctx.optional_str(column) == Some(SEALED_PLACEHOLDER) {
-                    continue;
-                }
-                push(&mut sets, &mut binds, column, Box::new(value.clone()));
-                changed.push(column);
-            }
             // A ROTATION, distinguished from any other edit. The core says so
             // (see `password_rotated`); only a real change re-stamps the age.
             if rotated {
@@ -233,11 +199,6 @@ pub(super) fn edit_item() -> CommandDefinition {
                     .map(|_| ctx.now.clone());
                 push(&mut sets, &mut binds, "password_set_at", Box::new(stamp));
             }
-            if secret {
-                let key_id = ctx.optional_str("key_id").map(str::to_owned);
-                push(&mut sets, &mut binds, "key_id", Box::new(key_id));
-            }
-
             if !sets.is_empty() {
                 binds.push(Box::new(item_id.clone()));
                 let sql = format!(
@@ -248,6 +209,27 @@ pub(super) fn edit_item() -> CommandDefinition {
                 let params: Vec<&dyn rusqlite::ToSql> =
                     binds.iter().map(std::convert::AsRef::as_ref).collect();
                 ctx.connection().execute(&sql, params.as_slice())?;
+            }
+
+            // EDIT REPLACES THE TYPE'S FIELDS; IT DOES NOT PATCH THEM, AND SAYS SO
+            // (L4, ruled 2026-10-15). A round-tripped placeholder is the one
+            // exception to the clearing and is SKIPPED: that is what "leave this
+            // secret alone" means.
+            let mut changed: Vec<&str> = Vec::new();
+            for (position, (column, value)) in field_values(ctx, &item_type).into_iter().enumerate()
+            {
+                if ctx.optional_str(column) == Some(SEALED_PLACEHOLDER) {
+                    continue;
+                }
+                write_built_in_field(
+                    ctx,
+                    &item_id,
+                    column,
+                    value.as_deref(),
+                    key_id.as_deref(),
+                    i64::try_from(position).unwrap_or(0),
+                )?;
+                changed.push(column);
             }
             ctx.touch(&item_id)?;
 
@@ -271,23 +253,6 @@ pub(super) fn edit_item() -> CommandDefinition {
     definition.sealed_input = &SEALED_ITEM_CELLS;
     definition
 }
-
-/// Every column a duplicate copies verbatim, minus the sealed ones.
-const PLAIN_COPY_COLUMNS: [&str; 13] = [
-    "type",
-    "username",
-    "url",
-    "notes",
-    "cardholder",
-    "expiry",
-    "brand",
-    "fullname",
-    "email",
-    "phone",
-    "address",
-    "network",
-    "compromised",
-];
 
 pub(super) fn duplicate_item() -> CommandDefinition {
     let mut definition = definition(
@@ -330,72 +295,74 @@ pub(super) fn duplicate_item() -> CommandDefinition {
             assert_sealed_cells(ctx, &SEALED_ITEM_CELLS)?;
             let secret = carries_secret(ctx, &SEALED_ITEM_CELLS);
             assert_key_generation(ctx, secret)?;
+            let key_id = ctx.optional_str("key_id").map(str::to_owned);
 
-            // CLONE-AND-EDIT FOR SIBLING ACCOUNTS (GAPS §3.3 #10), and the one
-            // v0 rule that could not survive the custody change: v0 unsealed
-            // each secret here and wrote it back as plaintext for the seal
-            // sweep to re-seal under the NEW row's id, "so no secret
-            // round-trips through the client". The ciphertext's AAD binds it to
-            // the old row, and the command plane cannot re-seal — so the core
-            // re-encrypts under the new id and sends the cells, which is why
-            // the new id is the caller's (D-1020-L9). The promise that changes
-            // is "no secret round-trips through the client"; the promise that
-            // survives, and is the stronger one, is that no secret is ever
-            // readable by the command plane or anything it writes.
-            let mut columns: Vec<String> = vec!["id".to_owned()];
+            // CLONE-AND-EDIT FOR SIBLING ACCOUNTS (GAPS §3.3 #10): the core
+            // re-encrypts every secret under the new field id and sends the
+            // cells, so the command plane never reads a secret.
             let source_title: String = ctx.connection().query_row(
                 "SELECT title FROM entity WHERE id = ?1",
                 [&source_id],
                 |row| row.get(0),
             )?;
+            let (source_type, compromised, password_set_at): (String, i64, Option<String>) =
+                ctx.connection().query_row(
+                    "SELECT type, compromised, password_set_at FROM locker_item WHERE id = ?1",
+                    [&source_id],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                )?;
             let title = format!("{source_title} copy");
             ctx.insert_entity_as(&item_id, Kind::LockerItem, &title)?;
-            let mut binds: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(item_id.clone())];
-            for column in PLAIN_COPY_COLUMNS {
-                // AS A VALUE, NOT AS A STRING. `compromised` is an INTEGER and
-                // `NOT NULL`; reading it into an `Option<String>` fails, and a
-                // `.ok().flatten()` around that failure turns the flag into a
-                // NULL the column's own constraint then refuses. Found by
-                // `a_duplicate_takes_the_re_sealed_cells_and_leaves_the_alias_behind`.
-                let value: rusqlite::types::Value = ctx.connection().query_row(
-                    &format!("SELECT {column} FROM locker_item WHERE id = ?1"),
-                    [&source_id],
-                    |row| row.get(0),
+            ctx.connection().execute(
+                "INSERT INTO locker_item (id, type, compromised, password_set_at)
+                 VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![item_id, source_type, compromised, password_set_at],
+            )?;
+
+            // Copy plain built-in fields verbatim from the source item.
+            let plain_fields: Vec<(String, Option<String>, i64)> = {
+                let mut statement = ctx.connection().prepare(
+                    "SELECT field_key, value_text, CAST(position AS INTEGER)
+                       FROM locker_item_field
+                      WHERE item_id = ?1 AND field_key IS NOT NULL
+                        AND kind NOT IN ('sealed', 'otp')
+                      ORDER BY position, id",
                 )?;
-                columns.push(column.to_owned());
-                binds.push(Box::new(value));
+                let rows = statement.query_map([&source_id], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                })?;
+                rows.collect::<rusqlite::Result<Vec<_>>>()?
+            };
+            for (field_key, value_text, position) in plain_fields {
+                if let Some(value) = value_text.as_deref() {
+                    write_built_in_field(ctx, &item_id, &field_key, Some(value), None, position)?;
+                }
             }
+            // Write any re-sealed built-in secret cells the core sent.
+            let owned = type_fields(&source_type);
             for column in SEALED_ITEM_CELLS {
-                let value = ctx
+                if !owned.contains(&column) {
+                    continue;
+                }
+                if let Some(value) = ctx
                     .optional_str(column)
                     .filter(|value| !value.is_empty() && *value != SEALED_PLACEHOLDER)
-                    .map(str::to_owned);
-                columns.push(column.to_owned());
-                binds.push(Box::new(value));
+                {
+                    let position = owned
+                        .iter()
+                        .position(|known| *known == column)
+                        .and_then(|pos| i64::try_from(pos).ok())
+                        .unwrap_or(0);
+                    write_built_in_field(
+                        ctx,
+                        &item_id,
+                        column,
+                        Some(value),
+                        key_id.as_deref(),
+                        position,
+                    )?;
+                }
             }
-            let password_set_at: Option<String> = ctx.connection().query_row(
-                "SELECT password_set_at FROM locker_item WHERE id = ?1",
-                [&source_id],
-                |row| row.get(0),
-            )?;
-            columns.push("password_set_at".to_owned());
-            binds.push(Box::new(password_set_at));
-            columns.push("key_id".to_owned());
-            binds.push(Box::new(ctx.optional_str("key_id").map(str::to_owned)));
-
-            let placeholders: Vec<String> = (1..=columns.len())
-                .map(|index| format!("?{index}"))
-                .collect();
-            let params: Vec<&dyn rusqlite::ToSql> =
-                binds.iter().map(std::convert::AsRef::as_ref).collect();
-            ctx.connection().execute(
-                &format!(
-                    "INSERT INTO locker_item ({}) VALUES ({})",
-                    columns.join(", "),
-                    placeholders.join(", ")
-                ),
-                params.as_slice(),
-            )?;
 
             // The custom fields, re-sealed by the core against their own new
             // ids for the same AAD reason.
@@ -538,29 +505,6 @@ pub(super) fn counts() -> CommandDefinition {
     )
 }
 
-/// The plain columns an export carries verbatim.
-const PLAIN_EXPORT_COLUMNS: [&str; 19] = [
-    "type",
-    "title",
-    "username",
-    "url",
-    "notes",
-    "cardholder",
-    "expiry",
-    "brand",
-    "fullname",
-    "email",
-    "phone",
-    "address",
-    "network",
-    "compromised",
-    "password_set_at",
-    "created_at",
-    "updated_at",
-    "archived_at",
-    "deleted_at",
-];
-
 pub(super) fn export() -> CommandDefinition {
     let mut definition = definition(
         "locker.export",
@@ -587,62 +531,107 @@ pub(super) fn export() -> CommandDefinition {
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false);
 
-            // A MASS UNSEAL IS A COMMAND AND NOT A QUERY, twice over, and both
-            // reasons survive the custody change: it is confirmed and run
-            // before any cell opens, so a core that opened them first would
-            // have skipped the member's confirmation. Ordinary app reads return
-            // sealed columns as placeholders.
-            //
-            // WHAT CHANGED (D-1020-L7): v0 unsealed every cell here and
-            // returned the plaintext. The command plane cannot, so the command
-            // answers the PLAIN half plus the ciphertext's addresses, and a
-            // core holding `K` produces the file. The confirm and
-            // the `high` risk stay exactly where they were, because what is
-            // being authorised is unchanged: every secret the locker holds,
-            // in the clear, in a file.
-            // The title, the stamps and the trash window are the entity's; the
-            // archive is the vault's flag, stated as the day it was set.
-            let projection = PLAIN_EXPORT_COLUMNS
-                .iter()
-                .map(|column| match *column {
-                    "title" | "created_at" | "updated_at" | "deleted_at" => format!("e.{column}"),
-                    "archived_at" => "(SELECT a.created_at FROM edge a WHERE a.from_id = i.id
-                          AND a.rel = 'tagged' AND a.to_id = 'flag:archived')"
-                        .to_owned(),
-                    other => format!("i.{other}"),
-                })
-                .collect::<Vec<_>>()
-                .join(", ");
+            // A MASS UNSEAL IS A COMMAND AND NOT A QUERY, twice over: it is
+            // confirmed and run before any cell opens. The command answers the
+            // PLAIN half plus key generation addresses; the core holding `K`
+            // unseals the secret cells into the exported file.
+            let mut plain_by_item: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
+            let mut key_by_item: BTreeMap<String, String> = BTreeMap::new();
+            {
+                let mut statement = ctx.connection().prepare(
+                    "SELECT item_id, field_key, value_text, key_id
+                       FROM locker_item_field
+                      WHERE field_key IS NOT NULL",
+                )?;
+                let rows = statement.query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                    ))
+                })?;
+                for row in rows {
+                    let (item_id, field_key, value_text, key_id) = row?;
+                    if let Some(value) = value_text
+                        && !SEALED_ITEM_CELLS.contains(&field_key.as_str())
+                    {
+                        plain_by_item
+                            .entry(item_id.clone())
+                            .or_default()
+                            .insert(field_key, value);
+                    }
+                    if let Some(key_id) = key_id {
+                        key_by_item.entry(item_id).or_insert(key_id);
+                    }
+                }
+            }
+
             let predicate = if include_trashed {
                 ""
             } else {
                 "WHERE e.deleted_at IS NULL"
             };
             let mut statement = ctx.connection().prepare(&format!(
-                "SELECT i.id, i.key_id, {projection}
+                "SELECT i.id, i.type, e.title, i.compromised, i.password_set_at,
+                        e.created_at, e.updated_at,
+                        (SELECT a.created_at FROM edge a WHERE a.from_id = i.id
+                           AND a.rel = 'tagged' AND a.to_id = 'flag:archived'),
+                        e.deleted_at
                    FROM locker_item i JOIN entity e ON e.id = i.id
                  {predicate} ORDER BY e.created_at, i.id"
             ))?;
             let items: Vec<serde_json::Value> = statement
                 .query_map([], |row| {
+                    let item_id: String = row.get(0)?;
                     let mut item = serde_json::Map::new();
                     item.insert(
                         "item_id".to_owned(),
-                        serde_json::Value::String(row.get::<_, String>(0)?),
+                        serde_json::Value::String(item_id.clone()),
                     );
                     item.insert(
                         "key_id".to_owned(),
-                        row.get::<_, Option<String>>(1)?
+                        key_by_item
+                            .get(&item_id)
+                            .cloned()
                             .map_or(serde_json::Value::Null, serde_json::Value::String),
                     );
-                    for (index, column) in PLAIN_EXPORT_COLUMNS.iter().enumerate() {
-                        let value: Option<String> =
-                            row.get::<_, Option<String>>(index + 2).or_else(|_| {
-                                row.get::<_, Option<i64>>(index + 2)
-                                    .map(|value| value.map(|value| value.to_string()))
-                            })?;
+                    let plain = plain_by_item.get(&item_id);
+                    item.insert(
+                        "type".to_owned(),
+                        serde_json::Value::String(row.get::<_, String>(1)?),
+                    );
+                    item.insert(
+                        "title".to_owned(),
+                        serde_json::Value::String(row.get::<_, String>(2)?),
+                    );
+                    for field in ALL_FIELDS
+                        .iter()
+                        .copied()
+                        .filter(|field| !SEALED_ITEM_CELLS.contains(field))
+                    {
                         item.insert(
-                            (*column).to_owned(),
+                            field.to_owned(),
+                            plain
+                                .and_then(|fields| fields.get(field))
+                                .cloned()
+                                .map_or(serde_json::Value::Null, serde_json::Value::String),
+                        );
+                    }
+                    item.insert(
+                        "compromised".to_owned(),
+                        serde_json::Value::String(row.get::<_, i64>(3)?.to_string()),
+                    );
+                    for (index, name) in [
+                        (4, "password_set_at"),
+                        (5, "created_at"),
+                        (6, "updated_at"),
+                        (7, "archived_at"),
+                        (8, "deleted_at"),
+                    ] {
+                        let value: Option<String> = row.get(index)?;
+                        item.insert(
+                            name.to_owned(),
                             value.map_or(serde_json::Value::Null, serde_json::Value::String),
                         );
                     }
@@ -656,11 +645,6 @@ pub(super) fn export() -> CommandDefinition {
                 "exported_at": ctx.now,
                 "item_count": items.len(),
                 "items": items,
-                // A REVISION'S SNAPSHOT IS THE ONE THING ONLY AN EXPORT
-                // UNSEALS, and it stays that way: the unsealing is outside
-                // the command plane, in the phone core holding `K`, after
-                // this command ran. There is no field saying where: one
-                // device, one side that can unseal (Q-1047-13).
             }))
         },
     );

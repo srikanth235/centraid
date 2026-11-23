@@ -596,8 +596,16 @@ fn with_a_locker_item(pair: &Pair) -> (String, String, String) {
         serde_json::json!({
             "item_id": "lk-bank", "type": "login", "title": "Hidden Vaultbank login",
             "username": "plainname", "url": "https://vaultbank.example",
-            "password": sealed(&key, "lk-bank", PLANTED[0]),
-            "otp_seed": sealed(&key, "lk-bank", PLANTED[1]),
+            "password": sealed(
+                &key,
+                &centraid_vault::commands::locker::built_in_field_id("lk-bank", "password"),
+                PLANTED[0]
+            ),
+            "otp_seed": sealed(
+                &key,
+                &centraid_vault::commands::locker::built_in_field_id("lk-bank", "otp_seed"),
+                PLANTED[1]
+            ),
             "password_rotated": true, "key_id": key
         }),
     );
@@ -709,34 +717,32 @@ fn the_core_door_serves_a_locker_items_plain_rows_edges_and_tags_and_no_sealed_c
         .expect("the door answers");
     assert!(format!("{tagged:?}").contains(&item), "{tagged:?}");
 
-    // Its kind row, plain: the username and the url, with each sealed cell as a presence bit.
+    // Its kind row and built-in field rows, plain: the username and the url, with each sealed cell as a presence bit.
+    let items = door
+        .table("locker_item", "id, type", "id", "id")
+        .expect("the door reads the kind row");
+    assert!(format!("{items:?}").contains("login"), "{items:?}");
     let rows = door
         .table(
-            "locker_item",
-            "id, type, username, url, password IS NOT NULL AS has_password, \
-             otp_seed IS NOT NULL AS has_otp_seed, card_number IS NOT NULL AS has_card_number",
+            "locker_item_field",
+            "id, item_id, field_key, value_text, value_sealed IS NOT NULL AS has_sealed",
             "id",
             "id",
         )
-        .expect("the door reads the kind row");
+        .expect("the door reads the field rows");
     let seen = format!("{rows:?}");
     assert!(
         seen.contains("plainname") && seen.contains("https://vaultbank.example"),
         "{seen}"
     );
-    assert_no_secret("the kind row", &seen);
+    assert_no_secret("the field rows", &seen);
     assert!(
-        seen.contains("has_password") && seen.contains("has_otp_seed"),
+        seen.contains("has_sealed") && seen.contains("Integer(1)"),
         "the sealed cells are presence bits: {seen}"
     );
 
     // …and a sealed column is served in no form: not projected, not ordered by, not filtered on.
     for (table, pk, column) in [
-        ("locker_item", "id", "password"),
-        ("locker_item", "id", "otp_seed"),
-        ("locker_item", "id", "card_number"),
-        ("locker_item", "id", "cvv"),
-        ("locker_item", "id", "content"),
         ("locker_item_field", "item_id", "value_sealed"),
         ("locker_item_passkey", "item_id", "private_key"),
     ] {
@@ -876,24 +882,29 @@ fn a_shared_verb_on_a_locker_item_runs_through_the_core_door() {
             .rows
     };
     let rows = owner(
-        &["id", "username", "password", "otp_seed"],
-        "locker_item",
-        "id = ?",
+        &["id", "field_key", "value_text", "value_sealed"],
+        "locker_item_field",
+        "item_id = ? AND field_key IS NOT NULL",
         1,
     );
-    let [row] = rows.as_slice() else {
-        panic!("the item is gone: {rows:?}");
+    let field_of = |key: &str| {
+        rows.iter()
+            .find(|row| {
+                row.get("field_key") == Some(&centraid_vault::value::Value::Text(key.to_owned()))
+            })
+            .unwrap_or_else(|| panic!("missing built-in field {key}: {rows:?}"))
     };
     assert_eq!(
-        format!("{:?}", row.get("username")),
-        format!(
-            "{:?}",
-            Some(centraid_vault::value::Value::Text(
-                "ada@new.example".to_owned()
-            ))
-        )
+        field_of("username").get("value_text"),
+        Some(&centraid_vault::value::Value::Text(
+            "ada@new.example".to_owned()
+        ))
     );
-    let cells = format!("{:?}{:?}", row.get("password"), row.get("otp_seed"));
+    let cells = format!(
+        "{:?}{:?}",
+        field_of("password").get("value_sealed"),
+        field_of("otp_seed").get("value_sealed")
+    );
     assert_eq!(
         cells.matches("lk1:").count(),
         2,

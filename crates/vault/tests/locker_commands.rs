@@ -546,7 +546,7 @@ fn a_password_write_without_the_rotation_claim_is_refused() {
         }),
     );
     let untouched: String = world.one(
-        "SELECT password FROM locker_item WHERE id = ?1",
+        "SELECT value_sealed FROM locker_item_field WHERE item_id = ?1 AND field_key = 'password'",
         &["item-1"],
     );
     assert_eq!(
@@ -585,8 +585,8 @@ fn a_password_write_without_the_rotation_claim_is_refused() {
 ///
 /// v0's contract, named by v0's own test: *"edit_item rewrites the type fields
 /// and replaces tags"*. An edit carrying only a password clears the username,
-/// the url, the OTP seed and the notes, because every column of the type is
-/// written, `NULL` for the omitted ones.
+/// the url, the OTP seed and the notes, because every built-in field of the
+/// type is written, and omitted ones are cleared.
 ///
 /// The owner ruled it stays a replace and is stated where callers read: the
 /// command's schema (`the_edit_commands_schema_says_it_replaces`), the
@@ -600,7 +600,7 @@ fn an_edit_rewrites_the_types_fields_rather_than_patching_them() {
     world.login("item-1", "key-1");
     assert_eq!(
         world.one::<String>(
-            "SELECT username FROM locker_item WHERE id = ?1",
+            "SELECT value_text FROM locker_item_field WHERE item_id = ?1 AND field_key = 'username'",
             &["item-1"]
         ),
         "ada@example.com"
@@ -615,13 +615,13 @@ fn an_edit_rewrites_the_types_fields_rather_than_patching_them() {
             "key_id": "key-1"
         }),
     );
-    // THE OMITTED COLUMNS ARE CLEARED. This is the contract.
+    // THE OMITTED FIELDS ARE CLEARED. This is the contract.
     for column in ["username", "url", "otp_seed", "notes"] {
-        let value: Option<String> = world.one(
-            &format!("SELECT {column} FROM locker_item WHERE id = ?1"),
-            &["item-1"],
+        let count: i64 = world.one(
+            "SELECT COUNT(*) FROM locker_item_field WHERE item_id = ?1 AND field_key = ?2",
+            &["item-1", column],
         );
-        assert_eq!(value, None, "{column} survived a rewrite");
+        assert_eq!(count, 0, "{column} survived a rewrite");
     }
     // …and the title, which is NOT a type field, is untouched.
     assert_eq!(
@@ -679,7 +679,7 @@ fn an_edit_rewrites_the_types_fields_rather_than_patching_them() {
     );
     assert_eq!(
         world.one::<String>(
-            "SELECT username FROM locker_item WHERE id = ?1",
+            "SELECT value_text FROM locker_item_field WHERE item_id = ?1 AND field_key = 'username'",
             &["item-1"]
         ),
         "ada@example.com"
@@ -687,7 +687,7 @@ fn an_edit_rewrites_the_types_fields_rather_than_patching_them() {
     // The placeholder left the secret alone.
     assert_eq!(
         world.one::<String>(
-            "SELECT password FROM locker_item WHERE id = ?1",
+            "SELECT value_sealed FROM locker_item_field WHERE item_id = ?1 AND field_key = 'password'",
             &["item-1"]
         ),
         ciphertext("rotated")
@@ -1104,10 +1104,10 @@ fn a_duplicate_takes_the_re_sealed_cells_and_leaves_the_alias_behind() {
         }),
     );
     assert_eq!(output["title"], serde_json::json!("The bank copy"));
-    // The COPY's ciphertext is the caller's, sealed against the new row.
+    // The COPY's ciphertext is the caller's, sealed against the new field row.
     assert_eq!(
         world.one::<String>(
-            "SELECT password FROM locker_item WHERE id = ?1",
+            "SELECT value_sealed FROM locker_item_field WHERE item_id = ?1 AND field_key = 'password'",
             &["item-copy"]
         ),
         ciphertext("item-copy")

@@ -285,7 +285,9 @@ impl Handle {
         name: &str,
         mut input: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
-        use centraid_vault::commands::locker::{SEALED_ITEM_CELLS, SEALED_PLACEHOLDER};
+        use centraid_vault::commands::locker::{
+            SEALED_ITEM_CELLS, SEALED_PLACEHOLDER, built_in_field_id,
+        };
         use centraid_vault::custody::locker_key::{
             decrypt_under_locker_key, encrypt_under_locker_key, is_locker_ciphertext,
         };
@@ -320,20 +322,22 @@ impl Handle {
             }
         }
         if let Some((_, password)) = carried.iter().find(|(column, _)| *column == "password") {
+            let field_id = built_in_field_id(&item_id, "password");
             let rotated = name == "locker.add_item" || {
                 let stored = self
                     .vault
                     .locker_sealed_item_cell(&item_id, "password")
                     .map_err(|error| error.to_string())?
                     .and_then(|cell| {
-                        decrypt_under_locker_key(&key, &key_id, &item_id, &cell.ciphertext?).ok()
+                        decrypt_under_locker_key(&key, &key_id, &field_id, &cell.ciphertext?).ok()
                     });
                 stored.as_deref() != Some(password.as_str())
             };
             input["password_rotated"] = serde_json::Value::Bool(rotated);
         }
         for (column, value) in carried {
-            let sealed = encrypt_under_locker_key(&key, &key_id, &item_id, &value)
+            let field_id = built_in_field_id(&item_id, column);
+            let sealed = encrypt_under_locker_key(&key, &key_id, &field_id, &value)
                 .map_err(|error| error.to_string())?;
             input[column] = serde_json::Value::String(sealed);
         }

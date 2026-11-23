@@ -512,8 +512,9 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
             let (key_id, key) = seeder.locker.clone().unwrap_or_default();
             input["key_id"] = json!(key_id);
             for (column, value) in secrets {
+                let field_id = centraid_vault::commands::locker::built_in_field_id(&id, column);
                 let sealed = centraid_vault::custody::locker_key::encrypt_under_locker_key(
-                    &key, &key_id, &id, value,
+                    &key, &key_id, &field_id, value,
                 )
                 .map_err(|error| error.to_string())?;
                 input[column] = json!(sealed);

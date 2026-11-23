@@ -54,14 +54,15 @@ fn a_typed_secret_is_sealed_by_the_door_under_the_key_and_bound_to_its_item() {
         )
         .expect("the door answers");
     assert!(ran.ok, "{:?}", ran.reason);
+    let pw_id = centraid_vault::commands::locker::built_in_field_id("item-sealed", "password");
     let rows = door
         .table_where(
-            "locker_item",
-            "id, key_id, password",
+            "locker_item_field",
+            "id, key_id, value_sealed",
             "id",
             "id",
             "id = ?",
-            &["item-sealed".to_owned()],
+            std::slice::from_ref(&pw_id),
         )
         .expect("the owner reads");
     let [row] = rows.as_slice() else {
@@ -71,16 +72,16 @@ fn a_typed_secret_is_sealed_by_the_door_under_the_key_and_bound_to_its_item() {
         Some(centraid_apps_kit::row::Cell::Text(text)) => text.clone(),
         other => panic!("{column}: {other:?}"),
     };
-    let (key_id, sealed) = (text("key_id"), text("password"));
+    let (key_id, sealed) = (text("key_id"), text("value_sealed"));
     assert_ne!(sealed, "hunter2");
-    let open = |item: &str| {
+    let open = |row_id: &str| {
         centraid_vault::custody::locker_key::decrypt_under_locker_key(
             centraid_nativetools::vaultio::HARNESS_LOCKER_KEY,
             &key_id,
-            item,
+            row_id,
             &sealed,
         )
     };
-    assert_eq!(open("item-sealed").ok().as_deref(), Some("hunter2"));
-    assert!(open("item-2").is_err(), "bound to its item");
+    assert_eq!(open(&pw_id).ok().as_deref(), Some("hunter2"));
+    assert!(open("item-2:password").is_err(), "bound to its field row");
 }

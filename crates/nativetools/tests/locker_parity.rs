@@ -308,31 +308,45 @@ fn the_assistant_stars_retitles_trashes_and_restores_a_locker_item() {
         .expect("the vault opens");
     let rows = owner
         .table_where(
-            "locker_item",
-            "id, username, key_id, password",
+            "locker_item_field",
+            "id, item_id, field_key, value_text",
             "id",
             "id",
-            "username = ?",
+            "field_key = 'username' AND value_text = ?",
             &["sam2".to_owned()],
         )
         .expect("the owner reads");
     let [row] = rows.as_slice() else {
         panic!("the edited item: {rows:?}");
     };
-    let Some(centraid_apps_kit::row::Cell::Text(sealed)) = row.get("password") else {
-        panic!("the password cell is gone: {row:?}");
+    let Some(centraid_apps_kit::row::Cell::Text(item_id)) = row.get("item_id") else {
+        panic!("no item_id");
     };
-    let Some(centraid_apps_kit::row::Cell::Text(key_id)) = row.get("key_id") else {
+    let pw_id = centraid_vault::commands::locker::built_in_field_id(item_id, "password");
+    let pw_rows = owner
+        .table_where(
+            "locker_item_field",
+            "id, key_id, value_sealed",
+            "id",
+            "id",
+            "id = ?",
+            std::slice::from_ref(&pw_id),
+        )
+        .expect("the owner reads password");
+    let [pw_row] = pw_rows.as_slice() else {
+        panic!("the password field is gone: {pw_rows:?}");
+    };
+    let Some(centraid_apps_kit::row::Cell::Text(sealed)) = pw_row.get("value_sealed") else {
+        panic!("the password cell is gone: {pw_row:?}");
+    };
+    let Some(centraid_apps_kit::row::Cell::Text(key_id)) = pw_row.get("key_id") else {
         panic!("no key id");
-    };
-    let Some(centraid_apps_kit::row::Cell::Text(id)) = row.get("id") else {
-        panic!("no id");
     };
     assert_eq!(
         centraid_vault::custody::locker_key::decrypt_under_locker_key(
             vaultio::HARNESS_LOCKER_KEY,
             key_id,
-            id,
+            &pw_id,
             sealed,
         )
         .ok()
@@ -387,8 +401,8 @@ fn no_sealed_column_is_read_as_a_value() {
     assert!(
         log.tables
             .iter()
-            .any(|(table, columns)| table == "locker_item"
-                && columns.contains("password IS NOT NULL AS has_password")),
+            .any(|(table, columns)| table == "locker_item_field"
+                && columns.contains("value_sealed IS NOT NULL AS has_sealed")),
         "a sealed cell is read as its presence"
     );
     assert!(
@@ -501,17 +515,17 @@ fn a_secret_the_member_typed_reaches_the_door_as_typed_and_is_stored_sealed() {
         .expect("the vault opens");
     let rows = owner
         .table_where(
-            "locker_item",
-            "id, key_id, password",
+            "locker_item_field",
+            "id, key_id, value_sealed",
             "id",
             "id",
-            "id != ?",
-            &[String::new()],
+            "field_key = ?",
+            &["password".to_owned()],
         )
         .expect("the owner reads");
     let stored: Vec<_> = rows
         .iter()
-        .filter_map(|row| match row.get("password") {
+        .filter_map(|row| match row.get("value_sealed") {
             Some(centraid_apps_kit::row::Cell::Text(text)) => Some(text.clone()),
             _ => None,
         })

@@ -262,21 +262,13 @@ fn every_table_every_kind_and_every_relation_is_classified() {
             // Every sealed column is KEPT (as ciphertext) and is the history's own mask list, so a
             // sealed column added to custody is masked on read without a second edit.
             for (table, column) in [
-                ("locker_item", "password"),
-                ("locker_item", "otp_seed"),
-                ("locker_item", "card_number"),
-                ("locker_item", "cvv"),
-                ("locker_item", "content"),
                 ("locker_item_field", "value_sealed"),
+                ("locker_item_passkey", "private_key"),
             ] {
                 let part = shape.part(table).expect("classified");
                 assert!(part.columns.iter().any(|name| name == column), "{table}.{column}");
                 assert!(history::is_sealed(table, column), "{table}.{column}");
             }
-            // A passkey is state, its key sealed and masked like the rest.
-            let passkey = shape.part("locker_item_passkey").expect("classified");
-            assert!(passkey.columns.iter().any(|name| name == "private_key"));
-            assert!(history::is_sealed("locker_item_passkey", "private_key"));
             Ok(())
         })
         .expect("read");
@@ -635,7 +627,8 @@ fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item()
         })
         .expect("the key plane");
     let id = "item-1";
-    let first = sealed(id, FIRST);
+    let pw_id = centraid_vault::commands::locker::built_in_field_id(id, "password");
+    let first = sealed(&pw_id, FIRST);
     w.ok(
         "locker.add_item",
         json!({ "item_id": id, "type": "login", "title": "The bank", "username": "ada@example.com",
@@ -654,10 +647,10 @@ fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item()
     assert_eq!(w.revisions(), 0, "a creation has no earlier state");
 
     // A password change ALONE is a version (it was not before the ruling).
-    edit("ada@example.com", &sealed(id, SECOND));
+    edit("ada@example.com", &sealed(&pw_id, SECOND));
     assert_eq!(w.revisions(), 1, "a changed sealed cell is history");
     // And a change that moves a plain field and the password is one version.
-    edit("ada@work.example", &sealed(id, THIRD));
+    edit("ada@work.example", &sealed(&pw_id, THIRD));
     let versions = w.versions(id);
     assert_eq!(versions.len(), 2);
 
@@ -676,7 +669,7 @@ fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item()
         })
         .expect("history");
     assert!(
-        all.contains("\"password\":\"lk1:"),
+        all.contains("\"value_sealed\":\"lk1:"),
         "the cell is kept, as ciphertext"
     );
     assert!(
@@ -706,7 +699,10 @@ fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item()
     }
 
     // (ii) READ: a changed secret is seen to have changed and is shown as nothing else.
-    let (was, now) = World::change(&versions[1], "locker_item.password");
+    let (was, now) = World::change(
+        &versions[1],
+        &format!("locker_item_field[{pw_id}].value_sealed"),
+    );
     assert_eq!((was, now), (json!(history::MASK), json!(history::MASK)));
     // The whole version leaves the vault masked too: the cell reads as the placeholder.
     let whole = w
@@ -718,8 +714,8 @@ fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item()
     let sealed_cell = whole
         .fields
         .iter()
-        .find(|(field, _)| field == "locker_item.password")
-        .map(|(_, value)| value.clone());
+        .find(|(field, _)| field == &format!("locker_item_field[{pw_id}]"))
+        .and_then(|(_, value)| value.get("value_sealed").cloned());
     assert_eq!(sealed_cell, Some(json!(history::MASK)));
     assert!(
         !format!("{whole:?}").contains("lk1:"),
@@ -742,8 +738,12 @@ fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item()
         !read.contains("lk1:"),
         "a version's diff shows no ciphertext"
     );
+    let user_id = centraid_vault::commands::locker::built_in_field_id(id, "username");
     assert_eq!(
-        World::change(&versions[0], "locker_item.username"),
+        World::change(
+            &versions[0],
+            &format!("locker_item_field[{user_id}].value_text")
+        ),
         (json!("ada@example.com"), json!("ada@work.example"))
     );
 
@@ -755,7 +755,7 @@ fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item()
         .expect("reads")
         .expect("the version held a password");
     assert_eq!(cell.key_id.as_deref(), Some("k1"));
-    assert_eq!(opened(id, &cell.ciphertext.expect("sealed")), FIRST);
+    assert_eq!(opened(&pw_id, &cell.ciphertext.expect("sealed")), FIRST);
     assert!(
         w.scratch
             .vault
@@ -772,9 +772,11 @@ fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item()
         json!({ "id": id, "seq": versions[1].seq }),
     );
     assert_eq!(out["restored"], true);
-    let live: String = w.count_text("SELECT password FROM locker_item WHERE id = 'item-1'");
+    let live: String = w.count_text(
+        "SELECT value_sealed FROM locker_item_field WHERE item_id = 'item-1' AND field_key = 'password'",
+    );
     assert_eq!(
-        opened(id, &live),
+        opened(&pw_id, &live),
         FIRST,
         "the old password is the live one again"
     );
@@ -785,8 +787,10 @@ fn a_changed_password_is_kept_sealed_masked_on_read_and_restored_with_the_item()
     );
     // Undo the restore: the password it replaced comes back.
     w.ok("history.undo", json!({ "id": id }));
-    let live: String = w.count_text("SELECT password FROM locker_item WHERE id = 'item-1'");
-    assert_eq!(opened(id, &live), THIRD);
+    let live: String = w.count_text(
+        "SELECT value_sealed FROM locker_item_field WHERE item_id = 'item-1' AND field_key = 'password'",
+    );
+    assert_eq!(opened(&pw_id, &live), THIRD);
     for name in ["vault.db", "vault.db-wal", "vault.db-shm"] {
         scan(name);
     }

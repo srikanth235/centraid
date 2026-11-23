@@ -29,8 +29,8 @@ pub use centraid_vault::commands::entity::TRASH_DAYS;
 /// one schema module so `centraid-apps-locker` never restates them.
 pub mod locker {
     pub use centraid_vault::commands::locker::{
-        ALL_FIELDS, FIELD_KINDS, ITEM_TYPES, SEALED_ITEM_CELLS, SEALED_PLACEHOLDER, is_sealed_kind,
-        secret_cells, type_fields,
+        ALL_FIELDS, BuiltInField, FIELD_KINDS, ITEM_TYPES, SEALED_ITEM_CELLS, SEALED_PLACEHOLDER,
+        built_in_field, built_in_field_id, is_sealed_kind, secret_cells, type_fields,
     };
 }
 

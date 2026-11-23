@@ -63,11 +63,6 @@ const TAG_BYTES: usize = 16;
 /// secret. Everything else on these tables is the browsable half a locked Locker
 /// still needs.
 pub const LOCKER_ENCRYPTED_COLUMNS: &[(&str, &str, &[&str])] = &[
-    (
-        "locker_item",
-        "id",
-        &crate::commands::locker::SEALED_ITEM_CELLS,
-    ),
     ("locker_item_field", "id", &["value_sealed"]),
     ("locker_item_passkey", "item_id", &["private_key"]),
 ];
@@ -367,9 +362,10 @@ impl crate::file::Vault {
         })
     }
 
-    /// One sealed `locker_item` cell of a LIVE item, for a reveal. `None`
-    /// when no live item has `item_id` or `column` is
-    /// not one of the five sealed item cells.
+    /// One built-in sealed cell of a LIVE item, for a reveal. `None` when no
+    /// live item has `item_id` or `column` is not one of the five sealed item
+    /// cells; `Some(SealedItemCell { ciphertext: None, key_id: None })` when
+    /// the live item has no value stored for that field.
     ///
     /// # Errors
     /// A failed read.
@@ -382,14 +378,15 @@ impl crate::file::Vault {
             return Ok(None);
         }
         self.read(|connection| {
-            // The column is one of five compile-time names, checked above, so
-            // it is spliced; the id is bound.
-            let sql = format!(
-                "SELECT i.{column}, i.key_id FROM locker_item i JOIN entity e ON e.id = i.id
-                  WHERE i.id = ?1 AND e.deleted_at IS NULL"
-            );
-            let mut statement = connection.prepare(&sql)?;
-            let mut rows = statement.query([item_id])?;
+            let mut statement = connection.prepare(
+                "SELECT f.value_sealed, f.key_id
+                   FROM locker_item i
+                   JOIN entity e ON e.id = i.id
+                   LEFT JOIN locker_item_field f
+                     ON f.item_id = i.id AND f.field_key = ?2
+                  WHERE i.id = ?1 AND e.deleted_at IS NULL",
+            )?;
+            let mut rows = statement.query([item_id, column])?;
             Ok(match rows.next()? {
                 Some(row) => {
                     let ciphertext: Option<String> = row.get(0)?;
@@ -443,11 +440,11 @@ impl crate::file::Vault {
     }
 
     /// One sealed cell of a LIVE item as an EARLIER version held it, for a reveal of a changed
-    /// secret: the item's own cell (`column`, one of the sealed item cells) or, when `field_id`
-    /// is stated, that custom field's `sealed`-kind value. `None` when the item is not live, the
+    /// secret: a built-in cell (`column`, one of the sealed item cells) or, when `field_id`
+    /// is stated, that field row's `sealed`-kind value. `None` when the item is not live, the
     /// version is not in its history, or the cell is not one a reveal may open (a one-time-code
     /// seed is `SEED_NOT_SHOWN` for the item and for a field, as it is live). The ciphertext is
-    /// as the version kept it, bound to the same row id and key generation it was sealed with, so
+    /// as the version kept it, bound to the same field id and key generation it was sealed with, so
     /// the core opens it with the same key and the same AAD as the live cell.
     ///
     /// # Errors
@@ -463,6 +460,9 @@ impl crate::file::Vault {
         if by_field && column != "value_sealed"
             || !by_field && !crate::commands::locker::SEALED_ITEM_CELLS.contains(&column)
         {
+            return Ok(None);
+        }
+        if !by_field && column == "otp_seed" {
             return Ok(None);
         }
         self.read(|connection| {
@@ -484,30 +484,32 @@ impl crate::file::Vault {
                     .filter(|value| !value.is_empty())
                     .map(str::to_owned)
             };
-            let (row, bound) = if by_field {
-                let field = state
-                    .get("locker_item_field")
-                    .and_then(serde_json::Value::as_array)
-                    .into_iter()
-                    .flatten()
-                    .find(|row| text(row, "id").as_deref() == Some(field_id));
-                match field {
-                    Some(field) if text(field, "kind").as_deref() == Some("sealed") => {
-                        (field.clone(), "value_sealed")
+            let field = state
+                .get("locker_item_field")
+                .and_then(serde_json::Value::as_array)
+                .into_iter()
+                .flatten()
+                .find(|row| {
+                    if by_field {
+                        text(row, "id").as_deref() == Some(field_id)
+                    } else {
+                        text(row, "field_key").as_deref() == Some(column)
                     }
-                    _ => return Ok(None),
+                });
+            match field {
+                Some(row) if text(row, "kind").as_deref() == Some("sealed") => {
+                    let ciphertext = text(row, "value_sealed");
+                    Ok(Some(SealedItemCell {
+                        key_id: ciphertext.as_ref().and_then(|_| text(row, "key_id")),
+                        ciphertext,
+                    }))
                 }
-            } else {
-                match state.get("locker_item").filter(|row| row.is_object()) {
-                    Some(item) => (item.clone(), column),
-                    None => return Ok(None),
-                }
-            };
-            let ciphertext = text(&row, bound);
-            Ok(Some(SealedItemCell {
-                key_id: ciphertext.as_ref().and_then(|_| text(&row, "key_id")),
-                ciphertext,
-            }))
+                None if !by_field => Ok(Some(SealedItemCell {
+                    ciphertext: None,
+                    key_id: None,
+                })),
+                _ => Ok(None),
+            }
         })
     }
 
@@ -593,9 +595,19 @@ mod tests {
             .unwrap();
         connection
             .execute(
-                "INSERT INTO locker_item (id, type, password, key_id) \
-                 VALUES (?1, 'login', ?2, ?3)",
-                (item_id, password, key_id),
+                "INSERT INTO locker_item (id, type) VALUES (?1, 'login')",
+                [item_id],
+            )
+            .unwrap();
+        let field_id = crate::commands::locker::built_in_field_id(item_id, "password");
+        connection
+            .execute(
+                "INSERT INTO locker_item_field \
+                   (id, item_id, field_key, section, label, kind, value_sealed, \
+                    created_at, updated_at, key_id) \
+                 VALUES (?1, ?2, 'password', '', 'Password', 'sealed', ?3, \
+                         '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', ?4)",
+                (&field_id, item_id, password, key_id),
             )
             .unwrap();
     }
@@ -711,14 +723,15 @@ mod tests {
         let secrets = ["s3cret", "otp-seed-bytes", "4111111111111111"];
         for (index, plaintext) in secrets.iter().enumerate() {
             let item = format!("item-{index}");
-            let sealed = encrypt_under_locker_key(&key, "k-1", &item, plaintext).unwrap();
+            let field_id = crate::commands::locker::built_in_field_id(&item, "password");
+            let sealed = encrypt_under_locker_key(&key, "k-1", &field_id, plaintext).unwrap();
             insert_item(&fixture.connection, &item, &sealed, "k-1");
         }
         drop(fixture.connection);
 
         let stolen = rusqlite::Connection::open(&fixture.vault_file).unwrap();
         let mut statement = stolen
-            .prepare("SELECT id, password, key_id FROM locker_item ORDER BY id")
+            .prepare("SELECT id, value_sealed, key_id FROM locker_item_field ORDER BY id")
             .unwrap();
         let cells = statement
             .query_map([], |row| {
@@ -734,25 +747,25 @@ mod tests {
         assert_eq!(cells.len(), secrets.len());
 
         let candidates: Vec<Vec<u8>> = vec![[0_u8; 32].to_vec(), b"k-1".to_vec()];
-        for (item_id, cell, stamped) in &cells {
+        for (field_id, cell, stamped) in &cells {
             assert!(
                 is_locker_ciphertext(cell),
-                "{item_id} must be stored as ciphertext, not plaintext"
+                "{field_id} must be stored as ciphertext, not plaintext"
             );
             for plaintext in secrets {
                 assert!(
                     !cell.contains(plaintext),
-                    "{item_id}'s cell must not carry its plaintext"
+                    "{field_id}'s cell must not carry its plaintext"
                 );
             }
             for candidate in &candidates {
                 assert!(
-                    decrypt_under_locker_key(candidate, stamped, item_id, cell).is_err(),
-                    "{item_id} opened under a key that is not K"
+                    decrypt_under_locker_key(candidate, stamped, field_id, cell).is_err(),
+                    "{field_id} opened under a key that is not K"
                 );
             }
             // …and it DOES open under `K`, so the refusals above are not vacuous.
-            assert!(decrypt_under_locker_key(&key, stamped, item_id, cell).is_ok());
+            assert!(decrypt_under_locker_key(&key, stamped, field_id, cell).is_ok());
         }
         let raw = std::fs::read(&fixture.vault_file).unwrap();
         for plaintext in secrets {
