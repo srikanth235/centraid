@@ -56,7 +56,7 @@ pub const WORDS: usize = 24;
 /// indices, and one shared across them would be two vaults at one identity.
 pub const INDEX_PREFIX: &str = "vault-index.";
 /// A gateway's bearer token, in the DEVICE store only: `gateway-token.<vault_id>.<gateway_id>`
-/// (#1191 B15, `contracts/backup/decisions.md` E12). The core holds it in memory and writes it nowhere.
+/// (#1191 B15, E12 in `.claude/skills/backup/phone.md`, "Credentials"). The core holds it in memory and writes it nowhere.
 pub const GATEWAY_TOKEN_PREFIX: &str = "gateway-token.";
 /// The highest index this phone ever recorded; never lowered.
 pub const INDEX_HIGH_WATER: &str = "vault-index-high-water";

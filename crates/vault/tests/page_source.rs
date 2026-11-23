@@ -1,5 +1,5 @@
 //! The vault's pages read through `sqlite_dbpage` on a pinned connection, with no plaintext
-//! copy of the vault on disk (#1191 B11, `contracts/backup/spike-page-read.md`).
+//! copy of the vault on disk (#1191 B11, `.claude/skills/backup/phone.md`).
 
 mod common;
 

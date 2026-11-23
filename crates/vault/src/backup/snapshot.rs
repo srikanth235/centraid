@@ -101,6 +101,7 @@ fn previous(state: &DeviceState, keys: &BackupKeys, device: &Device) -> Option<(
 fn entry_of(
     vault: &Vault,
     keys: &BackupKeys,
+    state: &DeviceState,
     file: &files::ContentFile,
     size: u64,
 ) -> Result<Entry> {
@@ -109,7 +110,12 @@ fn entry_of(
     } else {
         Class::Thumbnails
     };
-    let refs = content::refs_of(vault, keys, &file.h, size, class)?.unwrap_or_default();
+    let mut refs = content::refs_of(vault, keys, &file.h, size, class)?.unwrap_or_default();
+    // An original only the OS photo library holds is listed by the refs its stream was sealed
+    // into (§6.4); its chunks reach a gateway from staging as the shell streams them.
+    if refs.is_empty() && file.is_original() && size > 0 {
+        refs = state.os_chunks(&file.h)?;
+    }
     let (original, thumbnail) = if file.is_original() {
         (refs, Vec::new())
     } else {
@@ -264,7 +270,7 @@ pub fn take(
             entries.push(known.clone());
             continue;
         }
-        let entry = entry_of(vault, keys, file, size)?;
+        let entry = entry_of(vault, keys, state, file, size)?;
         if entry.has_bytes() {
             entries_new += 1;
         }

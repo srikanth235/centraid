@@ -1419,7 +1419,9 @@ pub fn read_back(env: &Env<'_>, store: &dyn Store) -> Result<ReadBack> {
         let mut object = Vec::new();
         let opened = match store.get(&chunk.name, &mut object) {
             Ok(_) => sealed::open(env.keys, chunk, &object).is_ok(),
-            Err(StoreError::Missing(_)) => false,
+            // A copy the destination serves off its own digest (the real client checks it on the
+            // way in) is damaged exactly as one that will not open is.
+            Err(StoreError::Missing(_) | StoreError::Damaged(_)) => false,
             Err(error) => return Err(error.into()),
         };
         report.read += 1;

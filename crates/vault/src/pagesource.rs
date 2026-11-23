@@ -1,5 +1,5 @@
 //! The vault's pages, read without a plaintext copy of the vault on disk
-//! (#1191 B11, `contracts/backup/spike-page-read.md`).
+//! (#1191 B11; the pages are read on a pinned reader through `sqlite_dbpage`, see `.claude/skills/backup/phone.md`).
 //!
 //! A snapshot used to copy the vault with SQLite's online-backup API into a
 //! scratch file and read that. This reads the pages themselves through

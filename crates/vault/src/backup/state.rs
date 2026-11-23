@@ -14,7 +14,7 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use centraid_media::sealed::{Name, PlaintextHash};
+use centraid_media::sealed::{Class, Digest, Name, PlaintextHash, Ref};
 use rusqlite::{Connection, OptionalExtension as _, params};
 
 use super::tree::NodeSource;
@@ -840,6 +840,61 @@ impl DeviceState {
         self.connection
             .execute("DELETE FROM local_bytes WHERE hash = ?1", [hash.to_hex()])?;
         Ok(())
+    }
+
+    // ── originals only the OS library holds ──
+
+    /// Record the sealed chunks of the original `hash`, in order, whose bytes only the OS photo
+    /// library holds: what the snapshot lists for it. Replaces any earlier record.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn put_os_chunks(&self, hash: &PlaintextHash, refs: &[Ref]) -> Result<()> {
+        let transaction = self.connection.unchecked_transaction()?;
+        transaction.execute("DELETE FROM os_chunk WHERE hash = ?1", [hash.to_hex()])?;
+        for (index, reference) in refs.iter().enumerate() {
+            transaction.execute(
+                "INSERT INTO os_chunk (hash, idx, name, digest, len) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![
+                    hash.to_hex(),
+                    signed(index as u64),
+                    reference.name.to_hex(),
+                    reference.digest.to_hex(),
+                    i64::from(reference.len)
+                ],
+            )?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// The recorded chunks of `hash`, in order; empty when none were recorded.
+    ///
+    /// # Errors
+    /// SQLite's refusal, or a row that will not read back.
+    pub fn os_chunks(&self, hash: &PlaintextHash) -> Result<Vec<Ref>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT name, digest, len FROM os_chunk WHERE hash = ?1 ORDER BY idx")?;
+        let rows = statement.query_map([hash.to_hex()], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (name, digest, len) = row?;
+            let bad = || invariant("an os_chunk row does not read back");
+            out.push(Ref {
+                name: Name::from_hex(&name).map_err(|_| bad())?,
+                digest: Digest::from_hex(&digest).map_err(|_| bad())?,
+                len: u32::try_from(len).map_err(|_| bad())?,
+                class: Class::Originals,
+            });
+        }
+        Ok(out)
     }
 
     // ── undo ──

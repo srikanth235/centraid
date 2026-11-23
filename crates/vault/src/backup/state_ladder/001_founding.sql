@@ -56,6 +56,18 @@ CREATE TABLE local_bytes (
   edited INTEGER NOT NULL DEFAULT 0 CHECK (edited IN (0, 1) AND (edited = 0 OR source = 'os'))
 ) STRICT;
 
+-- The chunk refs of an original whose bytes only the OS photo library holds (§6.4). The stage
+-- door seals the stream once to learn them; the sealed chunks that fit go to staging, and the
+-- snapshot lists these refs in the tree so a gateway can be owed them before every byte is staged.
+CREATE TABLE os_chunk (
+  hash   TEXT NOT NULL CHECK (length(hash) = 64 AND hash NOT GLOB '*[^0-9a-f]*'),
+  idx    INTEGER NOT NULL CHECK (idx >= 0),
+  name   TEXT NOT NULL CHECK (length(name) = 64 AND name NOT GLOB '*[^0-9a-f]*'),
+  digest TEXT NOT NULL CHECK (length(digest) = 64 AND digest NOT GLOB '*[^0-9a-f]*'),
+  len    INTEGER NOT NULL CHECK (len > 0),
+  PRIMARY KEY (hash, idx)
+) STRICT, WITHOUT ROWID;
+
 -- The one row of what the snapshot reads need to remember: the newest snapshot's root, how many
 -- snapshots since a full read (and when it was), and the pages written during the last pin, which
 -- the next snapshot reads although the checkpoint has since moved them out of the WAL.
