@@ -1710,19 +1710,15 @@ fn the_backup_plane_doors_are_request_kinds_and_answer_an_unpaired_phone() {
     ));
 
     // THE REQUEST'S OWN REFUSALS: a hash that is not 32 bytes.
-    for (id, door) in [(
-        49,
-        wire::request::Kind::FetchOriginal(wire::FetchOriginalRequest {
-            content_hash: vec![0xAB; 3],
-        }),
-    )] {
-        let (code, bytes) = call(opened.handle, &envelope(id, door.clone()));
-        assert_eq!(code, CENTRAID_BAD_ARGUMENT, "{door:?}");
-        let Some(wire::envelope::Body::Error(error)) = answer(&bytes).body else {
-            panic!("{door:?} is refused with an Error body");
-        };
-        assert_eq!(error.code, wire::ErrorCode::InvalidRequest as i32);
-    }
+    let door = wire::request::Kind::FetchOriginal(wire::FetchOriginalRequest {
+        content_hash: vec![0xAB; 3],
+    });
+    let (code, bytes) = call(opened.handle, &envelope(49, door.clone()));
+    assert_eq!(code, CENTRAID_BAD_ARGUMENT, "{door:?}");
+    let Some(wire::envelope::Body::Error(error)) = answer(&bytes).body else {
+        panic!("{door:?} is refused with an Error body");
+    };
+    assert_eq!(error.code, wire::ErrorCode::InvalidRequest as i32);
 }
 
 /// An entered event read owns its state until callbacks and panic reporting
