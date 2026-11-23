@@ -22,7 +22,7 @@ What the Rust screens draw, and the code that keeps them honest. The wording rul
 ## Reasons
 
 - `REASONS` lists the 13 `WaitReason`s in the order the line shows them. One row per reason with a count above zero, each worded by `strings::backup`.
-- The reasons come from the core (`phone/drain.rs`). A screen never decides one. Add a reason in `phone.proto`, the core, `REASONS`, `waiting_words`, `row_reason` and the strings together.
+- The reasons come from the core (`phone/drain/policy.rs`). A screen never decides one. Add a reason in `phone.proto`, the core, `REASONS`, `waiting_words`, `row_reason` and the strings together.
 - While items wait on `Gateway`, Home browses the local network for the gateway's new address. It runs only with the page and the app in front.
 
 ## Home (`home.rs`)

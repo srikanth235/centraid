@@ -37,8 +37,8 @@
 2. Add the adapter side: `src/server/http.rs` renders and decides nothing. SQL lives in `src/server/sql/*.sql`; every listing is a seek by key (add it to `sql::LISTINGS` so `tests/plans.rs` sees it); and the schema is a ladder (`sql/ladder/NNN_*.sql`, one transaction per rung, `user_version` counts them); a change is a new rung once released.
 3. Add the client method in `src/client/mod.rs`.
 4. Add a named case to `rules::conformance::CASES` (64 now), and a row in `conformance::NAMED` with a test of that name in both conformance files if `tests.md` names one. It runs over the in-memory rules and over the wire, and the two must agree. Add a case in the same change as any new rule.
-5. Mirror it in the phone's `Store` trait and `MemoryStore` in [`store.rs`](../../../crates/vault/src/backup/store.rs). The vault crate does not depend on the gateway, so it restates `MAX_NAMES`, `MAX_BUNDLE_BYTES` and `GRACE_MS` of `limits.rs` by hand as `NAMES_PER_CALL`, `BUNDLE_BYTES` and `TOMBSTONE_GRACE_MS`. Keep them equal.
-6. Check how the phone hears it. [`link.rs`](../../../crates/core/src/phone/link.rs) turns refusals into `StoreError`, and `refused_by` and `heard_of` in `drain.rs` turn a code into a wait reason. An unknown code reads as "refused for another reason".
+5. Mirror it in the phone's `Store` trait in [`store.rs`](../../../crates/vault/src/backup/store.rs). `centraid-vault` depends on `centraid-gateway` with `default-features = false` (pure rules only, zero I/O), so limits, refusal codes, wire enums and `MemoryStore` (`Gateway<MemoryState>`) all come straight from `centraid_gateway::rules` rather than being restated.
+6. Check how the phone hears it. [`link.rs`](../../../crates/core/src/phone/link.rs) turns refusals into `StoreError`, and `refused_by` and `heard_of` in [`drain/policy.rs`](../../../crates/core/src/phone/drain/policy.rs) turn a code into a wait reason. An unknown code reads as "refused for another reason".
 7. Update the README tables in the same change.
 
 ## Tests
