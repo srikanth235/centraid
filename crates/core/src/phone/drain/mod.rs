@@ -66,6 +66,7 @@
 
 mod media;
 mod os;
+mod plan;
 mod policy;
 mod records;
 
@@ -557,188 +558,183 @@ fn pass_over(
     // A ROW KEPT FOR A GATEWAY THAT NEVER CAME BACK IS KEPT A DAY, not for ever.
     mover::release_expired(state, spool, now_ms()).map_err(plane_error)?;
 
-    // THE WRITER EPOCH, AT CONTACT (#1080, the sweep's R6), and — once a core's life — every
-    // owed name squared with each gateway (#1080 ruling 7: reconciled "on every launch").
     let owes_reconcile = handle.owes_full_reconcile();
-    let mut squared_all = true;
-    each(&mut live, state, pass, |reached, pass| {
-        let store = &reached.store;
-        let id = &reached.gateway.gateway_id;
-        // Another phone that restored the vault claimed a later epoch; this phone's token is
-        // refused `MOVED` only when it writes, and a pass with nothing to write would never
-        // learn it. The head answers the writer epoch on every read, so the pass asks first.
-        match store.head_and_epoch() {
-            Ok((epoch, _)) if epoch > reached.gateway.epoch => {
-                return Err(CoreError::VaultMoved {
-                    current_epoch: epoch,
-                    moved_at_ms: 0,
-                });
-            }
-            // THE GATEWAY KNOWS THIS PHONE'S TOKEN, whatever it refused before: a mark that
-            // said to pair again is spent (the sweep's F2).
-            Ok((_, head)) => {
-                if reached.gateway.reach == Reach::PairAgain {
-                    set_reach(state, id, Reach::Ok)?;
-                }
-                // A HEAD THAT WENT BACKWARDS (#1188, B4): the gateway names an older generation
-                // than this phone signed there, or none (a restored backup of the gateway's own
-                // disk, a swapped store). It lost what it held since, so the blob walk starts
-                // again (`exists` finds what is missing) and a snapshot is retaken at once.
-                let rolled = match (reached.gateway.head, head) {
-                    (Some(_), None) => true,
-                    (Some(_), Some(head)) => head.generation < reached.gateway.generation,
-                    (None, _) => false,
-                };
-                if rolled {
-                    tracing::warn!(gateway = %id, "the gateway's head went backwards");
-                    state.set_cursor(id, 0).map_err(plane_error)?;
-                    pass.rolled.insert(id.clone());
-                    plane.set_rolled(id, true);
-                }
-            }
-            Err(StoreError::Unreachable(reason)) => {
-                pass.stopped_by(&Stop::Unreachable(reason))?;
-                squared_all = false;
-                return Ok(Flow::Stop);
-            }
-            Err(StoreError::Untrusted(reason)) => {
-                pass.stopped_by(&Stop::Untrusted(reason))?;
-                squared_all = false;
-                return Ok(Flow::Stop);
-            }
-            Err(error) => return Err(store_error(error)),
-        }
-        // EVERY NAME OWED, ASKED ONCE A LIFE (or at once, after a rollback): the ones the gateway
-        // already holds are let go. The library is NOT walked again from its start (B13): a
-        // gateway that lost a file since is found by the read-back's sample of originals' chunks,
-        // which resets the cursor for exactly that repair.
-        if owes_reconcile || pass.rolled.contains(id) {
-            let squared =
-                mover::reconcile(state, spool, store, &SystemClock).map_err(plane_error)?;
-            // NAMES THE GATEWAY HELD ARE FILES CONFIRMED, here as in a pass's own rounds:
-            // their rows may be in no snapshot yet (R-1080-C15).
-            pass.media_confirmed = pass.media_confirmed.saturating_add(squared.confirmed.len());
-        }
-        Ok(Flow::Continue)
-    })?;
-    if owes_reconcile && everyone && squared_all && live.len() == fleet.len() {
-        handle.reconciled_fully();
-    }
-
-    // 0. THE PHONE VERIFIES, BEFORE IT WRITES (#1188, B4; #1191, E10): a keyed random sample of what each gateway
-    // holds of the newest snapshot is read back and opened, so a gateway that lost or damaged a
-    // part is found by this pass and not by a restore: a snapshot is retaken at once.
-    each(&mut live, state, pass, |reached, pass| {
-        verify_sample(
-            plane,
-            state,
-            &reached.store,
-            &keyring.backup,
-            conditions.metered,
-            pass,
-        )?;
-        Ok(Flow::Continue)
-    })?;
-
     let budget = plane.budget();
     pass.free = plane.free_bytes();
+    let mut planner = plan::PassPlan::new(*conditions, fleet.len(), everyone, owes_reconcile);
 
-    // 1. THE RECORDS, when the link may carry them: one snapshot, planned against every
-    // gateway that is due or behind.
-    if conditions.may_move(Kind::Records) && !live.is_empty() {
-        let owed = plane.snapshot_owed();
-        let mut take = false;
-        // A VAULT THAT HAS NOT CHANGED SINCE A SNAPSHOT EVERY GATEWAY HOLDS WHOLE IS NOT COPIED
-        // AGAIN, however long ago that was and whoever asked (#1188, design 6).
-        if let Some(acked) = newest_stands(handle, state, &live, &pass.rolled)? {
-            // ASKED FOR, IT IS ANSWERED with the gateway's own time for the head it holds.
-            if owed {
-                pass.acked_at_ms = i64::try_from(acked).ok();
+    loop {
+        match planner.next_step() {
+            plan::Step::ContactAndReconcile => {
+                // THE WRITER EPOCH, AT CONTACT (#1080, the sweep's R6), and — once a core's life —
+                // every owed name squared with each gateway (#1080 ruling 7: reconciled "on every launch").
+                let mut squared_all = true;
+                each(&mut live, state, pass, |reached, pass| {
+                    let store = &reached.store;
+                    let id = &reached.gateway.gateway_id;
+                    match store.head_and_epoch() {
+                        Ok((epoch, _)) if epoch > reached.gateway.epoch => {
+                            return Err(CoreError::VaultMoved {
+                                current_epoch: epoch,
+                                moved_at_ms: 0,
+                            });
+                        }
+                        Ok((_, head)) => {
+                            if reached.gateway.reach == Reach::PairAgain {
+                                set_reach(state, id, Reach::Ok)?;
+                            }
+                            if plan::head_rolled_back(
+                                reached.gateway.head.is_some(),
+                                reached.gateway.generation,
+                                head.as_ref().map(|h| h.generation),
+                            ) {
+                                tracing::warn!(gateway = %id, "the gateway's head went backwards");
+                                state.set_cursor(id, 0).map_err(plane_error)?;
+                                pass.rolled.insert(id.clone());
+                                plane.set_rolled(id, true);
+                            }
+                        }
+                        Err(StoreError::Unreachable(reason)) => {
+                            pass.stopped_by(&Stop::Unreachable(reason))?;
+                            squared_all = false;
+                            return Ok(Flow::Stop);
+                        }
+                        Err(StoreError::Untrusted(reason)) => {
+                            pass.stopped_by(&Stop::Untrusted(reason))?;
+                            squared_all = false;
+                            return Ok(Flow::Stop);
+                        }
+                        Err(error) => return Err(store_error(error)),
+                    }
+                    if owes_reconcile || pass.rolled.contains(id) {
+                        let squared = mover::reconcile(state, spool, store, &SystemClock)
+                            .map_err(plane_error)?;
+                        pass.media_confirmed =
+                            pass.media_confirmed.saturating_add(squared.confirmed.len());
+                    }
+                    Ok(Flow::Continue)
+                })?;
+                if planner.on_contact(live.len(), squared_all) {
+                    handle.reconciled_fully();
+                }
             }
-            plane.set_snapshot_owed(false);
-        } else {
-            for reached in &live {
-                take |= snapshot_due(
-                    state,
-                    reached.store.gateway_id(),
-                    owed,
-                    pass.rolled.contains(reached.store.gateway_id()),
-                )?;
+            plan::Step::VerifySamples => {
+                // 0. THE PHONE VERIFIES, BEFORE IT WRITES (#1188, B4; #1191, E10).
+                each(&mut live, state, pass, |reached, pass| {
+                    verify_sample(
+                        plane,
+                        state,
+                        &reached.store,
+                        &keyring.backup,
+                        conditions.metered,
+                        pass,
+                    )?;
+                    Ok(Flow::Continue)
+                })?;
+                planner.on_verify(live.len());
             }
-        }
-        if round.records(take, &mut live, budget, pass)? {
-            return Ok(());
-        }
-    }
-
-    // 2. THE MEDIA, INTERLEAVED: one bounded round per gateway in turn (walk the vault's new
-    // claims, seal what fits the spool, move it), again, until every gateway has finished or
-    // left. A slow gateway takes its round and no more, so every reachable gateway makes progress
-    // in every pass and in every background window (#1188, item 16).
-    let bytes = handle.bytes();
-    let mut all_finished = true;
-    let mut feeds: Vec<Feed<'_>> = live.iter().map(|reached| Feed::new(reached)).collect();
-    let mut left: BTreeSet<String> = BTreeSet::new();
-    while feeds.iter().any(|feed| !feed.finished) {
-        for feed in feeds.iter_mut().filter(|feed| !feed.finished) {
-            pass.heard = None;
-            let id = feed.reached.gateway.gateway_id.clone();
-            let step = media_round(
-                feed,
-                handle,
-                state,
-                spool,
-                &keyring.backup,
-                bytes.as_ref().map(centraid_blobs::ContentBytes::store),
-                conditions,
-                budget,
-                deadline,
-                &reachable,
-                pass,
-            );
-            match step {
-                Ok(Flow::Continue) => {}
-                Ok(Flow::Stop) => {
-                    feed.finished = true;
-                    all_finished = false;
-                    left.insert(id.clone());
-                    if let Some(heard) = pass.heard.take() {
-                        set_reach(state, &id, heard)?;
+            plan::Step::Records => {
+                // 1. THE RECORDS, when the link may carry them: one snapshot, planned against every
+                // gateway that is due or behind.
+                let owed = plane.snapshot_owed();
+                let newest = newest_stands(handle, state, &live, &pass.rolled)?;
+                let any_due = if newest.is_some() {
+                    false
+                } else {
+                    let mut due = false;
+                    for reached in &live {
+                        due |= snapshot_due(
+                            state,
+                            reached.store.gateway_id(),
+                            owed,
+                            pass.rolled.contains(reached.store.gateway_id()),
+                        )?;
+                    }
+                    due
+                };
+                let decision = plan::decide_records(newest, owed, any_due);
+                if let Some(acked) = decision.acked_at_ms {
+                    pass.acked_at_ms = Some(acked);
+                }
+                if decision.clear_owed {
+                    plane.set_snapshot_owed(false);
+                }
+                let stopped_early =
+                    round.records(decision.take_snapshot, &mut live, budget, pass)?;
+                planner.on_records(live.len(), stopped_early);
+            }
+            plan::Step::Media => {
+                // 2. THE MEDIA, INTERLEAVED: one bounded round per gateway in turn (#1188, item 16).
+                let bytes = handle.bytes();
+                let mut all_finished = true;
+                let mut feeds: Vec<Feed<'_>> =
+                    live.iter().map(|reached| Feed::new(reached)).collect();
+                let mut left: BTreeSet<String> = BTreeSet::new();
+                while feeds.iter().any(|feed| !feed.finished) {
+                    for feed in feeds.iter_mut().filter(|feed| !feed.finished) {
+                        pass.heard = None;
+                        let id = feed.reached.gateway.gateway_id.clone();
+                        let step = media_round(
+                            feed,
+                            handle,
+                            state,
+                            spool,
+                            &keyring.backup,
+                            bytes.as_ref().map(centraid_blobs::ContentBytes::store),
+                            conditions,
+                            budget,
+                            deadline,
+                            &reachable,
+                            pass,
+                        );
+                        match step {
+                            Ok(Flow::Continue) => {}
+                            Ok(Flow::Stop) => {
+                                feed.finished = true;
+                                all_finished = false;
+                                left.insert(id.clone());
+                                if let Some(heard) = pass.heard.take() {
+                                    set_reach(state, &id, heard)?;
+                                }
+                            }
+                            Err(error) => {
+                                feed.finished = true;
+                                all_finished = false;
+                                left.insert(id);
+                                absorb(state, pass, feed.reached, error)?;
+                            }
+                        }
                     }
                 }
-                Err(error) => {
-                    feed.finished = true;
-                    all_finished = false;
-                    left.insert(id);
-                    absorb(state, pass, feed.reached, error)?;
+                live.retain(|reached| !left.contains(&reached.gateway.gateway_id));
+                planner.on_media(live.len(), all_finished, pass.media_confirmed);
+            }
+            plan::Step::CheckUncoveredRows => {
+                // 3. THE RECORDS AGAIN, WHEN THIS PASS CONFIRMED FILES THEIR ROWS ARE NOT IN A
+                // SNAPSHOT FOR (R-1080-C15).
+                let now_files =
+                    handle.with_vault(|vault| content_files(vault).map_err(plane_error))?;
+                let mut uncovered = false;
+                for reached in fleet {
+                    uncovered |= rows_uncovered(
+                        handle,
+                        state,
+                        &reached.gateway.gateway_id,
+                        conditions,
+                        &now_files,
+                    )?;
                 }
+                planner.on_uncovered_check(uncovered);
             }
-        }
-    }
-    live.retain(|reached| !left.contains(&reached.gateway.gateway_id));
-    // A gateway that left the pass was not finished.
-    all_finished &= live.len() == fleet.len();
-
-    // 3. THE RECORDS AGAIN, WHEN THIS PASS CONFIRMED FILES THEIR ROWS ARE NOT IN A SNAPSHOT
-    // FOR (R-1080-C15). A pass that was cut off owes it to the next, which takes it first.
-    if pass.media_confirmed > 0 && conditions.may_move(Kind::Records) {
-        let now_files = handle.with_vault(|vault| content_files(vault).map_err(plane_error))?;
-        let mut uncovered = false;
-        for reached in fleet {
-            uncovered |= rows_uncovered(
-                handle,
-                state,
-                &reached.gateway.gateway_id,
-                conditions,
-                &now_files,
-            )?;
-        }
-        if uncovered {
-            if all_finished {
+            plan::Step::FollowupRecords => {
                 round.records(true, &mut live, budget, pass)?;
-            } else {
-                plane.set_snapshot_owed(true);
+                planner.on_followup_done();
             }
+            plan::Step::MarkSnapshotOwed => {
+                plane.set_snapshot_owed(true);
+                planner.on_followup_done();
+            }
+            plan::Step::Done => break,
         }
     }
     Ok(())
