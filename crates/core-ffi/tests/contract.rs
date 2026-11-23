@@ -1691,19 +1691,31 @@ fn the_backup_plane_doors_are_request_kinds_and_answer_an_unpaired_phone() {
     };
     assert_eq!(released.recorded, 0);
 
-    // THE REQUEST'S OWN REFUSALS: a zero limit, a hash that is not 32 bytes.
-    for (id, door) in [
-        (
+    // THE DEPRECATED HANDOFF DOOR (#1209) answers empty whatever it is asked: the OS's uploads
+    // are `DrainResponse.os_bundles` now.
+    let (code, bytes) = call(
+        opened.handle,
+        &envelope(
             48,
             wire::request::Kind::Handoff(wire::HandoffRequest::default()),
         ),
-        (
-            49,
-            wire::request::Kind::FetchOriginal(wire::FetchOriginalRequest {
-                content_hash: vec![0xAB; 3],
-            }),
-        ),
-    ] {
+    );
+    assert_eq!(code, 0);
+    let Some(wire::envelope::Body::Response(response)) = answer(&bytes).body else {
+        panic!("the deprecated handoff door answers");
+    };
+    assert!(matches!(
+        response.kind,
+        Some(wire::response::Kind::Handoff(ref handoff)) if handoff.parts.is_empty()
+    ));
+
+    // THE REQUEST'S OWN REFUSALS: a hash that is not 32 bytes.
+    for (id, door) in [(
+        49,
+        wire::request::Kind::FetchOriginal(wire::FetchOriginalRequest {
+            content_hash: vec![0xAB; 3],
+        }),
+    )] {
         let (code, bytes) = call(opened.handle, &envelope(id, door.clone()));
         assert_eq!(code, CENTRAID_BAD_ARGUMENT, "{door:?}");
         let Some(wire::envelope::Body::Error(error)) = answer(&bytes).body else {
