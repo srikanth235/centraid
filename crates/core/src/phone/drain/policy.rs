@@ -191,17 +191,19 @@ impl Conditions {
 /// no pass has run yet; `GATEWAY` when one stopped answering; `UNTRUSTED` when the machine that
 /// answered is not the pinned gateway; `REFUSED` when one answered and refused a write for its
 /// own reason (a full disk, a part over its limit, or a code this build does not know);
-/// `PAIR_AGAIN` when it no longer knows this phone's token.
+/// `PAIR_AGAIN` when it no longer knows this phone's token. Ranks agree with [`wait_of`]: a
+/// `FROZEN` gateway ranks with the refusals, a `BUSY` one with the gateways that will answer
+/// later, so a gateway whose only problem is either still names its reason.
 ///
 /// # Errors
 /// The device state's refusal.
 pub fn last_reach(state: &DeviceState) -> Result<Option<wire::WaitReason>> {
     let rank = |reach: Reach| match reach {
         Reach::PairAgain => 4,
-        Reach::RefusedDisk | Reach::RefusedLarge | Reach::RefusedOther => 3,
+        Reach::RefusedDisk | Reach::RefusedLarge | Reach::RefusedOther | Reach::Frozen => 3,
         Reach::Untrusted => 2,
-        Reach::Unreachable | Reach::GatewayOld => 1,
-        _ => 0,
+        Reach::Unreachable | Reach::GatewayOld | Reach::Busy => 1,
+        Reach::Ok | Reach::Moved => 0,
     };
     let mut worst: Option<Reach> = None;
     for gateway in state.gateways().map_err(plane_error)? {
@@ -251,8 +253,8 @@ pub(super) enum Refused {
     /// `UNAUTHORIZED`: the gateway does not know this phone's token.
     Token,
     /// Any other refusal is that gateway's own answer: the reach the device state keeps for it
-    /// (`DISK_FULL`, `TOO_LARGE`, or one this build does not know). It stops that gateway's
-    /// pass and no other's.
+    /// (`DISK_FULL`, `TOO_LARGE`, `FROZEN`, `BUSY`, or one this build does not know). It stops
+    /// that gateway's pass and no other's; see [`stop_for`] for which stop.
     Limit(Reach),
 }
 
@@ -261,6 +263,16 @@ pub(super) fn refused_by(reason: &str) -> Refused {
     match Refusal::from_code(reason) {
         Refusal::Unauthorized => Refused::Token,
         other => Refused::Limit(heard_of(&other)),
+    }
+}
+
+/// The stop a gateway's refusal gives its pass. `BUSY` is transient (try later), so it stops
+/// the pass as an unreachable gateway does; every other refusal is the gateway's own answer and
+/// tells the member that machine has to be looked at.
+pub(super) const fn stop_for(heard: Reach) -> wire::DrainStop {
+    match heard {
+        Reach::Busy => wire::DrainStop::Unreachable,
+        _ => wire::DrainStop::Refused,
     }
 }
 
@@ -299,7 +311,7 @@ pub(super) fn stop_of(stop: &Stop) -> Result<Option<wire::DrainStop>> {
         }),
         Stop::Refused(refusal) => {
             tracing::warn!(code = %refusal.code(), "the gateway refused a part; the pass stops");
-            Ok(Some(wire::DrainStop::Refused))
+            Ok(Some(stop_for(heard_of(refusal))))
         }
         Stop::Moved { epoch } => Err(CoreError::VaultMoved {
             current_epoch: *epoch,
@@ -372,6 +384,53 @@ pub(super) fn snapshot_due(
 
 #[cfg(test)]
 mod tests {
+    use centraid_vault::backup::state::Gateway;
+
+    fn state_with(reaches: &[Reach]) -> (tempfile::TempDir, DeviceState) {
+        let dir = tempfile::tempdir().expect("a directory");
+        let state = DeviceState::open(dir.path().join("v.state.db")).expect("a device state");
+        for (i, reach) in reaches.iter().enumerate() {
+            let id = format!("gw{i}");
+            let row = Gateway::paired(id.clone(), vec![], vec![], id.clone(), 1, 1);
+            state.put_gateway(&row).expect("writes");
+            state.set_reach(&id, *reach, 2).expect("sets");
+        }
+        (dir, state)
+    }
+
+    /// **A GATEWAY WHOSE ONLY PROBLEM IS FROZEN OR BUSY STILL NAMES ITS REASON**, and BUSY's
+    /// stop is transient while FROZEN's is a refusal.
+    #[test]
+    fn frozen_and_busy_gateways_name_a_reason_and_busy_is_not_a_refusal() {
+        let (_d, frozen) = state_with(&[Reach::Frozen]);
+        assert_eq!(
+            last_reach(&frozen).expect("reads"),
+            Some(wire::WaitReason::RefusedOther)
+        );
+        let (_d, busy) = state_with(&[Reach::Busy]);
+        assert_eq!(
+            last_reach(&busy).expect("reads"),
+            Some(wire::WaitReason::Gateway)
+        );
+        let (_d, mixed) = state_with(&[Reach::Busy, Reach::Frozen]);
+        assert_eq!(
+            last_reach(&mixed).expect("reads"),
+            Some(wire::WaitReason::RefusedOther)
+        );
+        for code in ["FROZEN", "BUSY"] {
+            let Refused::Limit(heard) = refused_by(code) else {
+                panic!("{code} is a gateway's own answer");
+            };
+            let want = if code == "BUSY" {
+                wire::DrainStop::Unreachable
+            } else {
+                wire::DrainStop::Refused
+            };
+            assert_eq!(stop_for(heard), want, "{code}");
+        }
+        assert_eq!(stop_for(Reach::RefusedDisk), wire::DrainStop::Refused);
+    }
+
     /// **A REFUSAL IS CLASSED BY ITS CODE, AND AN UNKNOWN ONE STOPS ONE GATEWAY** (#1188, item
     /// 21): the code a gateway never emits (`QUOTA`) is just an unknown code, not a room.
     #[test]

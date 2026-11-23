@@ -89,7 +89,7 @@ pub use policy::{
 };
 
 use media::{Feed, LibraryAsk, media_round};
-use policy::{Refused, heard_of, refused_by, snapshot_due, stop_of};
+use policy::{Refused, heard_of, refused_by, snapshot_due, stop_for, stop_of};
 use records::{Round, newest_stands, rows_uncovered, verify_sample};
 
 use super::link::{self, Reached};
@@ -473,7 +473,7 @@ pub(super) fn absorb(
             Refused::Limit(heard) => {
                 tracing::warn!(code = %reason, "the gateway refused; it leaves the pass");
                 set_reach(state, id, heard)?;
-                pass.stopped = wire::DrainStop::Refused;
+                pass.stopped = stop_for(heard);
                 Ok(())
             }
             // A TOKEN THE GATEWAY DOES NOT KNOW (#1080, the sweep's F2): marked, so the
