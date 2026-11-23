@@ -334,18 +334,21 @@ fn pre_set_opening(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     opening_sentence(ctx)
 }
 
+#[derive(serde::Deserialize)]
+struct SetOpeningInput {
+    id: String,
+    opening_minor: Option<i64>,
+    opening_on: Option<String>,
+}
+
 fn set_opening(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let id = ctx.required_str("id")?;
+    let input: SetOpeningInput = ctx.parse_input()?;
     let changed = ctx.connection().execute(
         "UPDATE account SET opening_minor = ?2, opening_on = ?3
           WHERE id = ?1 AND (opening_minor, opening_on) IS NOT (?2, ?3)",
-        rusqlite::params![
-            id,
-            integer(ctx, "opening_minor").unwrap_or(0),
-            ctx.optional_str("opening_on")
-        ],
+        rusqlite::params![input.id, input.opening_minor.unwrap_or(0), input.opening_on],
     )? > 0;
-    Ok(json!({ "id": id, "changed": changed }))
+    Ok(json!({ "id": input.id, "changed": changed }))
 }
 
 fn pre_layout(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {

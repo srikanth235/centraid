@@ -282,31 +282,48 @@ fn set_guests(ctx: &CommandCtx<'_, '_>, id: &str, wanted: &[&str]) -> Result<()>
     Ok(())
 }
 
+#[derive(serde::Deserialize)]
+struct ProposeInput {
+    id: Option<String>,
+    title: String,
+    rule: Option<String>,
+    calendar_id: Option<String>,
+    description: Option<String>,
+    place_id: Option<String>,
+    url: Option<String>,
+    travel_min: Option<i64>,
+    status: Option<String>,
+    busy: Option<bool>,
+}
+
 fn propose(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let input: ProposeInput = ctx.parse_input()?;
     let times = times(ctx, None).map_err(|sentence| invalid("starts", sentence))?;
     let reminders = reminders_of(ctx);
+    let rule = input.rule.as_deref().map(rrule::canonicalize);
     let id = found(
         ctx,
         &NewEvent {
-            id: ctx.optional_str("id"),
-            title: ctx.required_str("title")?,
+            id: input.id.as_deref(),
+            title: &input.title,
             starts: &times.starts,
             ends: times.ends.as_deref(),
             timing: times.timing,
             zone: times.zone.as_deref(),
-            rule: ctx.optional_str("rule").map(rrule::canonicalize).as_deref(),
-            calendar_id: ctx.optional_str("calendar_id"),
+            rule: rule.as_deref(),
+            calendar_id: input.calendar_id.as_deref(),
             reminders: &reminders,
-            description: ctx.optional_str("description"),
-            place_id: ctx.optional_str("place_id"),
-            url: ctx.optional_str("url"),
-            travel_min: ctx.input.get("travel_min").and_then(Json::as_i64),
-            status: ctx.optional_str("status"),
-            busy: ctx.input.get("busy").and_then(Json::as_bool),
+            description: input.description.as_deref(),
+            place_id: input.place_id.as_deref(),
+            url: input.url.as_deref(),
+            travel_min: input.travel_min,
+            status: input.status.as_deref(),
+            busy: input.busy,
         },
     )?;
-    set_guests(ctx, &id, &guests(ctx))?;
-    Ok(json!({ "id": id, "attendees": guests(ctx).len() }))
+    let invited = guests(ctx);
+    set_guests(ctx, &id, &invited)?;
+    Ok(json!({ "id": id, "attendees": invited.len() }))
 }
 
 /// Set the event's own columns from what a command states: a key that is

@@ -296,21 +296,35 @@ fn list_refusal(ctx: &CommandCtx<'_, '_>, list: Option<&str>) -> Result<Option<S
     })
 }
 
+#[derive(serde::Deserialize)]
+struct AddPersonInput {
+    id: Option<String>,
+    title: String,
+    form: Option<String>,
+    nickname: Option<String>,
+    role: Option<String>,
+    met: Option<String>,
+    birthday: Option<String>,
+    cadence_days: Option<i64>,
+    list_id: Option<String>,
+}
+
 fn add(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let input: AddPersonInput = ctx.parse_input()?;
     let id = found(
         ctx,
         &NewPerson {
-            id: ctx.optional_str("id"),
-            title: ctx.required_str("title")?,
-            form: ctx.optional_str("form"),
-            nickname: ctx.optional_str("nickname"),
-            role: ctx.optional_str("role"),
-            met: ctx.optional_str("met"),
-            birthday: ctx.optional_str("birthday"),
-            cadence_days: ctx.input.get("cadence_days").and_then(Json::as_i64),
+            id: input.id.as_deref(),
+            title: &input.title,
+            form: input.form.as_deref(),
+            nickname: input.nickname.as_deref(),
+            role: input.role.as_deref(),
+            met: input.met.as_deref(),
+            birthday: input.birthday.as_deref(),
+            cadence_days: input.cadence_days,
         },
     )?;
-    if let Some(list) = ctx.optional_str("list_id") {
+    if let Some(list) = input.list_id.as_deref() {
         edge::put(ctx, list, Rel::Contains, &id, None, &Extras::default())?;
     }
     Ok(json!({ "id": id }))

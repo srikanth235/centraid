@@ -224,6 +224,17 @@ impl<'conn> CommandCtx<'_, 'conn> {
     pub fn optional_str(&self, key: &str) -> Option<&str> {
         self.input.get(key).and_then(serde_json::Value::as_str)
     }
+
+    /// Deserialize the command's JSON input into a typed input struct.
+    ///
+    /// # Errors
+    /// [`VaultError::InvalidInput`] if `self.input` does not match `T`.
+    pub fn parse_input<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
+        serde_json::from_value(self.input.clone()).map_err(|error| VaultError::InvalidInput {
+            name: self.command.to_owned(),
+            detail: error.to_string(),
+        })
+    }
 }
 
 /// A handler's body.

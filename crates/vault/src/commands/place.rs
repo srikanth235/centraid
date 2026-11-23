@@ -130,35 +130,49 @@ pub(crate) fn find_or_found(ctx: &CommandCtx<'_, '_>, lat: f64, lon: f64) -> Res
     found(ctx, None, &label, Some((lat, lon)), None, None)
 }
 
-fn pair_of(ctx: &CommandCtx<'_, '_>) -> Option<(f64, f64)> {
-    let number = |key: &str| ctx.input.get(key).and_then(serde_json::Value::as_f64);
-    Some((number("lat")?, number("lon")?))
+#[derive(serde::Deserialize)]
+struct AddInput {
+    id: Option<String>,
+    title: String,
+    lat: Option<f64>,
+    lon: Option<f64>,
+    address: Option<String>,
+    zone: Option<String>,
 }
 
 fn pre_add(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    if ctx.required_str("title")?.trim().is_empty() {
+    let input: AddInput = ctx.parse_input()?;
+    if input.title.trim().is_empty() {
         return Ok(Some("a place needs a name".to_owned()));
     }
-    let given = |key: &str| ctx.input.get(key).is_some_and(|v| !v.is_null());
-    Ok((given("lat") != given("lon"))
+    Ok((input.lat.is_some() != input.lon.is_some())
         .then(|| "a place's coordinates are a latitude and a longitude together".to_owned()))
 }
 
 fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let input: AddInput = ctx.parse_input()?;
+    let coords = input.lat.zip(input.lon);
     let id = found(
         ctx,
-        ctx.optional_str("id"),
-        ctx.required_str("title")?.trim(),
-        pair_of(ctx),
-        ctx.optional_str("address"),
-        ctx.optional_str("zone"),
+        input.id.as_deref(),
+        input.title.trim(),
+        coords,
+        input.address.as_deref(),
+        input.zone.as_deref(),
     )?;
     Ok(serde_json::json!({ "id": id }))
 }
 
+#[derive(serde::Deserialize)]
+struct LocateInput {
+    id: String,
+    locality: Option<String>,
+}
+
 fn pre_locate(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let input: LocateInput = ctx.parse_input()?;
     Ok(
-        match crate::commands::entity::lookup(ctx.connection(), ctx.required_str("id")?)? {
+        match crate::commands::entity::lookup(ctx.connection(), &input.id)? {
             Err(sentence) => Some(sentence),
             Ok(found) if found.kind != Kind::Place => Some(format!(
                 "“{}” is a {}, not a place",
@@ -172,16 +186,17 @@ fn pre_locate(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 
 /// Record the gazetteer's answer: the nearest city, or none (`null`).
 fn locate(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let id = ctx.required_str("id")?;
-    let locality = ctx
-        .optional_str("locality")
+    let input: LocateInput = ctx.parse_input()?;
+    let locality = input
+        .locality
+        .as_deref()
         .map(str::trim)
         .filter(|text| !text.is_empty());
     ctx.connection().execute(
         "UPDATE place SET locality = ?2 WHERE id = ?1",
-        rusqlite::params![id, locality],
+        rusqlite::params![input.id, locality],
     )?;
-    Ok(serde_json::json!({ "id": id, "matched": locality.is_some() }))
+    Ok(serde_json::json!({ "id": input.id, "matched": locality.is_some() }))
 }
 
 #[must_use]
