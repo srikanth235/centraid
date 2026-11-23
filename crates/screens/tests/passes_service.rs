@@ -1017,11 +1017,11 @@ fn uploads_op(effect: &wire::Effect) -> Option<wire::uploads_op::Op> {
     }
 }
 
-fn part(name: &str) -> wire::HandoffPart {
+fn bundle(name: &str) -> wire::HandoffPart {
     wire::HandoffPart {
         name: name.to_owned(),
-        url: format!("https://gw/v1/v/aa/o/{name}"),
-        method: "PUT".to_owned(),
+        url: "https://gw/v1/v/aa/bundle".to_owned(),
+        method: "POST".to_owned(),
         vault_id: "aa".to_owned(),
         ..Default::default()
     }
@@ -1031,66 +1031,53 @@ fn request_of(rig: &mut Rig) -> wire::request::Kind {
     rig.front()
 }
 
+fn pending_asked(effect: &wire::Effect) -> bool {
+    matches!(uploads_op(effect), Some(wire::uploads_op::Op::Pending(_)))
+}
+
 #[test]
-fn on_ios_the_os_session_draining_hands_the_next_batch_off_in_the_contracts_order() {
+fn on_ios_a_pass_that_names_bundle_files_has_them_enqueued_when_the_os_holds_no_task() {
     let mut rig = Rig::new();
     ios(&mut rig);
-    rig.first_pass(empty());
-    // The pass itself ended with a probe (every iOS pass does); answer it away.
-    assert!(matches!(
-        request_of(&mut rig),
-        wire::request::Kind::Reconcile(_)
-    ));
-    rig.answer_call(Ok(wire::Response {
-        kind: Some(wire::response::Kind::Reconcile(wire::ReconcileResponse {
-            reachable: false,
-            ..Default::default()
-        })),
-    }));
-    // AN UNREACHABLE GATEWAY ENQUEUES NOTHING AND ASKS FOR THE NEXT WINDOW.
-    assert!(rig.has(is_schedule));
-    rig.take_windows();
-    rig.fact(wire::shell_fact::Fact::Drained(wire::UploadsDrained {}));
-    // RECONCILE, THEN THE OS'S COUNT, THEN HANDOFF, THEN ENQUEUE.
-    assert!(matches!(
-        request_of(&mut rig),
-        wire::request::Kind::Reconcile(_)
-    ));
-    rig.answer_call(Ok(wire::Response {
-        kind: Some(wire::response::Kind::Reconcile(wire::ReconcileResponse {
-            reachable: true,
-            ..Default::default()
-        })),
-    }));
-    assert!(rig.has(|e| matches!(uploads_op(e), Some(wire::uploads_op::Op::Pending(_)))));
+    rig.first_pass(wire::DrainResponse {
+        os_bundles: vec![bundle("a"), bundle("b")],
+        ..empty()
+    });
+    // THE OS IS ASKED HOW MANY TASKS IT HOLDS BEFORE IT IS GIVEN MORE: no probe, no hand-off.
+    assert!(rig.has(pending_asked));
+    assert!(!rig.has(|e| matches!(uploads_op(e), Some(wire::uploads_op::Op::Enqueue(_)))));
     rig.answer(
-        |e| matches!(uploads_op(e), Some(wire::uploads_op::Op::Pending(_))),
-        wire::effect_result::Outcome::UploadsState(wire::UploadsState { pending: 30 }),
+        pending_asked,
+        wire::effect_result::Outcome::UploadsState(wire::UploadsState { pending: 0 }),
     );
-    let wire::request::Kind::Handoff(handoff) = request_of(&mut rig) else {
-        panic!("a handoff");
-    };
-    // THE OS HOLDS 30 OF 32: ROOM FOR 2.
-    assert_eq!(handoff.max_parts, 2);
-    assert_eq!(handoff.max_bytes, 512 * 1024 * 1024);
-    rig.answer_call(Ok(wire::Response {
-        kind: Some(wire::response::Kind::Handoff(wire::HandoffResponse {
-            parts: vec![part("a"), part("b")],
-        })),
-    }));
     let at = rig
         .position(|e| matches!(uploads_op(e), Some(wire::uploads_op::Op::Enqueue(_))))
-        .expect("the parts go to the OS whole");
+        .expect("the files go to the OS whole");
     let Some(wire::uploads_op::Op::Enqueue(enqueue)) =
         rig.driver.effects[at].effect.as_ref().and_then(uploads_op)
     else {
         unreachable!()
     };
-    assert_eq!(enqueue.parts, vec![part("a"), part("b")]);
+    assert_eq!(enqueue.parts, vec![bundle("a"), bundle("b")]);
 }
 
 #[test]
-fn on_ios_a_finished_task_settles_in_its_own_vault() {
+fn on_ios_files_are_not_enqueued_over_tasks_the_os_still_holds() {
+    let mut rig = Rig::new();
+    ios(&mut rig);
+    rig.first_pass(wire::DrainResponse {
+        os_bundles: vec![bundle("a")],
+        ..empty()
+    });
+    rig.answer(
+        pending_asked,
+        wire::effect_result::Outcome::UploadsState(wire::UploadsState { pending: 3 }),
+    );
+    assert!(!rig.has(|e| matches!(uploads_op(e), Some(wire::uploads_op::Op::Enqueue(_)))));
+}
+
+#[test]
+fn on_ios_what_the_os_reports_only_wakes_a_pass() {
     let mut rig = Rig::new();
     ios(&mut rig);
     rig.first_pass(empty());
@@ -1100,8 +1087,9 @@ fn on_ios_a_finished_task_settles_in_its_own_vault() {
             drainable: true,
         }],
     }));
-    // The pass's own probe is still waiting its turn; let it finish.
-    rig.answer_call(Err(wire::Error::default()));
+    assert!(!rig.has_call(), "no pass is owed before the OS says anything");
+    // A FINISHED TASK AND THE SESSION'S END ARE ONE WAKE (R7): a pass, and no door that records
+    // anything as stored.
     rig.fact(wire::shell_fact::Fact::Settled(wire::UploadSettled {
         name: "a".to_owned(),
         http_status: 201,
@@ -1109,46 +1097,13 @@ fn on_ios_a_finished_task_settles_in_its_own_vault() {
         gateway_id: "gw-1".to_owned(),
         vault_id: "aa".to_owned(),
     }));
-    // A VAULT THIS PHONE NO LONGER HOLDS SETTLES NOWHERE.
-    rig.fact(wire::shell_fact::Fact::Settled(wire::UploadSettled {
-        name: "z".to_owned(),
-        vault_id: "gone".to_owned(),
-        ..Default::default()
-    }));
-    let wire::request::Kind::Settle(settle) = request_of(&mut rig) else {
-        panic!("a settle");
-    };
-    assert_eq!(settle.settled.len(), 1);
-    assert_eq!(settle.settled[0].name, "a");
-    assert_eq!(settle.settled[0].vault_id, "aa");
-}
-
-/// A SETTLE THAT ARRIVES BEFORE THE SHELF HAS OPENED ITS VAULT (a background relaunch) is held, not
-/// dropped, and goes to its vault once the shelf holds it.
-#[test]
-fn a_settle_before_the_vault_is_open_waits_for_it() {
-    let mut rig = Rig::new();
-    ios(&mut rig);
-    rig.first_pass(empty());
-    rig.fact(wire::shell_fact::Fact::Settled(wire::UploadSettled {
-        name: "early".to_owned(),
-        http_status: 201,
-        error: String::new(),
-        gateway_id: "gw-1".to_owned(),
-        vault_id: "aa".to_owned(),
-    }));
-    rig.fact(wire::shell_fact::Fact::Held(wire::VaultsHeld {
-        vaults: vec![wire::Held {
-            vault_id: "aa".to_owned(),
-            drainable: true,
-        }],
-    }));
-    rig.answer_call(Err(wire::Error::default()));
-    let wire::request::Kind::Settle(settle) = request_of(&mut rig) else {
-        panic!("a settle");
-    };
-    assert_eq!(settle.settled.len(), 1);
-    assert_eq!(settle.settled[0].name, "early");
+    rig.fact(wire::shell_fact::Fact::Drained(wire::UploadsDrained {}));
+    let (drain, vault) = rig.drain();
+    assert_eq!(vault, "aa");
+    assert!(!drain.wants_snapshot && !drain.asked, "{drain:?}");
+    assert!(drain.os_uploads, "the pass writes the next files for the OS");
+    rig.answer_drain(empty());
+    assert!(!rig.has_call(), "one wake, one pass");
 }
 
 #[test]
@@ -1156,7 +1111,6 @@ fn changing_the_rule_on_ios_lets_go_of_every_upload_the_os_holds() {
     let mut rig = Rig::new();
     ios(&mut rig);
     rig.first_pass(empty());
-    rig.answer_call(Err(wire::Error::default()));
     rig.fact(wire::shell_fact::Fact::Asked(wire::PassAsked {
         ask: wire::pass_asked::Ask::RuleChanged as i32,
     }));
@@ -1198,25 +1152,6 @@ fn a_repeated_lifecycle_is_not_a_transition() {
     // A SHELL THAT RE-REPORTS THE FOREGROUND buys no walk and no pass.
     lifecycle(&mut rig, true);
     assert!(!rig.walk_asked() && !rig.has_call());
-}
-
-#[test]
-fn a_probe_the_core_cannot_answer_yet_is_no_answer_and_hands_nothing_off() {
-    let mut rig = Rig::new();
-    ios(&mut rig);
-    rig.first_pass(empty());
-    // NOT_YET_AVAILABLE IS NO ANSWER, never a fact: nothing is enqueued and no
-    // window is asked for on its account.
-    assert!(matches!(
-        request_of(&mut rig),
-        wire::request::Kind::Reconcile(_)
-    ));
-    rig.answer_call(Err(wire::Error {
-        code: wire::ErrorCode::NotYetAvailable as i32,
-        ..Default::default()
-    }));
-    assert!(!rig.has(is_schedule));
-    assert!(!rig.has(|e| uploads_op(e).is_some()));
 }
 
 #[test]

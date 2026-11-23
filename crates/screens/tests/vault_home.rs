@@ -323,18 +323,21 @@ fn pair_in_the_ledger(phone: &mut Phone, vault: &str, acked_at_ms: Option<u64>) 
         1,
         now,
     );
-    row.head_ms = acked_at_ms;
-    ledger.put_gateway(&row).expect("the gateway is recorded");
-    // What a pass records beside the row: the gateway answered, and acknowledged a head. The
-    // pairing's row never carries either (a pairing again keeps what the ledger already knows).
-    ledger
-        .touch_seen("gw-zq", now)
-        .expect("the gateway answered");
+    ledger.add_gateway(&row).expect("the gateway is recorded");
+    // What a pass records beside the row: the gateway answered, and confirmed a head. The
+    // pairing's row never carries either.
     if let Some(at) = acked_at_ms {
         ledger
-            .touch_ack("gw-zq", at)
-            .expect("the head was acknowledged");
+            .confirm_records(
+                "gw-zq",
+                &centraid_vault::backup::naming::Name::from_bytes([7; 32]),
+                at,
+            )
+            .expect("the gateway confirmed a head");
     }
+    ledger
+        .set_reach("gw-zq", centraid_vault::backup::state::Reach::Ok, None, now)
+        .expect("the gateway answered");
     let _ = core.call(&wire::Request {
         kind: Some(wire::request::Kind::ForgetDestination(
             wire::ForgetDestinationRequest {

@@ -23,12 +23,15 @@ use super::rule::Rules;
 /// | the app left the screen | `EnteredBackground` | the grace | now | no |
 /// | a restore finished | `Restored` | none | now | no |
 /// | a gateway was paired | `Paired` | none | now | no |
+/// | the OS reported an upload (settled or drained) | `UploadsReported` | the grace | when due | no |
 ///
 /// A snapshot is forced only where the member or the platform is about to stop
 /// looking. **Only "Back up now" is the member asking** (`DrainRequest.asked`,
 /// #1080 A24): it alone lets an original be sealed under MANUAL and a video's
 /// original be sealed off the charger. Leaving the screen and a finished
-/// restore time a snapshot and decide nothing else.
+/// restore time a snapshot and decide nothing else. **An upload the OS reports only wakes a pass**
+/// (#1209, R7): `UploadsReported` records nothing as stored; the pass re-reads each head and
+/// diffs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Reason {
     SessionOpened,
@@ -41,10 +44,12 @@ pub enum Reason {
     EnteredBackground,
     Restored,
     Paired,
+    /// The OS finished, failed or lost a background upload: look again.
+    UploadsReported,
 }
 
 impl Reason {
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::SessionOpened,
         Self::BecameActive,
         Self::AfterCommit,
@@ -55,6 +60,7 @@ impl Reason {
         Self::EnteredBackground,
         Self::Restored,
         Self::Paired,
+        Self::UploadsReported,
     ];
 
     /// Take a snapshot now, whether or not one is due. A pass owed a snapshot
@@ -118,6 +124,9 @@ impl Link {
 pub struct Conditions {
     pub rules: Rules,
     pub link: Link,
+    /// The OS carries bundle files while the app is suspended (iOS's background session,
+    /// Android's WorkManager): the pass writes them (`DrainRequest.os_uploads`).
+    pub uploads: bool,
 }
 
 impl Conditions {
@@ -138,6 +147,7 @@ impl Conditions {
             exclude_videos: !self.rules.include_videos,
             // THE MEMBER'S TAP AND NOTHING ELSE (#1080 A24).
             asked: reason.asked(),
+            os_uploads: self.uploads,
         }
     }
 }
