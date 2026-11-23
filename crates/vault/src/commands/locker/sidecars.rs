@@ -331,6 +331,22 @@ pub(super) fn set_field() -> CommandDefinition {
                 assert_sealed_cell("value", input.value.as_deref())?;
             }
             assert_key_generation(ctx, sealed_value)?;
+            // A type's built-in field has its own label, section and kind: it is edited through
+            // `locker.edit_item`, never rewritten here.
+            if let Some(field_id) = input.field_id.as_deref() {
+                let built_in: bool = ctx.connection().query_row(
+                    "SELECT EXISTS (SELECT 1 FROM locker_item_field
+                                     WHERE id = ?1 AND field_key IS NOT NULL)",
+                    [field_id],
+                    |row| row.get(0),
+                )?;
+                if built_in {
+                    return Err(invalid(
+                        "field_id",
+                        "that is one of the item's own fields; change its value by editing the item",
+                    ));
+                }
+            }
             // A NEW sealed field needs the caller's id, for the AAD reason.
             if sealed_value && input.field_id.is_none() {
                 return Err(invalid(

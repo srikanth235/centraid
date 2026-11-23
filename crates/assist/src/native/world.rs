@@ -125,17 +125,15 @@ impl Val {
 /// What a sealed locker value shows as until it is revealed.
 pub const SEALED: &str = "sealed";
 
-/// The locker columns that are neither sealed nor a model field.
-pub const LOCKER_PLAIN: [&str; 8] = [
-    "cardholder",
-    "expiry",
-    "brand",
-    "fullname",
-    "email",
-    "phone",
-    "address",
-    "network",
-];
+/// Whether a locker column is neither sealed nor a model field (`username`, `url` and `notes`
+/// are the model's own): the schema's built-in fields less those.
+#[must_use]
+pub fn is_locker_plain(column: &str) -> bool {
+    use centraid_vault::commands::locker::{ALL_FIELDS, SEALED_ITEM_CELLS};
+    ALL_FIELDS.contains(&column)
+        && !SEALED_ITEM_CELLS.contains(&column)
+        && !matches!(column, "username" | "url" | "notes")
+}
 
 /// `42.00 USD`.
 #[must_use]
@@ -1468,7 +1466,10 @@ impl World {
             }
             // The type's other plain columns, which an edit must send back
             // unchanged (the vault rewrites every column of the type).
-            for column in LOCKER_PLAIN {
+            for column in centraid_vault::commands::locker::ALL_FIELDS
+                .into_iter()
+                .filter(|column| is_locker_plain(column))
+            {
                 if let Some(value) = plain_of(column).filter(|value| !value.is_empty()) {
                     extra.insert(column, value);
                 }

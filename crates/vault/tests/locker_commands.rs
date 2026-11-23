@@ -102,6 +102,18 @@ impl World {
         outcome.output
     }
 
+    /// Run and expect the command to refuse as invalid input, returning its sentence.
+    fn refused_early(&self, name: &str, input: serde_json::Value) -> String {
+        match self.scratch.vault.execute(
+            &self.registry,
+            &Principal::owner("device-1"),
+            &Command::new(name, input),
+        ) {
+            Ok(outcome) => panic!("{name} should refuse: {:?}", outcome.status),
+            Err(error) => error.to_string(),
+        }
+    }
+
     /// Run and expect a refusal, returning its sentence.
     fn refused(&self, name: &str, input: serde_json::Value) -> String {
         let outcome = self.run(name, input);
@@ -1652,6 +1664,63 @@ fn a_wikilink_never_resolves_a_locker_item() {
         world.one::<i64>(
             "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'links' AND to_id = 'item-1'",
             &[&note],
+        ),
+        0
+    );
+}
+
+#[test]
+fn set_field_refuses_a_built_in_row_and_leaves_it_as_it_was() {
+    let world = World::new("locker-set-field-built-in", "key-1");
+    world.login("item-1", "key-1");
+    world.ok(
+        "locker.edit_item",
+        serde_json::json!({ "item_id": "item-1", "username": "ada" }),
+    );
+    let built_in = world.one::<String>(
+        "SELECT id FROM locker_item_field WHERE item_id = ?1 AND field_key = 'username'",
+        &["item-1"],
+    );
+    let why = world.refused_early(
+        "locker.set_field",
+        serde_json::json!({ "item_id": "item-1", "field_id": built_in,
+                            "label": "Renamed", "kind": "date", "value": "2026-01-01" }),
+    );
+    assert!(why.contains("item's own fields"), "{why}");
+    assert_eq!(
+        world.one::<String>(
+            "SELECT label || kind FROM locker_item_field WHERE id = ?1",
+            &[&built_in]
+        ),
+        "Usernametext"
+    );
+}
+
+#[test]
+fn a_new_item_refuses_the_sealed_placeholder_and_a_copy_never_stores_it() {
+    let world = World::new("locker-placeholder", "key-1");
+    let why = world.refused_early(
+        "locker.add_item",
+        serde_json::json!({ "item_id": "item-p", "type": "login", "title": "T",
+                            "password": "\u{ab}sealed\u{bb}", "key_id": "key-1" }),
+    );
+    assert!(why.contains("no saved password"), "{why}");
+    assert_eq!(
+        world.one::<i64>("SELECT COUNT(*) FROM locker_item WHERE id = 'item-p'", &[]),
+        0
+    );
+
+    world.login("item-1", "key-1");
+    world.ok(
+        "locker.duplicate_item",
+        serde_json::json!({ "item_id": "item-1", "new_item_id": "item-copy",
+                            "password": "\u{ab}sealed\u{bb}", "key_id": "key-1" }),
+    );
+    assert_eq!(
+        world.one::<i64>(
+            "SELECT COUNT(*) FROM locker_item_field
+              WHERE item_id = 'item-copy' AND value_sealed = '\u{ab}sealed\u{bb}'",
+            &[]
         ),
         0
     );

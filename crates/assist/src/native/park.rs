@@ -1704,18 +1704,9 @@ pub(crate) fn drift(patched: &World, real: &World) -> Vec<String> {
 // the Locker (a parked turn sees the plain half; the sealed cells are placeholders, `Flags::secrets`)
 // ---------------------------------------------------------------------
 
-/// The columns each Locker type owns; every other is nulled on a write
-/// (`centraid_vault::commands::locker::type_fields`, held by `tests/park.rs`).
+/// The columns each Locker type owns; every other is nulled on a write.
 fn locker_type_fields(item_type: &str) -> &'static [&'static str] {
-    match item_type {
-        "login" => &["username", "password", "url", "otp_seed", "notes"],
-        "card" => &["cardholder", "card_number", "expiry", "cvv", "brand"],
-        "note" => &["content"],
-        "identity" => &["fullname", "email", "phone", "address"],
-        "wifi" => &["network", "password"],
-        "password" => &["password"],
-        _ => &["notes"],
-    }
+    centraid_vault::commands::locker::type_fields(item_type)
 }
 
 /// The columns a Locker row holds, as the loader read them.
@@ -1761,7 +1752,7 @@ fn locker_store(row: &mut Row, item_type: &str, columns: &BTreeMap<&'static str,
         let sealed = crate::native::meta::REVEAL_FIELDS
             .iter()
             .any(|(_, column)| column == name);
-        let plain = crate::native::world::LOCKER_PLAIN.contains(name);
+        let plain = crate::native::world::is_locker_plain(name);
         if (sealed || plain) && !value.is_empty() {
             // A sealed cell is a presence bit in the world, as `World::load` reads it: what the
             // member typed is held by the parked step and nowhere else.
@@ -2148,7 +2139,7 @@ fn locker_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String>
         row.name = title.to_owned();
     }
     let mut columns = locker_columns(row);
-    let sealed = ["password", "otp_seed", "card_number", "cvv", "content"];
+    let sealed = centraid_vault::commands::locker::SEALED_ITEM_CELLS;
     let carries = sealed.iter().any(|column| {
         text(input, column).is_some_and(|value| {
             !value.is_empty() && value != centraid_vault::commands::locker::SEALED_PLACEHOLDER

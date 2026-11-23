@@ -41,6 +41,7 @@ pub const RECENT_ROWS: usize = 5;
 /// ceiling); `ReviewData::truncated` says when it stopped.
 pub const REVIEW_ROWS: usize = 2_000;
 
+use centraid_apps_kit::rules::locker::ALL_FIELDS;
 /// The sealed item cells each of the six original types carries, in the order
 /// the item pane draws them (re-exported from the vault's schema).
 pub use centraid_apps_kit::rules::locker::secret_cells;
@@ -947,6 +948,45 @@ pub fn read_shelf(door: &dyn PageDoor, window: usize) -> KitResult<Shelf> {
     })
 }
 
+/// Plain values and sealed-presence keys, each by item id.
+type KeyedFields = (
+    BTreeMap<String, BTreeMap<String, String>>,
+    BTreeMap<String, BTreeSet<String>>,
+);
+
+/// A built-in field's plain value by item, and which sealed ones are present.
+///
+/// Only keys the schema names are folded: a stray `field_key` such as `type` or `compromised` must
+/// never land among the item's own columns.
+fn fold_keyed_fields(fields: Vec<Row>) -> KeyedFields {
+    let mut plain_fields: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
+    let mut sealed_presence: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for field in fields {
+        let (Some(item_id), Some(field_key)) =
+            (text_of(&field, "item_id"), text_of(&field, "field_key"))
+        else {
+            continue;
+        };
+        if !ALL_FIELDS.contains(&field_key.as_str()) {
+            continue;
+        }
+        if SEALED_ITEM_COLUMNS.contains(&field_key.as_str()) {
+            if truthy(&field, "has_sealed") {
+                sealed_presence
+                    .entry(item_id)
+                    .or_default()
+                    .insert(field_key);
+            }
+        } else if let Some(value) = text_of(&field, "value_text") {
+            plain_fields
+                .entry(item_id)
+                .or_default()
+                .insert(field_key, value);
+        }
+    }
+    (plain_fields, sealed_presence)
+}
+
 /// Fold item ENTITY rows with their kind rows, built-in `locker_item_field` rows,
 /// and `tagged` edges.
 ///
@@ -967,28 +1007,8 @@ fn fold_items(
         .into_iter()
         .filter_map(|row| text_of(&row, "id").map(|id| (id, row)))
         .collect();
-    let mut plain_fields: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
-    let mut sealed_presence: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for field in read_chunked(&KEYED_FIELDS, door, &ids, None)? {
-        let (Some(item_id), Some(field_key)) =
-            (text_of(&field, "item_id"), text_of(&field, "field_key"))
-        else {
-            continue;
-        };
-        if SEALED_ITEM_COLUMNS.contains(&field_key.as_str()) {
-            if truthy(&field, "has_sealed") {
-                sealed_presence
-                    .entry(item_id)
-                    .or_default()
-                    .insert(field_key);
-            }
-        } else if let Some(value) = text_of(&field, "value_text") {
-            plain_fields
-                .entry(item_id)
-                .or_default()
-                .insert(field_key, value);
-        }
-    }
+    let (plain_fields, sealed_presence) =
+        fold_keyed_fields(read_chunked(&KEYED_FIELDS, door, &ids, None)?);
     let edges = read_chunked(
         &TAGGED_EDGES,
         door,
@@ -1210,6 +1230,27 @@ mod tests {
         let refs: Vec<&ItemRow> = rows.iter().collect();
         assert_eq!(recently_used(&refs), ["c", "e", "d", "a", "g"]);
         assert_eq!(RECENT_ROWS, 5);
+    }
+
+    #[test]
+    fn a_stray_field_key_never_overwrites_an_item_column() {
+        let field = |key: &str, value: &str| -> Row {
+            let mut row = Row::new();
+            row.insert("item_id".to_owned(), Cell::Text("i1".to_owned()));
+            row.insert("field_key".to_owned(), Cell::Text(key.to_owned()));
+            row.insert("value_text".to_owned(), Cell::Text(value.to_owned()));
+            row
+        };
+        let (plain, sealed) = fold_keyed_fields(vec![
+            field("username", "ada"),
+            field("compromised", "yes"),
+            field("type", "card"),
+            field("item_id", "other"),
+        ]);
+        let kept = &plain["i1"];
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept["username"], "ada");
+        assert!(sealed.is_empty());
     }
 
     #[test]

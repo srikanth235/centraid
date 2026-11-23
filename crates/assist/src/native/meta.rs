@@ -639,12 +639,7 @@ pub fn locker_secret_column(item_type: &str, field: &str) -> Option<&'static str
         .iter()
         .find(|(name, column)| *name == field && *column != "content")
         .map(|(_, column)| *column)?;
-    let keeps: &[&str] = match item_type {
-        "login" => &["password", "otp_seed"],
-        "card" => &["card_number", "cvv"],
-        "wifi" | "password" => &["password"],
-        _ => &[],
-    };
+    let keeps = centraid_vault::commands::locker::secret_cells(item_type);
     keeps.contains(&column).then_some(column)
 }
 
@@ -880,4 +875,29 @@ pub fn mapped_commands() -> Vec<&'static str> {
     out.sort_unstable();
     out.dedup();
     out
+}
+
+#[cfg(test)]
+mod locker_schema_tests {
+    use centraid_vault::commands::locker::{ITEM_TYPES, SEALED_ITEM_CELLS, secret_cells};
+
+    #[test]
+    fn the_reveal_fields_are_the_schemas_sealed_cells() {
+        let mut held: Vec<&str> = super::REVEAL_FIELDS.iter().map(|(_, c)| *c).collect();
+        let mut schema = SEALED_ITEM_CELLS.to_vec();
+        held.sort_unstable();
+        schema.sort_unstable();
+        assert_eq!(held, schema);
+    }
+
+    #[test]
+    fn a_secret_column_is_the_types_own_cell() {
+        for item_type in ITEM_TYPES {
+            for (field, column) in super::REVEAL_FIELDS {
+                let found = super::locker_secret_column(item_type, field);
+                let owned = *column != "content" && secret_cells(item_type).contains(column);
+                assert_eq!(found, owned.then_some(*column), "{item_type} {field}");
+            }
+        }
+    }
 }

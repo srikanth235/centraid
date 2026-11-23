@@ -299,6 +299,21 @@ fn pre_log(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok(None)
 }
 
+/// A whole-number measure read from any JSON number, rounded (`142.0` is a valid integer).
+fn whole<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<Option<i64>, D::Error> {
+    let number: Option<f64> = serde::Deserialize::deserialize(deserializer)?;
+    Ok(number.filter(|n| n.is_finite()).map(|n| n.round() as i64))
+}
+
+/// [`whole`] with patch semantics: absent is `None`, `null` is `Some(None)`.
+fn whole_patch<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<Option<Option<i64>>, D::Error> {
+    whole(deserializer).map(Some)
+}
+
 #[derive(serde::Deserialize)]
 struct LogWorkoutInput {
     id: Option<String>,
@@ -307,9 +322,11 @@ struct LogWorkoutInput {
     title: Option<String>,
     starts: String,
     ends: Option<String>,
+    #[serde(default, deserialize_with = "whole")]
     moving_s: Option<i64>,
     distance_m: Option<f64>,
     energy_kcal: Option<f64>,
+    #[serde(default, deserialize_with = "whole")]
     heart_bpm: Option<i64>,
     climb_m: Option<f64>,
 }
@@ -451,13 +468,13 @@ struct EditWorkoutInput {
     title: Option<String>,
     starts: Option<String>,
     ends: Option<String>,
-    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    #[serde(default, deserialize_with = "whole_patch")]
     moving_s: Option<Option<i64>>,
     #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
     distance_m: Option<Option<f64>>,
     #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
     energy_kcal: Option<Option<f64>>,
-    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    #[serde(default, deserialize_with = "whole_patch")]
     heart_bpm: Option<Option<i64>>,
     #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
     climb_m: Option<Option<f64>>,
@@ -581,4 +598,32 @@ pub fn definitions() -> Vec<CommandDefinition> {
             edit,
         ),
     ]
+}
+
+#[cfg(test)]
+mod whole_number_tests {
+    use super::{EditWorkoutInput, LogWorkoutInput};
+    use serde_json::json;
+
+    #[test]
+    fn whole_measures_read_integers_and_integer_valued_floats_alike() {
+        for heart in [json!(142), json!(142.0)] {
+            let log: LogWorkoutInput = serde_json::from_value(
+                json!({ "starts": "2026-03-04", "moving_s": 1800.0, "heart_bpm": heart }),
+            )
+            .expect("log input");
+            assert_eq!((log.moving_s, log.heart_bpm), (Some(1800), Some(142)));
+            let edit: EditWorkoutInput = serde_json::from_value(
+                json!({ "id": "w", "moving_s": 1800.0, "heart_bpm": heart }),
+            )
+            .expect("edit input");
+            assert_eq!(
+                (edit.moving_s, edit.heart_bpm),
+                (Some(Some(1800)), Some(Some(142)))
+            );
+        }
+        let edit: EditWorkoutInput =
+            serde_json::from_value(json!({ "id": "w", "heart_bpm": null })).expect("edit input");
+        assert_eq!((edit.moving_s, edit.heart_bpm), (None, Some(None)));
+    }
 }

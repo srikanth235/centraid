@@ -230,9 +230,14 @@ impl<'conn> CommandCtx<'_, 'conn> {
     /// # Errors
     /// [`VaultError::InvalidInput`] if `self.input` does not match `T`.
     pub fn parse_input<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
-        serde_json::from_value(self.input.clone()).map_err(|error| VaultError::InvalidInput {
-            name: self.command.to_owned(),
-            detail: error.to_string(),
+        serde_json::from_value(self.input.clone()).map_err(|error| {
+            let detail = error.to_string();
+            // serde names the key in "missing field `x`" and "unknown field `x`"; report it.
+            let name = detail
+                .split_once("field `")
+                .and_then(|(_, rest)| rest.split_once('`'))
+                .map_or_else(|| self.command.to_owned(), |(key, _)| key.to_owned());
+            VaultError::InvalidInput { name, detail }
         })
     }
 }

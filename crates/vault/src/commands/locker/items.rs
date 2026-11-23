@@ -9,7 +9,7 @@ use crate::model::Kind;
 
 use super::custody::{
     ADD_ITEM_PRE, DUPLICATE_ITEM_PRE, EDIT_ITEM_PRE, ITEM_EXISTS_SQL, NONE, assert_fresh_id,
-    assert_key_generation, assert_sealed_cell, assert_sealed_cells, carries_secret,
+    assert_key_generation, assert_sealed_cell, assert_sealed_cells, carries_secret, invalid,
     password_rotated,
 };
 use super::schema::{
@@ -71,6 +71,17 @@ pub(super) fn add_item() -> CommandDefinition {
             let input: AddItemInput = ctx.parse_input()?;
             assert_fresh_id(ctx, "item_id", &input.item_id)?;
             assert_sealed_cells(ctx, &SEALED_ITEM_CELLS)?;
+            // The placeholder means "leave alone", and a new item has nothing to leave.
+            for column in SEALED_ITEM_CELLS {
+                if ctx.optional_str(column) == Some(SEALED_PLACEHOLDER) {
+                    return Err(invalid(
+                        column,
+                        format!(
+                            "a new item has no saved {column} to keep; type it, or leave it empty"
+                        ),
+                    ));
+                }
+            }
             let secret = carries_secret(ctx, &SEALED_ITEM_CELLS);
             assert_key_generation(ctx, secret)?;
 
