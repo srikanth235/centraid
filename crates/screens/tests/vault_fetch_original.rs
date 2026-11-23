@@ -234,8 +234,8 @@ fn restored_enrollment_mounts_keys_and_the_real_screen_worker_returns_a_typed_fe
     phone.driver.pump(Duration::from_secs(10));
     assert_eq!(
         phone.driver.counter(id).title,
-        "outcome:Unreachable",
-        "no paired gateway is a typed outcome, not a missing key/store/runtime response"
+        "outcome:NotInBackup",
+        "no tree lists the original: a typed outcome, not a missing key/store/runtime response"
     );
     // Only the public fixture's key existence, never its value, is asserted here.
     assert!(phone.shell.device.contains_key(secrets::LOCAL_WORDS));
