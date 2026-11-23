@@ -3848,6 +3848,134 @@
       "w": 390,
       "x": 3760,
       "y": 76360
+    },
+    "TrashPhotosConfirm.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Photos trash, delete a photo that is not backed up (#1209)",
+      "w": 390,
+      "x": 8480,
+      "y": 0
+    },
+    "TrashPhotosConfirmDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Photos trash, delete a photo that is not backed up (#1209) · dark",
+      "w": 390,
+      "x": 8480,
+      "y": 0
+    },
+    "TrashPhotosConfirmMany.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Photos trash, delete several photos, some not backed up (#1209)",
+      "w": 390,
+      "x": 8480,
+      "y": 940
+    },
+    "TrashPhotosConfirmManyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Photos trash, delete several photos, some not backed up (#1209) · dark",
+      "w": 390,
+      "x": 8480,
+      "y": 940
+    },
+    "TrashPhotosEmpty.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Photos trash, empty trash with photos not backed up (#1209)",
+      "w": 390,
+      "x": 8480,
+      "y": 1880
+    },
+    "TrashPhotosEmptyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Photos trash, empty trash with photos not backed up (#1209) · dark",
+      "w": 390,
+      "x": 8480,
+      "y": 1880
+    },
+    "HomeBackupPhotosWaiting.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Home, backed up, photos waiting (#1209)",
+      "w": 390,
+      "x": 8480,
+      "y": 2820
+    },
+    "HomeBackupPhotosWaitingDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Home, backed up, photos waiting (#1209) · dark",
+      "w": 390,
+      "x": 8480,
+      "y": 2820
+    },
+    "RestoreRecords.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Restore, records first (#1209)",
+      "w": 390,
+      "x": 8480,
+      "y": 3760
+    },
+    "RestoreRecordsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Restore, records first (#1209) · dark",
+      "w": 390,
+      "x": 8480,
+      "y": 3760
+    },
+    "RestoreOpened.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Home, restored, previews coming back (#1209)",
+      "w": 390,
+      "x": 8480,
+      "y": 4700
+    },
+    "RestoreOpenedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Home, restored, previews coming back (#1209) · dark",
+      "w": 390,
+      "x": 8480,
+      "y": 4700
+    },
+    "RestorePhotos.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Photos, restored, originals coming back (#1209)",
+      "w": 390,
+      "x": 8480,
+      "y": 5640
+    },
+    "RestorePhotosDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Photos, restored, originals coming back (#1209) · dark",
+      "w": 390,
+      "x": 8480,
+      "y": 5640
+    },
+    "RestorePhotoOpen.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Photos viewer, original still coming back (#1209)",
+      "w": 390,
+      "x": 8480,
+      "y": 6580
+    },
+    "RestorePhotoOpenDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Photos viewer, original still coming back (#1209) · dark",
+      "w": 390,
+      "x": 8480,
+      "y": 6580
     }
   },
   "createdOnFiles": {
@@ -4804,7 +4932,23 @@
     "HomeBackupDayTwo.dc.html",
     "HomeBackupDayTwoDark.dc.html",
     "ReadableColumn.dc.html",
-    "ReadableColumnDark.dc.html"
+    "ReadableColumnDark.dc.html",
+    "TrashPhotosConfirm.dc.html",
+    "TrashPhotosConfirmDark.dc.html",
+    "TrashPhotosConfirmMany.dc.html",
+    "TrashPhotosConfirmManyDark.dc.html",
+    "TrashPhotosEmpty.dc.html",
+    "TrashPhotosEmptyDark.dc.html",
+    "HomeBackupPhotosWaiting.dc.html",
+    "HomeBackupPhotosWaitingDark.dc.html",
+    "RestoreRecords.dc.html",
+    "RestoreRecordsDark.dc.html",
+    "RestoreOpened.dc.html",
+    "RestoreOpenedDark.dc.html",
+    "RestorePhotos.dc.html",
+    "RestorePhotosDark.dc.html",
+    "RestorePhotoOpen.dc.html",
+    "RestorePhotoOpenDark.dc.html"
   ],
   "pages": [
     {
