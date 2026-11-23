@@ -886,6 +886,7 @@ dependencies = [
  "centraid-gateway",
  "centraid-media",
  "centraid-ontology",
+ "centraid-vault",
  "ed25519-dalek",
  "flate2",
  "hex",

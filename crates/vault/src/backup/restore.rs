@@ -1,452 +1,399 @@
-//! Restore: a vault file rebuilt from a destination, and every check that it
-//! is the file the snapshot took (#1080, "Restore").
+//! Restore, check and the structural check (spec §7,
+//! [#1209](https://github.com/srikanth235/centraid/issues/1209)).
 //!
-//! ```text
-//! fetch the manifest by the head's name   open it; its name must derive from its bytes
-//! fetch the ranges, 1,000 names a fetch   open each; its name must derive from its bytes
-//! write it at i × 64 KiB                  truncate to db_len
-//! db_hash                                 BLAKE3 of the whole file, against the manifest
-//! integrity_check, page_size, user_version
-//! census                                  table by table, against the manifest
-//! ```
+//! **The order is R3**: records first (the pages are written, verified and
+//! the vault opens), then thumbnails (the library is browsable), then
+//! originals, newest first, in the background or on open. [`Restore`] yields
+//! them in that order and no other: [`Restore::records`], then
+//! [`Restore::thumbnails`], then [`Restore::originals`], or all three through
+//! [`Restore::restore_all`], which says when the vault may open.
 //!
-//! The ranges come back through [`Store::get_many`], the protocol's `fetch`
-//! (the root's ruling A15): a snapshot is hundreds of 64 KiB ranges, and one
-//! request each would be hundreds of round trips. A fetch answers a name once,
-//! and two ranges with the same bytes have one name, so each answer is written
-//! at every index that names it.
-//!
-//! Every check refuses with a [`RestoreError`] naming the check or the table,
-//! and a refused restore leaves nothing at the output path: the file is built
-//! as `<out>.partial` and renamed only when every check passed. It never opens
-//! the file through the ladder — the caller does, with `Vault::open`, which
-//! migrates a file a newer build reads.
-//!
-//! **The checks are about rows, not only pages.** `integrity_check` speaks
-//! about the b-tree, and a perfect file with nobody's rows in it passes it;
-//! the census is what says the rows came back.
+//! Every object is fetched from the first gateway that has it and opened
+//! strictly against the ref that named it, so a gateway can lose or damage an
+//! object and the next one supplies it, and nothing a gateway says is believed
+//! until it opens.
 
-use std::collections::{BTreeMap, BTreeSet};
-use std::fs::{self, File};
-use std::io::{Read, Seek, SeekFrom, Write};
-use std::path::{Path, PathBuf};
+use std::collections::BTreeMap;
+use std::fs::File;
+use std::io::{Seek, SeekFrom, Write};
+use std::path::Path;
 
-use centraid_media::sealed;
+use centraid_media::sealed::{self, BackupKeys, Class, Name, PlaintextHash, Ref};
 
-use super::PlaneError;
-use super::naming::{BackupKeys, Name, PlaintextHash};
-use super::snapshot::{Manifest, RANGE_BYTES, RangeRef, census_of, read_copy};
-use super::store::{NAMES_PER_CALL, Store, StoreError};
-use crate::format::{APPLICATION_ID, EARLIER_APPLICATION_ID, schema_digest};
-use crate::migrations::{LADDER, Migration};
+use super::store::{Head, Store, StoreError};
+use super::tree::{self, Entry, Node, NodeSource, RANGE_BYTES, Root};
+use super::{PlaneError, Result, invariant};
 
-/// Why a restore refused the file.
-#[derive(Debug, thiserror::Error)]
-pub enum RestoreError {
-    #[error("{0} already exists; a restore never writes over a file")]
-    Exists(PathBuf),
-    #[error("the destination has no head: nothing to restore")]
-    NoHead,
-    #[error(transparent)]
-    Plane(#[from] PlaneError),
-    #[error("the manifest: {0}")]
-    Manifest(String),
-    #[error("range {i}: {reason}")]
-    Range { i: u32, reason: String },
-    #[error("db_hash: the restored file is not the file the snapshot took")]
-    DbHash,
-    #[error("integrity_check: {0}")]
-    Integrity(String),
-    #[error("{check}: the manifest says {expected} and the restored file says {found}")]
-    Header {
-        check: &'static str,
-        expected: i64,
-        found: i64,
-    },
-    /// The snapshot is of a vault the model before #1135 made: no compatibility (R-FP-10).
-    #[error("this backup was made by an earlier version of Centraid that this one cannot open")]
-    EarlierModel,
-    /// The snapshot's tables are not the ones this build was written against.
-    #[error(
-        "this backup does not match this version of Centraid: its tables are not the ones this version expects"
-    )]
-    SchemaMismatch { found: String, expected: String },
-    /// The snapshot was taken by a build whose ladder is longer than this one's: its rung is not
-    /// one this build knows. A file is never guessed down (the ladder is forward-only).
-    #[error(
-        "this backup was made by a newer version of Centraid (schema {found}; this version reads up to {supported}). Update Centraid and restore again"
-    )]
-    NewerBuild { found: i64, supported: i64 },
-    #[error(
-        "census: {table}: the manifest says {expected:?} rows and the restored file holds {found:?}"
-    )]
-    Census {
-        table: String,
-        expected: Option<i64>,
-        found: Option<i64>,
-    },
+/// The greatest `(epoch, generation, writes)` of the heads the gateways answered: the one to
+/// restore. A gateway that answered nothing is not in the list.
+#[must_use]
+pub fn pick_head(heads: &[(String, Head)]) -> Option<&(String, Head)> {
+    heads
+        .iter()
+        .max_by_key(|(_, head)| (head.epoch, head.generation, head.writes))
 }
 
-impl From<StoreError> for RestoreError {
-    fn from(error: StoreError) -> Self {
-        Self::Plane(error.into())
-    }
-}
-
-impl From<std::io::Error> for RestoreError {
-    fn from(error: std::io::Error) -> Self {
-        Self::Plane(error.into())
-    }
-}
-
-/// One check that passed, for the report.
+/// What one check of a restored vault found.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Check {
     pub name: &'static str,
-    pub detail: String,
 }
 
-/// A restored file, every check passed.
-#[derive(Debug, Clone)]
-pub struct Restored {
-    pub manifest: Manifest,
-    pub manifest_name: Name,
-    pub path: PathBuf,
+/// What the records phase did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordsReport {
+    pub ranges: u64,
+    pub bytes: u64,
+    /// The checks that passed, in order. A failed one is the error.
     pub checks: Vec<Check>,
 }
 
-fn fetch(store: &dyn Store, name: &Name) -> Result<Vec<u8>, StoreError> {
-    let mut bytes = Vec::new();
-    store.get(name, &mut bytes)?;
-    Ok(bytes)
+/// What a media phase did.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MediaReport {
+    /// Files written to the sink.
+    pub restored: u64,
+    /// Files with a chunk no gateway could supply.
+    pub missing: u64,
+    /// Files whose chunks opened but did not make the hash the tree names.
+    pub damaged: u64,
 }
 
-fn partial_of(out_path: &Path) -> PathBuf {
-    let mut partial = out_path.as_os_str().to_owned();
-    partial.push(".partial");
-    PathBuf::from(partial)
+/// A tree opened from the gateways.
+pub struct Restore<'a> {
+    keys: &'a BackupKeys,
+    stores: Vec<&'a dyn Store>,
+    nodes: BTreeMap<Name, Vec<u8>>,
+    pub root_ref: Ref,
+    pub root: Root,
 }
 
-/// Restore the snapshot the destination's head names.
-///
-/// # Errors
-/// [`RestoreError::NoHead`] for a destination that never registered one, and
-/// everything [`fetch_and_assemble`] refuses.
-pub fn restore_head(
-    store: &dyn Store,
-    keys: &BackupKeys,
-    out_path: &Path,
-) -> Result<Restored, RestoreError> {
-    let head = store.head()?.ok_or(RestoreError::NoHead)?;
-    fetch_and_assemble(store, keys, &head.name, out_path)
+fn failure(name: &'static str, detail: impl std::fmt::Display) -> PlaneError {
+    invariant(format!("restore check `{name}` failed: {detail}"))
 }
 
-/// Fetch the snapshot whose manifest is `head_name`, rebuild the vault file at
-/// `out_path`, and check it.
-///
-/// # Errors
-/// An existing `out_path`; a manifest or range that is missing, does not open
-/// or is not the file its name derives from; and every check in this module's
-/// header.
-pub fn fetch_and_assemble(
-    store: &dyn Store,
-    keys: &BackupKeys,
-    head_name: &Name,
-    out_path: &Path,
-) -> Result<Restored, RestoreError> {
-    fetch_and_assemble_on(LADDER, store, keys, head_name, out_path)
-}
-
-/// [`fetch_and_assemble`] over any ladder, so a rung two can be exercised before the real ladder
-/// holds one: a backup is accepted at any rung `ladder` knows, and the caller's `Vault::open`
-/// climbs it to the head.
-///
-/// # Errors
-/// As [`fetch_and_assemble`].
-pub fn fetch_and_assemble_on(
-    ladder: &[Migration],
-    store: &dyn Store,
-    keys: &BackupKeys,
-    head_name: &Name,
-    out_path: &Path,
-) -> Result<Restored, RestoreError> {
-    if out_path.exists() {
-        return Err(RestoreError::Exists(out_path.to_path_buf()));
-    }
-    let partial = partial_of(out_path);
-    let outcome = rebuild(ladder, store, keys, head_name, &partial);
-    match outcome {
-        Ok((manifest, checks)) => {
-            fs::rename(&partial, out_path)?;
-            Ok(Restored {
-                manifest,
-                manifest_name: *head_name,
-                path: out_path.to_path_buf(),
-                checks,
-            })
-        }
-        Err(error) => {
-            let _ = fs::remove_file(&partial);
-            Err(error)
-        }
+impl NodeSource for Restore<'_> {
+    fn plaintext(&self, name: &Name) -> Result<Option<Vec<u8>>> {
+        Ok(self.nodes.get(name).cloned())
     }
 }
 
-/// Fetch every range the manifest names and write each at `i × 64 KiB`.
-fn write_ranges(
-    store: &dyn Store,
-    keys: &BackupKeys,
-    manifest: &Manifest,
-    file: &mut File,
-) -> Result<(), RestoreError> {
-    let mut at: BTreeMap<Name, Vec<&RangeRef>> = BTreeMap::new();
-    let mut order: Vec<Name> = Vec::new();
-    for range in &manifest.ranges {
-        let indices = at.entry(range.name).or_default();
-        if indices.is_empty() {
-            order.push(range.name);
-        }
-        indices.push(range);
-    }
-    let mut written: BTreeSet<Name> = BTreeSet::new();
-    let mut refused: Option<RestoreError> = None;
-    for batch in order.chunks(NAMES_PER_CALL) {
-        let fetched = store.get_many(batch, &mut |name, sealed_bytes| {
-            let Some(ranges) = at.get(name).filter(|_| !written.contains(name)) else {
-                return Ok(());
-            };
-            let refuse = |refused: &mut Option<RestoreError>, i: u32, reason: String| {
-                *refused = Some(RestoreError::Range { i, reason });
-                std::io::Error::other("a range was refused")
-            };
-            let first = ranges.first().map_or(0, |range| range.i);
-            let plaintext = sealed::open_whole(keys, name, sealed_bytes)
-                .map_err(|error| refuse(&mut refused, first, error.to_string()))?;
-            for range in ranges {
-                if plaintext.len() as u64 != range.len {
-                    return Err(refuse(
-                        &mut refused,
-                        range.i,
-                        format!(
-                            "{} bytes where the manifest says {}",
-                            plaintext.len(),
-                            range.len
-                        ),
-                    ));
+impl<'a> Restore<'a> {
+    /// Fetch the root a head names and every node under it.
+    ///
+    /// # Errors
+    /// A node no gateway holds or that will not open.
+    pub fn open(keys: &'a BackupKeys, stores: &[&'a dyn Store], head: &Name) -> Result<Self> {
+        let mut this = Self {
+            keys,
+            stores: stores.to_vec(),
+            nodes: BTreeMap::new(),
+            root_ref: Ref {
+                name: *head,
+                digest: sealed::Digest::of(&[]),
+                len: 0,
+                class: Class::Records,
+            },
+            root: Root {
+                writes: 0,
+                user_version: 0,
+                page_size: 0,
+                page_count: 0,
+                taken_at_ms: 0,
+                census: BTreeMap::new(),
+                db_hash: None,
+                range_leaves: Vec::new(),
+                blobs: Ref {
+                    name: *head,
+                    digest: sealed::Digest::of(&[]),
+                    len: 0,
+                    class: Class::Records,
+                },
+                directory: Ref {
+                    name: *head,
+                    digest: sealed::Digest::of(&[]),
+                    len: 0,
+                    class: Class::Records,
+                },
+            },
+        };
+        let object = this.fetch(head)?;
+        let plaintext = sealed::open_checked(keys, head, Class::Records, None, None, &object)?;
+        this.root_ref = sealed::seal(keys, Class::Records, &plaintext)?.reference();
+        let Node::Root(root) = Node::decode(&plaintext)? else {
+            return Err(invariant("a head names something that is not a root"));
+        };
+        this.nodes.insert(*head, plaintext);
+        let mut stack: Vec<Ref> = root.range_leaves.clone();
+        stack.push(root.blobs);
+        stack.push(root.directory);
+        while let Some(reference) = stack.pop() {
+            let plaintext = this.fetch_open(&reference)?;
+            if reference.name != root.directory.name {
+                match Node::decode(&plaintext)? {
+                    Node::Blobs(tree::BlobsNode {
+                        body: tree::BlobsBody::Children(children),
+                        ..
+                    }) => stack.extend(children.into_iter().map(|(_, child)| child)),
+                    Node::Blobs(_) | Node::Leaf(_) => {}
+                    Node::Root(_) => return Err(invariant("a root inside a tree")),
                 }
-                file.seek(SeekFrom::Start(u64::from(range.i) * RANGE_BYTES))?;
-                file.write_all(&plaintext)?;
             }
-            written.insert(*name);
-            Ok(())
-        });
-        if let Some(error) = refused.take() {
-            return Err(error);
+            this.nodes.insert(reference.name, plaintext);
         }
-        fetched?;
+        this.root = root;
+        Ok(this)
     }
-    // A name the fetch did not hand back is one the destination does not
-    // hold; the lowest range it names is reported.
-    if let Some(name) = order.iter().find(|name| !written.contains(*name)) {
-        let i = at
-            .get(name)
-            .and_then(|ranges| ranges.first())
-            .map_or(0, |range| range.i);
-        return Err(RestoreError::Range {
-            i,
-            reason: format!("the destination does not hold {name}"),
+
+    fn fetch(&self, name: &Name) -> Result<Vec<u8>> {
+        let mut last = StoreError::Missing(*name);
+        for store in &self.stores {
+            let mut object = Vec::new();
+            match store.get(name, &mut object) {
+                Ok(_) => return Ok(object),
+                Err(error) => last = error,
+            }
+        }
+        Err(last.into())
+    }
+
+    /// Fetch and open against the ref, trying each gateway until one supplies bytes that open.
+    fn fetch_open(&self, reference: &Ref) -> Result<Vec<u8>> {
+        let mut last: Option<PlaneError> = None;
+        for store in &self.stores {
+            let mut object = Vec::new();
+            match store.get(&reference.name, &mut object) {
+                Ok(_) => match sealed::open(self.keys, reference, &object) {
+                    Ok(plaintext) => return Ok(plaintext),
+                    Err(error) => last = Some(error.into()),
+                },
+                Err(error) => last = Some(error.into()),
+            }
+        }
+        Err(last.unwrap_or_else(|| invariant("there is no gateway to restore from")))
+    }
+
+    // ── R3, phase 1: records ──
+
+    /// Write the vault's pages to `path`, verify them and say what held. After this the vault
+    /// opens.
+    ///
+    /// # Errors
+    /// A range no gateway supplies or that will not open; a failed check, named.
+    pub fn records(&self, path: &Path) -> Result<RecordsReport> {
+        let ranges = tree::ranges_of(self, &self.root)?;
+        let total = self.root.page_size * self.root.page_count;
+        if ranges.len() as u64 != self.root.range_count() {
+            return Err(failure(
+                "ranges",
+                "the tree names a different number of ranges",
+            ));
+        }
+        let mut file = File::create(path)?;
+        let mut whole = blake3::Hasher::new();
+        let mut written = 0_u64;
+        for (index, reference) in ranges.iter().enumerate() {
+            let bytes = self.fetch_open(reference)?;
+            let expected = if (index as u64 + 1) * RANGE_BYTES as u64 <= total {
+                RANGE_BYTES as u64
+            } else {
+                total - index as u64 * RANGE_BYTES as u64
+            };
+            if bytes.len() as u64 != expected {
+                return Err(failure(
+                    "ranges",
+                    format!("range {index} is {} bytes", bytes.len()),
+                ));
+            }
+            file.seek(SeekFrom::Start(index as u64 * RANGE_BYTES as u64))?;
+            file.write_all(&bytes)?;
+            whole.update(&bytes);
+            written += bytes.len() as u64;
+        }
+        file.sync_all()?;
+        drop(file);
+        let mut checks = vec![Check { name: "ranges" }];
+        if let Some(expected) = self.root.db_hash {
+            if whole.finalize().as_bytes() != &expected {
+                return Err(failure(
+                    "db_hash",
+                    "the pages are not the ones the root hashed",
+                ));
+            }
+            checks.push(Check { name: "db_hash" });
+        }
+        let connection = rusqlite::Connection::open_with_flags(
+            path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )?;
+        crate::file::quick_check(&connection).map_err(|error| failure("integrity_check", error))?;
+        checks.push(Check {
+            name: "integrity_check",
         });
+        let page_size: i64 = connection.query_row("PRAGMA page_size", [], |row| row.get(0))?;
+        let page_count: i64 = connection.query_row("PRAGMA page_count", [], |row| row.get(0))?;
+        if u64::try_from(page_size).ok() != Some(self.root.page_size)
+            || u64::try_from(page_count).ok() != Some(self.root.page_count)
+        {
+            return Err(failure("header", "the file's size is not the root's"));
+        }
+        checks.push(Check { name: "header" });
+        let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+        if u64::try_from(version).ok() != Some(self.root.user_version) {
+            return Err(failure("schema", "the user_version is not the root's"));
+        }
+        checks.push(Check { name: "schema" });
+        let census: BTreeMap<String, u64> = crate::pagesource::census_of(&connection)?
+            .into_iter()
+            .map(|(table, rows)| (table, u64::try_from(rows).unwrap_or(0)))
+            .collect();
+        if census != self.root.census {
+            return Err(failure(
+                "census",
+                "the rows are not the ones the root counted",
+            ));
+        }
+        checks.push(Check { name: "census" });
+        Ok(RecordsReport {
+            ranges: ranges.len() as u64,
+            bytes: written,
+            checks,
+        })
     }
-    Ok(())
+
+    // ── R3, phases 2 and 3: media ──
+
+    fn entries(&self) -> Result<Vec<Entry>> {
+        let mut entries = tree::entries_of(self, &self.root.blobs)?;
+        entries.sort_by_key(|entry| (std::cmp::Reverse(entry.taken_at_ms), entry.h));
+        Ok(entries)
+    }
+
+    fn media(
+        &self,
+        class: Class,
+        sink: &mut dyn FnMut(&Entry, &[u8]) -> Result<()>,
+    ) -> Result<MediaReport> {
+        let mut report = MediaReport::default();
+        for entry in self.entries()? {
+            let refs = entry.refs(class);
+            let wanted = !refs.is_empty() || (class == Class::Originals && entry.size == 0);
+            if !wanted {
+                continue;
+            }
+            let mut content = Vec::with_capacity(usize::try_from(entry.size).unwrap_or(0));
+            let mut missing = false;
+            for reference in refs {
+                match self.fetch_open(reference) {
+                    Ok(bytes) => content.extend_from_slice(&bytes),
+                    Err(_) => {
+                        missing = true;
+                        break;
+                    }
+                }
+            }
+            if missing {
+                report.missing += 1;
+            } else if PlaintextHash::of(&content) == entry.h {
+                sink(&entry, &content)?;
+                report.restored += 1;
+            } else {
+                report.damaged += 1;
+            }
+        }
+        Ok(report)
+    }
+
+    /// Phase 2: every derivative, newest first, handed to `sink` as bytes whose hash is `entry.h`.
+    ///
+    /// # Errors
+    /// The sink's refusal, or a node that is missing.
+    pub fn thumbnails(
+        &self,
+        sink: &mut dyn FnMut(&Entry, &[u8]) -> Result<()>,
+    ) -> Result<MediaReport> {
+        self.media(Class::Thumbnails, sink)
+    }
+
+    /// Phase 3: every original, newest first.
+    ///
+    /// # Errors
+    /// The sink's refusal, or a node that is missing.
+    pub fn originals(
+        &self,
+        sink: &mut dyn FnMut(&Entry, &[u8]) -> Result<()>,
+    ) -> Result<MediaReport> {
+        self.media(Class::Originals, sink)
+    }
+
+    /// All three phases in the order R3: the pages first, then `opened` (the caller opens the
+    /// vault), then thumbnails, then originals.
+    ///
+    /// # Errors
+    /// Whatever a phase refuses; `opened`'s own error stops it before any media.
+    pub fn restore_all(
+        &self,
+        path: &Path,
+        opened: &mut dyn FnMut(&Path) -> Result<()>,
+        sink: &mut dyn FnMut(&Entry, &[u8]) -> Result<()>,
+    ) -> Result<(RecordsReport, MediaReport, MediaReport)> {
+        let records = self.records(path)?;
+        opened(path)?;
+        let thumbnails = self.thumbnails(sink)?;
+        let originals = self.originals(sink)?;
+        Ok((records, thumbnails, originals))
+    }
 }
 
-fn rebuild(
-    ladder: &[Migration],
-    store: &dyn Store,
-    keys: &BackupKeys,
-    head_name: &Name,
-    partial: &Path,
-) -> Result<(Manifest, Vec<Check>), RestoreError> {
-    let mut checks = Vec::new();
-
-    let manifest = Manifest::read(keys, head_name, &mut |part| fetch(store, part)).map_err(
-        |error| match error {
-            PlaneError::Store(error) => RestoreError::from(error),
-            other => RestoreError::Manifest(other.to_string()),
-        },
-    )?;
-    checks.push(Check {
-        name: "manifest",
-        detail: format!(
-            "{} ranges, {} bytes, taken at {}",
-            manifest.ranges.len(),
-            manifest.db_len,
-            manifest.taken_at_ms
-        ),
-    });
-
-    let mut file = File::create(partial)?;
-    write_ranges(store, keys, &manifest, &mut file)?;
-    file.set_len(manifest.db_len)?;
-    file.sync_all()?;
-    drop(file);
-    checks.push(Check {
-        name: "ranges",
-        detail: format!("{} ranges opened under their names", manifest.ranges.len()),
-    });
-
-    let mut hasher = blake3::Hasher::new();
-    let mut reader = File::open(partial)?;
-    let mut buffer = vec![0_u8; 1 << 20];
-    loop {
-        let read = reader.read(&mut buffer)?;
-        if read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..read]);
-    }
-    drop(reader);
-    if PlaintextHash::from_bytes(*hasher.finalize().as_bytes()) != manifest.db_hash {
-        return Err(RestoreError::DbHash);
-    }
-    checks.push(Check {
-        name: "db_hash",
-        detail: manifest.db_hash.to_hex(),
-    });
-
-    let (integrity, page_size, user_version, application_id, census, digest) =
-        read_copy(partial, |connection| {
-            let integrity: String =
-                connection.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
-            let page_size: i64 = connection.query_row("PRAGMA page_size", [], |row| row.get(0))?;
-            let user_version: i64 =
-                connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-            let application_id: i64 =
-                connection.query_row("PRAGMA application_id", [], |row| row.get(0))?;
-            Ok((
-                integrity,
-                page_size,
-                user_version,
-                application_id,
-                census_of(connection)?,
-                schema_digest(connection)?,
-            ))
-        })?;
-    if integrity != "ok" {
-        return Err(RestoreError::Integrity(integrity));
-    }
-    checks.push(Check {
-        name: "integrity_check",
-        detail: integrity,
-    });
-    // THE FORMAT, BEFORE ANYTHING ELSE IS ASKED OF THE FILE (#1146, D3): a backup of the model
-    // before #1135 and one whose tables are not this build's are refused with a sentence, and the
-    // partial file is removed by the caller, so nothing replaces the vault that is here.
-    if application_id == EARLIER_APPLICATION_ID {
-        return Err(RestoreError::EarlierModel);
-    }
-    for (check, expected, found) in [
-        ("application_id", APPLICATION_ID, application_id),
-        ("page_size", i64::from(manifest.page_size), page_size),
-        ("user_version", manifest.user_version, user_version),
-    ] {
-        if expected != found {
-            return Err(RestoreError::Header {
-                check,
-                expected,
-                found,
-            });
-        }
-    }
-    checks.push(Check {
-        name: "header",
-        detail: format!("page_size {page_size}, user_version {user_version}"),
-    });
-    // THE BACKUP'S OWN RUNG, NOT THE RUNNING BUILD'S (B2): the manifest records `user_version`,
-    // the rung the file had reached, and the file must be exactly that rung's schema. Any rung
-    // the ladder knows is accepted here and climbed by `Vault::open`; a rung above the ladder is
-    // a newer build's, refused with a sentence that says to update.
-    let supported = ladder.last().map_or(0, |rung| rung.version);
-    if user_version > supported {
-        return Err(RestoreError::NewerBuild {
-            found: user_version,
-            supported,
-        });
-    }
-    let expected = rung_digest(ladder, user_version)?;
-    if digest != expected {
-        return Err(RestoreError::SchemaMismatch {
-            found: digest,
-            expected,
-        });
-    }
-    checks.push(Check {
-        name: "schema",
-        detail: format!("rung {user_version}, digest {digest}"),
-    });
-
-    let tables: BTreeSet<&String> = manifest.census.keys().chain(census.keys()).collect();
-    for table in tables {
-        let expected = manifest.census.get(table).copied();
-        let found = census.get(table).copied();
-        if expected != found {
-            return Err(RestoreError::Census {
-                table: table.clone(),
-                expected,
-                found,
-            });
-        }
-    }
-    checks.push(Check {
-        name: "census",
-        detail: format!(
-            "{} tables, {} rows",
-            census.len(),
-            census.values().sum::<i64>()
-        ),
-    });
-    Ok((manifest, checks))
+/// What "Check my backup" found.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckReport {
+    pub records: RecordsReport,
+    /// Chunks the tree lists that the gateway does not hold, by class.
+    pub thumbnails_missing: u64,
+    pub originals_missing: u64,
 }
 
-/// The schema digest of a file that has run the ladder up to and including `version`: the rungs
-/// are applied to an empty in-memory file, so the answer is whatever the ladder says that rung
-/// makes, never a constant that could drift from it.
-fn rung_digest(ladder: &[Migration], version: i64) -> Result<String, RestoreError> {
-    let connection = rusqlite::Connection::open_in_memory().map_err(PlaneError::from)?;
-    let mut reached = 0_i64;
-    for rung in ladder.iter().filter(|rung| rung.version <= version) {
-        connection
-            .execute_batch(rung.sql)
-            .map_err(PlaneError::from)?;
-        reached = rung.version;
-    }
-    if reached != version || version < 1 {
-        return Err(RestoreError::SchemaMismatch {
-            found: format!("rung {version}"),
-            expected: format!(
-                "a rung from 1 to {}",
-                ladder.last().map_or(0, |r| r.version)
-            ),
-        });
-    }
-    Ok(schema_digest(&connection).map_err(PlaneError::from)?)
+/// "Check my backup": restore the head's records into `scratch` from the tree, verify, and ask
+/// the gateway whether it holds every media chunk the tree lists. The scratch directory is
+/// removed whatever happens.
+///
+/// # Errors
+/// The first failed check, or a gateway that cannot be asked.
+pub fn check(keys: &BackupKeys, store: &dyn Store, scratch: &Path) -> Result<CheckReport> {
+    let head = store
+        .head()?
+        .ok_or_else(|| invariant("the gateway holds no head to check"))?;
+    let restore = Restore::open(keys, &[store], &head.name)?;
+    std::fs::create_dir_all(scratch)?;
+    let outcome = (|| -> Result<CheckReport> {
+        let records = restore.records(&scratch.join("check.db"))?;
+        let mut missing = [0_u64; 2];
+        for (slot, class) in [Class::Thumbnails, Class::Originals]
+            .into_iter()
+            .enumerate()
+        {
+            let names: Vec<Name> = tree::media_of(&restore, &restore.root_ref, class)?
+                .into_keys()
+                .collect();
+            for batch in names.chunks(super::store::NAMES_PER_CALL) {
+                missing[slot] += store.exists(batch)?.len() as u64;
+            }
+        }
+        Ok(CheckReport {
+            records,
+            thumbnails_missing: missing[0],
+            originals_missing: missing[1],
+        })
+    })();
+    let _ = std::fs::remove_dir_all(scratch);
+    outcome
 }
 
-// ---------------------------------------------------------------------------
-// The structural check: what `centraid doctor` runs over a vault file
-// ---------------------------------------------------------------------------
+// ─── the structural check of a vault file (centraid doctor) ─────────────────
 
-/// Why the structural check could not run.
-#[derive(Debug, thiserror::Error)]
-pub enum CheckError {
-    #[error("no vault file at {0}")]
-    Missing(PathBuf),
-    #[error(transparent)]
-    Sqlite(#[from] rusqlite::Error),
-}
-
-/// What [`restore_check`] found.
-#[derive(Debug, Clone)]
+/// What the structural check found.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructuralReport {
     /// `PRAGMA integrity_check`.
     pub integrity: String,
@@ -461,15 +408,21 @@ impl StructuralReport {
     }
 }
 
-/// THE STRUCTURAL CHECK over a vault file that is not live: `integrity_check`
-/// and `foreign_key_check`.
+/// Why the structural check could not run.
+#[derive(Debug, thiserror::Error)]
+pub enum CheckError {
+    #[error("there is no vault file at {0}")]
+    Missing(std::path::PathBuf),
+    #[error(transparent)]
+    Sqlite(#[from] rusqlite::Error),
+}
+
+/// `integrity_check` and `foreign_key_check` over a vault file that is not live. Read-only and
+/// lock-free: it never changes the file it judges.
 ///
-/// Read-only and lock-free, so it never changes the file it judges. It is the
-/// one definition of "sound" `centraid doctor` reports; [`restore_head`]'s own
-/// checks are stronger (the manifest's `db_hash` and census) and need the
-/// manifest this one does not have. There is no key verdict: the vault seals
-/// nothing under a key of its own (R-1047-D2).
-pub fn restore_check(file: &Path) -> Result<StructuralReport, CheckError> {
+/// # Errors
+/// A missing file, or SQLite's refusal.
+pub fn restore_check(file: &Path) -> std::result::Result<StructuralReport, CheckError> {
     if !file.exists() {
         return Err(CheckError::Missing(file.to_path_buf()));
     }
@@ -478,7 +431,6 @@ pub fn restore_check(file: &Path) -> Result<StructuralReport, CheckError> {
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI,
     )?;
     let integrity: String = connection.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
-
     let mut violations = Vec::new();
     {
         let mut statement = connection.prepare("PRAGMA foreign_key_check")?;
@@ -497,166 +449,4 @@ pub fn restore_check(file: &Path) -> Result<StructuralReport, CheckError> {
         integrity,
         foreign_key_violations: violations,
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use crate::backup::naming::{Digest, keys_from_root};
-    use crate::backup::snapshot;
-    use crate::backup::store::MemoryStore;
-
-    const ROOT: [u8; 32] = [0x42; 32];
-    const VAULT: &str = "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2";
-
-    /// A rung two the real ladder does not have yet: one more table.
-    const RUNG_TWO: &str = "CREATE TABLE later_rung (id TEXT PRIMARY KEY, note TEXT) STRICT;";
-
-    fn two_rungs() -> Vec<Migration> {
-        vec![
-            Migration {
-                version: 1,
-                name: "baseline",
-                sql: LADDER[0].sql,
-            },
-            Migration {
-                version: 2,
-                name: "later",
-                sql: RUNG_TWO,
-            },
-        ]
-    }
-
-    /// A founded vault's snapshot, published whole to a store whose head names it.
-    fn published(dir: &Path) -> (MemoryStore, BackupKeys) {
-        let keys = keys_from_root(&ROOT);
-        let vault = crate::file::Vault::create(dir.join("vault.db")).unwrap();
-        vault.found("The Household", "Ada").unwrap();
-        let spool = crate::backup::spool::Spool::open(dir.join("vault.spool")).unwrap();
-        let taken = snapshot::take(&vault, &keys, &spool, u64::MAX, VAULT, "test").unwrap();
-        let store = MemoryStore::new("gw");
-        for range in &taken.ranges {
-            let mut sealed_bytes = Vec::new();
-            std::io::Read::read_to_end(&mut spool.read(&range.name).unwrap(), &mut sealed_bytes)
-                .unwrap();
-            store
-                .put(
-                    &range.name,
-                    &Digest::of(&sealed_bytes),
-                    sealed_bytes.len() as u64,
-                    &mut &sealed_bytes[..],
-                )
-                .unwrap();
-        }
-        for leaf in &taken.leaves {
-            let sealed_leaf = sealed::seal_part(&keys, 0, &leaf.json, true).unwrap();
-            store
-                .put(
-                    &leaf.name,
-                    &Digest::of(&sealed_leaf),
-                    sealed_leaf.len() as u64,
-                    &mut &sealed_leaf[..],
-                )
-                .unwrap();
-        }
-        let sealed_manifest = sealed::seal_part(&keys, 0, &taken.manifest_json, true).unwrap();
-        store
-            .put(
-                &taken.manifest_name,
-                &Digest::of(&sealed_manifest),
-                sealed_manifest.len() as u64,
-                &mut &sealed_manifest[..],
-            )
-            .unwrap();
-        store
-            .set_head(
-                &taken.manifest_name,
-                None,
-                taken.manifest.taken_at_ms,
-                taken.manifest.writes,
-            )
-            .unwrap();
-        (store, keys)
-    }
-
-    /// **B2.** A backup taken at rung one restores under a build whose ladder has a rung two: the
-    /// restore accepts any rung the ladder knows (the caller's `Vault::open` climbs it), where it
-    /// used to refuse every backup whose digest differed from the running build's.
-    #[test]
-    fn a_backup_at_an_older_rung_restores_under_a_longer_ladder() {
-        let dir = tempfile::tempdir().unwrap();
-        let (store, keys) = published(dir.path());
-        let head = store.head().unwrap().unwrap();
-        let out = dir.path().join("restored.db");
-        let restored =
-            fetch_and_assemble_on(&two_rungs(), &store, &keys, &head.name, &out).unwrap();
-        assert_eq!(restored.manifest.user_version, 1);
-        assert!(
-            restored
-                .checks
-                .iter()
-                .any(|check| check.name == "schema" && check.detail.starts_with("rung 1")),
-            "{:?}",
-            restored.checks
-        );
-    }
-
-    /// A backup from a newer build is a sentence that says to update, never a guess down.
-    #[test]
-    fn a_backup_from_a_newer_build_asks_for_an_update() {
-        let dir = tempfile::tempdir().unwrap();
-        let (store, keys) = published(dir.path());
-        let head = store.head().unwrap().unwrap();
-        let out = dir.path().join("restored.db");
-        let error = fetch_and_assemble_on(&[], &store, &keys, &head.name, &out).unwrap_err();
-        assert!(
-            matches!(
-                error,
-                RestoreError::NewerBuild {
-                    found: 1,
-                    supported: 0
-                }
-            ),
-            "{error:?}"
-        );
-        assert!(!out.exists(), "a refused restore leaves nothing");
-    }
-
-    /// Accepting any rung is not accepting any file: a file whose tables are not its own rung's
-    /// is still refused.
-    #[test]
-    fn a_file_that_is_not_its_rungs_schema_is_refused() {
-        let dir = tempfile::tempdir().unwrap();
-        let (store, keys) = published(dir.path());
-        let head = store.head().unwrap().unwrap();
-        let out = dir.path().join("restored.db");
-        let mut altered = two_rungs();
-        altered[0].sql = "CREATE TABLE not_the_baseline (id TEXT) STRICT;";
-        let error = fetch_and_assemble_on(&altered, &store, &keys, &head.name, &out).unwrap_err();
-        assert!(
-            matches!(error, RestoreError::SchemaMismatch { .. }),
-            "{error:?}"
-        );
-    }
-
-    #[test]
-    fn a_sound_vault_file_is_structurally_clean() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("vault.db");
-        let vault = crate::file::Vault::create(&file).unwrap();
-        vault.found("The Household", "Ada").unwrap();
-        vault.close().unwrap();
-        let report = restore_check(&file).unwrap();
-        assert_eq!(report.integrity, "ok");
-        assert!(report.foreign_key_violations.is_empty());
-        assert!(report.is_clean());
-    }
-
-    #[test]
-    fn a_missing_file_is_a_named_refusal_not_a_panic() {
-        let dir = tempfile::tempdir().unwrap();
-        let error = restore_check(&dir.path().join("nothing.db")).unwrap_err();
-        assert!(error.to_string().contains("no vault file"), "{error}");
-    }
 }

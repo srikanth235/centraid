@@ -1,31 +1,29 @@
-//! The device state of a phone's backup (#1191, E11, B14): the five tables,
-//! the ladder, and the reset rules. Counts and rows, never durations.
+//! The device state and the staging area (spec §6.1, §6.4, #1209, L4): the schema, every
+//! constraint the code states written with raw SQL, and the crash a rename leaves behind.
+//! Counts and rows, never durations.
 
-use centraid_vault::backup::naming::{Digest, Name, PlaintextHash};
+use centraid_media::sealed::{Name, PlaintextHash};
+use centraid_vault::backup::PlaneError;
+use centraid_vault::backup::staging::{self, Staging};
 use centraid_vault::backup::state::{
-    DeviceState, Gateway, LocalBytes, LocalSource, Outbox, OutboxKind, Reach, Waiting,
+    Device, DeviceState, Gateway, LocalBytes, LocalSource, STATE_APPLICATION_ID,
 };
 use rusqlite::Connection;
 
 const GATEWAY: &str = "0123456789abcdef0123456789abcdef";
-const OTHER: &str = "fedcba9876543210fedcba9876543210";
 
 fn name(seed: u8) -> Name {
     Name::from_hex(&format!("{seed:02x}").repeat(32)).expect("a name")
 }
 
-fn digest(seed: u8) -> Digest {
-    Digest::from_hex(&format!("{seed:02x}").repeat(32)).expect("a digest")
-}
-
-fn paired(id: &str, now: u64) -> Gateway {
+fn paired(id: &str, epoch: u64) -> Gateway {
     Gateway::paired(
         id.to_owned(),
         vec!["192.168.1.5:7443".to_owned()],
         vec![1, 2, 3],
         "the desk".to_owned(),
-        1,
-        now,
+        epoch,
+        100,
     )
 }
 
@@ -35,354 +33,393 @@ fn open() -> (tempfile::TempDir, DeviceState) {
     (dir, state)
 }
 
-fn part(gateway: &str, seed: u8, kind: OutboxKind, created: u64) -> Outbox {
-    Outbox::sealed(
-        gateway,
-        name(seed),
-        kind,
-        format!("/spool/{seed}").into(),
-        100,
-        digest(seed),
-        created,
-    )
+fn refused(connection: &Connection, sql: &str, params: impl rusqlite::Params) -> bool {
+    connection.execute(sql, params).is_err_and(|error| {
+        error.to_string().contains("CHECK") || error.to_string().contains("constraint")
+    })
 }
 
 #[test]
-fn a_gateway_row_round_trips_and_a_pairing_again_starts_clean() {
+fn the_schema_has_no_outbox_and_one_rung() {
     let (_dir, state) = open();
-    state.put_gateway(&paired(GATEWAY, 10)).expect("paired");
-    state
-        .record_head(GATEWAY, &name(7), 3, 41, 1_000)
-        .expect("a head set");
-    state.set_cursor(GATEWAY, 99).expect("cursor");
-    state.set_moved(GATEWAY, 4, 50).expect("moved");
-    let row = state.gateway(GATEWAY).expect("reads").expect("a row");
-    assert_eq!(row.head, Some(name(7)));
-    assert_eq!((row.generation, row.writes, row.cursor), (3, 41, 99));
-    assert_eq!((row.reach, row.moved_epoch), (Reach::Moved, Some(4)));
-
-    // Paired again (a claim): the row keeps its identity and nothing it knew.
-    let mut again = paired(GATEWAY, 60);
-    again.epoch = 5;
-    state.put_gateway(&again).expect("paired again");
-    let row = state.gateway(GATEWAY).expect("reads").expect("a row");
-    assert_eq!(row, again);
-    assert_eq!(row.moved_epoch, None);
-    assert_eq!(state.gateways().expect("lists").len(), 1);
-}
-
-#[test]
-fn moved_is_one_gateways_mark_and_never_the_others() {
-    let (_dir, state) = open();
-    state.put_gateway(&paired(GATEWAY, 10)).expect("one");
-    state.put_gateway(&paired(OTHER, 11)).expect("two");
-    state.set_moved(GATEWAY, 2, 20).expect("moved");
-    let reaches: Vec<_> = state
-        .gateways()
-        .expect("lists")
-        .into_iter()
-        .map(|row| (row.gateway_id, row.reach))
-        .collect();
-    assert_eq!(
-        reaches,
-        vec![
-            (GATEWAY.to_owned(), Reach::Moved),
-            (OTHER.to_owned(), Reach::Ok)
-        ]
-    );
-    assert!(
-        state.set_reach(GATEWAY, Reach::Moved, 21).is_err(),
-        "a moved mark needs its claim's epoch"
-    );
-    state.set_reach(GATEWAY, Reach::Frozen, 22).expect("frozen");
-    let row = state.gateway(GATEWAY).expect("reads").expect("a row");
-    assert_eq!((row.reach, row.moved_epoch), (Reach::Frozen, None));
-}
-
-#[test]
-fn the_outbox_is_per_gateway_ordered_and_leaves_when_done() {
-    let (_dir, state) = open();
-    state.put_gateway(&paired(GATEWAY, 10)).expect("one");
-    state.put_gateway(&paired(OTHER, 11)).expect("two");
-    state
-        .put_outbox_many(&[
-            part(GATEWAY, 3, OutboxKind::Manifest, 1),
-            part(GATEWAY, 2, OutboxKind::Range, 5),
-            part(GATEWAY, 1, OutboxKind::Leaf, 9),
-            part(OTHER, 2, OutboxKind::Range, 5),
-        ])
-        .expect("owed");
-    let order: Vec<_> = state
-        .outbox(GATEWAY)
-        .expect("reads")
-        .into_iter()
-        .map(|row| row.kind)
-        .collect();
-    assert_eq!(
-        order,
-        vec![OutboxKind::Range, OutboxKind::Leaf, OutboxKind::Manifest],
-        "the root manifest moves last, whatever its age"
-    );
-    assert_eq!(state.owed_bytes(GATEWAY).expect("bytes"), 300);
-    assert!(state.done(GATEWAY, &name(2)).expect("done"));
-    assert!(!state.done(GATEWAY, &name(2)).expect("done twice"));
-    assert_eq!(state.outbox(OTHER).expect("reads").len(), 1);
-    assert_eq!(
-        state.owed_names().expect("names").len(),
-        3,
-        "the union over gateways: 1, 2 and 3"
-    );
-}
-
-#[test]
-fn an_unsealed_row_waits_and_a_check_refuses_a_row_that_lies() {
-    let (_dir, state) = open();
-    state.put_gateway(&paired(GATEWAY, 10)).expect("one");
-    let mut waiting = Outbox {
-        gateway_id: GATEWAY.to_owned(),
-        name: name(4),
-        kind: OutboxKind::Blob,
-        hash: Some(PlaintextHash::of(b"an original")),
-        part_path: None,
-        waiting: Some(Waiting::Bytes),
-        size: None,
-        digest: None,
-        media_type: Some("image/heic".to_owned()),
-        created_ms: 1,
-        handed_ms: None,
-        attempts: 0,
-        last_error: None,
-        derivative: false,
-    };
-    state.put_outbox(&waiting).expect("owed, not yet sealed");
-    assert_eq!(state.outbox_waiting(GATEWAY).expect("waits").len(), 1);
-    state
-        .seal_outbox(GATEWAY, &name(4), "/spool/4".as_ref(), 64, &digest(4))
-        .expect("sealed");
-    assert!(state.outbox_waiting(GATEWAY).expect("waits").is_empty());
-    assert_eq!(
-        state
-            .outbox_row(GATEWAY, &name(4))
-            .expect("reads")
-            .expect("a row")
-            .part_path,
-        Some("/spool/4".into())
-    );
-
-    // A blob with no hash, a range with one, a path with no digest: refused.
-    waiting.name = name(5);
-    waiting.hash = None;
-    assert!(state.put_outbox(&waiting).is_err(), "a blob names its hash");
-    let mut range = part(GATEWAY, 6, OutboxKind::Range, 1);
-    range.hash = Some(PlaintextHash::of(b"x"));
-    assert!(state.put_outbox(&range).is_err(), "only a blob has a hash");
-    let mut no_digest = part(GATEWAY, 8, OutboxKind::Range, 1);
-    no_digest.digest = None;
-    assert!(state.put_outbox(&no_digest).is_err(), "a path has a digest");
-}
-
-#[test]
-fn forgetting_a_gateway_drops_its_outbox_and_nothing_else() {
-    let (_dir, state) = open();
-    state.put_gateway(&paired(GATEWAY, 10)).expect("one");
-    state.put_gateway(&paired(OTHER, 11)).expect("two");
-    state
-        .put_outbox(&part(GATEWAY, 1, OutboxKind::Range, 1))
-        .expect("owed");
-    state
-        .put_outbox(&part(OTHER, 2, OutboxKind::Range, 1))
-        .expect("owed");
-    let local = LocalBytes {
-        hash: PlaintextHash::of(b"kept"),
-        source: LocalSource::Store,
-        os_ref: None,
-        edited: false,
-    };
-    state.put_local(&local).expect("local");
-    state.remove_gateway(GATEWAY).expect("forgotten");
-    assert!(state.outbox(GATEWAY).expect("reads").is_empty());
-    assert_eq!(state.outbox(OTHER).expect("reads").len(), 1);
-    assert_eq!(state.locals().expect("locals"), vec![local]);
-    assert_eq!(
-        state.owed_paths().expect("paths").len(),
-        1,
-        "only the other gateway's spool file is still owed"
-    );
-}
-
-#[test]
-fn restore_in_place_resets_each_gateway_and_empties_the_outbox_and_keeps_local_bytes() {
-    let (_dir, state) = open();
-    state.put_gateway(&paired(GATEWAY, 10)).expect("one");
-    state
-        .record_head(GATEWAY, &name(1), 9, 90, 2_000)
-        .expect("head");
-    state.set_cursor(GATEWAY, 500).expect("cursor");
-    state.next_sample_counter(GATEWAY).expect("a draw");
-    state.set_reach(GATEWAY, Reach::Busy, 20).expect("busy");
-    state.clear_directory_dirty(GATEWAY).expect("clean");
-    state
-        .put_outbox(&part(GATEWAY, 1, OutboxKind::Range, 1))
-        .expect("owed");
-    state
-        .put_local(&LocalBytes {
-            hash: PlaintextHash::of(b"here"),
-            source: LocalSource::Os,
-            os_ref: Some("asset-1".to_owned()),
-            edited: true,
-        })
-        .expect("local");
-    state
-        .reset_for_restore(&[(GATEWAY.to_owned(), 7, Some(name(2)))])
-        .expect("reset");
-    let row = state.gateway(GATEWAY).expect("reads").expect("a row");
-    assert_eq!(
-        (row.epoch, row.head, row.generation, row.writes, row.cursor),
-        (7, Some(name(2)), 0, 0, 0)
-    );
-    assert_eq!(
-        (row.reach, row.sample_counter, row.directory_dirty),
-        (Reach::Ok, 0, true)
-    );
-    assert!(state.outbox(GATEWAY).expect("reads").is_empty());
-    assert_eq!(
-        state.locals().expect("locals").len(),
-        1,
-        "about this device"
-    );
-}
-
-#[test]
-fn the_sample_counter_counts_each_draw_once() {
-    let (_dir, state) = open();
-    state.put_gateway(&paired(GATEWAY, 10)).expect("one");
-    let draws: Vec<_> = (0..3)
-        .map(|_| state.next_sample_counter(GATEWAY).expect("a draw"))
-        .collect();
-    assert_eq!(draws, vec![0, 1, 2]);
-    assert!(state.next_sample_counter(OTHER).is_err(), "not paired");
-}
-
-#[test]
-fn the_state_has_five_tables_an_id_and_a_rung_and_no_token_and_no_key_value_table() {
-    let (dir, state) = open();
-    drop(state);
-    let connection = Connection::open(dir.path().join("v.state.db")).expect("opens");
+    let connection = state.connection();
     let mut tables: Vec<String> = connection
-        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+        .prepare("SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name")
         .expect("prepares")
         .query_map([], |row| row.get(0))
-        .expect("queries")
-        .collect::<Result<_, _>>()
+        .expect("lists")
+        .collect::<rusqlite::Result<_>>()
         .expect("rows");
     tables.sort();
     assert_eq!(
         tables,
-        vec!["gateway", "local_bytes", "outbox", "part_digests", "undone"]
+        [
+            "device",
+            "gateway",
+            "local_bytes",
+            "node",
+            "staged",
+            "undone"
+        ],
+        "pairings, what each confirmed, the node cache, staging, the device row, undone names, local bytes"
     );
-    let id: i64 = connection
-        .query_row("PRAGMA application_id", [], |row| row.get(0))
-        .expect("id");
-    let rung: i64 = connection
-        .query_row("PRAGMA user_version", [], |row| row.get(0))
-        .expect("rung");
-    assert_eq!((id, rung), (0x4342_5331, 1));
-    let columns: Vec<String> = connection
-        .prepare("SELECT name FROM pragma_table_info('gateway')")
-        .expect("prepares")
-        .query_map([], |row| row.get(0))
-        .expect("queries")
-        .collect::<Result<_, _>>()
-        .expect("rows");
-    assert!(
-        !columns.iter().any(|column| column.contains("token")),
-        "the token is the shell's (E12): {columns:?}"
-    );
-}
-
-#[test]
-fn a_file_of_another_program_or_a_newer_rung_is_refused_untouched() {
-    let dir = tempfile::tempdir().expect("a temp dir");
-    let foreign = dir.path().join("foreign.state.db");
-    {
-        let connection = Connection::open(&foreign).expect("creates");
+    assert!(!tables.iter().any(|table| table.contains("outbox")));
+    let (application_id, version): (i64, i64) = (
         connection
-            .execute_batch("CREATE TABLE other (x); PRAGMA application_id = 1234;")
-            .expect("another program's file");
-    }
-    assert!(DeviceState::open(&foreign).is_err());
-
-    let newer = dir.path().join("newer.state.db");
-    DeviceState::open(&newer).expect("founds");
-    {
-        let connection = Connection::open(&newer).expect("opens");
+            .query_row("PRAGMA application_id", [], |row| row.get(0))
+            .expect("id"),
         connection
-            .pragma_update(None, "user_version", 2)
-            .expect("a rung this build does not have");
-    }
-    let before = std::fs::read(&newer).expect("reads");
-    assert!(
-        DeviceState::open(&newer).is_err(),
-        "a newer rung is refused"
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("version"),
     );
-    assert_eq!(std::fs::read(&newer).expect("reads"), before, "untouched");
+    assert_eq!((application_id, version), (STATE_APPLICATION_ID, 1));
 }
 
 #[test]
-fn an_old_ledger_beside_the_vault_is_deleted_without_being_read() {
+fn every_constraint_the_code_states_is_in_the_database_too() {
+    let (_dir, state) = open();
+    let c = state.connection();
+    state.add_gateway(&paired(GATEWAY, 1)).expect("pairs");
+    let hex = "ab".repeat(32);
+
+    // gateway
+    assert!(
+        refused(
+            c,
+            "INSERT INTO gateway (gateway_id, addrs, cert_der, label, epoch, paired_ms) VALUES ('g', '[]', x'', 'l', 0, 1)",
+            []
+        ),
+        "epoch >= 1"
+    );
+    assert!(
+        refused(
+            c,
+            "INSERT INTO gateway (gateway_id, addrs, cert_der, label, epoch, paired_ms) VALUES ('', '[]', x'', 'l', 1, 1)",
+            []
+        ),
+        "an id"
+    );
+    assert!(
+        refused(c, "UPDATE gateway SET reach = 'asleep'", []),
+        "a closed set of reaches"
+    );
+    assert!(
+        refused(c, "UPDATE gateway SET reach = 'moved'", []),
+        "moved needs its epoch"
+    );
+    assert!(
+        refused(c, "UPDATE gateway SET moved_epoch = 2", []),
+        "an epoch needs moved"
+    );
+    assert!(
+        refused(c, "UPDATE gateway SET conf = ?1", [&hex]),
+        "a confirmation needs its time"
+    );
+    assert!(
+        refused(
+            c,
+            "UPDATE gateway SET troot = ?1, troot_ms = 1",
+            ["NOT-HEX"]
+        ),
+        "a name is 64 hex"
+    );
+    assert!(
+        refused(c, "UPDATE gateway SET oroot = ?1", [&hex]),
+        "a confirmation needs its time"
+    );
+    assert!(refused(c, "UPDATE gateway SET sample_counter = -1", []));
+    assert!(refused(c, "UPDATE gateway SET generation = -1", []));
+    assert!(refused(c, "UPDATE gateway SET directory_dirty = 2", []));
+    assert!(refused(c, "UPDATE gateway SET scrub_cursor = 'x'", []));
+    // node
+    assert!(refused(
+        c,
+        "INSERT INTO node (name, plaintext) VALUES ('short', x'01')",
+        []
+    ));
+    assert!(
+        refused(
+            c,
+            "INSERT INTO node (name, plaintext) VALUES (?1, x'')",
+            [&hex]
+        ),
+        "a node has bytes"
+    );
+    // staged
+    assert!(refused(
+        c,
+        "INSERT INTO staged (name, path, size) VALUES (?1, 'p', -1)",
+        [&hex]
+    ));
+    assert!(refused(
+        c,
+        "INSERT INTO staged (name, path, size) VALUES (?1, '', 1)",
+        [&hex]
+    ));
+    // device
+    assert!(
+        refused(c, "INSERT INTO device (id) VALUES (2)", []),
+        "one row"
+    );
+    assert!(
+        refused(c, "UPDATE device SET newest = ?1", [&hex]),
+        "a root needs its time"
+    );
+    assert!(
+        refused(c, "UPDATE device SET carry = x'010203'", []),
+        "pages are four bytes"
+    );
+    assert!(refused(c, "UPDATE device SET since_full = -1", []));
+    // undone
+    assert!(
+        c.execute(
+            "INSERT INTO undone (gateway_id, name, until_ms) VALUES ('nobody', ?1, 1)",
+            [&hex]
+        )
+        .is_err(),
+        "an undone name belongs to a paired gateway"
+    );
+    // local_bytes
+    assert!(
+        refused(
+            c,
+            "INSERT INTO local_bytes (hash, source) VALUES (?1, 'os')",
+            [&hex]
+        ),
+        "a library row needs its reference"
+    );
+    assert!(
+        refused(
+            c,
+            "INSERT INTO local_bytes (hash, source, ref) VALUES (?1, 'store', 'x')",
+            [&hex]
+        ),
+        "a store row has none"
+    );
+    assert!(
+        refused(
+            c,
+            "INSERT INTO local_bytes (hash, source, edited) VALUES (?1, 'store', 1)",
+            [&hex]
+        ),
+        "only a library item is edited"
+    );
+}
+
+#[test]
+fn what_a_gateway_confirmed_survives_a_reopen_and_a_new_epoch_is_a_new_ask() {
     let dir = tempfile::tempdir().expect("a temp dir");
-    let vault = dir.path().join("v.vault");
-    let ledger = DeviceState::old_ledger_path(&vault);
-    // Not even a database: a build that read it would fail.
-    std::fs::write(&ledger, b"not a database at all").expect("writes");
-    std::fs::write(dir.path().join("v.backup.db-wal"), b"x").expect("writes");
-    let state = DeviceState::open_beside(&vault).expect("opens");
-    assert!(!ledger.exists(), "the old ledger is gone");
-    assert!(!dir.path().join("v.backup.db-wal").exists());
-    assert_eq!(state.path(), DeviceState::path_for(&vault));
+    let path = dir.path().join("v.state.db");
+    {
+        let state = DeviceState::open(&path).expect("opens");
+        state.add_gateway(&paired(GATEWAY, 1)).expect("pairs");
+        state.confirm_records(GATEWAY, &name(1), 10).expect("conf");
+        state
+            .confirm_thumbnails(GATEWAY, &name(1), 11)
+            .expect("troot");
+        state
+            .confirm_originals(GATEWAY, &name(1), 12)
+            .expect("oroot");
+        state.set_generation(GATEWAY, 7).expect("generation");
+    }
+    let state = DeviceState::open(&path).expect("reopens");
+    let gateway = state.gateway(GATEWAY).expect("reads").expect("there");
+    assert_eq!(gateway.conf, Some((name(1), 10)));
+    assert_eq!(gateway.troot, Some((name(1), 11)));
+    assert_eq!(gateway.oroot, Some((name(1), 12)));
+    assert_eq!(gateway.generation, 7);
+
+    // The same writer pairs again (an address moved): what it confirmed is kept.
+    let mut again = paired(GATEWAY, 1);
+    again.addrs = vec!["10.0.0.9:7443".to_owned()];
+    state.add_gateway(&again).expect("repairs");
+    let kept = state.gateway(GATEWAY).expect("reads").expect("there");
+    assert_eq!(kept.addrs, vec!["10.0.0.9:7443".to_owned()]);
+    assert_eq!(kept.conf, Some((name(1), 10)));
+
+    // A takeover is the next epoch: nothing confirmed under the last one is believed.
+    state.add_gateway(&paired(GATEWAY, 2)).expect("a new epoch");
+    let moved = state.gateway(GATEWAY).expect("reads").expect("there");
+    assert_eq!(
+        (moved.conf, moved.troot, moved.oroot, moved.generation),
+        (None, None, None, 0)
+    );
+
+    state.confirm_records(GATEWAY, &name(2), 20).expect("conf");
+    state.withdraw(GATEWAY).expect("withdraws");
+    let withdrawn = state.gateway(GATEWAY).expect("reads").expect("there");
+    assert!(withdrawn.conf.is_none() && withdrawn.troot.is_none() && withdrawn.oroot.is_none());
 }
 
 #[test]
-fn a_batch_of_done_names_costs_one_commit() {
-    let (_dir, state) = open();
-    state.put_gateway(&paired(GATEWAY, 10)).expect("one");
-    let rows: Vec<_> = (1..=20)
-        .map(|seed| part(GATEWAY, seed, OutboxKind::Range, 1))
-        .collect();
-    let before = state.commit_count();
-    state.put_outbox_many(&rows).expect("owed");
-    assert_eq!(state.commit_count() - before, 1, "twenty rows, one sync");
-    let names: Vec<_> = rows.iter().map(|row| row.name).collect();
-    let before = state.commit_count();
-    state.done_many(GATEWAY, &names).expect("done");
-    assert_eq!(state.commit_count() - before, 1);
+fn a_file_that_is_not_ours_or_is_newer_is_refused() {
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let other = dir.path().join("other.db");
+    Connection::open(&other)
+        .expect("opens")
+        .execute_batch("PRAGMA application_id = 1234; CREATE TABLE t (a)")
+        .expect("founds");
+    assert!(matches!(
+        DeviceState::open(&other),
+        Err(PlaneError::Invariant { .. })
+    ));
+
+    let newer = dir.path().join("newer.db");
+    drop(DeviceState::open(&newer).expect("founds"));
+    Connection::open(&newer)
+        .expect("opens")
+        .pragma_update(None, "user_version", 2)
+        .expect("a later rung");
+    assert!(DeviceState::open(&newer).is_err());
 }
 
-/// **AN UNDO IS NOT UNDONE BY THE NEXT PASS** (E6): the names a member's Undo lifted are kept
-/// by retention until their time is up, per gateway, and go with the gateway.
 #[test]
-fn undone_names_are_kept_until_their_time_and_go_with_the_gateway() {
+fn the_node_cache_keeps_and_forgets_by_name() {
     let (_dir, state) = open();
-    state.put_gateway(&paired(GATEWAY, 1)).expect("pairs");
+    for seed in 1..=5 {
+        state.put_node(&name(seed), &[seed]).expect("puts");
+    }
+    state.put_node(&name(1), &[1]).expect("idempotent");
+    assert_eq!(state.node_count().expect("count"), 5);
+    let keep = [name(2), name(4)].into_iter().collect();
+    assert_eq!(state.forget_nodes_except(&keep).expect("forgets"), 3);
+    assert_eq!(state.node_count().expect("count"), 2);
+    assert_eq!(state.get_node(&name(2)).expect("reads"), Some(vec![2]));
+    assert_eq!(state.get_node(&name(1)).expect("reads"), None);
+}
+
+#[test]
+fn the_device_row_and_staged_rows_and_undone_names_round_trip() {
+    let (_dir, state) = open();
+    assert_eq!(state.device().expect("row"), Device::default());
+    let device = Device {
+        newest: Some((name(9), 55)),
+        since_full: 2,
+        full_ms: Some(40),
+        carry: vec![1, 7, 70_000],
+    };
+    state.set_device(&device).expect("writes");
+    assert_eq!(state.device().expect("row"), device);
+
+    state.stage(&name(3), "/tmp/a", 10).expect("stages");
+    state.stage(&name(3), "/tmp/b", 11).expect("restages");
+    assert_eq!(
+        state.staged(&name(3)).expect("row").expect("there").size,
+        11
+    );
+    assert_eq!(state.staged_all().expect("all").len(), 1);
+    state.unstage(&name(3)).expect("unstages");
+    assert!(state.staged(&name(3)).expect("row").is_none());
+
+    state.add_gateway(&paired(GATEWAY, 1)).expect("pairs");
     state
-        .put_undone(GATEWAY, &[name(1), name(2)], 1_000)
+        .undone_add(GATEWAY, &[name(4), name(5)], 1_000)
+        .expect("undone");
+    assert_eq!(state.undone_names(GATEWAY, 999).expect("names").len(), 2);
+    assert!(
+        state
+            .undone_names(GATEWAY, 1_000)
+            .expect("lapsed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn local_bytes_keep_the_blobs_doors_contract() {
+    let (_dir, state) = open();
+    let h = PlaintextHash::of(b"a photo in the library");
+    state
+        .put_local(&LocalBytes {
+            hash: h,
+            source: LocalSource::Os,
+            os_ref: Some("ph://1".to_owned()),
+            edited: true,
+        })
         .expect("records");
     assert_eq!(
-        state.undone(GATEWAY, 999).expect("reads").len(),
-        2,
-        "kept before their time"
+        state
+            .local(&h)
+            .expect("reads")
+            .expect("there")
+            .os_ref
+            .as_deref(),
+        Some("ph://1")
     );
     assert!(
-        state.undone(GATEWAY, 1_000).expect("reads").is_empty(),
-        "forgotten at their time"
+        state
+            .put_local(&LocalBytes {
+                hash: h,
+                source: LocalSource::Store,
+                os_ref: Some("x".to_owned()),
+                edited: false,
+            })
+            .is_err()
     );
-    state
-        .put_undone(GATEWAY, &[name(3)], 5_000)
-        .expect("records");
-    state.remove_gateway(GATEWAY).expect("forgets");
-    state.put_gateway(&paired(GATEWAY, 1)).expect("pairs again");
+    state.forget_local(&h).expect("forgets");
+    assert!(state.local(&h).expect("reads").is_none());
+}
+
+#[test]
+fn the_budget_is_the_smaller_of_512_mib_and_a_tenth_of_free_space() {
+    assert_eq!(staging::budget_for(1_000), 100);
+    assert_eq!(
+        staging::budget_for(100 * 1024 * 1024 * 1024),
+        staging::BUDGET_CEILING
+    );
+    assert_eq!(staging::BUDGET_CEILING, 512 * 1024 * 1024);
+}
+
+#[test]
+fn staging_refuses_past_its_budget_and_a_name_is_whole_or_absent() {
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let staging = Staging::open(dir.path().join("s"), 100).expect("opens");
+    staging.put(&name(1), &[0; 60]).expect("fits");
+    assert_eq!(staging.used().expect("used"), 60);
+    assert!(matches!(
+        staging.put(&name(2), &[0; 60]),
+        Err(PlaneError::StagingFull)
+    ));
     assert!(
-        state.undone(GATEWAY, 0).expect("reads").is_empty(),
-        "a forgotten gateway's undone names go with it"
+        staging.get(&name(2)).expect("reads").is_none(),
+        "nothing half-written is named"
     );
+    // The same name is the same bytes: staged again, nothing changes.
+    staging.put(&name(1), &[0; 60]).expect("again");
+    assert_eq!(staging.used().expect("used"), 60);
+    staging.release(&name(1)).expect("releases");
+    staging.release(&name(1)).expect("absent is fine");
+    staging.put(&name(2), &[0; 60]).expect("fits now");
+    assert_eq!(staging.names().expect("names"), vec![name(2)]);
+}
+
+#[test]
+fn a_crash_between_fsync_and_rename_leaves_only_a_partial_which_open_sweeps() {
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let path = dir.path().join("s");
+    {
+        let staging = Staging::open(&path, 1_000).expect("opens");
+        staging.put(&name(1), b"whole").expect("a whole file");
+        // The crash: the partial is written and fsynced, the rename never happens.
+        let partial = staging.write_partial(&name(2), b"half").expect("a partial");
+        assert!(partial.exists());
+        assert!(
+            staging.get(&name(2)).expect("reads").is_none(),
+            "the name is absent"
+        );
+        assert_eq!(staging.used().expect("used"), 5, "a partial does not count");
+    }
+    let reopened = Staging::open(&path, 1_000).expect("reopens");
+    assert!(
+        std::fs::read_dir(&path).expect("lists").all(|entry| !entry
+            .expect("entry")
+            .file_name()
+            .to_string_lossy()
+            .ends_with(".part")),
+        "no partial survives an open"
+    );
+    assert_eq!(
+        reopened.get(&name(1)).expect("reads").as_deref(),
+        Some(&b"whole"[..])
+    );
+    assert!(reopened.get(&name(2)).expect("reads").is_none());
 }

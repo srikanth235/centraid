@@ -1,43 +1,26 @@
-//! Which snapshots to keep, and which names are garbage (#1080, "Retention").
+//! Which snapshots to keep and which names are garbage (spec §6.2 step 7,
+//! [#1209](https://github.com/srikanth235/centraid/issues/1209)).
 //!
-//! The phone keeps **7 daily, 4 weekly and 6 monthly** snapshots, judged on
-//! `taken_at_ms`, deregisters the rest by deleting their manifests, and then
-//! deletes every name nothing it keeps refers to. Pure functions: the caller
-//! brings the snapshot list, the manifests and the content hashes, so a fixed
-//! clock is all a test needs.
+//! **Retention** is 7 daily, 4 weekly and 6 monthly snapshots, plus the
+//! newest. **Collection** lists a gateway's names, works out the union of what
+//! the kept trees reach, and deletes the rest with one head-bound signed
+//! delete: the keep set is computed at the head it names, so a gateway whose
+//! head is any other (rolled back, or moved by another writer) refuses it.
 //!
-//! ## A PERIOD COUNTS ONLY IF IT HOLDS A SNAPSHOT (R-1080-B5)
-//!
-//! "7 daily" is the newest snapshot of each of the 7 most recent UTC days that
-//! have one, not of the 7 days before `now`; the same for ISO weeks (Monday to
-//! Sunday, UTC) and calendar months. A phone that was off for a month comes
-//! back to the history it left rather than to one snapshot. The rules overlap
-//! — today's newest is also this week's and this month's — so the union is at
-//! most 17. The newest snapshot is always kept. One dated after `now_ms` is
-//! judged as if taken at `now_ms` (see [`keep`]), so a clock that went forwards
-//! and was corrected cannot keep a snapshot for ever.
-//!
-//! ## WHAT IS LIVE
-//!
-//! [`live_names`] is every kept manifest, every range a kept manifest names,
-//! and every name a content hash in the vault implies. The caller adds the
-//! manifests and queued parts of uploads still in flight, which no snapshot
-//! list names yet: a collection that ran between a range's upload and its
-//! manifest's would otherwise delete the range.
-//!
-//! ## A FILE OUTLIVES THE VAULT THAT DELETED IT, AS LONG AS A SNAPSHOT NAMES IT
-//!
-//! The vault's current files are live, and a file the vault no longer names is
-//! garbage — but a kept snapshot's rows may still name it, and a restore of
-//! that snapshot needs its bytes. [`collectable`] holds such a file until
-//! every kept snapshot was taken after it left (the sweep's F5). While any kept
-//! snapshot is dated in the future nothing is collectable at all
-//! ([`collectable_among`]): its real time is unknown, and doubt never deletes.
+//! The union is the head, `conf`, `troot`, `oroot`, every kept snapshot, the
+//! newest snapshot, and anything an Undo restored this week. **A kept root
+//! whose nodes will not open stops collection: doubt never deletes.** The
+//! gateway is listed before the union is worked out, so an object that lands
+//! meanwhile is never judged.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
-use super::naming::{BackupKeys, Name, PlaintextHash, names_of};
-use super::store::SnapshotEntry;
+use centraid_media::sealed::{self, Class, Name, Ref};
+
+use super::engine::{Env, UNDO_KEEP_MS};
+use super::store::{SnapshotEntry, Store, StoreError, delete_all, list_all};
+use super::tree::{self, Node, NodeSource};
+use super::{Result, invariant};
 
 /// Daily snapshots kept.
 pub const KEEP_DAILY: usize = 7;
@@ -46,346 +29,196 @@ pub const KEEP_WEEKLY: usize = 4;
 /// Monthly snapshots kept.
 pub const KEEP_MONTHLY: usize = 6;
 
-const DAY_MS: u64 = 24 * 60 * 60 * 1000;
+const DAY_MS: u64 = 86_400_000;
 
-/// The period a snapshot falls in, under one rule.
-type Period = fn(u64) -> i64;
-
-/// What retention decided.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Keep {
-    /// Kept, newest first.
-    pub keep: Vec<Name>,
-    /// To be deregistered, newest first.
-    pub drop: Vec<Name>,
+fn month_of(ms: u64) -> i64 {
+    let seconds = i64::try_from(ms / 1000).unwrap_or(0);
+    let date = jiff::Timestamp::from_second(seconds)
+        .map(|at| at.to_zoned(jiff::tz::TimeZone::UTC).date())
+        .unwrap_or_default();
+    i64::from(date.year()) * 12 + i64::from(date.month())
 }
 
-/// Days since 1970-01-01, UTC.
-fn day(taken_at_ms: u64) -> i64 {
-    i64::try_from(taken_at_ms / DAY_MS).unwrap_or(i64::MAX)
-}
-
-/// Monday-based weeks: day 0 was a Thursday, so day −3 is the Monday that
-/// starts week 0.
-fn iso_week(taken_at_ms: u64) -> i64 {
-    (day(taken_at_ms) + 3).div_euclid(7)
-}
-
-/// `year * 12 + month0`, from Howard Hinnant's `civil_from_days`.
-fn month(taken_at_ms: u64) -> i64 {
-    let z = day(taken_at_ms) + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = yoe + era * 400 + i64::from(month <= 2);
-    year * 12 + (month - 1)
-}
-
-/// Decide which snapshots to keep.
-///
-/// **A DATE IN THE FUTURE IS CLAMPED, NOT KEPT FOR EVER** (#1188, B11). A phone whose clock was
-/// set ahead and corrected dated snapshots after `now`; they were kept untouched until the real
-/// date caught up, which for a year-9999 clock is never. A snapshot's time is judged as at most
-/// `now`, and where two share it the one registered later is the newer — the gateway's own
-/// clock says which is the head, so a bad phone clock never makes retention drop the head.
+/// The snapshots to keep: the newest of each of the 7 most recent days that have one, of each of
+/// the 4 most recent weeks, of each of the 6 most recent months, and the newest of all. A held
+/// snapshot (its delete already in its week) is not a candidate.
 #[must_use]
-pub fn keep(entries: &[SnapshotEntry], now_ms: u64) -> Keep {
-    let judged_at = |entry: &SnapshotEntry| entry.taken_at_ms.min(now_ms);
-    let mut ordered: Vec<&SnapshotEntry> = entries.iter().collect();
-    // THE SIGNED ORDER COMES FIRST: (epoch, generation) is what the vault key signed into each
-    // head, so it says which snapshot is newer where two share a millisecond or a phone's clock
-    // lied. Time, then registration, then name only break a tie among snapshots whose destination
-    // does not say (0, 0).
-    ordered.sort_by(|left, right| {
-        (
-            right.epoch,
-            right.generation,
-            judged_at(right),
-            right.registered_at_ms,
-            right.name,
-        )
-            .cmp(&(
-                left.epoch,
-                left.generation,
-                judged_at(left),
-                left.registered_at_ms,
-                left.name,
-            ))
-    });
-
-    let mut kept: BTreeSet<Name> = BTreeSet::new();
-    let judged: Vec<&SnapshotEntry> = ordered.clone();
-    if let Some(newest) = judged.first() {
+pub fn keep(snapshots: &[SnapshotEntry]) -> BTreeSet<Name> {
+    let mut live: Vec<&SnapshotEntry> = snapshots
+        .iter()
+        .filter(|snapshot| snapshot.held_at_ms.is_none())
+        .collect();
+    live.sort_by_key(|snapshot| std::cmp::Reverse((snapshot.taken_at_ms, snapshot.name)));
+    let mut kept = BTreeSet::new();
+    if let Some(newest) = live.first() {
         kept.insert(newest.name);
     }
-    let rules: [(usize, Period); 3] = [
-        (KEEP_DAILY, day),
-        (KEEP_WEEKLY, iso_week),
-        (KEEP_MONTHLY, month),
+    let mut buckets: [(BTreeSet<i64>, usize); 3] = [
+        (BTreeSet::new(), KEEP_DAILY),
+        (BTreeSet::new(), KEEP_WEEKLY),
+        (BTreeSet::new(), KEEP_MONTHLY),
     ];
-    for (count, period) in rules {
-        let mut last: Option<i64> = None;
-        let mut periods = 0;
-        for entry in &judged {
-            let this = period(judged_at(entry));
-            if last == Some(this) {
-                continue;
+    for snapshot in live {
+        let day = i64::try_from(snapshot.taken_at_ms / DAY_MS).unwrap_or(0);
+        let keys = [day, day / 7, month_of(snapshot.taken_at_ms)];
+        for ((seen, limit), key) in buckets.iter_mut().zip(keys) {
+            if seen.len() < *limit && seen.insert(key) {
+                kept.insert(snapshot.name);
             }
-            if periods == count {
-                break;
-            }
-            periods += 1;
-            last = Some(this);
-            kept.insert(entry.name);
         }
     }
+    kept
+}
 
-    let (keep, drop): (Vec<Name>, Vec<Name>) = ordered
+/// What a collection did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Collected {
+    /// Names listed, names kept, names deleted.
+    Done {
+        listed: usize,
+        kept: usize,
+        deleted: usize,
+    },
+    /// A kept root's nodes would not open, or the gateway moved: nothing was deleted.
+    Doubt(String),
+}
+
+/// A node source that falls back to the gateway for nodes the cache does not hold, and caches
+/// what it fetches, so a kept snapshot's tree can be walked.
+struct Fetching<'a> {
+    env: &'a Env<'a>,
+    store: &'a dyn Store,
+}
+
+impl NodeSource for Fetching<'_> {
+    fn plaintext(&self, name: &Name) -> Result<Option<Vec<u8>>> {
+        if let Some(plaintext) = self.env.state.get_node(name)? {
+            return Ok(Some(plaintext));
+        }
+        let mut object = Vec::new();
+        match self.store.get(name, &mut object) {
+            Ok(_) => {}
+            Err(StoreError::Missing(_)) => return Ok(None),
+            Err(error) => return Err(error.into()),
+        }
+        let Ok(plaintext) =
+            sealed::open_checked(self.env.keys, name, Class::Records, None, None, &object)
+        else {
+            return Ok(None);
+        };
+        // A node is only worth keeping if it decodes.
+        if Node::decode(&plaintext).is_err() && !looks_like_directory(&plaintext) {
+            return Ok(None);
+        }
+        self.env.state.put_node(name, &plaintext)?;
+        Ok(Some(plaintext))
+    }
+}
+
+fn looks_like_directory(plaintext: &[u8]) -> bool {
+    plaintext.first() == Some(&b'{')
+}
+
+/// Collect `store`: delete every name no kept root reaches.
+///
+/// # Errors
+/// The state's refusal, or a store error that is not an answer about this delete.
+pub fn collect(env: &Env<'_>, store: &dyn Store) -> Result<Collected> {
+    let id = store.gateway_id().to_owned();
+    let Some(gateway) = env.state.gateway(&id)? else {
+        return Err(invariant("collecting an unpaired gateway"));
+    };
+    // The head the keep set is computed at, and the only head the delete is bound to.
+    let Some(head) = store.head()? else {
+        return Ok(Collected::Doubt("the gateway has no head".to_owned()));
+    };
+    let snapshots = store.snapshots()?;
+    let kept = keep(&snapshots);
+    let listing = list_all(store)?;
+
+    let source = Fetching { env, store };
+    let mut roots: BTreeSet<Name> = kept;
+    roots.insert(head.name);
+    for pointer in [gateway.conf, gateway.troot, gateway.oroot]
+        .into_iter()
+        .flatten()
+    {
+        roots.insert(pointer.0);
+    }
+    if let Some((newest, _)) = env.state.device()?.newest {
+        roots.insert(newest);
+    }
+    let mut keep_names: BTreeSet<Name> = env.state.undone_names(&id, env.now_ms)?;
+    for name in &roots {
+        // The root's own ref: from the cache, or resealed from what the gateway holds.
+        let reference = match env.state.get_node(name)? {
+            Some(plaintext) => sealed::seal(env.keys, Class::Records, &plaintext)?.reference(),
+            None => match source.plaintext(name)? {
+                Some(plaintext) => sealed::seal(env.keys, Class::Records, &plaintext)?.reference(),
+                None => {
+                    return Ok(Collected::Doubt(format!(
+                        "the kept root {name} will not open"
+                    )));
+                }
+            },
+        };
+        match tree::everything_of(&source, &reference) {
+            Ok(names) => keep_names.extend(names),
+            Err(error) => {
+                return Ok(Collected::Doubt(format!(
+                    "the kept root {name} will not open: {error}"
+                )));
+            }
+        }
+    }
+    let garbage: Vec<Name> = listing
         .iter()
         .map(|entry| entry.name)
-        .partition(|name| kept.contains(name));
-    Keep { keep, drop }
-}
-
-/// Every name a destination must keep: the given manifests and every name
-/// they reference, and every name the content implies.
-#[must_use]
-pub fn live_names(
-    keys: &BackupKeys,
-    manifests_and_ranges: impl IntoIterator<Item = Name>,
-    content: impl IntoIterator<Item = (PlaintextHash, u64)>,
-) -> BTreeSet<Name> {
-    let mut live: BTreeSet<Name> = manifests_and_ranges.into_iter().collect();
-    for (h, len) in content {
-        live.extend(names_of(keys, &h, len));
-    }
-    live
-}
-
-/// What a destination lists beyond the live set.
-#[must_use]
-pub fn garbage(listed: impl IntoIterator<Item = Name>, live: &BTreeSet<Name>) -> Vec<Name> {
-    let mut out: Vec<Name> = listed
-        .into_iter()
-        .filter(|name| !live.contains(name))
+        .filter(|name| !keep_names.contains(name))
         .collect();
-    out.sort();
-    out.dedup();
-    out
+    let bound = if env.bugs.unbound_delete() {
+        // THE PLANTED BUG: bound to whatever head stands when the delete is sent.
+        store.head()?.map(|head| head.name)
+    } else {
+        Some(head.name)
+    };
+    let deleted = match delete_all(store, &garbage, bound.as_ref()) {
+        Ok(deleted) => deleted,
+        Err(StoreError::HeadConflict { .. }) => {
+            return Ok(Collected::Doubt(
+                "the head moved while the keep set was computed".to_owned(),
+            ));
+        }
+        Err(error) => return Err(error.into()),
+    };
+    Ok(Collected::Done {
+        listed: listing.len(),
+        kept: keep_names.len(),
+        deleted: deleted.deleted.len() + deleted.freed.len(),
+    })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// Names an Undo lifted: kept from collection for a week.
+///
+/// # Errors
+/// The state's refusal, or the gateway's.
+pub fn undo(env: &Env<'_>, store: &dyn Store, names: &[Name]) -> Result<u64> {
+    let lifted = store.undo(Some(names))?;
+    env.state
+        .undone_add(store.gateway_id(), names, env.now_ms + UNDO_KEEP_MS)?;
+    Ok(lifted)
+}
 
-    const HOUR_MS: u64 = 60 * 60 * 1000;
-
-    /// 2026-10-03T12:00:00Z, a Saturday.
-    const NOW_MS: u64 = 1_791_028_800_000;
-
-    fn name_at(taken_at_ms: u64) -> Name {
-        Name::from_bytes(*PlaintextHash::of(&taken_at_ms.to_be_bytes()).as_bytes())
-    }
-
-    fn entry(taken_at_ms: u64) -> SnapshotEntry {
-        SnapshotEntry {
-            name: name_at(taken_at_ms),
-            taken_at_ms,
-            registered_at_ms: taken_at_ms,
-            epoch: 0,
-            generation: 0,
-            held_at_ms: None,
-            purge_after_ms: None,
+/// The refs of a kept set, for tests that look at what survives.
+///
+/// # Errors
+/// A missing node.
+pub fn reachable(source: &dyn NodeSource, roots: &[Ref]) -> Result<BTreeMap<Name, ()>> {
+    let mut out = BTreeMap::new();
+    for root in roots {
+        for name in tree::everything_of(source, root)? {
+            out.insert(name, ());
         }
     }
-
-    /// `YYYY-MM-DDTHH:00Z` to milliseconds, through the same day arithmetic
-    /// run backwards — checked against two fixed points below.
-    fn at(year: i64, month: i64, day: i64, hour: u64) -> u64 {
-        let y = if month <= 2 { year - 1 } else { year };
-        let era = y.div_euclid(400);
-        let yoe = y - era * 400;
-        let mp = (month + 9) % 12;
-        let doy = (153 * mp + 2) / 5 + day - 1;
-        let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-        let days = era * 146_097 + doe - 719_468;
-        u64::try_from(days).expect("after 1970") * DAY_MS + hour * HOUR_MS
-    }
-
-    #[test]
-    fn the_calendar_arithmetic_is_right_at_its_edges() {
-        assert_eq!(at(1970, 1, 1, 0), 0);
-        assert_eq!(at(2026, 10, 3, 12), NOW_MS);
-        assert_eq!(month(at(2026, 10, 3, 12)), 2026 * 12 + 9);
-        assert_eq!(month(at(2024, 2, 29, 23)), 2024 * 12 + 1, "a leap day");
-        assert_eq!(month(at(2024, 3, 1, 0)), 2024 * 12 + 2);
-        // 2026-09-28 is a Monday and 2026-10-04 a Sunday: one ISO week.
-        assert_eq!(iso_week(at(2026, 9, 28, 0)), iso_week(at(2026, 10, 4, 23)));
-        assert_ne!(iso_week(at(2026, 9, 27, 23)), iso_week(at(2026, 9, 28, 0)));
-    }
-
-    /// **The acceptance case, under a fixed clock.** Hourly snapshots for 400
-    /// days keep exactly 7 daily, the 2 weekly and 4 monthly ones the daily
-    /// rule did not already keep — 13 in all — and drop every other.
-    #[test]
-    fn hourly_snapshots_for_400_days_keep_exactly_the_seventeen_rules_union() {
-        let entries: Vec<SnapshotEntry> = (0..400 * 24)
-            .map(|hours_ago| entry(NOW_MS - hours_ago * HOUR_MS))
-            .collect();
-        let decided = keep(&entries, NOW_MS);
-        let expected: BTreeSet<Name> = [
-            // Daily: today's newest, then 23:00 of each of the six days before.
-            at(2026, 10, 3, 12),
-            at(2026, 10, 2, 23),
-            at(2026, 10, 1, 23),
-            at(2026, 9, 30, 23),
-            at(2026, 9, 29, 23),
-            at(2026, 9, 28, 23),
-            at(2026, 9, 27, 23),
-            // Weekly: this week and last are already kept; two more Sundays.
-            at(2026, 9, 20, 23),
-            at(2026, 9, 13, 23),
-            // Monthly: October and September are already kept.
-            at(2026, 8, 31, 23),
-            at(2026, 7, 31, 23),
-            at(2026, 6, 30, 23),
-            at(2026, 5, 31, 23),
-        ]
-        .into_iter()
-        .map(name_at)
-        .collect();
-        assert_eq!(
-            decided.keep.iter().copied().collect::<BTreeSet<_>>(),
-            expected
-        );
-        assert_eq!(decided.keep.len(), 13);
-        assert_eq!(decided.drop.len(), entries.len() - 13);
-        assert_eq!(decided.keep[0], name_at(NOW_MS), "newest first");
-    }
-
-    /// A month offline does not cost the history: periods with no snapshot do
-    /// not count.
-    #[test]
-    fn a_gap_does_not_spend_the_periods() {
-        let mut entries: Vec<SnapshotEntry> =
-            (1..=10).map(|day| entry(at(2026, 8, day, 9))).collect();
-        entries.push(entry(NOW_MS));
-        let decided = keep(&entries, NOW_MS);
-        // Daily: today and the six most recent days before the gap. Weekly
-        // adds August 2, the newest of the week of July 27; the newest of the
-        // two later weeks are already kept. Counted back from `now` instead,
-        // the daily rule would keep today alone.
-        let expected: BTreeSet<Name> = [
-            NOW_MS,
-            at(2026, 8, 10, 9),
-            at(2026, 8, 9, 9),
-            at(2026, 8, 8, 9),
-            at(2026, 8, 7, 9),
-            at(2026, 8, 6, 9),
-            at(2026, 8, 5, 9),
-            at(2026, 8, 2, 9),
-        ]
-        .into_iter()
-        .map(name_at)
-        .collect();
-        assert_eq!(
-            decided.keep.iter().copied().collect::<BTreeSet<_>>(),
-            expected
-        );
-    }
-
-    /// **THE SIGNED ORDER DECIDES** (#1191): two snapshots that share a millisecond and a
-    /// registration are told apart by the generation the vault key signed, never by name, so the
-    /// head is kept whichever way their names fall.
-    #[test]
-    fn the_signed_generation_orders_snapshots_before_time_or_name() {
-        for (low, high) in [(1_u8, 2_u8), (2, 1)] {
-            let older = SnapshotEntry {
-                name: Name::from_bytes([low; 32]),
-                generation: 5,
-                ..entry(NOW_MS)
-            };
-            let head = SnapshotEntry {
-                name: Name::from_bytes([high; 32]),
-                generation: 6,
-                ..entry(NOW_MS)
-            };
-            let decided = keep(&[older, head], NOW_MS);
-            assert_eq!(decided.keep.first(), Some(&head.name), "the head leads");
-            assert_eq!(
-                decided.drop,
-                vec![older.name],
-                "the same day drops the older"
-            );
-        }
-    }
-
-    #[test]
-    fn the_newest_is_always_kept() {
-        let only = [entry(NOW_MS - 400 * DAY_MS)];
-        assert_eq!(keep(&only, NOW_MS).keep, vec![only[0].name]);
-        assert_eq!(keep(&[], NOW_MS), Keep::default());
-    }
-
-    /// **B11.** A snapshot dated ahead of now (a clock set forward and corrected) is judged as
-    /// today's and ages out like any other, and the head — registered last — is never the one
-    /// dropped for it.
-    #[test]
-    fn a_snapshot_dated_in_the_future_is_clamped_and_never_costs_the_head() {
-        let ahead = SnapshotEntry {
-            name: name_at(NOW_MS + 30 * DAY_MS),
-            taken_at_ms: NOW_MS + 30 * DAY_MS,
-            registered_at_ms: NOW_MS - 2 * HOUR_MS,
-            epoch: 0,
-            generation: 0,
-            held_at_ms: None,
-            purge_after_ms: None,
-        };
-        let head = SnapshotEntry {
-            name: name_at(NOW_MS),
-            taken_at_ms: NOW_MS,
-            registered_at_ms: NOW_MS,
-            epoch: 0,
-            generation: 0,
-            held_at_ms: None,
-            purge_after_ms: None,
-        };
-        let mut entries: Vec<SnapshotEntry> =
-            (1..20).map(|day| entry(NOW_MS - day * DAY_MS)).collect();
-        entries.push(ahead);
-        entries.push(head);
-        let decided = keep(&entries, NOW_MS);
-        assert!(decided.keep.contains(&head.name), "the head stays");
-        assert!(
-            decided.drop.contains(&ahead.name),
-            "the future-dated one shares today with the head and goes"
-        );
-    }
-
-    #[test]
-    fn garbage_is_exactly_what_the_live_set_does_not_name() {
-        let keys = BackupKeys::from_root(&[1; 32]);
-        let photo = PlaintextHash::of(b"a photograph");
-        let kept_manifest = name_at(1);
-        let kept_range = name_at(2);
-        let live = live_names(&keys, [kept_manifest, kept_range], [(photo, 10)]);
-        assert_eq!(live.len(), 3);
-        let dropped_manifest = name_at(3);
-        let dropped_range = name_at(4);
-        let photo_name = names_of(&keys, &photo, 10)[0];
-        let listed = [
-            kept_manifest,
-            dropped_range,
-            photo_name,
-            kept_range,
-            dropped_manifest,
-            dropped_range,
-        ];
-        let mut expected = vec![dropped_manifest, dropped_range];
-        expected.sort();
-        assert_eq!(garbage(listed, &live), expected);
-    }
+    Ok(out)
 }

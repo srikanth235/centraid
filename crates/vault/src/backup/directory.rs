@@ -1,16 +1,15 @@
-//! The sealed gateway directory (#1191, E8): the member's gateways, written as an ordinary sealed
-//! file the head's manifest names, so a restoring phone that reaches one gateway learns the rest.
+//! The sealed gateway directory (#1191, E8; a records chunk in #1209): the member's gateways, written as a sealed
+//! chunk the root names, so a restoring phone that reaches one gateway learns the rest.
 //!
 //! The plaintext is JSON `{"v":1,"gateways":[{gateway_id, addrs, pin, label}]}`, at most
-//! [`MAX_GATEWAYS`] entries sorted by `gateway_id`; its name is the sealed-name function of the
-//! plaintext's hash, so it is unique to the vault, unguessable, and **immutable**: a change to the
+//! [`MAX_GATEWAYS`] entries sorted by `gateway_id`; its name is the keyed name of its plaintext, so it is unique to the vault, unguessable, and **immutable**: a change to the
 //! set writes a new directory under a new name. It holds addresses, certificate pins and labels,
 //! never a token, and no other vault's id.
 
 use serde::{Deserialize, Serialize};
 
-use super::naming::{BackupKeys, Name, PlaintextHash, name};
 use super::{Result, invariant};
+use centraid_media::sealed::{self, BackupKeys, Class, Name, Sealed};
 
 /// The directory format this build writes and reads.
 pub const DIRECTORY_VERSION: u32 = 1;
@@ -68,7 +67,15 @@ impl Directory {
     /// # Errors
     /// As [`Directory::to_json`].
     pub fn name(&self, keys: &BackupKeys) -> Result<Name> {
-        Ok(name(keys, &PlaintextHash::of(&self.to_json()?), 0))
+        Ok(sealed::name_of(keys, Class::Records, &self.to_json()?))
+    }
+
+    /// The directory as one sealed chunk of class `records`: a node the root names.
+    ///
+    /// # Errors
+    /// As [`Directory::to_json`].
+    pub fn seal(&self, keys: &BackupKeys) -> Result<Sealed> {
+        Ok(sealed::seal(keys, Class::Records, &self.to_json()?)?)
     }
 
     /// Read a directory back, refusing a version this build does not read, more gateways than a

@@ -448,12 +448,11 @@ impl Vault {
     ///   had landed — and a snapshot taken in that window is a backup ahead of
     ///   the device it backs up. There is no correct recovery from that, so it
     ///   is not allowed to happen.
-    /// - **Checkpoints are SQLite's own** (#1080). `wal_autocheckpoint` is left
-    ///   at its default and a last close checkpoints the WAL away. The capture
-    ///   that once read the WAL frame by frame — and so had to own every
-    ///   checkpoint and keep the `-wal` across a close — is gone: a backup is
-    ///   the online backup API's page-for-page copy of the file, which reads
-    ///   through the WAL whatever its state (`.claude/skills/stack/sqlite/centraid.md`).
+    /// - **The core owns checkpoints** (#1209, R5). `wal_autocheckpoint = 0` on every connection
+    ///   to the file: the `-wal` grows until the core checkpoints it after a snapshot, so the
+    ///   frames in it are the pages written since the last one and a snapshot reads only the
+    ///   ranges they fall in (`backup::wal`). A last close still checkpoints the WAL away; a
+    ///   checkpoint made behind the core's back is what the periodic full read catches.
     /// - **`journal_size_limit`** — see [`JOURNAL_SIZE_LIMIT`].
     /// - **`secure_delete = ON`** (#1191, owner ruling 4). "Deleted for ever" has to erase from
     ///   this phone: SQLite overwrites the content of a deleted row with zeros as it frees the
@@ -474,6 +473,9 @@ impl Vault {
             connection.pragma_update(None, name, value)?;
         }
         connection.pragma_update(None, "journal_size_limit", JOURNAL_SIZE_LIMIT)?;
+        // R5: the core owns checkpoints. Nothing folds the WAL into the file but the core, after
+        // a snapshot, so the frames in it are exactly the pages written since (`backup::wal`).
+        connection.pragma_update(None, "wal_autocheckpoint", 0)?;
         // The busy timeout has to be set on every connection or a second writer
         // fails instantly instead of waiting.
         connection.busy_timeout(std::time::Duration::from_secs(5))?;
@@ -496,7 +498,7 @@ impl Vault {
         // are `query_only` toggled on this same connection ([`Self::read`])
         // rather than served from a pool, and nothing else in the process
         // opens the file for writing. (The snapshot plane opens it READ-ONLY, on a reader of its
-        // own, to copy it without holding this one: `backup::snapshot::copy_from`.)
+        // own, to read its pages without holding this one: `pagesource`.)
         Self::apply_pragmas(&connection)?;
         crate::log::guard::install_without_rowid_census(&connection)?;
         crate::history::install(&connection)?;
@@ -832,12 +834,11 @@ mod tests {
         // FULL is 2. Explicit, never the compiled default — under WAL that
         // default is NORMAL, which is the one setting F11 forbids.
         assert_eq!(pragma_int(&vault, "synchronous"), 2, "synchronous = FULL");
-        // SQLite's own default (#1080): nothing reads the WAL frame by frame,
-        // so nothing has to own its checkpoints.
+        // R5 (#1209): the core owns checkpoints, SQLite never runs one on its own.
         assert_eq!(
             pragma_int(&vault, "wal_autocheckpoint"),
-            1000,
-            "checkpoints are SQLite's own"
+            0,
+            "the core owns checkpoints"
         );
         assert_eq!(pragma_int(&vault, "journal_size_limit"), JOURNAL_SIZE_LIMIT);
         assert_eq!(pragma_int(&vault, "page_size"), PAGE_SIZE);
@@ -885,7 +886,7 @@ mod tests {
         let reopened = Vault::open(&path).expect("the vault opens again");
         assert_eq!(pragma_text(&reopened, "journal_mode"), "wal");
         assert_eq!(pragma_int(&reopened, "synchronous"), 2);
-        assert_eq!(pragma_int(&reopened, "wal_autocheckpoint"), 1000);
+        assert_eq!(pragma_int(&reopened, "wal_autocheckpoint"), 0);
         assert_eq!(
             pragma_int(&reopened, "journal_size_limit"),
             JOURNAL_SIZE_LIMIT
