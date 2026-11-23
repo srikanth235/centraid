@@ -1,9 +1,9 @@
-//! A GATEWAY BELOW PROTOCOL 3 IS REFUSED, OVER THE WIRE (#1191, B1, E13).
+//! A GATEWAY BELOW PROTOCOL 1 IS REFUSED, OVER THE WIRE (#1191, B1, E13).
 //!
-//! A stub with a real certificate and real TLS plays an older gateway: it has
-//! never heard of `/v3/info` (`NOT_FOUND`) and answers `/v2/info` with
-//! protocol 2. The real client must return `GatewayTooOld { found: 2,
-//! required: 3 }` and must not speak v2 to it past that one question.
+//! A stub with a real certificate and real TLS plays an older gateway: it
+//! answers `/v1/info` with protocol 0. The real client must return
+//! `GatewayTooOld { found: 0, required: 1 }` and must not send a second
+//! request.
 
 use std::sync::Arc;
 
@@ -17,14 +17,13 @@ use centraid_gateway::rules::limits::REQUIRED_PROTOCOL;
 use centraid_gateway::server::serve::{TlsListener, bind, run_router};
 use centraid_gateway::server::tls::Identity;
 
-/// What an older gateway says: `/v2/info` is protocol 2, and it has never
-/// heard of anything else.
+/// What an older gateway says: `/v1/info` reports a protocol below `REQUIRED_PROTOCOL`.
 async fn older(uri: Uri, paths: Arc<std::sync::Mutex<Vec<String>>>) -> Response {
     paths.lock().expect("paths").push(uri.path().to_owned());
-    if uri.path() == "/v2/info" {
+    if uri.path() == "/v1/info" {
         return axum::Json(serde_json::json!({
             "gateway_id": "05050505050505050505050505050505",
-            "protocol": 2,
+            "protocol": 0,
             "time_ms": 1
         }))
         .into_response();
@@ -41,7 +40,7 @@ async fn older(uri: Uri, paths: Arc<std::sync::Mutex<Vec<String>>>) -> Response 
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_gateway_below_protocol_3_is_refused() {
+async fn a_gateway_below_required_protocol_is_refused() {
     let dir = tempfile::tempdir().expect("a temp dir");
     let identity = Identity::load_or_mint(dir.path(), || GatewayId::from_bytes([5; 16]))
         .expect("a certificate");
@@ -59,14 +58,14 @@ async fn a_gateway_below_protocol_3_is_refused() {
     let phone = Client::trusting(vec![addr.to_string()], identity.cert_der().to_vec());
     match phone.info().await {
         Err(ClientError::GatewayTooOld { found, required }) => {
-            assert_eq!((found, required), (2, REQUIRED_PROTOCOL));
+            assert_eq!((found, required), (0, REQUIRED_PROTOCOL));
         }
         other => panic!("an older gateway was not refused as too old: {other:?}"),
     }
     assert_eq!(
         *paths.lock().expect("paths"),
-        vec!["/v3/info".to_owned(), "/v2/info".to_owned()],
-        "it asked v3, then v2 once to learn how old, and nothing else"
+        vec!["/v1/info".to_owned()],
+        "it asked /v1/info once and stopped"
     );
     server.abort();
 }

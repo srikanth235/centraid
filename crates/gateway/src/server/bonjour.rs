@@ -246,7 +246,7 @@ mod tests {
                 "local",
                 "8443",
                 "gw=0123456789abcdef0123456789abcdef",
-                "v=3"
+                "v=1"
             ]
         );
     }
@@ -330,7 +330,7 @@ mod tests {
         assert_eq!(
             args,
             "-R centraid-gateway-01234567 _centraid-gateway._tcp local 8443 \
-             gw=0123456789abcdef0123456789abcdef v=3"
+             gw=0123456789abcdef0123456789abcdef v=1"
         );
         assert!(alive(&pid), "registered while the gateway holds it");
 

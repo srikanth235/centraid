@@ -67,7 +67,7 @@ async fn a_gateway_that_lies_in_any_field_is_not_believed() {
     let serving: Arc<Mutex<HeadView>> = Arc::new(Mutex::new(head));
     let answer = Arc::clone(&serving);
     let router = Router::new().route(
-        "/v3/v/{vault}/head",
+        "/v1/v/{vault}/head",
         get(move || {
             let answer = Arc::clone(&answer);
             async move { axum::Json(*answer.lock().expect("answer")).into_response() }

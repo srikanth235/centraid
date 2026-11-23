@@ -20,7 +20,7 @@ pub const DIGEST_HEADER: &str = "content-digest";
 /// `HEAD` — which has no body — still says which refusal it is.
 pub const CODE_HEADER: &str = "centraid-code";
 
-/// `GET /v3/info`.
+/// `GET /v1/info`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Info {
     pub gateway_id: GatewayId,
@@ -96,14 +96,14 @@ pub struct SecretBody {
     pub signature: Signature,
 }
 
-/// `POST /v3/nonce`'s answer: a nonce good for one pair request.
+/// `POST /v1/nonce`'s answer: a nonce good for one pair request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NonceAnswer {
     pub nonce: Nonce,
     pub ttl_ms: i64,
 }
 
-/// `POST /v3/pair`. Every kind carries a nonce from `POST /v3/nonce`, signed
+/// `POST /v1/pair`. Every kind carries a nonce from `POST /v1/nonce`, signed
 /// into its preimage and spent by the request, whatever its outcome.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PairRequest {
@@ -121,7 +121,7 @@ pub struct PairRequest {
     pub read: Option<ReadBody>,
 }
 
-/// What `POST /v3/pair` answers. **The only time the token exists outside the
+/// What `POST /v1/pair` answers. **The only time the token exists outside the
 /// phone**: the gateway keeps its BLAKE3 and cannot print it again.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Paired {
@@ -162,7 +162,7 @@ pub struct HeadView {
     pub signature: Signature,
 }
 
-/// `PUT /v3/v/{vault}/head`. The epoch is the token's, not sent.
+/// `PUT /v1/v/{vault}/head`. The epoch is the token's, not sent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SetHead {
     pub name: Name,
@@ -213,7 +213,7 @@ pub struct HeldEntry {
     pub purge_after_ms: i64,
 }
 
-/// `POST /v3/v/{vault}/delete`: the names, and the vault key's signature
+/// `POST /v1/v/{vault}/delete`: the names, and the vault key's signature
 /// over them and the generation (E6).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeleteRequest {
@@ -222,7 +222,7 @@ pub struct DeleteRequest {
     pub signature: Signature,
 }
 
-/// `POST /v3/v/{vault}/check`: the vault key's signature over one name and the generation
+/// `POST /v1/v/{vault}/check`: the vault key's signature over one name and the generation
 /// (decision 34). The gateway hashes that stored object against its recorded digest.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CheckRequest {
@@ -250,7 +250,7 @@ pub struct Checked {
     pub state: CheckState,
 }
 
-/// `POST /v3/v/{vault}/undo`: lift the holds of `names`, or of every hold
+/// `POST /v1/v/{vault}/undo`: lift the holds of `names`, or of every hold
 /// when `names` is null.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UndoRequest {

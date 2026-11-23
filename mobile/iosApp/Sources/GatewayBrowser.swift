@@ -36,7 +36,7 @@ import Network
 // NOTHING HERE IS TRUSTED. An address in a sighting is what some machine on
 // the network said; Rust's `pairing::matching` drops names, loopback,
 // multicast and IPv6 link-local ones, and the core proves identity by the
-// pinned certificate and `/v2/info` before it keeps any.
+// pinned certificate and `/v1/info` before it keeps any.
 
 /// THE BROWSE'S PURE RULES — what a TXT record must carry to be worth a
 /// connection, and how a resolved endpoint is spelled for `pairing::matching`.

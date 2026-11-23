@@ -19,7 +19,7 @@ import java.util.concurrent.Executor
 //
 // NOTHING HERE IS TRUSTED. An address in a sighting is what some machine on the network said;
 // Rust's `pairing::matching` drops names, loopback, multicast and IPv6 link-local ones, and the core
-// proves identity by the pinned certificate and `/v2/info` before it keeps any.
+// proves identity by the pinned certificate and `/v1/info` before it keeps any.
 
 /**
  * `NsdManager.discoverServices` for the gateway type, with a multicast lock held for exactly as

@@ -182,7 +182,7 @@ async fn a_bundle_frame_is_staged_on_arrival_and_admitted_with_the_rest() {
         StreamBody::new(fed.map(|bytes| Ok::<_, std::io::Error>(hyper::body::Frame::data(bytes))));
     let request = hyper::Request::builder()
         .method("POST")
-        .uri(format!("/v3/v/{vault}/bundle"))
+        .uri(format!("/v1/v/{vault}/bundle"))
         .header("host", gateway.addr.to_string())
         .header("authorization", format!("Bearer {token}"))
         .header("content-length", length)

@@ -1,6 +1,6 @@
 //! The stateless nonce (#1191, E5 as amended by R2).
 //!
-//! `POST /v3/nonce` writes **nothing**. A nonce is 40 bytes the gateway can
+//! `POST /v1/nonce` writes **nothing**. A nonce is 40 bytes the gateway can
 //! recognise as its own without having kept it:
 //!
 //! ```text

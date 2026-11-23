@@ -312,7 +312,7 @@ impl GatewayStore {
         false
     }
 
-    /// `GET /v3/info`: whether the gateway answers at all, and its clock.
+    /// `GET /v1/info`: whether the gateway answers at all, and its clock.
     ///
     /// # Errors
     /// [`StoreError::Unreachable`] when it does not;
@@ -955,7 +955,7 @@ mod tests {
     fn answer(time_ms: i64) -> std::result::Result<Info, StoreError> {
         Ok(Info {
             gateway_id: centraid_gateway::rules::ids::GatewayId::from_bytes([1; 16]),
-            protocol: 3,
+            protocol: centraid_gateway::rules::limits::PROTOCOL,
             time_ms,
         })
     }

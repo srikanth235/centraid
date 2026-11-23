@@ -115,7 +115,7 @@ EXPOSE 8443
 
 # `health` dials the address `serve` recorded in the data directory — its own
 # loopback for a gateway bound to every interface — trusting the certificate
-# beside it, and prints `GET /v2/info`. It answers on an empty gateway, before
+# beside it, and prints `GET /v1/info`. It answers on an empty gateway, before
 # any phone has paired.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
   CMD ["/usr/local/bin/centraid-gateway", "health", "--data-dir", "/var/lib/centraid"]
