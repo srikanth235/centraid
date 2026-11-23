@@ -42,23 +42,7 @@ use crate::model::Kind;
 /// its title is part of the text of what it labels, so a member finds a
 /// transaction by its category and an event by its calendar. A Locker item is
 /// found by its plain fields only ([`text_of`]); a sealed cell is never text.
-pub const SEARCHABLE: [Kind; 15] = [
-    Kind::Person,
-    Kind::Place,
-    Kind::Event,
-    Kind::Task,
-    Kind::Activity,
-    Kind::Note,
-    Kind::Document,
-    Kind::Photo,
-    Kind::Txn,
-    Kind::Thread,
-    Kind::Notebook,
-    Kind::Folder,
-    Kind::Album,
-    Kind::Project,
-    Kind::LockerItem,
-];
+pub const SEARCHABLE: [Kind; 15] = Kind::SEARCHABLE;
 
 /// The text a kind is found by, beside its title: its own row and children, the
 /// words that label it, and the live notes `about` it. `None` is a kind nobody
