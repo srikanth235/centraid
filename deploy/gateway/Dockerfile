@@ -88,7 +88,7 @@ FROM debian:trixie-slim@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc401
 ARG VERSION=1.0.0-alpha.0
 ARG REVISION=unknown
 LABEL org.opencontainers.image.title="centraid-gateway" \
-  org.opencontainers.image.description="The Centraid gateway, protocol v2: a blind store a phone backs its vault up to, directly (#1080)" \
+  org.opencontainers.image.description="The Centraid gateway, protocol 1: a blind store a phone backs its vault up to, directly (#1080)" \
   org.opencontainers.image.source="https://github.com/srikanth235/centraid" \
   org.opencontainers.image.url="https://github.com/srikanth235/centraid" \
   org.opencontainers.image.version="${VERSION}" \

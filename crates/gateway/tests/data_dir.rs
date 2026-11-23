@@ -1,7 +1,7 @@
 //! THE DATA DIRECTORY'S VERSION (#1191, B1, E13).
 //!
 //! A gateway's `state.db` carries `application_id` `CGW3` and a `user_version`
-//! ladder. A folder an earlier gateway made — protocol 2, no application id —
+//! ladder. A folder an earlier gateway made — no application id —
 //! is refused with the owner's sentence and exit code 2, and **its bytes are
 //! not touched**: the member moves it aside, or reads it with the old
 //! gateway. Nothing is migrated.
@@ -12,7 +12,7 @@ use centraid_gateway::server::state::{
     APPLICATION_ID, OLDER_DATA_DIRECTORY, OpenStateError, SqliteState,
 };
 
-/// What the folder was made with: the protocol-2 schema, applied the way that
+/// What the folder was made with: the earlier schema, applied the way that
 /// gateway applied it (WAL, no application id, `user_version` 0).
 fn v2_data_dir() -> tempfile::TempDir {
     let dir = tempfile::tempdir().expect("a temp dir");

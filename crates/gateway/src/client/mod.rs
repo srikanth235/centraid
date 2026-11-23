@@ -1,7 +1,7 @@
 //! THE PHONE'S CLIENT (#1080).
 //!
 //! HTTP/1.1 over TLS over TCP to one gateway, trusting exactly one
-//! certificate ([`tls`]). Every route of protocol v3 is a method here; the
+//! certificate ([`tls`]). Every route of protocol 1 is a method here; the
 //! bodies and refusals are [`crate::rules`]' own types, so the client reads
 //! back exactly what the server rendered.
 //!

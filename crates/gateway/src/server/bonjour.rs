@@ -67,7 +67,7 @@ wait "$registered""#;
 
 /// What follows `dns-sd` on its command line to register this gateway: the
 /// service's name, its type, the default domain, the port, and the TXT record a
-/// phone reads — `gw` (the gateway's id) and `v=3`, the same as the in-process
+/// phone reads — `gw` (the gateway's id) and `v=1`, the same as the in-process
 /// advertisement.
 #[must_use]
 pub fn registration_args(gateway_id: &GatewayId, port: u16) -> Vec<String> {

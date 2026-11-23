@@ -244,7 +244,7 @@ tokio-rustls = { version = "0.26", default-features = false, features = [
   "ring",
 ] }
 
-# #1080 — `crates/gateway`, the gateway v2: direct HTTPS from the phone to a
+# #1080 — `crates/gateway`, the gateway: direct HTTPS from the phone to a
 # gateway that mints its own certificate, which the phone pins by BLAKE3
 # fingerprint. No certificate authority, relay or DNS service is involved.
 #

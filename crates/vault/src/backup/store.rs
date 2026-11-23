@@ -1,5 +1,5 @@
 //! The store the plane writes to and restores from: one destination, through
-//! one synchronous trait (#1080, gateway protocol v3).
+//! one synchronous trait (#1080, gateway protocol 1).
 //!
 //! [`Store`] is the protocol's object and head routes as Rust calls, so the
 //! snapshot, retention, restore and drill code runs unchanged against the real

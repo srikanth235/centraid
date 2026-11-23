@@ -58,7 +58,7 @@
           <h2 class="r" style="--d: 0.06s">Every request names <em>its vault.</em></h2>
           <p class="lede r" style="--d: 0.12s">
             A gateway can keep the backups of several vaults — yours, a household member's — so no
-            request is ever "to the gateway": every route lives under <code>/v2/v/{vault}</code>,
+            request is ever "to the gateway": every route lives under <code>/v1/v/{vault}</code>,
             where a vault's id is its identity public key, and the bearer token a request carries
             was minted for that vault alone. A token for one vault opens nothing of another's, and an
             unknown vault gets the same refusal as a foreign token, so neither is an oracle.

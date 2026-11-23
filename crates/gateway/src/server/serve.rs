@@ -433,7 +433,7 @@ pub async fn run_router(
 }
 
 /// The Bonjour advertisement of one gateway: `_centraid-gateway._tcp` on the
-/// LAN, with `gw=<gateway id>` and `v=2` in its TXT record, so a phone at home
+/// LAN, with `gw=<gateway id>` and `v=1` in its TXT record, so a phone at home
 /// refreshes a destination's addresses by browsing. Stopped when dropped.
 pub struct Advertisement {
     daemon: mdns_sd::ServiceDaemon,

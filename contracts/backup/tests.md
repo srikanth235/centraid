@@ -132,8 +132,8 @@ Layout used below: `gateway/tests/` is `crates/gateway/tests/`, `gateway/conform
 - `restore_in_place_and_forget_reset_the_state` (core, `core/tests/restore_edges.rs`): rows per E11's reset rules. B14.
 - `an_older_state_file_is_removed_unread` (core, `core/tests/backup_edges.rs`): a `CBL1` ledger beside the vault. B14.
 - `the_directory_is_rewritten_when_the_gateway_set_changes` (core, `core/tests/backup_replicas.rs`). B8.
-- `an_older_gateway_data_directory_is_refused_with_the_sentence` (gateway, `gateway/tests/data_dir.rs`): a v2 `state.db` fixture; observe exit 2, the exact sentence of E13, and the file's bytes unchanged. B1.
-- `a_gateway_below_protocol_3_is_refused` (core, `core/tests/backup_edges.rs`): a stub answering `/v2/info` only; observe `GatewayTooOld` and `reach = 'gateway_old'`. B1.
+- `an_older_gateway_data_directory_is_refused_with_the_sentence` (gateway, `gateway/tests/data_dir.rs`): an earlier gateway's `state.db` fixture; observe exit 2, the exact sentence of E13, and the file's bytes unchanged. B1.
+- `a_gateway_below_required_protocol_is_refused` (gateway, `gateway/tests/older_gateway.rs`): a stub answering `/v1/info` with protocol 0; observe `GatewayTooOld { found: 0, required: 1 }` and no second request. B1.
 - `a_head_from_the_future_is_refused` (gateway, `gateway/conformance`: `taken_at_is_bounded`): `CLOCK_AHEAD` above 300,000 ms, accepted at the bound. B7.
 - `a_bundle_commits_in_one_transaction` (gateway, `gateway/tests/bundle_commit.rs`): the adapter's statement counter shows one `BEGIN IMMEDIATE`/`COMMIT` pair per bundle; a kill between staging and commit leaves no row without bytes, and the orphan sweep removes the files. B7.
 - `pairing_secrets_are_pruned_and_bounded` (gateway, `gateway/conformance`: `secrets_are_bounded`). B7.

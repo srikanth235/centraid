@@ -802,7 +802,7 @@ fn part(name: &str, vault: &str) -> wire::HandoffPart {
     wire::HandoffPart {
         name: name.to_owned(),
         path: format!("/spool/{name}"),
-        url: format!("https://192.168.1.20:7443/v2/v/{vault}/o/{name}"),
+        url: format!("https://192.168.1.20:7443/v1/v/{vault}/o/{name}"),
         method: "PUT".to_owned(),
         size: 1_024,
         gateway_id: "gw-1".to_owned(),

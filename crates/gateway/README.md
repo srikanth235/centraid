@@ -1,4 +1,4 @@
-# `crates/gateway` — the gateway, protocol v3
+# `crates/gateway` — the gateway, protocol 1
 
 A Centraid gateway is a **blind store a phone backs its vault up to, directly** ([#1080](https://github.com/srikanth235/centraid/issues/1080)). The phone is the vault and the only writer; the gateway is a laptop, a NAS or a small VPS that keeps sealed objects it cannot open, under names it cannot invert, and answers a handful of HTTPS routes. This crate is the whole of it: the protocol's rules, the gateway a member runs, and the client a phone links.
 
@@ -106,7 +106,7 @@ Everything a gateway has is one directory of plain files. Copying it anywhere co
 
 **What a stolen copy yields.** Ciphertext; object names, which are keyed hashes nobody can invert; digests of the ciphertext; sizes; times — paired, stored, held for deletion, heads set, snapshots taken; device labels; the vault identity **public** keys, writer epochs and the **signatures** the vault key made (heads, the last claim); the BLAKE3 of revoked tokens. No nonce row names a vault. No plaintext, no plaintext hash and no key that opens anything has a column or a file to arrive in, and the suite's canary scans every byte of the directory, file names included, for each. Tokens and pairing secrets are there only as BLAKE3 of 32 and 16 random bytes, so none can be replayed. The directory does hold **the gateway's TLS key**: a thief who can also answer at the gateway's address can impersonate it to its phones — and receive more ciphertext, or lose what they send. After a theft, mint a new identity (move the identity files and `nonce.key` aside and `serve`) and pair each phone again.
 
-**An older data folder.** `serve` and `pairings` print "This data folder was made by an earlier version of the gateway, and this version cannot open it. Nothing was changed. Move the folder aside and start again; every phone will need to pair again." and exit with code 2. A phone whose gateway answers below protocol 3 gets `GatewayTooOld` and the member is told to update the gateway; there is no v2 fallback.
+**An older data folder.** `serve` and `pairings` print "This data folder was made by an earlier version of the gateway, and this version cannot open it. Nothing was changed. Move the folder aside and start again; every phone will need to pair again." and exit with code 2. A phone whose gateway answers below protocol 1 gets `GatewayTooOld` and the member is told to update the gateway; there is no fallback to another protocol.
 
 ## The sweeps
 
@@ -129,7 +129,7 @@ centraid-gateway install  --data-dir DIR [--bind 0.0.0.0:8443] [--dry-run] [--la
 
 `--data-dir` and `--bind` also read `CENTRAID_GATEWAY_DATA_DIR` and `CENTRAID_GATEWAY_BIND`.
 
-- **`serve`** runs with no vault. On an empty directory it mints the identity, listens, and prints the gateway id, the pin and the first pairing QR; nothing is stored until a phone pairs. It advertises `_centraid-gateway._tcp` on the LAN (TXT `gw`, `v=3`) unless told `--no-mdns`, runs the sweeps, and stops on Ctrl-C or `SIGTERM`.
+- **`serve`** runs with no vault. On an empty directory it mints the identity, listens, and prints the gateway id, the pin and the first pairing QR; nothing is stored until a phone pairs. It advertises `_centraid-gateway._tcp` on the LAN (TXT `gw`, `v=1`) unless told `--no-mdns`, runs the sweeps, and stops on Ctrl-C or `SIGTERM`.
 - **`pair`** prints a fresh payload and QR beside a running `serve`, listing this machine's addresses on the port `serve` bound.
 - **`pairings`** lists each vault: its writer epoch, safety number, head and tokens — each with its id, the first 12 hex characters of its BLAKE3 — and how many pairing secrets wait, were spent or expired. **`pairings revoke <token id>`** forgets one token, for a phone that is lost and cannot revoke itself.
 - **`vault <id8> <verb>`** is the member's last word over one vault, `id8` the first 8 hex that `pairings` prints (refused when it names more than one). Local and unsigned, through the same rules a phone's request goes through; each prints counts, never a name; a refusal exits 3. **`freeze`** refuses every state-changing route (`FROZEN`) and skips the vault in the purge; reads, nonces and read grants still answer. **`unfreeze`** lifts it and adds the time it lasted to every hold, so freezing does not burn the week. **`undo`** lifts every hold, no signature, frozen or not. **`purge-now --yes`** makes every hold of an unfrozen vault due and runs the purge once. **`delete-vault --yes`** removes a **frozen** vault: tokens, tombstones, head, snapshots, claim, then every object in pages by name; not held.
@@ -161,5 +161,5 @@ The container image is [`deploy/gateway/Dockerfile`](../../deploy/gateway/Docker
 | `tests/plans.rs` | every listing seeks an index, and the test sees a planted scan, sort and offset |
 | `tests/bundle_commit.rs` | a bundle is one transaction; a child process killed with SIGKILL between a bundle's renames and its commit leaves files and no row, and the orphan sweep takes them once the clock says they are old; a sweep during an open bundle removes nothing |
 | `tests/head_state.rs` | `Client::head_state` verifies the head and the standing claim against the vault key and the paired gateway id before it hands out an epoch: a stub that lies in each field, and the wrong gateway or vault, is `Unverified` |
-| `tests/older_gateway.rs` | a stub playing a protocol-2 gateway: the real client returns `GatewayTooOld` |
+| `tests/older_gateway.rs` | a stub playing a gateway below protocol 1: the real client returns `GatewayTooOld` |
 | `tests/signing_vectors.rs` | the vectors in `contracts/crypto/gateway-signing-vectors.json` |

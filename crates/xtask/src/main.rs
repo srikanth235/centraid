@@ -107,8 +107,8 @@ enum Command {
         #[arg(long)]
         check: bool,
     },
-    /// Write the lists the gateway and the phone must agree on (#1191, L1): the phone's mirrors of
-    /// the gateway's limits, generated from `crates/gateway/src/rules/limits.rs`. `--check` compares.
+    /// Write the lists the gateway and the phone must agree on (#1191, L1): the `edge_shape` seed
+    /// the vault's trigger test holds against, generated from the schema. `--check` compares.
     Lists {
         /// Compare instead of write.
         #[arg(long)]
