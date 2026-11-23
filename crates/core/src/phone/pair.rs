@@ -92,15 +92,7 @@ impl History {
     /// # Errors
     /// The vault's refusal to read.
     pub fn of(vault: &Vault) -> Result<Self> {
-        let row: Option<(i64, Option<String>)> = vault.read(|connection| {
-            use centraid_vault::rusqlite::OptionalExtension as _;
-            Ok(connection
-                .query_row("SELECT writes, written_at FROM vault", [], |row| {
-                    Ok((row.get(0)?, row.get(1)?))
-                })
-                .optional()?)
-        })?;
-        let (writes, at) = row.unwrap_or((0, None));
+        let (writes, at) = vault.read(centraid_vault::clock::writes_and_written_at)?;
         Ok(Self {
             writes: u64::try_from(writes).unwrap_or(0),
             last_write_ms: at

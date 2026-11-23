@@ -921,3 +921,48 @@ fn a_machine_that_is_not_the_pinned_gateway_is_untrusted_and_a_damaged_copy_is_d
     );
     assert_eq!(tokens(&impostor), 0, "nothing paired with the impostor");
 }
+
+#[test]
+fn a_second_pass_with_no_write_walks_nothing() {
+    let home = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    pair(&phone, &home);
+    owned_photo(&phone, "a photograph the app holds", 90_000);
+
+    let first = drain(&phone, at_home());
+    assert_eq!(first.stopped, wire::DrainStop::Empty as i32, "{first:?}");
+    let held = home.held(&vault_id());
+    let commits = committed(&home);
+    assert!(commits > 0, "the first pass sent the vault");
+
+    // NOTHING WAS WRITTEN: the pass finds the vault unchanged, takes no snapshot, sends nothing.
+    let second = drain(&phone, at_home());
+    assert_eq!(second.stopped, wire::DrainStop::Empty as i32, "{second:?}");
+    assert_eq!(second.confirmed_parts, 0, "{second:?}");
+    assert_eq!(committed(&home), commits, "no object was committed again");
+    assert_eq!(
+        home.held(&vault_id()),
+        held,
+        "the gateway holds the same set"
+    );
+}
+
+#[test]
+fn a_phone_with_no_room_says_so() {
+    let home = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone_with(dir.path(), |config| config.with_staging_ceiling(1));
+    pair(&phone, &home);
+    owned_photo(&phone, "a photograph the app holds", 90_000);
+
+    drain(&phone, at_home());
+    assert!(
+        status(&phone)
+            .waiting
+            .iter()
+            .any(|row| row.reason == wire::WaitReason::NoRoom as i32),
+        "the page says there is no room"
+    );
+    assert!(home.held(&vault_id()).is_empty(), "nothing went anywhere");
+}

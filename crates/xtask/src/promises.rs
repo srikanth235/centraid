@@ -3077,12 +3077,12 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 9] = [
         "every paired backup device receives every pass",
         &[
             (
-                "crates/core/tests/backup_replicas.rs",
-                "a_pass_feeds_every_paired_gateway",
+                "crates/core/tests/phone_backup.rs",
+                "a_pass_backs_up_a_vault_to_two_gateways_and_they_hold_only_ciphertext",
             ),
             (
-                "crates/core/tests/backup_holes.rs",
-                "a_device_away_past_the_wait_still_restores_the_whole_vault",
+                "crates/core/tests/restore_edges.rs",
+                "a_records_only_vault_and_a_cut_short_pass_restore_what_was_acknowledged",
             ),
         ],
     ),
@@ -3111,8 +3111,8 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 9] = [
                 "a_device_holding_an_older_backup_is_a_plain_warning",
             ),
             (
-                "crates/core/tests/backup_verify.rs",
-                "a_gateway_that_lies_about_exists_is_found_and_then_refilled",
+                "crates/core/tests/backup_check.rs",
+                "a_chunk_the_gateway_lost_is_a_missing_file_and_is_sent_again",
             ),
             (
                 "crates/screens/src/backup/tests.rs",
@@ -3143,29 +3143,17 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 9] = [
                 "crates/vault/tests/backup_snapshot.rs",
                 "the_quick_check_runs_before_the_head_is_signed",
             ),
-            (
-                "crates/core/tests/backup_scratch.rs",
-                "a_pass_writes_no_plaintext_copy_of_the_vault",
-            ),
-            (
-                "crates/core/tests/backup_scratch.rs",
-                "a_damaged_page_stops_a_backup_pass",
-            ),
-            (
-                "crates/core/tests/backup_scratch.rs",
-                "a_copy_a_crash_left_is_gone_at_the_next_open",
-            ),
         ],
     ),
     (
         "a phone with no room says so, and an unchanged vault is not walked again",
         &[
             (
-                "crates/core/tests/backup_scratch.rs",
-                "a_phone_with_no_room_says_so_and_catches_up_when_it_has_some",
+                "crates/core/tests/phone_backup.rs",
+                "a_phone_with_no_room_says_so",
             ),
             (
-                "crates/core/tests/backup_scratch.rs",
+                "crates/core/tests/phone_backup.rs",
                 "a_second_pass_with_no_write_walks_nothing",
             ),
         ],
@@ -3224,12 +3212,12 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 9] = [
         "a refusal names its reason, each with its own remedy, and stops only the gateway that gave it",
         &[
             (
-                "crates/core/tests/backup_replicas.rs",
-                "a_refusal_is_read_as_the_reason_the_gateway_gave",
+                "crates/core/tests/phone_backup.rs",
+                "a_gateway_older_than_this_build_is_told_to_be_updated",
             ),
             (
-                "crates/core/tests/backup_replicas.rs",
-                "a_full_gateway_is_named_while_the_other_is_fed",
+                "crates/core/tests/phone_backup.rs",
+                "a_machine_that_is_not_the_pinned_gateway_is_untrusted_and_a_damaged_copy_is_damaged",
             ),
             (
                 "crates/screens/src/backup/tests.rs",

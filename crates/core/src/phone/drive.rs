@@ -164,14 +164,8 @@ struct History {
 }
 
 fn history(vault: &Vault) -> Result<History> {
-    let writes = vault
-        .read(|connection| {
-            use centraid_vault::rusqlite::OptionalExtension as _;
-            Ok(connection
-                .query_row("SELECT writes FROM vault", [], |row| row.get::<_, i64>(0))
-                .optional()?
-                .unwrap_or(0))
-        })
+    let (writes, _) = vault
+        .read(centraid_vault::clock::writes_and_written_at)
         .map_err(|error| plane_error(error.into()))?;
     Ok(History {
         writes: u64::try_from(writes).unwrap_or(0),
