@@ -770,6 +770,7 @@ fn open(channel: &wire::PeopleChannel, intent: impl Into<HeroIntent>) -> Vec<wir
             text: value.to_owned(),
             sensitive: false,
             clear_after_ms: 0,
+            owner_vault_id: String::new(),
         }),
     };
     vec![wire::Effect { kind: Some(kind) }]

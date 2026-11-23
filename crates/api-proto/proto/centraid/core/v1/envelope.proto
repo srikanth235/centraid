@@ -148,6 +148,9 @@ message Request {
     GatewayTokensRequest gateway_tokens = 46;
     // UNDO THE DELETES A GATEWAY HOLDS (#1191, E6). See `phone.proto`.
     UndoHeldRequest undo_held = 47;
+    // WHOLE-VAULT EXPORT: resumable because each library original is supplied
+    // by the shell between core-owned ZIP writes. See `phone.proto`.
+    VaultExportRequest vault_export = 48;
   }
 }
 
@@ -196,6 +199,7 @@ message Response {
     CheckBackupResponse check_backup = 45;
     GatewayTokensResponse gateway_tokens = 46;
     UndoHeldResponse undo_held = 47;
+    VaultExportResponse vault_export = 48;
   }
 }
 

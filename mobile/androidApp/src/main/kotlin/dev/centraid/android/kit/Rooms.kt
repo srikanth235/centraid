@@ -25,6 +25,8 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.ModalBottomSheet
@@ -91,6 +93,8 @@ public data class RoomAction(
     val pill: Boolean = false,
     /** A pill that cannot be pressed yet is drawn quiet. */
     val enabled: Boolean = true,
+    /** Optional popup content composed inside the action's anchor Box (for a platform menu). */
+    val anchoredMenu: (@Composable () -> Unit)? = null,
     val onPress: () -> Unit,
 )
 
@@ -459,10 +463,48 @@ public fun EditorRoom(
             if (trailing != null && trailing.pill) {
                 KitPillButton(trailing.label, trailing.onPress, testTag = trailing.testTag, enabled = trailing.enabled)
             } else if (trailing != null) {
-                IconKey(trailing.iconKey, trailing.label, trailing.testTag, onPress = trailing.onPress)
+                Box(contentAlignment = Alignment.TopEnd) {
+                    IconKey(trailing.iconKey, trailing.label, trailing.testTag, onPress = trailing.onPress)
+                    trailing.anchoredMenu?.invoke()
+                }
             }
         }
         Column(Modifier.weight(1f).readableColumn(), content = content)
+    }
+}
+
+/** A PLATFORM DROPDOWN anchored to a [RoomAction], with the option words supplied by the screen. */
+@Composable
+public fun AnchoredOptionMenu(
+    expanded: Boolean,
+    title: String,
+    options: List<SheetOption>,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+    testTag: String,
+) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        modifier = Modifier.menuTestIds().testTag(testTag).semantics { contentDescription = title },
+        containerColor = Surface.card,
+    ) {
+        options.forEach { option ->
+            DropdownMenuItem(
+                text = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            option.label,
+                            color = if (option.destructive) StateColor.Red.text else Surface.ink,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (option.detail.isNotEmpty()) Text(option.detail, color = Surface.meta)
+                    }
+                },
+                onClick = { onPick(option.key) },
+                modifier = Modifier.testTag("$testTag-${option.key}"),
+            )
+        }
     }
 }
 

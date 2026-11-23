@@ -689,6 +689,52 @@ pub(crate) fn markdown_entries(
     Ok((archive_name, entries))
 }
 
+/// The Journal files owed by Export everything. They live under People so the
+/// aggregate keeps the owner's personal notes without changing Notes' own
+/// export or its settled Journal boundary.
+pub(crate) fn journal_markdown_entries(connection: &rusqlite::Connection) -> Result<Vec<Entry>> {
+    let mut statement = connection.prepare_cached(
+        "SELECT e.id, e.title, n.body
+           FROM entity e JOIN note n ON n.id = e.id
+          WHERE e.kind = 'note' AND e.deleted_at IS NULL
+            AND EXISTS (SELECT 1 FROM edge m WHERE m.from_id = e.id AND m.rel = 'about'
+                         AND m.to_id = (SELECT self_id FROM vault))
+          ORDER BY e.created_at, e.n",
+    )?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut tags = connection.prepare_cached(
+        "SELECT c.key FROM edge t JOIN concept c ON c.id = t.to_id AND c.kind = 'tag'
+          WHERE t.from_id = ?1 AND t.rel = 'tagged' ORDER BY c.key",
+    )?;
+    let mut used: BTreeSet<String> = BTreeSet::new();
+    let mut entries = Vec::with_capacity(rows.len());
+    for (id, title, body) in rows {
+        let labels = tags
+            .query_map([&id], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let stem = portable::file_stem(&title);
+        let mut path = format!("People/Journal/{stem}.md");
+        let mut again = 1;
+        while !used.insert(path.to_lowercase()) {
+            again += 1;
+            path = format!("People/Journal/{stem} {again}.md");
+        }
+        entries.push(Entry {
+            path,
+            bytes: portable::markdown_of(&title, &body, &labels).into_bytes(),
+        });
+    }
+    Ok(entries)
+}
+
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
     const CREATE: &[CommandCondition] = &[CommandCondition {

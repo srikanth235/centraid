@@ -75,6 +75,8 @@ struct State {
     recents: crate::kit::search::Recents,
     /// The unsaved new event (`calendar::draft`): memory here, the device store behind it.
     drafts: crate::calendar::draft::Board,
+    /// The latest Locker clipboard copy, held until Lock or its original expiry.
+    clipboard: crate::kit::secret::ClipboardBoard,
     band: Option<BandFn>,
     next_instance: u64,
     next_effect: u64,
@@ -83,6 +85,10 @@ struct State {
     selected: String,
     nav_revision: u64,
     timers: BTreeMap<(u64, String), Instant>,
+    /// Sensitive Locker clipboard writes still awaiting their OS result, bound to the owner ticket.
+    clipboard_effects: BTreeMap<u64, (String, u64, u64)>,
+    /// Runtime-issued instance-zero owned clears whose shell acknowledgements are expected.
+    runtime_owned_clipboard_clears: BTreeSet<u64>,
     /// Jobs running off the lock: the instance that asked and the tag it gave.
     jobs: BTreeMap<u64, (u64, String)>,
     next_job: u64,
@@ -141,6 +147,7 @@ impl Runtime {
                 alerts: crate::kit::permission::AlertBoard::default(),
                 recents: crate::kit::search::Recents::default(),
                 drafts: crate::calendar::draft::Board::default(),
+                clipboard: crate::kit::secret::ClipboardBoard::default(),
                 band: None,
                 next_instance: 1,
                 next_effect: 1,
@@ -149,6 +156,8 @@ impl Runtime {
                 selected,
                 nav_revision: 0,
                 timers: BTreeMap::new(),
+                clipboard_effects: BTreeMap::new(),
+                runtime_owned_clipboard_clears: BTreeSet::new(),
                 jobs: BTreeMap::new(),
                 next_job: 1,
                 env: Environment::default(),
@@ -208,6 +217,37 @@ impl Runtime {
         CoreError::InvalidRequest {
             detail: detail.into(),
         }
+    }
+
+    /// A clipboard effect may answer after its Locker item was popped. Resolve it while the
+    /// runtime still owns the ticket, before `call` validates whether that item remains open.
+    fn clipboard_effect_result(
+        state: &mut State,
+        instance: u64,
+        event: &wire::ScreenEvent,
+    ) -> bool {
+        let Some(wire::screen_event::Kind::EffectResult(result)) = event.kind.as_ref() else {
+            return false;
+        };
+        if state
+            .clipboard_effects
+            .get(&result.effect_id)
+            .is_none_or(|(_, _, owner)| *owner != instance)
+        {
+            return false;
+        }
+        if let Some((vault, ticket, _)) = state.clipboard_effects.remove(&result.effect_id)
+            && matches!(
+                result.outcome,
+                Some(wire::effect_result::Outcome::Failed(_))
+            )
+            && state.clipboard.failed(&vault, ticket)
+        {
+            state
+                .timers
+                .remove(&(0, format!("locker-clipboard:{ticket}")));
+        }
+        true
     }
 
     fn navigation(state: &State) -> wire::Navigation {
@@ -281,8 +321,9 @@ impl Runtime {
     }
 
     /// Drop an instance and what it owned.
-    fn close(state: &mut State, id: u64, out: &mut wire::ScreenUpdate) {
-        if state.instances.remove(&id).is_some() {
+    fn close(state: &mut State, core: &dyn ScreenCtx, id: u64, out: &mut wire::ScreenUpdate) {
+        if let Some(mut instance) = state.instances.remove(&id) {
+            instance.screen.closing(core);
             out.closed.push(id);
             // WHAT AN INSTANCE SAID EARLIER IN THIS UPDATE DIES WITH IT: a view
             // or an effect for a screen the same update closes would be drawn
@@ -373,6 +414,7 @@ impl Runtime {
         let alerts = state.alerts.clone();
         let recents = state.recents.clone();
         let drafts = state.drafts.clone();
+        let clipboard = state.clipboard.clone();
         let Some(instance) = state.instances.get_mut(&id) else {
             return;
         };
@@ -386,8 +428,10 @@ impl Runtime {
             .with_alerts(alerts.clone())
             .with_recents(recents.clone())
             .with_drafts(drafts.clone())
+            .with_clipboard(clipboard.clone())
             .with_handed(handed);
         let effects = instance.screen.update(event, &ctx);
+        let vault = ctx.foreground_vault_id();
         let done = ctx.finish();
         if let Some(handed) = done.handed {
             if handed.onward() {
@@ -403,6 +447,24 @@ impl Runtime {
         let Some(instance) = state.instances.get_mut(&id) else {
             return;
         };
+        let owned_deadline = clipboard.deadline();
+        let existing = owned_deadline.as_ref().is_some_and(|(ticket, deadline)| {
+            state.timers.get(&(0, format!("locker-clipboard:{ticket}"))) == Some(deadline)
+        });
+        if !existing {
+            state
+                .timers
+                .retain(|(owner, name), _| *owner != 0 || !name.starts_with("locker-clipboard:"));
+            if let Some((ticket, deadline)) = owned_deadline {
+                state
+                    .timers
+                    .insert((0, format!("locker-clipboard:{ticket}")), deadline);
+                core.wake_after(deadline.saturating_duration_since(Instant::now()));
+            }
+        }
+        if clipboard.deadline().is_none() {
+            state.clipboard_effects.clear();
+        }
         // THE EFFECTS ARE NUMBERED, AND THE SCREEN TOLD, BEFORE ANYTHING IT POSTED IS DELIVERED:
         // a post can come straight back to this screen, and its answer to that must not be taken
         // for the numbering of this update's effects. An effect the runtime keeps for itself has
@@ -425,6 +487,27 @@ impl Runtime {
                 })
             })
             .collect();
+        for (effect, number) in effects.iter().zip(&numbers) {
+            let (Some(wire::effect::Kind::ClipboardSet(set)), Some(effect_id)) =
+                (effect.kind.as_ref(), number)
+            else {
+                continue;
+            };
+            if !set.sensitive {
+                continue;
+            }
+            if set.owner_vault_id != vault {
+                continue;
+            }
+            if let Some(ticket) = clipboard.ticket_for(&set.owner_vault_id, &set.text) {
+                state
+                    .clipboard_effects
+                    .retain(|_, (_, held_ticket, _)| *held_ticket == ticket);
+                state
+                    .clipboard_effects
+                    .insert(*effect_id, (set.owner_vault_id.clone(), ticket, id));
+            }
+        }
         instance.screen.effects_numbered(&numbers);
 
         if !instance.service {
@@ -433,6 +516,7 @@ impl Runtime {
                 .with_alerts(alerts)
                 .with_recents(recents)
                 .with_drafts(drafts);
+            let view_ctx = view_ctx.with_clipboard(clipboard);
             let mut view = instance.screen.view(&view_ctx);
             view.instance = id;
             view.revision = 0;
@@ -676,7 +760,7 @@ impl Runtime {
     ) {
         for id in gone {
             Self::leave(state, core, *id, out);
-            Self::close(state, *id, out);
+            Self::close(state, core, *id, out);
         }
     }
 
@@ -805,6 +889,34 @@ impl Runtime {
         if !state.started || now == state.foreground {
             return;
         }
+        if let Some(previous) = state.foreground.as_deref() {
+            let mut clears = state.clipboard.clear(previous);
+            if clears.is_empty() {
+                // The shell may still own a restart-persistent clipboard lease even when this
+                // Runtime's volatile board is empty (or the OS clipboard belongs to a prior
+                // process). Bind cleanup to this vault and let the shell compare its generation.
+                clears.push(crate::kit::secret::clipboard_clear_owned(previous));
+            }
+            for effect in clears {
+                let effect_id = state.next_effect;
+                state.next_effect += 1;
+                if matches!(
+                    effect.kind.as_ref(),
+                    Some(wire::effect::Kind::ClipboardClearOwned(_))
+                ) {
+                    state.runtime_owned_clipboard_clears.insert(effect_id);
+                }
+                out.effects.push(wire::EffectRequest {
+                    effect_id,
+                    instance: 0,
+                    effect: Some(effect),
+                });
+            }
+            state
+                .timers
+                .retain(|(owner, name), _| *owner != 0 || !name.starts_with("locker-clipboard:"));
+            state.clipboard_effects.clear();
+        }
         state.foreground = now;
         // One vault's searches are never offered over another's.
         state.recents.clear();
@@ -813,7 +925,7 @@ impl Runtime {
         let mut reopened = Vec::new();
         for tab in 0..state.tabs.len() {
             for id in std::mem::take(&mut state.tabs[tab].stack) {
-                Self::close(state, id, out);
+                Self::close(state, core, id, out);
             }
             reopened.push(tab);
         }
@@ -925,13 +1037,32 @@ impl ScreenHost for Runtime {
                     .event
                     .clone()
                     .ok_or_else(|| Self::bad("an instance event without an event"))?;
+                let tracked_clipboard =
+                    Self::clipboard_effect_result(&mut state, send.instance, &event);
+                let tracked_runtime_clear = if send.instance == 0 {
+                    match event.kind.as_ref() {
+                        Some(wire::screen_event::Kind::EffectResult(result)) => state
+                            .runtime_owned_clipboard_clears
+                            .remove(&result.effect_id),
+                        _ => false,
+                    }
+                } else {
+                    false
+                };
                 if !state.instances.contains_key(&send.instance) {
-                    return Err(Self::bad(format!(
-                        "screen instance {} is not open",
-                        send.instance
-                    )));
+                    if tracked_clipboard || tracked_runtime_clear {
+                        // Only a tracked Locker copy answer or a runtime-issued instance-zero
+                        // owned clear may outlive its page. Other answers keep the closed-screen
+                        // rejection behavior, including stale owner-check responses.
+                    } else {
+                        return Err(Self::bad(format!(
+                            "screen instance {} is not open",
+                            send.instance
+                        )));
+                    }
+                } else {
+                    Self::dispatch(&mut state, core, send.instance, event, &mut out);
                 }
-                Self::dispatch(&mut state, core, send.instance, event, &mut out);
             }
             K::Snapshot(_) => {
                 out.navigation = Some(Self::navigation(&state));
@@ -1122,6 +1253,27 @@ impl ScreenHost for Runtime {
         let mut out = wire::ScreenUpdate::default();
         for (id, name) in due {
             state.timers.remove(&(id, name.clone()));
+            if id == 0 {
+                if let Some(ticket) = name
+                    .strip_prefix("locker-clipboard:")
+                    .and_then(|ticket| ticket.parse::<u64>().ok())
+                {
+                    let expired = state.clipboard.expire(ticket, now);
+                    if state.clipboard.deadline().is_none() {
+                        state.clipboard_effects.clear();
+                    }
+                    for effect in expired {
+                        let effect_id = state.next_effect;
+                        state.next_effect += 1;
+                        out.effects.push(wire::EffectRequest {
+                            effect_id,
+                            instance: 0,
+                            effect: Some(effect),
+                        });
+                    }
+                }
+                continue;
+            }
             Self::dispatch(
                 &mut state,
                 core,

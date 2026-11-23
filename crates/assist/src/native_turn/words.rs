@@ -18,7 +18,7 @@ const CHAT_COPY: &str = include_str!("../../../../copy/chat.json");
 /// One sentence of what the runtime says.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Say {
-    /// The turn ran out of steps with nothing to ask.
+    /// The turn could not be completed and has no useful question to ask.
     Cap,
     /// `Counted {what}.`
     Count,

@@ -22,7 +22,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
-use std::io::{BufWriter, Seek, Write};
+use std::io::{BufWriter, Read, Seek, Write};
 use std::path::Path;
 
 use rusqlite::Connection;
@@ -43,7 +43,7 @@ pub(crate) const NOT_HERE: &str = "not on this phone";
 pub(crate) const UNREADABLE: &str = "could not be read";
 
 /// An original an archive could not include: where it would have been, and why.
-pub(crate) struct LeftOut {
+pub struct LeftOut {
     pub name: String,
     pub why: &'static str,
 }
@@ -308,11 +308,50 @@ pub(crate) fn add_documents<W: Write + Seek>(
     documents: Vec<DocumentRow>,
     prefix: &str,
 ) -> Result<(u64, Vec<LeftOut>)> {
+    add_documents_inner(zip, blobs, folders, scope, documents, prefix, None)
+}
+
+/// The whole-vault export's cancellable document stream. It checks the shared signal between
+/// documents and before each fixed-size ZIP read, so cancellation never waits on a large original.
+pub(crate) fn add_documents_cancellable<W: Write + Seek>(
+    zip: &mut ZipWriter<W>,
+    blobs: &(dyn BlobStore + Send + Sync),
+    folders: &BTreeMap<String, Folder>,
+    scope: Option<&str>,
+    documents: Vec<DocumentRow>,
+    prefix: &str,
+    cancelled: &std::sync::atomic::AtomicBool,
+) -> Result<(u64, Vec<LeftOut>)> {
+    add_documents_inner(
+        zip,
+        blobs,
+        folders,
+        scope,
+        documents,
+        prefix,
+        Some(cancelled),
+    )
+}
+
+fn add_documents_inner<W: Write + Seek>(
+    zip: &mut ZipWriter<W>,
+    blobs: &(dyn BlobStore + Send + Sync),
+    folders: &BTreeMap<String, Folder>,
+    scope: Option<&str>,
+    documents: Vec<DocumentRow>,
+    prefix: &str,
+    cancelled: Option<&std::sync::atomic::AtomicBool>,
+) -> Result<(u64, Vec<LeftOut>)> {
     let mut used: BTreeSet<String> = BTreeSet::new();
     let mut dirs: BTreeSet<String> = BTreeSet::new();
     let mut added = 0_u64;
     let mut left: Vec<LeftOut> = Vec::new();
     for (title, blob, folder) in documents {
+        if cancelled.is_some_and(|token| token.load(std::sync::atomic::Ordering::SeqCst)) {
+            return Err(VaultError::Invariant {
+                context: "the whole-vault export was cancelled".to_owned(),
+            });
+        }
         let Some(mut names) = path_of(folders, folder.as_deref(), scope) else {
             continue;
         };
@@ -339,10 +378,35 @@ pub(crate) fn add_documents<W: Write + Seek>(
         }
         names.push(file_name(&title));
         let name = unique_among(&mut used, &dirs, format!("{prefix}{}", names.join("/")));
-        zip.add(&name, size, file)?;
+        if let Some(cancelled) = cancelled {
+            zip.add(
+                &name,
+                size,
+                CancelReader {
+                    inner: file,
+                    cancelled,
+                },
+            )?;
+        } else {
+            zip.add(&name, size, file)?;
+        }
         added += 1;
     }
     Ok((added, left))
+}
+
+struct CancelReader<'a, R> {
+    inner: R,
+    cancelled: &'a std::sync::atomic::AtomicBool,
+}
+
+impl<R: Read> Read for CancelReader<'_, R> {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        if self.cancelled.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(std::io::Error::other("the archive was cancelled"));
+        }
+        self.inner.read(buffer)
+    }
 }
 
 const SCHEMA: &str = r#"{

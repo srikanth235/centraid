@@ -956,6 +956,7 @@ fn exported(status: wire::originals_exported::Status) -> wire::effect_result::Ou
         status: status as i32,
         handed: 1,
         missing: 0,
+        ..wire::OriginalsExported::default()
     })
 }
 
@@ -1838,6 +1839,7 @@ fn a_cancelled_zero_file_handoff_is_quiet_but_one_file_has_a_receipt() {
                             status: wire::originals_exported::Status::Done as i32,
                             handed,
                             missing: 0,
+                            ..wire::OriginalsExported::default()
                         },
                     )),
                 }),

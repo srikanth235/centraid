@@ -76,8 +76,11 @@
 //! recorded them in the library.
 
 use std::collections::BTreeMap;
+use std::fs::{File, OpenOptions};
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use centraid_api_proto::core_v1 as wire;
@@ -119,6 +122,19 @@ pub struct Doors {
     /// Where a library item is sealed as it streams: present only when a
     /// gateway is paired and this core holds the vault's keys.
     pub seal: Option<SealInto>,
+    /// A single OS original selected by an active Rust-owned whole-vault export.
+    pub export: Option<ExportArchiveInto>,
+}
+
+/// The immutable photo descriptor the Rust export job is waiting for.
+pub struct ExportArchiveInto {
+    pub job_id: String,
+    pub photo_id: String,
+    pub hash: [u8; 32],
+    pub byte_size: u64,
+    pub media_type: String,
+    pub staging_dir: PathBuf,
+    pub cancelled: std::sync::Arc<AtomicBool>,
 }
 
 /// The spool a library item is sealed into, and how much it may take.
@@ -225,6 +241,30 @@ enum Holding {
         hasher: Box<blake3::Hasher>,
         seal: Option<LibrarySeal>,
     },
+    ExportArchive {
+        file: ExportTemp,
+        job_id: String,
+        photo_id: String,
+        expected: [u8; 32],
+        expected_len: u64,
+        hasher: Box<blake3::Hasher>,
+        cancelled: std::sync::Arc<AtomicBool>,
+    },
+}
+
+struct ExportTemp {
+    file: Option<File>,
+    path: PathBuf,
+    keep: bool,
+}
+
+impl Drop for ExportTemp {
+    fn drop(&mut self) {
+        self.file.take();
+        if !self.keep {
+            let _ = std::fs::remove_file(&self.path);
+        }
+    }
 }
 
 struct Session {
@@ -275,6 +315,18 @@ pub enum Staged {
         edited: bool,
         sealed: Option<FileSeal>,
     },
+    /// One original supplied to a ZIP job, held only in a temporary stage file until verified.
+    ExportArchive {
+        path: PathBuf,
+        staging_id: String,
+        job_id: String,
+        photo_id: String,
+        hash: PlaintextHash,
+        len: u64,
+        media_type: String,
+        expected: PlaintextHash,
+        expected_len: u64,
+    },
 }
 
 fn invalid(detail: impl Into<String>) -> CoreError {
@@ -283,14 +335,30 @@ fn invalid(detail: impl Into<String>) -> CoreError {
     }
 }
 
+struct ParsedStageSource {
+    library: bool,
+    archive: Option<ArchiveStageSource>,
+    derivative: Option<(String, String)>,
+}
+
+/// The immutable export descriptor carried by one archive-original stage.
+struct ArchiveStageSource {
+    job_id: String,
+    photo_id: String,
+    expected_hash: [u8; 32],
+    byte_size: u64,
+    media_type: String,
+}
+
 /// Read a `begin`'s fields, refusing the ones that contradict each other.
-fn source_of(begin: &wire::StageBegin) -> Result<(bool, Option<(String, String)>)> {
-    let library = match wire::StageSource::try_from(begin.source) {
-        Ok(wire::StageSource::Unspecified | wire::StageSource::Owned) => false,
-        Ok(wire::StageSource::OsLibrary) => true,
+fn source_of(begin: &wire::StageBegin) -> Result<ParsedStageSource> {
+    let (library, is_archive) = match wire::StageSource::try_from(begin.source) {
+        Ok(wire::StageSource::Unspecified | wire::StageSource::Owned) => (false, false),
+        Ok(wire::StageSource::OsLibrary) => (true, false),
+        Ok(wire::StageSource::ExportArchive) => (false, true),
         Err(_) => return Err(invalid(format!("{} is not a stage source", begin.source))),
     };
-    if library == begin.os_ref.is_empty() {
+    if library == begin.os_ref.is_empty() || (is_archive && !begin.os_ref.is_empty()) {
         return Err(invalid(if library {
             "an item from the library names its identifier (`os_ref`)"
         } else {
@@ -302,6 +370,36 @@ fn source_of(begin: &wire::StageBegin) -> Result<(bool, Option<(String, String)>
             "only a library item can have been edited in the library",
         ));
     }
+    let export_fields = !begin.export_job_id.is_empty()
+        || !begin.export_photo_id.is_empty()
+        || !begin.export_hash.is_empty();
+    let archive = if is_archive {
+        if begin.export_job_id.is_empty()
+            || begin.export_photo_id.is_empty()
+            || begin.export_hash.len() != 32
+            || begin.byte_size == 0
+            || !begin.for_hash.is_empty()
+            || !begin.tier.is_empty()
+        {
+            return Err(invalid(
+                "an export original carries its snapshot job, photo, hash and size",
+            ));
+        }
+        Some(ArchiveStageSource {
+            job_id: begin.export_job_id.clone(),
+            photo_id: begin.export_photo_id.clone(),
+            expected_hash: <[u8; 32]>::try_from(begin.export_hash.as_slice())
+                .map_err(|_| invalid("an export original names a 32-byte snapshot hash"))?,
+            byte_size: begin.byte_size,
+            media_type: begin.media_type.clone(),
+        })
+    } else if export_fields {
+        return Err(invalid(
+            "only an export archive stage carries export snapshot fields",
+        ));
+    } else {
+        None
+    };
     let derivative = match (begin.for_hash.is_empty(), begin.tier.is_empty()) {
         (true, true) => None,
         (false, false) => {
@@ -322,7 +420,11 @@ fn source_of(begin: &wire::StageBegin) -> Result<(bool, Option<(String, String)>
         }
         _ => return Err(invalid("a derivative names both its parent and its tier")),
     };
-    Ok((library, derivative))
+    Ok(ParsedStageSource {
+        library,
+        archive,
+        derivative,
+    })
 }
 
 impl Staging {
@@ -344,7 +446,14 @@ impl Staging {
         doors: Doors,
         now: Instant,
     ) -> Result<wire::StageBegun> {
-        let (library, derivative) = source_of(begin)?;
+        let source = source_of(begin)?;
+        if doors
+            .export
+            .as_ref()
+            .is_some_and(|into| into.cancelled.load(Ordering::SeqCst))
+        {
+            return Err(invalid("the whole-vault export was cancelled"));
+        }
         let mut sessions = self.lock_sessions()?;
         if sessions.len() >= MAX_OPEN_SESSIONS {
             // A FULL TABLE REAPS THE SESSIONS NOBODY IS FEEDING: dropping one
@@ -364,7 +473,7 @@ impl Staging {
         };
         let declared = (begin.byte_size > 0).then_some(begin.byte_size);
         let mut reserved = 0;
-        let holding = if library {
+        let holding = if source.library {
             let elsewhere = sessions
                 .values()
                 .map(|session| session.reserved)
@@ -431,6 +540,41 @@ impl Staging {
                     Some(seal)
                 }),
             }
+        } else if let Some(snapshot) = source.archive {
+            let into = doors.export.ok_or_else(|| {
+                invalid("there is no active export job waiting for these original bytes")
+            })?;
+            if snapshot.job_id != into.job_id
+                || snapshot.photo_id != into.photo_id
+                || snapshot.expected_hash != into.hash
+                || snapshot.byte_size != into.byte_size
+                || snapshot.media_type != into.media_type
+            {
+                return Err(invalid(
+                    "the export original does not match the active snapshot descriptor",
+                ));
+            }
+            let path = into.staging_dir.join(format!("{staging_id}.original"));
+            let file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+                .map_err(|error| CoreError::Unavailable {
+                    reason: format!("the original could not be staged: {error}"),
+                })?;
+            Holding::ExportArchive {
+                file: ExportTemp {
+                    file: Some(file),
+                    path,
+                    keep: false,
+                },
+                job_id: snapshot.job_id,
+                photo_id: snapshot.photo_id,
+                expected: snapshot.expected_hash,
+                expected_len: snapshot.byte_size,
+                hasher: Box::new(blake3::Hasher::new()),
+                cancelled: std::sync::Arc::clone(&into.cancelled),
+            }
         } else {
             let store = doors.store.ok_or_else(|| CoreError::Unavailable {
                 reason: "this core has no content store, so it cannot keep staged bytes".to_owned(),
@@ -439,7 +583,7 @@ impl Staging {
                 writer: Box::new(store.writer().map_err(|error| CoreError::Unavailable {
                     reason: format!("the content store would not take a write: {error}"),
                 })?),
-                derivative,
+                derivative: source.derivative,
             }
         };
         sessions.insert(
@@ -454,6 +598,16 @@ impl Staging {
                 touched: now,
             },
         );
+        if sessions.get(&staging_id).is_some_and(|session| {
+            matches!(
+                &session.holding,
+                Holding::ExportArchive { cancelled, .. }
+                    if cancelled.load(Ordering::SeqCst)
+            )
+        }) {
+            sessions.remove(&staging_id);
+            return Err(invalid("the whole-vault export was cancelled"));
+        }
         Ok(wire::StageBegun {
             staging_id,
             chunk_bytes: MAX_CHUNK_BYTES as u64,
@@ -535,6 +689,26 @@ impl Staging {
                 }
                 Ok(())
             }
+            Holding::ExportArchive {
+                file,
+                hasher,
+                cancelled,
+                ..
+            } => {
+                if cancelled.load(Ordering::SeqCst) {
+                    return Err(invalid("the whole-vault export was cancelled"));
+                }
+                let output = file.file.as_mut().ok_or_else(|| CoreError::Unavailable {
+                    reason: "the staged export original is already closed".to_owned(),
+                })?;
+                output
+                    .write_all(payload)
+                    .map_err(|error| CoreError::Unavailable {
+                        reason: format!("the export original could not be staged: {error}"),
+                    })?;
+                hasher.update(payload);
+                Ok(())
+            }
         };
         written?;
         session.touched = Instant::now();
@@ -552,6 +726,19 @@ impl Staging {
         }
     }
 
+    /// Close every partial export-original stream after its job is cancelled.
+    /// A frame holds this table lock for at most its fixed 512 KiB write.
+    pub fn cancel_export(&self, job_id: &str) {
+        if let Ok(mut sessions) = self.sessions.lock() {
+            sessions.retain(|_, session| {
+                !matches!(
+                    &session.holding,
+                    Holding::ExportArchive { job_id: owner, .. } if owner == job_id
+                )
+            });
+        }
+    }
+
     /// Close the session and hand back what it produced.
     ///
     /// The session is **removed before the length is checked**: a close that
@@ -565,6 +752,12 @@ impl Staging {
             .lock_sessions()?
             .remove(staging_id)
             .ok_or_else(|| unknown_session(staging_id))?;
+        if matches!(
+            &session.holding,
+            Holding::ExportArchive { cancelled, .. } if cancelled.load(Ordering::SeqCst)
+        ) {
+            return Err(invalid("the whole-vault export was cancelled"));
+        }
         if let Some(declared) = session.declared
             && session.received != declared
         {
@@ -610,6 +803,37 @@ impl Staging {
                     sealed,
                 }
             }
+            Holding::ExportArchive {
+                mut file,
+                job_id,
+                photo_id,
+                expected,
+                expected_len,
+                hasher,
+                ..
+            } => {
+                if let Some(output) = file.file.as_mut() {
+                    output.flush().map_err(|error| CoreError::Unavailable {
+                        reason: format!("the export original could not be closed: {error}"),
+                    })?;
+                    output.sync_all().map_err(|error| CoreError::Unavailable {
+                        reason: format!("the export original could not be closed: {error}"),
+                    })?;
+                }
+                file.file.take();
+                file.keep = true;
+                Staged::ExportArchive {
+                    path: file.path.clone(),
+                    staging_id: staging_id.to_owned(),
+                    job_id,
+                    photo_id,
+                    hash: PlaintextHash::from_bytes(*hasher.finalize().as_bytes()),
+                    len: session.received,
+                    media_type: session.media_type,
+                    expected: PlaintextHash::from_bytes(expected),
+                    expected_len,
+                }
+            }
         })
     }
 
@@ -636,6 +860,7 @@ fn poisoned() -> CoreError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     fn payload(size: usize) -> Vec<u8> {
         // Not zeroes: a digest over a run of zeroes would pass an assembler
@@ -671,6 +896,7 @@ mod tests {
         fn doors(&self, budget: Option<u64>) -> Doors {
             Doors {
                 store: Some(self.store.clone()),
+                export: None,
                 seal: budget.map(|budget| SealInto {
                     keys: keys(),
                     spool: self.spool.clone(),
@@ -691,6 +917,7 @@ mod tests {
         fn planned_on(&self, budget: u64, free: u64, planned: Planned) -> Doors {
             Doors {
                 store: Some(self.store.clone()),
+                export: None,
                 seal: Some(SealInto {
                     keys: keys(),
                     spool: self.spool.clone(),
@@ -735,6 +962,34 @@ mod tests {
         }
     }
 
+    fn archive_begin(bytes: &[u8]) -> wire::StageBegin {
+        wire::StageBegin {
+            source: wire::StageSource::ExportArchive as i32,
+            byte_size: bytes.len() as u64,
+            media_type: "image/jpeg".to_owned(),
+            export_job_id: "vault-export-test".to_owned(),
+            export_photo_id: "photo-1".to_owned(),
+            export_hash: blake3::hash(bytes).as_bytes().to_vec(),
+            ..wire::StageBegin::default()
+        }
+    }
+
+    fn archive_doors(dir: PathBuf, bytes: &[u8], cancelled: Arc<AtomicBool>) -> Doors {
+        Doors {
+            store: None,
+            seal: None,
+            export: Some(ExportArchiveInto {
+                job_id: "vault-export-test".to_owned(),
+                photo_id: "photo-1".to_owned(),
+                hash: *blake3::hash(bytes).as_bytes(),
+                byte_size: bytes.len() as u64,
+                media_type: "image/jpeg".to_owned(),
+                staging_dir: dir,
+                cancelled,
+            }),
+        }
+    }
+
     /// THE HANDLE IS THE VAULT'S OWN NAME FOR THE BYTES, and owned bytes land
     /// in the store, streamed.
     #[test]
@@ -761,6 +1016,76 @@ mod tests {
         assert_eq!(std::fs::read(&stored.path).expect("reads"), bytes);
         assert_eq!(media_type, "image/heic");
         assert_eq!(staging.open(), 0, "a closed session is gone");
+    }
+
+    #[test]
+    fn cancelling_an_export_original_midstream_removes_its_partial_file() {
+        let rig = rig();
+        let bytes = payload(1024);
+        let staging_dir = rig._dir.path().join("export-job");
+        std::fs::create_dir_all(&staging_dir).expect("an export staging folder");
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let staging = Staging::default();
+        let begun = staging
+            .begin(
+                &archive_begin(&bytes),
+                archive_doors(staging_dir.clone(), &bytes, Arc::clone(&cancelled)),
+            )
+            .expect("the snapshot original begins");
+        staging
+            .chunk(&begun.staging_id, 0, &bytes[..512])
+            .expect("one bounded frame is staged");
+        assert_eq!(
+            std::fs::read_dir(&staging_dir).expect("lists").count(),
+            1,
+            "the active stream owns one temp file"
+        );
+        cancelled.store(true, Ordering::SeqCst);
+        assert!(staging.chunk(&begun.staging_id, 1, &bytes[512..]).is_err());
+        assert_eq!(staging.open(), 0, "the cancelled session is gone");
+        assert_eq!(
+            std::fs::read_dir(&staging_dir).expect("lists").count(),
+            0,
+            "cancellation removes the partial plaintext original"
+        );
+    }
+
+    #[test]
+    fn an_export_stage_returns_only_a_verified_temp_receipt() {
+        let rig = rig();
+        let bytes = payload(1024);
+        let staging_dir = rig._dir.path().join("export-job");
+        std::fs::create_dir_all(&staging_dir).expect("an export staging folder");
+        let staging = Staging::default();
+        let begun = staging
+            .begin(
+                &archive_begin(&bytes),
+                archive_doors(
+                    staging_dir.clone(),
+                    &bytes,
+                    Arc::new(AtomicBool::new(false)),
+                ),
+            )
+            .expect("the snapshot original begins");
+        send(&staging, &begun.staging_id, &bytes).expect("frames are staged");
+        let Staged::ExportArchive {
+            path,
+            staging_id,
+            hash,
+            len,
+            expected,
+            expected_len,
+            ..
+        } = staging.end(&begun.staging_id).expect("the receipt closes")
+        else {
+            panic!("an archive stream returns a temporary receipt");
+        };
+        assert_eq!(staging_id, begun.staging_id);
+        assert_eq!(hash, expected);
+        assert_eq!(len, expected_len);
+        assert_eq!(std::fs::read(&path).expect("temp bytes"), bytes);
+        std::fs::remove_file(path).expect("the async commit removes its input");
+        assert_eq!(std::fs::read_dir(staging_dir).expect("lists").count(), 0);
     }
 
     /// A SENDER DOES NOT CHOOSE THIS PROCESS'S MEMORY, when it declared a size.

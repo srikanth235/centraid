@@ -92,6 +92,9 @@ final class ScreenStore: ObservableObject {
     /// answers through its own callback and does not hold the queue.
     private var queues: [UInt64: [Centraid_Core_V1_EffectRequest]] = [:]
     private var running: Set<UInt64> = []
+    /// Clipboard writes and clears are one shell-wide FIFO across screen instances.
+    private var clipboardQueue: [Centraid_Core_V1_EffectRequest] = []
+    private var clipboardRunning = false
     /// The `words.make` instances whose made vault the made-vault imports were told of.
     private var madeTold: Set<UInt64> = []
     /// The instances the SHELL popped (a Cancel or a back): a `words.make` the core closed
@@ -421,8 +424,27 @@ final class ScreenStore: ObservableObject {
             Task { await perform(request) }
             return
         }
+        switch request.effect.kind {
+        case .clipboardSet(_)?, .clipboardClear(_)?, .clipboardClearOwned(_)?:
+            clipboardQueue.append(request)
+            drainClipboard()
+            return
+        default:
+            break
+        }
         queues[request.instance, default: []].append(request)
         drain(request.instance)
+    }
+
+    private func drainClipboard() {
+        guard !clipboardRunning, !clipboardQueue.isEmpty else { return }
+        let next = clipboardQueue.removeFirst()
+        clipboardRunning = true
+        Task {
+            await perform(next)
+            clipboardRunning = false
+            drainClipboard()
+        }
     }
 
     private func drain(_ instance: UInt64) {
@@ -456,23 +478,84 @@ final class ScreenStore: ObservableObject {
         switch request.effect.kind {
         #if os(iOS)
         case .clipboardSet(let set)?:
+            let pasteboard = UIPasteboard.general
             if set.sensitive && set.clearAfterMs_p > 0 {
-                // THE OS KEEPS THE DEADLINE: a pasteboard item expires on its own, so a killed app
-                // cannot leave a secret behind, and `localOnly` keeps it off Universal Clipboard.
-                UIPasteboard.general.setItems(
-                    [["public.utf8-plain-text": set.text]],
+                // THE OS KEEPS THE DEADLINE: a local-only pasteboard item expires on its own. The
+                // shell persists only its vault, opaque item marker and expiry before answering
+                // Copy. Lock after process restart checks the marker type before reading its token.
+                let expiresAt = Date(timeIntervalSinceNow: Double(set.clearAfterMs_p) / 1000)
+                var item: [String: Any] = ["public.utf8-plain-text": set.text]
+                if !set.ownerVaultID.isEmpty {
+                    let token = UUID().uuidString
+                    do {
+                        try LockerClipboardLeaseStore.record(
+                            vaultID: set.ownerVaultID,
+                            token: token,
+                            text: set.text,
+                            expiresAt: expiresAt
+                        )
+                    } catch {
+                        answer(
+                            request,
+                            .failed(Self.failure(EffectReason.ofWrite(error, otherwise: EffectReason.unwritable)))
+                        )
+                        return
+                    }
+                    item[LockerClipboardLeaseStore.markerType] = Data(token.utf8)
+                } else {
+                    LockerClipboardLeaseStore.remove()
+                }
+                pasteboard.setItems(
+                    [item],
                     options: [
-                        .expirationDate: Date(timeIntervalSinceNow: Double(set.clearAfterMs_p) / 1000),
+                        .expirationDate: expiresAt,
                         .localOnly: true,
                     ]
                 )
             } else {
-                UIPasteboard.general.string = set.text
+                pasteboard.string = set.text
+                LockerClipboardLeaseStore.remove()
             }
             answer(request, done)
         case .clipboardClear(let clear)?:
-            // Only what the core put there: never clear something the member copied since.
-            if UIPasteboard.general.string == clear.expectedText { UIPasteboard.general.string = "" }
+            let pasteboard = UIPasteboard.general
+            let hasLockerLease = LockerClipboardLeaseStore.load() != nil
+            let hasLockerMarker = hasLockerLease
+                && pasteboard.contains(pasteboardTypes: [LockerClipboardLeaseStore.markerType])
+            switch LockerClipboardLeaseStore.legacyClearAction(
+                leasePresent: hasLockerLease,
+                markerPresent: hasLockerMarker
+            ) {
+            case .keepOwnedLease:
+                // A text-only clear cannot spend a vault-owned clipboard lease.
+                answer(request, done)
+                return
+            case .retireStaleLease:
+                // Missing marker proves the old owned item was replaced. Retire only metadata;
+                // never read the unrelated clipboard to satisfy this legacy clear.
+                LockerClipboardLeaseStore.remove()
+                answer(request, done)
+                return
+            case .inspectUnownedText:
+                if pasteboard.string == clear.expectedText { pasteboard.string = "" }
+                answer(request, done)
+            }
+        case .clipboardClearOwned(let clear)?:
+            let pasteboard = UIPasteboard.general
+            _ = LockerClipboardLeaseStore.clearOwned(
+                vaultID: clear.vaultID,
+                markerPresent: {
+                    pasteboard.contains(pasteboardTypes: [LockerClipboardLeaseStore.markerType])
+                },
+                readMarkerToken: {
+                    pasteboard.data(forPasteboardType: LockerClipboardLeaseStore.markerType)
+                        .flatMap { String(data: $0, encoding: .utf8) }
+                },
+                readContentDigest: {
+                    pasteboard.string.map(LockerClipboardLeaseStore.digest)
+                },
+                clearPasteboard: { pasteboard.items = [] }
+            )
             answer(request, done)
         case .haptic(let haptic)?:
             Self.play(haptic.kind)

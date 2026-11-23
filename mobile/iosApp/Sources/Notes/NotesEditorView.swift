@@ -20,10 +20,11 @@ struct NotesEditorView: View {
 
     /// THE ONLY PLACE A KEYSTROKE EXISTS BEFORE RUST HEARS IT.
     ///
-    /// Filled from the draft ONCE, when the draft first arrives. The body's own typing lives in
-    /// `NotesRichBody`, which takes the core's body back only when the core made it (a checklist
-    /// tap, Return, Undo, a pick), never an echo of the typing.
+    /// Seeded from the first draft. Thereafter `TypedText` separates title keystrokes and their
+    /// echoes from a genuine incoming value such as a restored version, so a state frame cannot
+    /// erase fast typing and the mounted editor still follows a committed restore.
     @State private var typedTitle = ""
+    @State private var titleTyping: TypedText?
     @State private var seeded = false
     /// A core edit is on its way back, so the body field may take the core's body while focused.
     @State private var coreEdit = false
@@ -39,6 +40,14 @@ struct NotesEditorView: View {
 
     private var draft: Centraid_Core_V1_NotesEditorDraft? {
         state.content != nil ? state.draft : nil
+    }
+
+    /// Adopt a genuine incoming title while leaving the field's in-flight keystrokes intact.
+    private func adoptTitle(_ incoming: String) {
+        guard seeded, let titleTyping,
+            let adopted = titleTyping.answer(value: incoming, shown: typedTitle)
+        else { return }
+        typedTitle = adopted
     }
 
     @FocusState private var tagFocused: Bool
@@ -132,18 +141,21 @@ struct NotesEditorView: View {
                                 .kitType(.title)
                                 .foregroundStyle(Surface.ink)
                                 .accessibilityIdentifier("note-title-field")
-                                // AN EDIT IS A DIFFERENCE FROM THE DRAFT, not an
-                                // assignment to the field: seeding writes to it too.
+                                // RETURN IN THE TITLE moves to the body; the title stays one line
+                                // (#1202, S2-3). The field wraps, so the key arrives as a line break.
                                 .onChange(of: typedTitle) { _, typed in
-                                    // RETURN IN THE TITLE moves to the body; the title stays one line
-                                    // (#1202, S2-3). The field wraps, so the key arrives as a line break.
+                                    guard let titleTyping else { return }
                                     if typed.contains(where: \.isNewline) {
-                                        typedTitle = String(typed.filter { !$0.isNewline })
+                                        let oneLine = String(typed.filter { !$0.isNewline })
+                                        typedTitle = oneLine
                                         bodyFocused = true
                                         return
                                     }
-                                    guard typed != draft.title else { return }
+                                    guard titleTyping.edited(next: typed) else { return }
                                     send(event { $0.title = .with { $0.title = typed } })
+                                }
+                                .onChange(of: draft.title) { _, incoming in
+                                    adoptTitle(incoming)
                                 }
                             NotesTagsRow(tags: state.tags, placeholder: chrome.tagPlaceholder, focused: $tagFocused, send: send)
                             ZStack(alignment: .topLeading) {
@@ -202,10 +214,17 @@ struct NotesEditorView: View {
                     }
                 }
                 .onAppear {
-                    // ONCE. See `seeded`.
+                    // Seed the editor's sent/echo tracker once. Later Rust values go through
+                    // `TypedText.answer` above, which adopts a restore but ignores stale frames.
                     if !seeded {
+                        titleTyping = TypedText(initial: draft.title)
                         typedTitle = draft.title
                         seeded = true
+                    } else {
+                        // The editor stays mounted beneath Earlier, but its ready content can be
+                        // rebuilt on return. Reconcile once here in case the changed title was
+                        // already the content subtree's initial value and never triggered onChange.
+                        adoptTitle(draft.title)
                     }
                 }
             }

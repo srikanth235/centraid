@@ -702,6 +702,7 @@ fn exported(
         status: status as i32,
         handed,
         missing,
+        ..wire::OriginalsExported::default()
     })
 }
 

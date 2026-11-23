@@ -1,5 +1,6 @@
 #if os(iOS)
 import Foundation
+import UIKit
 import XCTest
 import os
 
@@ -137,6 +138,82 @@ final class NotificationReadinessTests: XCTestCase {
         core.finish()
     }
 
+    func testClipboardSetAndLockClearKeepOrderAcrossScreenInstances() async {
+        UIPasteboard.general.items = []
+
+        let core = NotificationTestCore()
+        let scheduler = NotificationTestPerformer(heldCalls: [1])
+        defer {
+            scheduler.release(1)
+            core.finish()
+            LockerClipboardLeaseStore.remove()
+            UIPasteboard.general.items = []
+        }
+        let store = ScreenStore(core: core, scheduleNotifications: scheduler.perform)
+        await store.start()
+        var calls = core.calls.makeAsyncIterator()
+        _ = await calls.next()  // Snapshot.
+
+        core.emit(effect: .with { $0.kind = .scheduleNotifications(.init()) }, instance: 41, effectID: 1)
+        var started = scheduler.started.makeAsyncIterator()
+        guard await started.next() == 1 else {
+            XCTFail("The unrelated item-screen effect did not block.")
+            return
+        }
+
+        let copied = "synthetic Locker copy"
+        core.emit(
+            effect: .with {
+                $0.kind = .clipboardSet(
+                    .with {
+                        $0.text = copied
+                        $0.sensitive = true
+                        $0.clearAfterMs_p = 60_000
+                        $0.ownerVaultID = "synthetic-vault-id"
+                    })
+            },
+            instance: 41,
+            effectID: 2
+        )
+        core.emit(
+            effect: .with {
+                $0.kind = .clipboardClearOwned(
+                    .with {
+                        $0.vaultID = "synthetic-vault-id"
+                    })
+            },
+            instance: 7,
+            effectID: 3
+        )
+
+        var answerEvents = core.effectAnswers.makeAsyncIterator()
+        var answered: [UInt64: Bool] = [:]
+        while answered[3] == nil, answered.count < 3 {
+            guard let answer = await answerEvents.next() else {
+                XCTFail("Clipboard effects ended before Lock answered.")
+                return
+            }
+            answered[answer.0] = answer.1
+        }
+        guard answered[3] == true else {
+            XCTFail("Clipboard effects ended before Lock answered.")
+            return
+        }
+        // Home's Lock clear has run while the item screen's unrelated work is still blocked.
+        scheduler.release(1)
+        while answered[1] == nil || answered[2] == nil, answered.count < 3 {
+            guard let answer = await answerEvents.next() else {
+                XCTFail("Copy or the blocker did not answer.")
+                return
+            }
+            answered[answer.0] = answer.1
+        }
+        XCTAssertEqual(answered[1], true, "the unrelated blocker completes")
+        XCTAssertEqual(answered[2], true, "the Locker copy completed before Lock")
+        XCTAssertEqual(answered[3], true, "Lock completed after the copy")
+        XCTAssertTrue(UIPasteboard.general.items.isEmpty)
+    }
+
     private func schedule(
         id: String, verb: Centraid_Core_V1_NotificationVerb, pressID: String = ""
     ) -> Centraid_Core_V1_ScheduleNotifications {
@@ -149,7 +226,9 @@ private actor NotificationTestCore: ScreenCore {
     nonisolated private let pushed: AsyncStream<Centraid_Core_V1_ScreenUpdate>
     nonisolated private let push: AsyncStream<Centraid_Core_V1_ScreenUpdate>.Continuation
     nonisolated let calls: AsyncStream<String>
-    private let callEvents: AsyncStream<String>.Continuation
+    nonisolated private let callEvents: AsyncStream<String>.Continuation
+    nonisolated let effectAnswers: AsyncStream<(UInt64, Bool)>
+    nonisolated private let answerEvents: AsyncStream<(UInt64, Bool)>.Continuation
     nonisolated private let readers = OSAllocatedUnfairLock(initialState: 0)
     nonisolated var updates: AsyncStream<Centraid_Core_V1_ScreenUpdate> {
         readers.withLock { $0 += 1 }
@@ -164,6 +243,7 @@ private actor NotificationTestCore: ScreenCore {
     init(holdSnapshot: Bool = false, failSnapshot: Bool = false) {
         (pushed, push) = AsyncStream.makeStream()
         (calls, callEvents) = AsyncStream.makeStream()
+        (effectAnswers, answerEvents) = AsyncStream.makeStream()
         self.holdSnapshot = holdSnapshot
         self.failSnapshot = failSnapshot
     }
@@ -184,7 +264,16 @@ private actor NotificationTestCore: ScreenCore {
                 if case .notificationAnswered(let answer)? = fact.fact {
                     callEvents.yield("answer:\(answer.notificationID):\(answer.verb.rawValue)")
                 }
-            case .send?: callEvents.yield("performed")
+            case .send(let event)?:
+                callEvents.yield("performed")
+                if case .effectResult(let result)? = event.event.kind {
+                    let succeeded: Bool
+                    switch result.outcome {
+                    case .done?, .notificationsScheduled?: succeeded = true
+                    default: succeeded = false
+                    }
+                    answerEvents.yield((result.effectID, succeeded))
+                }
             default: break
             }
         }
@@ -197,17 +286,28 @@ private actor NotificationTestCore: ScreenCore {
 
     func releaseSnapshot() { snapshotRelease?.resume(); snapshotRelease = nil }
 
-    nonisolated func emit(schedule: Centraid_Core_V1_ScheduleNotifications, effectID: UInt64) {
-        push.yield(.with {
-            $0.effects = [.with {
-                $0.instance = 900
-                $0.effectID = effectID
-                $0.effect = .with { $0.kind = .scheduleNotifications(schedule) }
-            }]
-        })
+    nonisolated func emit(effect: Centraid_Core_V1_Effect, instance: UInt64, effectID: UInt64) {
+        push.yield(
+            .with {
+                $0.effects = [
+                    .with {
+                        $0.instance = instance
+                        $0.effectID = effectID
+                        $0.effect = effect
+                    }
+                ]
+            })
     }
 
-    nonisolated func finish() { push.finish() }
+    nonisolated func emit(schedule: Centraid_Core_V1_ScheduleNotifications, effectID: UInt64) {
+        emit(effect: .with { $0.kind = .scheduleNotifications(schedule) }, instance: 900, effectID: effectID)
+    }
+
+    nonisolated func finish() {
+        push.finish()
+        callEvents.finish()
+        answerEvents.finish()
+    }
     private struct SnapshotRefused: Error {}
 }
 

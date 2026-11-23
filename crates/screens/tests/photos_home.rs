@@ -1473,6 +1473,7 @@ fn send_a_copy_asks_which_location_travels_then_hands_the_pick_to_the_shell() {
                 status: status as i32,
                 handed: 0,
                 missing,
+                ..wire::OriginalsExported::default()
             },
         ));
         assert_eq!(

@@ -1,5 +1,5 @@
 //! Everything on the phone as one archive (#1185): `vault.export_all` streams a zip with one
-//! folder per app, the text files are exactly what each app's own export saves, the originals
+//! folder per app, ordinary app-export text is exact, Journal and My card are included, originals
 //! are byte for byte, Locker is not in it anywhere, and it writes nothing to the vault.
 
 mod common;
@@ -118,6 +118,11 @@ fn seeded() -> (World, Vec<u8>, Vec<u8>) {
     );
     w.ok("person.add", json!({ "title": "Maya Rao" }));
     w.ok(
+        "person.add_journal_entry",
+        json!({ "mood": "Grateful", "text": "A quiet day by the sea.",
+                "entry_date": "2026-03-04", "tz": "Asia/Kolkata" }),
+    );
+    w.ok(
         "event.propose",
         json!({ "title": "Review", "starts": "2026-03-03T10:00" }),
     );
@@ -214,6 +219,7 @@ fn every_app_has_its_folder_the_text_is_each_apps_own_export_and_the_originals_a
             "Money/transactions.csv",
             "Notes/Ideas/Boat.md",
             "Notes/Loose.md",
+            "People/Journal/Grateful.md",
             "People/people.vcf",
             "Photos/2025/2025-07-01 100000.jpg",
             "README.txt",
@@ -221,14 +227,46 @@ fn every_app_has_its_folder_the_text_is_each_apps_own_export_and_the_originals_a
         ]
     );
     assert_eq!(
-        out["count"], 10,
+        out["count"], 11,
         "every file but the README and the left-out note"
     );
 
     // The text files are what each app's own export saves, byte for byte.
-    assert_eq!(
+    let per_app_people = w.content("person.export_vcf", json!({}));
+    assert!(has_bytes(
+        find(&entries, "People/Journal/Grateful.md"),
+        b"A quiet day by the sea."
+    ));
+    let self_name: String = w
+        .scratch
+        .vault
+        .read(|connection| {
+            Ok(connection.query_row(
+                "SELECT e.title FROM entity e WHERE e.id = (SELECT self_id FROM vault)",
+                [],
+                |row| row.get(0),
+            )?)
+        })
+        .expect("the member's card");
+    assert!(has_bytes(
         find(&entries, "People/people.vcf"),
-        w.content("person.export_vcf", json!({}))
+        self_name.as_bytes()
+    ));
+    assert_eq!(
+        find(&entries, "People/people.vcf")
+            .windows(b"BEGIN:VCARD".len())
+            .filter(|window| *window == b"BEGIN:VCARD")
+            .count(),
+        per_app_people
+            .windows(b"BEGIN:VCARD".len())
+            .filter(|window| *window == b"BEGIN:VCARD")
+            .count()
+            + 1,
+        "the aggregate holds the same cards plus My card"
+    );
+    assert!(
+        !has_bytes(&per_app_people, self_name.as_bytes()),
+        "the standalone People export keeps its existing self-card exclusion"
     );
     assert_eq!(
         find(&entries, "Calendar/calendar.ics"),

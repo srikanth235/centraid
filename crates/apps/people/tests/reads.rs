@@ -315,7 +315,7 @@ fn the_trash_shelf_and_the_search_answer_in_the_roster_s_shape() {
         ["Bob"]
     );
     assert!(shelf.people[0].purge_at.is_some());
-    // The hits arrive ranked; a trashed person and the owner are hits of the index and no one here.
+    // The hits arrive ranked; a trashed person is omitted, while My card remains findable.
     let owner = w.vault.self_id().unwrap().unwrap();
     let hits: Vec<SearchHit> = [&bob, &owner, &ada]
         .into_iter()
@@ -326,10 +326,11 @@ fn the_trash_shelf_and_the_search_answer_in_the_roster_s_shape() {
         })
         .collect();
     let (found, _) = w.read(|door| load_search(door, &hits).expect("reads"));
-    assert_eq!(found.people.len(), 1);
-    assert_eq!(found.people[0].name, "Ada");
+    assert_eq!(found.people.len(), 2);
+    assert_eq!(found.people[0].party_id, owner);
+    assert_eq!(found.people[1].name, "Ada");
     assert_eq!(
-        found.people[0].snippet.as_deref(),
+        found.people[1].snippet.as_deref(),
         Some(format!("about {ada}").as_str())
     );
 }

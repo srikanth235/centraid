@@ -37,6 +37,7 @@ catalog! {
     plain chip_trashed = ("IN THE TRASH", "IN THE TRASH");
     plain close = ("Close", "Close");
     plain code_copied = ("Code copied. Clears when the code changes.", "Code copied. Clears when the code changes.");
+    plain code_copied_android = ("Code copied. Clears at expiry while Centraid is active.", "Code copied. Clears at expiry while Centraid is active.");
     plain code_fetching = ("Making a code…", "Making a code…");
     plain code_note = ("Next code in {seconds} s", "Next code in {seconds} s");
     plain code_not_a_seed = ("That setup key makes no codes. Edit the item and paste it again.", "That setup key makes no codes. Edit the item and paste it again.");
@@ -47,6 +48,7 @@ catalog! {
     plain conceal = ("Conceal", "Conceal");
     plain copied_plain = ("{field} copied", "{field} copied");
     plain copied_secret = ("{field} copied. Clears in 30 seconds.", "{field} copied. Clears in 30 seconds.");
+    plain copied_secret_android = ("{field} copied. Clears in 30 seconds while Centraid is active.", "{field} copied. Clears in 30 seconds while Centraid is active.");
     plain copy = ("Copy", "Copy");
     plain copy_code = ("Copy code", "Copy code");
     plain count_many = ("{n} items", "{n} items");
@@ -152,6 +154,7 @@ catalog! {
     plain filter_title = ("Show", "Show");
     plain generate = ("Generate", "Generate");
     plain generated_copied = ("Copied. Clears in 30 seconds.", "Copied. Clears in 30 seconds.");
+    plain generated_copied_android = ("Copied. Clears in 30 seconds while Centraid is active.", "Copied. Clears in 30 seconds while Centraid is active.");
     plain generator_a11y = ("Generated password", "Generated password");
     plain generator_title = ("Generate", "Generate");
     plain import_chip_fill = ("FILLS", "FILLS");
@@ -384,4 +387,34 @@ catalog! {
     plain window = ("Showing {shown} of {total}", "Showing {shown} of {total}");
     plain window_unknown = ("Showing only some items.", "Showing only some items.");
     plain write_refused = ("Not saved.", "Not saved.");
+}
+
+/// Copy confirmation for a sealed value. Android defers expiry cleanup until the app is active.
+#[must_use]
+pub fn copied_secret_for(locale: crate::strings::Locale, platform: &str) -> String {
+    if platform == "android" {
+        copied_secret_android(locale)
+    } else {
+        copied_secret(locale)
+    }
+}
+
+/// Copy confirmation for an expiring code. Android applies its existing deadline on return.
+#[must_use]
+pub fn code_copied_for(locale: crate::strings::Locale, platform: &str) -> String {
+    if platform == "android" {
+        code_copied_android(locale)
+    } else {
+        code_copied(locale)
+    }
+}
+
+/// Generator copy confirmation, with the platform's expiry behavior.
+#[must_use]
+pub fn generated_copied_for(locale: crate::strings::Locale, platform: &str) -> String {
+    if platform == "android" {
+        generated_copied_android(locale)
+    } else {
+        generated_copied(locale)
+    }
 }

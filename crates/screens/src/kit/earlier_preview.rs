@@ -45,6 +45,7 @@ pub(super) fn build(
         page: Page::loading(),
         undo: Undo::default(),
         names: Names::new(),
+        source: None,
         done: false,
     }))
 }
@@ -59,6 +60,8 @@ struct Preview {
     undo: Undo,
     /// What the spec's `know` hook read with the record.
     names: Names,
+    /// The record's persisted source; it identifies historical health changes across platforms.
+    source: Option<wire::OriginOf>,
     /// The shell pops this screen: closed, or restored.
     done: bool,
 }
@@ -82,6 +85,7 @@ impl Preview {
         // A shut wall is a wipe: nothing read before it stays, and nothing is read behind it.
         if let Some(denial) = self.walled(ctx) {
             self.names = Names::new();
+            self.source = None;
             self.undo.clear();
             self.page = Page::Refused(denial);
             return;
@@ -89,6 +93,9 @@ impl Preview {
         if let Some(know) = self.spec.know {
             self.names = know(ctx, &self.entity_id);
         }
+        self.source = (self.spec.app == "health")
+            .then(|| crate::kit::origin::read_source(ctx, &self.entity_id))
+            .flatten();
         let reading = read::read(
             ctx,
             load::shell::EarlierRecord {
@@ -169,7 +176,7 @@ impl Preview {
         let when = |local: &str, system: &str, actor: &str| {
             [
                 earlier::dated(locale, cycle, local),
-                earlier::from(locale, system, actor),
+                earlier::from_recorded_source(locale, system, actor, self.source.as_ref()),
             ]
             .into_iter()
             .filter(|part| !part.is_empty())

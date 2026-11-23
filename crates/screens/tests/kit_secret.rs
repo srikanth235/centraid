@@ -2,10 +2,10 @@
 //! each. The Locker screens (and chat's inline reveal, wave 4) share it.
 //!
 //! The bug these pin (#1135): on Android a revealed secret stayed on the
-//! clipboard when the app was killed before the clear fired. The clear is now a
-//! fact of the effect itself — `ClipboardSet` carries `sensitive` and
-//! `clear_after_ms` — so the shell can persist the deadline and clear a stale
-//! clip on its next launch, and the Rust timer clears it while the app lives.
+//! clipboard when the app was killed before the clear fired. `ClipboardSet`
+//! carries sensitivity, its deadline, and a vault owner; each shell persists
+//! only native ownership metadata, while native expiry protects process death.
+//! The Rust timer releases volatile ownership; manual Lock sends a vault-bound clear.
 
 use std::time::Duration;
 
@@ -17,8 +17,8 @@ use centraid_screens::{Registry, Runtime};
 use wire::screen_event::Kind as E;
 
 const PROBE: &str = "probe.secret";
-const COPY_AFTER: Duration = Duration::from_millis(40);
-const SHOW_AFTER: Duration = Duration::from_millis(40);
+const COPY_AFTER: Duration = Duration::from_secs(3_600);
+const SHOW_AFTER: Duration = Duration::from_secs(3_600);
 
 /// A screen that does nothing but hold a [`Secrets`]: a counter tap copies,
 /// the other event reveals.
@@ -39,7 +39,7 @@ impl Screen for Probe {
                 }
                 None => Vec::new(),
             },
-            Some(E::TimerFired(fired)) => self.secrets.fired(&fired.timer),
+            Some(E::TimerFired(fired)) => self.secrets.fired(&fired.timer, ctx),
             Some(E::EffectResult(result)) => {
                 self.secrets.answered(ctx, &result);
                 Vec::new()
@@ -131,26 +131,32 @@ fn a_copied_secret_is_sensitive_and_says_when_it_must_be_gone() {
         .expect("a copy asks the shell to set the clipboard");
     assert_eq!(set.text, "4111 1111 1111 1111");
     assert!(set.sensitive, "a secret is kept out of clipboard history");
-    // The deadline rides the effect, so a shell can keep it past a kill.
-    assert_eq!(set.clear_after_ms, 40);
+    assert_eq!(
+        set.clear_after_ms,
+        COPY_AFTER.as_millis() as u64,
+        "the shell receives the original native expiry"
+    );
 }
 
 #[test]
-fn the_timer_clears_what_it_set_and_only_that() {
+fn an_early_runtime_timer_does_not_spend_native_clipboard_expiry() {
     let mut driver = driver();
     driver.start();
     let id = instance(&driver);
     tap_copy(&mut driver, id);
     let before = driver.effects.len();
-    driver.pump(Duration::from_millis(400));
-    let clear = kinds(&driver.effects[before..])
-        .into_iter()
-        .find_map(|kind| match kind {
-            wire::effect::Kind::ClipboardClear(clear) => Some(clear.clone()),
-            _ => None,
-        })
-        .expect("the timer clears the clipboard");
-    assert_eq!(clear.expected_text, "4111 1111 1111 1111");
+    driver.send(
+        id,
+        E::TimerFired(wire::TimerFired {
+            timer: "secret-clip".to_owned(),
+        }),
+    );
+    assert!(
+        kinds(&driver.effects[before..])
+            .into_iter()
+            .all(|kind| !matches!(kind, wire::effect::Kind::ClipboardClearOwned(_))),
+        "native original expiry, not a stale Rust timer, owns clipboard expiry"
+    );
 }
 
 #[test]
@@ -172,11 +178,16 @@ fn a_copy_the_shell_could_not_make_leaves_nothing_to_clear() {
         }),
     );
     let before = driver.effects.len();
-    driver.pump(Duration::from_millis(400));
+    driver.send(
+        id,
+        E::TimerFired(wire::TimerFired {
+            timer: "secret-clip".to_owned(),
+        }),
+    );
     assert!(
         kinds(&driver.effects[before..])
             .into_iter()
-            .all(|kind| !matches!(kind, wire::effect::Kind::ClipboardClear(_))),
+            .all(|kind| !matches!(kind, wire::effect::Kind::ClipboardClearOwned(_))),
         "nothing was copied, so nothing is cleared"
     );
 }
@@ -201,7 +212,12 @@ fn a_shown_value_raises_the_screenshot_shield_and_the_timer_hides_it() {
     assert_eq!(view.title, "hunter2");
 
     let before = driver.effects.len();
-    driver.pump(Duration::from_millis(400));
+    driver.send(
+        id,
+        E::TimerFired(wire::TimerFired {
+            timer: "secret-hide:password".to_owned(),
+        }),
+    );
     let dropped = kinds(&driver.effects[before..])
         .into_iter()
         .find_map(|kind| match kind {

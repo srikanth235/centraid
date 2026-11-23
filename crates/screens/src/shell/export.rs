@@ -10,7 +10,6 @@
 
 use centraid_api_proto::core_v1 as wire;
 
-use crate::kit::act as kit_act;
 use crate::kit::export::{self, Choice, ExportSpec, Made};
 use crate::kit::owner::NoPasscode;
 use crate::kit::read::Reading;
@@ -53,13 +52,7 @@ fn choices(ctx: &Ctx) -> Reading<Vec<Choice>> {
     }])
 }
 
-/// The archive of every app but Locker, staged on disk by the vault.
-fn export(ctx: &Ctx, key: &str) -> Result<Made, String> {
-    // undo-exempt: an export writes nothing, so there is nothing to take back.
-    let settled = ctx.command(
-        "vault.export_all",
-        &serde_json::json!({}),
-        &kit_act::key(&["vault.export_all", key], kit_act::fresh()),
-    );
-    Ok(export::staged_of(&settled, "application/zip", "Centraid export.zip")?.into())
+/// The archive of every app but Locker, written by a resumable core-owned job.
+fn export(_ctx: &Ctx, _key: &str) -> Result<Made, String> {
+    Ok(Made::Archive)
 }

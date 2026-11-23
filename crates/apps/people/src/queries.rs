@@ -228,8 +228,8 @@ pub(crate) fn people_among(
     people_among_with(door, ids, live, false)
 }
 
-/// As [`people_among`], and the owner's own person too when `with_owner`: My card's sheet and
-/// editor read it, while the circle, the search and merge never do (#1173).
+/// As [`people_among`], and the owner's own person too when `with_owner`: My card's sheet,
+/// editor and Find result read it; the circle and merge leave it out (#1173).
 pub(crate) fn people_among_with(
     door: &dyn PageDoor,
     ids: &[String],
@@ -259,6 +259,14 @@ pub(crate) fn people_among_with(
     Ok(members(door, &entities, with_owner)?
         .into_iter()
         .map(|person| (person.id.clone(), person))
+        .collect())
+}
+
+/// The live people a Find result may open, including My card but never pets.
+/// Roster/circle callers continue to use [`circle_among`] and leave the owner out.
+pub fn find_people_among(door: &dyn PageDoor, ids: &[String]) -> KitResult<BTreeSet<String>> {
+    Ok(people_among_with(door, ids, true, true)?
+        .into_keys()
         .collect())
 }
 

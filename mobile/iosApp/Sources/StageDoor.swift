@@ -13,7 +13,9 @@ import SwiftProtobuf
 /// core's four places. A BLAKE3 is the vault's identity and no Apple API
 /// computes one, so the shell never names its own bytes. A refusal ends the stage where it
 /// happened; there is no resume, and the core's `already_held` makes a retry
-/// cheap. On the front core a stage goes to the vault in front.
+/// cheap. For an archive original, `end` returns an opaque staged receipt and
+/// Rust commits it into the ZIP asynchronously. On the front core a normal
+/// stage goes to the vault in front.
 enum StageDoor {
     /// A finished stage, or the core's typed refusal (nil when it gave none).
     enum Outcome {
@@ -31,6 +33,9 @@ enum StageDoor {
         /// A derivative: the original's content hash (64 hex) and the tier.
         var forHash = ""
         var tier = ""
+        var exportJobID = ""
+        var exportPhotoID = ""
+        var exportHash = ""
     }
 
     /// Stream into `core`. `read` answers the next slice of at most `max`
@@ -44,10 +49,13 @@ enum StageDoor {
         var frame = Centraid_Core_V1_StageBegin()
         frame.mediaType = begin.mediaType.isEmpty ? "application/octet-stream" : begin.mediaType
         frame.byteSize = begin.byteSize
-        frame.source = begin.osRef.isEmpty ? .owned : .osLibrary
+        frame.source = !begin.exportJobID.isEmpty ? .exportArchive : (begin.osRef.isEmpty ? .owned : .osLibrary)
         frame.osRef = begin.osRef
         frame.forHash = raw(begin.forHash)
         frame.tier = begin.tier
+        frame.exportJobID = begin.exportJobID
+        frame.exportPhotoID = begin.exportPhotoID
+        frame.exportHash = raw(begin.exportHash)
         let begun: Centraid_Core_V1_StageBegun
         switch await send(core, .begin(frame)) {
         case let .success(.begun(answer)?): begun = answer
@@ -59,7 +67,9 @@ enum StageDoor {
         while true {
             let slice: Data
             do {
+                try Task.checkCancellation()
                 slice = try await read(chunkBytes)
+                try Task.checkCancellation()
             } catch {
                 await abort(core, begun.stagingID)
                 return .refused(nil)
@@ -69,19 +79,41 @@ enum StageDoor {
             chunk.stagingID = begun.stagingID
             chunk.seq = seq
             chunk.payload = slice
-            if case let .failure(refusal) = await send(core, .chunk(chunk)) {
+            let sent = await send(core, .chunk(chunk))
+            if Task.isCancelled {
+                await abort(core, begun.stagingID)
+                return .refused(nil)
+            }
+            if case let .failure(refusal) = sent {
                 // The core closes a session it refused a chunk of; this covers a call that never reached it.
                 await abort(core, begun.stagingID)
                 return .refused(refusal.error)
             }
             seq += 1
         }
+        do {
+            try Task.checkCancellation()
+        } catch {
+            await abort(core, begun.stagingID)
+            return .refused(nil)
+        }
         var end = Centraid_Core_V1_StageEnd()
         end.stagingID = begun.stagingID
-        switch await send(core, .end(end)) {
+        let ended = await send(core, .end(end))
+        if Task.isCancelled {
+            // Screen closure also cancels its archive lease in Rust; this abort is idempotent for
+            // a session which End already closed, and covers End interrupted before it arrived.
+            await abort(core, begun.stagingID)
+            return .refused(nil)
+        }
+        switch ended {
         case let .success(.handle(handle)?): return .staged(handle)
-        case let .failure(refusal): return .refused(refusal.error)
-        default: return .refused(nil)
+        case let .failure(refusal):
+            await abort(core, begun.stagingID)
+            return .refused(refusal.error)
+        default:
+            await abort(core, begun.stagingID)
+            return .refused(nil)
         }
     }
 
@@ -90,13 +122,16 @@ enum StageDoor {
         _ core: any ScreenCore,
         file path: String,
         mediaType: String,
+        begin: Begin? = nil,
         progress: (@MainActor @Sendable (UInt64, UInt64) -> Void)? = nil
     ) async -> Outcome {
         guard let handle = FileHandle(forReadingAtPath: path) else { return .refused(nil) }
         defer { try? handle.close() }
         let size = ((try? FileManager.default.attributesOfItem(atPath: path)[.size]) as? NSNumber)?.uint64Value ?? 0
         var sent: UInt64 = 0
-        return await stage(core, Begin(mediaType: mediaType, byteSize: size)) { max in
+        var start = begin ?? Begin(mediaType: mediaType, byteSize: size)
+        if start.exportJobID.isEmpty { start.byteSize = size }
+        return await stage(core, start) { max in
             let slice = try handle.read(upToCount: max) ?? Data()
             sent += UInt64(slice.count)
             await progress?(sent, size)

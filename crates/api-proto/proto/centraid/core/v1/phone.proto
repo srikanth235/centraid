@@ -1185,6 +1185,78 @@ message PhraseSeeded {
   bytes seed = 1;
 }
 
+// A resumable whole-vault export. The core owns the snapshot, ZIP writer,
+// filenames and omissions; the shell supplies at most one OS original between
+// `NEXT` calls. No vault rows or content-store entries are written.
+message VaultExportRequest {
+  Action action = 1;
+  string job_id = 2;
+  // `SKIP` identifies the immutable next photo from the snapshot.
+  string photo_id = 3;
+  SkipReason skip_reason = 4;
+  // The opaque `StageHandle.export_stage_id` returned for one supplied original.
+  string stage_id = 5;
+
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+    ACTION_BEGIN = 1;
+    ACTION_NEXT = 2;
+    ACTION_SKIP = 3;
+    ACTION_FINISH = 4;
+    ACTION_CANCEL = 5;
+    ACTION_BUILD = 6;
+    ACTION_COMMIT = 7;
+    // Release the finished archive after the shell's save sheet copied it.
+    ACTION_RELEASE = 8;
+  }
+  enum SkipReason {
+    SKIP_REASON_UNSPECIFIED = 0;
+    SKIP_REASON_UNAVAILABLE = 1;
+    SKIP_REASON_UNREADABLE = 2;
+  }
+}
+
+message VaultExportResponse {
+  string job_id = 1;
+  string name = 2;
+  // Set by NEXT when the snapshot has no more originals.
+  bool complete = 3;
+  // NEXT processed one local/missing original; call NEXT again to keep each
+  // core call to one original.
+  bool advanced = 9;
+  // BUILD finished off the screen/runtime lock.
+  bool ready = 10;
+  // COMMIT's disposition for the supplied OS original.
+  ArchiveDisposition archive_disposition = 11;
+  VaultExportOriginal original = 4;
+  // Set by FINISH. `path` is Rust's staged ZIP; shells only pass it to the OS
+  // save sheet and never choose a path for the core.
+  string path = 5;
+  uint64 count = 6;
+  uint64 missing = 7;
+  repeated LeftOutOriginal left_out = 8;
+
+  enum ArchiveDisposition {
+    ARCHIVE_DISPOSITION_UNSPECIFIED = 0;
+    ARCHIVE_DISPOSITION_ADDED = 1;
+    ARCHIVE_DISPOSITION_CHANGED = 2;
+    ARCHIVE_DISPOSITION_UNREADABLE = 3;
+  }
+}
+
+message VaultExportOriginal {
+  string photo_id = 1;
+  string os_ref = 2;
+  string content_hash = 3;
+  uint64 byte_size = 4;
+  string media_type = 5;
+}
+
+message LeftOutOriginal {
+  string name = 1;
+  string why = 2;
+}
+
 // CHECK MY BACKUP (#1188, B6). For each backup device the phone can reach: restore the records
 // into a scratch copy and run every restore check, confirm by name that the device holds every
 // file the records refer to, read back and open a sample of those files. It never touches the

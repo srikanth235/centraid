@@ -44,6 +44,7 @@ pub enum VaultRequest {
     Releasable(wire::ReleasableRequest),
     Released(wire::ReleasedRequest),
     LibraryAssets(wire::LibraryAssetsRequest),
+    Export(wire::VaultExportRequest),
 }
 
 impl VaultRequest {
@@ -69,6 +70,7 @@ impl VaultRequest {
             Self::Releasable(r) => K::Releasable(r),
             Self::Released(r) => K::Released(r),
             Self::LibraryAssets(r) => K::LibraryAssets(r),
+            Self::Export(r) => K::VaultExport(r),
         };
         wire::Request { kind: Some(kind) }
     }
@@ -81,6 +83,10 @@ pub trait ScreenCtx {
     fn now_ms(&self) -> Option<i64> {
         None
     }
+
+    /// Cancel a Rust-owned whole-vault export when its screen is destroyed,
+    /// including forced foreground replacement where no `Left` event is sent.
+    fn cancel_vault_export(&self, _job_id: &str) {}
 
     /// The one read.
     ///
@@ -233,6 +239,10 @@ impl ScreenCtx for HandleState {
             return front.now_ms();
         }
         self.with_vault(|vault| Ok(vault.clock().now_ms())).ok()
+    }
+
+    fn cancel_vault_export(&self, job_id: &str) {
+        HandleState::cancel_vault_export(self, job_id);
     }
 
     fn load(&self, request: &wire::LoadRequest) -> Result<wire::LoadResponse> {

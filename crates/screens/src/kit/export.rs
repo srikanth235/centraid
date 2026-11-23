@@ -22,6 +22,9 @@
 //! under `<app>.export`; and put [`entry`]'s row in the More sheet. See `.claude/skills/change/keep-a-promise.md`.
 
 use centraid_api_proto::core_v1 as wire;
+use prost::Message;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use wire::screen_event::Kind as E;
 
 use super::owner::{Answer, Leaving, NoPasscode, OwnerGate};
@@ -77,6 +80,8 @@ pub struct StagedFile {
 pub enum Made {
     Bytes(ExportFile),
     Staged(StagedFile),
+    /// The whole-vault export is a core-owned job that needs one OS original at a time.
+    Archive,
 }
 
 impl From<ExportFile> for Made {
@@ -224,6 +229,10 @@ pub fn build(spec: &'static ExportSpec, route: &wire::Route) -> Option<Box<dyn S
         left_out: Vec::new(),
         left_out_why: String::new(),
         status: None,
+        archive_job: String::new(),
+        archive_name: String::new(),
+        archive_photo: None,
+        archive_lease: ArchiveLease::default(),
     }))
 }
 
@@ -233,6 +242,13 @@ enum Stage {
     Choosing,
     /// The owner check is up.
     Checking,
+    Beginning,
+    Building,
+    Advancing,
+    Supplying,
+    Skipping,
+    Finishing,
+    Committing,
     /// The save sheet is up.
     Saving,
 }
@@ -255,6 +271,35 @@ struct Export {
     left_out: Vec<String>,
     left_out_why: String,
     status: Option<wire::StatusLine>,
+    archive_job: String,
+    archive_name: String,
+    archive_photo: Option<wire::VaultExportOriginal>,
+    archive_lease: ArchiveLease,
+}
+
+/// The screen's lease covers BEGIN completing after the screen has already closed.
+#[derive(Clone, Default)]
+struct ArchiveLease {
+    cancelled: Arc<AtomicBool>,
+    job_id: Arc<Mutex<Option<String>>>,
+}
+
+impl ArchiveLease {
+    /// Remember BEGIN's id and report whether closure has already requested cancellation.
+    fn began(&self, job_id: String) -> bool {
+        if let Ok(mut slot) = self.job_id.lock() {
+            *slot = Some(job_id);
+        }
+        self.cancelled.load(Ordering::SeqCst)
+    }
+
+    /// Cancel a known job now; a not-yet-known job is cancelled by `began` when BEGIN returns.
+    fn close(&self, cancel: impl FnOnce(&str)) {
+        self.cancelled.store(true, Ordering::SeqCst);
+        if let Some(job_id) = self.job_id.lock().ok().and_then(|slot| slot.clone()) {
+            cancel(&job_id);
+        }
+    }
 }
 
 impl Export {
@@ -319,6 +364,48 @@ impl Export {
     fn save(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         let locale = ctx.locale();
         match (self.spec.export)(ctx, &self.chosen) {
+            Ok(Made::Archive) => {
+                self.stage = Stage::Beginning;
+                self.archive_job.clear();
+                self.archive_photo = None;
+                self.archive_lease = ArchiveLease::default();
+                let lease = self.archive_lease.clone();
+                ctx.off_thread("export.everything.begin", move |handle| {
+                    let request = wire::Request {
+                        kind: Some(wire::request::Kind::VaultExport(wire::VaultExportRequest {
+                            action: wire::vault_export_request::Action::Begin as i32,
+                            ..wire::VaultExportRequest::default()
+                        })),
+                    };
+                    let called = match handle.call(&request) {
+                        Ok(response) => wire::VaultCalled {
+                            response: response.encode_to_vec(),
+                            error: None,
+                        },
+                        Err(error) => wire::VaultCalled {
+                            response: Vec::new(),
+                            error: Some(error.to_wire()),
+                        },
+                    };
+                    if let Ok(response) = wire::Response::decode(called.response.as_slice())
+                        && let Some(wire::response::Kind::VaultExport(answer)) = response.kind
+                        && lease.began(answer.job_id.clone())
+                        && !answer.job_id.is_empty()
+                    {
+                        let _ = handle.call(&wire::Request {
+                            kind: Some(wire::request::Kind::VaultExport(
+                                wire::VaultExportRequest {
+                                    action: wire::vault_export_request::Action::Cancel as i32,
+                                    job_id: answer.job_id,
+                                    ..wire::VaultExportRequest::default()
+                                },
+                            )),
+                        });
+                    }
+                    called.encode_to_vec()
+                });
+                Vec::new()
+            }
             Ok(made) => {
                 self.stage = Stage::Saving;
                 if !self.warning.is_empty() {
@@ -333,6 +420,7 @@ impl Export {
                         file.left_out_why.clone(),
                     ),
                     Made::Bytes(_) => (0, 0, Vec::new(), String::new()),
+                    Made::Archive => unreachable!("archive jobs are handled before the file path"),
                 };
                 let kind = match made {
                     Made::Bytes(file) => wire::effect::Kind::SaveFile(wire::SaveFile {
@@ -346,6 +434,7 @@ impl Export {
                         name: file.name,
                         media_type: file.media_type,
                     }),
+                    Made::Archive => unreachable!("archive jobs are handled before the file path"),
                 };
                 vec![wire::Effect { kind: Some(kind) }]
             }
@@ -364,8 +453,258 @@ impl Export {
         }
     }
 
+    fn ask_next_original(&mut self, ctx: &Ctx) {
+        self.stage = Stage::Advancing;
+        ctx.vault_async(
+            "export.everything.next",
+            centraid_core::screens::VaultRequest::Export(wire::VaultExportRequest {
+                action: wire::vault_export_request::Action::Next as i32,
+                job_id: self.archive_job.clone(),
+                ..wire::VaultExportRequest::default()
+            }),
+        );
+    }
+
+    fn skip_current_original(&mut self, ctx: &Ctx, reason: wire::vault_export_request::SkipReason) {
+        let Some(photo) = self.archive_photo.as_ref() else {
+            self.archive_failed(ctx, shared::export_failed(ctx.locale()));
+            return;
+        };
+        self.stage = Stage::Skipping;
+        ctx.vault_async(
+            "export.everything.skip",
+            centraid_core::screens::VaultRequest::Export(wire::VaultExportRequest {
+                action: wire::vault_export_request::Action::Skip as i32,
+                job_id: self.archive_job.clone(),
+                photo_id: photo.photo_id.clone(),
+                skip_reason: reason as i32,
+                ..wire::VaultExportRequest::default()
+            }),
+        );
+    }
+
+    fn commit_current_original(&mut self, ctx: &Ctx, stage_id: String) {
+        let Some(photo) = self.archive_photo.as_ref() else {
+            self.archive_failed(ctx, shared::export_failed(ctx.locale()));
+            return;
+        };
+        self.stage = Stage::Committing;
+        ctx.vault_async(
+            "export.everything.commit",
+            centraid_core::screens::VaultRequest::Export(wire::VaultExportRequest {
+                action: wire::vault_export_request::Action::Commit as i32,
+                job_id: self.archive_job.clone(),
+                photo_id: photo.photo_id.clone(),
+                stage_id,
+                ..wire::VaultExportRequest::default()
+            }),
+        );
+    }
+
+    fn archive_failed(&mut self, ctx: &Ctx, sentence: String) {
+        if !self.archive_job.is_empty() {
+            ctx.vault_async(
+                "export.everything.cancel",
+                centraid_core::screens::VaultRequest::Export(wire::VaultExportRequest {
+                    action: wire::vault_export_request::Action::Cancel as i32,
+                    job_id: self.archive_job.clone(),
+                    ..wire::VaultExportRequest::default()
+                }),
+            );
+        }
+        self.archive_job.clear();
+        self.archive_photo = None;
+        self.stage = Stage::Choosing;
+        self.say(sentence, true);
+    }
+
+    fn archive_request_done(&mut self, ctx: &Ctx, done: &wire::OffThreadDone) -> Vec<wire::Effect> {
+        let called = match wire::VaultCalled::decode(done.bytes.as_slice()) {
+            Ok(called) if called.error.is_none() => called,
+            _ => {
+                self.archive_failed(ctx, shared::export_failed(ctx.locale()));
+                return Vec::new();
+            }
+        };
+        let response = match wire::Response::decode(called.response.as_slice()) {
+            Ok(response) => response,
+            Err(_) => {
+                self.archive_failed(ctx, shared::export_failed(ctx.locale()));
+                return Vec::new();
+            }
+        };
+        let Some(wire::response::Kind::VaultExport(answer)) = response.kind else {
+            self.archive_failed(ctx, shared::export_failed(ctx.locale()));
+            return Vec::new();
+        };
+        match done.tag.as_str() {
+            "export.everything.begin" if self.stage == Stage::Beginning => {
+                if answer.job_id.is_empty() {
+                    self.archive_failed(ctx, shared::export_failed(ctx.locale()));
+                } else {
+                    self.archive_job = answer.job_id;
+                    self.archive_name = answer.name;
+                    self.stage = Stage::Building;
+                    ctx.vault_async(
+                        "export.everything.build",
+                        centraid_core::screens::VaultRequest::Export(wire::VaultExportRequest {
+                            action: wire::vault_export_request::Action::Build as i32,
+                            job_id: self.archive_job.clone(),
+                            ..wire::VaultExportRequest::default()
+                        }),
+                    );
+                }
+            }
+            "export.everything.build" if self.stage == Stage::Building => {
+                if answer.ready {
+                    self.ask_next_original(ctx);
+                } else {
+                    self.archive_failed(ctx, shared::export_failed(ctx.locale()));
+                }
+            }
+            "export.everything.next" if self.stage == Stage::Advancing => {
+                if let Some(original) = answer.original {
+                    self.archive_photo = Some(original.clone());
+                    self.stage = Stage::Supplying;
+                    return vec![wire::Effect {
+                        kind: Some(wire::effect::Kind::ExportOriginals(wire::ExportOriginals {
+                            photo_ids: vec![original.photo_id.clone()],
+                            mode: wire::export_originals::Mode::Archive as i32,
+                            export_job_id: self.archive_job.clone(),
+                            export_photo_id: original.photo_id,
+                            export_os_ref: original.os_ref,
+                            export_byte_size: original.byte_size,
+                            export_content_hash: original.content_hash,
+                            export_media_type: original.media_type,
+                            ..wire::ExportOriginals::default()
+                        })),
+                    }];
+                }
+                if answer.complete {
+                    self.stage = Stage::Finishing;
+                    ctx.vault_async(
+                        "export.everything.finish",
+                        centraid_core::screens::VaultRequest::Export(wire::VaultExportRequest {
+                            action: wire::vault_export_request::Action::Finish as i32,
+                            job_id: self.archive_job.clone(),
+                            ..wire::VaultExportRequest::default()
+                        }),
+                    );
+                } else {
+                    self.ask_next_original(ctx);
+                }
+            }
+            "export.everything.skip" if self.stage == Stage::Skipping => {
+                self.archive_photo = None;
+                self.ask_next_original(ctx);
+            }
+            "export.everything.commit" if self.stage == Stage::Committing => {
+                match wire::vault_export_response::ArchiveDisposition::try_from(
+                    answer.archive_disposition,
+                )
+                .unwrap_or(wire::vault_export_response::ArchiveDisposition::Unspecified)
+                {
+                    wire::vault_export_response::ArchiveDisposition::Added
+                    | wire::vault_export_response::ArchiveDisposition::Changed
+                    | wire::vault_export_response::ArchiveDisposition::Unreadable => {
+                        self.archive_photo = None;
+                        self.ask_next_original(ctx);
+                    }
+                    wire::vault_export_response::ArchiveDisposition::Unspecified => {
+                        self.archive_failed(ctx, shared::export_failed(ctx.locale()))
+                    }
+                }
+            }
+            "export.everything.finish" if self.stage == Stage::Finishing => {
+                if answer.path.is_empty() {
+                    self.archive_failed(ctx, shared::export_failed(ctx.locale()));
+                } else {
+                    self.stage = Stage::Saving;
+                    self.saved = answer.count;
+                    self.missing = answer.missing;
+                    self.left_out = answer
+                        .left_out
+                        .iter()
+                        .take(NAMED_ON_THE_LINE)
+                        .map(|item| item.name.clone())
+                        .collect();
+                    return vec![wire::Effect {
+                        kind: Some(wire::effect::Kind::SaveFilePath(wire::SaveFilePath {
+                            path: answer.path,
+                            name: if answer.name.is_empty() {
+                                self.archive_name.clone()
+                            } else {
+                                answer.name
+                            },
+                            media_type: "application/zip".to_owned(),
+                        })),
+                    }];
+                }
+            }
+            _ => {}
+        }
+        Vec::new()
+    }
+
+    fn archive_original_done(
+        &mut self,
+        ctx: &Ctx,
+        result: &wire::EffectResult,
+    ) -> Vec<wire::Effect> {
+        let disposition = match &result.outcome {
+            Some(wire::effect_result::Outcome::OriginalsExported(answer)) => {
+                wire::originals_exported::ArchiveDisposition::try_from(answer.archive_disposition)
+                    .unwrap_or(wire::originals_exported::ArchiveDisposition::Unspecified)
+            }
+            Some(wire::effect_result::Outcome::Failed(_)) => {
+                wire::originals_exported::ArchiveDisposition::Unreadable
+            }
+            _ => wire::originals_exported::ArchiveDisposition::Unspecified,
+        };
+        match disposition {
+            wire::originals_exported::ArchiveDisposition::Staged => {
+                let Some(wire::effect_result::Outcome::OriginalsExported(answer)) = &result.outcome
+                else {
+                    self.archive_failed(ctx, shared::export_failed(ctx.locale()));
+                    return Vec::new();
+                };
+                self.commit_current_original(ctx, answer.archive_stage_id.clone());
+            }
+            wire::originals_exported::ArchiveDisposition::Unavailable => {
+                self.skip_current_original(ctx, wire::vault_export_request::SkipReason::Unavailable)
+            }
+            wire::originals_exported::ArchiveDisposition::Unreadable
+            | wire::originals_exported::ArchiveDisposition::Unspecified => {
+                self.skip_current_original(ctx, wire::vault_export_request::SkipReason::Unreadable)
+            }
+        }
+        Vec::new()
+    }
+
     /// The save sheet answered: saved, failed, or dismissed (which says nothing).
-    fn saved(&mut self, locale: Locale, result: &wire::EffectResult) {
+    fn saved(&mut self, ctx: &Ctx, result: &wire::EffectResult) {
+        let locale = ctx.locale();
+        if !self.archive_job.is_empty() {
+            let action = if matches!(&result.outcome, Some(wire::effect_result::Outcome::Done(_))) {
+                wire::vault_export_request::Action::Release
+            } else {
+                wire::vault_export_request::Action::Cancel
+            };
+            ctx.vault_async(
+                "export.everything.release",
+                centraid_core::screens::VaultRequest::Export(wire::VaultExportRequest {
+                    action: action as i32,
+                    job_id: self.archive_job.clone(),
+                    ..wire::VaultExportRequest::default()
+                }),
+            );
+            if action == wire::vault_export_request::Action::Release {
+                self.archive_job.clear();
+                if let Ok(mut slot) = self.archive_lease.job_id.lock() {
+                    *slot = None;
+                }
+            }
+        }
         self.stage = Stage::Choosing;
         match &result.outcome {
             Some(wire::effect_result::Outcome::Done(_)) => {
@@ -436,19 +775,50 @@ impl Screen for Export {
                 (Some(wire::effect_result::Outcome::OwnerChecked(checked)), Stage::Checking) => {
                     self.checked(ctx, checked)
                 }
+                (_, Stage::Supplying) => self.archive_original_done(ctx, &result),
                 (_, Stage::Saving) => {
-                    self.saved(ctx.locale(), &result);
+                    self.saved(ctx, &result);
                     Vec::new()
                 }
                 _ => Vec::new(),
             },
+            Some(E::OffThreadDone(done))
+                if matches!(
+                    self.stage,
+                    Stage::Beginning
+                        | Stage::Building
+                        | Stage::Advancing
+                        | Stage::Skipping
+                        | Stage::Finishing
+                        | Stage::Committing
+                ) =>
+            {
+                self.archive_request_done(ctx, &done)
+            }
             // Leaving withdraws a prompt that is still up, so none outlives the screen.
             Some(E::Left(_)) => {
+                if !self.archive_job.is_empty() {
+                    ctx.vault_async(
+                        "export.everything.cancel",
+                        centraid_core::screens::VaultRequest::Export(wire::VaultExportRequest {
+                            action: wire::vault_export_request::Action::Cancel as i32,
+                            job_id: self.archive_job.clone(),
+                            ..wire::VaultExportRequest::default()
+                        }),
+                    );
+                }
+                self.archive_lease.cancelled.store(true, Ordering::SeqCst);
+                self.archive_job.clear();
                 self.stage = Stage::Choosing;
                 self.gate.cancel()
             }
             _ => Vec::new(),
         }
+    }
+
+    fn closing(&mut self, core: &dyn centraid_core::screens::ScreenCtx) {
+        self.archive_lease
+            .close(|job_id| core.cancel_vault_export(job_id));
     }
 
     fn view(&self, ctx: &Ctx) -> wire::ViewState {
@@ -484,5 +854,27 @@ impl Screen for Export {
             })),
             ..wire::ViewState::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod archive_lease_tests {
+    use super::*;
+
+    #[test]
+    fn a_pop_while_begin_is_in_flight_cancels_the_late_job_id() {
+        let lease = ArchiveLease::default();
+        let mut cancelled = Vec::new();
+
+        // A screen pop lands before the worker's BEGIN response.
+        lease.close(|job_id| cancelled.push(job_id.to_owned()));
+        assert!(cancelled.is_empty(), "there is no id to cancel yet");
+
+        // When the blocked worker returns, it sees the closed lease and cancels before
+        // its completion can be delivered to a screen that no longer exists.
+        if lease.began("vault-export-late".to_owned()) {
+            cancelled.push("vault-export-late".to_owned());
+        }
+        assert_eq!(cancelled, ["vault-export-late"]);
     }
 }

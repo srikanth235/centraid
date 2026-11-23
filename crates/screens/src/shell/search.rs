@@ -5,8 +5,8 @@
 //!
 //! ## What the core answers, and what is decided here
 //!
-//! The core answers hits: an entity, an id, a title and the app each opens in.
-//! This screen groups them by app in the springboard's order, words each row
+//! The core answers hits: an entity, an id, a title, the app each opens in, and whether a person
+//! is My card. This screen groups them by app in the springboard's order, words each row
 //! (its kind, its spoken label), picks where a tap goes ([`row_routes`]) and
 //! separates the containers that matched (a notebook, an album, a project, a
 //! folder) from the plain rows. A hit with no page to open (a chat thread, until
@@ -37,7 +37,7 @@ use crate::kit::civil;
 use crate::kit::read::{self, Page, Reading};
 use crate::kit::search as ask;
 use crate::screen::{Ctx, Screen};
-use crate::strings::{Locale, fill, home as words, shared};
+use crate::strings::{Locale, fill, home as words, people as people_words, shared};
 
 pub use crate::kit::search::RECENT_MAX;
 
@@ -589,11 +589,16 @@ fn fold(locale: Locale, term: &str, found: &wire::VaultSearch) -> wire::HomeSear
                 if route.is_none() {
                     continue;
                 }
+                let accessibility_label = if hit.is_my_card {
+                    spoken(&[&hit.title, &people_words::my_card(locale), &earlier_label])
+                } else {
+                    spoken(&[&kind, &hit.title, &earlier_label])
+                };
                 rows.push(wire::HomeSearchRow {
                     entity: hit.entity.clone(),
                     id: hit.id.clone(),
                     app_id: app.to_owned(),
-                    accessibility_label: spoken(&[&kind, &hit.title, &earlier_label]),
+                    accessibility_label,
                     kind_label: kind,
                     title: hit.title.clone(),
                     route,
@@ -719,6 +724,37 @@ mod tests {
             reminders.rows[0].accessibility_label,
             "Task, Book the cabin"
         );
+    }
+
+    #[test]
+    fn home_find_names_my_card_accessibly_and_keeps_the_person_kind_for_both_rows() {
+        let mut own = hit("person", "owner-id", "Srikanth R", "people");
+        own.is_my_card = true;
+        let answer = data(vec![own, hit("person", "friend-id", "Maya", "people")]);
+        let people = answer
+            .groups
+            .iter()
+            .find(|group| group.app_id == "people")
+            .expect("People group");
+        let owner = people
+            .rows
+            .iter()
+            .find(|row| row.id == "owner-id")
+            .expect("My card row");
+        assert_eq!(owner.kind_label, "Person");
+        assert_eq!(owner.accessibility_label, "Srikanth R, My card");
+        assert!(matches!(
+            owner.route.as_ref().and_then(|route| route.args.as_ref()),
+            Some(wire::route::Args::PeoplePerson(args))
+                if args.party_id == "owner-id" && args.name == "Srikanth R"
+        ));
+        let friend = people
+            .rows
+            .iter()
+            .find(|row| row.id == "friend-id")
+            .expect("ordinary person row");
+        assert_eq!(friend.kind_label, "Person");
+        assert_eq!(friend.accessibility_label, "Person, Maya");
     }
 
     /// A HIT ON WORDS ONLY AN EARLIER VERSION HELD says so in the row's own line and opens that

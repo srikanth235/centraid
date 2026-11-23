@@ -10,6 +10,8 @@ use std::sync::Arc;
 use centraid_api_proto::core_v1 as wire;
 use centraid_assist::testing::ScriptedModel;
 use centraid_screens::catalog::act;
+use centraid_screens::testing::Driver;
+use centraid_screens::{Runtime, chat, locker};
 use chat_support::{Chat, step};
 use locker_support::{arrange, checked, login, passed};
 use wire::chat_event::Kind as C;
@@ -221,6 +223,181 @@ fn a_relock_or_leaving_drops_the_value() {
         });
         assert_eq!(last_shield.last(), Some(&false), "{leave}");
     }
+}
+
+#[test]
+fn a_copied_chat_reveal_survives_its_pop_and_locker_lock_clears_it() {
+    let runtime = Runtime::new(
+        chat_support::registry().merge(locker::registry()),
+        vec![
+            (chat::TAB.to_owned(), chat::routes::home()),
+            (
+                locker::TAB.to_owned(),
+                locker::routes::home(wire::LockerDestination::Items),
+            ),
+        ],
+    );
+    let model = reveal_script();
+    let mut driver = Driver::keyed(runtime);
+    driver.handle.assist().host().install(model);
+    driver.start();
+    let home_id = driver
+        .navigation
+        .as_ref()
+        .unwrap()
+        .tabs
+        .iter()
+        .find(|tab| tab.tab == locker::TAB)
+        .unwrap()
+        .entries[0]
+        .instance;
+    if !driver.effects.iter().any(|request| {
+        matches!(
+            request.effect.as_ref().and_then(|effect| effect.kind.as_ref()),
+            Some(wire::effect::Kind::OwnerCheck(check)) if check.ask
+        )
+    }) {
+        driver.send(
+            home_id,
+            wire::screen_event::Kind::LockerWall(wire::LockerWallEvent {
+                kind: Some(wire::locker_wall_event::Kind::Unlock(
+                    wire::locker_wall_event::UnlockTapped::default(),
+                )),
+            }),
+        );
+    }
+    let (owner_instance, owner_effect_id) = driver
+        .effects
+        .iter()
+        .find(|request| {
+            matches!(
+                request.effect.as_ref().and_then(|effect| effect.kind.as_ref()),
+                Some(wire::effect::Kind::OwnerCheck(check)) if check.ask
+            )
+        })
+        .map(|request| (request.instance, request.effect_id))
+        .expect("Locker Home asks the member to unlock");
+    driver.send(
+        owner_instance,
+        wire::screen_event::Kind::EffectResult(wire::EffectResult {
+            effect_id: owner_effect_id,
+            outcome: Some(passed(wire::Biometry::Face)),
+        }),
+    );
+    locker_support::login(&driver, "i1", "Bank");
+    driver.effects.clear();
+
+    let chat_id = driver.push(chat::TAB, chat::routes::home());
+    let mut chat = Chat {
+        driver,
+        id: chat_id,
+    };
+    chat.open("");
+    chat.say("what is my bank password?");
+    verb(&mut chat, "reveal");
+    assert!(
+        owner_checks(&chat) == 0,
+        "an already-open Locker session does not reauthenticate a chat reveal"
+    );
+    assert_eq!(row(&chat).value, SECRET);
+    verb(&mut chat, "copy");
+    assert!(
+        owner_checks(&chat) == 0,
+        "copying a revealed value does not ask for a second owner check"
+    );
+    let copy = chat
+        .driver
+        .effects
+        .iter()
+        .find(|request| {
+            matches!(
+                request.effect.as_ref().and_then(|effect| effect.kind.as_ref()),
+                Some(wire::effect::Kind::ClipboardSet(set))
+                    if set.text == SECRET && set.sensitive
+            )
+        })
+        .expect("the chat card copies a sensitive Locker value")
+        .clone();
+    chat.driver.send(
+        copy.instance,
+        wire::screen_event::Kind::EffectResult(wire::EffectResult {
+            effect_id: copy.effect_id,
+            outcome: Some(wire::effect_result::Outcome::Done(wire::EffectDone {})),
+        }),
+    );
+
+    // A second Locker controller can replace the shared owner while this chat still remembers
+    // its older ticket. Hiding or popping that controller must not clear the newer copy.
+    locker_support::login(&chat.driver, "i2", "Other");
+    let item_id = chat
+        .driver
+        .push(locker::TAB, locker::routes::item("i2", "Other"));
+    chat.driver.effects.clear();
+    locker_support::verb(&mut chat.driver, item_id, "password", "copy");
+    let newer_copy = chat
+        .driver
+        .effects
+        .iter()
+        .find(|request| {
+            matches!(
+                request.effect.as_ref().and_then(|effect| effect.kind.as_ref()),
+                Some(wire::effect::Kind::ClipboardSet(set))
+                    if set.text == SECRET && set.sensitive
+            )
+        })
+        .expect("the second Locker controller replaces the copy")
+        .clone();
+    chat.driver.send(
+        newer_copy.instance,
+        wire::screen_event::Kind::EffectResult(wire::EffectResult {
+            effect_id: newer_copy.effect_id,
+            outcome: Some(wire::effect_result::Outcome::Done(wire::EffectDone {})),
+        }),
+    );
+    let hidden = chat.driver.send(
+        chat_id,
+        wire::screen_event::Kind::TabHidden(wire::TabHidden {}),
+    );
+    assert!(
+        !hidden.effects.iter().any(|request| matches!(
+            request
+                .effect
+                .as_ref()
+                .and_then(|effect| effect.kind.as_ref()),
+            Some(wire::effect::Kind::ClipboardClearOwned(_))
+        )),
+        "stale chat cleanup cannot clear another controller's latest copy"
+    );
+
+    let popped = chat.driver.pop(chat::TAB, chat_id);
+    assert!(chat.driver.closed.contains(&chat_id));
+    assert!(
+        !popped.effects.iter().any(|request| matches!(
+            request
+                .effect
+                .as_ref()
+                .and_then(|effect| effect.kind.as_ref()),
+            Some(wire::effect::Kind::ClipboardClearOwned(_))
+        )),
+        "popping a chat reveal does not clear the runtime-owned copy"
+    );
+    chat.driver.pop(locker::TAB, item_id);
+
+    chat.driver.send(
+        home_id,
+        wire::screen_event::Kind::LockerHome(wire::LockerHomeEvent {
+            kind: Some(wire::locker_home_event::Kind::LockRequested(
+                Default::default(),
+            )),
+        }),
+    );
+    assert!(
+        chat.driver.effects.iter().any(|request| matches!(
+            request.effect.as_ref().and_then(|effect| effect.kind.as_ref()),
+            Some(wire::effect::Kind::ClipboardClearOwned(clear)) if clear.vault_id.is_empty()
+        )),
+        "Locker Lock clears a copy made from a popped chat card"
+    );
 }
 
 #[test]

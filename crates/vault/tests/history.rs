@@ -1275,6 +1275,102 @@ fn quiet_saves_within_the_gap_are_one_version_holding_the_state_before_the_sessi
 }
 
 #[test]
+fn a_body_edit_after_a_title_save_starts_a_revision_that_preserves_the_elided_body() {
+    let w = World::new();
+    let note = w.id("note.create", json!({ "title": "A", "body": "ALPHA" }));
+    w.at(
+        1_000,
+        true,
+        "note.edit",
+        json!({ "id": note, "title": "B" }),
+    );
+    w.at(
+        1_000,
+        true,
+        "note.edit",
+        json!({ "id": note, "body": "BETA" }),
+    );
+
+    assert_eq!(
+        w.revisions(),
+        2,
+        "the body edit starts a version to keep history immutable"
+    );
+    let versions = w.versions(&note);
+    assert_eq!(versions.len(), 2);
+    assert_eq!(
+        World::change(&versions[0], "note.body"),
+        (json!("ALPHA"), json!("BETA")),
+        "the body revision keeps the words from before that edit"
+    );
+    let earlier_match: i64 = w
+        .scratch
+        .vault
+        .read(|connection| {
+            Ok(connection.query_row(
+                "SELECT COUNT(*) FROM search_past WHERE search_past MATCH 'ALPHA'",
+                [],
+                |row| row.get(0),
+            )?)
+        })
+        .expect("past words are indexed");
+    assert_eq!(earlier_match, 1, "the preserved body stays findable");
+    w.ok(
+        "history.restore_version",
+        json!({ "id": note, "seq": versions[0].seq }),
+    );
+    assert_eq!(w.state(&note)["entity"]["title"], "B");
+    assert_eq!(w.state(&note)["note"]["body"], "ALPHA");
+    w.ok(
+        "history.restore_version",
+        json!({ "id": note, "seq": versions[1].seq }),
+    );
+    assert_eq!(w.state(&note)["entity"]["title"], "A");
+    assert_eq!(w.state(&note)["note"]["body"], "ALPHA");
+}
+
+#[test]
+fn multiple_body_edits_after_a_title_save_keep_the_session_origin() {
+    let w = World::new();
+    let note = w.id("note.create", json!({ "title": "A", "body": "ALPHA" }));
+    w.at(
+        1_000,
+        true,
+        "note.edit",
+        json!({ "id": note, "title": "B" }),
+    );
+    w.at(
+        1_000,
+        true,
+        "note.edit",
+        json!({ "id": note, "body": "BETA" }),
+    );
+    w.at(
+        1_000,
+        true,
+        "note.edit",
+        json!({ "id": note, "body": "GAMMA" }),
+    );
+
+    let versions = w.versions(&note);
+    assert_eq!(
+        versions.len(),
+        2,
+        "the title revision is followed by one body session"
+    );
+    assert_eq!(
+        World::change(&versions[0], "note.body"),
+        (json!("ALPHA"), json!("GAMMA")),
+        "later folded bodies never replace the session's original value"
+    );
+    w.ok(
+        "history.restore_version",
+        json!({ "id": note, "seq": versions[0].seq }),
+    );
+    assert_eq!(w.state(&note)["note"]["body"], "ALPHA");
+}
+
+#[test]
 fn the_idle_gap_is_ten_minutes_to_the_millisecond() {
     let w = World::new();
     let note = w.id("note.create", json!({ "title": "Plan", "body": "start" }));

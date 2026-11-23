@@ -28,6 +28,11 @@ pub trait Screen: Send {
     /// state in the view (the read law), never a panic and never an empty list.
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect>;
 
+    /// A screen is being destroyed, including forced foreground replacement.
+    /// Implementations may release short-lived core resources here; this hook
+    /// is synchronous and must not wait for unbounded work.
+    fn closing(&mut self, _core: &dyn ScreenCtx) {}
+
     /// The runtime numbered the effects the last [`Screen::update`] asked for: one entry per
     /// effect, in the order returned, `None` for one the runtime kept for itself (a tab
     /// selection, a shelf command) that no shell performs. The answer to an effect names its
@@ -116,6 +121,7 @@ pub struct Ctx<'a> {
     alerts: crate::kit::permission::AlertBoard,
     recents: crate::kit::search::Recents,
     drafts: crate::calendar::draft::Board,
+    clipboard: crate::kit::secret::ClipboardBoard,
     /// The line a page that just closed handed down to this screen, until it takes it.
     handed_in: RefCell<Option<Handed>>,
 }
@@ -136,6 +142,7 @@ impl<'a> Ctx<'a> {
             alerts: crate::kit::permission::AlertBoard::default(),
             recents: crate::kit::search::Recents::default(),
             drafts: crate::calendar::draft::Board::default(),
+            clipboard: crate::kit::secret::ClipboardBoard::default(),
             handed_in: RefCell::new(None),
         }
     }
@@ -193,6 +200,28 @@ impl<'a> Ctx<'a> {
     pub(crate) fn with_drafts(mut self, drafts: crate::calendar::draft::Board) -> Self {
         self.drafts = drafts;
         self
+    }
+
+    /// This context over the runtime's one volatile Locker clipboard owner.
+    #[must_use]
+    pub(crate) fn with_clipboard(mut self, clipboard: crate::kit::secret::ClipboardBoard) -> Self {
+        self.clipboard = clipboard;
+        self
+    }
+
+    /// The Locker copy board, shared across routes until the runtime closes.
+    #[must_use]
+    pub(crate) fn clipboard(&self) -> &crate::kit::secret::ClipboardBoard {
+        &self.clipboard
+    }
+
+    /// The vault whose Locker screen is currently in front, with the one-vault test host's empty
+    /// id as its binding when it has no multi-vault shelf.
+    #[must_use]
+    pub(crate) fn foreground_vault_id(&self) -> String {
+        self.vaults().map_or_else(String::new, |vaults| {
+            vaults.foreground_id().unwrap_or_default()
+        })
     }
 
     /// The unsaved new event, kept in memory for the runtime's life and in the device store by

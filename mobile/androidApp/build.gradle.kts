@@ -13,9 +13,47 @@
 // and everything above it is this module (#1135: the screens, the session and
 // every decision are Rust's).
 
+import org.gradle.api.DefaultTask
+import org.gradle.api.file.ConfigurableFileCollection
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.FileSystemOperations
+import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.TaskAction
+import javax.inject.Inject
+
 plugins {
     id("com.android.application")
     alias(libs.plugins.compose.compiler)
+}
+
+abstract class FilterReleaseAssets : DefaultTask() {
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val sourceAssets: ConfigurableFileCollection
+
+    @get:OutputDirectory
+    abstract val filteredAssets: DirectoryProperty
+
+    @get:Inject
+    abstract val fileSystemOperations: FileSystemOperations
+
+    @TaskAction
+    fun filterFixtures() {
+        fileSystemOperations.sync {
+            from(sourceAssets)
+            exclude("demo-vault.sqlite3", "work-vault.sqlite3")
+            into(filteredAssets)
+        }
+        filteredAssets.get().asFile.mkdirs()
+    }
+}
+
+val filterReleaseAssets = tasks.register<FilterReleaseAssets>("filterReleaseAssets") {
+    sourceAssets.from(fileTree("src/main/assets"))
+    filteredAssets.set(layout.buildDirectory.dir("generated/release-assets-filtered"))
 }
 
 android {
@@ -56,8 +94,23 @@ android {
     // ALL APP DATA IS EXCLUDED FROM AUTO BACKUP AND DEVICE-TO-DEVICE TRANSFER.
     // In v0 this was written by `plugins/withCentraidAndroidPrivacy.cjs` into a generated project; here
     // it is source, which is the whole point of retiring the prebuild.
+    // `mobile/scripts/demo-vault.sh` uses `src/main/assets` for local Debug fixtures. Release gets
+    // a filtered copy of this directory; future variant-specific shipped assets belong in
+    // `src/release/assets`.
+    sourceSets {
+        getByName("main").assets.directories.clear()
+        getByName("debug").assets.directories.add("src/main/assets")
+    }
+
     packaging {
         resources.excludes.add("META-INF/*")
+    }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        val assets = requireNotNull(variant.sources.assets) { "Release variant has no asset sources" }
+        assets.addGeneratedSourceDirectory(filterReleaseAssets) { task -> task.filteredAssets }
     }
 }
 

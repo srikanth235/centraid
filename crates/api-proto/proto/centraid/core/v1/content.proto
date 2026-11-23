@@ -166,6 +166,12 @@ message StageBegin {
   // core never offers the item for deletion from the library
   // (`ReleasableRequest`). Set only with `STAGE_SOURCE_OS_LIBRARY`.
   bool os_edited = 7;
+  // `STAGE_SOURCE_EXPORT_ARCHIVE` only. Rust minted `export_job_id` and
+  // captured this `export_photo_id` + hash + size in the snapshot; the shell
+  // cannot choose an archive path or another item.
+  string export_job_id = 8;
+  string export_photo_id = 9;
+  bytes export_hash = 10;
 }
 
 // WHERE STAGED BYTES LIVE ON THIS PHONE (#1080 ruling 6).
@@ -182,6 +188,9 @@ enum StageSource {
   // them into the spool in the same stream (#1080, the root's ruling A8); it
   // keeps no plaintext copy.
   STAGE_SOURCE_OS_LIBRARY = 2;
+  // One OS original streamed into a core-owned whole-vault ZIP job. It is
+  // hashed and checked against that job's snapshot, never stored in ByteStore.
+  STAGE_SOURCE_EXPORT_ARCHIVE = 3;
 }
 
 message StageChunk {
@@ -241,4 +250,14 @@ message StageHandle {
   // would re-make and re-stage what the vault holds. A shell renders only the
   // tiers it is not told about.
   repeated string derivatives_held = 4;
+  // Nonzero only for an OS original supplied to a whole-vault archive.
+  ExportDisposition export_disposition = 5;
+
+  enum ExportDisposition {
+    EXPORT_DISPOSITION_UNSPECIFIED = 0;
+    // The bounded stage file is ready for the async export COMMIT step.
+    EXPORT_DISPOSITION_STAGED = 4;
+  }
+  // Opaque Rust staging-session id; never a path. Set only for a staged export original.
+  string export_stage_id = 6;
 }

@@ -34,6 +34,14 @@ pub fn line(locale: Locale, label: &str) -> Option<wire::OriginLine> {
 
 /// The line for `entity_id`'s page, when it came from somewhere other than the member's typing.
 pub fn read(ctx: &Ctx, entity_id: &str) -> Option<wire::OriginLine> {
+    let found = read_source(ctx, entity_id)?;
+    line(ctx.locale(), &found.label)
+}
+
+/// The recorded origin for `entity_id`, including its system and label. Historical descriptions
+/// use this persisted relation and never infer a source from the current phone's platform.
+#[must_use]
+pub fn read_source(ctx: &Ctx, entity_id: &str) -> Option<wire::OriginOf> {
     if entity_id.is_empty() {
         return None;
     }
@@ -50,7 +58,7 @@ pub fn read(ctx: &Ctx, entity_id: &str) -> Option<wire::OriginLine> {
     let Reading::Data(found) = reading else {
         return None;
     };
-    line(ctx.locale(), &found.label)
+    Some(found)
 }
 
 #[cfg(test)]

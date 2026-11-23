@@ -110,6 +110,45 @@ fn saved_paths(d: &Driver) -> Vec<wire::SaveFilePath> {
         .collect()
 }
 
+/// Drive the typed asynchronous whole-vault export until the staged archive
+/// reaches the OS save effect. The test shell has no photo-library provider,
+/// so each requested OS original is answered as unavailable and the core must
+/// finish a valid archive with an honest omission. Each wait is for a pushed
+/// event; the fixed iteration cap bounds a stuck test without timing assertions.
+fn finish_archive(d: &mut Driver, instance: u64) {
+    for _ in 0..64 {
+        if !saved_paths(d).is_empty() {
+            return;
+        }
+        if let Some(at) = d.effects.iter().position(|request| {
+            request.instance == instance
+                && matches!(
+                    request.effect.as_ref().and_then(|effect| effect.kind.as_ref()),
+                    Some(wire::effect::Kind::ExportOriginals(originals))
+                        if originals.mode == wire::export_originals::Mode::Archive as i32
+                )
+        }) {
+            let request = d.effects.remove(at);
+            d.send(
+                instance,
+                E::EffectResult(wire::EffectResult {
+                    effect_id: request.effect_id,
+                    outcome: Some(wire::effect_result::Outcome::OriginalsExported(
+                        wire::OriginalsExported {
+                            archive_disposition:
+                                wire::originals_exported::ArchiveDisposition::Unavailable as i32,
+                            ..wire::OriginalsExported::default()
+                        },
+                    )),
+                }),
+            );
+        } else {
+            d.pump(std::time::Duration::from_secs(1));
+        }
+    }
+    panic!("the whole-vault export did not reach its staged archive effect");
+}
+
 #[test]
 fn settings_has_an_export_row_that_opens_a_page_with_one_row() {
     let (mut d, settings) = started();
@@ -141,6 +180,7 @@ fn a_tap_asks_the_owner_check_then_offers_the_staged_archive_to_the_save_sheet()
         "nothing is made before the check"
     );
     answer_owner_check(&mut d, wire::owner_checked::Outcome::Succeeded, true);
+    finish_archive(&mut d, i);
     let saves = saved_paths(&d);
     assert_eq!(saves.len(), 1);
     let save = &saves[0];
@@ -196,6 +236,7 @@ fn a_phone_with_no_passcode_saves_with_the_warning() {
     let i = open(&mut d, settings);
     tap(&mut d, i);
     answer_owner_check(&mut d, wire::owner_checked::Outcome::Unavailable, false);
+    finish_archive(&mut d, i);
     assert_eq!(saved_paths(&d).len(), 1, "it goes ahead");
     d.answer_effect(wire::effect_result::Outcome::Done(wire::EffectDone {}));
     let status = transfer(d.view(i)).status.clone().expect("a line");

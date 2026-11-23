@@ -1532,6 +1532,7 @@ impl Screen for Lightbox {
                                     sensitive: false,
                                     // A place is not a secret: the clip stays.
                                     clear_after_ms: 0,
+                                    owner_vault_id: String::new(),
                                 },
                             ))];
                         }

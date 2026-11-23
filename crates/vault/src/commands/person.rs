@@ -1181,16 +1181,31 @@ pub(crate) fn vcard_file(
     list: Option<&str>,
     person: Option<&str>,
 ) -> Result<(String, usize)> {
+    vcard_file_with_owner(connection, list, person, false)
+}
+
+/// The aggregate's People folder includes the member's own saved card too.
+pub(crate) fn vcard_file_for_vault(connection: &rusqlite::Connection) -> Result<(String, usize)> {
+    vcard_file_with_owner(connection, None, None, true)
+}
+
+fn vcard_file_with_owner(
+    connection: &rusqlite::Connection,
+    list: Option<&str>,
+    person: Option<&str>,
+    include_owner: bool,
+) -> Result<(String, usize)> {
     let mut people = connection.prepare_cached(
         "SELECT e.id, e.title, p.nickname, p.role, p.birthday
            FROM entity e JOIN person p ON p.id = e.id
-          WHERE e.kind = 'person' AND e.deleted_at IS NULL AND e.id IS NOT (SELECT self_id FROM vault)
+          WHERE e.kind = 'person' AND e.deleted_at IS NULL
+            AND (?3 OR e.id IS NOT (SELECT self_id FROM vault))
             AND (?1 IS NULL OR e.id IN (SELECT to_id FROM edge WHERE from_id = ?1 AND rel = 'contains'))
             AND (?2 IS NULL OR e.id = ?2)
           ORDER BY e.title COLLATE NOCASE, e.created_at, e.id",
     )?;
     let rows = people
-        .query_map(rusqlite::params![list, person], |row| {
+        .query_map(rusqlite::params![list, person, include_owner], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
