@@ -8,6 +8,8 @@ description: >-
 
 The phone is the vault; the gateway is a blind store for its sealed backup. "Backed up" says only what a gateway acknowledged.
 
+The plane is being rewritten from [`contracts/backup/spec.md`](../../../contracts/backup/spec.md) ([#1209](https://github.com/srikanth235/centraid/issues/1209)); work on #1209 reads the spec, not the pages below.
+
 | If you are doing | Read |
 | --- | --- |
 | Deciding what backup may claim or do | [product.md](product.md) |

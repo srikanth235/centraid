@@ -37,6 +37,7 @@ These are decided. Do not build them, propose them in passing, or leave a hook "
 - **A recognition plane.** No faces, no People-in-photos, no memories, no enrichment queue or engine profiles, no "prioritise" controls. If on-device detection is ever wanted, it is proposed separately.
 - **Map SDKs and tile fetches.** A tile URL is a bounding box and tells a server roughly where a member photographs. Places are drawn as a zero-egress plot of the member's own coordinates.
 - **Breach checking and anything else that sends Locker data off the phone.** Weak and reused password scoring is likewise not done and is said not to be.
+- **A second vault on the phone (v0)** (owner, 2026-11-23, #1209). One vault per phone. Everything stays vault-scoped (keys, state files, tokens, gateway namespaces) so a second vault later is a feature, not a migration.
 - **Shared expenses.** No Tally, group balances, debts or settle verbs. Money is one person's own imported statements.
 - **Sample data in a member's vault.** No example vault, no sample mark, no "See an example". The first vault is the member's alone.
 - **Sharing-era vocabulary on the phone.** No copy says "gateway", "queued for the vault" or "owner" to a member who is looking at their own data.
