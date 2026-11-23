@@ -19,7 +19,7 @@ Where this file and [`decisions.md`](decisions.md) disagree, this file wins. `de
 
 Every stored object (vault range, tree node, thumbnail chunk, original chunk) is one sealed chunk of at most `CHUNK_BYTES` plaintext.
 
-Keys (per vault; `root_key` from the 24 words as today, `BackupKeys::from_root` kept):
+Keys (per vault: `root_key` is `seed / vault'(i) / root'` from the 24 words, as today, so two vaults never share a key; `BackupKeys::from_root` kept):
 
 ```
 K_backup = derive_key("centraid backup v2 root",  root_key)        (kept)
@@ -33,16 +33,17 @@ For a chunk's plaintext `p` and its class byte `c` (§3):
 ```
 name   = blake3_keyed(K_name, "obj3" ‖ c ‖ p)                       32 bytes
 body   = zstd(p) if strictly shorter, else p;  flags bit0 = compressed
-nonce  = blake3_keyed(K_nonce, name)[0..24]
 aad    = "CSB3" ‖ u8(3) ‖ flags ‖ c ‖ name
+nonce  = blake3_keyed(K_nonce, aad ‖ blake3(body))[0..24]
 object = "CSB3" ‖ u8(3) ‖ flags ‖ c ‖ nonce ‖ XChaCha20-Poly1305(K_obj, nonce, aad, body)
 digest = blake3(object)                                            32 bytes
 ```
 
 - Same `p` and `c` in the same vault always give the same `name`, `object` and `digest`, so a chunk is rebuilt from its source instead of being kept, and a resend is byte-identical.
-- What a gateway learns is equality of chunks within one vault, which the keyed name already reveals, plus the sealed length (as today).
-- `zstd` stays pinned exactly; `contracts/crypto/` gains `sealed3-vectors.json` (key derivations, names, objects, digests for fixed inputs, compressed and not) and the chunk-digest vectors are regenerated as a deliberate format change.
-- Open an object: check `digest`, check the header, decrypt with `aad`, decompress if flagged, then recompute `name` from the plaintext and compare. Any mismatch is "damaged".
+- The nonce covers the sealed body (SIV-style), so no `(K_obj, nonce)` pair ever meets two bodies, even if zstd's output changed.
+- What a gateway learns: equality of chunks within one vault, at chunk granularity (shared chunks between files and between versions are visible), which the keyed names already reveal, plus the sealed length (as today). Nothing across vaults.
+- `zstd` stays pinned exactly. Changing its version, level or parameters changes held objects' bodies and digests: it is a format change (`centraid-sealed/4`). `contracts/crypto/` gains `sealed3-vectors.json` (key derivations, names, nonces, objects, digests for fixed inputs, compressed and not), which pins the compressed output; the chunk-digest vectors are regenerated as a deliberate format change.
+- Open an object: check `digest`; refuse an unknown flag bit, a class other than the ref's, or a length past the largest sealed chunk; decrypt with the `aad` built from the name it was fetched under; decompress, refusing output past `CHUNK_BYTES`; recompute `name` from the plaintext and `nonce` from `aad ‖ blake3(body)` and compare both. Any mismatch is "damaged".
 - A ref to an object is `{name: 32, digest: 32, len: u32 (sealed length), class: u8}`.
 
 ## 3. The tree (manifest v5)
@@ -154,4 +155,4 @@ The Python model this is ported from is attached to the design doc linked in #12
 
 ## 10. Reviews
 
-- **Crypto review of §2:** pending. Recorded here with its outcome before wave 1 writes sealing code.
+- **Crypto review of §2** (2026-11-23): approved with changes, all applied above. Blocker fixed: the nonce was derived from `name` alone, so a change in zstd's output would have reused a `(key, nonce)` pair over a different body; it now derives from `aad ‖ blake3(body)`. Also applied: the open procedure refuses unknown flags, a wrong class, oversize objects and oversize decompression, and checks the nonce; a zstd change is named a format change; chunk-granular equality is stated as what the gateway learns. Key separation confirmed: `root_key` is already per vault.
