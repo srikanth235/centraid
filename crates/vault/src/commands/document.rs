@@ -248,93 +248,145 @@ pub(crate) fn write_words(ctx: &CommandCtx<'_, '_>, words: &str) -> Result<Strin
 /// The words the phone read out of the bytes (a PDF's text, a scan's OCR), when it
 /// sent them with the file: they are the blob's `text` derivative, so the
 /// document is found by them from the first moment.
-fn keep_extracted_text(ctx: &CommandCtx<'_, '_>, blob: &str) -> Result<()> {
-    if let Some(text) = ctx.optional_str("text").filter(|text| !text.is_empty()) {
+fn keep_extracted_text(ctx: &CommandCtx<'_, '_>, blob: &str, text: Option<&str>) -> Result<()> {
+    if let Some(text) = text.filter(|text| !text.is_empty()) {
         crate::blob::write_derivative(ctx.connection(), &ctx.now, blob, "text", None, Some(text))?;
     }
     Ok(())
 }
 
+#[derive(serde::Deserialize)]
+struct AddDocumentInput {
+    id: Option<String>,
+    title: String,
+    blob: String,
+    media_type: String,
+    folder_id: Option<String>,
+    text: Option<String>,
+}
+
 fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let input: AddDocumentInput = ctx.parse_input()?;
     claim(ctx, "blob")?;
-    keep_extracted_text(ctx, ctx.required_str("blob")?)?;
+    keep_extracted_text(ctx, &input.blob, input.text.as_deref())?;
     let id = found(
         ctx,
-        ctx.optional_str("id"),
-        ctx.required_str("title")?,
-        ctx.required_str("blob")?,
-        ctx.required_str("media_type")?,
-        ctx.optional_str("folder_id"),
+        input.id.as_deref(),
+        &input.title,
+        &input.blob,
+        &input.media_type,
+        input.folder_id.as_deref(),
     )?;
     arrival::record(ctx, &id, Kind::Document)?;
     Ok(serde_json::json!({ "id": id }))
 }
 
+#[derive(serde::Deserialize)]
+struct CreateTextInput {
+    id: Option<String>,
+    title: String,
+    body_text: Option<String>,
+    media_type: Option<String>,
+    folder_id: Option<String>,
+}
+
 fn create_text(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let words = ctx.optional_str("body_text").unwrap_or_default();
-    let hash = write_words(ctx, words)?;
+    let input: CreateTextInput = ctx.parse_input()?;
+    let hash = write_words(ctx, input.body_text.as_deref().unwrap_or_default())?;
     let id = found(
         ctx,
-        ctx.optional_str("id"),
-        ctx.required_str("title")?,
+        input.id.as_deref(),
+        &input.title,
         &hash,
-        ctx.optional_str("media_type").unwrap_or("text/plain"),
-        ctx.optional_str("folder_id"),
+        input.media_type.as_deref().unwrap_or("text/plain"),
+        input.folder_id.as_deref(),
     )?;
     Ok(serde_json::json!({ "id": id }))
+}
+
+#[derive(serde::Deserialize)]
+struct EditDocumentInput {
+    id: String,
+    body_text: Option<String>,
+    title: Option<String>,
 }
 
 fn edit(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let id = ctx.required_str("id")?;
-    if let Some(words) = ctx.optional_str("body_text") {
+    let input: EditDocumentInput = ctx.parse_input()?;
+    if let Some(words) = input.body_text.as_deref() {
         let hash = write_words(ctx, words)?;
-        let media_type = media_type_of(ctx, id)?.unwrap_or_default();
-        set_content(ctx, id, &hash, &media_type)?;
+        let media_type = media_type_of(ctx, &input.id)?.unwrap_or_default();
+        set_content(ctx, &input.id, &hash, &media_type)?;
     }
-    if let Some(title) = ctx.optional_str("title") {
+    if let Some(title) = input.title.as_deref() {
         ctx.connection().execute(
             "UPDATE entity SET title = ?2 WHERE id = ?1",
-            [id, title.trim()],
+            [input.id.as_str(), title.trim()],
         )?;
     }
-    with_rev(ctx, id, serde_json::json!({ "id": id }))
+    with_rev(ctx, &input.id, serde_json::json!({ "id": input.id }))
+}
+
+#[derive(serde::Deserialize)]
+struct ReplaceDocumentInput {
+    id: String,
+    blob: String,
+    media_type: Option<String>,
+    title: Option<String>,
+    text: Option<String>,
 }
 
 fn replace(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let id = ctx.required_str("id")?;
-    let media_type = match ctx.optional_str("media_type") {
-        Some(media_type) => media_type.to_owned(),
-        None => media_type_of(ctx, id)?.unwrap_or_default(),
+    let input: ReplaceDocumentInput = ctx.parse_input()?;
+    let media_type = match input.media_type {
+        Some(media_type) => media_type,
+        None => media_type_of(ctx, &input.id)?.unwrap_or_default(),
     };
     claim(ctx, "blob")?;
-    keep_extracted_text(ctx, ctx.required_str("blob")?)?;
-    let replaced = set_content(ctx, id, ctx.required_str("blob")?, &media_type)?;
-    if let Some(title) = ctx.optional_str("title") {
+    keep_extracted_text(ctx, &input.blob, input.text.as_deref())?;
+    let replaced = set_content(ctx, &input.id, &input.blob, &media_type)?;
+    if let Some(title) = input.title.as_deref() {
         ctx.connection().execute(
             "UPDATE entity SET title = ?2 WHERE id = ?1",
-            [id, title.trim()],
+            [input.id.as_str(), title.trim()],
         )?;
     }
-    Ok(serde_json::json!({ "id": id, "replaced": replaced }))
+    Ok(serde_json::json!({ "id": input.id, "replaced": replaced }))
+}
+
+#[derive(serde::Deserialize)]
+struct MoveDocumentInput {
+    id: String,
+    folder_id: Option<String>,
 }
 
 fn move_document(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let id = ctx.required_str("id")?;
+    let input: MoveDocumentInput = ctx.parse_input()?;
     ctx.connection().execute(
         "UPDATE document SET folder_id = ?2 WHERE id = ?1",
-        rusqlite::params![id, ctx.optional_str("folder_id")],
+        rusqlite::params![input.id, input.folder_id],
     )?;
-    Ok(serde_json::json!({ "id": id }))
+    Ok(serde_json::json!({ "id": input.id }))
+}
+
+#[derive(serde::Deserialize)]
+struct RestoreDocumentVersionInput {
+    id: String,
+    seq: Option<i64>,
 }
 
 fn restore_version(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let id = ctx.required_str("id")?;
-    let seq = ctx.input["seq"].as_i64().unwrap_or_default();
+    let input: RestoreDocumentVersionInput = ctx.parse_input()?;
     // The bytes of the version: one path with every other restore (`history.restore_version`),
     // limited to the content, as this verb always was.
-    let restored = crate::history::restore_version(ctx, id, seq, crate::history::Scope::Content)?
-        .is_some_and(|restored| restored.restored);
-    Ok(serde_json::json!({ "id": id, "restored": restored }))
+    let restored = crate::history::restore_version(
+        ctx,
+        &input.id,
+        input.seq.unwrap_or_default(),
+        crate::history::Scope::Content,
+    )?
+    .is_some_and(|restored| restored.restored);
+    Ok(serde_json::json!({ "id": input.id, "restored": restored }))
 }
 
 #[must_use]

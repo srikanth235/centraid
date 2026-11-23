@@ -617,12 +617,17 @@ fn import(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     Ok(report)
 }
 
+#[derive(serde::Deserialize)]
+struct ExportNoteInput {
+    notebook_id: Option<String>,
+}
+
 /// `note.export`: the member's notes (a notebook's, or all) as Markdown files in an archive,
 /// a folder per notebook, `[[links]]` as written, tags in front matter. Writes nothing.
 /// Journal entries are People's and are not exported here.
 fn export(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let (archive_name, entries) =
-        markdown_entries(ctx.connection(), ctx.optional_str("notebook_id"))?;
+    let input: ExportNoteInput = ctx.parse_input()?;
+    let (archive_name, entries) = markdown_entries(ctx.connection(), input.notebook_id.as_deref())?;
     let count = entries.len();
     let bytes = portable::zip(&entries);
     Ok(serde_json::json!({

@@ -326,6 +326,60 @@ fn keep_thumbnail(ctx: &CommandCtx<'_, '_>, uri: &str) -> Result<String> {
     Ok(hash)
 }
 
+#[derive(serde::Deserialize)]
+struct CardInput {
+    app: String,
+    entity: String,
+    id: String,
+    #[serde(default)]
+    qualifier: String,
+    title: String,
+    #[serde(default)]
+    subtitle: String,
+    #[serde(default)]
+    meta: String,
+}
+
+#[derive(serde::Deserialize)]
+struct AttachmentInput {
+    form: String,
+    label: String,
+    entity_id: Option<String>,
+    thumbnail_data_uri: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct QuestionInput {
+    text: String,
+    #[serde(default)]
+    attachments: Vec<AttachmentInput>,
+}
+
+#[derive(serde::Deserialize, Default)]
+struct AnswerInput {
+    outcome: String,
+    text: Option<String>,
+    refusal: Option<String>,
+    notice: Option<String>,
+    record_json: Option<String>,
+    #[serde(default)]
+    cards: Vec<CardInput>,
+}
+
+#[derive(serde::Deserialize)]
+struct TurnInput {
+    question: QuestionInput,
+    answer: AnswerInput,
+}
+
+#[derive(serde::Deserialize)]
+struct SaveTurnInput {
+    thread_id: Option<String>,
+    replace_last: Option<bool>,
+    scope_app: Option<String>,
+    turn: TurnInput,
+}
+
 fn insert_message(
     ctx: &CommandCtx<'_, '_>,
     thread_id: &str,
@@ -333,21 +387,19 @@ fn insert_message(
     role: &str,
     outcome: &str,
     text: &str,
-    answer: &Value,
+    answer: &AnswerInput,
 ) -> Result<()> {
-    let cards = answer.get("cards").cloned().unwrap_or_else(|| json!([]));
-    let card = |card: &Value| {
-        json!({
-            "app": str_of(card, "app"), "entity": str_of(card, "entity"), "id": str_of(card, "id"),
-            "qualifier": str_of(card, "qualifier"), "title": str_of(card, "title"),
-            "subtitle": str_of(card, "subtitle"), "meta": str_of(card, "meta"),
+    let snapshot: Vec<Value> = answer
+        .cards
+        .iter()
+        .map(|card| {
+            json!({
+                "app": card.app, "entity": card.entity, "id": card.id,
+                "qualifier": card.qualifier, "title": card.title,
+                "subtitle": card.subtitle, "meta": card.meta,
+            })
         })
-    };
-    let snapshot: Vec<Value> = cards
-        .as_array()
-        .map(|all| all.iter().map(card).collect())
-        .unwrap_or_default();
-    let text_of = |key: &str| answer.get(key).and_then(Value::as_str);
+        .collect();
     ctx.connection().execute(
         "INSERT INTO message
            (thread_id, ordinal, role, text, outcome, refusal, notice, record, cards, created_at, updated_at)
@@ -358,9 +410,9 @@ fn insert_message(
             role,
             text,
             outcome,
-            text_of("refusal"),
-            text_of("notice"),
-            text_of("record_json"),
+            answer.refusal,
+            answer.notice,
+            answer.record_json,
             Value::Array(snapshot).to_string(),
             ctx.now,
         ],
@@ -369,25 +421,26 @@ fn insert_message(
 }
 
 fn save_turn(ctx: &CommandCtx<'_, '_>) -> Result<Value> {
-    let question = &turn(ctx)["question"];
-    let answer = &turn(ctx)["answer"];
+    let input: SaveTurnInput = ctx.parse_input()?;
+    let question = &input.turn.question;
+    let answer = &input.turn.answer;
     let connection = ctx.connection();
 
     // THE THREAD: the named one, or a new one titled by its first question.
-    let (thread_id, created) = match ctx.optional_str("thread_id") {
-        Some(existing) => (existing.to_owned(), false),
+    let (thread_id, created) = match input.thread_id {
+        Some(existing) => (existing, false),
         None => {
-            let id = ctx.insert_entity(Kind::Thread, &title_of(str_of(question, "text")))?;
+            let id = ctx.insert_entity(Kind::Thread, &title_of(&question.text))?;
             connection.execute(
                 "INSERT INTO thread (id, scope) VALUES (?1, ?2)",
-                rusqlite::params![id, ctx.optional_str("scope_app")],
+                rusqlite::params![id, input.scope_app],
             )?;
             (id, true)
         }
     };
 
     // A REGENERATE REPLACES THE LAST TURN: its two messages (and their attachments, by cascade) go.
-    if replaces(ctx) && !created {
+    if input.replace_last.unwrap_or(false) && !created {
         let last = last_answer(ctx, &thread_id)?.map_or(0, |(ordinal, _)| ordinal);
         connection.execute(
             "DELETE FROM message WHERE thread_id = ?1 AND ordinal >= ?2",
@@ -408,34 +461,35 @@ fn save_turn(ctx: &CommandCtx<'_, '_>) -> Result<Value> {
         |row| row.get(0),
     )?;
     let assistant_ordinal = user_ordinal + 1;
+    let empty_answer = AnswerInput::default();
     insert_message(
         ctx,
         &thread_id,
         user_ordinal,
         "user",
         "sent",
-        str_of(question, "text"),
-        &json!({}),
+        &question.text,
+        &empty_answer,
     )?;
     insert_message(
         ctx,
         &thread_id,
         assistant_ordinal,
         "assistant",
-        str_of(answer, "outcome"),
-        str_of(answer, "text"),
+        &answer.outcome,
+        answer.text.as_deref().unwrap_or_default(),
         answer,
     )?;
 
     // THE ATTACHMENTS: an entity the engine keeps honest, or a thumbnail rented from the blob plane.
-    for (position, attachment) in attachments(ctx).iter().enumerate() {
+    for (position, attachment) in question.attachments.iter().enumerate() {
         let entity_id = attachment
-            .get("entity_id")
-            .and_then(Value::as_str)
+            .entity_id
+            .as_deref()
             .filter(|id| matches!(find(connection, id), Ok(Some(_))));
         let thumb = attachment
-            .get("thumbnail_data_uri")
-            .and_then(Value::as_str)
+            .thumbnail_data_uri
+            .as_deref()
             .map(|uri| keep_thumbnail(ctx, uri))
             .transpose()?;
         connection.execute(
@@ -445,8 +499,8 @@ fn save_turn(ctx: &CommandCtx<'_, '_>) -> Result<Value> {
                 thread_id,
                 user_ordinal,
                 i64::try_from(position).unwrap_or(0),
-                str_of(attachment, "form"),
-                str_of(attachment, "label"),
+                attachment.form,
+                attachment.label,
                 entity_id,
                 thumb,
             ],
@@ -489,16 +543,22 @@ fn pre_settle(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok((!waiting).then(|| "Nothing is waiting on that.".to_owned()))
 }
 
+#[derive(serde::Deserialize)]
+struct SettleProposalInput {
+    thread_id: String,
+    outcome: String,
+    text: Option<String>,
+}
+
 fn settle_proposal(ctx: &CommandCtx<'_, '_>) -> Result<Value> {
-    let thread_id = ctx.required_str("thread_id")?;
-    let outcome = ctx.required_str("outcome")?;
-    let Some((ordinal, current)) = last_answer(ctx, thread_id)? else {
-        return Ok(json!({ "thread_id": thread_id, "settled": false }));
+    let input: SettleProposalInput = ctx.parse_input()?;
+    let Some((ordinal, current)) = last_answer(ctx, &input.thread_id)? else {
+        return Ok(json!({ "thread_id": input.thread_id, "settled": false }));
     };
     // A tap delivered twice settles once: the second finds it settled the way it asks.
-    if current == outcome {
+    if current == input.outcome {
         return Ok(
-            json!({ "thread_id": thread_id, "assistant_ordinal": ordinal, "settled": false }),
+            json!({ "thread_id": input.thread_id, "assistant_ordinal": ordinal, "settled": false }),
         );
     }
     // The settled line replaces the proposal's, in the statement that moves the outcome (the trigger
@@ -506,16 +566,10 @@ fn settle_proposal(ctx: &CommandCtx<'_, '_>) -> Result<Value> {
     ctx.connection().execute(
         "UPDATE message SET outcome = ?1, text = COALESCE(?2, text), updated_at = ?3
           WHERE thread_id = ?4 AND ordinal = ?5",
-        rusqlite::params![
-            outcome,
-            ctx.optional_str("text"),
-            ctx.now,
-            thread_id,
-            ordinal
-        ],
+        rusqlite::params![input.outcome, input.text, ctx.now, input.thread_id, ordinal],
     )?;
-    ctx.touch(thread_id)?;
-    Ok(json!({ "thread_id": thread_id, "assistant_ordinal": ordinal, "settled": true }))
+    ctx.touch(&input.thread_id)?;
+    Ok(json!({ "thread_id": input.thread_id, "assistant_ordinal": ordinal, "settled": true }))
 }
 
 fn clear(ctx: &CommandCtx<'_, '_>) -> Result<Value> {

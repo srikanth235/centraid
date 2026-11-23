@@ -287,6 +287,18 @@ fn replace_memo(ctx: &CommandCtx<'_, '_>, item_id: &str, note: &str) -> Result<(
     Ok(())
 }
 
+#[derive(serde::Deserialize)]
+struct SetFieldInput {
+    item_id: String,
+    field_id: Option<String>,
+    section: Option<String>,
+    label: String,
+    kind: String,
+    value: Option<String>,
+    position: Option<i64>,
+    key_id: Option<String>,
+}
+
 pub(super) fn set_field() -> CommandDefinition {
     let mut definition = definition(
         "locker.set_field",
@@ -309,21 +321,18 @@ pub(super) fn set_field() -> CommandDefinition {
         SET_FIELD_PRE,
         NONE,
         |ctx| {
-            let item_id = ctx.required_str("item_id")?.to_owned();
-            let kind = ctx.required_str("kind")?.to_owned();
-            let label = ctx.required_str("label")?.to_owned();
-            let value = ctx.optional_str("value").map(str::to_owned);
-            let field_id = ctx.optional_str("field_id").map(str::to_owned);
-            let sealed_value = is_sealed_kind(&kind)
-                && value
+            let input: SetFieldInput = ctx.parse_input()?;
+            let sealed_value = is_sealed_kind(&input.kind)
+                && input
+                    .value
                     .as_deref()
                     .is_some_and(|value| !value.is_empty() && value != SEALED_PLACEHOLDER);
-            if is_sealed_kind(&kind) {
-                assert_sealed_cell("value", value.as_deref())?;
+            if is_sealed_kind(&input.kind) {
+                assert_sealed_cell("value", input.value.as_deref())?;
             }
             assert_key_generation(ctx, sealed_value)?;
             // A NEW sealed field needs the caller's id, for the AAD reason.
-            if sealed_value && field_id.is_none() {
+            if sealed_value && input.field_id.is_none() {
                 return Err(invalid(
                     "field_id",
                     "a new sealed custom field must carry the id it was sealed against, \
@@ -333,18 +342,14 @@ pub(super) fn set_field() -> CommandDefinition {
             }
             let written = write_field(
                 ctx,
-                &item_id,
+                &input.item_id,
                 &FieldWrite {
-                    field_id: field_id.as_deref(),
-                    section: ctx.optional_str("section").unwrap_or(""),
-                    label: &label,
-                    kind: &kind,
-                    value: value.as_deref(),
-                    position: ctx
-                        .input
-                        .get("position")
-                        .and_then(serde_json::Value::as_i64)
-                        .unwrap_or(0),
+                    field_id: input.field_id.as_deref(),
+                    section: input.section.as_deref().unwrap_or(""),
+                    label: &input.label,
+                    kind: &input.kind,
+                    value: input.value.as_deref(),
+                    position: input.position.unwrap_or(0),
                 },
             )?;
             // A sealed field's `key_id` is stamped on the field row, like
@@ -352,14 +357,20 @@ pub(super) fn set_field() -> CommandDefinition {
             if sealed_value {
                 ctx.connection().execute(
                     "UPDATE locker_item_field SET key_id = ?1 WHERE id = ?2",
-                    rusqlite::params![ctx.optional_str("key_id"), written],
+                    rusqlite::params![input.key_id, written],
                 )?;
             }
-            Ok(serde_json::json!({ "field_id": written, "item_id": item_id }))
+            Ok(serde_json::json!({ "field_id": written, "item_id": input.item_id }))
         },
     );
     definition.sealed_input = &["value"];
     definition
+}
+
+#[derive(serde::Deserialize)]
+struct RemoveFieldInput {
+    item_id: String,
+    field_id: String,
 }
 
 pub(super) fn remove_field() -> CommandDefinition {
@@ -378,15 +389,25 @@ pub(super) fn remove_field() -> CommandDefinition {
         ITEM_LIVE,
         NONE,
         |ctx| {
-            let item_id = ctx.required_str("item_id")?.to_owned();
-            let field_id = ctx.required_str("field_id")?.to_owned();
+            let input: RemoveFieldInput = ctx.parse_input()?;
             ctx.connection().execute(
                 "DELETE FROM locker_item_field WHERE id = ?1 AND item_id = ?2 AND field_key IS NULL",
-                rusqlite::params![field_id, item_id],
+                rusqlite::params![input.field_id, input.item_id],
             )?;
-            Ok(serde_json::json!({ "field_id": field_id, "item_id": item_id }))
+            Ok(serde_json::json!({ "field_id": input.field_id, "item_id": input.item_id }))
         },
     )
+}
+
+#[derive(serde::Deserialize)]
+struct AddressEntry {
+    url: String,
+}
+
+#[derive(serde::Deserialize)]
+struct SetAddressesInput {
+    item_id: String,
+    addresses: Vec<AddressEntry>,
 }
 
 pub(super) fn set_addresses_command() -> CommandDefinition {
@@ -412,24 +433,27 @@ pub(super) fn set_addresses_command() -> CommandDefinition {
         ITEM_LIVE,
         NONE,
         |ctx| {
-            let item_id = ctx.required_str("item_id")?.to_owned();
-            let addresses: Vec<String> = ctx
-                .input
-                .get("addresses")
-                .and_then(serde_json::Value::as_array)
-                .map(|list| {
-                    list.iter()
-                        .filter_map(|address| Some(address.get("url")?.as_str()?.to_owned()))
-                        .collect()
-                })
-                .unwrap_or_default();
-            // `locker_item.url` stays the PRIMARY, so the connector binding
+            let input: SetAddressesInput = ctx.parse_input()?;
+            let addresses: Vec<String> = input.addresses.into_iter().map(|a| a.url).collect();
+            // The primary `url` field stays in `locker_item_field`, so the connector binding
             // and Review's unsecured-address check keep working. No secret is involved, which is why this one takes the
             // whole list.
-            let written = set_addresses(ctx, &item_id, &addresses)?;
-            Ok(serde_json::json!({ "item_id": item_id, "count": written }))
+            let written = set_addresses(ctx, &input.item_id, &addresses)?;
+            Ok(serde_json::json!({ "item_id": input.item_id, "count": written }))
         },
     )
+}
+
+#[derive(serde::Deserialize)]
+struct SetPasskeyInput {
+    item_id: String,
+    rp_id: String,
+    user_handle: Option<String>,
+    display_name: Option<String>,
+    credential_id: Option<String>,
+    algorithm: Option<String>,
+    private_key: Option<String>,
+    key_id: Option<String>,
 }
 
 pub(super) fn set_passkey() -> CommandDefinition {
@@ -454,10 +478,10 @@ pub(super) fn set_passkey() -> CommandDefinition {
         SET_PASSKEY_PRE,
         NONE,
         |ctx| {
-            let item_id = ctx.required_str("item_id")?.to_owned();
-            let private_key = ctx.optional_str("private_key").map(str::to_owned);
-            assert_sealed_cell("private_key", private_key.as_deref())?;
-            let sealed = private_key
+            let input: SetPasskeyInput = ctx.parse_input()?;
+            assert_sealed_cell("private_key", input.private_key.as_deref())?;
+            let sealed = input
+                .private_key
                 .as_deref()
                 .is_some_and(|value| !value.is_empty() && value != SEALED_PLACEHOLDER);
             assert_key_generation(ctx, sealed)?;
@@ -470,7 +494,7 @@ pub(super) fn set_passkey() -> CommandDefinition {
                 .query_row(
                     "SELECT private_key, key_id, created_at
                        FROM locker_item_passkey WHERE item_id = ?1",
-                    [&item_id],
+                    [&input.item_id],
                     |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
                 )
                 .ok();
@@ -479,17 +503,16 @@ pub(super) fn set_passkey() -> CommandDefinition {
             // because a caller that never held the key has no generation to
             // name; writing the input's absent `key_id` over the stored one
             // left a ciphertext that named no generation.
-            let (stored, stored_key_id) = if private_key.as_deref() == Some(SEALED_PLACEHOLDER) {
-                existing.as_ref().map_or((None, None), |(key, key_id, _)| {
-                    (key.clone(), key_id.clone())
-                })
-            } else {
-                let key = private_key.filter(|value| !value.is_empty());
-                let key_id = key
-                    .as_ref()
-                    .and_then(|_| ctx.optional_str("key_id").map(str::to_owned));
-                (key, key_id)
-            };
+            let (stored, stored_key_id) =
+                if input.private_key.as_deref() == Some(SEALED_PLACEHOLDER) {
+                    existing.as_ref().map_or((None, None), |(key, key_id, _)| {
+                        (key.clone(), key_id.clone())
+                    })
+                } else {
+                    let key = input.private_key.filter(|value| !value.is_empty());
+                    let key_id = key.as_ref().and_then(|_| input.key_id.clone());
+                    (key, key_id)
+                };
             let created_at = existing
                 .as_ref()
                 .map_or_else(|| ctx.now.clone(), |(_, _, created)| created.clone());
@@ -508,23 +531,28 @@ pub(super) fn set_passkey() -> CommandDefinition {
                    key_id = excluded.key_id,
                    updated_at = excluded.updated_at",
                 rusqlite::params![
-                    item_id,
-                    ctx.required_str("rp_id")?,
-                    ctx.optional_str("user_handle"),
-                    ctx.optional_str("display_name"),
-                    ctx.optional_str("credential_id"),
-                    ctx.optional_str("algorithm"),
+                    input.item_id,
+                    input.rp_id,
+                    input.user_handle,
+                    input.display_name,
+                    input.credential_id,
+                    input.algorithm,
                     stored,
                     stored_key_id,
                     created_at,
                     ctx.now
                 ],
             )?;
-            Ok(item_id_output(&item_id))
+            Ok(item_id_output(&input.item_id))
         },
     );
     definition.sealed_input = &["private_key"];
     definition
+}
+
+#[derive(serde::Deserialize)]
+struct ClearPasskeyInput {
+    item_id: String,
 }
 
 pub(super) fn clear_passkey() -> CommandDefinition {
@@ -535,14 +563,20 @@ pub(super) fn clear_passkey() -> CommandDefinition {
         ITEM_LIVE,
         NONE,
         |ctx| {
-            let item_id = ctx.required_str("item_id")?.to_owned();
+            let input: ClearPasskeyInput = ctx.parse_input()?;
             ctx.connection().execute(
                 "DELETE FROM locker_item_passkey WHERE item_id = ?1",
-                [&item_id],
+                [&input.item_id],
             )?;
-            Ok(item_id_output(&item_id))
+            Ok(item_id_output(&input.item_id))
         },
     )
+}
+
+#[derive(serde::Deserialize)]
+struct SetMemoInput {
+    item_id: String,
+    note: String,
 }
 
 pub(super) fn set_memo() -> CommandDefinition {
@@ -561,13 +595,13 @@ pub(super) fn set_memo() -> CommandDefinition {
         ITEM_LIVE,
         NONE,
         |ctx| {
-            let item_id = ctx.required_str("item_id")?.to_owned();
+            let input: SetMemoInput = ctx.parse_input()?;
             // An owner remark is a `knowledge.annotation` (#310) and is
             // PLAINTEXT. Secrets go in sealed fields, which stay out of every
             // index; a memo is plain and is part of the item's search text
             // (`index::text_of`). An empty note clears it.
-            replace_memo(ctx, &item_id, ctx.required_str("note")?)?;
-            Ok(item_id_output(&item_id))
+            replace_memo(ctx, &input.item_id, &input.note)?;
+            Ok(item_id_output(&input.item_id))
         },
     )
 }

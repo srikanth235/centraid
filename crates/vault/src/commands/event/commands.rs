@@ -240,14 +240,6 @@ fn invalid(name: &str, detail: String) -> VaultError {
     }
 }
 
-fn reminders_of(ctx: &CommandCtx<'_, '_>) -> Vec<i64> {
-    ctx.input
-        .get("reminders")
-        .and_then(Json::as_array)
-        .map(|list| list.iter().filter_map(Json::as_i64).collect())
-        .unwrap_or_default()
-}
-
 /// Make the event's guests exactly `wanted`: a guest already invited keeps their
 /// answer, a new one has not answered, one left out is taken off the list.
 fn set_guests(ctx: &CommandCtx<'_, '_>, id: &str, wanted: &[&str]) -> Result<()> {
@@ -294,12 +286,14 @@ struct ProposeInput {
     travel_min: Option<i64>,
     status: Option<String>,
     busy: Option<bool>,
+    reminders: Option<Vec<i64>>,
+    attendees: Option<Vec<String>>,
 }
 
 fn propose(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let input: ProposeInput = ctx.parse_input()?;
     let times = times(ctx, None).map_err(|sentence| invalid("starts", sentence))?;
-    let reminders = reminders_of(ctx);
+    let reminders = input.reminders.unwrap_or_default();
     let rule = input.rule.as_deref().map(rrule::canonicalize);
     let id = found(
         ctx,
@@ -321,15 +315,43 @@ fn propose(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             busy: input.busy,
         },
     )?;
-    let invited = guests(ctx);
+    let attendees = input.attendees.unwrap_or_default();
+    let invited: Vec<&str> = attendees.iter().map(String::as_str).collect();
     set_guests(ctx, &id, &invited)?;
     Ok(json!({ "id": id, "attendees": invited.len() }))
 }
 
+#[derive(serde::Deserialize)]
+struct EditEventInput {
+    id: String,
+    title: Option<String>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    description: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    place_id: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    url: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    calendar_id: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    status: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    busy: Option<Option<bool>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    travel_min: Option<Option<i64>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    reminders: Option<Option<Vec<i64>>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    rule: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    attendees: Option<Option<Vec<String>>>,
+}
+
 /// Set the event's own columns from what a command states: a key that is
 /// present is set (`null` clears it), one that is absent is left alone.
-fn write_event(ctx: &CommandCtx<'_, '_>, id: &str, after: &Times) -> Result<()> {
+fn write_event(ctx: &CommandCtx<'_, '_>, input: &EditEventInput, after: &Times) -> Result<()> {
     let connection = ctx.connection();
+    let id = input.id.as_str();
     connection.execute(
         "UPDATE event SET starts = ?2, ends = ?3, timing = ?4, zone = ?5 WHERE id = ?1",
         rusqlite::params![
@@ -340,112 +362,167 @@ fn write_event(ctx: &CommandCtx<'_, '_>, id: &str, after: &Times) -> Result<()> 
             after.zone
         ],
     )?;
-    for column in [
-        "description",
-        "place_id",
-        "url",
-        "calendar_id",
-        "status",
-        "busy",
-        "travel_min",
-    ] {
-        if let Some(value) = ctx.input.get(column) {
-            connection.execute(
-                &format!("UPDATE event SET {column} = ?2 WHERE id = ?1"),
-                rusqlite::params![id, crate::commands::follow::to_sql(value)],
-            )?;
-        }
+    if let Some(description) = &input.description {
+        connection.execute(
+            "UPDATE event SET description = ?2 WHERE id = ?1",
+            rusqlite::params![id, description],
+        )?;
     }
-    if ctx.input.get("reminders").is_some() {
-        set_reminders(connection, id, &reminders_of(ctx))?;
+    if let Some(place_id) = &input.place_id {
+        connection.execute(
+            "UPDATE event SET place_id = ?2 WHERE id = ?1",
+            rusqlite::params![id, place_id],
+        )?;
     }
-    if let Some(rule) = ctx.input.get("rule") {
-        let rule = rule.as_str().map(rrule::canonicalize);
+    if let Some(url) = &input.url {
+        connection.execute(
+            "UPDATE event SET url = ?2 WHERE id = ?1",
+            rusqlite::params![id, url],
+        )?;
+    }
+    if let Some(calendar_id) = &input.calendar_id {
+        connection.execute(
+            "UPDATE event SET calendar_id = ?2 WHERE id = ?1",
+            rusqlite::params![id, calendar_id],
+        )?;
+    }
+    if let Some(status) = &input.status {
+        connection.execute(
+            "UPDATE event SET status = ?2 WHERE id = ?1",
+            rusqlite::params![id, status],
+        )?;
+    }
+    if let Some(busy) = input.busy {
+        connection.execute(
+            "UPDATE event SET busy = ?2 WHERE id = ?1",
+            rusqlite::params![id, busy.map(i64::from)],
+        )?;
+    }
+    if let Some(travel_min) = input.travel_min {
+        connection.execute(
+            "UPDATE event SET travel_min = ?2 WHERE id = ?1",
+            rusqlite::params![id, travel_min],
+        )?;
+    }
+    if let Some(reminders) = &input.reminders {
+        set_reminders(connection, id, reminders.as_deref().unwrap_or_default())?;
+    }
+    if let Some(rule) = &input.rule {
+        let rule = rule.as_deref().map(rrule::canonicalize);
         connection.execute(
             "UPDATE event SET rule = ?2, rule_supported = 1 WHERE id = ?1",
             rusqlite::params![id, rule],
         )?;
     }
-    if let Some(title) = ctx.optional_str("title") {
+    if let Some(title) = input.title.as_deref() {
         connection.execute(
             "UPDATE entity SET title = ?2 WHERE id = ?1",
             [id, title.trim()],
         )?;
     }
-    if ctx.input.get("attendees").is_some() {
-        set_guests(ctx, id, &guests(ctx))?;
+    if let Some(attendees) = &input.attendees {
+        let invited: Vec<&str> = attendees
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .map(String::as_str)
+            .collect();
+        set_guests(ctx, id, &invited)?;
     }
     ctx.touch(id)
 }
 
 fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let id = ctx.required_str("id")?;
-    let row = row_of(ctx.connection(), id)?;
+    let input: EditEventInput = ctx.parse_input()?;
+    let row = row_of(ctx.connection(), &input.id)?;
     let after = times(ctx, Some(&row.times)).map_err(|sentence| invalid("starts", sentence))?;
-    write_event(ctx, id, &after)?;
-    with_rev(ctx, id, json!({ "id": id }))
+    write_event(ctx, &input, &after)?;
+    with_rev(ctx, &input.id, json!({ "id": input.id }))
+}
+
+#[derive(serde::Deserialize)]
+struct CancelEventInput {
+    id: String,
 }
 
 fn cancel(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let id = ctx.required_str("id")?;
-    ctx.connection()
-        .execute("UPDATE event SET status = 'cancelled' WHERE id = ?1", [id])?;
-    Ok(json!({ "id": id }))
+    let input: CancelEventInput = ctx.parse_input()?;
+    ctx.connection().execute(
+        "UPDATE event SET status = 'cancelled' WHERE id = ?1",
+        [input.id.as_str()],
+    )?;
+    Ok(json!({ "id": input.id }))
+}
+
+#[derive(serde::Deserialize)]
+struct RespondEventInput {
+    id: String,
+    person_id: String,
+    state: String,
 }
 
 fn respond(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let (id, person, state) = (
-        ctx.required_str("id")?,
-        ctx.required_str("person_id")?,
-        ctx.required_str("state")?,
-    );
+    let input: RespondEventInput = ctx.parse_input()?;
     edge::put(
         ctx,
-        id,
+        &input.id,
         Rel::Attendee,
-        person,
+        &input.person_id,
         None,
         &Extras {
-            state: Some(state),
+            state: Some(&input.state),
             ..Extras::default()
         },
     )?;
-    ctx.touch(id)?;
-    Ok(json!({ "id": id, "state": state }))
+    ctx.touch(&input.id)?;
+    Ok(json!({ "id": input.id, "state": input.state }))
+}
+
+#[derive(serde::Deserialize)]
+struct EditOccurrenceInput {
+    id: String,
+    original_start: String,
+    scope: String,
+    action: String,
+    title: Option<String>,
+    description: Option<String>,
+    url: Option<String>,
+    place_id: Option<String>,
 }
 
 /// What happened to one day of a series, or to the series as a whole; with the event's revision
 /// when the change named the one it replaces.
 fn edit_occurrence(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let id = ctx.required_str("id")?;
-    with_rev(ctx, id, change_occurrence(ctx)?)
+    let input: EditOccurrenceInput = ctx.parse_input()?;
+    with_rev(ctx, &input.id, change_occurrence(ctx, &input)?)
 }
 
-fn change_occurrence(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let id = ctx.required_str("id")?;
-    let (scope, action) = (ctx.required_str("scope")?, ctx.required_str("action")?);
-    let answer = json!({ "id": id, "scope": scope });
-    if scope == "series" {
+fn change_occurrence(ctx: &CommandCtx<'_, '_>, input: &EditOccurrenceInput) -> Result<Json> {
+    let id = input.id.as_str();
+    let answer = json!({ "id": id, "scope": input.scope });
+    if input.scope == "series" {
         // The whole series: skipping it is cancelling it, and a change to it is
         // an edit of the event's own times and words.
-        if action == "skip" {
-            cancel(ctx)?;
+        if input.action == "skip" {
+            ctx.connection()
+                .execute("UPDATE event SET status = 'cancelled' WHERE id = ?1", [id])?;
         } else {
+            let edit_input: EditEventInput = ctx.parse_input()?;
             let row = row_of(ctx.connection(), id)?;
             let after = times(ctx, Some(&row.times)).map_err(|s| invalid("starts", s))?;
-            write_event(ctx, id, &after)?;
+            write_event(ctx, &edit_input, &after)?;
         }
         return Ok(answer);
     }
-    let key = ctx.required_str("original_start")?;
+    let key = input.original_start.as_str();
     let connection = ctx.connection();
-    if action == "restore" {
+    if input.action == "restore" {
         connection.execute(
             "DELETE FROM occurrence WHERE series_id = ?1 AND original_start = ?2 AND scope = ?3",
-            [id, key, scope],
+            [id, key, input.scope.as_str()],
         )?;
     } else {
-        let skipped = action == "skip";
+        let skipped = input.action == "skip";
         let mut day = DayTimes::default();
         if !skipped {
             let row = row_of(connection, id)?;
@@ -456,13 +533,9 @@ fn change_occurrence(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             )
             .map_err(|s| invalid("starts", s))?;
         }
-        let said = |name: &str| {
-            if skipped {
-                None
-            } else {
-                ctx.optional_str(name)
-            }
-        };
+        fn said(skipped: bool, value: &Option<String>) -> Option<&str> {
+            (!skipped).then_some(value.as_deref()).flatten()
+        }
         connection.execute(
             "INSERT INTO occurrence (series_id, original_start, scope, cancelled, starts, ends,
                                      timing, zone, title, description, url, place_id)
@@ -473,16 +546,16 @@ fn change_occurrence(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             rusqlite::params![
                 id,
                 key,
-                scope,
+                input.scope,
                 skipped,
                 day.starts,
                 day.ends,
                 day.own.as_ref().map(|(timing, _)| timing.as_str()),
                 day.own.as_ref().and_then(|(_, zone)| zone.as_deref()),
-                said("title"),
-                said("description"),
-                said("url"),
-                said("place_id"),
+                said(skipped, &input.title),
+                said(skipped, &input.description),
+                said(skipped, &input.url),
+                said(skipped, &input.place_id),
             ],
         )?;
     }

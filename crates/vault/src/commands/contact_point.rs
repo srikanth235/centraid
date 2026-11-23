@@ -285,20 +285,27 @@ fn pre_save(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok((held > 0).then(|| "this contact point is already saved".to_owned()))
 }
 
+#[derive(serde::Deserialize)]
+struct SaveContactPointInput {
+    id: String,
+    point_id: Option<String>,
+    kind: String,
+    value: String,
+    label: Option<String>,
+    preferred: Option<bool>,
+}
+
 fn save(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let input: SaveContactPointInput = ctx.parse_input()?;
     let connection = ctx.connection();
-    let person = ctx.required_str("id")?;
-    let (kind, value) = (ctx.required_str("kind")?, ctx.required_str("value")?.trim());
+    let person = input.id.as_str();
+    let (kind, value) = (input.kind.as_str(), input.value.trim());
     let key = reach_key(kind, value);
-    let label = ctx.optional_str("label").filter(|l| !l.trim().is_empty());
-    let preferred = ctx
-        .input
-        .get("preferred")
-        .and_then(Json::as_bool)
-        .unwrap_or(false);
+    let label = input.label.as_deref().filter(|l| !l.trim().is_empty());
+    let preferred = input.preferred.unwrap_or(false);
     // An edit names the point it changes (the precondition has seen it is this
     // person's); anything else is a new one.
-    let point = ctx.optional_str("point_id");
+    let point = input.point_id.as_deref();
     let id = point.map_or_else(|| ctx.next_id(), str::to_owned);
     if preferred {
         connection.execute(
@@ -332,15 +339,21 @@ fn pre_remove(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok((held == 0).then(|| "there is no contact point with that id".to_owned()))
 }
 
+#[derive(serde::Deserialize)]
+struct RemoveContactPointInput {
+    point_id: String,
+}
+
 fn remove(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let input: RemoveContactPointInput = ctx.parse_input()?;
     let person: String = ctx.connection().query_row(
         "SELECT person_id FROM contact_point WHERE id = ?1",
-        [ctx.required_str("point_id")?],
+        [input.point_id.as_str()],
         |row| row.get(0),
     )?;
     ctx.connection().execute(
         "DELETE FROM contact_point WHERE id = ?1",
-        [ctx.required_str("point_id")?],
+        [input.point_id.as_str()],
     )?;
     Ok(json!({ "id": person }))
 }

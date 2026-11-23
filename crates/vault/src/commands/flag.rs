@@ -9,8 +9,13 @@ use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempoten
 use crate::error::{Result, VaultError};
 use crate::model::Flag;
 
-fn flag_of(ctx: &CommandCtx<'_, '_>) -> Result<Flag> {
-    let word = ctx.required_str("flag")?;
+#[derive(serde::Deserialize)]
+struct FlagInput {
+    id: String,
+    flag: String,
+}
+
+fn flag_of(word: &str) -> Result<Flag> {
     Flag::parse(word).ok_or_else(|| VaultError::InvalidInput {
         name: "flag".to_owned(),
         detail: format!("`{word}` is not starred, pinned or archived"),
@@ -18,12 +23,14 @@ fn flag_of(ctx: &CommandCtx<'_, '_>) -> Result<Flag> {
 }
 
 fn set(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let changed = set_tagged(ctx, ctx.required_str("id")?, &flag_of(ctx)?.id(), true)?;
+    let input: FlagInput = ctx.parse_input()?;
+    let changed = set_tagged(ctx, &input.id, &flag_of(&input.flag)?.id(), true)?;
     Ok(serde_json::json!({ "changed": changed }))
 }
 
 fn clear(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let changed = set_tagged(ctx, ctx.required_str("id")?, &flag_of(ctx)?.id(), false)?;
+    let input: FlagInput = ctx.parse_input()?;
+    let changed = set_tagged(ctx, &input.id, &flag_of(&input.flag)?.id(), false)?;
     Ok(serde_json::json!({ "changed": changed }))
 }
 

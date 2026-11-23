@@ -103,19 +103,53 @@ fn pre_record(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok(None)
 }
 
+#[derive(serde::Deserialize)]
+struct DayInput {
+    day: String,
+    metric: String,
+    value: f64,
+}
+
+#[derive(serde::Deserialize)]
+struct RecordInput {
+    person_id: Option<String>,
+    cursor: Option<String>,
+    cursor_ref: Option<String>,
+    cursor_device: Option<String>,
+    days: Vec<DayInput>,
+}
+
+fn subject_of(ctx: &CommandCtx<'_, '_>, person_id: Option<&str>) -> Result<String> {
+    Ok(match person_id {
+        Some(person) => person.to_owned(),
+        None => ctx
+            .connection()
+            .query_row("SELECT self_id FROM vault", [], |row| row.get(0))?,
+    })
+}
+
 fn record(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let input: RecordInput = ctx.parse_input()?;
     // THE STORE'S CURSOR RIDES WITH THE DAYS IT COVERS (#1183): one commit, so a refused batch
     // leaves the cursor where it was and a read that stopped part-way resumes from it.
-    if let Some(cursor) = ctx.optional_str("cursor") {
-        origin_cursor::advance(
-            ctx,
-            "health",
-            ctx.required_str("cursor_ref")?,
-            ctx.required_str("cursor_device")?,
-            cursor,
-        )?;
+    if let Some(cursor) = input.cursor.as_deref() {
+        let cursor_ref =
+            input
+                .cursor_ref
+                .as_deref()
+                .ok_or_else(|| crate::error::VaultError::InvalidInput {
+                    name: "cursor_ref".to_owned(),
+                    detail: "a required string is missing".to_owned(),
+                })?;
+        let cursor_device = input.cursor_device.as_deref().ok_or_else(|| {
+            crate::error::VaultError::InvalidInput {
+                name: "cursor_device".to_owned(),
+                detail: "a required string is missing".to_owned(),
+            }
+        })?;
+        origin_cursor::advance(ctx, "health", cursor_ref, cursor_device, cursor)?;
     }
-    let person = subject(ctx)?;
+    let person = subject_of(ctx, input.person_id.as_deref())?;
     let connection = ctx.connection();
     let mut held = connection.prepare_cached(
         "SELECT value FROM measurement WHERE person_id = ?1 AND day = ?2 AND metric = ?3",
@@ -125,14 +159,21 @@ fn record(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
          ON CONFLICT (person_id, day, metric) DO UPDATE SET value = excluded.value",
     )?;
     let (mut written, mut unchanged) = (0_u64, 0_u64);
-    for (day, metric, value) in days_of(ctx) {
+    for entry in input.days {
         let was: Option<f64> = held
-            .query_row(rusqlite::params![person, day, metric], |row| row.get(0))
+            .query_row(rusqlite::params![person, entry.day, entry.metric], |row| {
+                row.get(0)
+            })
             .optional()?;
-        if was.is_some_and(|was| was.to_bits() == value.to_bits()) {
+        if was.is_some_and(|was| was.to_bits() == entry.value.to_bits()) {
             unchanged += 1;
         } else {
-            write.execute(rusqlite::params![person, day, metric, value])?;
+            write.execute(rusqlite::params![
+                person,
+                entry.day,
+                entry.metric,
+                entry.value
+            ])?;
             written += 1;
         }
     }
@@ -158,10 +199,22 @@ fn followed_by(connection: &rusqlite::Connection) -> Result<Option<String>> {
 /// The `(day, metric)` a `measurement.log` names: `day` and `metric`, or the `id` chat reads a
 /// figure's row by, `<day>:<metric>`.
 fn named(ctx: &CommandCtx<'_, '_>) -> Option<(String, String)> {
-    if let (Some(day), Some(metric)) = (ctx.optional_str("day"), ctx.optional_str("metric")) {
+    named_parts(
+        ctx.optional_str("id"),
+        ctx.optional_str("day"),
+        ctx.optional_str("metric"),
+    )
+}
+
+fn named_parts(
+    id: Option<&str>,
+    day: Option<&str>,
+    metric: Option<&str>,
+) -> Option<(String, String)> {
+    if let (Some(day), Some(metric)) = (day, metric) {
         return Some((day.to_owned(), metric.to_owned()));
     }
-    let (day, metric) = ctx.optional_str("id")?.split_once(':')?;
+    let (day, metric) = id?.split_once(':')?;
     Some((day.to_owned(), metric.to_owned()))
 }
 
@@ -187,14 +240,25 @@ fn pre_log(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok(None)
 }
 
+#[derive(serde::Deserialize)]
+struct LogMeasurementInput {
+    person_id: Option<String>,
+    id: Option<String>,
+    day: Option<String>,
+    metric: Option<String>,
+    value: Option<f64>,
+}
+
 fn log(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let (day, metric) = named(ctx).unwrap_or_default();
-    let person = subject(ctx)?;
-    let value = ctx
-        .input
-        .get("value")
-        .and_then(Json::as_f64)
-        .unwrap_or_default();
+    let input: LogMeasurementInput = ctx.parse_input()?;
+    let (day, metric) = named_parts(
+        input.id.as_deref(),
+        input.day.as_deref(),
+        input.metric.as_deref(),
+    )
+    .unwrap_or_default();
+    let person = subject_of(ctx, input.person_id.as_deref())?;
+    let value = input.value.unwrap_or_default();
     let connection = ctx.connection();
     let replaced: Option<f64> = connection
         .query_row(
@@ -235,10 +299,24 @@ fn pre_clear(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok((!held).then(|| format!("There is no {metric} figure for {day}.")))
 }
 
+#[derive(serde::Deserialize)]
+struct ClearMeasurementInput {
+    person_id: Option<String>,
+    id: Option<String>,
+    day: Option<String>,
+    metric: Option<String>,
+}
+
 /// Take back a figure the member logged: the row goes, and nothing else.
 fn clear(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let (day, metric) = named(ctx).unwrap_or_default();
-    let person = subject(ctx)?;
+    let input: ClearMeasurementInput = ctx.parse_input()?;
+    let (day, metric) = named_parts(
+        input.id.as_deref(),
+        input.day.as_deref(),
+        input.metric.as_deref(),
+    )
+    .unwrap_or_default();
+    let person = subject_of(ctx, input.person_id.as_deref())?;
     let replaced: Option<f64> = ctx
         .connection()
         .query_row(

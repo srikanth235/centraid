@@ -93,14 +93,24 @@ pub fn advance(
     Ok(())
 }
 
+#[derive(serde::Deserialize)]
+struct AdvanceCursorInput {
+    system: String,
+    #[serde(rename = "ref")]
+    reference: String,
+    device_id: String,
+    cursor: String,
+}
+
 /// `follow.advance_cursor`: [`advance`] as a command, for a position no record rides with.
 pub(crate) fn advance_cursor(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let input: AdvanceCursorInput = ctx.parse_input()?;
     advance(
         ctx,
-        ctx.required_str("system")?,
-        ctx.required_str("ref")?,
-        ctx.required_str("device_id")?,
-        ctx.required_str("cursor")?,
+        &input.system,
+        &input.reference,
+        &input.device_id,
+        &input.cursor,
     )?;
     Ok(serde_json::json!({}))
 }

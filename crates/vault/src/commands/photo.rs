@@ -123,8 +123,8 @@ struct Inherited {
     place_id: Option<String>,
 }
 
-fn inherited(ctx: &CommandCtx<'_, '_>) -> Result<Inherited> {
-    let Some(source) = ctx.optional_str("edited_from") else {
+fn inherited(ctx: &CommandCtx<'_, '_>, source: Option<&str>) -> Result<Inherited> {
+    let Some(source) = source else {
         return Ok(Inherited::default());
     };
     Ok(ctx.connection().query_row(
@@ -142,22 +142,14 @@ fn inherited(ctx: &CommandCtx<'_, '_>) -> Result<Inherited> {
     )?)
 }
 
-fn number(ctx: &CommandCtx<'_, '_>, key: &str) -> Option<f64> {
-    ctx.input.get(key).and_then(serde_json::Value::as_f64)
-}
-
-fn whole(ctx: &CommandCtx<'_, '_>, key: &str) -> Option<i64> {
-    ctx.input.get(key).and_then(serde_json::Value::as_i64)
-}
-
 /// Take back a photograph the same bytes already are: out of the trash if it
 /// was there, and into the burst the bytes now say they belong to.
-fn adopt(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<()> {
+fn adopt(ctx: &CommandCtx<'_, '_>, id: &str, burst: Option<&str>) -> Result<()> {
     ctx.connection().execute(
         "UPDATE entity SET deleted_at = NULL, purge_at = NULL WHERE id = ?1",
         [id],
     )?;
-    if let Some(burst) = ctx.optional_str("burst") {
+    if let Some(burst) = burst {
         ctx.connection().execute(
             "UPDATE photo SET burst = ?2 WHERE id = ?1 AND burst IS NULL",
             [id, burst],
@@ -166,100 +158,134 @@ fn adopt(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<()> {
     Ok(())
 }
 
+#[derive(serde::Deserialize)]
+struct AddPhotoInput {
+    id: Option<String>,
+    blob: String,
+    media_type: String,
+    form: Option<String>,
+    title: Option<String>,
+    taken_at: Option<String>,
+    offset_min: Option<i64>,
+    width: Option<i64>,
+    height: Option<i64>,
+    duration_s: Option<f64>,
+    exif: Option<serde_json::Value>,
+    burst: Option<String>,
+    edited_from: Option<String>,
+    lat: Option<f64>,
+    lon: Option<f64>,
+    place_id: Option<String>,
+    phash: Option<String>,
+    thumbhash: Option<String>,
+    roll_cursor: Option<String>,
+    roll_device: Option<String>,
+}
+
 fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let input: AddPhotoInput = ctx.parse_input()?;
     // THE CAMERA ROLL'S CURSOR RIDES WITH THE PHOTOGRAPH (#1183): the commit that brings the last
     // part of an asset in moves the cursor past it, whether the bytes are new or already held; a
     // refused add leaves it where it was.
-    if let Some(cursor) = ctx.optional_str("roll_cursor") {
+    if let Some(cursor) = input.roll_cursor.as_deref() {
+        let device =
+            input
+                .roll_device
+                .as_deref()
+                .ok_or_else(|| crate::error::VaultError::InvalidInput {
+                    name: "roll_device".to_owned(),
+                    detail: "a required string is missing".to_owned(),
+                })?;
         origin_cursor::advance(
             ctx,
             "camera_roll",
             origin_cursor::CAMERA_ROLL_REF,
-            ctx.required_str("roll_device")?,
+            device,
             cursor,
         )?;
     }
-    let blob = ctx.required_str("blob")?;
-    let media_type = ctx.required_str("media_type")?;
     claim(ctx, "blob")?;
     let existing: Option<String> = ctx
         .connection()
-        .query_row("SELECT id FROM photo WHERE blob = ?1", [blob], |row| {
-            row.get(0)
-        })
+        .query_row(
+            "SELECT id FROM photo WHERE blob = ?1",
+            [input.blob.as_str()],
+            |row| row.get(0),
+        )
         .optional()?;
     if let Some(id) = existing {
-        adopt(ctx, &id)?;
+        adopt(ctx, &id, input.burst.as_deref())?;
         return Ok(serde_json::json!({ "id": id, "deduped": true }));
     }
-    let source = inherited(ctx)?;
-    let place_id = match (
-        ctx.optional_str("place_id"),
-        number(ctx, "lat"),
-        number(ctx, "lon"),
-    ) {
-        (Some(id), _, _) => Some(id.to_owned()),
+    let source = inherited(ctx, input.edited_from.as_deref())?;
+    let place_id = match (input.place_id, input.lat, input.lon) {
+        (Some(id), _, _) => Some(id),
         (None, Some(lat), Some(lon)) => Some(place::find_or_found(ctx, lat, lon)?),
         (None, _, _) => source.place_id,
     };
-    let title = ctx.optional_str("title").unwrap_or(&source.title).trim();
-    let id = match ctx.optional_str("id") {
+    let title = input.title.as_deref().unwrap_or(&source.title).trim();
+    let id = match input.id.as_deref() {
         Some(id) => {
             ctx.insert_entity_as(id, Kind::Photo, title)?;
             id.to_owned()
         }
         None => ctx.insert_entity(Kind::Photo, title)?,
     };
-    let form = ctx
-        .optional_str("form")
-        .or_else(|| form_of(media_type))
+    let form = input
+        .form
+        .as_deref()
+        .or_else(|| form_of(&input.media_type))
         .unwrap_or("scan");
-    let exif = ctx
-        .input
-        .get("exif")
-        .filter(|value| value.is_object())
-        .map(ToString::to_string);
+    let exif = input
+        .exif
+        .filter(serde_json::Value::is_object)
+        .map(|value| value.to_string());
     ctx.connection().execute(
         "INSERT INTO photo (id, blob, media_type, form, taken_at, offset_min, width, height,
                             duration_s, exif, burst, edited_from, place_id)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
         rusqlite::params![
             id,
-            blob,
-            media_type,
+            input.blob,
+            input.media_type,
             form,
-            ctx.optional_str("taken_at")
+            input
+                .taken_at
+                .as_deref()
                 .map(|stated| {
                     // A photo's time is an instant: a stated date or wall clock is read as UTC.
                     crate::time::recurrence::parse_instant_ms(stated)
                         .map_or_else(|| stated.to_owned(), crate::clock::format_iso_ms)
                 })
                 .or(source.taken_at),
-            whole(ctx, "offset_min").or(source.offset_min),
-            whole(ctx, "width"),
-            whole(ctx, "height"),
-            number(ctx, "duration_s"),
+            input.offset_min.or(source.offset_min),
+            input.width,
+            input.height,
+            input.duration_s,
             exif,
-            ctx.optional_str("burst"),
-            ctx.optional_str("edited_from"),
+            input.burst,
+            input.edited_from,
             place_id,
         ],
     )?;
     // What the phone worked out about the picture rides with it: two small
     // values, so a library of thousands is one command each, not three.
-    for variant in ["phash", "thumbhash"] {
-        if let Some(value) = ctx.optional_str(variant) {
+    for (variant, value) in [
+        ("phash", input.phash.as_deref()),
+        ("thumbhash", input.thumbhash.as_deref()),
+    ] {
+        if let Some(value) = value {
             crate::blob::write_derivative(
                 ctx.connection(),
                 &ctx.now,
-                blob,
+                &input.blob,
                 variant,
                 None,
                 Some(value),
             )?;
         }
     }
-    derive_image_tiers(ctx, blob, media_type)?;
+    derive_image_tiers(ctx, &input.blob, &input.media_type)?;
     arrival::record(ctx, &id, Kind::Photo)?;
     Ok(serde_json::json!({ "id": id, "deduped": false }))
 }
@@ -333,29 +359,41 @@ fn pre_edit(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok(loops.then(|| "a photograph cannot be an edit of its own edit".to_owned()))
 }
 
+#[derive(serde::Deserialize)]
+struct EditPhotoInput {
+    id: String,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    taken_at: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    offset_min: Option<Option<i64>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    edited_from: Option<Option<String>>,
+}
+
 /// Set the capture facts that were named; a name given as `null` clears its fact.
 fn edit(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let id = ctx.required_str("id")?;
-    for column in ["taken_at", "offset_min", "edited_from"] {
-        if let Some(value) = ctx.input.get(column) {
-            ctx.connection().execute(
-                &format!("UPDATE photo SET {column} = ?2 WHERE id = ?1"),
-                rusqlite::params![
-                    id,
-                    if column == "taken_at" {
-                        crate::commands::follow::to_sql(&value.as_str().map_or_else(
-                            || value.clone(),
-                            |text| serde_json::Value::from(crate::time::temporal::canonical(text)),
-                        ))
-                    } else {
-                        crate::commands::follow::to_sql(value)
-                    }
-                ],
-            )?;
-        }
+    let input: EditPhotoInput = ctx.parse_input()?;
+    if let Some(taken_at) = input.taken_at {
+        let canonical = taken_at.as_deref().map(crate::time::temporal::canonical);
+        ctx.connection().execute(
+            "UPDATE photo SET taken_at = ?2 WHERE id = ?1",
+            rusqlite::params![input.id, canonical],
+        )?;
     }
-    ctx.touch(id)?;
-    Ok(serde_json::json!({ "id": id }))
+    if let Some(offset_min) = input.offset_min {
+        ctx.connection().execute(
+            "UPDATE photo SET offset_min = ?2 WHERE id = ?1",
+            rusqlite::params![input.id, offset_min],
+        )?;
+    }
+    if let Some(edited_from) = input.edited_from {
+        ctx.connection().execute(
+            "UPDATE photo SET edited_from = ?2 WHERE id = ?1",
+            rusqlite::params![input.id, edited_from],
+        )?;
+    }
+    ctx.touch(&input.id)?;
+    Ok(serde_json::json!({ "id": input.id }))
 }
 
 fn pre_set_place(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -365,14 +403,20 @@ fn pre_set_place(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     place_refusal(ctx)
 }
 
+#[derive(serde::Deserialize)]
+struct SetPlaceInput {
+    id: String,
+    place_id: Option<String>,
+}
+
 /// Point the photograph at a place, or (no `place_id`) clear it back to unknown.
 fn set_place(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let id = ctx.required_str("id")?;
+    let input: SetPlaceInput = ctx.parse_input()?;
     ctx.connection().execute(
         "UPDATE photo SET place_id = ?2 WHERE id = ?1",
-        rusqlite::params![id, ctx.optional_str("place_id")],
+        rusqlite::params![input.id, input.place_id],
     )?;
-    Ok(serde_json::json!({ "id": id }))
+    Ok(serde_json::json!({ "id": input.id }))
 }
 
 fn pre_cover(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -398,11 +442,17 @@ fn pre_cover(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok((member == 0).then(|| format!("that photograph is not in “{}”", album.title)))
 }
 
+#[derive(serde::Deserialize)]
+struct SetCoverInput {
+    id: String,
+    photo_id: Option<String>,
+}
+
 /// Choose one of the album's photographs as its cover, or (no `photo_id`) let
 /// the album fall back to its first.
 fn set_cover(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let id = ctx.required_str("id")?;
-    let blob: Option<String> = match ctx.optional_str("photo_id") {
+    let input: SetCoverInput = ctx.parse_input()?;
+    let blob: Option<String> = match input.photo_id.as_deref() {
         Some(photo) => Some(ctx.connection().query_row(
             "SELECT blob FROM photo WHERE id = ?1",
             [photo],
@@ -412,9 +462,9 @@ fn set_cover(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     };
     ctx.connection().execute(
         "UPDATE container SET cover = ?2 WHERE id = ?1",
-        rusqlite::params![id, blob],
+        rusqlite::params![input.id, blob],
     )?;
-    Ok(serde_json::json!({ "id": id }))
+    Ok(serde_json::json!({ "id": input.id }))
 }
 
 #[must_use]

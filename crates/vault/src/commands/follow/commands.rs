@@ -281,6 +281,13 @@ fn pre_stop(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     }))
 }
 
+#[derive(serde::Deserialize)]
+struct StopFollowInput {
+    system: String,
+    #[serde(rename = "ref")]
+    reference: String,
+}
+
 /// Stop following one origin: it is RETIRED, not deleted. **Every row stays** and is the member's own
 /// from now on (nothing is trashed, and a followed row's "Phone says" lines go), and the origin keeps
 /// its home (`fills`) and its sources, so following the same `ref` again finds both: no second
@@ -289,12 +296,12 @@ fn pre_stop(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 /// retired) is nothing. A reconnected folder's NEW origin finds the rows the retired one filled by
 /// the record's match key, as it finds any row nothing follows, and takes their sources over.
 fn stop(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let (system, reference) = (ctx.required_str("system")?, ctx.required_str("ref")?);
+    let input: StopFollowInput = ctx.parse_input()?;
     let connection = ctx.connection();
     let origin: Option<String> = connection
         .query_row(
             "SELECT id FROM origin WHERE system = ?1 AND ref = ?2 AND retired_at IS NULL",
-            [system, reference],
+            [input.system.as_str(), input.reference.as_str()],
             |row| row.get(0),
         )
         .optional()?;
@@ -365,19 +372,28 @@ fn pre_take(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok(None)
 }
 
+#[derive(serde::Deserialize)]
+struct TakeStatedInput {
+    entity: String,
+    field: String,
+    item_key: Option<String>,
+}
+
 /// Take what the source last stated for a field the member changed: the held field (or one held
 /// item) becomes the stated value through the same writes the merge makes, as an ordinary edit. The
 /// field then agrees with the statement again, so it is no longer reported and the next pass
 /// treats it as untouched. A field that already agrees is left alone.
 fn take_stated(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let (id, field) = (ctx.required_str("entity")?, ctx.required_str("field")?);
+    let input: TakeStatedInput = ctx.parse_input()?;
+    let id = input.entity.as_str();
+    let field = input.field.as_str();
     let connection = ctx.connection();
     let (map, stated) = live_link(connection, id)?.ok_or_else(|| VaultError::Invariant {
         context: "a take names a live source link".to_owned(),
     })?;
     let said = stated.get(field).cloned().unwrap_or(Json::Null);
     let changed = if let Some(child) = map.child(field) {
-        let changed = (child.take)(ctx, id, ctx.optional_str("item_key"), &said)?;
+        let changed = (child.take)(ctx, id, input.item_key.as_deref(), &said)?;
         if changed {
             ctx.touch(id)?;
         }

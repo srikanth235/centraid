@@ -379,6 +379,11 @@ pub(super) fn stamp_use(ctx: &CommandCtx<'_, '_>, item_id: &str) -> Result<()> {
     }
 }
 
+#[derive(serde::Deserialize)]
+struct ItemIdInput {
+    item_id: String,
+}
+
 pub(super) fn totp_code() -> CommandDefinition {
     static PRE: &[CommandCondition] = &[CommandCondition {
         predicate: "item_has_seed",
@@ -427,7 +432,7 @@ pub(super) fn totp_code() -> CommandDefinition {
         PRE,
         NONE,
         |ctx| {
-            let item_id = ctx.required_str("item_id")?.to_owned();
+            let input: ItemIdInput = ctx.parse_input()?;
             // WHAT THIS COMMAND IS, AFTER THE CUSTODY CHANGE (D-1020-L6).
             //
             // v0 unsealed the seed here and returned six digits. The command
@@ -436,9 +441,9 @@ pub(super) fn totp_code() -> CommandDefinition {
             // computed by `crates/core::locker::phone` after this stamp lands,
             // over the `otp_seed` cell it opens under `K`, with
             // `crates/apps/locker::totp`'s RFC 6238 fold.
-            stamp_use(ctx, &item_id)?;
+            stamp_use(ctx, &input.item_id)?;
             Ok(serde_json::json!({
-                "item_id": item_id,
+                "item_id": input.item_id,
                 "period": 30
             }))
         },
@@ -464,9 +469,9 @@ pub(super) fn mark_used() -> CommandDefinition {
         ITEM_LIVE,
         NONE,
         |ctx| {
-            let item_id = ctx.required_str("item_id")?.to_owned();
-            stamp_use(ctx, &item_id)?;
-            Ok(serde_json::json!({ "item_id": item_id, "last_used_at": ctx.now }))
+            let input: ItemIdInput = ctx.parse_input()?;
+            stamp_use(ctx, &input.item_id)?;
+            Ok(serde_json::json!({ "item_id": input.item_id, "last_used_at": ctx.now }))
         },
     )
 }

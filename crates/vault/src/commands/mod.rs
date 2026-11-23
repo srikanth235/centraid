@@ -237,6 +237,19 @@ impl<'conn> CommandCtx<'_, 'conn> {
     }
 }
 
+/// Deserialize an optional nullable patch field into `Option<Option<T>>`:
+/// absent key → `None` (via `#[serde(default)]`), explicit `null` → `Some(None)`,
+/// explicit value → `Some(Some(v))`.
+pub(crate) fn deserialize_patch<'de, T, D>(
+    deserializer: D,
+) -> std::result::Result<Option<Option<T>>, D::Error>
+where
+    T: serde::Deserialize<'de>,
+    D: serde::Deserializer<'de>,
+{
+    serde::Deserialize::deserialize(deserializer).map(Some)
+}
+
 /// A handler's body.
 pub type CommandHandler = fn(&CommandCtx<'_, '_>) -> Result<serde_json::Value>;
 

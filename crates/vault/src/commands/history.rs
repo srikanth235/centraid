@@ -109,20 +109,32 @@ fn answer(id: &str, seq: i64, restored: Option<history::Restored>) -> serde_json
     })
 }
 
+#[derive(serde::Deserialize)]
+struct RestoreVersionInput {
+    id: String,
+    seq: Option<i64>,
+}
+
 fn restore_version(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let id = ctx.required_str("id")?;
-    let seq = ctx.input["seq"].as_i64().unwrap_or_default();
+    let input: RestoreVersionInput = ctx.parse_input()?;
+    let seq = input.seq.unwrap_or_default();
     Ok(answer(
-        id,
+        &input.id,
         seq,
-        history::restore_version(ctx, id, seq, Scope::All)?,
+        history::restore_version(ctx, &input.id, seq, Scope::All)?,
     ))
 }
 
+#[derive(serde::Deserialize)]
+struct UndoInput {
+    id: String,
+    seq: Option<i64>,
+}
+
 fn undo(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let id = ctx.required_str("id")?;
+    let input: UndoInput = ctx.parse_input()?;
     // The change the caller named (still undoable: see `pre_undo`), else the newest.
-    let seq = match ctx.input.get("seq").and_then(serde_json::Value::as_i64) {
+    let seq = match input.seq {
         Some(seq) => seq,
         None => newest(ctx)?.unwrap_or_default(),
     };
@@ -130,11 +142,11 @@ fn undo(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     // version. Any other named change is taken back alone, the fields it changed and nothing else.
     let whole = newest(ctx)? == Some(seq) || changed_back_since(ctx, seq)?;
     let restored = if whole {
-        history::restore_version(ctx, id, seq, Scope::All)?
+        history::restore_version(ctx, &input.id, seq, Scope::All)?
     } else {
-        history::restore_changes(ctx, id, seq)?
+        history::restore_changes(ctx, &input.id, seq)?
     };
-    Ok(answer(id, seq, restored))
+    Ok(answer(&input.id, seq, restored))
 }
 
 fn fields(ctx: &CommandCtx<'_, '_>) -> serde_json::Map<String, serde_json::Value> {
@@ -178,19 +190,27 @@ fn pre_keep(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     history::overlay_refusal(ctx.connection(), id, &overlay)
 }
 
+#[derive(serde::Deserialize)]
+struct KeepVersionInput {
+    id: String,
+    fields: serde_json::Map<String, serde_json::Value>,
+}
+
 fn keep_version(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let id = ctx.required_str("id")?;
-    let mut overlay = fields(ctx);
-    crate::commands::event::shape_overlay(ctx.connection(), id, &mut overlay)
+    let input: KeepVersionInput = ctx.parse_input()?;
+    let mut overlay = input.fields;
+    crate::commands::event::shape_overlay(ctx.connection(), &input.id, &mut overlay)
         .map_err(|sentence| crate::error::VaultError::Invariant { context: sentence })?;
     if let Some(words) = overlay.remove(DOCUMENT_TEXT) {
         let hash = crate::commands::document::write_words(ctx, words.as_str().unwrap_or_default())?;
         overlay.insert("document.blob".to_owned(), hash.into());
     }
-    let kept = history::keep_overlay(ctx.connection(), id, &overlay, &ctx.now, ctx.command)?;
+    let kept = history::keep_overlay(ctx.connection(), &input.id, &overlay, &ctx.now, ctx.command)?;
     Ok(match kept {
-        history::Kept::Version(seq) => serde_json::json!({ "id": id, "kept": true, "seq": seq }),
-        history::Kept::Same => serde_json::json!({ "id": id, "kept": false }),
+        history::Kept::Version(seq) => {
+            serde_json::json!({ "id": input.id, "kept": true, "seq": seq })
+        }
+        history::Kept::Same => serde_json::json!({ "id": input.id, "kept": false }),
     })
 }
 

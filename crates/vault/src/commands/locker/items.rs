@@ -9,7 +9,7 @@ use crate::model::Kind;
 
 use super::custody::{
     ADD_ITEM_PRE, DUPLICATE_ITEM_PRE, EDIT_ITEM_PRE, ITEM_EXISTS_SQL, NONE, assert_fresh_id,
-    assert_key_generation, assert_sealed_cell, assert_sealed_cells, carries_secret, invalid,
+    assert_key_generation, assert_sealed_cell, assert_sealed_cells, carries_secret,
     password_rotated,
 };
 use super::schema::{
@@ -20,6 +20,17 @@ use super::sidecars::{
     FieldWrite, mint_template_fields, set_addresses, set_alias, write_built_in_field, write_field,
 };
 use super::{count, definition, item_type_of};
+
+#[derive(serde::Deserialize)]
+struct AddItemInput {
+    item_id: String,
+    #[serde(rename = "type")]
+    item_type: String,
+    title: String,
+    compromised: Option<bool>,
+    alias: Option<String>,
+    key_id: Option<String>,
+}
 
 pub(super) fn add_item() -> CommandDefinition {
     static POST: &[CommandCondition] = &[CommandCondition {
@@ -57,26 +68,18 @@ pub(super) fn add_item() -> CommandDefinition {
         ADD_ITEM_PRE,
         POST,
         |ctx| {
-            let item_id = ctx.required_str("item_id")?.to_owned();
-            let item_type = ctx.required_str("type")?.to_owned();
-            let title = ctx.required_str("title")?.to_owned();
-            assert_fresh_id(ctx, "item_id", &item_id)?;
+            let input: AddItemInput = ctx.parse_input()?;
+            assert_fresh_id(ctx, "item_id", &input.item_id)?;
             assert_sealed_cells(ctx, &SEALED_ITEM_CELLS)?;
             let secret = carries_secret(ctx, &SEALED_ITEM_CELLS);
             assert_key_generation(ctx, secret)?;
-            let key_id = ctx.optional_str("key_id").map(str::to_owned);
 
-            let values = field_values(ctx, &item_type);
+            let values = field_values(ctx, &input.item_type);
             let password = values
                 .iter()
                 .find(|(column, _)| *column == "password")
                 .and_then(|(_, value)| value.clone());
-            let compromised = i64::from(
-                ctx.input
-                    .get("compromised")
-                    .and_then(serde_json::Value::as_bool)
-                    .unwrap_or(false),
-            );
+            let compromised = i64::from(input.compromised.unwrap_or(false));
             // PASSWORD AGE IS SET-TIME, NEVER `updated_at`: a retag must not
             // make a three-year-old password look fresh (GAPS §3.3 #6d).
             let password_set_at = password.as_ref().map(|_| ctx.now.clone());
@@ -84,11 +87,11 @@ pub(super) fn add_item() -> CommandDefinition {
             // THE ENTITY FIRST, under the caller's id (D-1020-L9): the kind row
             // joins it by `(id, kind)`, and the title, the stamps and the trash
             // window are the entity's, like every kind's.
-            ctx.insert_entity_as(&item_id, Kind::LockerItem, &title)?;
+            ctx.insert_entity_as(&input.item_id, Kind::LockerItem, &input.title)?;
             ctx.connection().execute(
                 "INSERT INTO locker_item (id, type, compromised, password_set_at)
                  VALUES (?1, ?2, ?3, ?4)",
-                rusqlite::params![item_id, item_type, compromised, password_set_at],
+                rusqlite::params![input.item_id, input.item_type, compromised, password_set_at],
             )?;
 
             // Only the type's own built-in fields are stored, uniformly in
@@ -98,30 +101,40 @@ pub(super) fn add_item() -> CommandDefinition {
                 if let Some(value) = value.as_deref() {
                     write_built_in_field(
                         ctx,
-                        &item_id,
+                        &input.item_id,
                         column,
                         Some(value),
-                        key_id.as_deref(),
+                        input.key_id.as_deref(),
                         i64::try_from(position).unwrap_or(0),
                     )?;
                 }
             }
 
-            if let Some(alias) = ctx.optional_str("alias") {
-                set_alias(ctx, &item_id, alias)?;
+            if let Some(alias) = input.alias.as_deref() {
+                set_alias(ctx, &input.item_id, alias)?;
             }
             // A type is a set of sections and fields: the nine expansion types
             // arrive as EMPTY template rows the member fills in, which is also
             // what lets an unknown type degrade to a note that still carries
             // them. Empty needs no key, so a vault with no `K` can still make
             // a passport item and list it.
-            let minted = mint_template_fields(ctx, &item_id, &item_type)?;
-            arrival::record(ctx, &item_id, Kind::LockerItem)?;
-            Ok(serde_json::json!({ "item_id": item_id, "template_fields": minted }))
+            let minted = mint_template_fields(ctx, &input.item_id, &input.item_type)?;
+            arrival::record(ctx, &input.item_id, Kind::LockerItem)?;
+            Ok(serde_json::json!({ "item_id": input.item_id, "template_fields": minted }))
         },
     );
     definition.sealed_input = &SEALED_ITEM_CELLS;
     definition
+}
+
+#[derive(serde::Deserialize)]
+struct EditItemInput {
+    item_id: String,
+    title: Option<String>,
+    compromised: Option<bool>,
+    alias: Option<String>,
+    key_id: Option<String>,
+    password: Option<String>,
 }
 
 pub(super) fn edit_item() -> CommandDefinition {
@@ -149,13 +162,12 @@ pub(super) fn edit_item() -> CommandDefinition {
         EDIT_ITEM_PRE,
         NONE,
         |ctx| {
-            let item_id = ctx.required_str("item_id")?.to_owned();
-            let item_type = item_type_of(ctx, &item_id)?;
+            let input: EditItemInput = ctx.parse_input()?;
+            let item_type = item_type_of(ctx, &input.item_id)?;
             assert_sealed_cells(ctx, &SEALED_ITEM_CELLS)?;
             let secret = carries_secret(ctx, &SEALED_ITEM_CELLS);
             assert_key_generation(ctx, secret)?;
             let rotated = password_rotated(ctx)?;
-            let key_id = ctx.optional_str("key_id").map(str::to_owned);
 
             let mut sets: Vec<String> = Vec::new();
             let mut binds: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
@@ -167,10 +179,10 @@ pub(super) fn edit_item() -> CommandDefinition {
                 sets.push(format!("{column} = ?{}", binds.len()));
             };
 
-            if let Some(title) = ctx.optional_str("title") {
+            if let Some(title) = input.title.as_deref() {
                 ctx.connection().execute(
                     "UPDATE entity SET title = ?2 WHERE id = ?1",
-                    [item_id.as_str(), title],
+                    [input.item_id.as_str(), title],
                 )?;
             }
             // THE COMPROMISED FLAG (#1047, R-1047-F7): the member's, set and
@@ -178,11 +190,7 @@ pub(super) fn edit_item() -> CommandDefinition {
             // CLEARS IT, because the fix Review asks for ("change the
             // password") has been made; a write that states the flag itself
             // wins over that rule, since the member said so in the same breath.
-            let stated = ctx
-                .input
-                .get("compromised")
-                .and_then(serde_json::Value::as_bool);
-            if let Some(compromised) = stated.or_else(|| rotated.then_some(false)) {
+            if let Some(compromised) = input.compromised.or_else(|| rotated.then_some(false)) {
                 push(
                     &mut sets,
                     &mut binds,
@@ -193,14 +201,15 @@ pub(super) fn edit_item() -> CommandDefinition {
             // A ROTATION, distinguished from any other edit. The core says so
             // (see `password_rotated`); only a real change re-stamps the age.
             if rotated {
-                let stamp = ctx
-                    .optional_str("password")
+                let stamp = input
+                    .password
+                    .as_deref()
                     .filter(|value| !value.is_empty())
                     .map(|_| ctx.now.clone());
                 push(&mut sets, &mut binds, "password_set_at", Box::new(stamp));
             }
             if !sets.is_empty() {
-                binds.push(Box::new(item_id.clone()));
+                binds.push(Box::new(input.item_id.clone()));
                 let sql = format!(
                     "UPDATE locker_item SET {} WHERE id = ?{}",
                     sets.join(", "),
@@ -223,27 +232,27 @@ pub(super) fn edit_item() -> CommandDefinition {
                 }
                 write_built_in_field(
                     ctx,
-                    &item_id,
+                    &input.item_id,
                     column,
                     value.as_deref(),
-                    key_id.as_deref(),
+                    input.key_id.as_deref(),
                     i64::try_from(position).unwrap_or(0),
                 )?;
                 changed.push(column);
             }
-            ctx.touch(&item_id)?;
+            ctx.touch(&input.item_id)?;
 
-            if let Some(alias) = ctx.optional_str("alias") {
+            if let Some(alias) = input.alias.as_deref() {
                 // An EMPTY alias clears the binding, which is the paper cut
                 // README-Locker §8 names: a member could set one and never
                 // take it back.
-                set_alias(ctx, &item_id, alias)?;
+                set_alias(ctx, &input.item_id, alias)?;
             }
             crate::commands::entity::with_rev(
                 ctx,
-                &item_id,
+                &input.item_id,
                 serde_json::json!({
-                    "item_id": item_id,
+                    "item_id": input.item_id,
                     "rotated": rotated,
                     "columns": changed
                 }),
@@ -252,6 +261,27 @@ pub(super) fn edit_item() -> CommandDefinition {
     );
     definition.sealed_input = &SEALED_ITEM_CELLS;
     definition
+}
+
+#[derive(serde::Deserialize)]
+struct DuplicateFieldInput {
+    field_id: String,
+    #[serde(default)]
+    section: String,
+    #[serde(default)]
+    label: String,
+    kind: Option<String>,
+    value: Option<String>,
+    position: Option<i64>,
+}
+
+#[derive(serde::Deserialize)]
+struct DuplicateItemInput {
+    item_id: String,
+    new_item_id: String,
+    key_id: Option<String>,
+    #[serde(default)]
+    fields: Vec<DuplicateFieldInput>,
 }
 
 pub(super) fn duplicate_item() -> CommandDefinition {
@@ -289,30 +319,30 @@ pub(super) fn duplicate_item() -> CommandDefinition {
         DUPLICATE_ITEM_PRE,
         NONE,
         |ctx| {
-            let source_id = ctx.required_str("item_id")?.to_owned();
-            let item_id = ctx.required_str("new_item_id")?.to_owned();
-            assert_fresh_id(ctx, "new_item_id", &item_id)?;
+            let input: DuplicateItemInput = ctx.parse_input()?;
+            let source_id = &input.item_id;
+            let item_id = &input.new_item_id;
+            assert_fresh_id(ctx, "new_item_id", item_id)?;
             assert_sealed_cells(ctx, &SEALED_ITEM_CELLS)?;
             let secret = carries_secret(ctx, &SEALED_ITEM_CELLS);
             assert_key_generation(ctx, secret)?;
-            let key_id = ctx.optional_str("key_id").map(str::to_owned);
 
             // CLONE-AND-EDIT FOR SIBLING ACCOUNTS (GAPS §3.3 #10): the core
             // re-encrypts every secret under the new field id and sends the
             // cells, so the command plane never reads a secret.
             let source_title: String = ctx.connection().query_row(
                 "SELECT title FROM entity WHERE id = ?1",
-                [&source_id],
+                [source_id],
                 |row| row.get(0),
             )?;
             let (source_type, compromised, password_set_at): (String, i64, Option<String>) =
                 ctx.connection().query_row(
                     "SELECT type, compromised, password_set_at FROM locker_item WHERE id = ?1",
-                    [&source_id],
+                    [source_id],
                     |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
                 )?;
             let title = format!("{source_title} copy");
-            ctx.insert_entity_as(&item_id, Kind::LockerItem, &title)?;
+            ctx.insert_entity_as(item_id, Kind::LockerItem, &title)?;
             ctx.connection().execute(
                 "INSERT INTO locker_item (id, type, compromised, password_set_at)
                  VALUES (?1, ?2, ?3, ?4)",
@@ -328,14 +358,14 @@ pub(super) fn duplicate_item() -> CommandDefinition {
                         AND kind NOT IN ('sealed', 'otp')
                       ORDER BY position, id",
                 )?;
-                let rows = statement.query_map([&source_id], |row| {
+                let rows = statement.query_map([source_id], |row| {
                     Ok((row.get(0)?, row.get(1)?, row.get(2)?))
                 })?;
                 rows.collect::<rusqlite::Result<Vec<_>>>()?
             };
             for (field_key, value_text, position) in plain_fields {
                 if let Some(value) = value_text.as_deref() {
-                    write_built_in_field(ctx, &item_id, &field_key, Some(value), None, position)?;
+                    write_built_in_field(ctx, item_id, &field_key, Some(value), None, position)?;
                 }
             }
             // Write any re-sealed built-in secret cells the core sent.
@@ -355,10 +385,10 @@ pub(super) fn duplicate_item() -> CommandDefinition {
                         .unwrap_or(0);
                     write_built_in_field(
                         ctx,
-                        &item_id,
+                        item_id,
                         column,
                         Some(value),
-                        key_id.as_deref(),
+                        input.key_id.as_deref(),
                         position,
                     )?;
                 }
@@ -367,48 +397,25 @@ pub(super) fn duplicate_item() -> CommandDefinition {
             // The custom fields, re-sealed by the core against their own new
             // ids for the same AAD reason.
             let mut copied = 0_usize;
-            if let Some(fields) = ctx
-                .input
-                .get("fields")
-                .and_then(serde_json::Value::as_array)
-            {
-                for field in fields {
-                    let field_id = field
-                        .get("field_id")
-                        .and_then(serde_json::Value::as_str)
-                        .ok_or_else(|| invalid("fields", "every field names a `field_id`"))?;
-                    let kind = field
-                        .get("kind")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or("text");
-                    let value = field.get("value").and_then(serde_json::Value::as_str);
-                    if is_sealed_kind(kind) {
-                        assert_sealed_cell("fields[].value", value)?;
-                    }
-                    assert_fresh_id(ctx, "fields[].field_id", field_id)?;
-                    write_field(
-                        ctx,
-                        &item_id,
-                        &FieldWrite {
-                            field_id: Some(field_id),
-                            section: field
-                                .get("section")
-                                .and_then(serde_json::Value::as_str)
-                                .unwrap_or(""),
-                            label: field
-                                .get("label")
-                                .and_then(serde_json::Value::as_str)
-                                .unwrap_or_default(),
-                            kind,
-                            value,
-                            position: field
-                                .get("position")
-                                .and_then(serde_json::Value::as_i64)
-                                .unwrap_or(0),
-                        },
-                    )?;
-                    copied += 1;
+            for field in &input.fields {
+                let kind = field.kind.as_deref().unwrap_or("text");
+                if is_sealed_kind(kind) {
+                    assert_sealed_cell("fields[].value", field.value.as_deref())?;
                 }
+                assert_fresh_id(ctx, "fields[].field_id", &field.field_id)?;
+                write_field(
+                    ctx,
+                    item_id,
+                    &FieldWrite {
+                        field_id: Some(&field.field_id),
+                        section: &field.section,
+                        label: &field.label,
+                        kind,
+                        value: field.value.as_deref(),
+                        position: field.position.unwrap_or(0),
+                    },
+                )?;
+                copied += 1;
             }
 
             // The addresses copy as they are — no secret is involved.
@@ -417,10 +424,10 @@ pub(super) fn duplicate_item() -> CommandDefinition {
                     "SELECT url FROM locker_item_address
                       WHERE item_id = ?1 ORDER BY position, id",
                 )?;
-                let rows = statement.query_map([&source_id], |row| row.get::<_, String>(0))?;
+                let rows = statement.query_map([source_id], |row| row.get::<_, String>(0))?;
                 rows.collect::<rusqlite::Result<Vec<_>>>()?
             };
-            set_addresses(ctx, &item_id, &addresses)?;
+            set_addresses(ctx, item_id, &addresses)?;
             // The source's TAGS come along (`tagged` edges to tags); its star
             // and archive are flags and do not. The copy is a new thing.
             ctx.connection().execute(
@@ -505,6 +512,11 @@ pub(super) fn counts() -> CommandDefinition {
     )
 }
 
+#[derive(serde::Deserialize)]
+struct ExportLockerInput {
+    include_trashed: Option<bool>,
+}
+
 pub(super) fn export() -> CommandDefinition {
     let mut definition = definition(
         "locker.export",
@@ -525,11 +537,8 @@ pub(super) fn export() -> CommandDefinition {
         NONE,
         NONE,
         |ctx| {
-            let include_trashed = ctx
-                .input
-                .get("include_trashed")
-                .and_then(serde_json::Value::as_bool)
-                .unwrap_or(false);
+            let input: ExportLockerInput = ctx.parse_input()?;
+            let include_trashed = input.include_trashed.unwrap_or(false);
 
             // A MASS UNSEAL IS A COMMAND AND NOT A QUERY, twice over: it is
             // confirmed and run before any cell opens. The command answers the

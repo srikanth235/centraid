@@ -78,9 +78,16 @@ fn pre_merge(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok(is_you.then(|| "this is you; merge the other person into you instead".to_owned()))
 }
 
+#[derive(serde::Deserialize)]
+struct MergePersonInput {
+    from: String,
+    into: String,
+}
+
 fn merge(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let input: MergePersonInput = ctx.parse_input()?;
     let connection = ctx.connection();
-    let (loser, winner) = (ctx.required_str("from")?, ctx.required_str("into")?);
+    let (loser, winner) = (input.from.as_str(), input.into.as_str());
 
     // Edges: an edge cannot change its ends, so each is written again at the
     // surviving person and the old one goes with the purge. One that already
@@ -346,22 +353,43 @@ fn pre_edit(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     }
 }
 
-/// The columns a person's edit sets as text. A key that is present is set (a
-/// `null` or a blank clears it); a key that is absent is left alone.
-const TEXT_COLUMNS: [&str; 5] = ["sort_name", "nickname", "role", "met", "birthday"];
+#[derive(serde::Deserialize)]
+struct EditPersonInput {
+    id: String,
+    title: Option<String>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    sort_name: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    nickname: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    role: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    met: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    birthday: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    cadence_days: Option<Option<i64>>,
+}
 
 fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let (connection, id) = (ctx.connection(), ctx.required_str("id")?);
-    if let Some(title) = ctx.optional_str("title") {
+    let input: EditPersonInput = ctx.parse_input()?;
+    let (connection, id) = (ctx.connection(), input.id.as_str());
+    if let Some(title) = input.title.as_deref() {
         connection.execute(
             "UPDATE entity SET title = ?2 WHERE id = ?1",
             [id, title.trim()],
         )?;
     }
-    for column in TEXT_COLUMNS {
-        if let Some(value) = ctx.input.get(column) {
+    for (column, patch) in [
+        ("sort_name", input.sort_name),
+        ("nickname", input.nickname),
+        ("role", input.role),
+        ("met", input.met),
+        ("birthday", input.birthday),
+    ] {
+        if let Some(value) = patch {
             let text = value
-                .as_str()
+                .as_deref()
                 .map(str::trim)
                 .filter(|text| !text.is_empty());
             connection.execute(
@@ -370,10 +398,10 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             )?;
         }
     }
-    if let Some(days) = ctx.input.get("cadence_days") {
+    if let Some(days) = input.cadence_days {
         connection.execute(
             "UPDATE person SET cadence_days = ?2 WHERE id = ?1",
-            rusqlite::params![id, days.as_i64().filter(|days| *days > 0)],
+            rusqlite::params![id, days.filter(|days| *days > 0)],
         )?;
     }
     ctx.touch(id)?;
@@ -391,10 +419,17 @@ fn pre_move(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     list_refusal(ctx, ctx.optional_str("list_id"))
 }
 
+#[derive(serde::Deserialize)]
+struct MovePersonInput {
+    id: String,
+    list_id: Option<String>,
+}
+
 /// A person is in one list at a time (or none): filing them somewhere takes
 /// them out of the list they were in.
 fn move_person(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let id = ctx.required_str("id")?;
+    let input: MovePersonInput = ctx.parse_input()?;
+    let id = input.id.as_str();
     // The list they were in, so the move is taken back by moving them there again (`null`: none).
     let was: Option<String> = ctx
         .connection()
@@ -410,12 +445,12 @@ fn move_person(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             AND from_id IN (SELECT id FROM container WHERE kind = 'list')",
         [id],
     )?;
-    if let Some(list) = ctx.optional_str("list_id") {
+    if let Some(list) = input.list_id.as_deref() {
         edge::put(ctx, list, Rel::Contains, id, None, &Extras::default())?;
     }
     Ok(json!({
         "id": id,
-        "list_id": ctx.optional_str("list_id"),
+        "list_id": input.list_id,
         "replaced": { "list_id": was }
     }))
 }
@@ -444,11 +479,19 @@ fn pre_log(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     pre_live_person(ctx)
 }
 
+#[derive(serde::Deserialize)]
+struct LogInteractionInput {
+    id: String,
+    kind: String,
+    text: Option<String>,
+}
+
 /// A touch: an `activity` of an activity kind, `with` the person, starting now.
 /// The words kept of it are a note `about` the activity.
 fn log_interaction(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let (connection, person) = (ctx.connection(), ctx.required_str("id")?);
-    let kind = ensure_concept(ctx, Kind::ActivityKind, ctx.required_str("kind")?)?;
+    let input: LogInteractionInput = ctx.parse_input()?;
+    let (connection, person) = (ctx.connection(), input.id.as_str());
+    let kind = ensure_concept(ctx, Kind::ActivityKind, &input.kind)?;
     let title: String =
         connection.query_row("SELECT title FROM entity WHERE id = ?1", [&kind], |row| {
             row.get(0)
@@ -459,25 +502,31 @@ fn log_interaction(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         rusqlite::params![activity, kind, ctx.now],
     )?;
     edge::put(ctx, &activity, Rel::With, person, None, &Extras::default())?;
-    if let Some(text) = ctx.optional_str("text").filter(|t| !t.trim().is_empty()) {
+    if let Some(text) = input.text.as_deref().filter(|t| !t.trim().is_empty()) {
         let words = note::found(ctx, None, &title, text, "plain", None)?;
         edge::put(ctx, &words, Rel::About, &activity, None, &Extras::default())?;
     }
     Ok(json!({ "interaction_id": activity }))
 }
 
+#[derive(serde::Deserialize)]
+struct PersonTextInput {
+    id: String,
+    text: String,
+}
+
 /// A note about a person: a `note` with an `about` edge, so it is found with them.
 fn add_note(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let text = ctx.required_str("text")?;
-    let words = note::found(ctx, None, &headline(text), text, "plain", None)?;
-    edge::put(
+    let input: PersonTextInput = ctx.parse_input()?;
+    let words = note::found(
         ctx,
-        &words,
-        Rel::About,
-        ctx.required_str("id")?,
         None,
-        &Extras::default(),
+        &headline(&input.text),
+        &input.text,
+        "plain",
+        None,
     )?;
+    edge::put(ctx, &words, Rel::About, &input.id, None, &Extras::default())?;
     Ok(json!({ "note_id": words }))
 }
 
@@ -488,9 +537,16 @@ fn pre_journal(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok(journal_stamp(ctx).err())
 }
 
+#[derive(serde::Deserialize)]
+struct AddJournalInput {
+    mood: String,
+    text: String,
+}
+
 /// A journal entry: a note about the owner, titled by its mood, filed on its own
 /// day.
 fn add_journal_entry(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let input: AddJournalInput = ctx.parse_input()?;
     let filed_at = journal_stamp(ctx).map_err(|detail| VaultError::InvalidInput {
         name: "entry_date".to_owned(),
         detail,
@@ -498,14 +554,7 @@ fn add_journal_entry(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let owner: String = ctx
         .connection()
         .query_row("SELECT self_id FROM vault", [], |row| row.get(0))?;
-    let entry = note::found(
-        ctx,
-        None,
-        ctx.required_str("mood")?,
-        ctx.required_str("text")?,
-        "plain",
-        None,
-    )?;
+    let entry = note::found(ctx, None, &input.mood, &input.text, "plain", None)?;
     ctx.connection().execute(
         "UPDATE entity SET created_at = ?2 WHERE id = ?1",
         [&entry, &filed_at],
@@ -568,21 +617,15 @@ fn journal_stamp(ctx: &CommandCtx<'_, '_>) -> std::result::Result<String, String
 
 /// A task about a person: a follow-up, or (`gift`) a present they might like.
 fn add_task_about(ctx: &CommandCtx<'_, '_>, gift: bool) -> Result<Json> {
+    let input: PersonTextInput = ctx.parse_input()?;
     let id = task::found(
         ctx,
         &NewTask {
-            title: ctx.required_str("text")?,
+            title: &input.text,
             ..NewTask::default()
         },
     )?;
-    edge::put(
-        ctx,
-        &id,
-        Rel::About,
-        ctx.required_str("id")?,
-        None,
-        &Extras::default(),
-    )?;
+    edge::put(ctx, &id, Rel::About, &input.id, None, &Extras::default())?;
     if gift {
         let tag = ensure_concept(ctx, Kind::Tag, GIFT_TAG)?;
         set_tagged(ctx, &id, &tag, true)?;
@@ -616,11 +659,20 @@ fn first_year_with(year: i64, month_day: &str) -> i64 {
         .unwrap_or(year)
 }
 
+#[derive(serde::Deserialize)]
+struct AddDateInput {
+    id: String,
+    label: String,
+    month_day: String,
+    reminder_on: Option<bool>,
+}
+
 /// An important date. The birthday is the person's own column; any other is a
 /// yearly all-day `event` `about` them (R-FP-2), which Agenda shows on its day.
 fn add_date(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let (person, label) = (ctx.required_str("id")?, ctx.required_str("label")?.trim());
-    let month_day = ctx.required_str("month_day")?;
+    let input: AddDateInput = ctx.parse_input()?;
+    let (person, label) = (input.id.as_str(), input.label.trim());
+    let month_day = input.month_day.as_str();
     if crate::model::fold_label(label) == "birthday" {
         ctx.connection().execute(
             "UPDATE person SET birthday = CASE WHEN length(birthday) = 10 AND substr(birthday, 6) = ?2
@@ -636,11 +688,7 @@ fn add_date(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         .and_then(|y| y.parse().ok())
         .unwrap_or(2000);
     let starts = format!("{}-{month_day}", first_year_with(year, month_day));
-    let reminded = ctx
-        .input
-        .get("reminder_on")
-        .and_then(Json::as_bool)
-        .unwrap_or(false);
+    let reminded = input.reminder_on.unwrap_or(false);
     let date = event::found(
         ctx,
         &NewEvent {
@@ -703,27 +751,36 @@ fn pre_relationship(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         .then(|| "a person cannot be related to themselves".to_owned()))
 }
 
+#[derive(serde::Deserialize)]
+struct AddRelationshipInput {
+    id: String,
+    name: String,
+    kind: String,
+    pet: Option<String>,
+}
+
 /// A `related` edge from the person to a relative, labelled by what the relative
 /// is to them. A relative not yet in the vault is founded: a pet is a person of
 /// form `pet` whose `role` is its species.
 fn add_relationship(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let pet = ctx.optional_str("pet");
+    let input: AddRelationshipInput = ctx.parse_input()?;
+    let pet = input.pet.as_deref();
     let target = match relative(ctx)? {
         Some(id) => id,
         None => found(
             ctx,
             &NewPerson {
-                title: ctx.required_str("name")?,
+                title: &input.name,
                 form: pet.map(|_| "pet"),
                 role: pet,
                 ..NewPerson::default()
             },
         )?,
     };
-    let label = ensure_concept(ctx, Kind::Relation, ctx.required_str("kind")?)?;
+    let label = ensure_concept(ctx, Kind::Relation, &input.kind)?;
     edge::put(
         ctx,
-        ctx.required_str("id")?,
+        &input.id,
         Rel::Related,
         &target,
         Some(&label),
@@ -995,18 +1052,6 @@ fn adds_of(known: &Known, person: &str, card: &Card) -> Adds {
     }
 }
 
-/// The cards of the file, the repeats within it folded together, and how many were folded.
-fn vcards(ctx: &CommandCtx<'_, '_>) -> (Vec<Card>, usize) {
-    let cards = ctx
-        .optional_str("cards")
-        .map(vcard::parse)
-        .unwrap_or_default()
-        .into_iter()
-        .take(VCARD_MAX)
-        .collect();
-    merge_repeats(cards)
-}
-
 /// A CARD THAT REPEATS AN EARLIER ONE'S NAME IN THE SAME FILE IS THAT PERSON (#1202), by the rule the
 /// vault is matched by. It is folded into the first: what that one leaves blank is filled and the
 /// points it lacks are added (capped at [`vcard::MAX_POINTS`]), so a second number is not lost with
@@ -1064,6 +1109,13 @@ fn write_points(
     Ok(())
 }
 
+#[derive(serde::Deserialize)]
+struct ImportVcfInput {
+    cards: Option<String>,
+    dry_run: Option<bool>,
+    merge: Option<bool>,
+}
+
 /// `person.import_vcf`: read vCards as people. A card that names someone the vault already has
 /// (by name, or by a number or an address) is a **proposal to merge**: it fills what that person
 /// leaves blank and adds the points they lack, and replaces nothing. With `dry_run` it writes
@@ -1071,17 +1123,18 @@ fn write_points(
 /// `merge: false` the matches are left alone and only new people are added. Importing a file
 /// twice adds nothing: the second time every card is the person the first made.
 fn import_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let dry_run = ctx
-        .input
-        .get("dry_run")
-        .and_then(Json::as_bool)
-        .unwrap_or(false);
-    let merge = ctx
-        .input
-        .get("merge")
-        .and_then(Json::as_bool)
-        .unwrap_or(true);
-    let (cards, repeated) = vcards(ctx);
+    let input: ImportVcfInput = ctx.parse_input()?;
+    let dry_run = input.dry_run.unwrap_or(false);
+    let merge = input.merge.unwrap_or(true);
+    let parsed_cards = input
+        .cards
+        .as_deref()
+        .map(vcard::parse)
+        .unwrap_or_default()
+        .into_iter()
+        .take(VCARD_MAX)
+        .collect();
+    let (cards, repeated) = merge_repeats(parsed_cards);
     // MATCHED AGAINST THE VAULT AS IT WAS, never against what this file has written, so the
     // preview and the write agree card for card.
     let known = known_people(ctx)?;
@@ -1155,12 +1208,19 @@ fn import_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     }))
 }
 
+#[derive(serde::Deserialize)]
+struct ExportVcfInput {
+    list_id: Option<String>,
+    person_id: Option<String>,
+}
+
 /// `person.export_vcf`: everyone, one list's people, or one person (`person_id`, what a detail
 /// page shares) as vCards in one file. Writes nothing.
 /// The owner's own card is not in it: it is the member's, not someone to add to another book.
 fn export_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let list = ctx.optional_str("list_id");
-    let person = ctx.optional_str("person_id");
+    let input: ExportVcfInput = ctx.parse_input()?;
+    let list = input.list_id.as_deref();
+    let person = input.person_id.as_deref();
     let mut file_name = "People".to_owned();
     if let Some(list) = list.or(person) {
         let title: Option<String> = ctx
