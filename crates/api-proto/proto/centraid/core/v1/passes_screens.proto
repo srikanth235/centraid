@@ -104,6 +104,9 @@ message PassAsked {
 
 // One upload the OS ran while the app was suspended finished
 // (`URLSession`'s task delegate). `http_status` is 0 when no response arrived.
+//
+// **IT ONLY WAKES A PASS** (#1209, R7): nothing here marks anything stored. The pass re-reads
+// the gateway's head and diffs; only the engine's answers confirm.
 message UploadSettled {
   string name = 1;
   uint32 http_status = 2;
@@ -113,8 +116,8 @@ message UploadSettled {
 }
 
 // The OS delivered every event for the upload session
-// (`urlSessionDidFinishEvents`): hand the next batch off before iOS suspends
-// the app again.
+// (`urlSessionDidFinishEvents`): wake a pass, which writes the next bundle files before iOS
+// suspends the app again.
 message UploadsDrained {}
 
 // A wake, posted by name from one screen or service to another: something it holds
@@ -206,6 +209,7 @@ message UploadsOp {
 message UploadsPending {}
 
 message UploadsEnqueue {
+  // The bundle files `DrainResponse.os_bundles` named (#1209), each a whole `POST bundle`.
   repeated HandoffPart parts = 1;
 }
 
