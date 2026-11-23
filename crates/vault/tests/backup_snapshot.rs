@@ -262,3 +262,149 @@ fn photos_become_entries_once_and_their_chunks_are_read_once() {
         "known blobs are not read or sealed again"
     );
 }
+
+#[test]
+fn a_snapshot_taken_while_another_thread_commits_is_exactly_a_committed_state() {
+    use centraid_vault::Vault;
+    use centraid_vault::backup::drill::dump;
+    use centraid_vault::backup::engine::{Env, GatewayPass, Policy, Scheduler};
+    use centraid_vault::backup::restore::Restore;
+    use centraid_vault::backup::store::MemoryStore;
+    use std::sync::mpsc;
+
+    let rig = Rig::new("thread");
+    rig.grow(30, "thread");
+    let store = MemoryStore::new("desk");
+    store.set_clock_ms(T0 * 2);
+    rig.pair(&store);
+    rig.snapshot(T0);
+
+    // Another thread holds the vault open on a connection of its own and commits notes the moment
+    // a pin begins, then reports; the snapshot's pin must not see any of it.
+    let path = rig.vault().path().to_owned();
+    let (go, wait) = mpsc::channel::<u32>();
+    let (done, finished) = mpsc::channel::<()>();
+    let committer = std::thread::spawn(move || {
+        let vault = Vault::open(&path).expect("a second handle opens the vault");
+        while let Ok(count) = wait.recv() {
+            for n in 0..count {
+                backup_support::common::insert_note(&vault, &format!("from the thread {n}"))
+                    .expect("commits");
+            }
+            done.send(()).expect("reports");
+        }
+    });
+
+    for round in 1..=3_u64 {
+        let committed = dump(rig.vault()).expect("the committed state at the pin");
+        let during = || {
+            go.send(5).expect("asks the thread to commit");
+            finished.recv().expect("the thread committed");
+        };
+        let mut options = Options::at(T0 + round * 1_000);
+        options.on_pin = Some(&during);
+        let taken = rig.snapshot_with(options);
+        let env = Env::new(
+            rig.vault(),
+            &rig.keys,
+            &rig.state,
+            &rig.staging,
+            Policy::WIFI,
+            T0 + round,
+        );
+        Scheduler::new(vec![GatewayPass::new(&env, &store).expect("a pass")], 8)
+            .run(10_000)
+            .expect("runs");
+
+        let dir = tempfile::tempdir().expect("a directory");
+        let restore = Restore::open(
+            &rig.keys,
+            &[&store as &dyn centraid_vault::backup::store::Store],
+            &taken.root.name,
+        )
+        .expect("opens");
+        let out = dir.path().join("restored.db");
+        restore.records(&out).expect("every restore check holds");
+        let restored = Vault::open(&out).expect("opens");
+        assert_eq!(
+            dump(&restored).expect("dumps"),
+            committed,
+            "round {round}: exactly the state at the pin, none of the commits that landed during it"
+        );
+    }
+    drop(go);
+    committer.join().expect("the thread ends");
+
+    // What the thread committed is in the next snapshot: carried although the WAL was folded.
+    let after = dump(rig.vault()).expect("dumps");
+    let last = rig.snapshot(T0 + 10_000);
+    let env = Env::new(
+        rig.vault(),
+        &rig.keys,
+        &rig.state,
+        &rig.staging,
+        Policy::WIFI,
+        T0 + 10_000,
+    );
+    Scheduler::new(vec![GatewayPass::new(&env, &store).expect("a pass")], 8)
+        .run(10_000)
+        .expect("runs");
+    let dir = tempfile::tempdir().expect("a directory");
+    let restore = Restore::open(
+        &rig.keys,
+        &[&store as &dyn centraid_vault::backup::store::Store],
+        &last.root.name,
+    )
+    .expect("opens");
+    restore
+        .records(&dir.path().join("final.db"))
+        .expect("restores");
+    assert_eq!(
+        dump(&Vault::open(&dir.path().join("final.db")).expect("opens")).expect("dumps"),
+        after
+    );
+}
+
+#[test]
+fn the_quick_check_runs_before_the_head_is_signed() {
+    use centraid_vault::backup::engine::GatewayPass;
+    use centraid_vault::backup::store::{MemoryStore, Store as _};
+
+    let rig = Rig::new("quick");
+    rig.grow(20, "quick");
+    let store = MemoryStore::new("desk");
+    store.set_clock_ms(T0 * 2);
+    rig.pair(&store);
+    let raw = rig.raw();
+    raw.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+        row.get::<_, i64>(0)
+    })
+    .expect("folds");
+    drop(raw);
+    let path = rig.vault().path().to_owned();
+    let mut bytes = std::fs::read(&path).expect("reads");
+    let leaf = (1..bytes.len() / 4096)
+        .find(|page| bytes[page * 4096] == 0x0d)
+        .expect("a leaf page");
+    bytes[leaf * 4096 + 3] = 0xff;
+    bytes[leaf * 4096 + 4] = 0xff;
+    std::fs::write(&path, &bytes).expect("damages");
+
+    let refused = centraid_vault::backup::snapshot::take(
+        rig.vault(),
+        &rig.keys,
+        &rig.state,
+        &rig.staging,
+        &rig.directory,
+        Options::at(T0),
+    );
+    assert!(
+        refused.is_err(),
+        "quick_check refuses the pass on the pin it read"
+    );
+    // No root exists, so no pass can start and no head is ever signed over the damage.
+    let env = rig.env(T0);
+    assert!(GatewayPass::new(&env, &store).is_err());
+    assert!(store.head().expect("head").is_none());
+    assert_eq!(store.counts().heads, 0);
+}

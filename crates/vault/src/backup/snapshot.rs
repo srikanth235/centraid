@@ -140,6 +140,11 @@ pub fn take(
     directory: &Directory,
     options: Options<'_>,
 ) -> Result<Taken> {
+    if vault.depth.get() > 0 {
+        return Err(invariant(
+            "a snapshot was asked for inside a commit; a snapshot is taken between commits",
+        ));
+    }
     let path = vault.path().to_owned();
     let device = state.device()?;
     let prior = previous(state, keys, &device);
@@ -350,4 +355,34 @@ pub fn empty_directory() -> Result<Directory> {
 #[must_use]
 pub fn root_name(taken: &Taken) -> Name {
     taken.root.name
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A snapshot is taken between commits: inside one the plane refuses by name.
+    #[test]
+    fn no_snapshot_is_taken_inside_a_commit() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let vault = Vault::create(dir.path().join("vault.db")).expect("a vault");
+        vault.found("The Household", "Ada").expect("founds");
+        let keys = BackupKeys::from_root(&[3; 32]);
+        let state = DeviceState::open_beside(vault.path()).expect("state");
+        let staging = Staging::open(dir.path().join("vault.staging"), 1 << 30).expect("staging");
+        let directory = Directory::new(Vec::new()).expect("a directory");
+        let outcome = vault.commit(|_| {
+            assert!(matches!(
+                take(&vault, &keys, &state, &staging, &directory, Options::at(1)),
+                Err(super::super::PlaneError::Invariant { .. })
+            ));
+            Ok(())
+        });
+        assert!(outcome.is_ok());
+        assert_eq!(crate::pagesource::live_pins(), 0);
+        assert!(
+            state.device().expect("device").newest.is_none(),
+            "and no root exists"
+        );
+    }
 }

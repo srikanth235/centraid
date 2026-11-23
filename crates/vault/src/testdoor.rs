@@ -254,7 +254,10 @@ pub fn text_of_tables(
 /// # Errors
 /// SQLite's refusal to open or write the file.
 pub fn stamp_earlier_model(path: &std::path::Path) -> rusqlite::Result<()> {
-    Connection::open(path)?.pragma_update(
+    let connection = Connection::open(path)?;
+    // R5: no connection to the vault file checkpoints on its own, a closed one's included.
+    connection.pragma_update(None, "wal_autocheckpoint", 0)?;
+    connection.pragma_update(
         None,
         "application_id",
         crate::format::EARLIER_APPLICATION_ID,

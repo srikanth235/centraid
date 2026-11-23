@@ -268,6 +268,7 @@ pub fn all(root: &Path) -> Vec<RuleReport> {
         no_listening_socket(root),
         commonmain_no_platform_import(root),
         gateway_harness_out_of_release(root),
+        vault_connections_do_not_checkpoint(root),
     ]
     .into_iter()
     .chain(crate::native_rules::all(root))
@@ -577,6 +578,72 @@ pub fn listener_hits(source: &str) -> Vec<(usize, &'static str)> {
                 .map(|pattern| (index + 1, *pattern))
         })
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Rule — the core owns the vault's checkpoints (#1209, R5)
+// ---------------------------------------------------------------------------
+
+/// Where the vault's code opens a database that is not the vault file: its own state, the word
+/// index, a test's scratch. Each is a named file with a reason, so an exemption is one somebody
+/// wrote down.
+const OTHER_DATABASES: [(&str, &str); 2] = [
+    (
+        "crates/vault/src/backup/state.rs",
+        "the backup's device state, `<stem>.state.db`",
+    ),
+    ("crates/vault/src/words.rs", "the word list's own database"),
+];
+
+/// The text that proves a file stops SQLite's own checkpoints on the connection it opens.
+const NO_AUTOCHECKPOINT: &str = "\"wal_autocheckpoint\", 0";
+
+/// **Every connection to the vault file sets `wal_autocheckpoint = 0`.** The snapshot reads only the
+/// ranges the WAL's frames name (`backup::wal`), which is true only while nothing but the core
+/// folds the WAL into the file, after a snapshot. A connection that opened the vault with SQLite's
+/// default would checkpoint on its own, and the next snapshot would miss what it moved.
+///
+/// The rule reads each non-test file of `crates/vault/src` and `crates/core/src` that opens a
+/// connection (`Connection::open(`, `Connection::open_with_flags(`; an in-memory database is not
+/// the vault) and requires the file to set the pragma, unless it is one of [`OTHER_DATABASES`].
+pub fn vault_connections_do_not_checkpoint(root: &Path) -> RuleReport {
+    const NAME: &str = "vault-connections-do-not-checkpoint";
+    let mut scanned = 0usize;
+    let mut findings = Vec::new();
+    for dir in ["crates/vault/src", "crates/core/src"] {
+        for file in source_files(&root.join(dir), "rs") {
+            let rel = relative(root, &file);
+            if OTHER_DATABASES.iter().any(|(path, _)| *path == rel) {
+                continue;
+            }
+            let Ok(source) = fs::read_to_string(&file) else {
+                continue;
+            };
+            // Test modules open scratch databases of their own; the rule reads the product code.
+            let product = source.split("#[cfg(test)]").next().unwrap_or(&source);
+            let opens: Vec<usize> = product
+                .lines()
+                .enumerate()
+                .filter(|(_, line)| {
+                    let code = line.split("//").next().unwrap_or(line);
+                    code.contains("Connection::open(")
+                        || code.contains("Connection::open_with_flags(")
+                })
+                .map(|(index, _)| index + 1)
+                .collect();
+            if opens.is_empty() {
+                continue;
+            }
+            scanned += 1;
+            if !product.contains(NO_AUTOCHECKPOINT) {
+                findings.push(format!(
+                    "{rel}:{}: opens a connection to a database but never sets `wal_autocheckpoint = 0`. The core owns the vault's checkpoints (R5): a connection that checkpoints on its own hides pages from the next snapshot's dirty set. Set it on the connection, or name the file in OTHER_DATABASES if it is not the vault",
+                    opens[0]
+                ));
+            }
+        }
+    }
+    RuleReport::applied(NAME, scanned, findings)
 }
 
 // ---------------------------------------------------------------------------
@@ -1042,6 +1109,33 @@ fn door() {
 
     /// An allowlisted file that stopped accepting is an exemption nobody is
     /// looking at, which is how the next one gets added quietly.
+    #[test]
+    fn a_vault_connection_that_checkpoints_on_its_own_is_caught() {
+        let root = fixture_dir("autocheckpoint-red");
+        write(
+            &root,
+            "crates/vault/src/file.rs",
+            "fn open() { let c = Connection::open(path); c.pragma_update(None, \"wal_autocheckpoint\", 0); }",
+        );
+        write(
+            &root,
+            "crates/core/src/phone.rs",
+            "fn peek() { let c = rusqlite::Connection::open(vault_file); }\n#[cfg(test)]\nmod t { fn x() { Connection::open(a); } }",
+        );
+        write(
+            &root,
+            "crates/vault/src/backup/state.rs",
+            "fn state() { Connection::open(path); }",
+        );
+        let report = vault_connections_do_not_checkpoint(&root);
+        assert_eq!(report.findings.len(), 1, "{:?}", report.findings);
+        assert!(report.findings[0].contains("crates/core/src/phone.rs:1"));
+        assert!(
+            matches!(report.state, RuleState::Applied(2)),
+            "the vault's own and the offender"
+        );
+    }
+
     #[test]
     fn the_listener_allowlist_has_no_dead_entries() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
