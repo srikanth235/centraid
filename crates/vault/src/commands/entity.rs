@@ -511,9 +511,10 @@ pub(crate) fn purge_one(
     // now (`index::purge`), and a Locker item's plain text is its sidecars' rows.
     crate::index::purge(connection, id)?;
     // A Locker item's sidecars are deleted explicitly, in this commit, though
-    // they declare ON DELETE CASCADE: a cascade fires no `AFTER DELETE`
-    // trigger unless `recursive_triggers` is on, and the commit's census names
-    // the tables whose rows went. Its receipts stay: they name it by value.
+    // they declare ON DELETE CASCADE. A cascade would fire the same `AFTER DELETE` triggers (the
+    // commit's touch triggers and the history's rely on that for every other child); the explicit
+    // deletes only keep the order plain: sidecars, then the item row, then the entity. Its
+    // receipts stay: they name it by value.
     if found.kind == Kind::LockerItem {
         for table in [
             "locker_item_field",

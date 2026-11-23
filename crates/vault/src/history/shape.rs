@@ -410,6 +410,20 @@ pub const OMITTED: &[(&str, &str, &str)] = &[
     ),
 ];
 
+/// The columns whose change is NOT a change to the entity a member sees: an update that moves only
+/// these neither stamps `updated_at` nor re-indexes. This is the commit triggers' own notion, apart
+/// from [`OMITTED`] (what the history does not keep): an immutable or bank-stated column the
+/// history leaves out is still a change to the entity when a command moves it (a purge detaching a
+/// derived photo's `edited_from`, `txn.account_id` feeding the account's text).
+pub const NEVER_TOUCHES: &[(&str, &str, &str)] =
+    &[("locker_item", "last_used_at", "a use is not an edit")];
+
+fn never_touches(table: &str, column: &str) -> bool {
+    NEVER_TOUCHES
+        .iter()
+        .any(|(name, never, _)| *name == table && *never == column)
+}
+
 /// Whether `table.column` holds ciphertext under the Locker key (`lk1:`): kept in a state exactly
 /// as sealed, and shown nowhere but masked ([`crate::history::MASK`]). One list with the custody
 /// module's, so a sealed column added there is masked here without a second edit.
@@ -455,6 +469,9 @@ pub struct Part {
     pub role: Role,
     /// The columns kept, in table order.
     pub columns: Vec<String>,
+    /// The columns whose change moves the entity (`updated_at`, search): every live column but
+    /// a host's id and the [`NEVER_TOUCHES`] ones, kept by the history or not.
+    pub touch_columns: Vec<String>,
     /// The columns that name one row among the entity's rows of this table (empty for a kind row
     /// and for a child that is one row per entity).
     pub key: Vec<String>,
@@ -552,6 +569,14 @@ impl Shape {
                 .map(|row| row.0.clone())
                 .filter(|column| column != via && !omitted(name, column))
                 .collect();
+            let touch_columns = live
+                .iter()
+                .map(|row| row.0.clone())
+                .filter(|column| {
+                    (column != via || matches!(role, Role::Child { .. }))
+                        && !never_touches(name, column)
+                })
+                .collect();
             let mut keyed: Vec<&&(String, i64, i64)> = live
                 .iter()
                 .filter(|row| row.1 > 0 && row.0 != via)
@@ -583,6 +608,7 @@ impl Shape {
                 alias,
                 role: *role,
                 columns,
+                touch_columns,
                 key,
                 references,
             });
@@ -795,6 +821,13 @@ impl Shape {
                 t = super::COMMIT_TOUCHED,
             )
         };
+        let changed = |columns: &[String]| {
+            columns
+                .iter()
+                .map(|c| format!("old.{q} IS NOT new.{q}", q = quoted(c)))
+                .collect::<Vec<_>>()
+                .join(" OR ")
+        };
         let mut touch_trigger =
             |name: &str, timing: &str, table: &str, guard: Option<&str>, body: String| {
                 let when_clause = guard.map_or(String::new(), |g| format!(" WHEN {g}"));
@@ -826,7 +859,10 @@ impl Shape {
             "entity_update",
             "AFTER UPDATE OF title, deleted_at, purge_at",
             "entity",
-            None,
+            Some(
+                "old.title IS NOT new.title OR old.deleted_at IS NOT new.deleted_at
+                 OR old.purge_at IS NOT new.purge_at",
+            ),
             mark_stamp("new.id"),
         );
         let mut edge_installed = false;
@@ -881,7 +917,7 @@ impl Shape {
                         "edge_related_update",
                         "AFTER UPDATE OF \"label_id\"",
                         "edge",
-                        Some("new.rel = 'related'"),
+                        Some("new.rel = 'related' AND old.label_id IS NOT new.label_id"),
                         format!(
                             "{} {}",
                             mark_reindex("new.from_id"),
@@ -904,15 +940,18 @@ impl Shape {
             }
             match part.role {
                 Role::Host => {
-                    // `part.columns` excludes `OMITTED` columns (such as `locker_item.last_used_at`
-                    // and immutable columns), so a reveal stamp never bumps `updated_at` or re-indexes.
-                    if !part.columns.is_empty() {
-                        let cols: Vec<String> = part.columns.iter().map(|c| quoted(c)).collect();
+                    // Only a column that really changed fires it (`WHEN`), so an upsert that
+                    // writes the same values stamps and re-indexes nothing. `touch_columns`
+                    // leaves out [`NEVER_TOUCHES`] (`locker_item.last_used_at`), so a reveal
+                    // stamp never bumps `updated_at`.
+                    if !part.touch_columns.is_empty() {
+                        let cols: Vec<String> =
+                            part.touch_columns.iter().map(|c| quoted(c)).collect();
                         touch_trigger(
                             &format!("{}_update", part.alias),
                             &format!("AFTER UPDATE OF {}", cols.join(", ")),
                             part.name,
-                            None,
+                            Some(&changed(&part.touch_columns)),
                             mark_stamp("new.id"),
                         );
                     }
@@ -930,7 +969,7 @@ impl Shape {
                         &format!("{}_update", part.alias),
                         "AFTER UPDATE",
                         part.name,
-                        None,
+                        Some(&changed(&part.touch_columns)),
                         mark_stamp(&format!("new.{via}")),
                     );
                     touch_trigger(

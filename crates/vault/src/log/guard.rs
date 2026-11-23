@@ -79,6 +79,9 @@ pub struct Pending {
     /// The ids already stamped in this commit, so a second touch does not stamp
     /// `updated_at` a second time: a commit is one change.
     stamped: BTreeSet<String>,
+    /// The first instant a handler stamped with (`touch`, `insert_entity`): the commit's drain
+    /// stamps the entities the triggers found with the same one, so a commit is one instant.
+    instant: Option<String>,
     /// The command (or other producer) the commit is for: the `cause` of the history it keeps.
     producer: String,
     /// Whether the commit is a quiet save (an editor's autosave): see [`CommitTx::set_quiet`].
@@ -129,6 +132,10 @@ impl<'conn> CommitTx<'conn> {
     /// # Errors
     /// [`VaultError::Invariant`] when there is no such entity.
     pub fn touch(&self, id: &str, now: &str) -> Result<()> {
+        self.pending
+            .borrow_mut()
+            .instant
+            .get_or_insert_with(|| now.to_owned());
         let first = self.pending.borrow_mut().stamped.insert(id.to_owned());
         if first {
             let changed = self.connection.execute(
@@ -159,6 +166,10 @@ impl<'conn> CommitTx<'conn> {
     /// # Errors
     /// Whatever SQLite refused: a duplicate id, a kind the CHECK does not know.
     pub fn insert_entity(&self, id: &str, kind: Kind, title: &str, now: &str) -> Result<()> {
+        self.pending
+            .borrow_mut()
+            .instant
+            .get_or_insert_with(|| now.to_owned());
         self.connection.execute(
             "INSERT INTO entity (id, kind, title, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?4)",
@@ -279,6 +290,13 @@ impl Vault {
             };
             let value = body(&tx)?;
             let now = self.clock().now_text();
+            // Entities the triggers found take the instant the handlers already stamped with.
+            let stamp_now = self
+                .pending
+                .borrow()
+                .instant
+                .clone()
+                .unwrap_or_else(|| now.clone());
             // Auto-derive touched entities from the connection's TEMP triggers: every direct
             // mutation to an entity, host row, child row, or edge stamps `updated_at` (when
             // appropriate) and joins `owed` for search + alerts automatically.
@@ -289,7 +307,7 @@ impl Vault {
                     connection.prepare_cached("UPDATE entity SET updated_at = ?2 WHERE id = ?1")?;
                 for id in auto.stamp {
                     if pending.stamped.insert(id.clone()) {
-                        stamp_stmt.execute(rusqlite::params![id, &now])?;
+                        stamp_stmt.execute(rusqlite::params![id, &stamp_now])?;
                     }
                 }
             }

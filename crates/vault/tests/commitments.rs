@@ -10,6 +10,7 @@ mod common;
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use centraid_vault::Clock as _;
 use centraid_vault::commands::Registry;
 use centraid_vault::index;
 use centraid_vault::model::{Kind, Rel, fold_label};
@@ -1213,8 +1214,6 @@ fn the_word_list_gains_a_word_on_index_and_loses_it_on_a_purge_or_a_rebuild() {
 
 #[test]
 fn an_edit_without_explicit_touch_still_updates_search_and_timestamp() {
-    use centraid_vault::Clock as _;
-
     // Auto-touch TEMP triggers guarantee that a raw SQL write without calling `ctx.touch`
     // still advances `updated_at` and keeps the incremental search index equal to a rebuild,
     // while an omitted column (`locker_item.last_used_at`) leaves `updated_at` untouched.
@@ -1266,6 +1265,137 @@ fn an_edit_without_explicit_touch_still_updates_search_and_timestamp() {
     assert_eq!(
         locker_updated, AT,
         "a reveal stamp must not move updated_at"
+    );
+}
+
+fn updated_at(vault: &Vault, id: &str) -> String {
+    read(vault, |c| {
+        Ok(
+            c.query_row("SELECT updated_at FROM entity WHERE id = ?1", [id], |r| {
+                r.get(0)
+            })?,
+        )
+    })
+}
+
+#[test]
+fn purging_a_source_photo_stamps_and_reindexes_the_photo_derived_from_it() {
+    // `photo.edited_from` is omitted from the history (immutable) but a purge moving it is still
+    // a change to the derived photograph: the commit triggers' column set is their own.
+    let scratch = founded("c6-detach");
+    let vault = &scratch.vault;
+    vault
+        .commit(|tx| {
+            let c = tx.connection();
+            let blob = centraid_vault::blob::content_digest(b"src");
+            let other = centraid_vault::blob::content_digest(b"der");
+            centraid_vault::blob::stage(c, &blob, 1)?;
+            centraid_vault::blob::stage(c, &other, 1)?;
+            tx.insert_entity("src", Kind::Photo, "Source", AT)?;
+            c.execute(
+                "INSERT INTO photo (id, blob, media_type, form) VALUES ('src', ?1, 'image/jpeg', 'photo')",
+                [&blob],
+            )?;
+            tx.insert_entity("der", Kind::Photo, "Derived", AT)?;
+            c.execute(
+                "INSERT INTO photo (id, blob, media_type, form, edited_from)
+                 VALUES ('der', ?1, 'image/jpeg', 'photo', 'src')",
+                [&other],
+            )?;
+            Ok(())
+        })
+        .expect("two photographs");
+    scratch.clock.advance_ms(60_000);
+    let registry = Registry::with_system_commands().expect("a registry");
+    run(vault, &registry, "entity.trash", json!({ "id": "src" }));
+    run(vault, &registry, "entity.purge", json!({ "id": "src" }));
+    assert_eq!(
+        updated_at(vault, "der"),
+        scratch.clock.now_text(),
+        "detaching a derived photograph is a change to it"
+    );
+    assert_eq!(
+        index_dump(vault),
+        rebuilt(vault),
+        "and the index follows it"
+    );
+}
+
+#[test]
+fn a_write_that_changes_nothing_touches_nothing_and_a_mixed_commit_shares_one_instant() {
+    let scratch = founded("c6-noop");
+    let vault = &scratch.vault;
+    vault
+        .commit(|tx| {
+            let c = tx.connection();
+            tx.insert_entity("ev", Kind::Event, "Series", AT)?;
+            c.execute(
+                "INSERT INTO event (id, starts, timing, rule, calendar_id)
+                 VALUES ('ev', '2026-03-02', 'all-day', 'FREQ=WEEKLY', 'calendar:default')",
+                [],
+            )?;
+            tx.insert_entity("n", Kind::Note, "Note", AT)?;
+            c.execute("INSERT INTO note (id, body) VALUES ('n', 'same')", [])?;
+            tx.insert_entity("m", Kind::Note, "Other", AT)?;
+            c.execute("INSERT INTO note (id, body) VALUES ('m', 'same')", [])?;
+            Ok(())
+        })
+        .expect("a series and two notes");
+    let upsert = |starts: &str| {
+        vault
+            .commit(|tx| {
+                tx.connection().execute(
+                    "INSERT INTO occurrence (series_id, original_start, scope, starts)
+                     VALUES ('ev', '2026-03-09', 'occurrence', ?1)
+                     ON CONFLICT (series_id, original_start, scope)
+                     DO UPDATE SET starts = ?1",
+                    [starts],
+                )?;
+                Ok(())
+            })
+            .expect("an upsert");
+    };
+    scratch.clock.advance_ms(60_000);
+    upsert("2026-03-10");
+    let first = updated_at(vault, "ev");
+    assert_ne!(first, AT, "a changed occurrence stamps its series");
+    scratch.clock.advance_ms(60_000);
+    upsert("2026-03-10");
+    assert_eq!(
+        updated_at(vault, "ev"),
+        first,
+        "re-writing the same values stamps nothing"
+    );
+    vault
+        .commit(|tx| {
+            tx.connection()
+                .execute("UPDATE note SET body = 'same' WHERE id = 'n'", [])?;
+            Ok(())
+        })
+        .expect("a no-op update");
+    assert_eq!(
+        updated_at(vault, "n"),
+        AT,
+        "a no-op host update stamps nothing"
+    );
+
+    // A manual touch (the command's instant) and an auto stamp (the trigger) in one commit
+    // carry the same `updated_at`, even when the vault's clock has moved between them.
+    let before = scratch.clock.now_text();
+    scratch.clock.advance_ms(60_000);
+    vault
+        .commit(|tx| {
+            tx.touch("n", &before)?;
+            tx.connection()
+                .execute("UPDATE note SET body = 'changed' WHERE id = 'm'", [])?;
+            Ok(())
+        })
+        .expect("a mixed commit");
+    assert_eq!(updated_at(vault, "n"), before);
+    assert_eq!(
+        updated_at(vault, "m"),
+        before,
+        "an auto stamp takes the instant the handlers stamped with"
     );
 }
 
