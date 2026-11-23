@@ -299,54 +299,67 @@ fn pre_log(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok(None)
 }
 
-/// The measures an input states, as the columns they are: the figure, or `null` to clear one.
-fn stated(ctx: &CommandCtx<'_, '_>) -> Vec<(&'static str, Sql)> {
-    COLUMNS
-        .iter()
-        .skip(1) // `recorded_by` is the store's
-        .filter_map(|column| {
-            let value = ctx.input.get(*column)?;
-            let bound = match value {
-                Json::Null => Sql::Null,
-                Json::Number(number) if WHOLE.contains(column) => {
-                    Sql::Integer(number.as_f64()?.round() as i64)
-                }
-                Json::Number(number) => Sql::Real(number.as_f64()?),
-                _ => return None,
-            };
-            Some((*column, bound))
-        })
-        .collect()
+/// A whole-number measure read from any JSON number, rounded (`142.0` is a valid integer).
+fn whole<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<Option<i64>, D::Error> {
+    let number: Option<f64> = serde::Deserialize::deserialize(deserializer)?;
+    Ok(number.filter(|n| n.is_finite()).map(|n| n.round() as i64))
+}
+
+/// [`whole`] with patch semantics: absent is `None`, `null` is `Some(None)`.
+fn whole_patch<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<Option<Option<i64>>, D::Error> {
+    whole(deserializer).map(Some)
+}
+
+#[derive(serde::Deserialize)]
+struct LogWorkoutInput {
+    id: Option<String>,
+    #[serde(rename = "type")]
+    workout_type: Option<String>,
+    title: Option<String>,
+    starts: String,
+    ends: Option<String>,
+    #[serde(default, deserialize_with = "whole")]
+    moving_s: Option<i64>,
+    distance_m: Option<f64>,
+    energy_kcal: Option<f64>,
+    #[serde(default, deserialize_with = "whole")]
+    heart_bpm: Option<i64>,
+    climb_m: Option<f64>,
 }
 
 fn log(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let input: LogWorkoutInput = ctx.parse_input()?;
     let connection = ctx.connection();
-    let word = ctx.optional_str("type").unwrap_or("workout");
+    let word = input.workout_type.as_deref().unwrap_or("workout");
     let kind = ensure_concept(ctx, Kind::WorkoutKind, word)?;
     let named: String =
         connection.query_row("SELECT title FROM entity WHERE id = ?1", [&kind], |row| {
             row.get(0)
         })?;
-    let title = ctx
-        .optional_str("title")
+    let title = input
+        .title
+        .as_deref()
         .map(str::trim)
         .filter(|title| !title.is_empty())
         .unwrap_or(&named);
     // the id the phone minted first when it named one (a card shows it before the tap)
-    let id = match ctx.optional_str("id") {
+    let id = match input.id.as_deref() {
         Some(id) => {
             ctx.insert_entity_as(id, Kind::Activity, title)?;
             id.to_owned()
         }
         None => ctx.insert_entity(Kind::Activity, title)?,
     };
-    let starts = instant(connection, ctx.required_str("starts")?)?.map_err(|detail| {
-        VaultError::InvalidInput {
+    let starts =
+        instant(connection, &input.starts)?.map_err(|detail| VaultError::InvalidInput {
             name: "starts".to_owned(),
             detail,
-        }
-    })?;
-    let ends = match ctx.optional_str("ends") {
+        })?;
+    let ends = match input.ends.as_deref() {
         Some(ends) => {
             Some(
                 instant(connection, ends)?.map_err(|detail| VaultError::InvalidInput {
@@ -363,13 +376,31 @@ fn log(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         rusqlite::params![id, kind, starts, ends],
     )?;
     settle(ctx, &id)?;
-    set_measures(ctx, &id)?;
-    ctx.touch(&id)?;
+    let mut measures = Vec::new();
+    if let Some(v) = input.moving_s {
+        measures.push(("moving_s", Sql::Integer(v)));
+    }
+    if let Some(v) = input.distance_m {
+        measures.push(("distance_m", Sql::Real(v)));
+    }
+    if let Some(v) = input.energy_kcal {
+        measures.push(("energy_kcal", Sql::Real(v)));
+    }
+    if let Some(v) = input.heart_bpm {
+        measures.push(("heart_bpm", Sql::Integer(v)));
+    }
+    if let Some(v) = input.climb_m {
+        measures.push(("climb_m", Sql::Real(v)));
+    }
+    write_measures(ctx, &id, measures)?;
     Ok(serde_json::json!({ "id": id, "workout_id": id }))
 }
 
-fn set_measures(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<()> {
-    let measures = stated(ctx);
+fn write_measures(
+    ctx: &CommandCtx<'_, '_>,
+    id: &str,
+    measures: Vec<(&'static str, Sql)>,
+) -> Result<()> {
     if measures.is_empty() {
         return Ok(());
     }
@@ -429,39 +460,82 @@ fn pre_edit(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         .map(|_| "A workout cannot end before it starts.".to_owned()))
 }
 
+#[derive(serde::Deserialize)]
+struct EditWorkoutInput {
+    id: String,
+    #[serde(rename = "type")]
+    workout_type: Option<String>,
+    title: Option<String>,
+    starts: Option<String>,
+    ends: Option<String>,
+    #[serde(default, deserialize_with = "whole_patch")]
+    moving_s: Option<Option<i64>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    distance_m: Option<Option<f64>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    energy_kcal: Option<Option<f64>>,
+    #[serde(default, deserialize_with = "whole_patch")]
+    heart_bpm: Option<Option<i64>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    climb_m: Option<Option<f64>>,
+}
+
 fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let input: EditWorkoutInput = ctx.parse_input()?;
     let connection = ctx.connection();
-    let id = ctx.required_str("id")?;
-    if let Some(title) = ctx
-        .optional_str("title")
+    if let Some(title) = input
+        .title
+        .as_deref()
         .map(str::trim)
         .filter(|t| !t.is_empty())
     {
-        connection.execute("UPDATE entity SET title = ?2 WHERE id = ?1", [id, title])?;
+        connection.execute(
+            "UPDATE entity SET title = ?2 WHERE id = ?1",
+            [input.id.as_str(), title],
+        )?;
     }
-    if let Some(word) = ctx.optional_str("type") {
+    if let Some(word) = input.workout_type.as_deref() {
         let kind = ensure_concept(ctx, Kind::WorkoutKind, word)?;
         connection.execute(
             "UPDATE activity SET type_id = ?2 WHERE id = ?1",
-            [id, &kind],
+            [input.id.as_str(), &kind],
         )?;
     }
-    for (column, name) in [("starts", "starts"), ("ends", "ends")] {
-        if let Some(text) = ctx.optional_str(name) {
+    for (column, value) in [
+        ("starts", input.starts.as_deref()),
+        ("ends", input.ends.as_deref()),
+    ] {
+        if let Some(text) = value {
             let instant =
                 instant(connection, text)?.map_err(|detail| VaultError::InvalidInput {
-                    name: name.to_owned(),
+                    name: column.to_owned(),
                     detail,
                 })?;
             connection.execute(
                 &format!("UPDATE activity SET {column} = ?2 WHERE id = ?1"),
-                [id, &instant],
+                [input.id.as_str(), &instant],
             )?;
         }
     }
-    set_measures(ctx, id)?;
-    ctx.touch(id)?;
-    Ok(serde_json::json!({ "workout_id": id }))
+    let mut measures = Vec::new();
+    if let Some(v) = input.moving_s {
+        measures.push(("moving_s", v.map_or(Sql::Null, Sql::Integer)));
+    }
+    if let Some(v) = input.distance_m {
+        measures.push(("distance_m", v.map_or(Sql::Null, Sql::Real)));
+    }
+    if let Some(v) = input.energy_kcal {
+        measures.push(("energy_kcal", v.map_or(Sql::Null, Sql::Real)));
+    }
+    if let Some(v) = input.heart_bpm {
+        measures.push(("heart_bpm", v.map_or(Sql::Null, Sql::Integer)));
+    }
+    if let Some(v) = input.climb_m {
+        measures.push(("climb_m", v.map_or(Sql::Null, Sql::Real)));
+    }
+    write_measures(ctx, &input.id, measures)?;
+    ctx.touch(&input.id)?;
+    Ok(serde_json::json!({ "workout_id": input.id }))
 }
 
 #[must_use]
@@ -524,4 +598,32 @@ pub fn definitions() -> Vec<CommandDefinition> {
             edit,
         ),
     ]
+}
+
+#[cfg(test)]
+mod whole_number_tests {
+    use super::{EditWorkoutInput, LogWorkoutInput};
+    use serde_json::json;
+
+    #[test]
+    fn whole_measures_read_integers_and_integer_valued_floats_alike() {
+        for heart in [json!(142), json!(142.0)] {
+            let log: LogWorkoutInput = serde_json::from_value(
+                json!({ "starts": "2026-03-04", "moving_s": 1800.0, "heart_bpm": heart }),
+            )
+            .expect("log input");
+            assert_eq!((log.moving_s, log.heart_bpm), (Some(1800), Some(142)));
+            let edit: EditWorkoutInput = serde_json::from_value(
+                json!({ "id": "w", "moving_s": 1800.0, "heart_bpm": heart }),
+            )
+            .expect("edit input");
+            assert_eq!(
+                (edit.moving_s, edit.heart_bpm),
+                (Some(Some(1800)), Some(Some(142)))
+            );
+        }
+        let edit: EditWorkoutInput =
+            serde_json::from_value(json!({ "id": "w", "heart_bpm": null })).expect("edit input");
+        assert_eq!((edit.moving_s, edit.heart_bpm), (None, Some(None)));
+    }
 }

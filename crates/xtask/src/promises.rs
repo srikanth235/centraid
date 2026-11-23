@@ -308,7 +308,7 @@ pub const REGISTER: &[Row] = &[
     kept(
         "calendar",
         Promise::Arrive,
-        "crates/vault/src/commands/follow.rs",
+        "crates/vault/src/commands/follow/merge.rs",
     ),
     kept(
         "docs",
@@ -318,7 +318,7 @@ pub const REGISTER: &[Row] = &[
     kept(
         "health",
         Promise::Arrive,
-        "crates/vault/src/commands/follow.rs",
+        "crates/vault/src/commands/follow/merge.rs",
     ),
     kept(
         "locker",

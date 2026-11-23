@@ -106,8 +106,14 @@ fn plant(sample: &common::chat::Sample) {
         serde_json::json!({
             "item_id": "lk-login", "type": "login", "title": "Planted login",
             "username": "plainname", "url": "https://planted.example",
-            "password": seal("lk-login", marker("password")),
-            "otp_seed": seal("lk-login", marker("otp_seed")),
+            "password": seal(
+                &centraid_vault::commands::locker::built_in_field_id("lk-login", "password"),
+                marker("password")
+            ),
+            "otp_seed": seal(
+                &centraid_vault::commands::locker::built_in_field_id("lk-login", "otp_seed"),
+                marker("otp_seed")
+            ),
             "password_rotated": true, "key_id": key_id
         }),
     );
@@ -367,7 +373,7 @@ fn no_sealed_value_reaches_the_model_an_event_the_thread_an_action_key_or_the_in
     assert!(matches!(done.outcome, Confirmed::Done { .. }), "{done:?}");
 
     // It is stored sealed, and the member's own Locker opens it to what they typed.
-    let stored = stored_text(&sample, &|name| name == "locker_item");
+    let stored = stored_text(&sample, &|name| name == "locker_item_field");
     assert!(stored.contains("lk1:"));
     assert!(!stored.contains(TYPED_CREATE), "stored as typed");
     let gym = {
@@ -494,7 +500,7 @@ fn a_sealing_command_through_the_door_lands_sealed_exactly_as_the_handles_own_do
             "{id}"
         );
     }
-    let stored = stored_text(&sample, &|name| name == "locker_item");
+    let stored = stored_text(&sample, &|name| name == "locker_item_field");
     assert_eq!(stored.matches("lk1:").count(), 2, "both sealed: {stored}");
     assert!(!stored.contains(TYPED_CREATE));
 }

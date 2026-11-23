@@ -1774,6 +1774,17 @@ pub fn v4_think(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_bare_words_include_every_locker_type_and_secret_cell() {
+        use centraid_vault::commands::locker::{ITEM_TYPES, SEALED_ITEM_CELLS};
+        for word in ITEM_TYPES {
+            assert!(super::ENUM_WORDS.contains(&word), "{word}");
+        }
+        for cell in SEALED_ITEM_CELLS.iter().filter(|c| **c != "otp_seed") {
+            assert!(super::ENUM_WORDS.contains(cell), "{cell}");
+        }
+    }
+
     use super::*;
 
     fn call(think: &str, dates: Option<&str>, mode: TraceMode) -> Call {

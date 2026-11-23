@@ -255,7 +255,14 @@ fn a_locker_items_earlier_cells_are_not_found_through_the_door() {
         .commit(|tx| {
             tx.insert_entity("lk", Kind::LockerItem, "Bank", "2026-03-01T09:00:00.000Z")?;
             tx.connection().execute(
-                "INSERT INTO locker_item (id, type, notes) VALUES ('lk', 'login', 'quokkaold')",
+                "INSERT INTO locker_item (id, type) VALUES ('lk', 'login')",
+                [],
+            )?;
+            tx.connection().execute(
+                "INSERT INTO locker_item_field
+                   (id, item_id, field_key, section, label, kind, value_text, created_at, updated_at)
+                 VALUES ('lk:notes', 'lk', 'notes', '', 'Notes', 'text', 'quokkaold',
+                         '2026-03-01T09:00:00.000Z', '2026-03-01T09:00:00.000Z')",
                 [],
             )?;
             Ok(())
@@ -265,7 +272,9 @@ fn a_locker_items_earlier_cells_are_not_found_through_the_door() {
         .vault
         .commit(|tx| {
             tx.connection().execute(
-                "UPDATE locker_item SET notes = 'quokkanew' WHERE id = 'lk'",
+                "UPDATE locker_item_field
+                    SET value_text = 'quokkanew', updated_at = '2026-03-02T09:00:00.000Z'
+                  WHERE id = 'lk:notes'",
                 [],
             )?;
             tx.touch("lk", "2026-03-02T09:00:00.000Z")?;

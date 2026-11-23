@@ -197,7 +197,7 @@ impl<S: State> Gateway<S> {
         self.id
     }
 
-    /// `GET /v3/info`. Answers before anything is paired.
+    /// `GET /v1/info`. Answers before anything is paired.
     #[must_use]
     pub const fn info(&self, now_ms: i64) -> Info {
         Info {
@@ -233,7 +233,7 @@ impl<S: State> Gateway<S> {
         })
     }
 
-    /// `POST /v3/nonce`: a nonce for `random`, **written nowhere** (R2): the
+    /// `POST /v1/nonce`: a nonce for `random`, **written nowhere** (R2): the
     /// gateway recognises it later by its MAC. The only state it reads is the
     /// spent table's live size, and at [`MAX_LIVE_NONCES`] spent in the last
     /// five minutes the answer is `BUSY`. The route names no vault, so a
@@ -256,7 +256,7 @@ impl<S: State> Gateway<S> {
         })
     }
 
-    /// `POST /v3/pair`. `token` is the fresh token the adapter drew; it is
+    /// `POST /v1/pair`. `token` is the fresh token the adapter drew; it is
     /// handed back only if the pairing succeeds.
     ///
     /// The checks run shape, then the nonce's MAC and age, then the credential
@@ -329,7 +329,7 @@ impl<S: State> Gateway<S> {
         authorize(&self.state, vault, token, access)
     }
 
-    /// `GET /v3/v/{vault}/head`: the record as the phone signed it.
+    /// `GET /v1/v/{vault}/head`: the record as the phone signed it.
     ///
     /// # Errors
     ///
@@ -345,7 +345,7 @@ impl<S: State> Gateway<S> {
         Ok(view(&head, claim))
     }
 
-    /// `PUT /v3/v/{vault}/head`: the signed record, judged in the order of
+    /// `PUT /v1/v/{vault}/head`: the signed record, judged in the order of
     /// E3 — signature, clock, generation, writes, compare-and-set on `prev`,
     /// and a manifest the gateway holds — then stored as signed and
     /// registered as a snapshot.
@@ -443,7 +443,7 @@ impl<S: State> Gateway<S> {
         })
     }
 
-    /// `GET /v3/v/{vault}/snapshots?after=&limit=`: one page, by name. A
+    /// `GET /v1/v/{vault}/snapshots?after=&limit=`: one page, by name. A
     /// snapshot whose manifest is held for deletion stays in the list.
     ///
     /// # Errors
@@ -477,7 +477,7 @@ impl<S: State> Gateway<S> {
             .collect())
     }
 
-    /// `POST /v3/v/{vault}/exists`: the names this gateway does not hold. A
+    /// `POST /v1/v/{vault}/exists`: the names this gateway does not hold. A
     /// held or damaged name is not live — the phone must send it again.
     ///
     /// # Errors
@@ -504,7 +504,7 @@ impl<S: State> Gateway<S> {
         Ok(missing)
     }
 
-    /// `PUT /v3/v/{vault}/o/{name}`.
+    /// `PUT /v1/v/{vault}/o/{name}`.
     ///
     /// **Write-once by name and digest.** A live name with this digest is
     /// `AlreadyStored` and nothing moves; a live name with another digest is
@@ -532,7 +532,7 @@ impl<S: State> Gateway<S> {
         })
     }
 
-    /// `POST /v3/v/{vault}/bundle`: every frame judged as its own `PUT`
+    /// `POST /v1/v/{vault}/bundle`: every frame judged as its own `PUT`
     /// would be, **in one transaction**: the rows of the frames that were
     /// stored land together or not at all. `commit(i)` moves frame `i`'s
     /// staged bytes into place just before its row is written, so a crash
@@ -565,7 +565,7 @@ impl<S: State> Gateway<S> {
         })
     }
 
-    /// `GET` and `HEAD /v3/v/{vault}/o/{name}`: the object to serve.
+    /// `GET` and `HEAD /v1/v/{vault}/o/{name}`: the object to serve.
     ///
     /// A held object is still served until the purge takes its bytes: that
     /// is what the hold is for — a restore that began from a snapshot keeps
@@ -590,7 +590,7 @@ impl<S: State> Gateway<S> {
             .ok_or(Refusal::NotFound { name: Some(*name) })?)
     }
 
-    /// `GET /v3/v/{vault}/objects?after=&limit=`: one page of what is not
+    /// `GET /v1/v/{vault}/objects?after=&limit=`: one page of what is not
     /// held for deletion, sorted by name. `limit` above [`LIST_LIMIT`] is
     /// clamped.
     ///
@@ -617,7 +617,7 @@ impl<S: State> Gateway<S> {
             .collect())
     }
 
-    /// `GET /v3/v/{vault}/held?after=&limit=`: one page of what is held for
+    /// `GET /v1/v/{vault}/held?after=&limit=`: one page of what is held for
     /// deletion, by name, with the dates the phone shows.
     ///
     /// # Errors
@@ -657,7 +657,7 @@ impl<S: State> Gateway<S> {
         Ok(out)
     }
 
-    /// `POST /v3/v/{vault}/fetch`: the objects to stream back, in the order
+    /// `POST /v1/v/{vault}/fetch`: the objects to stream back, in the order
     /// asked, each once. A name [`Self::object`] would not serve is left out
     /// — the phone sees which came back — and the whole answer must fit one
     /// bundle.
@@ -696,7 +696,7 @@ impl<S: State> Gateway<S> {
         Ok(plan)
     }
 
-    /// `POST /v3/v/{vault}/delete`: the vault key's signed request to hold
+    /// `POST /v1/v/{vault}/delete`: the vault key's signed request to hold
     /// each name for [`GRACE_MS`]. Nothing is removed: the bytes are served,
     /// the name is listed in `held` and a snapshot stays in its list, until
     /// the purge sweep passes the date. The head's manifest is refused
@@ -774,7 +774,7 @@ impl<S: State> Gateway<S> {
         })
     }
 
-    /// `POST /v3/v/{vault}/check`: the vault key's signed request that the gateway hash one
+    /// `POST /v1/v/{vault}/check`: the vault key's signed request that the gateway hash one
     /// stored object against its recorded digest (decision 34). A mismatch (or a file gone)
     /// marks the name damaged, so a signed delete frees it at once; a match changes nothing.
     /// The check is signed under its own context, bound to this gateway, the vault and the
@@ -843,7 +843,7 @@ impl<S: State> Gateway<S> {
         Ok(answer)
     }
 
-    /// `POST /v3/v/{vault}/undo`: the vault key's signed request to lift the
+    /// `POST /v1/v/{vault}/undo`: the vault key's signed request to lift the
     /// holds of `names`, or of every hold when `names` is null. The objects
     /// are live again. Undo never moves the head and never reverses a
     /// takeover.
@@ -1089,7 +1089,7 @@ impl<S: State> Gateway<S> {
         }
     }
 
-    /// `POST /v3/v/{vault}/revoke`: the calling token revokes ITSELF.
+    /// `POST /v1/v/{vault}/revoke`: the calling token revokes ITSELF.
     ///
     /// A phone that forgets a gateway, or a member who forgets one on the
     /// phone, ends the token's life at the gateway too. Any token of the

@@ -177,21 +177,28 @@ fn pre_create(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     parent_refusal(ctx, kind, None)
 }
 
+#[derive(serde::Deserialize)]
+struct CreateContainerInput {
+    id: Option<String>,
+    kind: String,
+    title: String,
+    parent: Option<String>,
+    color: Option<String>,
+    icon: Option<String>,
+    position: Option<f64>,
+}
+
 fn create(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let kind = kind_of(ctx.required_str("kind")?)?;
-    let title = ctx.required_str("title")?.trim();
-    let parent = ctx.input.get("parent").and_then(serde_json::Value::as_str);
-    let id = match ctx.optional_str("id") {
+    let input: CreateContainerInput = ctx.parse_input()?;
+    let kind = kind_of(&input.kind)?;
+    let title = input.title.trim();
+    let id = match input.id.as_deref() {
         Some(id) => {
             ctx.insert_entity_as(id, kind, title)?;
             id.to_owned()
         }
         None => ctx.insert_entity(kind, title)?,
     };
-    let position = ctx
-        .input
-        .get("position")
-        .and_then(serde_json::Value::as_f64);
     ctx.connection().execute(
         "INSERT INTO container (id, kind, parent_id, color, icon, position)
          VALUES (?1, ?2, ?3, ?4, ?6, COALESCE(?5,
@@ -200,10 +207,10 @@ fn create(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         rusqlite::params![
             id,
             kind.as_str(),
-            parent,
-            ctx.input.get("color").and_then(serde_json::Value::as_str),
-            position,
-            ctx.input.get("icon").and_then(serde_json::Value::as_str)
+            input.parent,
+            input.color,
+            input.position,
+            input.icon,
         ],
     )?;
     Ok(serde_json::json!({ "id": id }))
@@ -228,20 +235,33 @@ fn pre_style(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok(style_refusal(&ctx.input, found.kind))
 }
 
+#[derive(serde::Deserialize)]
+struct StyleContainerInput {
+    id: String,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    color: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    icon: Option<Option<String>>,
+}
+
 /// `container.style`: a list's or a calendar's colour and icon. A key that is present is set
 /// (`null` clears it) and one that is absent is left alone.
 fn style(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let id = ctx.required_str("id")?;
-    for column in ["color", "icon"] {
-        if let Some(value) = ctx.input.get(column) {
-            ctx.connection().execute(
-                &format!("UPDATE container SET {column} = ?2 WHERE id = ?1"),
-                rusqlite::params![id, value.as_str()],
-            )?;
-        }
+    let input: StyleContainerInput = ctx.parse_input()?;
+    if let Some(color) = input.color {
+        ctx.connection().execute(
+            "UPDATE container SET color = ?2 WHERE id = ?1",
+            rusqlite::params![input.id, color],
+        )?;
     }
-    ctx.touch(id)?;
-    Ok(serde_json::json!({ "id": id }))
+    if let Some(icon) = input.icon {
+        ctx.connection().execute(
+            "UPDATE container SET icon = ?2 WHERE id = ?1",
+            rusqlite::params![input.id, icon],
+        )?;
+    }
+    ctx.touch(&input.id)?;
+    Ok(serde_json::json!({ "id": input.id }))
 }
 
 fn pre_move(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -255,19 +275,23 @@ fn pre_move(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     parent_refusal(ctx, found.kind, Some(&found.id))
 }
 
+#[derive(serde::Deserialize)]
+struct MoveContainerInput {
+    id: String,
+    parent: Option<String>,
+    position: Option<f64>,
+}
+
 fn move_container(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let id = ctx.required_str("id")?;
-    require(ctx.connection(), id)?;
-    let parent = ctx.input.get("parent").and_then(serde_json::Value::as_str);
-    let position = ctx
-        .input
-        .get("position")
-        .and_then(serde_json::Value::as_f64);
+    let input: MoveContainerInput = ctx.parse_input()?;
+    require(ctx.connection(), &input.id)?;
     let kind: Option<String> = ctx
         .connection()
-        .query_row("SELECT kind FROM container WHERE id = ?1", [id], |row| {
-            row.get(0)
-        })
+        .query_row(
+            "SELECT kind FROM container WHERE id = ?1",
+            [input.id.as_str()],
+            |row| row.get(0),
+        )
         .optional()?;
     ctx.connection().execute(
         "UPDATE container SET parent_id = ?2,
@@ -275,29 +299,12 @@ fn move_container(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
                   (SELECT COALESCE(MAX(position), 0) + 1 FROM container
                     WHERE kind = ?4 AND parent_id IS ?2))
           WHERE id = ?1",
-        rusqlite::params![id, parent, position, kind],
+        rusqlite::params![input.id, input.parent, input.position, kind],
     )?;
-    ctx.touch(id)?;
-    // A SECTION TAKES ITS TASKS WITH IT. A task names its project and its
-    // section, and the baseline's trigger refuses a task whose section is in
-    // another project; it fires on a write to the task, so moving the section
-    // alone would leave its tasks (trashed ones too) pointing at the old
-    // project, a state no task command could then edit.
-    if kind.as_deref() == Some("section") {
-        let tasks: Vec<String> = ctx
-            .connection()
-            .prepare("SELECT id FROM task WHERE section_id = ?1 AND project_id IS NOT ?2")?
-            .query_map(rusqlite::params![id, parent], |row| row.get(0))?
-            .collect::<rusqlite::Result<_>>()?;
-        for task in tasks {
-            ctx.connection().execute(
-                "UPDATE task SET project_id = ?2 WHERE id = ?1",
-                rusqlite::params![task, parent],
-            )?;
-            ctx.touch(&task)?;
-        }
-    }
-    Ok(serde_json::json!({ "id": id }))
+    // When `kind = 'section'`, the baseline's `container_section_takes_its_tasks` trigger moves
+    // every task in the section to the new project, and the `task` auto-touch TEMP trigger
+    // stamps `updated_at` and re-indexes each moved task automatically.
+    Ok(serde_json::json!({ "id": input.id }))
 }
 
 /// The calendar a followed phone calendar is, founded the first time the calendar is read and kept
@@ -318,17 +325,14 @@ pub(crate) fn follow_calendar(
         if found.deleted_at.is_some() {
             return Ok(fills.to_owned());
         }
-        if let Some(color) = home.color
-            && connection.execute(
+        if let Some(color) = home.color {
+            connection.execute(
                 "UPDATE container SET color = ?2 WHERE id = ?1 AND color IS NOT ?2",
                 [fills, color],
-            )? > 0
-        {
-            ctx.touch(fills)?;
+            )?;
         }
         if home.was == Some(found.title.as_str()) && found.title != title {
             connection.execute("UPDATE entity SET title = ?2 WHERE id = ?1", [fills, title])?;
-            ctx.touch(fills)?;
         }
         return Ok(fills.to_owned());
     }
@@ -340,22 +344,14 @@ pub(crate) fn follow_calendar(
              WHERE kind = 'calendar' AND parent_id IS NULL))",
         rusqlite::params![id, home.color],
     )?;
-    let filed: Vec<String> = connection
-        .prepare(
-            "SELECT e.id FROM source s JOIN event e ON e.id = s.entity_id
-              WHERE s.origin_id = ?1 AND e.calendar_id = ?2",
-        )?
-        .query_map([home.origin, crate::model::DEFAULT_CALENDAR_ID], |row| {
-            row.get(0)
-        })?
-        .collect::<rusqlite::Result<_>>()?;
-    for event in filed {
-        connection.execute(
-            "UPDATE event SET calendar_id = ?2 WHERE id = ?1",
-            [&event, &id],
-        )?;
-        ctx.touch(&event)?;
-    }
+    connection.execute(
+        "UPDATE event SET calendar_id = ?2
+          WHERE id IN (
+            SELECT e.id FROM source s JOIN event e ON e.id = s.entity_id
+             WHERE s.origin_id = ?1 AND e.calendar_id = ?3
+          )",
+        [home.origin, id.as_str(), crate::model::DEFAULT_CALENDAR_ID],
+    )?;
     Ok(id)
 }
 

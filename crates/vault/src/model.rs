@@ -8,8 +8,52 @@
 
 use unicode_normalization::UnicodeNormalization;
 
+/// Which host table holds a kind's own row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KindGroup {
+    /// Its own table, named by [`KindSpec::name`].
+    Own,
+    /// Hosted in `concept`.
+    Concept,
+    /// Hosted in `container`.
+    Container,
+}
+
+/// Declarative ontology metadata for one entity [`Kind`].
+///
+/// Stated ONCE in [`KIND_SPECS`]; [`Kind::ALL`], [`Kind::LINK_ENDS`],
+/// [`Kind::MEMBER_ITEMS`], [`Kind::CONCEPTS`], [`Kind::CONTAINERS`],
+/// [`Kind::SEARCHABLE`], [`HOST_TABLES`], and every [`Kind`] predicate are
+/// derived from this single table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KindSpec {
+    pub kind: Kind,
+    pub name: &'static str,
+    pub group: KindGroup,
+    /// Whether a member can add/import an item of this kind (`first_item`).
+    pub member_item: bool,
+    /// Whether a general link (`links`) may end at this kind.
+    pub link_end: bool,
+    /// Whether a member's delete goes through the trash rather than purging outright.
+    pub has_trash: bool,
+    /// Whether [`crate::index::text::text_of`] indexes this kind as its own row in `search`.
+    pub searchable: bool,
+}
+
+impl KindSpec {
+    #[must_use]
+    pub const fn host_table(&self) -> &'static str {
+        match self.group {
+            KindGroup::Own => self.name,
+            KindGroup::Concept => "concept",
+            KindGroup::Container => "container",
+        }
+    }
+}
+
 /// What an entity is. The `entity.kind` CHECK, in the same order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(usize)]
 pub enum Kind {
     Person,
     Place,
@@ -39,52 +83,310 @@ pub enum Kind {
     LockerItem,
 }
 
+const fn spec(
+    kind: Kind,
+    name: &'static str,
+    group: KindGroup,
+    member_item: bool,
+    link_end: bool,
+    has_trash: bool,
+    searchable: bool,
+) -> KindSpec {
+    KindSpec {
+        kind,
+        name,
+        group,
+        member_item,
+        link_end,
+        has_trash,
+        searchable,
+    }
+}
+
+/// The single declarative registry for all 26 entity kinds, in `entity.kind` CHECK order.
+pub const KIND_SPECS: [KindSpec; 26] = [
+    // Own host tables (items & threads).
+    spec(
+        Kind::Person,
+        "person",
+        KindGroup::Own,
+        true,
+        true,
+        true,
+        true,
+    ),
+    spec(Kind::Place, "place", KindGroup::Own, true, true, true, true),
+    spec(Kind::Event, "event", KindGroup::Own, true, true, true, true),
+    spec(Kind::Task, "task", KindGroup::Own, true, true, true, true),
+    spec(
+        Kind::Activity,
+        "activity",
+        KindGroup::Own,
+        true,
+        true,
+        true,
+        true,
+    ),
+    spec(Kind::Note, "note", KindGroup::Own, true, true, true, true),
+    spec(
+        Kind::Document,
+        "document",
+        KindGroup::Own,
+        true,
+        true,
+        true,
+        true,
+    ),
+    spec(Kind::Photo, "photo", KindGroup::Own, true, true, true, true),
+    spec(
+        Kind::Account,
+        "account",
+        KindGroup::Own,
+        true,
+        true,
+        true,
+        false,
+    ),
+    spec(Kind::Txn, "txn", KindGroup::Own, true, true, true, true),
+    spec(
+        Kind::Thread,
+        "thread",
+        KindGroup::Own,
+        true,
+        false,
+        false,
+        true,
+    ),
+    // Hosted in `concept`.
+    spec(
+        Kind::Tag,
+        "tag",
+        KindGroup::Concept,
+        false,
+        false,
+        false,
+        false,
+    ),
+    spec(
+        Kind::Flag,
+        "flag",
+        KindGroup::Concept,
+        false,
+        false,
+        false,
+        false,
+    ),
+    spec(
+        Kind::Category,
+        "category",
+        KindGroup::Concept,
+        false,
+        false,
+        false,
+        false,
+    ),
+    spec(
+        Kind::WorkoutKind,
+        "workout_kind",
+        KindGroup::Concept,
+        false,
+        false,
+        false,
+        false,
+    ),
+    spec(
+        Kind::ActivityKind,
+        "activity_kind",
+        KindGroup::Concept,
+        false,
+        false,
+        false,
+        false,
+    ),
+    spec(
+        Kind::Relation,
+        "relation",
+        KindGroup::Concept,
+        false,
+        false,
+        false,
+        false,
+    ),
+    // Hosted in `container`.
+    spec(
+        Kind::Notebook,
+        "notebook",
+        KindGroup::Container,
+        true,
+        false,
+        true,
+        true,
+    ),
+    spec(
+        Kind::Folder,
+        "folder",
+        KindGroup::Container,
+        true,
+        false,
+        true,
+        true,
+    ),
+    spec(
+        Kind::Album,
+        "album",
+        KindGroup::Container,
+        true,
+        false,
+        true,
+        true,
+    ),
+    spec(
+        Kind::List,
+        "list",
+        KindGroup::Container,
+        true,
+        false,
+        true,
+        false,
+    ),
+    spec(
+        Kind::Project,
+        "project",
+        KindGroup::Container,
+        true,
+        false,
+        true,
+        true,
+    ),
+    spec(
+        Kind::Section,
+        "section",
+        KindGroup::Container,
+        false,
+        false,
+        true,
+        false,
+    ),
+    spec(
+        Kind::Area,
+        "area",
+        KindGroup::Container,
+        true,
+        false,
+        true,
+        false,
+    ),
+    spec(
+        Kind::Calendar,
+        "calendar",
+        KindGroup::Container,
+        true,
+        false,
+        true,
+        false,
+    ),
+    // Locker item: own host table, never a link target (owner ruling D11).
+    spec(
+        Kind::LockerItem,
+        "locker_item",
+        KindGroup::Own,
+        true,
+        false,
+        true,
+        true,
+    ),
+];
+
+#[derive(Clone, Copy)]
+enum KindFilter {
+    All,
+    LinkEnd,
+    MemberItem,
+    Concept,
+    Container,
+    Searchable,
+}
+
+impl KindFilter {
+    const fn matches(self, s: &KindSpec) -> bool {
+        match self {
+            Self::All => true,
+            Self::LinkEnd => s.link_end,
+            Self::MemberItem => s.member_item,
+            Self::Concept => matches!(s.group, KindGroup::Concept),
+            Self::Container => matches!(s.group, KindGroup::Container),
+            Self::Searchable => s.searchable,
+        }
+    }
+}
+
+const fn collect_kinds<const N: usize>(filter: KindFilter) -> [Kind; N] {
+    let mut out = [Kind::Person; N];
+    let mut write = 0;
+    let mut i = 0;
+    while i < KIND_SPECS.len() {
+        if filter.matches(&KIND_SPECS[i]) {
+            out[write] = KIND_SPECS[i].kind;
+            write += 1;
+        }
+        i += 1;
+    }
+    assert!(write == N, "KIND_SPECS filter count mismatch");
+    out
+}
+
+const fn const_str_eq(a: &str, b: &str) -> bool {
+    let a = a.as_bytes();
+    let b = b.as_bytes();
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < a.len() {
+        if a[i] != b[i] {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
+const fn collect_host_tables() -> [&'static str; 14] {
+    let mut out = [""; 14];
+    let mut write = 0;
+    let mut i = 0;
+    while i < KIND_SPECS.len() {
+        let table = KIND_SPECS[i].host_table();
+        let mut seen = false;
+        let mut j = 0;
+        while j < write {
+            if const_str_eq(out[j], table) {
+                seen = true;
+                break;
+            }
+            j += 1;
+        }
+        if !seen {
+            out[write] = table;
+            write += 1;
+        }
+        i += 1;
+    }
+    assert!(write == 14, "distinct host table count mismatch");
+    out
+}
+
+/// The 14 distinct host tables across [`KIND_SPECS`], matching `history::shape::TABLES`'s `Role::Host` entries.
+pub const HOST_TABLES: [&str; 14] = collect_host_tables();
+
 impl Kind {
     /// Every kind, in the CHECK's order.
-    pub const ALL: [Self; 26] = [
-        Self::Person,
-        Self::Place,
-        Self::Event,
-        Self::Task,
-        Self::Activity,
-        Self::Note,
-        Self::Document,
-        Self::Photo,
-        Self::Account,
-        Self::Txn,
-        Self::Thread,
-        Self::Tag,
-        Self::Flag,
-        Self::Category,
-        Self::WorkoutKind,
-        Self::ActivityKind,
-        Self::Relation,
-        Self::Notebook,
-        Self::Folder,
-        Self::Album,
-        Self::List,
-        Self::Project,
-        Self::Section,
-        Self::Area,
-        Self::Calendar,
-        Self::LockerItem,
-    ];
+    pub const ALL: [Self; 26] = collect_kinds(KindFilter::All);
 
     /// The kinds a general link (`links`) may END at: the items of the nine apps and the three
     /// things items are about (#1185). A Locker item is never here: it may start a link and can
     /// never be the target of one (owner ruling D11).
-    pub const LINK_ENDS: [Self; 10] = [
-        Self::Person,
-        Self::Place,
-        Self::Event,
-        Self::Task,
-        Self::Activity,
-        Self::Note,
-        Self::Document,
-        Self::Photo,
-        Self::Account,
-        Self::Txn,
-    ];
+    pub const LINK_ENDS: [Self; 10] = collect_kinds(KindFilter::LinkEnd);
 
     /// THE KINDS A MEMBER CAN ADD OR IMPORT, one definition for "the member holds something": every
     /// app's items and the containers they make (a workout, a place, an assistant thread, a notebook,
@@ -92,80 +394,26 @@ impl Kind {
     /// category, a kind of workout or activity, a relation) and not a section, which only exists in
     /// a project. `person` and `calendar` are here, but the founding person and the default Calendar the
     /// vault is founded with never count (see [`crate::first_item`]).
-    pub const MEMBER_ITEMS: [Self; 19] = [
-        Self::Person,
-        Self::Place,
-        Self::Event,
-        Self::Task,
-        Self::Activity,
-        Self::Note,
-        Self::Document,
-        Self::Photo,
-        Self::Account,
-        Self::Txn,
-        Self::Thread,
-        Self::Notebook,
-        Self::Folder,
-        Self::Album,
-        Self::List,
-        Self::Project,
-        Self::Area,
-        Self::Calendar,
-        Self::LockerItem,
-    ];
+    pub const MEMBER_ITEMS: [Self; 19] = collect_kinds(KindFilter::MemberItem);
 
     /// The kinds `concept` hosts: the `concept.kind` CHECK.
-    pub const CONCEPTS: [Self; 6] = [
-        Self::Tag,
-        Self::Flag,
-        Self::Category,
-        Self::WorkoutKind,
-        Self::ActivityKind,
-        Self::Relation,
-    ];
+    pub const CONCEPTS: [Self; 6] = collect_kinds(KindFilter::Concept);
 
     /// The kinds `container` hosts: the `container.kind` CHECK.
-    pub const CONTAINERS: [Self; 8] = [
-        Self::Notebook,
-        Self::Folder,
-        Self::Album,
-        Self::List,
-        Self::Project,
-        Self::Section,
-        Self::Area,
-        Self::Calendar,
-    ];
+    pub const CONTAINERS: [Self; 8] = collect_kinds(KindFilter::Container);
+
+    /// The kinds [`crate::index::text::text_of`] indexes directly in `search`.
+    pub const SEARCHABLE: [Self; 15] = collect_kinds(KindFilter::Searchable);
+
+    /// This kind's declarative [`KindSpec`].
+    #[must_use]
+    pub const fn spec(self) -> &'static KindSpec {
+        &KIND_SPECS[self as usize]
+    }
 
     #[must_use]
     pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Person => "person",
-            Self::Place => "place",
-            Self::Event => "event",
-            Self::Task => "task",
-            Self::Activity => "activity",
-            Self::Note => "note",
-            Self::Document => "document",
-            Self::Photo => "photo",
-            Self::Account => "account",
-            Self::Txn => "txn",
-            Self::Thread => "thread",
-            Self::Tag => "tag",
-            Self::Flag => "flag",
-            Self::Category => "category",
-            Self::WorkoutKind => "workout_kind",
-            Self::ActivityKind => "activity_kind",
-            Self::Relation => "relation",
-            Self::Notebook => "notebook",
-            Self::Folder => "folder",
-            Self::Album => "album",
-            Self::List => "list",
-            Self::Project => "project",
-            Self::Section => "section",
-            Self::Area => "area",
-            Self::Calendar => "calendar",
-            Self::LockerItem => "locker_item",
-        }
+        self.spec().name
     }
 
     #[must_use]
@@ -175,37 +423,31 @@ impl Kind {
 
     /// Whether a general link (`links`) may END at this kind ([`Self::LINK_ENDS`]).
     #[must_use]
-    pub fn is_link_end(self) -> bool {
-        Self::LINK_ENDS.contains(&self)
+    pub const fn is_link_end(self) -> bool {
+        self.spec().link_end
     }
 
     /// Whether a general link (`links`) may START at this kind: every end, and a Locker item.
     #[must_use]
-    pub fn is_link_start(self) -> bool {
-        self.is_link_end() || self == Self::LockerItem
+    pub const fn is_link_start(self) -> bool {
+        self.is_link_end() || matches!(self, Self::LockerItem)
     }
 
     #[must_use]
-    pub fn is_concept(self) -> bool {
-        Self::CONCEPTS.contains(&self)
+    pub const fn is_concept(self) -> bool {
+        matches!(self.spec().group, KindGroup::Concept)
     }
 
     #[must_use]
-    pub fn is_container(self) -> bool {
-        Self::CONTAINERS.contains(&self)
+    pub const fn is_container(self) -> bool {
+        matches!(self.spec().group, KindGroup::Container)
     }
 
     /// The table whose row is this kind's own: the kind's name, or `concept`
     /// or `container` for the kinds those two tables host.
     #[must_use]
-    pub fn host(self) -> &'static str {
-        if self.is_concept() {
-            "concept"
-        } else if self.is_container() {
-            "container"
-        } else {
-            self.as_str()
-        }
+    pub const fn host(self) -> &'static str {
+        self.spec().host_table()
     }
 
     /// Whether a member's delete of this kind goes through the trash. The rest
@@ -215,16 +457,7 @@ impl Kind {
     /// (R-CHAT-8).
     #[must_use]
     pub const fn has_trash(self) -> bool {
-        !matches!(
-            self,
-            Self::Tag
-                | Self::Flag
-                | Self::Category
-                | Self::WorkoutKind
-                | Self::ActivityKind
-                | Self::Relation
-                | Self::Thread
-        )
+        self.spec().has_trash
     }
 
     /// A short noun for a sentence about the kind ("a workout kind").
@@ -363,5 +596,20 @@ mod tests {
         for rel in Rel::ALL {
             assert_eq!(Rel::parse(rel.as_str()), Some(rel));
         }
+    }
+
+    #[test]
+    fn kind_specs_align_with_discriminants_and_history_hosts() {
+        for (idx, spec) in KIND_SPECS.iter().enumerate() {
+            assert_eq!(spec.kind as usize, idx, "spec order drifted at {idx}");
+            assert_eq!(spec.kind.spec(), spec);
+        }
+        let history_hosts: Vec<&str> = crate::history::TABLES
+            .iter()
+            .filter_map(|(table, role)| {
+                matches!(role, crate::history::Role::Host).then_some(*table)
+            })
+            .collect();
+        assert_eq!(history_hosts, HOST_TABLES);
     }
 }

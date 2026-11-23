@@ -40,15 +40,13 @@ pub const ITEM_COLUMNS: &str = "item_id, type, title, username, url, notes, \
 /// What a statement reads of an item's ENTITY row.
 pub const ENTITY_COLUMNS: &str = "id, title, created_at, updated_at, deleted_at, purge_at";
 
-/// What a statement reads of an item's KIND row (`locker_item`): its typed
-/// plain columns and the memo, never a sealed cell.
-pub const KIND_COLUMNS: &str = "id, type, username, url, notes, cardholder, expiry, brand, \
-     fullname, email, phone, address, network, compromised, password_set_at, memo, last_used_at";
+/// What a statement reads of an item's KIND row (`locker_item`): universal
+/// non-secret metadata only. Built-in fields live in `locker_item_field`.
+pub const KIND_COLUMNS: &str = "id, type, compromised, password_set_at, memo, last_used_at";
 
 /// The five columns of `locker_item` that hold ciphertext under `K`, named here
 /// only so [`tests`] can assert none of them is in [`ITEM_COLUMNS`].
-pub const SEALED_ITEM_COLUMNS: [&str; 5] =
-    ["password", "otp_seed", "card_number", "cvv", "content"];
+pub use centraid_apps_kit::rules::locker::SEALED_ITEM_CELLS as SEALED_ITEM_COLUMNS;
 
 /// The default and the bounds of the `items` window (`items.ts`, and the
 /// manifest's own input schema: 20…2,000, default 300).

@@ -418,7 +418,6 @@ pub(crate) fn trash_one(
         "UPDATE entity SET deleted_at = ?2, purge_at = ?3 WHERE id = ?1",
         rusqlite::params![id, stamp.0, stamp.1],
     )?;
-    ctx.touch(id)?;
     trashed.push(id.to_owned());
     for member in members(ctx.connection(), &found)? {
         if !is_self(ctx.connection(), &member)?
@@ -460,43 +459,21 @@ pub(crate) fn purge_one(
         if *holder != found.kind {
             continue;
         }
-        // A day of a series is named by its series, which is what is touched.
-        let named = if *table == "occurrence" {
-            "series_id"
-        } else {
-            "id"
-        };
-        let referrers = ids(
-            connection,
-            &format!("SELECT {named} FROM {table} WHERE {column} = ?1"),
-            id,
-        )?;
+        // The host/child auto-touch TEMP triggers stamp `updated_at` and re-index every detached
+        // referrer (including `occurrence` → `series_id`) automatically.
         connection.execute(
             &format!("UPDATE {table} SET {set} WHERE {column} = ?1"),
             [id],
         )?;
-        for referrer in referrers {
-            // A container or a concept is an entity too; a row of any of the
-            // kind tables is.
-            ctx.touch(&referrer)?;
-        }
     }
     // An album's cover is a photograph's bytes: once those are purged the cover
     // goes, so the bytes are not held by a picture of something that is gone.
     if found.kind == Kind::Photo {
-        let albums = ids(
-            connection,
-            "SELECT c.id FROM container c JOIN photo p ON p.blob = c.cover WHERE p.id = ?1",
-            id,
-        )?;
         connection.execute(
             "UPDATE container SET cover = NULL
               WHERE cover = (SELECT blob FROM photo WHERE id = ?1)",
             [id],
         )?;
-        for album in albums {
-            ctx.touch(&album)?;
-        }
     }
     // WHAT AN ORIGIN FILLS IS THE TARGET OF ITS FOLLOW, for whatever kind it
     // is (an account, a calendar, a folder): the follow stops with it, as
@@ -534,9 +511,10 @@ pub(crate) fn purge_one(
     // now (`index::purge`), and a Locker item's plain text is its sidecars' rows.
     crate::index::purge(connection, id)?;
     // A Locker item's sidecars are deleted explicitly, in this commit, though
-    // they declare ON DELETE CASCADE: a cascade fires no `AFTER DELETE`
-    // trigger unless `recursive_triggers` is on, and the commit's census names
-    // the tables whose rows went. Its receipts stay: they name it by value.
+    // they declare ON DELETE CASCADE. A cascade would fire the same `AFTER DELETE` triggers (the
+    // commit's touch triggers and the history's rely on that for every other child); the explicit
+    // deletes only keep the order plain: sidecars, then the item row, then the entity. Its
+    // receipts stay: they name it by value.
     if found.kind == Kind::LockerItem {
         for table in [
             "locker_item_field",
@@ -575,13 +553,29 @@ fn pre_retitle(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok(None)
 }
 
+#[derive(serde::Deserialize)]
+struct RetitleInput {
+    id: String,
+    title: String,
+}
+
+#[derive(serde::Deserialize)]
+struct ByIdInput {
+    id: String,
+}
+
 fn retitle(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let id = ctx.required_str("id")?;
-    let title = ctx.required_str("title")?.trim();
-    ctx.connection()
-        .execute("UPDATE entity SET title = ?2 WHERE id = ?1", [id, title])?;
-    ctx.touch(id)?;
-    with_rev(ctx, id, serde_json::json!({ "id": id, "title": title }))
+    let input: RetitleInput = ctx.parse_input()?;
+    let title = input.title.trim();
+    ctx.connection().execute(
+        "UPDATE entity SET title = ?2 WHERE id = ?1",
+        [input.id.as_str(), title],
+    )?;
+    with_rev(
+        ctx,
+        &input.id,
+        serde_json::json!({ "id": input.id, "title": title }),
+    )
 }
 
 fn pre_trash(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -604,9 +598,10 @@ fn pre_trash(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 }
 
 fn trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let input: ByIdInput = ctx.parse_input()?;
     let stamp = trash_stamp(ctx)?;
     let mut trashed = Vec::new();
-    trash_one(ctx, ctx.required_str("id")?, &stamp, &mut trashed)?;
+    trash_one(ctx, &input.id, &stamp, &mut trashed)?;
     Ok(serde_json::json!({ "trashed": trashed, "purge_at": stamp.1 }))
 }
 
@@ -670,7 +665,6 @@ pub(crate) fn restore_one(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Vec<Stri
             "UPDATE entity SET deleted_at = NULL, purge_at = NULL WHERE id = ?1",
             [&target],
         )?;
-        ctx.touch(&target)?;
         restored.push(target);
     }
     Ok(restored)
@@ -678,7 +672,8 @@ pub(crate) fn restore_one(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Vec<Stri
 
 /// `entity.restore`.
 fn restore(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let restored = restore_one(ctx, ctx.required_str("id")?)?;
+    let input: ByIdInput = ctx.parse_input()?;
+    let restored = restore_one(ctx, &input.id)?;
     Ok(serde_json::json!({ "restored": restored }))
 }
 
@@ -697,8 +692,9 @@ fn pre_purge(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 }
 
 fn purge(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let input: ByIdInput = ctx.parse_input()?;
     let mut purged = Vec::new();
-    purge_one(ctx, ctx.required_str("id")?, &mut purged)?;
+    purge_one(ctx, &input.id, &mut purged)?;
     // What nothing names any more is released with it: its bytes, and a
     // thumbnail only it had.
     let released = crate::blob::collect(ctx.connection())?;
@@ -735,6 +731,16 @@ fn pre_empty(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 /// How many trashed rows one read of the pass takes.
 const DOOMED_CHUNK: i64 = 64;
 
+#[derive(serde::Deserialize)]
+struct EmptyTrashInput {
+    kind: Option<String>,
+    with_kind: Option<String>,
+    having: Option<String>,
+    due_only: Option<bool>,
+    limit: Option<u64>,
+    defer_collect: Option<bool>,
+}
+
 /// Purge what is in the trash: one kind's (with `with_kind`, a second beside it: a People trash holds people and lists), or every kind's; all of it, or only
 /// what has waited out its window; and, with a `limit`, at most that many
 /// roots (what went with them is not counted against it), saying `more` when
@@ -744,21 +750,10 @@ const DOOMED_CHUNK: i64 = 64;
 /// `defer_collect` the bytes nothing names any more are not collected here: the caller of a
 /// pass in batches collects once at its end.
 fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let due_only = ctx
-        .input
-        .get("due_only")
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false);
-    let limit = ctx
-        .input
-        .get("limit")
-        .and_then(serde_json::Value::as_u64)
-        .and_then(|limit| usize::try_from(limit).ok());
-    let defer_collect = ctx
-        .input
-        .get("defer_collect")
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false);
+    let input: EmptyTrashInput = ctx.parse_input()?;
+    let due_only = input.due_only.unwrap_or(false);
+    let limit = input.limit.and_then(|limit| usize::try_from(limit).ok());
+    let defer_collect = input.defer_collect.unwrap_or(false);
     // A pass that empties only what is overdue trusts the clock only within bounds of the vault's
     // last commit (#1191, V19): otherwise nothing is overdue.
     if due_only
@@ -768,9 +763,9 @@ fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     {
         return Ok(serde_json::json!({ "purged": 0, "released": [], "more": false }));
     }
-    let kind = ctx.optional_str("kind");
-    let with_kind = ctx.optional_str("with_kind");
-    let having = ctx.optional_str("having");
+    let kind = input.kind.as_deref();
+    let with_kind = input.with_kind.as_deref();
+    let having = input.having.as_deref();
     let mut purged = Vec::new();
     let mut roots = 0usize;
     let mut more = false;

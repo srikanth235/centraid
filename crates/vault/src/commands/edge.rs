@@ -180,27 +180,6 @@ pub(crate) fn put(
     )?;
     if rel.belongs_to_note() && is_note(ctx, from)? {
         ctx.touch(from)?;
-        ctx.mark_for_index(to);
-    }
-    mark_labelled(ctx, from, rel, to)?;
-    Ok(())
-}
-
-/// A list or an album is part of the text of what it holds, and a relation's
-/// label of both people it joins ([`crate::index::text_of`]): putting such an
-/// edge in place or taking it away changes their text without changing them.
-/// A participant is also found by the notes about the activity they were with.
-fn mark_labelled(ctx: &CommandCtx<'_, '_>, from: &str, rel: Rel, to: &str) -> Result<()> {
-    match rel {
-        Rel::Contains => ctx.mark_for_index(to),
-        // Only a touch's participants are found by the notes about it; a line
-        // or a Locker item that is `with` someone adds nothing to their text.
-        Rel::With if is_kind(ctx, from, Kind::Activity)? => ctx.mark_for_index(to),
-        Rel::Related => {
-            ctx.mark_for_index(from);
-            ctx.mark_for_index(to);
-        }
-        _ => {}
     }
     Ok(())
 }
@@ -218,34 +197,53 @@ fn is_note(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<bool> {
     is_kind(ctx, id, Kind::Note)
 }
 
+#[derive(serde::Deserialize)]
+struct AddEdgeInput {
+    from: String,
+    rel: String,
+    to: String,
+    label: Option<String>,
+    position: Option<f64>,
+    state: Option<String>,
+    anchor: Option<serde_json::Value>,
+}
+
+fn parse_rel(word: &str) -> Result<Rel> {
+    Rel::parse(word).ok_or_else(|| crate::error::VaultError::InvalidInput {
+        name: "rel".to_owned(),
+        detail: format!("`{word}` is not a way things are joined"),
+    })
+}
+
 fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let rel = rel_of(ctx)?;
+    let input: AddEdgeInput = ctx.parse_input()?;
+    let rel = parse_rel(&input.rel)?;
     let label_id = if rel == Rel::Related {
-        Some(ensure_concept(
-            ctx,
-            Kind::Relation,
-            ctx.required_str("label")?,
-        )?)
+        let label =
+            input
+                .label
+                .as_deref()
+                .ok_or_else(|| crate::error::VaultError::InvalidInput {
+                    name: "label".to_owned(),
+                    detail: "a required string is missing".to_owned(),
+                })?;
+        Some(ensure_concept(ctx, Kind::Relation, label)?)
     } else {
         None
     };
     put(
         ctx,
-        ctx.required_str("from")?,
+        &input.from,
         rel,
-        ctx.required_str("to")?,
+        &input.to,
         label_id.as_deref(),
         &Extras {
-            position: ctx
-                .input
-                .get("position")
-                .and_then(serde_json::Value::as_f64),
-            state: ctx.optional_str("state"),
-            anchor: ctx
-                .input
-                .get("anchor")
+            position: input.position,
+            state: input.state.as_deref(),
+            anchor: input
+                .anchor
                 .filter(|value| !value.is_null())
-                .map(serde_json::Value::to_string),
+                .map(|value| value.to_string()),
         },
     )?;
     Ok(serde_json::json!({ "label": label_id }))
@@ -260,21 +258,28 @@ fn pre_remove(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok(None)
 }
 
+#[derive(serde::Deserialize)]
+struct RemoveEdgeInput {
+    from: String,
+    rel: String,
+    to: String,
+    label: Option<String>,
+}
+
 fn remove(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let from = ctx.required_str("from")?;
-    let to = ctx.required_str("to")?;
-    let rel = rel_of(ctx)?;
-    let label_id = ctx
-        .optional_str("label")
+    let input: RemoveEdgeInput = ctx.parse_input()?;
+    let rel = parse_rel(&input.rel)?;
+    let label_id = input
+        .label
+        .as_deref()
         .map(|label| concept_id(Kind::Relation, &fold_label(label)))
         .unwrap_or_default();
     let removed = ctx.connection().execute(
         "DELETE FROM edge WHERE from_id = ?1 AND rel = ?2 AND to_id = ?3 AND ifnull(label_id, '') = ?4",
-        rusqlite::params![from, rel.as_str(), to, label_id],
+        rusqlite::params![input.from, rel.as_str(), input.to, label_id],
     )?;
-    if removed > 0 && rel.belongs_to_note() && is_note(ctx, from)? {
-        ctx.touch(from)?;
-        ctx.mark_for_index(to);
+    if removed > 0 && rel.belongs_to_note() && is_note(ctx, &input.from)? {
+        ctx.touch(&input.from)?;
     }
     // A link is taken off from either end (#1185): the edge the other way, if that is how it was
     // made, goes too.
@@ -282,16 +287,12 @@ fn remove(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     if rel == Rel::Links {
         let back = ctx.connection().execute(
             "DELETE FROM edge WHERE from_id = ?1 AND rel = 'links' AND to_id = ?2",
-            [to, from],
+            [input.to.as_str(), input.from.as_str()],
         )?;
-        if back > 0 && is_note(ctx, to)? {
-            ctx.touch(to)?;
-            ctx.mark_for_index(from);
+        if back > 0 && is_note(ctx, &input.to)? {
+            ctx.touch(&input.to)?;
         }
         removed += back;
-    }
-    if removed > 0 {
-        mark_labelled(ctx, from, rel, to)?;
     }
     Ok(serde_json::json!({ "removed": removed > 0 }))
 }
@@ -306,17 +307,20 @@ fn pre_move(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok((held == 0).then(|| "that is not in this list".to_owned()))
 }
 
+#[derive(serde::Deserialize)]
+struct MoveEdgeInput {
+    from: String,
+    to: String,
+    position: Option<f64>,
+}
+
 fn move_edge(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let (from, to) = (ctx.required_str("from")?, ctx.required_str("to")?);
-    require(ctx.connection(), from)?;
-    let position = ctx
-        .input
-        .get("position")
-        .and_then(serde_json::Value::as_f64)
-        .unwrap_or_default();
+    let input: MoveEdgeInput = ctx.parse_input()?;
+    require(ctx.connection(), &input.from)?;
+    let position = input.position.unwrap_or_default();
     ctx.connection().execute(
         "UPDATE edge SET position = ?3 WHERE from_id = ?1 AND rel = 'contains' AND to_id = ?2",
-        rusqlite::params![from, to, position],
+        rusqlite::params![input.from, input.to, position],
     )?;
     Ok(serde_json::json!({ "position": position }))
 }

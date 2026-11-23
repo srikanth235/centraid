@@ -42,23 +42,7 @@ use crate::model::Kind;
 /// its title is part of the text of what it labels, so a member finds a
 /// transaction by its category and an event by its calendar. A Locker item is
 /// found by its plain fields only ([`text_of`]); a sealed cell is never text.
-pub const SEARCHABLE: [Kind; 15] = [
-    Kind::Person,
-    Kind::Place,
-    Kind::Event,
-    Kind::Task,
-    Kind::Activity,
-    Kind::Note,
-    Kind::Document,
-    Kind::Photo,
-    Kind::Txn,
-    Kind::Thread,
-    Kind::Notebook,
-    Kind::Folder,
-    Kind::Album,
-    Kind::Project,
-    Kind::LockerItem,
-];
+pub const SEARCHABLE: [Kind; 15] = Kind::SEARCHABLE;
 
 /// The text a kind is found by, beside its title: its own row and children, the
 /// words that label it, and the live notes `about` it. `None` is a kind nobody
@@ -173,21 +157,20 @@ pub fn text_of(connection: &Connection, id: &str, kind: Kind) -> Result<Option<S
         )?,
         Kind::Album => String::new(),
         // A Locker item is found by what it shows in the clear: its title (the
-        // index's own column), the plain cells below, its aliases and extra
-        // addresses, then the tags and notes folded in below like any other
-        // kind. **Never a sealed cell** (`SEALED_ITEM_CELLS`), a sealed custom
-        // field's `value_sealed`, or a passkey's key: the plaintext gate hunts
-        // for each in the index and its word list.
+        // index's own column), its memo, its plain built-in fields in
+        // `locker_item_field`, its aliases and extra addresses, then the tags
+        // and notes folded in below like any other kind. **Never a sealed cell**
+        // (`value_sealed`), or a passkey's key: the plaintext gate hunts for
+        // each in the index and its word list.
         Kind::LockerItem => joined(
             connection,
-            "SELECT username FROM locker_item WHERE id = ?1
-             UNION ALL SELECT url FROM locker_item WHERE id = ?1
-             UNION ALL SELECT notes FROM locker_item WHERE id = ?1
-             UNION ALL SELECT fullname FROM locker_item WHERE id = ?1
-             UNION ALL SELECT email FROM locker_item WHERE id = ?1
-             UNION ALL SELECT phone FROM locker_item WHERE id = ?1
-             UNION ALL SELECT brand FROM locker_item WHERE id = ?1
-             UNION ALL SELECT memo FROM locker_item WHERE id = ?1
+            "SELECT memo FROM locker_item WHERE id = ?1
+             UNION ALL SELECT value_text FROM (
+                 SELECT value_text FROM locker_item_field
+                  WHERE item_id = ?1
+                    AND field_key IN ('username', 'url', 'notes', 'fullname', 'email', 'phone', 'brand')
+                    AND value_text IS NOT NULL
+                  ORDER BY field_key)
              UNION ALL SELECT id FROM (
                  SELECT id FROM locker_item_alias WHERE item_id = ?1 ORDER BY id)
              UNION ALL SELECT url FROM (
@@ -253,7 +236,7 @@ pub fn text_of(connection: &Connection, id: &str, kind: Kind) -> Result<Option<S
         )?,
         Kind::LockerItem => phone_digits(
             connection,
-            "SELECT phone FROM locker_item WHERE id = ?1",
+            "SELECT value_text FROM locker_item_field WHERE item_id = ?1 AND field_key = 'phone'",
             id,
         )?,
         _ => String::new(),

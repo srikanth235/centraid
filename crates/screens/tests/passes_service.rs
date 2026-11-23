@@ -1020,7 +1020,7 @@ fn uploads_op(effect: &wire::Effect) -> Option<wire::uploads_op::Op> {
 fn part(name: &str) -> wire::HandoffPart {
     wire::HandoffPart {
         name: name.to_owned(),
-        url: format!("https://gw/v2/v/aa/o/{name}"),
+        url: format!("https://gw/v1/v/aa/o/{name}"),
         method: "PUT".to_owned(),
         vault_id: "aa".to_owned(),
         ..Default::default()

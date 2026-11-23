@@ -88,14 +88,14 @@ struct UploadTag: Codable, Equatable {
     }
 
     /// THE FALLBACK WHEN THE TAG IS GONE: the request's own path,
-    /// `/v2/v/{vault}/o/{name}` (#1080 protocol table, A6). Both segments must
+    /// `/v1/v/{vault}/o/{name}` (#1080 protocol table, A6). Both segments must
     /// be 64 lowercase hex — a vault id is an Ed25519 public key and a name is
     /// a keyed BLAKE3 — so a path this file did not build names nothing.
     static func parse(url: URL?) -> (vault: String, name: String)? {
         guard let url else { return nil }
         let segments = url.pathComponents
         guard segments.count == 6,
-              segments[0] == "/", segments[1] == "v2", segments[2] == "v", segments[4] == "o",
+              segments[0] == "/", segments[1] == "v1", segments[2] == "v", segments[4] == "o",
               isHex64(segments[3]), isHex64(segments[5])
         else { return nil }
         return (segments[3], segments[5])

@@ -795,7 +795,7 @@ const REFRESH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 /// over the addresses of whatever advertised this gateway's id; **the shell's
 /// match is a hint and this is the check**. Each candidate is dialled with the
 /// certificate this phone pinned at pairing, so a machine that only claims the
-/// id is refused by TLS, and must answer `GET /v2/info` with this gateway's own
+/// id is refused by TLS, and must answer `GET /v1/info` with this gateway's own
 /// id. The ones that did are recorded first, ahead of what the ledger had; the
 /// ones that did not are not recorded at all.
 ///

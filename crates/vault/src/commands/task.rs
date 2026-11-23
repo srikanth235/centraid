@@ -389,116 +389,188 @@ fn pre_live(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 // Handlers
 // ---------------------------------------------------------------------------
 
+#[derive(serde::Deserialize)]
+struct AddTaskInput {
+    id: Option<String>,
+    title: String,
+    due: Option<String>,
+    description: Option<String>,
+    priority: Option<i64>,
+    effort_min: Option<i64>,
+    remind_before_min: Option<i64>,
+    rule: Option<String>,
+    anchor: Option<String>,
+    zone: Option<String>,
+    parent_id: Option<String>,
+    project_id: Option<String>,
+    section_id: Option<String>,
+    position: Option<f64>,
+    url: Option<String>,
+    done_at: Option<String>,
+}
+
 fn add(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let int = |key: &str| ctx.input.get(key).and_then(Json::as_i64);
+    let input: AddTaskInput = ctx.parse_input()?;
     let id = found(
         ctx,
         &NewTask {
-            id: ctx.optional_str("id"),
-            title: ctx.required_str("title")?,
-            due: ctx.optional_str("due"),
-            description: ctx.optional_str("description"),
-            priority: int("priority"),
-            effort_min: int("effort_min"),
-            remind_before_min: int("remind_before_min"),
-            rule: ctx.optional_str("rule"),
-            anchor: ctx.optional_str("anchor"),
-            zone: ctx.optional_str("zone"),
-            parent_id: ctx.optional_str("parent_id"),
-            project_id: ctx.optional_str("project_id"),
-            section_id: ctx.optional_str("section_id"),
-            position: ctx.input.get("position").and_then(Json::as_f64),
-            url: ctx.optional_str("url"),
-            done_at: ctx.optional_str("done_at"),
+            id: input.id.as_deref(),
+            title: &input.title,
+            due: input.due.as_deref(),
+            description: input.description.as_deref(),
+            priority: input.priority,
+            effort_min: input.effort_min,
+            remind_before_min: input.remind_before_min,
+            rule: input.rule.as_deref(),
+            anchor: input.anchor.as_deref(),
+            zone: input.zone.as_deref(),
+            parent_id: input.parent_id.as_deref(),
+            project_id: input.project_id.as_deref(),
+            section_id: input.section_id.as_deref(),
+            position: input.position,
+            url: input.url.as_deref(),
+            done_at: input.done_at.as_deref(),
         },
     )?;
     Ok(json!({ "id": id }))
 }
 
-/// Set the columns a command states: a key that is present is set (`null`
-/// clears it), one that is absent is left alone.
-fn set_stated(ctx: &CommandCtx<'_, '_>, id: &str, columns: &[(&str, &str)]) -> Result<()> {
-    for (key, column) in columns {
-        if let Some(value) = ctx.input.get(*key) {
-            let value = if *key == "rule" {
-                value.as_str().map(rrule::canonicalize).map(Json::from)
-            } else if *key == "url" {
-                value.as_str().map(|url| Json::from(url.trim()))
-            } else if matches!(*key, "due" | "snoozed_until") {
-                Some(value.as_str().map_or_else(
-                    || value.clone(),
-                    |text| Json::from(temporal::canonical(text)),
-                ))
-            } else {
-                Some(value.clone())
-            };
-            ctx.connection().execute(
-                &format!("UPDATE task SET {column} = ?2 WHERE id = ?1"),
-                rusqlite::params![
-                    id,
-                    crate::commands::follow::to_sql(&value.unwrap_or(Json::Null))
-                ],
-            )?;
-        }
-    }
-    Ok(())
+#[derive(serde::Deserialize)]
+struct EditTaskInput {
+    id: String,
+    title: Option<String>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    description: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    due: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    priority: Option<Option<i64>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    effort_min: Option<Option<i64>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    remind_before_min: Option<Option<i64>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    rule: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    snoozed_until: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    url: Option<Option<String>>,
 }
 
 fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let id = ctx.required_str("id")?;
+    let input: EditTaskInput = ctx.parse_input()?;
+    let connection = ctx.connection();
     // A SNOOZE BELONGS TO THE DUE, LEAD AND RULE IT WAS SET AGAINST (#1188, NA5): an edit of any of
     // them that does not state a snooze of its own ends it, so the new reminder is the one set.
-    if ["due", "remind_before_min", "rule"]
-        .iter()
-        .any(|key| ctx.input.get(*key).is_some())
-        && ctx.input.get("snoozed_until").is_none()
+    if (input.due.is_some() || input.remind_before_min.is_some() || input.rule.is_some())
+        && input.snoozed_until.is_none()
     {
-        ctx.connection()
-            .execute("UPDATE task SET snoozed_until = NULL WHERE id = ?1", [id])?;
-    }
-    set_stated(
-        ctx,
-        id,
-        &[
-            ("description", "description"),
-            ("due", "due"),
-            ("priority", "priority"),
-            ("effort_min", "effort_min"),
-            ("remind_before_min", "remind_before_min"),
-            ("rule", "rule"),
-            ("snoozed_until", "snoozed_until"),
-            ("url", "url"),
-        ],
-    )?;
-    if let Some(title) = ctx.optional_str("title") {
-        ctx.connection().execute(
-            "UPDATE entity SET title = ?2 WHERE id = ?1",
-            [id, title.trim()],
+        connection.execute(
+            "UPDATE task SET snoozed_until = NULL WHERE id = ?1",
+            [input.id.as_str()],
         )?;
     }
-    ctx.touch(id)?;
-    entity::with_rev(ctx, id, json!({ "id": id }))
+    if let Some(description) = input.description {
+        connection.execute(
+            "UPDATE task SET description = ?2 WHERE id = ?1",
+            rusqlite::params![input.id, description],
+        )?;
+    }
+    if let Some(due) = input.due {
+        let canonical = due.as_deref().map(temporal::canonical);
+        connection.execute(
+            "UPDATE task SET due = ?2 WHERE id = ?1",
+            rusqlite::params![input.id, canonical],
+        )?;
+    }
+    if let Some(priority) = input.priority {
+        connection.execute(
+            "UPDATE task SET priority = ?2 WHERE id = ?1",
+            rusqlite::params![input.id, priority],
+        )?;
+    }
+    if let Some(effort_min) = input.effort_min {
+        connection.execute(
+            "UPDATE task SET effort_min = ?2 WHERE id = ?1",
+            rusqlite::params![input.id, effort_min],
+        )?;
+    }
+    if let Some(remind_before_min) = input.remind_before_min {
+        connection.execute(
+            "UPDATE task SET remind_before_min = ?2 WHERE id = ?1",
+            rusqlite::params![input.id, remind_before_min],
+        )?;
+    }
+    if let Some(rule) = input.rule {
+        let canonical = rule.as_deref().map(rrule::canonicalize);
+        connection.execute(
+            "UPDATE task SET rule = ?2 WHERE id = ?1",
+            rusqlite::params![input.id, canonical],
+        )?;
+    }
+    if let Some(snoozed_until) = input.snoozed_until {
+        let canonical = snoozed_until.as_deref().map(temporal::canonical);
+        connection.execute(
+            "UPDATE task SET snoozed_until = ?2 WHERE id = ?1",
+            rusqlite::params![input.id, canonical],
+        )?;
+    }
+    if let Some(url) = input.url {
+        let trimmed = url.as_deref().map(str::trim);
+        connection.execute(
+            "UPDATE task SET url = ?2 WHERE id = ?1",
+            rusqlite::params![input.id, trimmed],
+        )?;
+    }
+    if let Some(title) = input.title.as_deref() {
+        connection.execute(
+            "UPDATE entity SET title = ?2 WHERE id = ?1",
+            [input.id.as_str(), title.trim()],
+        )?;
+    }
+    ctx.touch(&input.id)?;
+    entity::with_rev(ctx, &input.id, json!({ "id": input.id }))
+}
+
+#[derive(serde::Deserialize)]
+struct OrganizeTaskInput {
+    id: String,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    position: Option<Option<f64>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    anchor: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    zone: Option<Option<String>>,
 }
 
 /// File a task: its project, section and place, and how its repeat is measured.
 fn organize(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let id = ctx.required_str("id")?;
+    let input: OrganizeTaskInput = ctx.parse_input()?;
     let after = image(ctx)?;
-    ctx.connection().execute(
+    let connection = ctx.connection();
+    connection.execute(
         "UPDATE task SET project_id = ?2, section_id = ?3 WHERE id = ?1",
-        rusqlite::params![id, after.project, after.section],
+        rusqlite::params![input.id, after.project, after.section],
     )?;
-    set_stated(
-        ctx,
-        id,
-        &[
-            ("position", "position"),
-            ("anchor", "anchor"),
-            ("zone", "zone"),
-        ],
-    )?;
-    ctx.touch(id)?;
-    entity::with_rev(ctx, id, json!({ "id": id }))
+    if let Some(position) = input.position {
+        connection.execute(
+            "UPDATE task SET position = ?2 WHERE id = ?1",
+            rusqlite::params![input.id, position],
+        )?;
+    }
+    if let Some(anchor) = input.anchor {
+        connection.execute(
+            "UPDATE task SET anchor = ?2 WHERE id = ?1",
+            rusqlite::params![input.id, anchor],
+        )?;
+    }
+    if let Some(zone) = input.zone {
+        connection.execute(
+            "UPDATE task SET zone = ?2 WHERE id = ?1",
+            rusqlite::params![input.id, zone],
+        )?;
+    }
+    entity::with_rev(ctx, &input.id, json!({ "id": input.id }))
 }
 
 /// What closing a task as done did.
@@ -574,7 +646,6 @@ pub fn complete(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Completion> {
         "UPDATE task SET status = 'done', done_at = ?2, snoozed_until = NULL WHERE id = ?1",
         rusqlite::params![id, ctx.now],
     )?;
-    ctx.touch(id)?;
     let (Some(rule), Some(due)) = (rule, due) else {
         return Ok(done);
     };
@@ -619,8 +690,14 @@ pub fn complete(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Completion> {
     Ok(done)
 }
 
+#[derive(serde::Deserialize)]
+struct TaskIdInput {
+    id: String,
+}
+
 fn complete_command(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let done = complete(ctx, ctx.required_str("id")?)?;
+    let input: TaskIdInput = ctx.parse_input()?;
+    let done = complete(ctx, &input.id)?;
     Ok(json!({
         "id": done.id,
         "status": "done",
@@ -633,15 +710,12 @@ fn complete_command(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
 /// Close or reopen a task without a successor: cancelling ends the occurrence,
 /// reopening makes a closed one open again. Both are idempotent.
 fn settle(ctx: &CommandCtx<'_, '_>, status: &str) -> Result<Json> {
-    let id = ctx.required_str("id")?;
-    let changed = ctx.connection().execute(
+    let input: TaskIdInput = ctx.parse_input()?;
+    ctx.connection().execute(
         "UPDATE task SET status = ?2, done_at = NULL WHERE id = ?1 AND status <> ?2",
-        [id, status],
+        [input.id.as_str(), status],
     )?;
-    if changed > 0 {
-        ctx.touch(id)?;
-    }
-    Ok(json!({ "id": id, "status": status }))
+    Ok(json!({ "id": input.id, "status": status }))
 }
 
 fn reopen(ctx: &CommandCtx<'_, '_>) -> Result<Json> {

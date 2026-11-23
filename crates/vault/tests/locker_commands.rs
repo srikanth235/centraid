@@ -102,6 +102,18 @@ impl World {
         outcome.output
     }
 
+    /// Run and expect the command to refuse as invalid input, returning its sentence.
+    fn refused_early(&self, name: &str, input: serde_json::Value) -> String {
+        match self.scratch.vault.execute(
+            &self.registry,
+            &Principal::owner("device-1"),
+            &Command::new(name, input),
+        ) {
+            Ok(outcome) => panic!("{name} should refuse: {:?}", outcome.status),
+            Err(error) => error.to_string(),
+        }
+    }
+
     /// Run and expect a refusal, returning its sentence.
     fn refused(&self, name: &str, input: serde_json::Value) -> String {
         let outcome = self.run(name, input);
@@ -546,7 +558,7 @@ fn a_password_write_without_the_rotation_claim_is_refused() {
         }),
     );
     let untouched: String = world.one(
-        "SELECT password FROM locker_item WHERE id = ?1",
+        "SELECT value_sealed FROM locker_item_field WHERE item_id = ?1 AND field_key = 'password'",
         &["item-1"],
     );
     assert_eq!(
@@ -585,8 +597,8 @@ fn a_password_write_without_the_rotation_claim_is_refused() {
 ///
 /// v0's contract, named by v0's own test: *"edit_item rewrites the type fields
 /// and replaces tags"*. An edit carrying only a password clears the username,
-/// the url, the OTP seed and the notes, because every column of the type is
-/// written, `NULL` for the omitted ones.
+/// the url, the OTP seed and the notes, because every built-in field of the
+/// type is written, and omitted ones are cleared.
 ///
 /// The owner ruled it stays a replace and is stated where callers read: the
 /// command's schema (`the_edit_commands_schema_says_it_replaces`), the
@@ -600,7 +612,7 @@ fn an_edit_rewrites_the_types_fields_rather_than_patching_them() {
     world.login("item-1", "key-1");
     assert_eq!(
         world.one::<String>(
-            "SELECT username FROM locker_item WHERE id = ?1",
+            "SELECT value_text FROM locker_item_field WHERE item_id = ?1 AND field_key = 'username'",
             &["item-1"]
         ),
         "ada@example.com"
@@ -615,13 +627,13 @@ fn an_edit_rewrites_the_types_fields_rather_than_patching_them() {
             "key_id": "key-1"
         }),
     );
-    // THE OMITTED COLUMNS ARE CLEARED. This is the contract.
+    // THE OMITTED FIELDS ARE CLEARED. This is the contract.
     for column in ["username", "url", "otp_seed", "notes"] {
-        let value: Option<String> = world.one(
-            &format!("SELECT {column} FROM locker_item WHERE id = ?1"),
-            &["item-1"],
+        let count: i64 = world.one(
+            "SELECT COUNT(*) FROM locker_item_field WHERE item_id = ?1 AND field_key = ?2",
+            &["item-1", column],
         );
-        assert_eq!(value, None, "{column} survived a rewrite");
+        assert_eq!(count, 0, "{column} survived a rewrite");
     }
     // …and the title, which is NOT a type field, is untouched.
     assert_eq!(
@@ -679,7 +691,7 @@ fn an_edit_rewrites_the_types_fields_rather_than_patching_them() {
     );
     assert_eq!(
         world.one::<String>(
-            "SELECT username FROM locker_item WHERE id = ?1",
+            "SELECT value_text FROM locker_item_field WHERE item_id = ?1 AND field_key = 'username'",
             &["item-1"]
         ),
         "ada@example.com"
@@ -687,7 +699,7 @@ fn an_edit_rewrites_the_types_fields_rather_than_patching_them() {
     // The placeholder left the secret alone.
     assert_eq!(
         world.one::<String>(
-            "SELECT password FROM locker_item WHERE id = ?1",
+            "SELECT value_sealed FROM locker_item_field WHERE item_id = ?1 AND field_key = 'password'",
             &["item-1"]
         ),
         ciphertext("rotated")
@@ -1104,10 +1116,10 @@ fn a_duplicate_takes_the_re_sealed_cells_and_leaves_the_alias_behind() {
         }),
     );
     assert_eq!(output["title"], serde_json::json!("The bank copy"));
-    // The COPY's ciphertext is the caller's, sealed against the new row.
+    // The COPY's ciphertext is the caller's, sealed against the new field row.
     assert_eq!(
         world.one::<String>(
-            "SELECT password FROM locker_item WHERE id = ?1",
+            "SELECT value_sealed FROM locker_item_field WHERE item_id = ?1 AND field_key = 'password'",
             &["item-copy"]
         ),
         ciphertext("item-copy")
@@ -1652,6 +1664,63 @@ fn a_wikilink_never_resolves_a_locker_item() {
         world.one::<i64>(
             "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'links' AND to_id = 'item-1'",
             &[&note],
+        ),
+        0
+    );
+}
+
+#[test]
+fn set_field_refuses_a_built_in_row_and_leaves_it_as_it_was() {
+    let world = World::new("locker-set-field-built-in", "key-1");
+    world.login("item-1", "key-1");
+    world.ok(
+        "locker.edit_item",
+        serde_json::json!({ "item_id": "item-1", "username": "ada" }),
+    );
+    let built_in = world.one::<String>(
+        "SELECT id FROM locker_item_field WHERE item_id = ?1 AND field_key = 'username'",
+        &["item-1"],
+    );
+    let why = world.refused_early(
+        "locker.set_field",
+        serde_json::json!({ "item_id": "item-1", "field_id": built_in,
+                            "label": "Renamed", "kind": "date", "value": "2026-01-01" }),
+    );
+    assert!(why.contains("item's own fields"), "{why}");
+    assert_eq!(
+        world.one::<String>(
+            "SELECT label || kind FROM locker_item_field WHERE id = ?1",
+            &[&built_in]
+        ),
+        "Usernametext"
+    );
+}
+
+#[test]
+fn a_new_item_refuses_the_sealed_placeholder_and_a_copy_never_stores_it() {
+    let world = World::new("locker-placeholder", "key-1");
+    let why = world.refused_early(
+        "locker.add_item",
+        serde_json::json!({ "item_id": "item-p", "type": "login", "title": "T",
+                            "password": "\u{ab}sealed\u{bb}", "key_id": "key-1" }),
+    );
+    assert!(why.contains("no saved password"), "{why}");
+    assert_eq!(
+        world.one::<i64>("SELECT COUNT(*) FROM locker_item WHERE id = 'item-p'", &[]),
+        0
+    );
+
+    world.login("item-1", "key-1");
+    world.ok(
+        "locker.duplicate_item",
+        serde_json::json!({ "item_id": "item-1", "new_item_id": "item-copy",
+                            "password": "\u{ab}sealed\u{bb}", "key_id": "key-1" }),
+    );
+    assert_eq!(
+        world.one::<i64>(
+            "SELECT COUNT(*) FROM locker_item_field
+              WHERE item_id = 'item-copy' AND value_sealed = '\u{ab}sealed\u{bb}'",
+            &[]
         ),
         0
     );

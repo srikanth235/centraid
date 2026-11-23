@@ -107,26 +107,19 @@ fn speakable(kind: &str) -> bool {
 /// The key of a custom field's secret: `field:<id>`.
 const FIELD: &str = "field:";
 
+/// If a `locker_item_field` row id names a built-in keyed field (`<item_id>:<field_key>`),
+/// return its `field_key`.
+fn built_in_key(id: &str) -> Option<&str> {
+    let (_, key) = id.rsplit_once(':')?;
+    (PLAIN.contains(&key) || types::is_secret(key)).then_some(key)
+}
+
 /// The sealed cells among a set of fields: for each, the secret it names and whether the set held a
 /// value there (`false`: the cell held nothing).
 fn sealed_cells(look: &Look, fields: &[Field]) -> Vec<(Secret, bool)> {
     let locale = look.locale;
     let mut cells = Vec::new();
     for field in fields {
-        if let Some(column) = field.name.strip_prefix("locker_item.")
-            && types::is_secret(column)
-        {
-            cells.push((
-                Secret {
-                    key: column.to_owned(),
-                    label: types::label(locale, column),
-                    // A seed is the second factor: dots for good.
-                    revealable: column != types::SEED,
-                },
-                !field.value.is_null(),
-            ));
-            continue;
-        }
         // A passkey's key: dots for good, as it is never shown live.
         let passkey = match (field.name.as_str(), &field.value) {
             ("locker_item_passkey.private_key", value) => Some(!value.is_null()),
@@ -149,17 +142,28 @@ fn sealed_cells(look: &Look, fields: &[Field]) -> Vec<(Secret, bool)> {
         let Some((id, column)) = custom(field) else {
             continue;
         };
+        let built_in = built_in_key(id);
         let (kind, label, held) = match (column, &field.value) {
-            // One column of a field that stayed: its kind and label as the item holds it now.
-            (Some("value_sealed"), value) => (
-                look.names.get(&format!("{id}{KIND}")).cloned(),
-                look.names.get(id).cloned(),
-                !value.is_null(),
-            ),
+            // One column of a field that stayed: built-in key or custom field metadata.
+            (Some("value_sealed"), value) => match built_in {
+                Some(key) if types::is_secret(key) => (
+                    Some(if key == types::SEED { "otp" } else { "sealed" }.to_owned()),
+                    Some(types::label(locale, key)),
+                    !value.is_null(),
+                ),
+                Some(_) => continue,
+                None => (
+                    look.names.get(&format!("{id}{KIND}")).cloned(),
+                    look.names.get(id).cloned(),
+                    !value.is_null(),
+                ),
+            },
             // The whole row, held then (a removed field) or now (an added one).
             (None, Value::Object(row)) => (
                 row.get("kind").and_then(Value::as_str).map(str::to_owned),
-                row.get("label").and_then(Value::as_str).map(str::to_owned),
+                built_in
+                    .map(|key| types::label(locale, key))
+                    .or_else(|| row.get("label").and_then(Value::as_str).map(str::to_owned)),
                 row.get("value_sealed")
                     .is_some_and(|value| !value.is_null()),
             ),
@@ -168,9 +172,13 @@ fn sealed_cells(look: &Look, fields: &[Field]) -> Vec<(Secret, bool)> {
         if !matches!(kind.as_deref(), Some("sealed" | "otp")) {
             continue;
         }
+        let secret_key = match built_in {
+            Some(key) => key.to_owned(),
+            None => format!("{FIELD}{id}"),
+        };
         cells.push((
             Secret {
-                key: format!("{FIELD}{id}"),
+                key: secret_key,
                 label: label
                     .filter(|label| !label.trim().is_empty())
                     .unwrap_or_else(|| types::label(locale, "value")),
@@ -253,19 +261,39 @@ fn parts(look: &Look, fields: &[Field]) -> Vec<String> {
             text(&field.value),
         ));
     }
+    // Built-in plain fields from `locker_item_field[<item_id>:<key>]`, in the page's order.
+    let mut built_in_plain: std::collections::BTreeMap<&str, Option<String>> =
+        std::collections::BTreeMap::new();
+    for field in fields {
+        let Some((id, column)) = custom(field) else {
+            continue;
+        };
+        let Some(key) = built_in_key(id) else {
+            continue;
+        };
+        if types::is_secret(key) {
+            continue;
+        }
+        let value = match (column, &field.value) {
+            (None, Value::Object(row)) => row.get("value_text").and_then(text),
+            (None, Value::Null) => None,
+            (Some("value_text"), value) => text(value),
+            _ => continue,
+        };
+        built_in_plain.insert(key, value);
+    }
     for column in PLAIN {
-        // A sealed column is not in the list above; this is the second wall, not the first.
         if types::is_secret(column) {
             continue;
         }
-        let Some(field) = named(&format!("locker_item.{column}")) else {
+        let Some(value) = built_in_plain.get(column) else {
             continue;
         };
-        let value = text(&field.value).map(|value| {
+        let value = value.as_deref().map(|value| {
             if column == "notes" {
-                brief(&value)
+                brief(value)
             } else {
-                value
+                value.to_owned()
             }
         });
         lines.push(said(locale, &types::label(locale, column), value));
@@ -293,6 +321,9 @@ fn parts(look: &Look, fields: &[Field]) -> Vec<String> {
         let Some((id, column)) = custom(field) else {
             continue;
         };
+        if built_in_key(id).is_some() {
+            continue;
+        }
         match (column, &field.value) {
             // The whole row: held then, so its own label and kind say whether it has words.
             (None, Value::Object(row)) => {

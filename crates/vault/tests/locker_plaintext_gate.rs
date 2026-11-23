@@ -58,21 +58,21 @@ use centraid_vault::model::Kind;
 /// in a base64 blob would make this test pass for the wrong reason.
 const PLANTED: [(&str, &str, &str, &str); 6] = [
     (
-        "locker_item",
-        "item-1",
-        "password",
+        "locker_item_field",
+        "item-1:password",
+        "value_sealed",
         "PLANTED-PASSWORD-zq7xk4-not-in-any-payload",
     ),
     (
-        "locker_item",
-        "item-1",
-        "otp_seed",
+        "locker_item_field",
+        "item-1:otp_seed",
+        "value_sealed",
         "PLANTED-OTPSEED-mv9wr2-not-in-any-payload",
     ),
     (
-        "locker_item",
-        "item-2",
-        "card_number",
+        "locker_item_field",
+        "item-2:card_number",
+        "value_sealed",
         "PLANTED-CARDNUMBER-td3hb8-not-in-any-payload",
     ),
     (
@@ -128,35 +128,52 @@ impl Sealed {
                      VALUES ('key-1', '2026-01-01T00:00:00.000Z')",
                     [],
                 )?;
-                // A login, and a card (a type owns its own columns, and the file refuses the rest).
-                for (item_id, title, kind, name_column, name, brand) in [
-                    (
-                        "item-1",
-                        "The bank",
-                        "login",
-                        "username",
-                        "plainuser-xylophone9",
-                        None,
-                    ),
-                    (
-                        "item-2",
-                        "The card",
-                        "card",
-                        "memo",
-                        "plainname-quokka7",
-                        Some("plainbrand-zeppelin3"),
-                    ),
-                ] {
-                    // A Locker item is an entity first; its kind row joins it.
-                    tx.insert_entity(item_id, Kind::LockerItem, title, "2026-01-01T00:00:00.000Z")?;
-                    connection.execute(
-                        &format!(
-                            "INSERT INTO locker_item (id, type, {name_column}, brand, key_id)
-                             VALUES (?1, ?2, ?3, ?4, 'key-1')"
-                        ),
-                        rusqlite::params![item_id, kind, name, brand],
-                    )?;
-                }
+                tx.insert_entity("item-1", Kind::LockerItem, "The bank", "2026-01-01T00:00:00.000Z")?;
+                connection.execute(
+                    "INSERT INTO locker_item (id, type) VALUES ('item-1', 'login')",
+                    [],
+                )?;
+                connection.execute(
+                    "INSERT INTO locker_item_field
+                       (id, item_id, field_key, section, label, kind, value_text, created_at, updated_at)
+                     VALUES ('item-1:username', 'item-1', 'username', '', 'Username', 'text',
+                             'plainuser-xylophone9', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
+                    [],
+                )?;
+                connection.execute(
+                    "INSERT INTO locker_item_field
+                       (id, item_id, field_key, section, label, kind, created_at, updated_at, key_id)
+                     VALUES ('item-1:password', 'item-1', 'password', '', 'Password', 'sealed',
+                             '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 'key-1')",
+                    [],
+                )?;
+                connection.execute(
+                    "INSERT INTO locker_item_field
+                       (id, item_id, field_key, section, label, kind, value_sealed, created_at, updated_at, key_id)
+                     VALUES ('item-1:otp_seed', 'item-1', 'otp_seed', '', 'One-time code', 'otp',
+                             'lk1:placeholder', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 'key-1')",
+                    [],
+                )?;
+                tx.insert_entity("item-2", Kind::LockerItem, "The card", "2026-01-01T00:00:00.000Z")?;
+                connection.execute(
+                    "INSERT INTO locker_item (id, type, memo)
+                     VALUES ('item-2', 'card', 'plainname-quokka7')",
+                    [],
+                )?;
+                connection.execute(
+                    "INSERT INTO locker_item_field
+                       (id, item_id, field_key, section, label, kind, value_text, created_at, updated_at)
+                     VALUES ('item-2:brand', 'item-2', 'brand', '', 'Brand', 'text',
+                             'plainbrand-zeppelin3', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
+                    [],
+                )?;
+                connection.execute(
+                    "INSERT INTO locker_item_field
+                       (id, item_id, field_key, section, label, kind, created_at, updated_at, key_id)
+                     VALUES ('item-2:card_number', 'item-2', 'card_number', '', 'Card number', 'sealed',
+                             '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 'key-1')",
+                    [],
+                )?;
                 connection.execute(
                     "INSERT INTO locker_item_alias (id, item_id, created_at)
                      VALUES ('plainalias-narwhal5', 'item-1', '2026-01-01T00:00:00.000Z')",
@@ -961,26 +978,38 @@ fn the_assistants_reads_serve_a_locker_items_plain_rows_and_never_a_sealed_colum
     let items = page(
         "assist.native.locker_item",
         "locker_item",
-        &[
-            "id",
-            "type",
-            "username",
-            "brand",
-            "password IS NOT NULL AS has_password",
-            "otp_seed IS NOT NULL AS has_otp_seed",
-            "card_number IS NOT NULL AS has_card_number",
-        ],
+        &["id", "type", "memo"],
         "id",
         None,
     )
     .expect("the door answers");
     let rendered = format!("{:?}", items.rows);
+    assert!(rendered.contains("plainname-quokka7"), "{rendered}");
+    carries_no_secret("the assistant's read of locker_item", rendered.as_bytes());
+    let fields = page(
+        "assist.native.locker_item_field",
+        "locker_item_field",
+        &[
+            "id",
+            "item_id",
+            "field_key",
+            "value_text",
+            "value_sealed IS NOT NULL AS has_sealed",
+        ],
+        "id",
+        None,
+    )
+    .expect("the door answers");
+    let rendered = format!("{:?}", fields.rows);
     assert!(rendered.contains("plainuser-xylophone9"), "{rendered}");
     assert!(
-        rendered.contains("has_password") && rendered.contains("Integer(1)"),
+        rendered.contains("has_sealed") && rendered.contains("Integer(1)"),
         "the presence bit is served: {rendered}"
     );
-    carries_no_secret("the assistant's read of locker_item", rendered.as_bytes());
+    carries_no_secret(
+        "the assistant's read of locker_item_field",
+        rendered.as_bytes(),
+    );
     assert!(
         !rendered.contains("lk1:"),
         "no ciphertext either: {rendered}"
@@ -989,11 +1018,6 @@ fn the_assistants_reads_serve_a_locker_items_plain_rows_and_never_a_sealed_colum
     // …and every way to name a sealed column is refused: projected, ordered by, filtered on,
     // or read out of a JSON path.
     for (table, pk, column) in [
-        ("locker_item", "id", "password"),
-        ("locker_item", "id", "otp_seed"),
-        ("locker_item", "id", "card_number"),
-        ("locker_item", "id", "cvv"),
-        ("locker_item", "id", "content"),
         ("locker_item_field", "item_id", "value_sealed"),
         ("locker_item_passkey", "item_id", "private_key"),
     ] {

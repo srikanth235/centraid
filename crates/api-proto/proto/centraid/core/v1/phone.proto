@@ -647,7 +647,7 @@ enum WaitReason {
 // phone may hold more than one. Read from the device's ledger; nothing here is
 // a key or a token.
 message Destination {
-  // The gateway's own id, as its `GET /v2/info` answers it.
+  // The gateway's own id, as its `GET /v1/info` answers it.
   string gateway_id = 1;
   // What the member called it when pairing.
   string label = 2;
@@ -772,7 +772,7 @@ message DeviceWaiting {
 // advertised this gateway's id and hands its addresses here. **The shell's
 // match is a hint and the core's is the check**: each candidate is dialled
 // with the certificate this phone pinned at pairing and must answer
-// `GET /v2/info` with this gateway's own id, so a machine that merely claims
+// `GET /v1/info` with this gateway's own id, so a machine that merely claims
 // the id in its advertisement is refused by the certificate, and one that
 // answers as another gateway is not recorded. Only addresses that answered
 // are kept, first in the list, ahead of the ones already recorded.

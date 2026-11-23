@@ -10,8 +10,14 @@ use crate::error::Result;
 /// The longest a vault's name goes, in characters: it is drawn on the header.
 const NAME_MAX: usize = 60;
 
+#[derive(serde::Deserialize)]
+struct RenameInput {
+    name: String,
+}
+
 fn rename(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let name = ctx.required_str("name")?.trim();
+    let input: RenameInput = ctx.parse_input()?;
+    let name = input.name.trim();
     let changed = ctx
         .connection()
         .execute("UPDATE vault SET name = ?1 WHERE name <> ?1", [name])?;

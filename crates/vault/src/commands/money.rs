@@ -87,10 +87,6 @@ fn is_month(connection: &Connection, text: &str) -> Result<bool> {
     is_day(connection, &format!("{text}-01"))
 }
 
-fn flag(ctx: &CommandCtx<'_, '_>, key: &str) -> Option<bool> {
-    ctx.input.get(key).and_then(Json::as_bool)
-}
-
 fn integer(ctx: &CommandCtx<'_, '_>, key: &str) -> Option<i64> {
     ctx.input.get(key).and_then(Json::as_i64)
 }
@@ -190,17 +186,31 @@ fn opening_sentence(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     )
 }
 
+#[derive(serde::Deserialize)]
+struct AddAccountInput {
+    id: Option<String>,
+    title: String,
+    #[serde(rename = "type")]
+    account_type: String,
+    currency: Option<String>,
+    opening_minor: Option<i64>,
+    opening_on: Option<String>,
+    on_budget: Option<bool>,
+    external_ref: Option<String>,
+}
+
 fn add_account(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let input: AddAccountInput = ctx.parse_input()?;
     let connection = ctx.connection();
-    let title = squash(ctx.required_str("title")?);
-    let id = match ctx.optional_str("id") {
+    let title = squash(&input.title);
+    let id = match input.id.as_deref() {
         Some(id) => {
             ctx.insert_entity_as(id, Kind::Account, &title)?;
             id.to_owned()
         }
         None => ctx.insert_entity(Kind::Account, &title)?,
     };
-    let currency = match ctx.optional_str("currency") {
+    let currency = match input.currency.as_deref() {
         Some(currency) => currency.trim().to_uppercase(),
         None => connection.query_row("SELECT currency FROM vault", [], |row| row.get(0))?,
     };
@@ -209,11 +219,11 @@ fn add_account(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         rusqlite::params![
             id,
-            ctx.required_str("type")?,
+            input.account_type,
             currency,
-            integer(ctx, "opening_minor").unwrap_or(0),
-            ctx.optional_str("opening_on"),
-            i64::from(flag(ctx, "on_budget").unwrap_or(true)),
+            input.opening_minor.unwrap_or(0),
+            input.opening_on,
+            i64::from(input.on_budget.unwrap_or(true)),
         ],
     )?;
     connection.execute(
@@ -221,7 +231,7 @@ fn add_account(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
          VALUES (?1, 'statement', ?2, ?3, ?4, ?5)",
         rusqlite::params![
             ctx.next_id(),
-            origin_ref(&id, ctx.optional_str("external_ref")),
+            origin_ref(&id, input.external_ref.as_deref()),
             title,
             id,
             ctx.now
@@ -287,11 +297,23 @@ fn pre_edit_account(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok(None)
 }
 
+#[derive(serde::Deserialize)]
+struct EditAccountInput {
+    id: String,
+    title: Option<String>,
+    #[serde(rename = "type")]
+    account_type: Option<String>,
+    on_budget: Option<bool>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    external_ref: Option<Option<String>>,
+}
+
 fn edit_account(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let input: EditAccountInput = ctx.parse_input()?;
     let connection = ctx.connection();
-    let id = ctx.required_str("id")?;
+    let id = input.id.as_str();
     let mut changed = false;
-    if let Some(title) = ctx.optional_str("title") {
+    if let Some(title) = input.title.as_deref() {
         let name = squash(title);
         changed |= connection.execute(
             "UPDATE entity SET title = ?2 WHERE id = ?1 AND title IS NOT ?2",
@@ -303,22 +325,22 @@ fn edit_account(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             [id, &name],
         )?;
     }
-    if let Some(account_type) = ctx.optional_str("type") {
+    if let Some(account_type) = input.account_type.as_deref() {
         changed |= connection.execute(
             "UPDATE account SET type = ?2 WHERE id = ?1 AND type IS NOT ?2",
             [id, account_type],
         )? > 0;
     }
-    if let Some(budget) = flag(ctx, "on_budget") {
+    if let Some(budget) = input.on_budget {
         changed |= connection.execute(
             "UPDATE account SET on_budget = ?2 WHERE id = ?1 AND on_budget IS NOT ?2",
             rusqlite::params![id, i64::from(budget)],
         )? > 0;
     }
-    if let Some(number) = ctx.input.get("external_ref") {
+    if let Some(number) = input.external_ref {
         changed |= connection.execute(
             "UPDATE origin SET ref = ?2 WHERE system = 'statement' AND fills = ?1 AND ref IS NOT ?2",
-            rusqlite::params![id, origin_ref(id, number.as_str())],
+            rusqlite::params![id, origin_ref(id, number.as_deref())],
         )? > 0;
     }
     if changed {
@@ -334,21 +356,21 @@ fn pre_set_opening(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     opening_sentence(ctx)
 }
 
+#[derive(serde::Deserialize)]
+struct SetOpeningInput {
+    id: String,
+    opening_minor: Option<i64>,
+    opening_on: Option<String>,
+}
+
 fn set_opening(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let id = ctx.required_str("id")?;
+    let input: SetOpeningInput = ctx.parse_input()?;
     let changed = ctx.connection().execute(
         "UPDATE account SET opening_minor = ?2, opening_on = ?3
           WHERE id = ?1 AND (opening_minor, opening_on) IS NOT (?2, ?3)",
-        rusqlite::params![
-            id,
-            integer(ctx, "opening_minor").unwrap_or(0),
-            ctx.optional_str("opening_on")
-        ],
+        rusqlite::params![input.id, input.opening_minor.unwrap_or(0), input.opening_on],
     )? > 0;
-    if changed {
-        ctx.touch(id)?;
-    }
-    Ok(json!({ "id": id, "changed": changed }))
+    Ok(json!({ "id": input.id, "changed": changed }))
 }
 
 fn pre_layout(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -370,18 +392,26 @@ fn pre_layout(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok(missing.then(|| "This layout does not say which columns hold the amount.".to_owned()))
 }
 
+#[derive(serde::Deserialize)]
+struct RememberLayoutInput {
+    id: String,
+    layout: Option<Json>,
+}
+
 /// Remember how the account's statements are laid out, for the next one. A `null` layout forgets
 /// it. The answer names the layout it replaced (`null` when none was remembered), which is how
 /// the act is taken back.
 fn remember_layout(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let layout = ctx.input.get("layout").cloned().unwrap_or(Json::Null);
-    let stored = (!layout.is_null()).then(|| layout.to_string());
-    let account = ctx.required_str("id")?;
+    let input: RememberLayoutInput = ctx.parse_input()?;
+    let stored = input
+        .layout
+        .filter(|layout| !layout.is_null())
+        .map(|layout| layout.to_string());
     let held: Option<String> = ctx
         .connection()
         .query_row(
             "SELECT config FROM origin WHERE system = 'statement' AND fills = ?1",
-            [account],
+            [input.id.as_str()],
             |row| row.get(0),
         )
         .optional()?
@@ -389,7 +419,7 @@ fn remember_layout(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let saved = ctx.connection().execute(
         "UPDATE origin SET config = ?2
           WHERE system = 'statement' AND fills = ?1 AND config IS NOT ?2",
-        rusqlite::params![account, stored],
+        rusqlite::params![input.id, stored],
     )? > 0;
     if !saved {
         return Ok(json!({ "saved": false }));
@@ -466,18 +496,31 @@ fn pre_categorize(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     }
 }
 
+#[derive(serde::Deserialize)]
+struct CategorizeInput {
+    ids: Vec<String>,
+    category_id: Option<String>,
+}
+
 fn categorize(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let category = ctx.optional_str("category_id");
+    let input: CategorizeInput = ctx.parse_input()?;
+    let mut seen = std::collections::BTreeSet::new();
+    let ids: Vec<String> = input
+        .ids
+        .into_iter()
+        .filter(|id| seen.insert(id.clone()))
+        .collect();
+    let category = input.category_id.as_deref();
     let mut changed = Vec::new();
     // The category each changed line held, kept only while they all held the same one: then the
     // act is taken back by filing those lines under it again. Lines that held different ones are
     // not put back by one act, so none is named.
     let mut held: Option<Option<String>> = None;
     let mut uniform = true;
-    for id in ids_of(ctx) {
+    for id in &ids {
         let before: Option<String> = ctx.connection().query_row(
             "SELECT category_id FROM txn WHERE id = ?1",
-            [&id],
+            [id.as_str()],
             |row| row.get(0),
         )?;
         if ctx.connection().execute(
@@ -485,12 +528,11 @@ fn categorize(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             rusqlite::params![id, category],
         )? > 0
         {
-            ctx.touch(&id)?;
             if held.as_ref().is_some_and(|first| *first != before) {
                 uniform = false;
             }
             held.get_or_insert(before);
-            changed.push(id);
+            changed.push(id.clone());
         }
     }
     let replaced = match held {
@@ -499,7 +541,7 @@ fn categorize(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     };
     let answer = json!({ "changed": changed.len(), "replaced": replaced });
     // One line named is the record a revision is of: the answer carries the one the next save names.
-    match ids_of(ctx).as_slice() {
+    match ids.as_slice() {
         [only] => with_rev(ctx, only, answer),
         _ => Ok(answer),
     }
@@ -507,19 +549,10 @@ fn categorize(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
 
 /// Let go of a line's transfer, and of the other half's.
 fn end_transfer(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<usize> {
-    let touched: Vec<String> = ctx
+    let removed = ctx
         .connection()
-        .prepare_cached("SELECT a FROM transfer WHERE a = ?1 OR b = ?1 UNION ALL SELECT b FROM transfer WHERE a = ?1 OR b = ?1")?
-        .query_map([id], |row| row.get(0))?
-        .collect::<rusqlite::Result<_>>()?;
-    if !touched.is_empty() {
-        ctx.connection()
-            .execute("DELETE FROM transfer WHERE a = ?1 OR b = ?1", [id])?;
-    }
-    for member in &touched {
-        ctx.touch(member)?;
-    }
-    Ok(touched.len())
+        .execute("DELETE FROM transfer WHERE a = ?1 OR b = ?1", [id])?;
+    Ok(removed * 2)
 }
 
 fn pre_line(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -529,17 +562,19 @@ fn pre_line(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     ))
 }
 
+#[derive(serde::Deserialize)]
+struct TxnIdInput {
+    id: String,
+}
+
 fn void(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let id = ctx.required_str("id")?;
+    let input: TxnIdInput = ctx.parse_input()?;
     // A removed line is no half of a transfer.
-    let ended = end_transfer(ctx, id)?;
+    let ended = end_transfer(ctx, &input.id)?;
     let voided = ctx.connection().execute(
         "UPDATE txn SET status = 'void' WHERE id = ?1 AND status <> 'void'",
-        [id],
+        [input.id.as_str()],
     )? > 0;
-    if voided {
-        ctx.touch(id)?;
-    }
     Ok(json!({ "voided": voided, "transfers_ended": ended }))
 }
 
@@ -582,10 +617,17 @@ fn pre_transfer(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     ))
 }
 
+#[derive(serde::Deserialize)]
+struct LinkTransferInput {
+    id: String,
+    other_id: String,
+}
+
 /// Two lines are the two halves of one movement of the member's own money: one `transfer` row
 /// holds the pair, the lower id first, so either half finds its partner.
 fn link_transfer(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let (one, other) = (ctx.required_str("id")?, ctx.required_str("other_id")?);
+    let input: LinkTransferInput = ctx.parse_input()?;
+    let (one, other) = (input.id.as_str(), input.other_id.as_str());
     let (a, b) = if one < other {
         (one, other)
     } else {
@@ -595,26 +637,22 @@ fn link_transfer(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         "INSERT INTO transfer (a, b) VALUES (?1, ?2) ON CONFLICT (a) DO NOTHING",
         [a, b],
     )? > 0;
-    if linked {
-        ctx.touch(a)?;
-        ctx.touch(b)?;
-    }
     Ok(json!({ "linked": linked }))
 }
 
 fn unlink_transfer(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let id = ctx.required_str("id")?;
+    let input: TxnIdInput = ctx.parse_input()?;
     // The other half, named before the link goes: linking the two again takes the act back.
     let other: Option<String> = ctx
         .connection()
         .query_row(
             "SELECT CASE WHEN a = ?1 THEN b ELSE a END FROM transfer WHERE a = ?1 OR b = ?1",
-            [id],
+            [input.id.as_str()],
             |row| row.get(0),
         )
         .optional()?
         .flatten();
-    let unlinked = end_transfer(ctx, id)?;
+    let unlinked = end_transfer(ctx, &input.id)?;
     Ok(json!({
         "unlinked": unlinked,
         "replaced": other.map(|other| json!({ "other_id": other }))
@@ -643,8 +681,18 @@ fn pre_plan(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok(None)
 }
 
+#[derive(serde::Deserialize)]
+struct SetPlanInput {
+    month: String,
+    category_id: String,
+    amount_minor: Option<i64>,
+    currency: Option<String>,
+    carry: Option<bool>,
+}
+
 fn set_plan(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let (month, category) = (ctx.required_str("month")?, ctx.required_str("category_id")?);
+    let input: SetPlanInput = ctx.parse_input()?;
+    let (month, category) = (input.month.as_str(), input.category_id.as_str());
     // What the month held before, so the act is taken back by setting it again (or by removing
     // the plan when there was none): a plan is no record, so the history keeps none.
     let before: Option<(i64, String, bool)> = ctx
@@ -666,7 +714,7 @@ fn set_plan(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             None => json!({ "amount_minor": null }),
         }
     };
-    let Some(amount) = integer(ctx, "amount_minor") else {
+    let Some(amount) = input.amount_minor else {
         // `null` removes the plan for that month.
         let removed = ctx.connection().execute(
             "DELETE FROM budget WHERE month = ?1 AND category_id = ?2",
@@ -674,13 +722,13 @@ fn set_plan(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         )? > 0;
         return Ok(json!({ "changed": removed, "replaced": replaced(removed) }));
     };
-    let currency = match ctx.optional_str("currency") {
+    let currency = match input.currency.as_deref() {
         Some(currency) => currency.trim().to_uppercase(),
         None => ctx
             .connection()
             .query_row("SELECT currency FROM vault", [], |row| row.get(0))?,
     };
-    let carry = flag(ctx, "carry").map(i64::from);
+    let carry = input.carry.map(i64::from);
     let changed = ctx.connection().execute(
         "INSERT INTO budget (category_id, month, amount_minor, currency, carry)
          VALUES (?1, ?2, ?3, ?4, COALESCE(?5, 0))
@@ -709,21 +757,29 @@ fn pre_carry(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok(unless(found, "Set an amount for that month first."))
 }
 
+#[derive(serde::Deserialize)]
+struct SetCarryInput {
+    month: String,
+    category_id: String,
+    carry: Option<bool>,
+}
+
 fn set_carry(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let input: SetCarryInput = ctx.parse_input()?;
     let before: Option<bool> = ctx
         .connection()
         .query_row(
             "SELECT carry FROM budget WHERE month = ?1 AND category_id = ?2",
-            [ctx.required_str("month")?, ctx.required_str("category_id")?],
+            [input.month.as_str(), input.category_id.as_str()],
             |row| row.get(0),
         )
         .optional()?;
     let changed = ctx.connection().execute(
         "UPDATE budget SET carry = ?1 WHERE month = ?2 AND category_id = ?3 AND carry IS NOT ?1",
         rusqlite::params![
-            i64::from(flag(ctx, "carry").unwrap_or(false)),
-            ctx.required_str("month")?,
-            ctx.required_str("category_id")?
+            i64::from(input.carry.unwrap_or(false)),
+            input.month,
+            input.category_id
         ],
     )? > 0;
     Ok(json!({
@@ -749,17 +805,25 @@ fn pre_account_at(ctx: &CommandCtx<'_, '_>, key: &str) -> Result<Option<String>>
     ))
 }
 
+#[derive(serde::Deserialize)]
+struct RecordCheckpointInput {
+    account_id: String,
+    day: String,
+    balance_minor: Option<i64>,
+}
+
 /// A balance the bank stated on a day. Stating it again, or differently, is the
 /// same row: the latest word for the day stands.
 fn record_checkpoint(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let input: RecordCheckpointInput = ctx.parse_input()?;
     let written = ctx.connection().execute(
         "INSERT INTO checkpoint (account_id, day, balance_minor) VALUES (?1, ?2, ?3)
          ON CONFLICT (account_id, day) DO UPDATE SET balance_minor = excluded.balance_minor
           WHERE checkpoint.balance_minor IS NOT excluded.balance_minor",
         rusqlite::params![
-            ctx.required_str("account_id")?,
-            ctx.required_str("day")?,
-            integer(ctx, "balance_minor").unwrap_or(0)
+            input.account_id,
+            input.day,
+            input.balance_minor.unwrap_or(0)
         ],
     )? > 0;
     Ok(json!({ "written": written }))
@@ -819,9 +883,16 @@ fn category_key(group: Option<&str>, title: &str) -> String {
     }
 }
 
+#[derive(serde::Deserialize)]
+struct AddCategoryInput {
+    title: String,
+    parent_id: Option<String>,
+}
+
 fn add_category(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let input: AddCategoryInput = ctx.parse_input()?;
     let connection = ctx.connection();
-    let parent = ctx.optional_str("parent_id");
+    let parent = input.parent_id.as_deref();
     let group_key: Option<String> = match parent {
         Some(parent) => Some(connection.query_row(
             "SELECT key FROM concept WHERE id = ?1",
@@ -830,7 +901,7 @@ fn add_category(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         )?),
         None => None,
     };
-    let title = squash(ctx.required_str("title")?);
+    let title = squash(&input.title);
     let key = category_key(group_key.as_deref(), &title);
     let id = concept_id(Kind::Category, &key);
     ctx.insert_entity_as(&id, Kind::Category, &title)?;
@@ -863,19 +934,22 @@ fn pre_merge_category(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     ))
 }
 
+#[derive(serde::Deserialize)]
+struct MergeCategoryInput {
+    from_id: String,
+    into_id: String,
+}
+
 /// Fold one category into another: its lines, its rules and its plans move, and
 /// it goes. Where both planned the same month (in one currency) the plans add.
 fn merge_category(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let input: MergeCategoryInput = ctx.parse_input()?;
     let connection = ctx.connection();
-    let (from, into) = (ctx.required_str("from_id")?, ctx.required_str("into_id")?);
-    let lines: Vec<String> = connection
-        .prepare("SELECT id FROM txn WHERE category_id = ?1")?
-        .query_map([from], |row| row.get(0))?
-        .collect::<rusqlite::Result<_>>()?;
-    for id in &lines {
-        connection.execute("UPDATE txn SET category_id = ?2 WHERE id = ?1", [id, into])?;
-        ctx.touch(id)?;
-    }
+    let (from, into) = (input.from_id.as_str(), input.into_id.as_str());
+    let transactions = connection.execute(
+        "UPDATE txn SET category_id = ?2 WHERE category_id = ?1",
+        [from, into],
+    )?;
     let rules = connection.execute(
         "UPDATE rule SET category_id = ?2 WHERE category_id = ?1",
         [from, into],
@@ -913,7 +987,7 @@ fn merge_category(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     }
     // The category leaves; its plans left with it and its archive mark with it.
     entity::purge_one(ctx, from, &mut Vec::new())?;
-    Ok(json!({ "transactions": lines.len(), "rules": rules, "plans": plans.len() }))
+    Ok(json!({ "transactions": transactions, "rules": rules, "plans": plans.len() }))
 }
 
 // ---------------------------------------------------------------------------

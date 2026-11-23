@@ -165,7 +165,7 @@ mod tests {
     }
 
     fn sighting(name: &str, gw: Option<&str>, addresses: &[&str]) -> wire::GatewaySighting {
-        let mut txt = std::collections::HashMap::from([("v".to_owned(), "2".to_owned())]);
+        let mut txt = std::collections::HashMap::from([("v".to_owned(), "1".to_owned())]);
         if let Some(gw) = gw {
             txt.insert("gw".to_owned(), gw.to_owned());
         }

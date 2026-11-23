@@ -274,12 +274,33 @@ fn pre_add(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     judge(ctx, &draft(ctx, None, None), true)
 }
 
+#[derive(serde::Deserialize)]
+struct AddRuleInput {
+    id: Option<String>,
+    #[serde(rename = "match")]
+    kind: String,
+    text: String,
+    min: Option<i64>,
+    max: Option<i64>,
+    account_id: Option<String>,
+    category_id: String,
+    display_name: Option<String>,
+    position: Option<f64>,
+}
+
 fn add(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let draft = draft(ctx, None, None);
-    let id = ctx
-        .optional_str("id")
-        .map_or_else(|| ctx.next_id(), str::to_owned);
-    let position: f64 = match ctx.input.get("position").and_then(Json::as_f64) {
+    let input: AddRuleInput = ctx.parse_input()?;
+    let draft = Draft {
+        kind: input.kind.trim().to_owned(),
+        text: input.text.trim().to_owned(),
+        min: input.min,
+        max: input.max,
+        account: input.account_id.map(|s| s.trim().to_owned()),
+        category: input.category_id.trim().to_owned(),
+        display_name: input.display_name.map(|s| s.trim().to_owned()),
+    };
+    let id = input.id.unwrap_or_else(|| ctx.next_id());
+    let position: f64 = match input.position {
         Some(position) => position,
         None => ctx.connection().query_row(
             "SELECT COALESCE(MAX(position), -1) + 1 FROM rule",
@@ -310,22 +331,78 @@ fn pre_edit(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     judge(ctx, &draft(ctx, Some(&rule), Some(&pattern)), moved)
 }
 
+#[derive(serde::Deserialize)]
+struct EditRuleInput {
+    id: String,
+    #[serde(
+        rename = "match",
+        default,
+        deserialize_with = "crate::commands::deserialize_patch"
+    )]
+    kind: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    text: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    min: Option<Option<i64>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    max: Option<Option<i64>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    account_id: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    category_id: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    display_name: Option<Option<String>>,
+    position: Option<f64>,
+}
+
 fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let id = ctx.required_str("id")?;
-    let Some((rule, pattern)) = stored(ctx, id)? else {
-        return Ok(json!({ "id": id, "changed": false }));
+    let input: EditRuleInput = ctx.parse_input()?;
+    let Some((rule, pattern)) = stored(ctx, &input.id)? else {
+        return Ok(json!({ "id": input.id, "changed": false }));
     };
-    let draft = draft(ctx, Some(&rule), Some(&pattern));
-    let position = ctx
-        .input
-        .get("position")
-        .and_then(Json::as_f64)
-        .unwrap_or(rule.position);
+    let held_text = pattern
+        .get("text")
+        .and_then(Json::as_str)
+        .map(str::to_owned);
+    let trim_opt = |v: Option<String>| v.map(|s| s.trim().to_owned());
+    let draft = Draft {
+        kind: input
+            .kind
+            .as_ref()
+            .map(|v| trim_opt(v.clone()))
+            .unwrap_or_else(|| Some(rule.kind.clone()))
+            .unwrap_or_default(),
+        text: input
+            .text
+            .as_ref()
+            .map(|v| trim_opt(v.clone()))
+            .unwrap_or(held_text)
+            .unwrap_or_default(),
+        min: input.min.unwrap_or(rule.min),
+        max: input.max.unwrap_or(rule.max),
+        account: input
+            .account_id
+            .as_ref()
+            .map(|v| trim_opt(v.clone()))
+            .unwrap_or_else(|| rule.account.clone()),
+        category: input
+            .category_id
+            .as_ref()
+            .map(|v| trim_opt(v.clone()))
+            .unwrap_or_else(|| Some(rule.category.clone()))
+            .unwrap_or_default(),
+        display_name: input
+            .display_name
+            .as_ref()
+            .map(|v| trim_opt(v.clone()))
+            .unwrap_or_else(|| rule.display_name.clone()),
+    };
+    let position = input.position.unwrap_or(rule.position);
     let changed = ctx.connection().execute(
         "UPDATE rule SET pattern = ?2, category_id = ?3, display_name = ?5, position = ?4
           WHERE id = ?1 AND (pattern, category_id, display_name, position) IS NOT (?2, ?3, ?5, ?4)",
         rusqlite::params![
-            id,
+            input.id,
             draft.pattern(),
             draft.category,
             position,
@@ -335,42 +412,50 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     // A rule is no record, so the history keeps none: the answer names what each field the
     // command stated held before, and the same edit with those values takes it back.
     let replaced = changed.then(|| {
-        let held = |key: &str| match key {
-            "match" => json!(rule.kind),
-            "text" => pattern.get("text").cloned().unwrap_or(Json::Null),
-            "min" => json!(rule.min),
-            "max" => json!(rule.max),
-            "account_id" => json!(rule.account),
-            "category_id" => json!(rule.category),
-            "display_name" => json!(rule.display_name),
-            _ => json!(rule.position),
-        };
-        let stated = [
-            "match",
-            "text",
-            "min",
-            "max",
-            "account_id",
-            "category_id",
-            "display_name",
-            "position",
-        ];
-        Json::Object(
-            stated
-                .into_iter()
-                .filter(|key| ctx.input.get(*key).is_some())
-                .map(|key| (key.to_owned(), held(key)))
-                .collect(),
-        )
+        let mut map = serde_json::Map::new();
+        if input.kind.is_some() {
+            map.insert("match".to_owned(), json!(rule.kind));
+        }
+        if input.text.is_some() {
+            map.insert(
+                "text".to_owned(),
+                pattern.get("text").cloned().unwrap_or(Json::Null),
+            );
+        }
+        if input.min.is_some() {
+            map.insert("min".to_owned(), json!(rule.min));
+        }
+        if input.max.is_some() {
+            map.insert("max".to_owned(), json!(rule.max));
+        }
+        if input.account_id.is_some() {
+            map.insert("account_id".to_owned(), json!(rule.account));
+        }
+        if input.category_id.is_some() {
+            map.insert("category_id".to_owned(), json!(rule.category));
+        }
+        if input.display_name.is_some() {
+            map.insert("display_name".to_owned(), json!(rule.display_name));
+        }
+        if input.position.is_some() {
+            map.insert("position".to_owned(), json!(rule.position));
+        }
+        Json::Object(map)
     });
-    Ok(json!({ "id": id, "changed": changed, "replaced": replaced }))
+    Ok(json!({ "id": input.id, "changed": changed, "replaced": replaced }))
+}
+
+#[derive(serde::Deserialize)]
+struct DeleteRuleInput {
+    id: String,
 }
 
 fn delete(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let input: DeleteRuleInput = ctx.parse_input()?;
     // Deleting what is not there is the same end state as deleting it.
     let deleted = ctx
         .connection()
-        .execute("DELETE FROM rule WHERE id = ?1", [ctx.required_str("id")?])?
+        .execute("DELETE FROM rule WHERE id = ?1", [input.id.as_str()])?
         > 0;
     Ok(json!({ "deleted": deleted }))
 }
@@ -382,16 +467,19 @@ fn pre_apply(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     })
 }
 
+#[derive(serde::Deserialize)]
+struct ApplyRuleInput {
+    id: Option<String>,
+    overwrite: Option<bool>,
+}
+
 /// File the member's history by the rules: every line a rule matches that has no
 /// category (or, with `overwrite`, any category) takes the category the deciding
 /// rule names. With an `id`, only lines that rule matches are touched.
 fn apply(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let only = ctx.optional_str("id");
-    let overwrite = ctx
-        .input
-        .get("overwrite")
-        .and_then(Json::as_bool)
-        .unwrap_or(false);
+    let input: ApplyRuleInput = ctx.parse_input()?;
+    let only = input.id.as_deref();
+    let overwrite = input.overwrite.unwrap_or(false);
     let rules = load(ctx.connection())?;
     type History = (String, String, i64, Option<String>, String, String);
     let lines: Vec<History> = ctx
@@ -440,7 +528,6 @@ fn apply(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
                 [&id, category],
             )? > 0
         {
-            ctx.touch(&id)?;
             recategorised += 1;
         }
         // The bank's words are the line's name until the member or a rule gives it another.
@@ -452,7 +539,6 @@ fn apply(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
                 .execute("UPDATE entity SET title = ?2 WHERE id = ?1", [&id, name])?
                 > 0
         {
-            ctx.touch(&id)?;
             renamed += 1;
         }
     }

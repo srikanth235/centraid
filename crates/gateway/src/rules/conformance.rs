@@ -253,7 +253,7 @@ pub trait Target {
         vault: &VaultId,
         request: &UndoRequest,
     ) -> Result<Undone, Failure>;
-    /// `POST /v3/v/{vault}/revoke`: the calling token revokes itself.
+    /// `POST /v1/v/{vault}/revoke`: the calling token revokes itself.
     async fn revoke(&mut self, token: &Token, vault: &VaultId) -> Result<(), Failure>;
 }
 

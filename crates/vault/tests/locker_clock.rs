@@ -121,8 +121,6 @@ fn every_locker_table_holds_the_instants_of_the_injected_clock() {
     for (table, column) in [
         ("locker_item_alias", "created_at"),
         ("locker_item_address", "created_at"),
-        ("locker_item_field", "created_at"),
-        ("locker_item_field", "updated_at"),
         ("locker_item_passkey", "created_at"),
         ("locker_item_passkey", "updated_at"),
         ("locker_item", "password_set_at"),
@@ -135,6 +133,15 @@ fn every_locker_table_holds_the_instants_of_the_injected_clock() {
             "{table}.{column} is the injected clock's instant"
         );
     }
+    for column in ["created_at", "updated_at"] {
+        assert_eq!(
+            w.texts(&format!(
+                "SELECT {column} FROM locker_item_field ORDER BY id"
+            )),
+            [at.as_str(), at.as_str()],
+            "locker_item_field.{column} is the injected clock's instant"
+        );
+    }
     assert_eq!(w.texts("SELECT created_at FROM locker_key"), [founded]);
     // A later edit of the field moves its `updated_at` to the clock's new instant, from the
     // command, with no trigger.
@@ -145,10 +152,13 @@ fn every_locker_table_holds_the_instants_of_the_injected_clock() {
                  "label": "Recovery code", "kind": "sealed", "value": ciphertext("g"), "key_id": "key-1" }),
     );
     assert_eq!(
-        w.texts("SELECT updated_at FROM locker_item_field"),
+        w.texts("SELECT updated_at FROM locker_item_field WHERE id = 'field-1'"),
         [w.scratch.clock.now_text()]
     );
-    assert_eq!(w.texts("SELECT created_at FROM locker_item_field"), [at]);
+    assert_eq!(
+        w.texts("SELECT created_at FROM locker_item_field WHERE id = 'field-1'"),
+        [at]
+    );
 }
 
 #[test]
@@ -161,10 +171,15 @@ fn the_file_refuses_a_second_key_a_foreign_type_column_and_a_host_stamp() {
         "locker.add_item",
         json!({ "item_id": "item-1", "type": "login", "title": "T" }),
     );
-    // An item can only name the key generation the vault has.
+    // A field can only name the key generation the vault has.
     assert!(
-        w.refuses("UPDATE locker_item SET key_id = 'nobody' WHERE id = 'item-1'")
-            .contains("FOREIGN KEY constraint failed")
+        w.refuses(
+            "INSERT INTO locker_item_field
+               (id, item_id, field_key, section, label, kind, value_sealed, created_at, updated_at, key_id)
+             VALUES ('item-1:password', 'item-1', 'password', '', 'Password', 'sealed', 'lk1:x',
+                     '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', 'nobody')"
+        )
+        .contains("FOREIGN KEY constraint failed")
     );
     // The refused commit is rolled back whole: the next one runs (a COMMIT that fails on a deferred
     // key must not leave its transaction open).
@@ -187,94 +202,66 @@ fn the_file_refuses_a_second_key_a_foreign_type_column_and_a_host_stamp() {
     assert!(!schema.contains("TRIGGER"), "no Locker trigger remains");
 }
 
-/// Every type owns exactly the typed columns it names, and the file says so for every type and
-/// every column, not for a sample: a column outside its owners is refused by that column's own
-/// CHECK, a column inside them is taken.
+/// Every built-in `field_key` is enforced by the file's CHECK constraints: empty keys are
+/// refused, secret keys (`password`, `card_number`, `cvv`, `content`, `otp_seed`) cannot be stored
+/// as plain kinds, and plain keys cannot be stored as sealed kinds.
 #[test]
-fn every_type_owns_its_typed_columns_and_no_others() {
-    // The rule as the commands state it (`type_fields` in commands/locker.rs), column by owners.
-    const TYPES: [&str; 15] = [
-        "login",
-        "card",
-        "note",
-        "identity",
-        "wifi",
-        "password",
-        "ssh_key",
-        "api_credential",
-        "passport",
-        "bank_account",
-        "driving_licence",
-        "software_licence",
-        "crypto_wallet",
-        "membership",
-        "document",
-    ];
-    let owners = |column: &str| -> Vec<&'static str> {
-        match column {
-            "username" | "url" | "otp_seed" => vec!["login"],
-            "password" => vec!["login", "wifi", "password"],
-            "notes" => TYPES
-                .iter()
-                .copied()
-                .filter(|t| !["card", "note", "identity", "wifi", "password"].contains(t))
-                .collect(),
-            "cardholder" | "card_number" | "expiry" | "cvv" | "brand" => vec!["card"],
-            "content" => vec!["note"],
-            "fullname" | "email" | "phone" | "address" => vec!["identity"],
-            "network" => vec!["wifi"],
-            other => panic!("no owners named for {other}"),
-        }
-    };
-    const COLUMNS: [&str; 16] = [
-        "username",
-        "password",
-        "url",
-        "otp_seed",
-        "notes",
-        "cardholder",
-        "card_number",
-        "expiry",
-        "cvv",
-        "brand",
-        "content",
-        "fullname",
-        "email",
-        "phone",
-        "address",
-        "network",
-    ];
+fn every_built_in_field_key_enforces_its_secret_boundary() {
+    use centraid_vault::commands::locker::{ALL_FIELDS, SEALED_ITEM_CELLS, built_in_field};
+
     let w = World::new();
-    let mut checked = 0;
-    for (index, kind) in TYPES.iter().enumerate() {
-        let id = format!("item-{index}");
-        w.ok(
-            "locker.add_item",
-            json!({ "item_id": id, "type": kind, "title": format!("T{index}") }),
-        );
-        for column in COLUMNS {
-            let sql = format!("UPDATE locker_item SET {column} = 'x' WHERE id = '{id}'");
-            if owners(column).contains(kind) {
-                w.scratch
-                    .vault
-                    .commit(|tx| {
-                        tx.connection().execute(&sql, [])?;
-                        tx.connection().execute(
-                            &format!("UPDATE locker_item SET {column} = NULL WHERE id = '{id}'"),
-                            [],
-                        )?;
-                        Ok(())
-                    })
-                    .unwrap_or_else(|error| panic!("{kind} should own {column}: {error}"));
-            } else {
-                let why = w.refuses(&sql);
-                assert!(
-                    why.contains(&format!("CHECK constraint failed: {column} IS NULL OR")),
-                    "{kind}.{column} was refused, but not by its own CHECK: {why}"
-                );
-            }
-            checked += 1;
-        }
+    w.ok(
+        "locker.add_item",
+        json!({ "item_id": "item-1", "type": "login", "title": "T1" }),
+    );
+    let at = "2026-01-01T00:00:00.000Z";
+    for key in ALL_FIELDS {
+        let meta = built_in_field(key).expect("known built-in key");
+        let is_secret = SEALED_ITEM_CELLS.contains(&key);
+        // Storing a secret key as plain `text` or a plain key as `sealed` is refused by CHECK.
+        let wrong = if is_secret {
+            format!(
+                "INSERT INTO locker_item_field
+                   (id, item_id, field_key, section, label, kind, value_text, created_at, updated_at)
+                 VALUES ('bad-{key}', 'item-1', '{key}', '', 'x', 'text', 'plain', '{at}', '{at}')"
+            )
+        } else {
+            format!(
+                "INSERT INTO locker_item_field
+                   (id, item_id, field_key, section, label, kind, value_sealed, created_at, updated_at)
+                 VALUES ('bad-{key}', 'item-1', '{key}', '', 'x', 'sealed', 'lk1:x', '{at}', '{at}')"
+            )
+        };
+        let why = w.refuses(&wrong);
+        assert!(why.contains("CHECK constraint failed"), "{key}: {why}");
+
+        // Storing with its real kind succeeds.
+        let (col, val) = if is_secret {
+            ("value_sealed", "lk1:x")
+        } else {
+            ("value_text", "plain")
+        };
+        w.scratch
+            .vault
+            .commit(|tx| {
+                tx.connection().execute(
+                    &format!(
+                        "INSERT INTO locker_item_field
+                           (id, item_id, field_key, section, label, kind, {col}, created_at, updated_at)
+                         VALUES ('ok-{key}', 'item-1', '{key}', '', '{}', '{}', '{val}', '{at}', '{at}')",
+                        meta.label, meta.kind
+                    ),
+                    [],
+                )?;
+                Ok(())
+            })
+            .unwrap_or_else(|error| panic!("{key} should succeed: {error}"));
     }
-    assert_eq!(checked, 15 * 16);
+    // An empty field_key is refused by CHECK.
+    let why = w.refuses(&format!(
+        "INSERT INTO locker_item_field
+           (id, item_id, field_key, section, label, kind, value_text, created_at, updated_at)
+         VALUES ('bad-empty', 'item-1', '', '', 'x', 'text', 'v', '{at}', '{at}')"
+    ));
+    assert!(why.contains("CHECK constraint failed"), "{why}");
 }

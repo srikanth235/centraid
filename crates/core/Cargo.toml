@@ -77,7 +77,7 @@ centraid-identity = { path = "../identity" }
 # THE VAULT IDENTITY KEY'S TYPE, which signs every head, delete, undo, claim
 # and pairing (#1191, E1). Already linked through `centraid-identity`.
 ed25519-dalek.workspace = true
-# THE PHONE'S HALF OF THE GATEWAY PROTOCOL v3 (#1080, #1191): the pinned HTTPS client
+# THE PHONE'S HALF OF THE GATEWAY PROTOCOL (#1080, #1191): the pinned HTTPS client
 # and the rules' own vocabulary — the pairing payload's parser, the claim's
 # preimage, the refusal codes — so a phone and a gateway cannot disagree about
 # either. The client feature alone: a phone links no listener, no SQLite of the

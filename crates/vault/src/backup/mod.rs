@@ -1,8 +1,9 @@
 //! The snapshot plane: the vault backed up as page-identical snapshots, from
 //! first principles ([#1080](https://github.com/srikanth235/centraid/issues/1080)).
 //!
-//! A snapshot is the live vault copied page for page into a scratch file, cut
-//! into 64 KiB ranges, each range a file in `centraid-sealed/2`
+//! A snapshot walks the live vault's pages through `sqlite_dbpage` on a pinned
+//! read-only connection (writing no plaintext copy to disk), cuts them into
+//! 64 KiB ranges, seals each changed range in `centraid-sealed/2`
 //! ([`centraid_media::sealed`]) named from its own BLAKE3, plus one manifest
 //! naming the ranges. An unchanged range has an unchanged name, so a snapshot
 //! uploads only the ranges that changed since one the gateway already holds,
@@ -14,7 +15,7 @@
 //! | [`naming`] | the keys from the root key, and the names the vault's content implies |
 //! | [`files`] | every file the vault knows by hash, with what a pass decides by |
 //! | [`holdings`] | what the vault holds by kind, for the Backup screen's per-app rows |
-//! | [`snapshot`] | the page-identical copy, its ranges and manifest; plan, spool, settle |
+//! | [`snapshot`] | the `sqlite_dbpage` walk, its ranges and manifest; plan, spool, settle |
 //! | [`store`] | the [`store::Store`] trait one destination answers, and [`store::MemoryStore`] |
 //! | [`state`] | `<stem>.state.db`: the paired gateways, each one's outbox, where bytes are on the device |
 //! | [`spool`] | `<stem>.spool/`: sealed parts waiting to move, under a byte budget |
@@ -41,7 +42,6 @@
 pub mod directory;
 pub mod drill;
 pub mod files;
-pub mod generated_limits;
 pub mod holdings;
 pub mod mover;
 pub mod naming;

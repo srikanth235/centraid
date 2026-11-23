@@ -119,24 +119,27 @@ pub(crate) fn set_tagged(
             [id, concept],
         )?
     };
-    if changed > 0 {
-        ctx.mark_for_index(id);
-    }
     Ok(changed > 0)
 }
 
+#[derive(serde::Deserialize)]
+struct AddTagInput {
+    id: String,
+    label: String,
+    color: Option<String>,
+}
+
 fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let id = ctx.required_str("id")?;
-    let label = ctx.required_str("label")?;
+    let input: AddTagInput = ctx.parse_input()?;
     let known: i64 = ctx.connection().query_row(
         "SELECT COUNT(*) FROM concept WHERE kind = 'tag' AND key = ?1",
-        [fold_label(label)],
+        [fold_label(&input.label)],
         |row| row.get(0),
     )?;
-    let tag = ensure_concept(ctx, Kind::Tag, label)?;
+    let tag = ensure_concept(ctx, Kind::Tag, &input.label)?;
     if known == 0 {
         // A NEW LABEL WEARS THE COLOUR ASKED FOR, else the palette hue least in use.
-        let color = match ctx.input.get("color").and_then(serde_json::Value::as_str) {
+        let color = match input.color.as_deref() {
             Some(color) => color,
             None => next_color(ctx)?,
         };
@@ -145,21 +148,33 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             [tag.as_str(), color],
         )?;
     }
-    let added = set_tagged(ctx, id, &tag, true)?;
+    let added = set_tagged(ctx, &input.id, &tag, true)?;
     Ok(serde_json::json!({ "tag": tag, "added": added }))
 }
 
+#[derive(serde::Deserialize)]
+struct RemoveTagInput {
+    id: String,
+    label: String,
+}
+
 fn remove(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let id = ctx.required_str("id")?;
-    let tag = concept_id(Kind::Tag, &fold_label(ctx.required_str("label")?));
-    let removed = set_tagged(ctx, id, &tag, false)?;
+    let input: RemoveTagInput = ctx.parse_input()?;
+    let tag = concept_id(Kind::Tag, &fold_label(&input.label));
+    let removed = set_tagged(ctx, &input.id, &tag, false)?;
     Ok(serde_json::json!({ "tag": tag, "removed": removed }))
+}
+
+#[derive(serde::Deserialize)]
+struct RecolorTagInput {
+    label: String,
+    color: String,
 }
 
 /// `tag.color`: change the colour a label wears. The label's words are its identity.
 fn recolor(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let tag = concept_id(Kind::Tag, &fold_label(ctx.required_str("label")?));
-    let color = ctx.required_str("color")?;
+    let input: RecolorTagInput = ctx.parse_input()?;
+    let tag = concept_id(Kind::Tag, &fold_label(&input.label));
     // The colour it wore, so the act can be taken back: the one value this command replaces.
     let replaced: Option<String> = ctx
         .connection()
@@ -172,7 +187,7 @@ fn recolor(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         .flatten();
     let changed = ctx.connection().execute(
         "UPDATE concept SET color = ?2 WHERE id = ?1 AND color IS NOT ?2",
-        [tag.as_str(), color],
+        [tag.as_str(), input.color.as_str()],
     )?;
     Ok(serde_json::json!({
         "tag": tag,

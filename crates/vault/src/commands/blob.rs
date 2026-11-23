@@ -38,22 +38,30 @@ pub(crate) fn claim(ctx: &CommandCtx<'_, '_>, key: &str) -> Result<()> {
     Ok(())
 }
 
+#[derive(serde::Deserialize)]
+struct StageBlobInput {
+    hash: String,
+    size: Option<i64>,
+}
+
 fn stage(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let size = ctx
-        .input
-        .get("size")
-        .and_then(serde_json::Value::as_i64)
-        .unwrap_or_default();
-    let added = blob::stage(ctx.connection(), ctx.required_str("hash")?, size)?;
+    let input: StageBlobInput = ctx.parse_input()?;
+    let added = blob::stage(
+        ctx.connection(),
+        &input.hash,
+        input.size.unwrap_or_default(),
+    )?;
     Ok(serde_json::json!({ "added": added }))
 }
 
+#[derive(serde::Deserialize)]
+struct CollectBlobInput {
+    limit: Option<u64>,
+}
+
 fn collect(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let limit = ctx
-        .input
-        .get("limit")
-        .and_then(serde_json::Value::as_u64)
-        .and_then(|limit| usize::try_from(limit).ok());
+    let input: CollectBlobInput = ctx.parse_input()?;
+    let limit = input.limit.and_then(|limit| usize::try_from(limit).ok());
     let released = match limit {
         Some(limit) => blob::collect_up_to(ctx.connection(), limit)?,
         None => blob::collect(ctx.connection())?,
@@ -103,51 +111,60 @@ fn replaced_file(ctx: &CommandCtx<'_, '_>, blob: &str, variant: &str) -> Result<
     Ok(held.flatten().into_iter().collect())
 }
 
+#[derive(serde::Deserialize)]
+struct WriteDerivativeInput {
+    blob: String,
+    variant: String,
+    out: Option<String>,
+    out_size: Option<i64>,
+    media_type: Option<String>,
+    text: Option<String>,
+}
+
 fn write(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let hash = ctx.required_str("blob")?;
-    let out = ctx
-        .input
-        .get("out")
-        .and_then(serde_json::Value::as_str)
-        .map(|out| {
-            (
-                out,
-                ctx.input
-                    .get("out_size")
-                    .and_then(serde_json::Value::as_i64)
-                    .unwrap_or_default(),
-                ctx.optional_str("media_type").unwrap_or_default(),
-            )
-        });
+    let input: WriteDerivativeInput = ctx.parse_input()?;
+    let out = input.out.as_deref().map(|out| {
+        (
+            out,
+            input.out_size.unwrap_or_default(),
+            input.media_type.as_deref().unwrap_or_default(),
+        )
+    });
     // The file the variant held before this write is the one it may release.
-    let replaced = replaced_file(ctx, hash, ctx.required_str("variant")?)?;
+    let replaced = replaced_file(ctx, &input.blob, &input.variant)?;
     blob::write_derivative(
         ctx.connection(),
         &ctx.now,
-        hash,
-        ctx.required_str("variant")?,
+        &input.blob,
+        &input.variant,
         out,
-        ctx.optional_str("text"),
+        input.text.as_deref(),
     )?;
     // The text and the caption are part of what the document or the photograph
     // is found by; the document itself did not change.
-    for owner in blob::owners_of_blob(ctx.connection(), hash)? {
+    for owner in blob::owners_of_blob(ctx.connection(), &input.blob)? {
         ctx.mark_for_index(&owner);
     }
     // A variant holds one file: the one it replaced is named by nothing now. Only that one is
     // asked about; the library is not walked for a thumbnail.
     let released = blob::collect_hashes(ctx.connection(), &replaced)?;
-    Ok(serde_json::json!({ "blob": hash, "released": released }))
+    Ok(serde_json::json!({ "blob": input.blob, "released": released }))
+}
+
+#[derive(serde::Deserialize)]
+struct DropDerivativeInput {
+    blob: String,
+    variant: String,
 }
 
 fn drop_derivative(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let hash = ctx.required_str("blob")?;
-    let replaced = replaced_file(ctx, hash, ctx.required_str("variant")?)?;
+    let input: DropDerivativeInput = ctx.parse_input()?;
+    let replaced = replaced_file(ctx, &input.blob, &input.variant)?;
     let removed = ctx.connection().execute(
         "DELETE FROM derivative WHERE blob = ?1 AND variant = ?2",
-        [hash, ctx.required_str("variant")?],
+        [input.blob.as_str(), input.variant.as_str()],
     )?;
-    for owner in blob::owners_of_blob(ctx.connection(), hash)? {
+    for owner in blob::owners_of_blob(ctx.connection(), &input.blob)? {
         ctx.mark_for_index(&owner);
     }
     // The file the dropped variant held is named by nothing now.

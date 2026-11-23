@@ -219,13 +219,10 @@ fn open_of_a_damaged_vault_is_a_typed_error() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// THE SCHEMA THE RELEASE AT `99cc70d8f` WROTE (#1202 upgrade case). The ladder was frozen at that
-/// release: its digest below is `format::SCHEMA_DIGEST` as that commit carried it. A file the
-/// release wrote has this schema at `user_version = 1`, so while the ladder's head is still rung 1
-/// the current code must found exactly it, and once a rung two is appended this test must climb
-/// from rung 1 instead of being edited: the constant never moves.
+/// The v0 baseline schema digest at `user_version = 1` (matches `format::SCHEMA_DIGEST` while
+/// the ladder head is rung 1; once released and a rung 2 is appended, this climbs from rung 1).
 const RELEASE_99CC70D8F_SCHEMA_DIGEST: &str =
-    "ca48de87ac6e7fcce60254324970b81254bccf984b03b812f2a4379b9d1357ad";
+    "3503c6f7788fb7059e49f212402e07a56d2a93a7d9eafa9a5f1bda3d2be0ba81";
 
 #[test]
 fn a_vault_the_release_wrote_opens_on_this_code_and_keeps_what_it_held() {

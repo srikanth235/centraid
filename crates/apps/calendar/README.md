@@ -27,7 +27,7 @@ Calendar is **7 manifest queries (the events' and one read-only read of reminder
 
 ## How a command states an event's times
 
-`event.propose`, `event.edit` and `event.edit_occurrence` take `starts`/`ends` in one of four shapes (`crates/vault/src/commands/event.rs`):
+`event.propose`, `event.edit` and `event.edit_occurrence` take `starts`/`ends` in one of four shapes (`crates/vault/src/commands/event/`):
 
 | Input | `starts` / `ends` | Stored |
 | --- | --- | --- |

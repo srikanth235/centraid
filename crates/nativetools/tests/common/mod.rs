@@ -278,27 +278,29 @@ pub fn opened(world: &World, item_id: &str, column: &str) -> String {
         "opened",
     )
     .expect("the vault opens");
+    let field_id = centraid_vault::commands::locker::built_in_field_id(item_id, column);
     let rows = owner
         .table_where(
-            "locker_item",
-            &format!("id, key_id, {column}"),
+            "locker_item_field",
+            "id, key_id, value_sealed",
             "id",
             "id",
             "id = ?",
-            &[item_id.to_owned()],
+            std::slice::from_ref(&field_id),
         )
         .expect("the owner reads");
     let [row] = rows.as_slice() else {
-        panic!("the item {item_id}: {rows:?}");
+        panic!("the item {item_id} field {column}: {rows:?}");
     };
-    let (Some(Cell::Text(key_id)), Some(Cell::Text(sealed))) = (row.get("key_id"), row.get(column))
+    let (Some(Cell::Text(key_id)), Some(Cell::Text(sealed))) =
+        (row.get("key_id"), row.get("value_sealed"))
     else {
         panic!("the item holds no {column}: {row:?}");
     };
     centraid_vault::custody::locker_key::decrypt_under_locker_key(
         vaultio::HARNESS_LOCKER_KEY,
         key_id,
-        item_id,
+        &field_id,
         sealed,
     )
     .expect("it opens under the harness key")

@@ -6,7 +6,7 @@ The phone's own stores (contacts, calendars, reminders, a picked folder, the hea
 
 - **Shell reader.** It reads the store and returns a snapshot. It decides nothing and names no command.
 - **Follow coordinator** (`crates/screens/src/follow`). It decides when to read and hands the snapshot to the store's follower.
-- **Vault command** (`crates/vault/src/commands/follow.rs`). It merges the snapshot. The merge is the vault's alone.
+- **Vault command** (`crates/vault/src/commands/follow/`). It merges the snapshot. The merge is the vault's alone.
 
 ## The coordinator
 

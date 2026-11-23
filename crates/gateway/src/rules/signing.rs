@@ -16,11 +16,12 @@
 //!
 //! | Record | Context | Fields after `gateway_id ‖ vault_id` |
 //! | --- | --- | --- |
-//! | claim, read grant | `centraid-gateway-claim-v3` | `epoch`, `head_seen` (or empty), `nonce` |
-//! | head | `centraid-gateway-head-v3` | `epoch`, `generation`, `writes`, `taken_at_ms`, `manifest_name`, `prev` (or empty) |
-//! | delete | `centraid-gateway-delete-v3` | `epoch`, `generation`, `names_digest` |
-//! | undo | `centraid-gateway-undo-v3` | `epoch`, `generation`, `names_digest` (empty for "every hold") |
-//! | pairing by secret | `centraid-gateway-pair-v3` | `blake3(secret)`, `nonce` |
+//! | claim, read grant | `centraid-gateway-claim-v1` | `epoch`, `head_seen` (or empty), `nonce` |
+//! | head | `centraid-gateway-head-v1` | `epoch`, `generation`, `writes`, `taken_at_ms`, `manifest_name`, `prev` (or empty) |
+//! | delete | `centraid-gateway-delete-v1` | `epoch`, `generation`, `names_digest` |
+//! | undo | `centraid-gateway-undo-v1` | `epoch`, `generation`, `names_digest` (empty for "every hold") |
+//! | check | `centraid-gateway-check-v1` | `epoch`, `generation`, `name` |
+//! | pairing by secret | `centraid-gateway-pair-v1` | `blake3(secret)`, `nonce` |
 //!
 //! `names_digest` is `blake3(u32be(count) ‖ name₁ ‖ … ‖ nameₙ)` over the
 //! names sorted ascending and de-duplicated. A read grant is the claim
@@ -39,17 +40,17 @@ use ed25519_dalek::Signer as _;
 use crate::rules::ids::{GatewayId, Name, Nonce, Secret, Signature, VaultId};
 
 /// The claim and read grant's domain separator.
-pub const CLAIM_CONTEXT: &[u8] = b"centraid-gateway-claim-v3";
+pub const CLAIM_CONTEXT: &[u8] = b"centraid-gateway-claim-v1";
 /// The head's domain separator.
-pub const HEAD_CONTEXT: &[u8] = b"centraid-gateway-head-v3";
+pub const HEAD_CONTEXT: &[u8] = b"centraid-gateway-head-v1";
 /// The delete's domain separator.
-pub const DELETE_CONTEXT: &[u8] = b"centraid-gateway-delete-v3";
+pub const DELETE_CONTEXT: &[u8] = b"centraid-gateway-delete-v1";
 /// The undo's domain separator.
-pub const UNDO_CONTEXT: &[u8] = b"centraid-gateway-undo-v3";
+pub const UNDO_CONTEXT: &[u8] = b"centraid-gateway-undo-v1";
 /// The check-this-name domain separator (decision 34).
-pub const CHECK_CONTEXT: &[u8] = b"centraid-gateway-check-v3";
+pub const CHECK_CONTEXT: &[u8] = b"centraid-gateway-check-v1";
 /// The pairing-by-secret domain separator.
-pub const PAIR_CONTEXT: &[u8] = b"centraid-gateway-pair-v3";
+pub const PAIR_CONTEXT: &[u8] = b"centraid-gateway-pair-v1";
 
 /// The epoch a read grant signs, and the epoch its token carries.
 pub const READ_EPOCH: u64 = 0;
@@ -448,7 +449,7 @@ mod tests {
         let with_head = claim_preimage(&gateway(), &v, 2, Some(&head), &nonce());
         let mut expected = Vec::new();
         expected.extend_from_slice(&25_u32.to_be_bytes());
-        expected.extend_from_slice(b"centraid-gateway-claim-v3");
+        expected.extend_from_slice(b"centraid-gateway-claim-v1");
         expected.extend_from_slice(&16_u32.to_be_bytes());
         expected.extend_from_slice(&[0x11; 16]);
         expected.extend_from_slice(&32_u32.to_be_bytes());
@@ -470,7 +471,7 @@ mod tests {
         let v = VaultId::from_bytes([0x22; 32]);
         let mut expected = Vec::new();
         expected.extend_from_slice(&24_u32.to_be_bytes());
-        expected.extend_from_slice(b"centraid-gateway-head-v3");
+        expected.extend_from_slice(b"centraid-gateway-head-v1");
         expected.extend_from_slice(&16_u32.to_be_bytes());
         expected.extend_from_slice(&[0x11; 16]);
         expected.extend_from_slice(&32_u32.to_be_bytes());

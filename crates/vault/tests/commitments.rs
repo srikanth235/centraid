@@ -10,6 +10,7 @@ mod common;
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use centraid_vault::Clock as _;
 use centraid_vault::commands::Registry;
 use centraid_vault::index;
 use centraid_vault::model::{Kind, Rel, fold_label};
@@ -613,22 +614,22 @@ fn an_edge_joins_exactly_the_kinds_edge_shape_names_for_every_relation_and_pair_
                 tx.insert_entity(&format!("to:{}", kind.as_str()), kind, "t", AT)?;
             }
             let c = tx.connection();
+            let mut insert_edge = c.prepare(
+                "INSERT INTO edge (from_id, rel, to_id, label_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            )?;
             let mut tried = 0;
             for rel in Rel::ALL {
                 for from in Kind::ALL {
                     for to in Kind::ALL {
                         c.execute_batch("SAVEPOINT shape")?;
                         let label = (rel == Rel::Related).then_some("to:relation");
-                        let attempt = c.execute(
-                            "INSERT INTO edge (from_id, rel, to_id, label_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-                            rusqlite::params![
-                                format!("from:{}", from.as_str()),
-                                rel.as_str(),
-                                format!("to:{}", to.as_str()),
-                                label,
-                                AT
-                            ],
-                        );
+                        let attempt = insert_edge.execute(rusqlite::params![
+                            format!("from:{}", from.as_str()),
+                            rel.as_str(),
+                            format!("to:{}", to.as_str()),
+                            label,
+                            AT
+                        ]);
                         c.execute_batch("ROLLBACK TO shape; RELEASE shape")?;
                         assert_eq!(
                             attempt.is_ok(),
@@ -1212,31 +1213,189 @@ fn the_word_list_gains_a_word_on_index_and_loses_it_on_a_purge_or_a_rebuild() {
 }
 
 #[test]
-fn an_edit_that_forgets_to_touch_is_caught_by_the_same_comparison() {
-    // The seeded red: write a body and never touch, and the comparison fails.
-    let scratch = founded("c6-red");
+fn an_edit_without_explicit_touch_still_updates_search_and_timestamp() {
+    // Auto-touch TEMP triggers guarantee that a raw SQL write without calling `ctx.touch`
+    // still advances `updated_at` and keeps the incremental search index equal to a rebuild,
+    // while an omitted column (`locker_item.last_used_at`) leaves `updated_at` untouched.
+    let scratch = founded("c6-auto");
     scratch
         .vault
         .commit(|tx| {
             tx.insert_entity("n", Kind::Note, "Note", AT)?;
             tx.connection()
                 .execute("INSERT INTO note (id, body) VALUES ('n', 'before')", [])?;
+            tx.insert_entity("l", Kind::LockerItem, "Login", AT)?;
+            tx.connection().execute(
+                "INSERT INTO locker_item (id, type) VALUES ('l', 'login')",
+                [],
+            )?;
             Ok(())
         })
         .expect("creates");
+    scratch.clock.advance_ms(60_000);
     scratch
         .vault
         .commit(|tx| {
             tx.connection()
                 .execute("UPDATE note SET body = 'after' WHERE id = 'n'", [])?;
+            tx.connection().execute(
+                "UPDATE locker_item SET last_used_at = ?1 WHERE id = 'l'",
+                [scratch.clock.now_text()],
+            )?;
             Ok(())
         })
         .expect("edits without touching");
     let incremental = index_dump(&scratch.vault);
-    assert_ne!(
+    assert_eq!(
         incremental,
         rebuilt(&scratch.vault),
-        "an untouched edit leaves the index stale, and the comparison sees it"
+        "auto-touch keeps the incremental index equal to a rebuild without manual ctx.touch"
+    );
+    let (note_updated, locker_updated): (String, String) = read(&scratch.vault, |c| {
+        Ok((
+            c.query_row("SELECT updated_at FROM entity WHERE id = 'n'", [], |r| {
+                r.get(0)
+            })?,
+            c.query_row("SELECT updated_at FROM entity WHERE id = 'l'", [], |r| {
+                r.get(0)
+            })?,
+        ))
+    });
+    assert_eq!(note_updated, scratch.clock.now_text());
+    assert_eq!(
+        locker_updated, AT,
+        "a reveal stamp must not move updated_at"
+    );
+}
+
+fn updated_at(vault: &Vault, id: &str) -> String {
+    read(vault, |c| {
+        Ok(
+            c.query_row("SELECT updated_at FROM entity WHERE id = ?1", [id], |r| {
+                r.get(0)
+            })?,
+        )
+    })
+}
+
+#[test]
+fn purging_a_source_photo_stamps_and_reindexes_the_photo_derived_from_it() {
+    // `photo.edited_from` is omitted from the history (immutable) but a purge moving it is still
+    // a change to the derived photograph: the commit triggers' column set is their own.
+    let scratch = founded("c6-detach");
+    let vault = &scratch.vault;
+    vault
+        .commit(|tx| {
+            let c = tx.connection();
+            let blob = centraid_vault::blob::content_digest(b"src");
+            let other = centraid_vault::blob::content_digest(b"der");
+            centraid_vault::blob::stage(c, &blob, 1)?;
+            centraid_vault::blob::stage(c, &other, 1)?;
+            tx.insert_entity("src", Kind::Photo, "Source", AT)?;
+            c.execute(
+                "INSERT INTO photo (id, blob, media_type, form) VALUES ('src', ?1, 'image/jpeg', 'photo')",
+                [&blob],
+            )?;
+            tx.insert_entity("der", Kind::Photo, "Derived", AT)?;
+            c.execute(
+                "INSERT INTO photo (id, blob, media_type, form, edited_from)
+                 VALUES ('der', ?1, 'image/jpeg', 'photo', 'src')",
+                [&other],
+            )?;
+            Ok(())
+        })
+        .expect("two photographs");
+    scratch.clock.advance_ms(60_000);
+    let registry = Registry::with_system_commands().expect("a registry");
+    run(vault, &registry, "entity.trash", json!({ "id": "src" }));
+    run(vault, &registry, "entity.purge", json!({ "id": "src" }));
+    assert_eq!(
+        updated_at(vault, "der"),
+        scratch.clock.now_text(),
+        "detaching a derived photograph is a change to it"
+    );
+    assert_eq!(
+        index_dump(vault),
+        rebuilt(vault),
+        "and the index follows it"
+    );
+}
+
+#[test]
+fn a_write_that_changes_nothing_touches_nothing_and_a_mixed_commit_shares_one_instant() {
+    let scratch = founded("c6-noop");
+    let vault = &scratch.vault;
+    vault
+        .commit(|tx| {
+            let c = tx.connection();
+            tx.insert_entity("ev", Kind::Event, "Series", AT)?;
+            c.execute(
+                "INSERT INTO event (id, starts, timing, rule, calendar_id)
+                 VALUES ('ev', '2026-03-02', 'all-day', 'FREQ=WEEKLY', 'calendar:default')",
+                [],
+            )?;
+            tx.insert_entity("n", Kind::Note, "Note", AT)?;
+            c.execute("INSERT INTO note (id, body) VALUES ('n', 'same')", [])?;
+            tx.insert_entity("m", Kind::Note, "Other", AT)?;
+            c.execute("INSERT INTO note (id, body) VALUES ('m', 'same')", [])?;
+            Ok(())
+        })
+        .expect("a series and two notes");
+    let upsert = |starts: &str| {
+        vault
+            .commit(|tx| {
+                tx.connection().execute(
+                    "INSERT INTO occurrence (series_id, original_start, scope, starts)
+                     VALUES ('ev', '2026-03-09', 'occurrence', ?1)
+                     ON CONFLICT (series_id, original_start, scope)
+                     DO UPDATE SET starts = ?1",
+                    [starts],
+                )?;
+                Ok(())
+            })
+            .expect("an upsert");
+    };
+    scratch.clock.advance_ms(60_000);
+    upsert("2026-03-10");
+    let first = updated_at(vault, "ev");
+    assert_ne!(first, AT, "a changed occurrence stamps its series");
+    scratch.clock.advance_ms(60_000);
+    upsert("2026-03-10");
+    assert_eq!(
+        updated_at(vault, "ev"),
+        first,
+        "re-writing the same values stamps nothing"
+    );
+    vault
+        .commit(|tx| {
+            tx.connection()
+                .execute("UPDATE note SET body = 'same' WHERE id = 'n'", [])?;
+            Ok(())
+        })
+        .expect("a no-op update");
+    assert_eq!(
+        updated_at(vault, "n"),
+        AT,
+        "a no-op host update stamps nothing"
+    );
+
+    // A manual touch (the command's instant) and an auto stamp (the trigger) in one commit
+    // carry the same `updated_at`, even when the vault's clock has moved between them.
+    let before = scratch.clock.now_text();
+    scratch.clock.advance_ms(60_000);
+    vault
+        .commit(|tx| {
+            tx.touch("n", &before)?;
+            tx.connection()
+                .execute("UPDATE note SET body = 'changed' WHERE id = 'm'", [])?;
+            Ok(())
+        })
+        .expect("a mixed commit");
+    assert_eq!(updated_at(vault, "n"), before);
+    assert_eq!(
+        updated_at(vault, "m"),
+        before,
+        "an auto stamp takes the instant the handlers stamped with"
     );
 }
 
@@ -1699,46 +1858,17 @@ const CENSUS: &[(&str, &str, Reach)] = &[
         "cause",
         Reach::Not("the name of the command that made the change"),
     ),
-    // Locker: the plain cells a member sees in the list are found by; every
-    // sealed cell is `lk1:` ciphertext and is never text (`SEALED_ITEM_CELLS`).
-    ("locker_item", "username", Reach::Own),
-    ("locker_item", "url", Reach::Own),
-    ("locker_item", "notes", Reach::Own),
-    ("locker_item", "fullname", Reach::Own),
-    ("locker_item", "email", Reach::Own),
-    ("locker_item", "phone", Reach::Own),
-    ("locker_item", "brand", Reach::Own),
+    // Locker: `locker_item.memo`, extra addresses, and plain built-in fields
+    // in `locker_item_field.value_text` are findable; every sealed cell lives
+    // in `locker_item_field.value_sealed` or `locker_item_passkey.private_key`
+    // as `lk1:` ciphertext and is never text.
     ("locker_item", "memo", Reach::Own),
     ("locker_item_address", "url", Reach::Own),
-    (
-        "locker_item",
-        "password",
-        Reach::Not("a sealed cell: ciphertext"),
-    ),
-    (
-        "locker_item",
-        "otp_seed",
-        Reach::Not("a sealed cell: ciphertext"),
-    ),
-    (
-        "locker_item",
-        "card_number",
-        Reach::Not("a sealed cell: ciphertext"),
-    ),
-    (
-        "locker_item",
-        "cvv",
-        Reach::Not("a sealed cell: ciphertext"),
-    ),
-    (
-        "locker_item",
-        "content",
-        Reach::Not("a sealed cell: ciphertext"),
-    ),
+    ("locker_item_field", "value_text", Reach::Own),
     (
         "locker_item_field",
         "value_sealed",
-        Reach::Not("a sealed custom field's value: ciphertext"),
+        Reach::Not("a sealed field's value: ciphertext"),
     ),
     (
         "locker_item_passkey",
@@ -1746,35 +1876,14 @@ const CENSUS: &[(&str, &str, Reach)] = &[
         Reach::Not("a passkey's private key: ciphertext"),
     ),
     (
-        "locker_item",
-        "cardholder",
-        Reach::Not("argued out: a card's face is read in the item, not searched for"),
-    ),
-    (
-        "locker_item",
-        "expiry",
-        Reach::Not("a date on a card, not prose"),
-    ),
-    (
-        "locker_item",
-        "address",
-        Reach::Not("a postal address of an identity; an owner question whether it is searched"),
-    ),
-    ("locker_item", "network", Reach::Not("a wifi network type")),
-    (
         "locker_item_field",
         "section",
-        Reach::Not("a custom field's group name; out of search by owner decision D11"),
+        Reach::Not("a field's group name; out of search by owner decision D11"),
     ),
     (
         "locker_item_field",
         "label",
-        Reach::Not("a custom field's name; out of search by owner decision D11"),
-    ),
-    (
-        "locker_item_field",
-        "value_text",
-        Reach::Not("a custom field's plain value; out of search by owner decision D11"),
+        Reach::Not("a field's name; out of search by owner decision D11"),
     ),
     (
         "locker_item_passkey",

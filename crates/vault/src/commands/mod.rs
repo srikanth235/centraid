@@ -224,6 +224,35 @@ impl<'conn> CommandCtx<'_, 'conn> {
     pub fn optional_str(&self, key: &str) -> Option<&str> {
         self.input.get(key).and_then(serde_json::Value::as_str)
     }
+
+    /// Deserialize the command's JSON input into a typed input struct.
+    ///
+    /// # Errors
+    /// [`VaultError::InvalidInput`] if `self.input` does not match `T`.
+    pub fn parse_input<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
+        serde_json::from_value(self.input.clone()).map_err(|error| {
+            let detail = error.to_string();
+            // serde names the key in "missing field `x`" and "unknown field `x`"; report it.
+            let name = detail
+                .split_once("field `")
+                .and_then(|(_, rest)| rest.split_once('`'))
+                .map_or_else(|| self.command.to_owned(), |(key, _)| key.to_owned());
+            VaultError::InvalidInput { name, detail }
+        })
+    }
+}
+
+/// Deserialize an optional nullable patch field into `Option<Option<T>>`:
+/// absent key → `None` (via `#[serde(default)]`), explicit `null` → `Some(None)`,
+/// explicit value → `Some(Some(v))`.
+pub(crate) fn deserialize_patch<'de, T, D>(
+    deserializer: D,
+) -> std::result::Result<Option<Option<T>>, D::Error>
+where
+    T: serde::Deserialize<'de>,
+    D: serde::Deserializer<'de>,
+{
+    serde::Deserialize::deserialize(deserializer).map(Some)
 }
 
 /// A handler's body.

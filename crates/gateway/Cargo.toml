@@ -1,6 +1,6 @@
 [package]
 name = "centraid-gateway"
-description = "The gateway protocol v2: blind rules, the HTTPS gateway and the phone's pinned client (#1080)."
+description = "The gateway protocol: blind rules, the HTTPS gateway and the phone's pinned client (#1080)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

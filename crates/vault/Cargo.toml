@@ -19,8 +19,10 @@ path = "src/bin/export-ladder-ddl.rs"
 aes-gcm.workspace = true
 base64.workspace = true
 blake3.workspace = true
+centraid-gateway = { path = "../gateway", default-features = false }
 centraid-media = { path = "../media" }
 centraid-ontology = { path = "../ontology" }
+ed25519-dalek.workspace = true
 flate2.workspace = true
 hex.workspace = true
 jiff.workspace = true
@@ -46,6 +48,8 @@ centraid-blobs = { path = "../blobs" }
 base64.workspace = true
 proptest.workspace = true
 tempfile.workspace = true
-rusqlite.workspace = true
+# `tests/page_source.rs` cross-checks `sqlite_dbpage` against SQLite's
+# online-backup API under concurrent commits; production snapshots never use it.
+rusqlite = { workspace = true, features = ["backup"] }
 hex.workspace = true
 centraid-ontology = { path = "../ontology" }

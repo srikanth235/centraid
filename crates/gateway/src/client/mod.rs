@@ -1,7 +1,7 @@
 //! THE PHONE'S CLIENT (#1080).
 //!
 //! HTTP/1.1 over TLS over TCP to one gateway, trusting exactly one
-//! certificate ([`tls`]). Every route of protocol v3 is a method here; the
+//! certificate ([`tls`]). Every route of protocol 1 is a method here; the
 //! bodies and refusals are [`crate::rules`]' own types, so the client reads
 //! back exactly what the server rendered.
 //!
@@ -264,7 +264,7 @@ pub struct Part {
 /// its own trust challenge.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Handoff {
-    /// `https://<preferred address>/v3/v/<vault>/o/<name>`.
+    /// `https://<preferred address>/v1/v/<vault>/o/<name>`.
     pub url: String,
     /// `PUT`.
     pub method: String,
@@ -514,37 +514,27 @@ impl Client {
 
     // ─── the routes ──────────────────────────────────────────────────────────
 
-    /// `GET /v3/info`. Needs no token. **The handshake**: a gateway that
-    /// answers with a protocol below [`REQUIRED_PROTOCOL`], or that does not
-    /// know `/v3/info` but answers `/v2/info`, is refused as
-    /// [`ClientError::GatewayTooOld`]; the older dialect is never spoken.
+    /// `GET /v1/info`. Needs no token. **The handshake**: a gateway that
+    /// answers with a protocol below [`REQUIRED_PROTOCOL`] is refused as
+    /// [`ClientError::GatewayTooOld`]; an older dialect is never spoken.
     ///
     /// # Errors
     ///
     /// [`ClientError`], [`ClientError::GatewayTooOld`] included.
     pub async fn info(&self) -> Result<Info, ClientError> {
         let answer: Result<Info, ClientError> =
-            self.call(Method::GET, "/v3/info", None::<&()>, false).await;
-        if let Err(ClientError::Refused(Refusal::NotFound { .. } | Refusal::BadRequest)) = &answer {
-            // A gateway that has never heard of `/v3/info`: an older one, or
-            // not a gateway at all.
-            let older: Option<Info> = self
-                .call(Method::GET, "/v2/info", None::<&()>, false)
-                .await
-                .ok();
-            return handshake(answer, older.map(|info| info.protocol));
-        }
-        handshake(answer, None)
+            self.call(Method::GET, "/v1/info", None::<&()>, false).await;
+        handshake(answer)
     }
 
-    /// `POST /v3/pair`. On success the client keeps the token.
+    /// `POST /v1/pair`. On success the client keeps the token.
     ///
     /// # Errors
     ///
     /// [`ClientError`].
     pub async fn pair(&self, request: &PairRequest) -> Result<Paired, ClientError> {
         let paired: Paired = self
-            .call(Method::POST, "/v3/pair", Some(request), false)
+            .call(Method::POST, "/v1/pair", Some(request), false)
             .await?;
         self.set_token(paired.token);
         Ok(paired)
@@ -679,13 +669,13 @@ impl Client {
         self.call(Method::GET, &path, None::<&()>, true).await
     }
 
-    /// `POST /v3/nonce`: a nonce for one pair request. No token, no vault.
+    /// `POST /v1/nonce`: a nonce for one pair request. No token, no vault.
     ///
     /// # Errors
     ///
     /// [`ClientError`]; `BUSY` as a refusal carrying when to ask again.
     pub async fn nonce(&self) -> Result<NonceAnswer, ClientError> {
-        self.call(Method::POST, "/v3/nonce", None::<&()>, false)
+        self.call(Method::POST, "/v1/nonce", None::<&()>, false)
             .await
     }
 
@@ -1351,23 +1341,15 @@ impl Client {
     }
 }
 
-/// What the handshake decides, as a pure function of the two answers: the
-/// `/v3/info` answer, and the protocol an `/v2/info` answered with, when it
-/// was asked.
-fn handshake(v3: Result<Info, ClientError>, older: Option<u32>) -> Result<Info, ClientError> {
-    match (v3, older) {
-        (Ok(info), _) if info.protocol < REQUIRED_PROTOCOL => Err(ClientError::GatewayTooOld {
+/// What the handshake decides from the `/v1/info` answer: any protocol below
+/// [`REQUIRED_PROTOCOL`] is refused as [`ClientError::GatewayTooOld`].
+fn handshake(answer: Result<Info, ClientError>) -> Result<Info, ClientError> {
+    match answer {
+        Ok(info) if info.protocol < REQUIRED_PROTOCOL => Err(ClientError::GatewayTooOld {
             found: info.protocol,
             required: REQUIRED_PROTOCOL,
         }),
-        (
-            Err(ClientError::Refused(Refusal::NotFound { .. } | Refusal::BadRequest)),
-            Some(found),
-        ) => Err(ClientError::GatewayTooOld {
-            found,
-            required: REQUIRED_PROTOCOL,
-        }),
-        (answer, _) => answer,
+        other => other,
     }
 }
 
@@ -1381,11 +1363,11 @@ fn page_path(route: &str, after: Option<&Name>, limit: usize) -> String {
 }
 
 fn route(vault: &VaultId, tail: &str) -> String {
-    format!("/v3/v/{vault}/{tail}")
+    format!("/v1/v/{vault}/{tail}")
 }
 
 fn object_route(vault: &VaultId, name: &Name) -> String {
-    format!("/v3/v/{vault}/o/{name}")
+    format!("/v1/v/{vault}/o/{name}")
 }
 
 /// Exactly `length` bytes of the file at `path`, opened on first poll and
@@ -1552,32 +1534,20 @@ mod tests {
         }
     }
 
-    /// A GATEWAY BELOW PROTOCOL 3 IS REFUSED, TYPED, whichever way it says so:
-    /// it answers `/v3/info` with a lower protocol, or it does not know
-    /// `/v3/info` and answers `/v2/info`. There is no fallback to speak v2.
+    /// A GATEWAY BELOW [`REQUIRED_PROTOCOL`] IS REFUSED, TYPED.
     #[test]
     fn an_older_gateway_is_too_old_and_never_spoken_to() {
         assert!(matches!(
-            handshake(Ok(info(2)), None),
+            handshake(Ok(info(0))),
             Err(ClientError::GatewayTooOld {
-                found: 2,
+                found: 0,
                 required: REQUIRED_PROTOCOL
             })
         ));
         assert!(matches!(
-            handshake(
-                Err(ClientError::Refused(Refusal::NotFound { name: None })),
-                Some(2)
-            ),
-            Err(ClientError::GatewayTooOld { found: 2, .. })
-        ));
-        assert!(matches!(
-            handshake(
-                Err(ClientError::Refused(Refusal::NotFound { name: None })),
-                None
-            ),
+            handshake(Err(ClientError::Refused(Refusal::NotFound { name: None }))),
             Err(ClientError::Refused(Refusal::NotFound { .. }))
         ));
-        assert!(handshake(Ok(info(REQUIRED_PROTOCOL)), None).is_ok());
+        assert!(handshake(Ok(info(REQUIRED_PROTOCOL))).is_ok());
     }
 }

@@ -296,8 +296,20 @@ fn a_locker_items_earlier_cells_are_not_found() {
         .commit(|tx| {
             tx.insert_entity("lk", Kind::LockerItem, "Bank", AT)?;
             tx.connection().execute(
-                "INSERT INTO locker_item (id, type, notes, password) VALUES ('lk', 'login', 'quokkaold', 'lk1:sealed')",
+                "INSERT INTO locker_item (id, type) VALUES ('lk', 'login')",
                 [],
+            )?;
+            tx.connection().execute(
+                "INSERT INTO locker_item_field
+                   (id, item_id, field_key, section, label, kind, value_text, created_at, updated_at)
+                 VALUES ('lk:notes', 'lk', 'notes', '', 'Notes', 'text', 'quokkaold', ?1, ?1)",
+                [AT],
+            )?;
+            tx.connection().execute(
+                "INSERT INTO locker_item_field
+                   (id, item_id, field_key, section, label, kind, value_sealed, created_at, updated_at)
+                 VALUES ('lk:password', 'lk', 'password', '', 'Password', 'sealed', 'lk1:sealed', ?1, ?1)",
+                [AT],
             )?;
             Ok(())
         })
@@ -305,8 +317,9 @@ fn a_locker_items_earlier_cells_are_not_found() {
     vault
         .commit(|tx| {
             tx.connection().execute(
-                "UPDATE locker_item SET notes = 'quokkanew' WHERE id = 'lk'",
-                [],
+                "UPDATE locker_item_field SET value_text = 'quokkanew', updated_at = ?1
+                  WHERE id = 'lk:notes'",
+                [AT],
             )?;
             tx.touch("lk", AT)?;
             Ok(())

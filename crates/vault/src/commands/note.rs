@@ -176,14 +176,24 @@ pub fn found(
     Ok(id)
 }
 
+#[derive(serde::Deserialize)]
+struct CreateInput {
+    id: Option<String>,
+    title: String,
+    body: Option<String>,
+    format: Option<String>,
+    notebook_id: Option<String>,
+}
+
 fn create(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let input: CreateInput = ctx.parse_input()?;
     let id = found(
         ctx,
-        ctx.optional_str("id"),
-        ctx.required_str("title")?,
-        ctx.optional_str("body").unwrap_or_default(),
-        ctx.optional_str("format").unwrap_or("markdown"),
-        ctx.optional_str("notebook_id"),
+        input.id.as_deref(),
+        &input.title,
+        input.body.as_deref().unwrap_or_default(),
+        input.format.as_deref().unwrap_or("markdown"),
+        input.notebook_id.as_deref(),
     )?;
     Ok(serde_json::json!({ "id": id }))
 }
@@ -205,44 +215,69 @@ fn set_body(ctx: &CommandCtx<'_, '_>, id: &str, body: &str) -> Result<bool> {
     Ok(true)
 }
 
+#[derive(serde::Deserialize)]
+struct EditInput {
+    id: String,
+    body: Option<String>,
+    format: Option<String>,
+    title: Option<String>,
+}
+
 fn edit(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let id = ctx.required_str("id")?;
-    if let Some(body) = ctx.optional_str("body") {
-        set_body(ctx, id, body)?;
+    let input: EditInput = ctx.parse_input()?;
+    if let Some(body) = input.body.as_deref() {
+        set_body(ctx, &input.id, body)?;
     }
-    if let Some(format) = ctx.optional_str("format") {
-        ctx.connection()
-            .execute("UPDATE note SET format = ?2 WHERE id = ?1", [id, format])?;
-    }
-    if let Some(title) = ctx.optional_str("title") {
+    if let Some(format) = input.format.as_deref() {
         ctx.connection().execute(
-            "UPDATE entity SET title = ?2 WHERE id = ?1",
-            [id, title.trim()],
+            "UPDATE note SET format = ?2 WHERE id = ?1",
+            [input.id.as_str(), format],
         )?;
     }
-    ctx.touch(id)?;
-    with_rev(ctx, id, serde_json::json!({ "id": id }))
+    if let Some(title) = input.title.as_deref() {
+        ctx.connection().execute(
+            "UPDATE entity SET title = ?2 WHERE id = ?1",
+            [input.id.as_str(), title.trim()],
+        )?;
+    }
+    ctx.touch(&input.id)?;
+    with_rev(ctx, &input.id, serde_json::json!({ "id": input.id }))
+}
+
+#[derive(serde::Deserialize)]
+struct MoveInput {
+    id: String,
+    notebook_id: Option<String>,
 }
 
 fn move_note(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let id = ctx.required_str("id")?;
+    let input: MoveInput = ctx.parse_input()?;
     ctx.connection().execute(
         "UPDATE note SET notebook_id = ?2 WHERE id = ?1",
-        rusqlite::params![id, ctx.optional_str("notebook_id")],
+        rusqlite::params![input.id, input.notebook_id],
     )?;
-    ctx.touch(id)?;
-    Ok(serde_json::json!({ "id": id }))
+    Ok(serde_json::json!({ "id": input.id }))
+}
+
+#[derive(serde::Deserialize)]
+struct RestoreVersionInput {
+    id: String,
+    seq: Option<i64>,
 }
 
 fn restore_version(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let id = ctx.required_str("id")?;
-    let seq = ctx.input["seq"].as_i64().unwrap_or_default();
+    let input: RestoreVersionInput = ctx.parse_input()?;
     // The words of the version: one path with every other restore (`history.restore_version`),
     // limited to the words, as this verb always was. The words it replaces are kept as a version
     // by the commit door.
-    let restored = crate::history::restore_version(ctx, id, seq, crate::history::Scope::Content)?
-        .is_some_and(|restored| restored.restored);
-    Ok(serde_json::json!({ "id": id, "restored": restored }))
+    let restored = crate::history::restore_version(
+        ctx,
+        &input.id,
+        input.seq.unwrap_or_default(),
+        crate::history::Scope::Content,
+    )?
+    .is_some_and(|restored| restored.restored);
+    Ok(serde_json::json!({ "id": input.id, "restored": restored }))
 }
 
 /// Compile the links a note's words name again, after something other than an edit set them.
@@ -582,12 +617,17 @@ fn import(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     Ok(report)
 }
 
+#[derive(serde::Deserialize)]
+struct ExportNoteInput {
+    notebook_id: Option<String>,
+}
+
 /// `note.export`: the member's notes (a notebook's, or all) as Markdown files in an archive,
 /// a folder per notebook, `[[links]]` as written, tags in front matter. Writes nothing.
 /// Journal entries are People's and are not exported here.
 fn export(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let (archive_name, entries) =
-        markdown_entries(ctx.connection(), ctx.optional_str("notebook_id"))?;
+    let input: ExportNoteInput = ctx.parse_input()?;
+    let (archive_name, entries) = markdown_entries(ctx.connection(), input.notebook_id.as_deref())?;
     let count = entries.len();
     let bytes = portable::zip(&entries);
     Ok(serde_json::json!({

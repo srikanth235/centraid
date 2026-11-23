@@ -268,12 +268,12 @@ pub const TABLES: &[(&str, &str, &str)] = &[
     (
         "locker",
         "locker_item",
-        "A sealed item: a login, card, note, wifi network or other type. Its title, stamps and trash are its entity's; its secrets are sealed cells.",
+        "A Locker item: a login, card, note, wifi network or other type. Its title, stamps and trash are its entity's; its fields live in `locker_item_field`.",
     ),
     (
         "locker",
         "locker_item_field",
-        "A custom field of an item, sealed when it is secret.",
+        "A built-in, template, or custom field of a Locker item, sealed in `value_sealed` when it is secret.",
     ),
     (
         "locker",

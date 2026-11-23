@@ -6733,8 +6733,8 @@
         {
           "name": "username",
           "source": {
-            "column": "username",
-            "table": "locker_item"
+            "column": "value_text",
+            "table": "locker_item_field"
           },
           "type": "text",
           "unit": null,
@@ -6743,8 +6743,8 @@
         {
           "name": "url",
           "source": {
-            "column": "url",
-            "table": "locker_item"
+            "column": "value_text",
+            "table": "locker_item_field"
           },
           "type": "text",
           "unit": null,
@@ -6753,8 +6753,8 @@
         {
           "name": "notes",
           "source": {
-            "column": "notes",
-            "table": "locker_item"
+            "column": "value_text",
+            "table": "locker_item_field"
           },
           "type": "text",
           "unit": null,
@@ -7464,10 +7464,8 @@
     "event.starts",
     "event.status",
     "locker_item.id",
-    "locker_item.notes",
     "locker_item.type",
-    "locker_item.url",
-    "locker_item.username",
+    "locker_item_field.value_text",
     "measurement.day",
     "measurement.metric",
     "measurement.value",

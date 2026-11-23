@@ -410,6 +410,20 @@ pub const OMITTED: &[(&str, &str, &str)] = &[
     ),
 ];
 
+/// The columns whose change is NOT a change to the entity a member sees: an update that moves only
+/// these neither stamps `updated_at` nor re-indexes. This is the commit triggers' own notion, apart
+/// from [`OMITTED`] (what the history does not keep): an immutable or bank-stated column the
+/// history leaves out is still a change to the entity when a command moves it (a purge detaching a
+/// derived photo's `edited_from`, `txn.account_id` feeding the account's text).
+pub const NEVER_TOUCHES: &[(&str, &str, &str)] =
+    &[("locker_item", "last_used_at", "a use is not an edit")];
+
+fn never_touches(table: &str, column: &str) -> bool {
+    NEVER_TOUCHES
+        .iter()
+        .any(|(name, never, _)| *name == table && *never == column)
+}
+
 /// Whether `table.column` holds ciphertext under the Locker key (`lk1:`): kept in a state exactly
 /// as sealed, and shown nowhere but masked ([`crate::history::MASK`]). One list with the custody
 /// module's, so a sealed column added there is masked here without a second edit.
@@ -455,6 +469,9 @@ pub struct Part {
     pub role: Role,
     /// The columns kept, in table order.
     pub columns: Vec<String>,
+    /// The columns whose change moves the entity (`updated_at`, search): every live column but
+    /// a host's id and the [`NEVER_TOUCHES`] ones, kept by the history or not.
+    pub touch_columns: Vec<String>,
     /// The columns that name one row among the entity's rows of this table (empty for a kind row
     /// and for a child that is one row per entity).
     pub key: Vec<String>,
@@ -552,6 +569,14 @@ impl Shape {
                 .map(|row| row.0.clone())
                 .filter(|column| column != via && !omitted(name, column))
                 .collect();
+            let touch_columns = live
+                .iter()
+                .map(|row| row.0.clone())
+                .filter(|column| {
+                    (column != via || matches!(role, Role::Child { .. }))
+                        && !never_touches(name, column)
+                })
+                .collect();
             let mut keyed: Vec<&&(String, i64, i64)> = live
                 .iter()
                 .filter(|row| row.1 > 0 && row.0 != via)
@@ -583,6 +608,7 @@ impl Shape {
                 alias,
                 role: *role,
                 columns,
+                touch_columns,
                 key,
                 references,
             });
@@ -771,6 +797,190 @@ impl Shape {
                     part.name,
                     seen(&format!("new.{via}"), Some((part, "new")), ""),
                 );
+            }
+        }
+        // Also install auto-touch / auto-reindex triggers so every write to an entity, its host
+        // row, its child rows, or its edges automatically lands in `updated_at`, `search`, and
+        // `alert` at commit — without relying on every command handler remembering `ctx.touch`.
+        sql.push_str(&format!(
+            "CREATE TEMP TABLE IF NOT EXISTS {COMMIT_TOUCHED}
+               (entity_id TEXT PRIMARY KEY, stamp INTEGER NOT NULL DEFAULT 0, born INTEGER NOT NULL DEFAULT 0)
+               WITHOUT ROWID;\n",
+            COMMIT_TOUCHED = super::COMMIT_TOUCHED,
+        ));
+        let mark_stamp = |id: &str| {
+            format!(
+                "INSERT INTO temp.{t} (entity_id, stamp, born) VALUES ({id}, 1, 0)
+                   ON CONFLICT (entity_id) DO UPDATE SET stamp = 1;",
+                t = super::COMMIT_TOUCHED,
+            )
+        };
+        let mark_reindex = |id: &str| {
+            format!(
+                "INSERT OR IGNORE INTO temp.{t} (entity_id, stamp, born) VALUES ({id}, 0, 0);",
+                t = super::COMMIT_TOUCHED,
+            )
+        };
+        let changed = |columns: &[String]| {
+            columns
+                .iter()
+                .map(|c| format!("old.{q} IS NOT new.{q}", q = quoted(c)))
+                .collect::<Vec<_>>()
+                .join(" OR ")
+        };
+        let mut touch_trigger =
+            |name: &str, timing: &str, table: &str, guard: Option<&str>, body: String| {
+                let when_clause = guard.map_or(String::new(), |g| format!(" WHEN {g}"));
+                sql.push_str(&format!(
+                    "CREATE TEMP TRIGGER IF NOT EXISTS centraid_commit_{name}
+                   {timing} ON main.{table}{when_clause} BEGIN {body} END;\n",
+                    table = quoted(table),
+                ));
+            };
+        touch_trigger(
+            "entity_born",
+            "AFTER INSERT",
+            "entity",
+            None,
+            format!(
+                "INSERT INTO temp.{t} (entity_id, stamp, born) VALUES (new.id, 0, 1)
+                   ON CONFLICT (entity_id) DO UPDATE SET born = 1;",
+                t = super::COMMIT_TOUCHED,
+            ),
+        );
+        touch_trigger(
+            "entity_gone",
+            "AFTER DELETE",
+            "entity",
+            None,
+            mark_reindex("old.id"),
+        );
+        touch_trigger(
+            "entity_update",
+            "AFTER UPDATE OF title, deleted_at, purge_at",
+            "entity",
+            Some(
+                "old.title IS NOT new.title OR old.deleted_at IS NOT new.deleted_at
+                 OR old.purge_at IS NOT new.purge_at",
+            ),
+            mark_stamp("new.id"),
+        );
+        let mut edge_installed = false;
+        for part in &self.parts {
+            if part.name == "edge" {
+                if !edge_installed {
+                    edge_installed = true;
+                    // Re-index only the endpoint whose `index::text_of` actually reads this
+                    // relation — never the container or tag end, because adding one member to a
+                    // large list/tag must not expand all of the label's other dependents into
+                    // `search_owed`. Reordering (`position`) fires nothing.
+                    touch_trigger(
+                        "edge_to_insert",
+                        "AFTER INSERT",
+                        "edge",
+                        Some("new.rel IN ('contains', 'about', 'with')"),
+                        mark_reindex("new.to_id"),
+                    );
+                    touch_trigger(
+                        "edge_to_delete",
+                        "AFTER DELETE",
+                        "edge",
+                        Some("old.rel IN ('contains', 'about', 'with')"),
+                        mark_reindex("old.to_id"),
+                    );
+                    touch_trigger(
+                        "edge_from_insert",
+                        "AFTER INSERT",
+                        "edge",
+                        Some("new.rel = 'tagged'"),
+                        mark_reindex("new.from_id"),
+                    );
+                    touch_trigger(
+                        "edge_from_delete",
+                        "AFTER DELETE",
+                        "edge",
+                        Some("old.rel = 'tagged'"),
+                        mark_reindex("old.from_id"),
+                    );
+                    touch_trigger(
+                        "edge_related_insert",
+                        "AFTER INSERT",
+                        "edge",
+                        Some("new.rel = 'related'"),
+                        format!(
+                            "{} {}",
+                            mark_reindex("new.from_id"),
+                            mark_reindex("new.to_id")
+                        ),
+                    );
+                    touch_trigger(
+                        "edge_related_update",
+                        "AFTER UPDATE OF \"label_id\"",
+                        "edge",
+                        Some("new.rel = 'related' AND old.label_id IS NOT new.label_id"),
+                        format!(
+                            "{} {}",
+                            mark_reindex("new.from_id"),
+                            mark_reindex("new.to_id")
+                        ),
+                    );
+                    touch_trigger(
+                        "edge_related_delete",
+                        "AFTER DELETE",
+                        "edge",
+                        Some("old.rel = 'related'"),
+                        format!(
+                            "{} {}",
+                            mark_reindex("old.from_id"),
+                            mark_reindex("old.to_id")
+                        ),
+                    );
+                }
+                continue;
+            }
+            match part.role {
+                Role::Host => {
+                    // Only a column that really changed fires it (`WHEN`), so an upsert that
+                    // writes the same values stamps and re-indexes nothing. `touch_columns`
+                    // leaves out [`NEVER_TOUCHES`] (`locker_item.last_used_at`), so a reveal
+                    // stamp never bumps `updated_at`.
+                    if !part.touch_columns.is_empty() {
+                        let cols: Vec<String> =
+                            part.touch_columns.iter().map(|c| quoted(c)).collect();
+                        touch_trigger(
+                            &format!("{}_update", part.alias),
+                            &format!("AFTER UPDATE OF {}", cols.join(", ")),
+                            part.name,
+                            Some(&changed(&part.touch_columns)),
+                            mark_stamp("new.id"),
+                        );
+                    }
+                }
+                Role::Child { .. } => {
+                    let via = quoted(part.via());
+                    touch_trigger(
+                        &format!("{}_insert", part.alias),
+                        "AFTER INSERT",
+                        part.name,
+                        None,
+                        mark_stamp(&format!("new.{via}")),
+                    );
+                    touch_trigger(
+                        &format!("{}_update", part.alias),
+                        "AFTER UPDATE",
+                        part.name,
+                        Some(&changed(&part.touch_columns)),
+                        mark_stamp(&format!("new.{via}")),
+                    );
+                    touch_trigger(
+                        &format!("{}_delete", part.alias),
+                        "AFTER DELETE",
+                        part.name,
+                        None,
+                        mark_stamp(&format!("old.{via}")),
+                    );
+                }
+                Role::Entity | Role::Outside(_) => {}
             }
         }
         sql
