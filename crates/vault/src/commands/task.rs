@@ -497,7 +497,6 @@ fn organize(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             ("zone", "zone"),
         ],
     )?;
-    ctx.touch(id)?;
     entity::with_rev(ctx, id, json!({ "id": id }))
 }
 
@@ -574,7 +573,6 @@ pub fn complete(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Completion> {
         "UPDATE task SET status = 'done', done_at = ?2, snoozed_until = NULL WHERE id = ?1",
         rusqlite::params![id, ctx.now],
     )?;
-    ctx.touch(id)?;
     let (Some(rule), Some(due)) = (rule, due) else {
         return Ok(done);
     };
@@ -634,13 +632,10 @@ fn complete_command(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
 /// reopening makes a closed one open again. Both are idempotent.
 fn settle(ctx: &CommandCtx<'_, '_>, status: &str) -> Result<Json> {
     let id = ctx.required_str("id")?;
-    let changed = ctx.connection().execute(
+    ctx.connection().execute(
         "UPDATE task SET status = ?2, done_at = NULL WHERE id = ?1 AND status <> ?2",
         [id, status],
     )?;
-    if changed > 0 {
-        ctx.touch(id)?;
-    }
     Ok(json!({ "id": id, "status": status }))
 }
 

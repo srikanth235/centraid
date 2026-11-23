@@ -230,7 +230,6 @@ fn move_note(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         "UPDATE note SET notebook_id = ?2 WHERE id = ?1",
         rusqlite::params![id, ctx.optional_str("notebook_id")],
     )?;
-    ctx.touch(id)?;
     Ok(serde_json::json!({ "id": id }))
 }
 

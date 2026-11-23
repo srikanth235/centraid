@@ -795,17 +795,20 @@ impl Shape {
                 t = super::COMMIT_TOUCHED,
             )
         };
-        let mut touch_trigger = |name: &str, when: &str, table: &str, body: String| {
-            sql.push_str(&format!(
-                "CREATE TEMP TRIGGER IF NOT EXISTS centraid_commit_{name}
-                   {when} ON main.{table} BEGIN {body} END;\n",
-                table = quoted(table),
-            ));
-        };
+        let mut touch_trigger =
+            |name: &str, timing: &str, table: &str, guard: Option<&str>, body: String| {
+                let when_clause = guard.map_or(String::new(), |g| format!(" WHEN {g}"));
+                sql.push_str(&format!(
+                    "CREATE TEMP TRIGGER IF NOT EXISTS centraid_commit_{name}
+                   {timing} ON main.{table}{when_clause} BEGIN {body} END;\n",
+                    table = quoted(table),
+                ));
+            };
         touch_trigger(
             "entity_born",
             "AFTER INSERT",
             "entity",
+            None,
             format!(
                 "INSERT INTO temp.{t} (entity_id, stamp, born) VALUES (new.id, 0, 1)
                    ON CONFLICT (entity_id) DO UPDATE SET born = 1;",
@@ -816,12 +819,14 @@ impl Shape {
             "entity_gone",
             "AFTER DELETE",
             "entity",
+            None,
             mark_reindex("old.id"),
         );
         touch_trigger(
             "entity_update",
             "AFTER UPDATE OF title, deleted_at, purge_at",
             "entity",
+            None,
             mark_stamp("new.id"),
         );
         let mut edge_installed = false;
@@ -829,32 +834,65 @@ impl Shape {
             if part.name == "edge" {
                 if !edge_installed {
                     edge_installed = true;
-                    // Edges re-index both endpoints without bumping `updated_at` (tagging or
-                    // filing an item changes its search text without editing the item itself).
+                    // Re-index only the endpoint whose `index::text_of` actually reads this
+                    // relation — never the container or tag end, because adding one member to a
+                    // large list/tag must not expand all of the label's other dependents into
+                    // `search_owed`. Reordering (`position`) fires nothing.
                     touch_trigger(
-                        "edge_insert",
+                        "edge_to_insert",
                         "AFTER INSERT",
                         "edge",
-                        format!(
-                            "{} {}",
-                            mark_reindex("new.from_id"),
-                            mark_reindex("new.to_id")
-                        ),
+                        Some("new.rel IN ('contains', 'about', 'with')"),
+                        mark_reindex("new.to_id"),
                     );
                     touch_trigger(
-                        "edge_update",
-                        "AFTER UPDATE",
-                        "edge",
-                        format!(
-                            "{} {}",
-                            mark_reindex("new.from_id"),
-                            mark_reindex("new.to_id")
-                        ),
-                    );
-                    touch_trigger(
-                        "edge_delete",
+                        "edge_to_delete",
                         "AFTER DELETE",
                         "edge",
+                        Some("old.rel IN ('contains', 'about', 'with')"),
+                        mark_reindex("old.to_id"),
+                    );
+                    touch_trigger(
+                        "edge_from_insert",
+                        "AFTER INSERT",
+                        "edge",
+                        Some("new.rel = 'tagged'"),
+                        mark_reindex("new.from_id"),
+                    );
+                    touch_trigger(
+                        "edge_from_delete",
+                        "AFTER DELETE",
+                        "edge",
+                        Some("old.rel = 'tagged'"),
+                        mark_reindex("old.from_id"),
+                    );
+                    touch_trigger(
+                        "edge_related_insert",
+                        "AFTER INSERT",
+                        "edge",
+                        Some("new.rel = 'related'"),
+                        format!(
+                            "{} {}",
+                            mark_reindex("new.from_id"),
+                            mark_reindex("new.to_id")
+                        ),
+                    );
+                    touch_trigger(
+                        "edge_related_update",
+                        "AFTER UPDATE OF \"label_id\"",
+                        "edge",
+                        Some("new.rel = 'related'"),
+                        format!(
+                            "{} {}",
+                            mark_reindex("new.from_id"),
+                            mark_reindex("new.to_id")
+                        ),
+                    );
+                    touch_trigger(
+                        "edge_related_delete",
+                        "AFTER DELETE",
+                        "edge",
+                        Some("old.rel = 'related'"),
                         format!(
                             "{} {}",
                             mark_reindex("old.from_id"),
@@ -874,6 +912,7 @@ impl Shape {
                             &format!("{}_update", part.alias),
                             &format!("AFTER UPDATE OF {}", cols.join(", ")),
                             part.name,
+                            None,
                             mark_stamp("new.id"),
                         );
                     }
@@ -884,18 +923,21 @@ impl Shape {
                         &format!("{}_insert", part.alias),
                         "AFTER INSERT",
                         part.name,
+                        None,
                         mark_stamp(&format!("new.{via}")),
                     );
                     touch_trigger(
                         &format!("{}_update", part.alias),
                         "AFTER UPDATE",
                         part.name,
+                        None,
                         mark_stamp(&format!("new.{via}")),
                     );
                     touch_trigger(
                         &format!("{}_delete", part.alias),
                         "AFTER DELETE",
                         part.name,
+                        None,
                         mark_stamp(&format!("old.{via}")),
                     );
                 }

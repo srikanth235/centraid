@@ -1,8 +1,11 @@
 //! The one search index, kept by the writer.
 //!
 //! `search` is a contentless FTS5 table whose rowid is `entity.n`. A command
-//! never writes it: it calls `ctx.touch(id)`, and at commit the guard hands
-//! every touched id here ([#1135](https://github.com/srikanth235/centraid/issues/1135)).
+//! never writes it: temp triggers installed at open record every entity whose
+//! row, child or edge changes in the transaction (and commands may call
+//! `ctx.touch(id)` / `ctx.mark_for_index(id)` for cross-entity effects), and at
+//! commit the guard hands every affected id here
+//! ([#1135](https://github.com/srikanth235/centraid/issues/1135)).
 //!
 //! A live entity whose kind has a search text gets its row replaced; anything
 //! else (trashed, a kind nobody searches, nothing to say) has its row deleted.

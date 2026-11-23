@@ -1745,21 +1745,16 @@ fn keep_in_a_trashed_home(ctx: &CommandCtx<'_, '_>, origin: &OriginRow) -> Resul
     let Some((deleted_at, purge_at)) = stamp else {
         return Ok(());
     };
-    let arrivals: Vec<String> = connection
-        .prepare(
-            "SELECT ev.id FROM event ev JOIN entity en ON en.id = ev.id
-              JOIN source s ON s.entity_id = ev.id
-              WHERE ev.calendar_id = ?1 AND s.origin_id = ?2 AND en.deleted_at IS NULL",
-        )?
-        .query_map([home, origin.id.as_str()], |row| row.get(0))?
-        .collect::<rusqlite::Result<_>>()?;
-    for id in arrivals {
-        connection.execute(
-            "UPDATE entity SET deleted_at = ?2, purge_at = ?3 WHERE id = ?1",
-            rusqlite::params![id, deleted_at, purge_at],
-        )?;
-        ctx.touch(&id)?;
-    }
+    connection.execute(
+        "UPDATE entity SET deleted_at = ?3, purge_at = ?4
+          WHERE deleted_at IS NULL
+            AND id IN (
+                SELECT ev.id FROM event ev
+                  JOIN source s ON s.entity_id = ev.id
+                 WHERE ev.calendar_id = ?1 AND s.origin_id = ?2
+            )",
+        rusqlite::params![home, origin.id.as_str(), deleted_at, purge_at],
+    )?;
     Ok(())
 }
 

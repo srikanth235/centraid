@@ -181,7 +181,6 @@ fn locate(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         "UPDATE place SET locality = ?2 WHERE id = ?1",
         rusqlite::params![id, locality],
     )?;
-    ctx.touch(id)?;
     Ok(serde_json::json!({ "id": id, "matched": locality.is_some() }))
 }
 

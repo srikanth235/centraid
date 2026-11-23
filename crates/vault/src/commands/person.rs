@@ -93,8 +93,6 @@ fn merge(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
            FROM edge WHERE from_id = ?1 OR to_id = ?1",
         [loser, winner],
     )?;
-    // The notes about the merged person are about the survivor now.
-    ctx.mark_for_index(winner);
 
     // A person may hold one preferred contact point of a kind; the survivor's
     // preference stands.
@@ -137,7 +135,6 @@ fn merge(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
 
     let mut purged = Vec::new();
     purge_one(ctx, loser, &mut purged)?;
-    ctx.touch(winner)?;
     Ok(serde_json::json!({ "into": winner, "edges": moved, "rows": repointed }))
 }
 
@@ -399,8 +396,6 @@ fn move_person(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             AND from_id IN (SELECT id FROM container WHERE kind = 'list')",
         [id],
     )?;
-    // The list's title is part of the person's search text.
-    ctx.mark_for_index(id);
     if let Some(list) = ctx.optional_str("list_id") {
         edge::put(ctx, list, Rel::Contains, id, None, &Extras::default())?;
     }
@@ -619,7 +614,6 @@ fn add_date(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
               WHERE id = ?1",
             [person, month_day],
         )?;
-        ctx.touch(person)?;
         return Ok(json!({ "id": person }));
     }
     let year: i64 = ctx
@@ -1110,7 +1104,6 @@ fn import_vcf(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
                             rusqlite::params![person, adds.nickname, adds.role, adds.birthday],
                         )?;
                         write_points(ctx, &person, card, &adds.points)?;
-                        ctx.touch(&person)?;
                     }
                 }
             }

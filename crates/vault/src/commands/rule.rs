@@ -440,7 +440,6 @@ fn apply(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
                 [&id, category],
             )? > 0
         {
-            ctx.touch(&id)?;
             recategorised += 1;
         }
         // The bank's words are the line's name until the member or a rule gives it another.
@@ -452,7 +451,6 @@ fn apply(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
                 .execute("UPDATE entity SET title = ?2 WHERE id = ?1", [&id, name])?
                 > 0
         {
-            ctx.touch(&id)?;
             renamed += 1;
         }
     }

@@ -1433,7 +1433,6 @@ fn cancel(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let id = ctx.required_str("id")?;
     ctx.connection()
         .execute("UPDATE event SET status = 'cancelled' WHERE id = ?1", [id])?;
-    ctx.touch(id)?;
     Ok(json!({ "id": id }))
 }
 
@@ -1530,7 +1529,6 @@ fn change_occurrence(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             ],
         )?;
     }
-    ctx.touch(id)?;
     Ok(answer)
 }
 

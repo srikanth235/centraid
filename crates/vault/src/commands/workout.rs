@@ -364,7 +364,6 @@ fn log(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     )?;
     settle(ctx, &id)?;
     set_measures(ctx, &id)?;
-    ctx.touch(&id)?;
     Ok(serde_json::json!({ "id": id, "workout_id": id }))
 }
 

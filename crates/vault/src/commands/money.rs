@@ -345,9 +345,6 @@ fn set_opening(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             ctx.optional_str("opening_on")
         ],
     )? > 0;
-    if changed {
-        ctx.touch(id)?;
-    }
     Ok(json!({ "id": id, "changed": changed }))
 }
 
@@ -485,7 +482,6 @@ fn categorize(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             rusqlite::params![id, category],
         )? > 0
         {
-            ctx.touch(&id)?;
             if held.as_ref().is_some_and(|first| *first != before) {
                 uniform = false;
             }
@@ -507,19 +503,10 @@ fn categorize(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
 
 /// Let go of a line's transfer, and of the other half's.
 fn end_transfer(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<usize> {
-    let touched: Vec<String> = ctx
+    let removed = ctx
         .connection()
-        .prepare_cached("SELECT a FROM transfer WHERE a = ?1 OR b = ?1 UNION ALL SELECT b FROM transfer WHERE a = ?1 OR b = ?1")?
-        .query_map([id], |row| row.get(0))?
-        .collect::<rusqlite::Result<_>>()?;
-    if !touched.is_empty() {
-        ctx.connection()
-            .execute("DELETE FROM transfer WHERE a = ?1 OR b = ?1", [id])?;
-    }
-    for member in &touched {
-        ctx.touch(member)?;
-    }
-    Ok(touched.len())
+        .execute("DELETE FROM transfer WHERE a = ?1 OR b = ?1", [id])?;
+    Ok(removed * 2)
 }
 
 fn pre_line(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -537,9 +524,6 @@ fn void(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         "UPDATE txn SET status = 'void' WHERE id = ?1 AND status <> 'void'",
         [id],
     )? > 0;
-    if voided {
-        ctx.touch(id)?;
-    }
     Ok(json!({ "voided": voided, "transfers_ended": ended }))
 }
 
@@ -595,10 +579,6 @@ fn link_transfer(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         "INSERT INTO transfer (a, b) VALUES (?1, ?2) ON CONFLICT (a) DO NOTHING",
         [a, b],
     )? > 0;
-    if linked {
-        ctx.touch(a)?;
-        ctx.touch(b)?;
-    }
     Ok(json!({ "linked": linked }))
 }
 
@@ -868,14 +848,10 @@ fn pre_merge_category(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 fn merge_category(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let connection = ctx.connection();
     let (from, into) = (ctx.required_str("from_id")?, ctx.required_str("into_id")?);
-    let lines: Vec<String> = connection
-        .prepare("SELECT id FROM txn WHERE category_id = ?1")?
-        .query_map([from], |row| row.get(0))?
-        .collect::<rusqlite::Result<_>>()?;
-    for id in &lines {
-        connection.execute("UPDATE txn SET category_id = ?2 WHERE id = ?1", [id, into])?;
-        ctx.touch(id)?;
-    }
+    let transactions = connection.execute(
+        "UPDATE txn SET category_id = ?2 WHERE category_id = ?1",
+        [from, into],
+    )?;
     let rules = connection.execute(
         "UPDATE rule SET category_id = ?2 WHERE category_id = ?1",
         [from, into],
@@ -913,7 +889,7 @@ fn merge_category(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     }
     // The category leaves; its plans left with it and its archive mark with it.
     entity::purge_one(ctx, from, &mut Vec::new())?;
-    Ok(json!({ "transactions": lines.len(), "rules": rules, "plans": plans.len() }))
+    Ok(json!({ "transactions": transactions, "rules": rules, "plans": plans.len() }))
 }
 
 // ---------------------------------------------------------------------------

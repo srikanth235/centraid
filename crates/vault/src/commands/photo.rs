@@ -163,7 +163,7 @@ fn adopt(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<()> {
             [id, burst],
         )?;
     }
-    ctx.touch(id)
+    Ok(())
 }
 
 fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
@@ -372,7 +372,6 @@ fn set_place(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         "UPDATE photo SET place_id = ?2 WHERE id = ?1",
         rusqlite::params![id, ctx.optional_str("place_id")],
     )?;
-    ctx.touch(id)?;
     Ok(serde_json::json!({ "id": id }))
 }
 
@@ -415,7 +414,6 @@ fn set_cover(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         "UPDATE container SET cover = ?2 WHERE id = ?1",
         rusqlite::params![id, blob],
     )?;
-    ctx.touch(id)?;
     Ok(serde_json::json!({ "id": id }))
 }
 
