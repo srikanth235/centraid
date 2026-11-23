@@ -1,13 +1,13 @@
-import CryptoKit
 import Foundation
 
 /// The shell's restart-safe ownership record for the latest Locker clipboard item.
-/// It contains no clipboard text, only an opaque item marker, its vault, a digest,
-/// and the original OS expiry.
+/// It contains no clipboard text and no digest of it (a short PIN or code would fall to an
+/// offline guess), only an opaque item marker, its vault and the original OS expiry. The marker
+/// token proves ownership: a pasteboard item is immutable once set, so the same token means the
+/// same item.
 struct LockerClipboardLease: Codable, Equatable, Sendable {
     let vaultID: String
     let token: String
-    let digest: String
     let expiresAt: Date
 }
 
@@ -31,17 +31,14 @@ enum LockerClipboardLeaseStore {
         lease: LockerClipboardLease,
         requestedVaultID: String,
         markerPresent: Bool,
-        markerToken: String?,
-        contentDigest: String?
+        markerToken: String?
     ) -> LockerClipboardLeaseDisposition {
         guard !requestedVaultID.isEmpty, lease.vaultID == requestedVaultID else {
             return .ignore
         }
         guard markerPresent else { return .discard }
         guard let markerToken else { return .ignore }
-        guard markerToken == lease.token else { return .discard }
-        guard let contentDigest else { return .ignore }
-        return contentDigest == lease.digest ? .clear : .discard
+        return markerToken == lease.token ? .clear : .discard
     }
 
     static func legacyClearAction(leasePresent: Bool, markerPresent: Bool) -> LockerLegacyClearAction {
@@ -53,7 +50,20 @@ enum LockerClipboardLeaseStore {
         guard let url = fileURL(directory: directory),
             let data = try? Data(contentsOf: url)
         else { return nil }
-        return try? PropertyListDecoder().decode(LockerClipboardLease.self, from: data)
+        guard let lease = try? PropertyListDecoder().decode(LockerClipboardLease.self, from: data) else {
+            return nil
+        }
+        // An older build also stored an unsalted digest of the text. Rewrite without it.
+        if let raw = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil)
+            as? [String: Any], raw["digest"] != nil,
+            let clean = try? PropertyListEncoder().encode(lease)
+        {
+            try? clean.write(
+                to: url,
+                options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+            )
+        }
+        return lease
     }
 
     /// Synchronously publish ownership metadata before the OS copy is reported complete.
@@ -61,7 +71,6 @@ enum LockerClipboardLeaseStore {
     static func record(
         vaultID: String,
         token: String,
-        text: String,
         expiresAt: Date,
         directory: URL? = nil
     ) throws {
@@ -75,7 +84,6 @@ enum LockerClipboardLeaseStore {
         let lease = LockerClipboardLease(
             vaultID: vaultID,
             token: token,
-            digest: digest(text),
             expiresAt: expiresAt
         )
         let data = try PropertyListEncoder().encode(lease)
@@ -110,10 +118,6 @@ enum LockerClipboardLeaseStore {
         try? FileManager.default.removeItem(at: url)
     }
 
-    static func digest(_ text: String) -> String {
-        SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
-    }
-
     private static func fileURL(directory: URL?) -> URL? {
         let base: URL
         if let directory {
@@ -140,14 +144,13 @@ enum LockerClipboardLeaseStore {
         return base.appendingPathComponent(fileName, isDirectory: false)
     }
 
-    /// Clears only the current item carrying the exact marker and text digest published with
-    /// `vaultID`. The type check gates marker access, and the token match gates content access.
+    /// Clears only the current item carrying the exact marker token published with `vaultID`.
+    /// The type check gates marker access.
     @discardableResult
     static func clearOwned(
         vaultID: String,
         markerPresent: () -> Bool,
         readMarkerToken: () -> String?,
-        readContentDigest: () -> String?,
         clearPasteboard: () -> Void,
         directory: URL? = nil
     ) -> Bool {
@@ -155,13 +158,11 @@ enum LockerClipboardLeaseStore {
         guard lease.vaultID == vaultID, !vaultID.isEmpty else { return false }
         let present = markerPresent()
         let token = present ? readMarkerToken() : nil
-        let contentDigest = token == lease.token ? readContentDigest() : nil
         switch disposition(
             lease: lease,
             requestedVaultID: vaultID,
             markerPresent: present,
-            markerToken: token,
-            contentDigest: contentDigest
+            markerToken: token
         ) {
         case .ignore:
             return false
@@ -169,17 +170,15 @@ enum LockerClipboardLeaseStore {
             remove(directory: directory)
             return false
         case .clear:
-            // Pasteboard contents may change after the first read. Recheck the type marker,
-            // token and digest synchronously immediately before the destructive assignment.
+            // Pasteboard contents may change after the first read. Recheck the type marker and
+            // token synchronously immediately before the destructive assignment.
             let stillPresent = markerPresent()
             let currentToken = stillPresent ? readMarkerToken() : nil
-            let currentDigest = currentToken == lease.token ? readContentDigest() : nil
             switch disposition(
                 lease: lease,
                 requestedVaultID: vaultID,
                 markerPresent: stillPresent,
-                markerToken: currentToken,
-                contentDigest: currentDigest
+                markerToken: currentToken
             ) {
             case .ignore:
                 return false

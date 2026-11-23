@@ -6,6 +6,8 @@
 //! carries sensitivity, its deadline, and a vault owner; each shell persists
 //! only native ownership metadata, while native expiry protects process death.
 //! The Rust timer releases volatile ownership; manual Lock sends a vault-bound clear.
+//! The volatile owner is not visible from here (Lock and a vault switch send their clear either
+//! way), so its release is tested in `src/kit/secret_tests.rs`.
 
 use std::time::Duration;
 
@@ -135,60 +137,6 @@ fn a_copied_secret_is_sensitive_and_says_when_it_must_be_gone() {
         set.clear_after_ms,
         COPY_AFTER.as_millis() as u64,
         "the shell receives the original native expiry"
-    );
-}
-
-#[test]
-fn an_early_runtime_timer_does_not_spend_native_clipboard_expiry() {
-    let mut driver = driver();
-    driver.start();
-    let id = instance(&driver);
-    tap_copy(&mut driver, id);
-    let before = driver.effects.len();
-    driver.send(
-        id,
-        E::TimerFired(wire::TimerFired {
-            timer: "secret-clip".to_owned(),
-        }),
-    );
-    assert!(
-        kinds(&driver.effects[before..])
-            .into_iter()
-            .all(|kind| !matches!(kind, wire::effect::Kind::ClipboardClearOwned(_))),
-        "native original expiry, not a stale Rust timer, owns clipboard expiry"
-    );
-}
-
-#[test]
-fn a_copy_the_shell_could_not_make_leaves_nothing_to_clear() {
-    let mut driver = driver();
-    driver.start();
-    let id = instance(&driver);
-    let update = tap_copy(&mut driver, id);
-    let effect_id = update.effects[0].effect_id;
-    driver.send(
-        id,
-        E::EffectResult(wire::EffectResult {
-            effect_id,
-            outcome: Some(wire::effect_result::Outcome::Failed(wire::EffectFailed {
-                reason: "no clipboard".to_owned(),
-                denied: false,
-                ..Default::default()
-            })),
-        }),
-    );
-    let before = driver.effects.len();
-    driver.send(
-        id,
-        E::TimerFired(wire::TimerFired {
-            timer: "secret-clip".to_owned(),
-        }),
-    );
-    assert!(
-        kinds(&driver.effects[before..])
-            .into_iter()
-            .all(|kind| !matches!(kind, wire::effect::Kind::ClipboardClearOwned(_))),
-        "nothing was copied, so nothing is cleared"
     );
 }
 

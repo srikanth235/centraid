@@ -84,6 +84,42 @@ class EffectRequestQueuesTest {
         assertEquals("", clipboardOwner)
     }
 
+    @Test
+    fun aThrowingClipboardRequestDoesNotStopLaterOnesAndIsAnsweredAsFailed() = runTest {
+        val completed = mutableListOf<Long>()
+        val failedIds = mutableListOf<Long>()
+        val queues = EffectRequestQueues(
+            backgroundScope,
+            perform = { request ->
+                if (request.effect_id == 1L || request.effect_id == 3L) error("boom")
+                completed += request.effect_id
+            },
+            onError = { request, _ -> failedIds += request.effect_id },
+        )
+
+        queues.submit(
+            EffectRequest(
+                effect_id = 1,
+                instance = 7,
+                effect = Effect(clipboard_set = ClipboardSet(text = CLIP, sensitive = true, owner_vault_id = VAULT)),
+            ),
+        )
+        queues.submit(
+            EffectRequest(
+                effect_id = 2,
+                instance = 7,
+                effect = Effect(clipboard_clear_owned = ClipboardClearOwned(vault_id = VAULT)),
+            ),
+        )
+        // A per-screen queue survives a throwing request too.
+        queues.submit(EffectRequest(effect_id = 3, instance = 9, effect = Effect(schedule_notifications = ScheduleNotifications())))
+        queues.submit(EffectRequest(effect_id = 4, instance = 9, effect = Effect(schedule_notifications = ScheduleNotifications())))
+        runCurrent()
+
+        assertEquals(listOf(2L, 4L), completed)
+        assertEquals(listOf(1L, 3L), failedIds)
+    }
+
     private companion object {
         const val CLIP = "synthetic Locker copy"
         const val VAULT = "vault-fixture"

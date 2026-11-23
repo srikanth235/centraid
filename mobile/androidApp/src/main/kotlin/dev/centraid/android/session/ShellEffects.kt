@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.PersistableBundle
+import android.util.Log
 import android.provider.Settings
 import androidx.core.content.ContextCompat
 import centraid.core.v1.BackgroundStatus
@@ -121,7 +122,14 @@ internal class ShellEffects(
     /** The LAN browse for a moved gateway (`BrowseGateways`): one per screen instance that asked. */
     private val browsing = GatewayBrowsing(this.context, scope)
 
-    private val queues = EffectRequestQueues(scope) { request -> run(request) }
+    private val queues = EffectRequestQueues(
+        scope,
+        perform = { request -> run(request) },
+        onError = { request, error ->
+            Log.w("ShellEffects", "effect ${request.effect_id} failed unexpectedly", error)
+            screens.answer(request, failed(EffectReason.FAILED))
+        },
+    )
 
     fun start() {
         // A BROWSE LASTS AS LONG AS THE SCREEN THAT ASKED FOR IT: `Screens` drops an instance Rust
@@ -301,61 +309,33 @@ internal class ShellEffects(
                     clip.description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
                 }
                 ClipboardDeadline.markOwnedClip(clip, leaseId)
-                val issuedAtMs = try {
-                    withContext(Dispatchers.Main) {
-                        val issuedAt = System.currentTimeMillis()
-                        clipboard().setPrimaryClip(clip)
-                        issuedAt
-                    }
-                } catch (cancelled: CancellationException) {
-                    if (leaseId.isNotBlank()) {
-                        withContext(NonCancellable + Dispatchers.Main) {
-                            ClipboardDeadline.clearClipIfLeaseMatches(context, leaseId)
-                            ClipboardDeadline.activate(context)
-                        }
-                    }
-                    throw cancelled
-                } catch (_: Exception) {
-                    withContext(Dispatchers.Main) { ClipboardDeadline.clearClipIfLeaseMatches(context, leaseId) }
-                    return failed(EffectReason.UNWRITABLE)
-                }
-
-                // EffectDone is the completed-copy boundary: durably publish only the digest,
-                // owner, lease token, and original expiry before acknowledging the OS write.
+                // THE LEASE IS DURABLE BEFORE THE SECRET LEAVES THE PROCESS: if the process dies
+                // after the OS write, the next launch's sweep still finds this lease. A lease whose
+                // clip was never written finds no matching token there and is simply spent.
+                val issuedAtMs = System.currentTimeMillis()
                 val persisted = try {
                     withContext(Dispatchers.IO) {
-                        ClipboardDeadline.persist(
-                            context,
-                            set.text,
-                            set.clear_after_ms,
-                            set.owner_vault_id,
-                            leaseId,
-                            issuedAtMs,
-                        )
+                        ClipboardDeadline.persist(context, set.clear_after_ms, set.owner_vault_id, leaseId, issuedAtMs)
                     }
                 } catch (cancelled: CancellationException) {
-                    if (leaseId.isNotBlank()) {
-                        withContext(NonCancellable + Dispatchers.Main) {
-                            ClipboardDeadline.clearClipIfLeaseMatches(context, leaseId)
-                            ClipboardDeadline.activate(context)
-                        }
-                    }
+                    withContext(NonCancellable + Dispatchers.Main) { abandonCopy(leaseId) }
                     throw cancelled
                 } catch (_: Exception) {
-                    if (leaseId.isNotBlank()) {
-                        withContext(Dispatchers.Main) {
-                            runCatching { ClipboardDeadline.clearClipIfLeaseMatches(context, leaseId) }
-                            ClipboardDeadline.activate(context)
-                        }
-                    }
+                    withContext(Dispatchers.Main) { abandonCopy(leaseId) }
                     return failed(EffectReason.UNWRITABLE)
                 }
-                if (!persisted && leaseId.isNotBlank()) {
+                if (!persisted) {
                     // No EffectDone for an owned/timed copy whose owner/deadline lease was not durable.
-                    withContext(Dispatchers.Main) {
-                        ClipboardDeadline.clearClipIfLeaseMatches(context, leaseId)
-                        ClipboardDeadline.activate(context)
-                    }
+                    withContext(Dispatchers.Main) { abandonCopy(leaseId) }
+                    return failed(EffectReason.UNWRITABLE)
+                }
+                try {
+                    withContext(Dispatchers.Main) { clipboard().setPrimaryClip(clip) }
+                } catch (cancelled: CancellationException) {
+                    withContext(NonCancellable + Dispatchers.Main) { abandonCopy(leaseId) }
+                    throw cancelled
+                } catch (_: Exception) {
+                    withContext(Dispatchers.Main) { abandonCopy(leaseId) }
                     return failed(EffectReason.UNWRITABLE)
                 }
                 val activated = withContext(Dispatchers.Main) {
@@ -484,6 +464,17 @@ internal class ShellEffects(
         failed(EffectReason.UNAVAILABLE)
     }
 
+    /** A copy that did not complete: clear the clip if it is ours, drop its lease, and leave no untracked copy. */
+    private fun abandonCopy(leaseId: String) {
+        if (leaseId.isBlank()) return
+        runCatching { ClipboardDeadline.clearClipIfLeaseMatches(context, leaseId) }
+        ClipboardDeadline.discard(context, leaseId)
+        // This copy's lease replaced the previous one before its write failed, so the previous
+        // copy may still be on the clipboard with nothing tracking it: clear it now.
+        runCatching { ClipboardDeadline.clearOrphanedClip(context) }
+        ClipboardDeadline.activate(context)
+    }
+
     private fun clipboard(): ClipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
     private fun failed(reason: String) = EffectResult(failed = EffectFailed(reason = reason))
@@ -494,12 +485,14 @@ internal class ShellEffects(
 internal class EffectRequestQueues(
     private val scope: CoroutineScope,
     private val perform: suspend (EffectRequest) -> Unit,
+    /** Answers a request whose [perform] threw, so the loop survives and the core is not left waiting. */
+    private val onError: suspend (EffectRequest, Throwable) -> Unit = { _, _ -> },
 ) {
     private val perInstance = ConcurrentHashMap<Long, Channel<EffectRequest>>()
     private val clipboard = Channel<EffectRequest>(Channel.UNLIMITED)
 
     init {
-        scope.launch { for (request in clipboard) perform(request) }
+        scope.launch { for (request in clipboard) guarded(request) }
     }
 
     suspend fun submit(request: EffectRequest) {
@@ -518,9 +511,26 @@ internal class EffectRequestQueues(
         }
     }
 
+    /** One failing request must not end its queue: Lock would never clear the clipboard again. */
+    private suspend fun guarded(request: EffectRequest) {
+        try {
+            perform(request)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            try {
+                onError(request, error)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // The failure answer itself failed; the queue still moves on.
+            }
+        }
+    }
+
     private fun queueOf(instance: Long): Channel<EffectRequest> = perInstance.getOrPut(instance) {
         Channel<EffectRequest>(Channel.UNLIMITED).also { queue ->
-            scope.launch { for (request in queue) perform(request) }
+            scope.launch { for (request in queue) guarded(request) }
         }
     }
 }

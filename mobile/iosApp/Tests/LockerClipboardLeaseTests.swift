@@ -20,7 +20,6 @@ final class LockerClipboardLeaseTests: XCTestCase {
         try LockerClipboardLeaseStore.record(
             vaultID: "vault-a",
             token: "opaque-marker-a",
-            text: "synthetic Locker value",
             expiresAt: expiry,
             directory: directory
         )
@@ -30,7 +29,6 @@ final class LockerClipboardLeaseTests: XCTestCase {
             LockerClipboardLease(
                 vaultID: "vault-a",
                 token: "opaque-marker-a",
-                digest: LockerClipboardLeaseStore.digest("synthetic Locker value"),
                 expiresAt: expiry
             )
         )
@@ -48,7 +46,6 @@ final class LockerClipboardLeaseTests: XCTestCase {
                 didReadMarker = true
                 return "opaque-marker-a"
             },
-            readContentDigest: { LockerClipboardLeaseStore.digest("synthetic Locker value") },
             clearPasteboard: { didClearPasteboard = true },
             directory: directory
         )
@@ -65,12 +62,10 @@ final class LockerClipboardLeaseTests: XCTestCase {
         try LockerClipboardLeaseStore.record(
             vaultID: "vault-a",
             token: "opaque-marker-a",
-            text: "synthetic Locker value",
             expiresAt: Date(timeIntervalSince1970: 1_800_000_000),
             directory: directory
         )
         var didReadMarker = false
-        var didReadContent = false
         var didClearPasteboard = false
 
         let cleared = LockerClipboardLeaseStore.clearOwned(
@@ -80,17 +75,12 @@ final class LockerClipboardLeaseTests: XCTestCase {
                 didReadMarker = true
                 return "unrelated text"
             },
-            readContentDigest: {
-                didReadContent = true
-                return "unrelated digest"
-            },
             clearPasteboard: { didClearPasteboard = true },
             directory: directory
         )
 
         XCTAssertFalse(cleared)
         XCTAssertFalse(didReadMarker, "type metadata gates every marker-content read")
-        XCTAssertFalse(didReadContent)
         XCTAssertFalse(didClearPasteboard)
         XCTAssertNil(LockerClipboardLeaseStore.load(directory: directory))
     }
@@ -101,50 +91,17 @@ final class LockerClipboardLeaseTests: XCTestCase {
         try LockerClipboardLeaseStore.record(
             vaultID: "vault-a",
             token: "old-process-marker",
-            text: "original Locker value",
             expiresAt: Date(timeIntervalSince1970: 1_800_000_000),
             directory: directory
         )
         // A reboot can reuse a numeric pasteboard generation. Ownership depends on the item
-        // marker and content digest, never on that counter.
-        var didReadContent = false
+        // marker token, never on that counter.
         var didClearPasteboard = false
 
         let cleared = LockerClipboardLeaseStore.clearOwned(
             vaultID: "vault-a",
             markerPresent: { true },
             readMarkerToken: { "newer-unrelated-marker" },
-            readContentDigest: {
-                didReadContent = true
-                return "must-not-read"
-            },
-            clearPasteboard: { didClearPasteboard = true },
-            directory: directory
-        )
-
-        XCTAssertFalse(cleared)
-        XCTAssertFalse(didReadContent)
-        XCTAssertFalse(didClearPasteboard)
-        XCTAssertNil(LockerClipboardLeaseStore.load(directory: directory))
-    }
-
-    func testMatchingMarkerWithChangedContentDoesNotClearTheReplacement() throws {
-        let directory = directory()
-        defer { remove(directory) }
-        try LockerClipboardLeaseStore.record(
-            vaultID: "vault-a",
-            token: "opaque-marker-a",
-            text: "original Locker value",
-            expiresAt: Date(timeIntervalSince1970: 1_800_000_000),
-            directory: directory
-        )
-        var didClearPasteboard = false
-
-        let cleared = LockerClipboardLeaseStore.clearOwned(
-            vaultID: "vault-a",
-            markerPresent: { true },
-            readMarkerToken: { "opaque-marker-a" },
-            readContentDigest: { LockerClipboardLeaseStore.digest("changed clipboard value") },
             clearPasteboard: { didClearPasteboard = true },
             directory: directory
         )
@@ -160,71 +117,58 @@ final class LockerClipboardLeaseTests: XCTestCase {
         try LockerClipboardLeaseStore.record(
             vaultID: "vault-a",
             token: "opaque-marker-a",
-            text: "original Locker value",
             expiresAt: Date(timeIntervalSince1970: 1_800_000_000),
             directory: directory
         )
-        var digestReads = 0
+        var tokenReads = 0
         var didClearPasteboard = false
 
         let cleared = LockerClipboardLeaseStore.clearOwned(
             vaultID: "vault-a",
             markerPresent: { true },
-            readMarkerToken: { "opaque-marker-a" },
-            readContentDigest: {
-                digestReads += 1
-                return digestReads == 1
-                    ? LockerClipboardLeaseStore.digest("original Locker value")
-                    : LockerClipboardLeaseStore.digest("newer clipboard value")
+            readMarkerToken: {
+                tokenReads += 1
+                return tokenReads == 1 ? "opaque-marker-a" : "newer-marker"
             },
             clearPasteboard: { didClearPasteboard = true },
             directory: directory
         )
 
         XCTAssertFalse(cleared)
-        XCTAssertEqual(digestReads, 2, "ownership is checked again immediately before clearing")
+        XCTAssertEqual(tokenReads, 2, "ownership is checked again immediately before clearing")
         XCTAssertFalse(didClearPasteboard)
         XCTAssertNil(LockerClipboardLeaseStore.load(directory: directory))
     }
 
-    func testUnavailableContentDigestPreservesLeaseForALaterExplicitLockRetry() throws {
+    func testNoDigestIsPersistedAndAnOldOneIsRewrittenAway() throws {
         let directory = directory()
         defer { remove(directory) }
         try LockerClipboardLeaseStore.record(
             vaultID: "vault-a",
             token: "opaque-marker-a",
-            text: "original Locker value",
             expiresAt: Date(timeIntervalSince1970: 1_800_000_000),
             directory: directory
         )
-        let originalLease = LockerClipboardLeaseStore.load(directory: directory)
-        var didClearPasteboard = false
+        let url = directory.appendingPathComponent("locker-clipboard-lease-v1.plist")
+        func keys() throws -> Set<String> {
+            let raw = try PropertyListSerialization.propertyList(
+                from: Data(contentsOf: url), options: [], format: nil
+            ) as? [String: Any]
+            return Set(raw?.keys.map { $0 } ?? [])
+        }
+        XCTAssertEqual(try keys(), ["vaultID", "token", "expiresAt"])
 
-        let firstAttempt = LockerClipboardLeaseStore.clearOwned(
-            vaultID: "vault-a",
-            markerPresent: { true },
-            readMarkerToken: { "opaque-marker-a" },
-            readContentDigest: { nil },
-            clearPasteboard: { didClearPasteboard = true },
-            directory: directory
-        )
+        let legacy: [String: Any] = [
+            "vaultID": "vault-a",
+            "token": "opaque-marker-a",
+            "digest": "0123abcd",
+            "expiresAt": Date(timeIntervalSince1970: 1_800_000_000),
+        ]
+        try PropertyListSerialization.data(fromPropertyList: legacy, format: .binary, options: 0)
+            .write(to: url)
 
-        XCTAssertFalse(firstAttempt)
-        XCTAssertFalse(didClearPasteboard)
-        XCTAssertEqual(LockerClipboardLeaseStore.load(directory: directory), originalLease)
-
-        let retry = LockerClipboardLeaseStore.clearOwned(
-            vaultID: "vault-a",
-            markerPresent: { true },
-            readMarkerToken: { "opaque-marker-a" },
-            readContentDigest: { LockerClipboardLeaseStore.digest("original Locker value") },
-            clearPasteboard: { didClearPasteboard = true },
-            directory: directory
-        )
-
-        XCTAssertTrue(retry)
-        XCTAssertTrue(didClearPasteboard)
-        XCTAssertNil(LockerClipboardLeaseStore.load(directory: directory))
+        XCTAssertEqual(LockerClipboardLeaseStore.load(directory: directory)?.token, "opaque-marker-a")
+        XCTAssertEqual(try keys(), ["vaultID", "token", "expiresAt"])
     }
 
     func testAnotherVaultDoesNotReadOrConsumeTheCurrentLease() throws {
@@ -233,7 +177,6 @@ final class LockerClipboardLeaseTests: XCTestCase {
         try LockerClipboardLeaseStore.record(
             vaultID: "vault-b",
             token: "opaque-marker-b",
-            text: "synthetic Locker value",
             expiresAt: Date(timeIntervalSince1970: 1_800_000_000),
             directory: directory
         )
@@ -246,7 +189,6 @@ final class LockerClipboardLeaseTests: XCTestCase {
                 return true
             },
             readMarkerToken: { "opaque-marker-b" },
-            readContentDigest: { "unused" },
             clearPasteboard: {},
             directory: directory
         )
@@ -262,7 +204,6 @@ final class LockerClipboardLeaseTests: XCTestCase {
         try LockerClipboardLeaseStore.record(
             vaultID: "vault-a",
             token: "opaque-marker-a",
-            text: "synthetic Locker value",
             expiresAt: Date(timeIntervalSince1970: 1_800_000_000),
             directory: directory
         )
@@ -270,7 +211,6 @@ final class LockerClipboardLeaseTests: XCTestCase {
         try LockerClipboardLeaseStore.record(
             vaultID: "",
             token: "",
-            text: "",
             expiresAt: Date(timeIntervalSince1970: 1_800_000_030),
             directory: directory
         )

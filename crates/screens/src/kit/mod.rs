@@ -26,6 +26,8 @@ pub mod reads_page;
 pub mod schedule;
 pub mod search;
 pub mod secret;
+#[cfg(test)]
+mod secret_tests;
 pub mod share;
 pub mod stale;
 pub mod transfer;

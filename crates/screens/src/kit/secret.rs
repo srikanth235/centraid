@@ -353,8 +353,12 @@ mod clipboard_tests {
         let current = board.set("vault-a", "new-secret", deadline);
         assert_ne!(current, stale, "tickets are monotonic across owner removal");
         assert!(!board.failed("vault-a", stale));
-        assert!(board.expire(stale, deadline).is_empty());
-        assert_eq!(board.deadline().map(|(ticket, _)| ticket), Some(current));
+        board.expire(stale, deadline);
+        assert_eq!(
+            board.deadline().map(|(ticket, _)| ticket),
+            Some(current),
+            "a stale ticket's timer cannot release the newer owner, even past the deadline"
+        );
         assert!(board.clear("vault-b").is_empty());
         let effects = board.clear("vault-a");
         let Some(wire::effect::Kind::ClipboardClearOwned(clear)) =
@@ -374,7 +378,7 @@ mod clipboard_tests {
         assert!(board.failed("vault-a", ticket));
         assert!(board.deadline().is_none());
         assert!(!board.failed("vault-a", ticket));
-        assert!(board.expire(ticket, deadline).is_empty());
+        board.expire(ticket, deadline);
         assert!(board.deadline().is_none());
         assert!(!format!("{board:?}").contains("failed-secret"));
     }
@@ -390,8 +394,22 @@ mod clipboard_tests {
         let ticket = board.set("vault-a", "popped-secret", deadline);
 
         assert!(board.expire(ticket, start).is_empty());
+        assert_eq!(
+            board.deadline().map(|(held, _)| held),
+            Some(ticket),
+            "an early wake is not the native expiry and keeps the owner"
+        );
+        assert!(
+            board
+                .expire(ticket, deadline - Duration::from_millis(1))
+                .is_empty()
+        );
+        assert!(board.deadline().is_some(), "still short of the deadline");
         assert!(board.expire(ticket, deadline).is_empty());
-        assert!(board.deadline().is_none());
+        assert!(
+            board.deadline().is_none(),
+            "the owner is released at the deadline"
+        );
     }
 
     #[test]

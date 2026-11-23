@@ -491,7 +491,6 @@ final class ScreenStore: ObservableObject {
                         try LockerClipboardLeaseStore.record(
                             vaultID: set.ownerVaultID,
                             token: token,
-                            text: set.text,
                             expiresAt: expiresAt
                         )
                     } catch {
@@ -550,9 +549,6 @@ final class ScreenStore: ObservableObject {
                 readMarkerToken: {
                     pasteboard.data(forPasteboardType: LockerClipboardLeaseStore.markerType)
                         .flatMap { String(data: $0, encoding: .utf8) }
-                },
-                readContentDigest: {
-                    pasteboard.string.map(LockerClipboardLeaseStore.digest)
                 },
                 clearPasteboard: { pasteboard.items = [] }
             )
