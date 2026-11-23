@@ -1,7 +1,7 @@
 //! EARLIER VERSIONS of a workout (#1185): the entry at the foot of the page with its count (absent
 //! at zero), the kit's one list with each version's figures in the member's units, Restore with no
-//! confirm, Undo, and a change the health store's pass made reading "From Apple Health". Every test
-//! goes through `Driver`, over a vault seeded at a fixed instant.
+//! confirm, Undo, and a change the recorded health store made reading its persisted source label.
+//! Every test goes through `Driver`, over a vault seeded at a fixed instant.
 
 mod health_support;
 
@@ -18,6 +18,10 @@ const SEEDED_AT_MS: i64 = 1_772_452_800_000;
 const STARTS: &str = "2026-03-04T07:00:00Z";
 
 fn driver_in(region: &str) -> Driver {
+    driver_on(region, "ios")
+}
+
+fn driver_on(region: &str, platform: &str) -> Driver {
     let mut d = Driver::with_runtime_clocked(
         health::runtime(),
         std::sync::Arc::new(centraid_vault::clock::FixedClock::at(SEEDED_AT_MS)),
@@ -25,7 +29,7 @@ fn driver_in(region: &str) -> Driver {
     d.call(wire::screen_request::Kind::Environment(wire::Environment {
         locale: format!("en-{region}"),
         zone: "Europe/Berlin".to_owned(),
-        platform: "ios".to_owned(),
+        platform: platform.to_owned(),
         ..Default::default()
     }));
     d.start();
@@ -82,6 +86,13 @@ fn earlier_view(v: &wire::ViewState) -> &wire::EarlierView {
     match &v.kind {
         Some(wire::view_state::Kind::Earlier(view)) => view,
         other => panic!("not the earlier-versions screen: {other:?}"),
+    }
+}
+
+fn earlier_preview_view(v: &wire::ViewState) -> &wire::EarlierPreviewView {
+    match &v.kind {
+        Some(wire::view_state::Kind::EarlierPreview(view)) => view,
+        other => panic!("not the earlier-version preview: {other:?}"),
     }
 }
 
@@ -252,6 +263,46 @@ fn a_change_the_health_stores_pass_made_reads_as_coming_from_apple_health() {
     assert_eq!(listed[0].value, "5.1 km");
     assert_eq!(listed[1].value, "5.0 km");
     assert!(!listed[1].label.contains("From"));
+}
+
+#[test]
+fn history_names_the_recorded_health_connect_source_on_an_android_platform() {
+    let mut d = driver_on("DE", "android");
+    let pass = |metres: u32| {
+        arrange(
+            &d,
+            act::health::FollowWorkouts {
+                origin: json!({ "ref": "store:health-connect", "label": "Health Connect", "device_id": "device-b" }).to_string(),
+                records: json!([{ "external_id": "w:hc-1", "device_id": "device-b", "fields": {
+                    "kind": "run", "starts": STARTS, "ends": "2026-03-04T07:30:00Z",
+                    "workout": { "moving_s": 1_800, "distance_m": metres } } }])
+                .to_string(),
+                ..Default::default()
+            },
+        );
+    };
+    pass(5_000);
+    pass(5_100);
+    let id = the_workout(&d);
+    let list = open_earlier(&mut d, &id);
+    assert!(
+        rows(d.view(list))[0]
+            .label
+            .ends_with(" · From Health Connect"),
+        "the list uses the source stored with this record, despite the Android display platform"
+    );
+
+    let preview_route = centraid_screens::kit::earlier::preview_route(
+        health::EARLIER,
+        &id,
+        rows(d.view(list))[1].seq,
+        "Earlier versions",
+    );
+    let preview = d.push(health::TAB, preview_route);
+    let Some(data) = earlier_preview_view(d.view(preview)).data.as_ref() else {
+        panic!("the full earlier version is readable");
+    };
+    assert!(data.banner_changed.contains("From Health Connect"));
 }
 
 #[test]

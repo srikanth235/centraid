@@ -824,6 +824,12 @@ fn conclude(session: &Session, reply: &Value) -> Result<Answered, Refusal> {
             notices: Vec::new(),
         });
     }
+    // A repeated invalid call is a failed attempt, even when fail-soft ends it
+    // with the typed `not_found` reason. Only a completed empty read carries
+    // `answer.rows = []` and may be presented as an empty result.
+    if effect["invalid_repeat"].is_object() && effect["failsoft"]["action"] == "decline:not_found" {
+        return Ok(said(say(Say::Cap)));
+    }
     if let Some(reason) = effect["decline"]["reason"].as_str() {
         return Ok(said(say(Say::of_decline(reason))));
     }

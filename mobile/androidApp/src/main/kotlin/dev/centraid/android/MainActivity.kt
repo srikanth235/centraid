@@ -71,6 +71,12 @@ public class MainActivity : FragmentActivity() {
         open.scope.launch { open.screens.memoryWarning() }
     }
 
+    /** A clipboard read denied while the window was unfocused is retried when it becomes visible. */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) ClipboardDeadline.sweep(applicationContext)
+    }
+
     /**
      * A tap on a notification, or the shortcut or widget button (#1173), reached an activity that was
      * already running: the tap is reported at once if the session is, else with the launch's.
@@ -100,7 +106,11 @@ public class MainActivity : FragmentActivity() {
         // EDGE TO EDGE: the page ground is the emitted `bg` and reaches the notch; the insets are paid
         // back by `safeDrawingPadding` below, the only place this shell knows a system bar exists.
         enableEdgeToEdge()
-        placeDemoVaults()
+        // Demo databases are developer fixtures, never content in a member's vault. Release may
+        // have been built from a checkout that contains ignored local fixture assets.
+        if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+            placeDemoVaults()
+        }
         // THE LAUNCHER SHORTCUT'S "ADD A REMINDER" AND A WIDGET'S TAPS (#1173), queued until the session
         // reports it. A recreated activity (a rotation) is handed the same intent again: not twice.
         if (savedInstanceState == null) {

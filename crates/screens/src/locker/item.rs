@@ -240,8 +240,8 @@ impl Item {
         effects
     }
 
-    /// A RELOCK IS A WIPE: every answer, every revealed value and every sheet
-    /// goes, and the screen is its blank until the Locker opens again.
+    /// A RELOCK WIPES SCREEN STATE: every answer, revealed value and sheet
+    /// goes; a copied secret retains its original clipboard deadline.
     fn wipe(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         self.loaded = Page::loading();
         self.undo.clear();
@@ -317,26 +317,40 @@ impl Item {
             // A SHOWN CODE COPIES WITHOUT A SECOND STAMP, for the reveal's
             // reason, and lives on the clipboard only as long as it is good.
             "copy_code" if stored && self.reveal.shows_code(key) => {
-                self.undo.say(words::code_copied(locale));
+                self.undo
+                    .say(words::code_copied_for(locale, ctx.platform()));
                 self.reveal.copy_shown(ctx, key).unwrap_or_default()
             }
             "code" | "copy_code" if stored && (key == SEED || is_code_field(&item, key)) => {
                 let outcome =
                     self.reveal
                         .code(ctx, &item.item_id, key, verb == "copy_code", verb == "code");
-                self.revealed(ctx, &item, key, outcome, words::code_copied(locale))
+                self.revealed(
+                    ctx,
+                    &item,
+                    key,
+                    outcome,
+                    words::code_copied_for(locale, ctx.platform()),
+                )
             }
             // A REVEALED VALUE COPIES WITHOUT A SECOND STAMP: it is already
             // revealed, and the item already says it was used.
             "copy" if stored && key != SEED && self.reveal.value(key).is_some() => {
-                self.undo.say(copied_secret(locale, &item, key));
+                self.undo
+                    .say(copied_secret(locale, &item, key, ctx.platform()));
                 self.reveal.copy_shown(ctx, key).unwrap_or_default()
             }
             // THE SEED ITSELF IS NOT SHOWN OR COPIED from this page: its row
             // makes codes.
             "reveal" | "copy" if stored && key != SEED && !is_code_field(&item, key) => {
                 let outcome = self.reveal.reveal(ctx, &item.item_id, key, verb == "copy");
-                self.revealed(ctx, &item, key, outcome, copied_secret(locale, &item, key))
+                self.revealed(
+                    ctx,
+                    &item,
+                    key,
+                    outcome,
+                    copied_secret(locale, &item, key, ctx.platform()),
+                )
             }
             // A PLAIN VALUE COPIES AS ITSELF — it is metadata, never stamped.
             "copy" => match plain_value(&item, key) {
@@ -1520,7 +1534,7 @@ fn openable(url: &str) -> String {
 }
 
 /// A copied sealed value's sentence, naming a custom field by its own label.
-fn copied_secret(locale: Locale, item: &wire::LockerItem, key: &str) -> String {
+fn copied_secret(locale: Locale, item: &wire::LockerItem, key: &str, platform: &str) -> String {
     let label = match key.strip_prefix(FIELD) {
         Some(id) => item
             .fields
@@ -1529,7 +1543,10 @@ fn copied_secret(locale: Locale, item: &wire::LockerItem, key: &str) -> String {
             .map_or_else(|| words::field_value(locale), |field| field.label.clone()),
         None => types::label(locale, key),
     };
-    fill(&words::copied_secret(locale), &[("field", &label)])
+    fill(
+        &words::copied_secret_for(locale, platform),
+        &[("field", &label)],
+    )
 }
 
 impl Screen for Item {
@@ -1578,7 +1595,7 @@ impl Screen for Item {
                 let id = self.id();
                 self.reveal.tick(ctx, &id)
             }
-            Some(E::TimerFired(fired)) => self.reveal.fired(&fired.timer),
+            Some(E::TimerFired(fired)) => self.reveal.fired(&fired.timer, ctx),
             // LEAVING CONCEALS: nothing revealed outlives the screen, and a
             // sheet with a typed secret goes with it.
             Some(E::StatusActed(_)) => {

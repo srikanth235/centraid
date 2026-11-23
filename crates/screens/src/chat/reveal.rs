@@ -8,9 +8,11 @@
 //! result, no event the model can read back, no saved turn and no card snapshot (`Msg::cards`
 //! never holds it; a reopened thread shows the card with Reveal again).
 //!
-//! It is dropped when Locker relocks, when Chat leaves the foreground, when the tab or the page
-//! is left, when the thread changes (the turn the reveal was made in is over), after the
-//! window, and when the item is gone. A cancelled owner check shows nothing and says nothing.
+//! The revealed screen value is dropped when Locker relocks, when Chat leaves the foreground, when
+//! the tab or the page is left, when the thread changes (the turn the reveal was made in is over),
+//! after the window, and when the item is gone. A copied value stays on the clipboard until its
+//! original expiry, including across background; an explicit Locker Lock clears it. A cancelled
+//! owner check shows nothing and says nothing.
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_assist::native::member::{ActionKind, MemberAction};
@@ -173,9 +175,9 @@ impl Chat {
                     message_id,
                     index,
                     if code {
-                        words::code_copied(locale)
+                        words::code_copied_for(locale, ctx.platform())
                     } else {
-                        copied_sentence(locale, &spot.column)
+                        copied_sentence(locale, &spot.column, ctx.platform())
                     },
                 ));
                 effects
@@ -274,9 +276,9 @@ impl Chat {
                     spot.message,
                     spot.index,
                     if spot.code {
-                        words::code_copied(locale)
+                        words::code_copied_for(locale, ctx.platform())
                     } else {
-                        copied_sentence(locale, &spot.column)
+                        copied_sentence(locale, &spot.column, ctx.platform())
                     },
                 ));
                 effects
@@ -294,7 +296,7 @@ impl Chat {
         }
     }
 
-    /// Everything shown goes, and the clipboard a copy filled.
+    /// Everything shown goes; the shared clipboard owner keeps its own deadline.
     pub(super) fn drop_reveal(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
         self.reveals.active = None;
         self.reveals.reveal.wipe(ctx)
@@ -352,7 +354,7 @@ impl Chat {
                 .unwrap_or_default();
             self.reveals.reveal.tick(ctx, &item)
         } else {
-            self.reveals.reveal.fired(timer)
+            self.reveals.reveal.fired(timer, ctx)
         };
         if self.reveals.reveal.column().is_none() {
             self.reveals.active = None;
@@ -413,9 +415,9 @@ impl Chat {
     }
 }
 
-fn copied_sentence(locale: Locale, column: &str) -> String {
+fn copied_sentence(locale: Locale, column: &str, platform: &str) -> String {
     fill(
-        &words::copied_secret(locale),
+        &words::copied_secret_for(locale, platform),
         &[("field", &types::label(locale, column))],
     )
 }

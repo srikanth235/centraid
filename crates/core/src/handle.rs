@@ -29,8 +29,9 @@
 //! met, because the FFI takes no lock of its own; the lock is the vault's, and
 //! `crates/core-ffi/CONTRACT.md` says so in those words.
 
+use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use centraid_api_proto::core_v1 as wire;
@@ -40,6 +41,8 @@ use centraid_vault::commands::Registry;
 
 use crate::config::CoreConfig;
 use crate::error::{CoreError, Result};
+
+static NEXT_VAULT_EXPORT_ID: AtomicU64 = AtomicU64::new(0);
 use crate::events::{EventQueue, Next};
 
 /// The capabilities this build requires of a peer.
@@ -125,6 +128,137 @@ impl Handle {
     }
 }
 
+/// One bounded OS-original temp file awaiting the job's async ZIP commit.
+struct PendingExportOriginal {
+    job_id: String,
+    photo_id: String,
+    path: std::path::PathBuf,
+}
+
+impl Drop for PendingExportOriginal {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+/// The core owns the unsaved plaintext ZIP until Release or Cancel.
+struct CompletedExportArchive {
+    path: std::path::PathBuf,
+}
+
+impl Drop for CompletedExportArchive {
+    fn drop(&mut self) {
+        if let Some(job_dir) = self.path.parent() {
+            let _ = std::fs::remove_dir_all(job_dir);
+        }
+    }
+}
+
+/// The current process' export directories, shared by cores that attach the same byte store.
+#[derive(Default)]
+struct ActiveExportDirectories(Mutex<BTreeSet<String>>);
+
+impl ActiveExportDirectories {
+    fn register(&self, job_id: &str) {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(job_id.to_owned());
+    }
+
+    fn release(&self, job_id: &str) {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(job_id);
+    }
+
+    /// Remove crash residue while preserving directories registered by any live core.
+    /// Build registers before it creates a directory; this mutex serializes registration with
+    /// the sweep, and is never held while a ZIP or original is read or written.
+    fn clear_stale(&self, staging: &std::path::Path) {
+        let active = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Ok(entries) = std::fs::read_dir(staging) {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let Some(name) = name.to_str() else {
+                    continue;
+                };
+                if name.starts_with("vault-export-") && !active.contains(name) {
+                    let _ = std::fs::remove_dir_all(entry.path());
+                }
+            }
+        }
+    }
+}
+
+static ACTIVE_EXPORT_DIRECTORIES: OnceLock<Arc<ActiveExportDirectories>> = OnceLock::new();
+
+fn active_export_directories() -> Arc<ActiveExportDirectories> {
+    Arc::clone(
+        ACTIVE_EXPORT_DIRECTORIES.get_or_init(|| Arc::new(ActiveExportDirectories::default())),
+    )
+}
+
+/// A per-job claim spans Build's filesystem work and remains held until cancel or release.
+struct ExportBuildClaims {
+    claimed: Mutex<BTreeSet<String>>,
+    directories: Arc<ActiveExportDirectories>,
+}
+
+impl ExportBuildClaims {
+    fn with_directories(directories: Arc<ActiveExportDirectories>) -> Self {
+        Self {
+            claimed: Mutex::new(BTreeSet::new()),
+            directories,
+        }
+    }
+
+    fn claim(&self, job_id: &str) -> bool {
+        let mut claimed = self
+            .claimed
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if !claimed.insert(job_id.to_owned()) {
+            return false;
+        }
+        self.directories.register(job_id);
+        true
+    }
+
+    fn release(&self, job_id: &str) {
+        let removed = self
+            .claimed
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(job_id);
+        if removed {
+            self.directories.release(job_id);
+        }
+    }
+}
+
+impl Default for ExportBuildClaims {
+    fn default() -> Self {
+        Self::with_directories(active_export_directories())
+    }
+}
+
+impl Drop for ExportBuildClaims {
+    fn drop(&mut self) {
+        let claimed = self
+            .claimed
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for job_id in claimed.iter() {
+            self.directories.release(job_id);
+        }
+    }
+}
+
 /// Everything a [`Handle`] is. Public only so `Handle` can deref to it.
 #[doc(hidden)]
 pub struct HandleState {
@@ -204,6 +338,18 @@ pub struct HandleState {
     /// Open staging sessions: bytes a shell is streaming in so this core can
     /// name them (#1025 S4). See [`crate::stage`].
     staging: crate::stage::Staging,
+    /// Whole-vault export jobs: one snapshot and one ZIP writer per in-flight export.
+    vault_exports: Mutex<
+        std::collections::BTreeMap<
+            String,
+            Arc<Mutex<centraid_vault::commands::vault_export::VaultExportArchive>>,
+        >,
+    >,
+    vault_export_cancellations: Mutex<std::collections::BTreeMap<String, Arc<AtomicBool>>>,
+    vault_export_builds: ExportBuildClaims,
+    vault_export_stage_sessions: Mutex<std::collections::BTreeMap<String, (String, String)>>,
+    vault_export_stages: Mutex<std::collections::BTreeMap<String, PendingExportOriginal>>,
+    vault_export_completed: Mutex<std::collections::BTreeMap<String, CompletedExportArchive>>,
     /// THE LIBRARY ITEMS THE LAST PASS ASKED FOR, by the library's own
     /// identifier (R-1080-C39): the parts it planned to seal from each one's
     /// stream. A `begin` for one takes its plan; the next pass replaces them
@@ -370,6 +516,12 @@ impl Core {
             ui_thread_name,
             events: Arc::new(EventQueue::new()),
             staging: crate::stage::Staging::default(),
+            vault_exports: Mutex::new(std::collections::BTreeMap::new()),
+            vault_export_cancellations: Mutex::new(std::collections::BTreeMap::new()),
+            vault_export_builds: ExportBuildClaims::default(),
+            vault_export_stage_sessions: Mutex::new(std::collections::BTreeMap::new()),
+            vault_export_stages: Mutex::new(std::collections::BTreeMap::new()),
+            vault_export_completed: Mutex::new(std::collections::BTreeMap::new()),
             library_plan: Mutex::new(std::collections::BTreeMap::new()),
             closed: AtomicBool::new(false),
             poison: Mutex::new(None),
@@ -799,6 +951,20 @@ impl HandleState {
     }
 
     pub fn attach_bytes(&self, bytes: centraid_blobs::ContentBytes) {
+        let no_export_running = self
+            .vault_export_cancellations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .is_empty();
+        if let Some(staging) = centraid_vault::bytes::BlobStore::staging_dir(&bytes) {
+            // A killed process cannot Drop a plaintext archive or its in-flight original.
+            // Live paths are registered across all cores sharing this byte store before Build
+            // creates them; the shared registry serializes this sweep with that registration.
+            active_export_directories().clear_stale(&staging);
+            if no_export_running {
+                let _ = std::fs::remove_file(staging.join("export.zip"));
+            }
+        }
         if let Ok(mut held) = self.bytes.lock() {
             *held = Some(bytes.clone());
         }
@@ -1707,6 +1873,9 @@ impl HandleState {
             K::LibraryAssets(request) => Ok(response(wire::response::Kind::LibraryAssets(
                 self.with_vault(|vault| crate::phone::library_assets(&self.plane, vault, request))?,
             ))),
+            K::VaultExport(request) => Ok(response(wire::response::Kind::VaultExport(
+                self.vault_export(request)?,
+            ))),
             K::Released(request) => {
                 let (answer, assets) =
                     self.with_vault(|vault| crate::phone::released(&self.plane, vault, request))?;
@@ -1718,6 +1887,487 @@ impl HandleState {
             tracing::debug!(request_id, %error, "the core refused a request");
             error
         })
+    }
+
+    /// One bounded step of a Rust-owned whole-vault ZIP export. No vault lock is held while the
+    /// shell resolves and streams an OS original between calls.
+    fn vault_export(
+        &self,
+        request: &wire::VaultExportRequest,
+    ) -> Result<wire::VaultExportResponse> {
+        use wire::vault_export_request::{Action as A, SkipReason};
+        match A::try_from(request.action).unwrap_or(A::Unspecified) {
+            A::Begin => {
+                if !request.job_id.is_empty() || !request.photo_id.is_empty() {
+                    return Err(CoreError::InvalidRequest {
+                        detail: "begin a whole-vault export without a job or photo id".to_owned(),
+                    });
+                }
+                let name = self.with_vault(|vault| {
+                    Ok(centraid_vault::commands::vault_export::archive_filename(
+                        &vault.clock().now_text(),
+                    ))
+                })?;
+                let mut cancellations = self
+                    .vault_export_cancellations
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if !cancellations.is_empty() {
+                    return Err(CoreError::InvalidRequest {
+                        detail: "a whole-vault export is already in progress".to_owned(),
+                    });
+                }
+                let ordinal = NEXT_VAULT_EXPORT_ID.fetch_add(1, Ordering::SeqCst) + 1;
+                let job_id = format!("vault-export-{ordinal}");
+                let cancelled = Arc::new(AtomicBool::new(false));
+                cancellations.insert(job_id.clone(), cancelled);
+                Ok(wire::VaultExportResponse {
+                    job_id,
+                    name,
+                    ..wire::VaultExportResponse::default()
+                })
+            }
+            A::Build => {
+                let cancelled = self
+                    .vault_export_cancellations
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .get(&request.job_id)
+                    .cloned()
+                    .ok_or_else(|| CoreError::InvalidRequest {
+                        detail: "this export job is no longer open".to_owned(),
+                    })?;
+                if cancelled.load(Ordering::SeqCst) {
+                    return Err(CoreError::InvalidRequest {
+                        detail: "this export job was cancelled".to_owned(),
+                    });
+                }
+                if !self.vault_export_builds.claim(&request.job_id) {
+                    return Err(CoreError::InvalidRequest {
+                        detail: "this export job has already been built or is being built"
+                            .to_owned(),
+                    });
+                }
+                // Cancellation may race the claim. Recheck before the first filesystem operation.
+                if cancelled.load(Ordering::SeqCst) {
+                    self.vault_export_builds.release(&request.job_id);
+                    return Err(CoreError::InvalidRequest {
+                        detail: "this export job was cancelled".to_owned(),
+                    });
+                }
+                let mut job_dir = None;
+                let build = (|| {
+                    let bytes = self.bytes().ok_or_else(|| CoreError::Unavailable {
+                        reason: "this vault has no content store for an export archive".to_owned(),
+                    })?;
+                    let staging = centraid_vault::bytes::BlobStore::staging_dir(&bytes)
+                        .ok_or_else(|| CoreError::Unavailable {
+                            reason: "this vault has nowhere to stage an export archive".to_owned(),
+                        })?;
+                    std::fs::create_dir_all(&staging).map_err(|error| CoreError::Unavailable {
+                        reason: format!("the export staging folder could not be opened: {error}"),
+                    })?;
+                    let dir = staging.join(&request.job_id);
+                    if dir.exists() {
+                        std::fs::remove_dir_all(&dir).map_err(|error| CoreError::Unavailable {
+                            reason: format!("an earlier export could not be cleared: {error}"),
+                        })?;
+                    }
+                    std::fs::create_dir_all(&dir).map_err(|error| CoreError::Unavailable {
+                        reason: format!("the export staging folder could not be opened: {error}"),
+                    })?;
+                    job_dir = Some(dir.clone());
+                    let target = dir.join("export.zip");
+                    let snapshot = self.with_vault(|vault| {
+                        let blobs = vault.blobs().ok_or_else(|| CoreError::Unavailable {
+                            reason: "this vault has no content store for an export archive"
+                                .to_owned(),
+                        })?;
+                        vault.read(|connection| {
+                            centraid_vault::commands::vault_export::VaultExportSnapshot::capture(
+                                connection, blobs,
+                            )
+                        })
+                        .map_err(CoreError::from)
+                    })?;
+                    let archive =
+                        centraid_vault::commands::vault_export::VaultExportArchive::begin(
+                            snapshot,
+                            &bytes,
+                            &target,
+                            Arc::clone(&cancelled),
+                        )?;
+                    if cancelled.load(Ordering::SeqCst) {
+                        drop(archive);
+                        return Err(CoreError::InvalidRequest {
+                            detail: "this export job was cancelled".to_owned(),
+                        });
+                    }
+                    Ok(archive)
+                })();
+                let archive = match build {
+                    Ok(archive) => archive,
+                    Err(error) => {
+                        if let Some(dir) = job_dir {
+                            let _ = std::fs::remove_dir_all(dir);
+                        }
+                        self.cancel_vault_export(&request.job_id);
+                        return Err(error);
+                    }
+                };
+                self.vault_exports
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .insert(request.job_id.clone(), Arc::new(Mutex::new(archive)));
+                if cancelled.load(Ordering::SeqCst) {
+                    self.cancel_vault_export(&request.job_id);
+                    return Err(CoreError::InvalidRequest {
+                        detail: "this export job was cancelled".to_owned(),
+                    });
+                }
+                Ok(wire::VaultExportResponse {
+                    job_id: request.job_id.clone(),
+                    ready: true,
+                    ..wire::VaultExportResponse::default()
+                })
+            }
+            A::Next => {
+                let job = {
+                    let jobs = self
+                        .vault_exports
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    jobs.get(&request.job_id).cloned()
+                }
+                .ok_or_else(|| CoreError::InvalidRequest {
+                    detail: "this export job is no longer open".to_owned(),
+                })?;
+                let mut job = job
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                use centraid_vault::commands::vault_export::ExportStep as S;
+                Ok(match job.next_step()? {
+                    S::Original(original) => wire::VaultExportResponse {
+                        job_id: request.job_id.clone(),
+                        original: Some(wire::VaultExportOriginal {
+                            photo_id: original.photo_id,
+                            os_ref: original.os_ref,
+                            content_hash: original.hash,
+                            byte_size: original.byte_size,
+                            media_type: original.media_type,
+                        }),
+                        ..wire::VaultExportResponse::default()
+                    },
+                    S::Advanced => wire::VaultExportResponse {
+                        job_id: request.job_id.clone(),
+                        advanced: true,
+                        ..wire::VaultExportResponse::default()
+                    },
+                    S::Complete => wire::VaultExportResponse {
+                        job_id: request.job_id.clone(),
+                        complete: true,
+                        ..wire::VaultExportResponse::default()
+                    },
+                })
+            }
+            A::Skip => {
+                let why = match SkipReason::try_from(request.skip_reason)
+                    .unwrap_or(SkipReason::Unspecified)
+                {
+                    SkipReason::Unavailable => "the photo library could not provide it",
+                    SkipReason::Unreadable => "could not be read",
+                    SkipReason::Unspecified => {
+                        return Err(CoreError::InvalidRequest {
+                            detail: "skipping an export original names why it was unavailable"
+                                .to_owned(),
+                        });
+                    }
+                };
+                let job = {
+                    let jobs = self
+                        .vault_exports
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    jobs.get(&request.job_id).cloned()
+                }
+                .ok_or_else(|| CoreError::InvalidRequest {
+                    detail: "this export job is no longer open".to_owned(),
+                })?;
+                let mut job = job
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                job.skip_os_original(&request.photo_id, why)?;
+                Ok(wire::VaultExportResponse {
+                    job_id: request.job_id.clone(),
+                    ..wire::VaultExportResponse::default()
+                })
+            }
+            A::Finish => {
+                let archive = self
+                    .vault_exports
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .remove(&request.job_id)
+                    .ok_or_else(|| CoreError::InvalidRequest {
+                        detail: "this export job is no longer open".to_owned(),
+                    })?;
+                let job = match Arc::try_unwrap(archive) {
+                    Ok(job) => job,
+                    Err(archive) => {
+                        self.vault_exports
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .insert(request.job_id.clone(), archive);
+                        return Err(CoreError::InvalidRequest {
+                            detail: "an export original is still being supplied".to_owned(),
+                        });
+                    }
+                };
+                let cancelled = self
+                    .vault_export_cancellations
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .get(&request.job_id)
+                    .cloned()
+                    .ok_or_else(|| CoreError::InvalidRequest {
+                        detail: "this export job was cancelled".to_owned(),
+                    })?;
+                let job = job
+                    .into_inner()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let finished = match job.finish() {
+                    Ok(finished) => finished,
+                    Err(error) => {
+                        self.cancel_vault_export(&request.job_id);
+                        return Err(error.into());
+                    }
+                };
+                if cancelled.load(Ordering::SeqCst) {
+                    let _ = std::fs::remove_dir_all(
+                        finished
+                            .path
+                            .parent()
+                            .unwrap_or_else(|| std::path::Path::new(".")),
+                    );
+                    return Err(CoreError::InvalidRequest {
+                        detail: "this export job was cancelled".to_owned(),
+                    });
+                }
+                self.vault_export_completed
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .insert(
+                        request.job_id.clone(),
+                        CompletedExportArchive {
+                            path: finished.path.clone(),
+                        },
+                    );
+                if cancelled.load(Ordering::SeqCst) {
+                    self.cancel_vault_export(&request.job_id);
+                    return Err(CoreError::InvalidRequest {
+                        detail: "this export job was cancelled".to_owned(),
+                    });
+                }
+                Ok(wire::VaultExportResponse {
+                    job_id: request.job_id.clone(),
+                    path: finished.path.to_string_lossy().into_owned(),
+                    count: finished.count,
+                    missing: finished.left_out.len() as u64,
+                    left_out: finished
+                        .left_out
+                        .into_iter()
+                        .map(|item| wire::LeftOutOriginal {
+                            name: item.name,
+                            why: item.why.to_owned(),
+                        })
+                        .collect(),
+                    ..wire::VaultExportResponse::default()
+                })
+            }
+            A::Commit => {
+                if request.stage_id.is_empty() || request.photo_id.is_empty() {
+                    return Err(CoreError::InvalidRequest {
+                        detail: "commit names the staged export original and snapshot photo"
+                            .to_owned(),
+                    });
+                }
+                let pending = self
+                    .vault_export_stages
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .remove(&request.stage_id)
+                    .ok_or_else(|| CoreError::InvalidRequest {
+                        detail: "this staged export original is no longer available".to_owned(),
+                    })?;
+                if pending.job_id != request.job_id || pending.photo_id != request.photo_id {
+                    self.release_export_claim(&pending.job_id, &pending.photo_id);
+                    return Err(CoreError::InvalidRequest {
+                        detail: "this staged original does not match the requested export item"
+                            .to_owned(),
+                    });
+                }
+                let job = self
+                    .vault_exports
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .get(&request.job_id)
+                    .cloned()
+                    .ok_or_else(|| CoreError::InvalidRequest {
+                        detail: "this export job is no longer open".to_owned(),
+                    })?;
+                let result = job
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .add_os_original(&pending.photo_id, &pending.path);
+                let disposition = result?;
+                use centraid_vault::commands::vault_export::OriginalDisposition as D;
+                Ok(wire::VaultExportResponse {
+                    job_id: request.job_id.clone(),
+                    archive_disposition: match disposition {
+                        D::Added => wire::vault_export_response::ArchiveDisposition::Added,
+                        D::Changed => wire::vault_export_response::ArchiveDisposition::Changed,
+                        D::Unreadable => {
+                            wire::vault_export_response::ArchiveDisposition::Unreadable
+                        }
+                    } as i32,
+                    ..wire::VaultExportResponse::default()
+                })
+            }
+            A::Release => {
+                let completed = self
+                    .vault_export_completed
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .remove(&request.job_id);
+                if let Some(completed) = completed {
+                    self.vault_export_cancellations
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .remove(&request.job_id);
+                    self.vault_export_builds.release(&request.job_id);
+                    drop(completed);
+                } else if self
+                    .vault_export_cancellations
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .contains_key(&request.job_id)
+                {
+                    return Err(CoreError::InvalidRequest {
+                        detail: "this export has no completed archive to release".to_owned(),
+                    });
+                }
+                Ok(wire::VaultExportResponse {
+                    job_id: request.job_id.clone(),
+                    ..wire::VaultExportResponse::default()
+                })
+            }
+            A::Cancel => {
+                self.cancel_vault_export(&request.job_id);
+                Ok(wire::VaultExportResponse {
+                    job_id: request.job_id.clone(),
+                    ..wire::VaultExportResponse::default()
+                })
+            }
+            A::Unspecified => Err(CoreError::InvalidRequest {
+                detail: "a whole-vault export names a supported job action".to_owned(),
+            }),
+        }
+    }
+
+    pub(crate) fn cancel_vault_export(&self, job_id: &str) {
+        let local = self
+            .vault_export_cancellations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .contains_key(job_id)
+            || self
+                .vault_export_completed
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .contains_key(job_id)
+            || self
+                .vault_exports
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .contains_key(job_id)
+            || self
+                .vault_export_stage_sessions
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .values()
+                .any(|(owner, _)| owner == job_id)
+            || self
+                .vault_export_stages
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .values()
+                .any(|staged| staged.job_id == job_id);
+        if !local && let Some(vaults) = self.vaults().cloned() {
+            for held in vaults.held() {
+                if let Some(core) = vaults.core_of(&held.vault_id) {
+                    core.cancel_vault_export(job_id);
+                }
+            }
+            return;
+        }
+        if let Some(cancelled) = self
+            .vault_export_cancellations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(job_id)
+            .cloned()
+        {
+            cancelled.store(true, Ordering::SeqCst);
+        }
+        self.vault_exports
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(job_id);
+        self.staging.cancel_export(job_id);
+        let (staged_ids, pending) = {
+            // StageEnd moves one item from the session map to the receipt map.
+            // Holding both maps in the same order makes that transfer atomic
+            // with Cancel's drain, so no late receipt can outlive cancellation.
+            let mut sessions = self
+                .vault_export_stage_sessions
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut stages = self
+                .vault_export_stages
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let staged_ids: Vec<String> = sessions
+                .iter()
+                .filter(|(_, (owner, _))| owner == job_id)
+                .map(|(id, _)| id.clone())
+                .collect();
+            for id in &staged_ids {
+                sessions.remove(id);
+            }
+            let pending_ids: Vec<String> = stages
+                .iter()
+                .filter(|(_, staged)| staged.job_id == job_id)
+                .map(|(id, _)| id.clone())
+                .collect();
+            let pending = pending_ids
+                .into_iter()
+                .filter_map(|id| stages.remove(&id))
+                .collect::<Vec<_>>();
+            (staged_ids, pending)
+        };
+        for id in staged_ids {
+            self.staging.abort(&id);
+        }
+        drop(pending);
+        self.vault_export_cancellations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(job_id);
+        self.vault_export_builds.release(job_id);
+        self.vault_export_completed
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(job_id);
     }
 
     /// The keys a door that seals, signs or names needs, or the refusal a
@@ -1910,19 +2560,57 @@ impl HandleState {
     fn stage(&self, frame: &wire::StageRequest) -> Result<wire::StageResponse> {
         use wire::stage_request::Kind as S;
         let kind = match frame.kind.as_ref() {
-            Some(S::Begin(begin)) => wire::stage_response::Kind::Begun(
-                self.staging.begin(begin, self.stage_doors(begin)?)?,
-            ),
-            Some(S::Chunk(chunk)) => wire::stage_response::Kind::Chunked(self.staging.chunk(
-                &chunk.staging_id,
-                chunk.seq,
-                &chunk.payload,
-            )?),
-            Some(S::End(end)) => wire::stage_response::Kind::Handle(
-                self.record_staged(self.staging.end(&end.staging_id)?)?,
-            ),
+            Some(S::Begin(begin)) => {
+                let doors = self.stage_doors(begin)?;
+                let export = doors.export.as_ref().map(|door| {
+                    (
+                        door.job_id.clone(),
+                        door.photo_id.clone(),
+                        Arc::clone(&door.cancelled),
+                    )
+                });
+                match self.staging.begin(begin, doors) {
+                    Ok(begun) => {
+                        if let Some((job_id, photo_id, cancelled)) = export {
+                            self.register_export_stage_session(
+                                begun.staging_id.clone(),
+                                job_id,
+                                photo_id,
+                                &cancelled,
+                            )?;
+                        }
+                        wire::stage_response::Kind::Begun(begun)
+                    }
+                    Err(error) => {
+                        if let Some((job_id, photo_id, _)) = export {
+                            self.release_export_claim(&job_id, &photo_id);
+                        }
+                        return Err(error);
+                    }
+                }
+            }
+            Some(S::Chunk(chunk)) => {
+                match self
+                    .staging
+                    .chunk(&chunk.staging_id, chunk.seq, &chunk.payload)
+                {
+                    Ok(answer) => wire::stage_response::Kind::Chunked(answer),
+                    Err(error) => {
+                        self.release_export_stage_session(&chunk.staging_id);
+                        return Err(error);
+                    }
+                }
+            }
+            Some(S::End(end)) => match self.staging.end(&end.staging_id) {
+                Ok(staged) => wire::stage_response::Kind::Handle(self.record_staged(staged)?),
+                Err(error) => {
+                    self.release_export_stage_session(&end.staging_id);
+                    return Err(error);
+                }
+            },
             Some(S::Abort(abort)) => {
                 self.staging.abort(&abort.staging_id);
+                self.release_export_stage_session(&abort.staging_id);
                 wire::stage_response::Kind::Aborted(wire::StageAborted {})
             }
             None => {
@@ -1935,33 +2623,155 @@ impl HandleState {
         Ok(wire::StageResponse { kind: Some(kind) })
     }
 
+    fn release_export_claim(&self, job_id: &str, photo_id: &str) {
+        let job = self
+            .vault_exports
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(job_id)
+            .cloned();
+        if let Some(job) = job {
+            let _ = job
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .release_os_claim(photo_id);
+        }
+    }
+
+    fn release_export_stage_session(&self, staging_id: &str) {
+        let session = self
+            .vault_export_stage_sessions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(staging_id);
+        if let Some((job_id, photo_id)) = session {
+            self.release_export_claim(&job_id, &photo_id);
+        }
+    }
+
+    /// Register a begun export stage, then recheck its shared cancellation bit.
+    /// Cancel may drain the tables between Staging::begin and this handoff;
+    /// the recheck closes that late-registration window.
+    fn register_export_stage_session(
+        &self,
+        staging_id: String,
+        job_id: String,
+        photo_id: String,
+        cancelled: &AtomicBool,
+    ) -> Result<()> {
+        self.vault_export_stage_sessions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(staging_id.clone(), (job_id.clone(), photo_id.clone()));
+        if cancelled.load(Ordering::SeqCst) {
+            self.vault_export_stage_sessions
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .remove(&staging_id);
+            self.staging.abort(&staging_id);
+            self.release_export_claim(&job_id, &photo_id);
+            return Err(CoreError::InvalidRequest {
+                detail: "this export job was cancelled".to_owned(),
+            });
+        }
+        Ok(())
+    }
+
     /// What a staging session may write to: the content store, and — for an
     /// item from the library, when a gateway is paired and the keys are here —
     /// the spool, under its budget, with what the last pass planned for the
     /// item if it asked for it.
     fn stage_doors(&self, begin: &wire::StageBegin) -> Result<crate::stage::Doors> {
         let store = self.bytes().map(|door| door.store().clone());
-        let plane = &self.plane;
-        let paired = !plane
-            .state()?
-            .gateways()
-            .map_err(crate::phone::plane_error)?
-            .is_empty();
-        let seal = match (&self.keys, paired) {
-            (Some(keys), true) => Some(crate::stage::SealInto {
-                keys: keys.backup.clone(),
-                spool: plane.spool()?,
-                budget: plane.budget(),
-                free: plane.free_bytes(),
-                planned: if begin.os_ref.is_empty() {
-                    None
-                } else {
-                    self.take_planned(&begin.os_ref)
-                },
-            }),
-            _ => None,
+        let export = if wire::StageSource::try_from(begin.source)
+            == Ok(wire::StageSource::ExportArchive)
+        {
+            let job = {
+                let jobs = self
+                    .vault_exports
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                jobs.get(&begin.export_job_id).cloned()
+            }
+            .ok_or_else(|| CoreError::InvalidRequest {
+                detail: "this export job is no longer open".to_owned(),
+            })?;
+            let mut job = job
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let hash = <[u8; 32]>::try_from(begin.export_hash.as_slice()).map_err(|_| {
+                CoreError::InvalidRequest {
+                    detail: "an export original names its 32-byte snapshot hash".to_owned(),
+                }
+            })?;
+            let staging_dir = self
+                .bytes()
+                .and_then(|bytes| centraid_vault::bytes::BlobStore::staging_dir(&bytes))
+                .map(|dir| dir.join(&begin.export_job_id))
+                .ok_or_else(|| CoreError::Unavailable {
+                    reason: "this vault has nowhere to stage an export original".to_owned(),
+                })?;
+            let cancelled = self
+                .vault_export_cancellations
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .get(&begin.export_job_id)
+                .cloned()
+                .ok_or_else(|| CoreError::InvalidRequest {
+                    detail: "this export job is no longer open".to_owned(),
+                })?;
+            let original = job.claim_os_original(&begin.export_photo_id)?;
+            if original.photo_id != begin.export_photo_id
+                || original.hash != hex::encode(hash)
+                || original.byte_size != begin.byte_size
+                || original.media_type != begin.media_type
+            {
+                let _ = job.release_os_claim(&original.photo_id);
+                return Err(CoreError::InvalidRequest {
+                    detail: "these bytes do not match the next original in this export".to_owned(),
+                });
+            }
+            Some(crate::stage::ExportArchiveInto {
+                job_id: begin.export_job_id.clone(),
+                photo_id: original.photo_id,
+                hash,
+                byte_size: original.byte_size,
+                media_type: original.media_type,
+                staging_dir,
+                cancelled,
+            })
+        } else {
+            None
         };
-        Ok(crate::stage::Doors { store, seal })
+        let seal = if export.is_some() {
+            None
+        } else {
+            let plane = &self.plane;
+            let paired = !plane
+                .state()?
+                .gateways()
+                .map_err(crate::phone::plane_error)?
+                .is_empty();
+            match (&self.keys, paired) {
+                (Some(keys), true) => Some(crate::stage::SealInto {
+                    keys: keys.backup.clone(),
+                    spool: plane.spool()?,
+                    budget: plane.budget(),
+                    free: plane.free_bytes(),
+                    planned: if begin.os_ref.is_empty() {
+                        None
+                    } else {
+                        self.take_planned(&begin.os_ref)
+                    },
+                }),
+                _ => None,
+            }
+        };
+        Ok(crate::stage::Doors {
+            store,
+            seal,
+            export,
+        })
     }
 
     /// The plan the last pass made for the library item `os_ref`, taken: one
@@ -2019,6 +2829,8 @@ impl HandleState {
                     byte_size: stored.bytes,
                     already_held: stored.already_held,
                     derivatives_held: Vec::new(),
+                    export_disposition: 0,
+                    export_stage_id: String::new(),
                 })
             }
             Staged::Library {
@@ -2064,6 +2876,71 @@ impl HandleState {
                     byte_size: len,
                     already_held,
                     derivatives_held: self.tiers_held(derivatives),
+                    export_disposition: 0,
+                    export_stage_id: String::new(),
+                })
+            }
+            Staged::ExportArchive {
+                path,
+                staging_id,
+                job_id,
+                photo_id,
+                hash,
+                len,
+                ..
+            } => {
+                use wire::stage_handle::ExportDisposition as W;
+                let cancelled = self
+                    .vault_export_cancellations
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .get(&job_id)
+                    .cloned();
+                let mut sessions = self
+                    .vault_export_stage_sessions
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let mut stages = self
+                    .vault_export_stages
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let staged_for = sessions.remove(&staging_id).ok_or_else(|| {
+                    let _ = std::fs::remove_file(&path);
+                    CoreError::InvalidRequest {
+                        detail: "this export stage session is no longer open".to_owned(),
+                    }
+                })?;
+                if staged_for != (job_id.clone(), photo_id.clone()) {
+                    let _ = std::fs::remove_file(&path);
+                    self.release_export_claim(&job_id, &photo_id);
+                    return Err(CoreError::InvalidRequest {
+                        detail: "the staged original does not match its export session".to_owned(),
+                    });
+                }
+                if cancelled.is_none_or(|cancelled| cancelled.load(Ordering::SeqCst)) {
+                    let _ = std::fs::remove_file(&path);
+                    self.release_export_claim(&job_id, &photo_id);
+                    return Err(CoreError::InvalidRequest {
+                        detail: "this export job was cancelled".to_owned(),
+                    });
+                }
+                stages.insert(
+                    staging_id.clone(),
+                    PendingExportOriginal {
+                        job_id,
+                        photo_id,
+                        path,
+                    },
+                );
+                drop(stages);
+                drop(sessions);
+                Ok(wire::StageHandle {
+                    content_hash: hash.to_hex(),
+                    byte_size: len,
+                    already_held: false,
+                    derivatives_held: Vec::new(),
+                    export_disposition: W::Staged as i32,
+                    export_stage_id: staging_id,
                 })
             }
         }
@@ -2216,6 +3093,7 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             // `library_assets` IS ONE READ OF THE LEDGER and one of the vault,
             // for at most a hundred refs (#1127).
             | K::LibraryAssets(_)
+            | K::VaultExport(_)
             // A CHAT TURN IS BOUNDED BY ITS CEILINGS: `STEP_CAP` (6) steps of at most
             // 512 tokens, each read from memory, and a free reply of at most 256.
             // It stops through `AssistCancel`, not through this registry, so it
@@ -2264,10 +3142,497 @@ mod tests {
         }
     }
 
+    fn export_call(
+        handle: &Handle,
+        action: centraid_api_proto::core_v1::vault_export_request::Action,
+        job_id: &str,
+    ) -> Result<centraid_api_proto::core_v1::VaultExportResponse> {
+        let response = handle.call(&wire::Request {
+            kind: Some(wire::request::Kind::VaultExport(wire::VaultExportRequest {
+                action: action as i32,
+                job_id: job_id.to_owned(),
+                ..wire::VaultExportRequest::default()
+            })),
+        })?;
+        let Some(wire::response::Kind::VaultExport(answer)) = response.kind else {
+            panic!("the vault export returns its typed response");
+        };
+        Ok(answer)
+    }
+
     impl Drop for Scratch {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.dir);
         }
+    }
+
+    #[test]
+    fn cancelling_a_pending_begin_refuses_a_late_build_and_releases_the_next_job() {
+        use wire::vault_export_request::Action as A;
+
+        let scratch = Scratch::founded();
+        scratch
+            .handle
+            .open_own_bytes(scratch.dir.join("vault.bytes"))
+            .expect("the byte store opens");
+        let begun = export_call(&scratch.handle, A::Begin, "").expect("begin");
+        let id = begun.job_id;
+        assert!(!id.is_empty());
+        let other_vault = Scratch::founded();
+        other_vault
+            .handle
+            .open_own_bytes(other_vault.dir.join("vault.bytes"))
+            .expect("the second byte store opens");
+        let other = export_call(&other_vault.handle, A::Begin, "").expect("second begin");
+        assert_ne!(id, other.job_id, "job IDs are unique across vault cores");
+
+        scratch.handle.cancel_vault_export(&id);
+        assert!(
+            export_call(&scratch.handle, A::Build, &id).is_err(),
+            "a build that completes after screen close cannot create an archive"
+        );
+        assert!(
+            export_call(&other_vault.handle, A::Build, &other.job_id)
+                .expect("the other vault is untouched")
+                .ready
+        );
+        other_vault.handle.cancel_vault_export(&other.job_id);
+        let next = export_call(&scratch.handle, A::Begin, "").expect("the lease was released");
+        assert_ne!(next.job_id, id, "export identities are process-wide unique");
+        scratch.handle.cancel_vault_export(&next.job_id);
+    }
+
+    #[test]
+    fn a_duplicate_build_is_refused_without_replacing_the_first_archive() {
+        use wire::vault_export_request::Action as A;
+
+        let scratch = Scratch::founded();
+        scratch
+            .handle
+            .open_own_bytes(scratch.dir.join("vault.bytes"))
+            .expect("the byte store opens");
+        let begun = export_call(&scratch.handle, A::Begin, "").expect("begin");
+        let id = begun.job_id;
+        assert!(
+            export_call(&scratch.handle, A::Build, &id)
+                .expect("the first build")
+                .ready
+        );
+        let first = scratch
+            .handle
+            .vault_exports
+            .lock()
+            .expect("the job map")
+            .get(&id)
+            .cloned()
+            .expect("the first archive is registered");
+
+        assert!(export_call(&scratch.handle, A::Build, &id).is_err());
+        let after_duplicate = scratch
+            .handle
+            .vault_exports
+            .lock()
+            .expect("the job map")
+            .get(&id)
+            .cloned()
+            .expect("the first archive remains registered");
+        assert!(
+            Arc::ptr_eq(&first, &after_duplicate),
+            "a duplicate Build preserves the original writer"
+        );
+        drop(after_duplicate);
+        drop(first);
+        assert!(
+            export_call(&scratch.handle, A::Next, &id)
+                .expect("the first job advances")
+                .complete
+        );
+        let finished = export_call(&scratch.handle, A::Finish, &id).expect("finish");
+        let archive = std::path::PathBuf::from(finished.path);
+        assert!(archive.exists(), "the original writer completed its ZIP");
+        scratch.handle.cancel_vault_export(&id);
+        assert!(
+            !archive.exists(),
+            "cancellation removes the completed archive"
+        );
+    }
+
+    #[test]
+    fn release_of_an_active_export_is_refused_without_deregistering_the_job() {
+        use wire::vault_export_request::Action as A;
+
+        let scratch = Scratch::founded();
+        scratch
+            .handle
+            .open_own_bytes(scratch.dir.join("vault.bytes"))
+            .expect("the byte store opens");
+        let begun = export_call(&scratch.handle, A::Begin, "").expect("begin");
+        let id = begun.job_id;
+
+        assert!(export_call(&scratch.handle, A::Release, &id).is_err());
+        assert!(
+            scratch
+                .handle
+                .vault_export_cancellations
+                .lock()
+                .expect("the cancellation registry")
+                .contains_key(&id)
+        );
+        assert!(
+            export_call(&scratch.handle, A::Build, &id)
+                .expect("the active job remains buildable")
+                .ready
+        );
+        scratch.handle.cancel_vault_export(&id);
+        assert!(export_call(&scratch.handle, A::Release, &id).is_ok());
+    }
+
+    #[test]
+    fn concurrent_build_claims_have_one_winner() {
+        let claims = Arc::new(ExportBuildClaims::with_directories(Arc::new(
+            ActiveExportDirectories::default(),
+        )));
+        let start = Arc::new(std::sync::Barrier::new(8));
+        let contenders = (0..8)
+            .map(|_| {
+                let claims = Arc::clone(&claims);
+                let start = Arc::clone(&start);
+                std::thread::spawn(move || {
+                    start.wait();
+                    claims.claim("vault-export-race")
+                })
+            })
+            .collect::<Vec<_>>();
+        let winners = contenders
+            .into_iter()
+            .map(|contender| contender.join().expect("claim thread finishes"))
+            .filter(|winner| *winner)
+            .count();
+        assert_eq!(winners, 1, "one Build owns the job's filesystem work");
+    }
+
+    #[test]
+    fn startup_sweep_preserves_a_live_job_registered_before_its_directory() {
+        let root = tempfile::tempdir().expect("a staging root");
+        let live_id = "vault-export-live";
+        let live_dir = root.path().join(live_id);
+        let stale_dir = root.path().join("vault-export-stale");
+        std::fs::create_dir_all(&live_dir).expect("the live folder");
+        std::fs::create_dir_all(&stale_dir).expect("the stale folder");
+
+        let registry = Arc::new(ActiveExportDirectories::default());
+        let claims = Arc::new(ExportBuildClaims::with_directories(Arc::clone(&registry)));
+        assert!(claims.claim(live_id));
+        registry.clear_stale(root.path());
+
+        assert!(
+            live_dir.exists(),
+            "startup cleanup keeps registered job data"
+        );
+        assert!(!stale_dir.exists(), "startup cleanup removes crash residue");
+        claims.release(live_id);
+    }
+
+    #[test]
+    fn registration_and_startup_sweep_race_cannot_remove_the_winning_job_dir() {
+        let root = tempfile::tempdir().expect("a staging root");
+        let staging = root.path().to_path_buf();
+        let job_id = "vault-export-racing";
+        let job_dir = staging.join(job_id);
+        let registry = Arc::new(ActiveExportDirectories::default());
+        let claims = Arc::new(ExportBuildClaims::with_directories(Arc::clone(&registry)));
+        let start = Arc::new(std::sync::Barrier::new(3));
+
+        let builder = {
+            let start = Arc::clone(&start);
+            let claims = Arc::clone(&claims);
+            let job_dir = job_dir.clone();
+            std::thread::spawn(move || {
+                start.wait();
+                assert!(claims.claim(job_id));
+                std::fs::create_dir_all(&job_dir).expect("the winning build creates its folder");
+            })
+        };
+        let cleaner = {
+            let start = Arc::clone(&start);
+            let registry = Arc::clone(&registry);
+            std::thread::spawn(move || {
+                start.wait();
+                registry.clear_stale(&staging);
+            })
+        };
+
+        start.wait();
+        builder.join().expect("the build claim finishes");
+        cleaner.join().expect("the startup sweep finishes");
+        assert!(
+            job_dir.exists(),
+            "cleanup cannot erase the claimed job folder"
+        );
+        claims.release(job_id);
+    }
+
+    #[test]
+    fn cancelling_after_finish_removes_the_unsaved_plaintext_zip() {
+        use wire::vault_export_request::Action as A;
+
+        let scratch = Scratch::founded();
+        scratch
+            .handle
+            .open_own_bytes(scratch.dir.join("vault.bytes"))
+            .expect("the byte store opens");
+        let begun = export_call(&scratch.handle, A::Begin, "").expect("begin");
+        let id = begun.job_id;
+        assert!(
+            export_call(&scratch.handle, A::Build, &id)
+                .expect("build")
+                .ready
+        );
+        assert!(
+            export_call(&scratch.handle, A::Next, &id)
+                .expect("next")
+                .complete
+        );
+        let finished = export_call(&scratch.handle, A::Finish, &id).expect("finish");
+        let archive = std::path::PathBuf::from(finished.path);
+        assert!(archive.exists(), "the OS save sheet's source is staged");
+
+        // This is the synchronous cleanup hook used when a screen is forcibly closed, including
+        // after Finish replied but before a save-sheet effect is delivered.
+        scratch.handle.cancel_vault_export(&id);
+        assert!(
+            !archive.exists(),
+            "the undelivered plaintext ZIP is removed"
+        );
+        assert!(
+            !archive.parent().expect("job folder").exists(),
+            "per-job original and ZIP staging is removed together"
+        );
+    }
+
+    #[test]
+    fn dropping_a_core_removes_an_uncommitted_export_original_receipt() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let handle = Core::open(CoreConfig::new(dir.path().join("vault.db"))).expect("opens");
+        let path = dir.path().join("one.original");
+        std::fs::write(&path, b"one staged photo").expect("staged bytes");
+        handle
+            .vault_export_stages
+            .lock()
+            .expect("stage map")
+            .insert(
+                "stage-1".to_owned(),
+                PendingExportOriginal {
+                    job_id: "vault-export-1".to_owned(),
+                    photo_id: "photo-1".to_owned(),
+                    path: path.clone(),
+                },
+            );
+
+        drop(handle);
+        assert!(
+            !path.exists(),
+            "the receipt owns plaintext until commit or drop"
+        );
+    }
+
+    #[test]
+    fn cancel_racing_stage_end_cannot_leave_an_export_receipt() {
+        use wire::vault_export_request::Action as A;
+
+        let scratch = Scratch::founded();
+        scratch
+            .handle
+            .open_own_bytes(scratch.dir.join("vault.bytes"))
+            .expect("the byte store opens");
+        let begun = export_call(&scratch.handle, A::Begin, "").expect("begin");
+        let job_id = begun.job_id;
+        let staging_id = "stage-racing-cancel".to_owned();
+        let photo_id = "photo-racing-cancel".to_owned();
+        let path = scratch.dir.join("racing.original");
+        std::fs::write(&path, b"racing photo").expect("staged original");
+        scratch
+            .handle
+            .vault_export_stage_sessions
+            .lock()
+            .expect("stage sessions")
+            .insert(staging_id.clone(), (job_id.clone(), photo_id.clone()));
+
+        let start = Arc::new(std::sync::Barrier::new(3));
+        let end_handle = scratch.handle.clone();
+        let end_start = Arc::clone(&start);
+        let end_job_id = job_id.clone();
+        let end_staging_id = staging_id.clone();
+        let end_photo_id = photo_id.clone();
+        let end_path = path.clone();
+        let end = std::thread::spawn(move || {
+            end_start.wait();
+            end_handle.record_staged(crate::stage::Staged::ExportArchive {
+                path: end_path,
+                staging_id: end_staging_id,
+                job_id: end_job_id,
+                photo_id: end_photo_id,
+                hash: centraid_media::sealed::PlaintextHash::of(b"racing photo"),
+                len: b"racing photo".len() as u64,
+                media_type: "image/jpeg".to_owned(),
+                expected: centraid_media::sealed::PlaintextHash::of(b"racing photo"),
+                expected_len: b"racing photo".len() as u64,
+            })
+        });
+        let cancel_handle = scratch.handle.clone();
+        let cancel_start = Arc::clone(&start);
+        let cancel_job_id = job_id.clone();
+        let cancel = std::thread::spawn(move || {
+            cancel_start.wait();
+            cancel_handle.cancel_vault_export(&cancel_job_id);
+        });
+
+        start.wait();
+        let _ = end.join().expect("StageEnd finishes");
+        cancel.join().expect("Cancel finishes");
+        assert!(!path.exists(), "Cancel removes the staged plaintext");
+        assert!(
+            !scratch
+                .handle
+                .vault_export_stages
+                .lock()
+                .expect("stage receipts")
+                .values()
+                .any(|stage| stage.job_id == job_id),
+            "no receipt remains after Cancel completes"
+        );
+        assert!(
+            !scratch
+                .handle
+                .vault_export_stage_sessions
+                .lock()
+                .expect("stage sessions")
+                .values()
+                .any(|(owner, _)| owner == &job_id),
+            "no open session remains after Cancel completes"
+        );
+    }
+
+    #[test]
+    fn cancel_between_stage_begin_and_registration_aborts_the_late_session() {
+        let scratch = Scratch::founded();
+        let job_id = "vault-export-begin-race".to_owned();
+        let photo_id = "photo-begin-race".to_owned();
+        let hash = *blake3::hash(b"staged photo").as_bytes();
+        let staging_dir = scratch.dir.join("staging");
+        let job_dir = staging_dir.join(&job_id);
+        std::fs::create_dir_all(&job_dir).expect("staging directory");
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let begin = wire::StageBegin {
+            media_type: "image/jpeg".to_owned(),
+            byte_size: b"staged photo".len() as u64,
+            source: wire::StageSource::ExportArchive as i32,
+            export_job_id: job_id.clone(),
+            export_photo_id: photo_id.clone(),
+            export_hash: hash.to_vec(),
+            ..wire::StageBegin::default()
+        };
+        let begun = scratch
+            .handle
+            .staging
+            .begin(
+                &begin,
+                crate::stage::Doors {
+                    store: None,
+                    seal: None,
+                    export: Some(crate::stage::ExportArchiveInto {
+                        job_id: job_id.clone(),
+                        photo_id: photo_id.clone(),
+                        hash,
+                        byte_size: b"staged photo".len() as u64,
+                        media_type: "image/jpeg".to_owned(),
+                        staging_dir: job_dir.clone(),
+                        cancelled: Arc::clone(&cancelled),
+                    }),
+                },
+            )
+            .expect("the export stage begins before Cancel");
+        let partial = job_dir.join(format!("{}.original", begun.staging_id));
+        assert!(partial.exists(), "the first stage has a partial file");
+
+        // This is the window after Staging::begin has inserted and checked its
+        // session, but before HandleState registers the export session id.
+        cancelled.store(true, Ordering::SeqCst);
+        assert!(
+            scratch
+                .handle
+                .register_export_stage_session(
+                    begun.staging_id.clone(),
+                    job_id.clone(),
+                    photo_id,
+                    &cancelled,
+                )
+                .is_err()
+        );
+        assert!(
+            !partial.exists(),
+            "late registration aborts its partial file"
+        );
+        assert!(
+            !scratch
+                .handle
+                .vault_export_stage_sessions
+                .lock()
+                .expect("stage sessions")
+                .contains_key(&begun.staging_id),
+            "late registration leaves no session map entry"
+        );
+    }
+
+    #[test]
+    fn an_invalid_commit_and_cancel_both_drop_the_pending_original() {
+        use wire::vault_export_request::Action as A;
+
+        let scratch = Scratch::founded();
+        let invalid_path = scratch.dir.join("invalid.original");
+        std::fs::write(&invalid_path, b"invalid receipt").expect("bytes");
+        scratch
+            .handle
+            .vault_export_stages
+            .lock()
+            .expect("stage map")
+            .insert(
+                "stage-invalid".to_owned(),
+                PendingExportOriginal {
+                    job_id: "vault-export-invalid".to_owned(),
+                    photo_id: "photo-right".to_owned(),
+                    path: invalid_path.clone(),
+                },
+            );
+        let refused = scratch.handle.call(&wire::Request {
+            kind: Some(wire::request::Kind::VaultExport(wire::VaultExportRequest {
+                action: A::Commit as i32,
+                job_id: "vault-export-invalid".to_owned(),
+                photo_id: "photo-wrong".to_owned(),
+                stage_id: "stage-invalid".to_owned(),
+                ..wire::VaultExportRequest::default()
+            })),
+        });
+        assert!(refused.is_err());
+        assert!(!invalid_path.exists(), "a refused receipt is discarded");
+
+        let cancelled_path = scratch.dir.join("cancelled.original");
+        std::fs::write(&cancelled_path, b"cancelled receipt").expect("bytes");
+        scratch
+            .handle
+            .vault_export_stages
+            .lock()
+            .expect("stage map")
+            .insert(
+                "stage-cancelled".to_owned(),
+                PendingExportOriginal {
+                    job_id: "vault-export-cancelled".to_owned(),
+                    photo_id: "photo-1".to_owned(),
+                    path: cancelled_path.clone(),
+                },
+            );
+        scratch.handle.cancel_vault_export("vault-export-cancelled");
+        assert!(!cancelled_path.exists(), "cancel drops its pending receipt");
     }
 
     fn trashed_note(handle: &Handle, id: &str, overdue: bool) {

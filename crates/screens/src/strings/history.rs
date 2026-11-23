@@ -18,7 +18,7 @@ catalog! {
         "Couldn’t read the earlier versions."
     );
     plain from_folder = ("From the folder", "From the folder");
-    plain from_health = ("From Apple Health", "From Apple Health");
+    plain from_health_unknown = ("From a health store", "From a health store");
     plain from_import = ("From an import", "From an import");
     plain from_phone = ("From your phone", "From your phone");
     plain from_statement = ("From a statement", "From a statement");

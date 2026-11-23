@@ -88,6 +88,7 @@ pub(super) fn plain_copy(text: &str) -> wire::Effect {
             text: text.to_owned(),
             sensitive: false,
             clear_after_ms: 0,
+            owner_vault_id: String::new(),
         })),
     }
 }

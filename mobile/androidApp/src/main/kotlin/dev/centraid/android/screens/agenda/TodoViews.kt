@@ -436,7 +436,10 @@ internal fun TodoQuickAddBar(
                         .fillMaxWidth()
                         .focusRequester(focus)
                         .testTag(testTag)
-                        .clearAndSetSemantics { contentDescription = prompt },
+                        // Keep BasicTextField's editable-text and set-text semantics. Replacing
+                        // them with clearAndSetSemantics turns the field into a generic View and
+                        // hides the staged title from TalkBack.
+                        .semantics { contentDescription = prompt },
                 )
             }
             if (quickAdd.can_submit) {

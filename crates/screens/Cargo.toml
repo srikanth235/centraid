@@ -33,6 +33,7 @@ centraid-design = { path = "../design" }
 centraid-apps-locker = { path = "../apps/locker" }
 # The generator draws from the operating system's CSPRNG.
 rand.workspace = true
+zeroize = "1"
 # The keyed test driver derives the vault seed from the recovery words.
 centraid-identity = { path = "../identity" }
 # The headless driver founds and seeds a scratch vault (`testing`).

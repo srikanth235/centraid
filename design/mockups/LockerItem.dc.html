@@ -7,6 +7,7 @@
 </head>
 <body>
 <x-dc>
+<!-- Behaviour annotation: Every Locker Copy, including a reveal from a chat card, remains available when its view closes or the app backgrounds, until the original clipboard expiry. Manual Locker Lock clears the latest secret conditionally, including after process restart; only non-secret ownership metadata survives restart. Controller cleanup cannot clear a newer copy. Background still relocks Locker and wipes its keys and revealed values. iOS clears at the OS expiry; Android clears at the same expiry while Centraid is active, or on return if the expiry passed in the background. Android copy confirmations name this active-app behavior; iOS keeps its expiry wording. -->
 <helmet>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@500;600&amp;display=swap" rel="stylesheet">
 <style>
@@ -57,7 +58,7 @@ button{font:inherit;color:inherit}
       <button style="border: none; background: none; color: #454E58; font-weight: 600; font-size: 14px; padding: 8px;">Open</button>
     </div>
   </div>
-  <p style="margin: 6px 20px 0; font-size: 12px; color: #6F6B64;">Copied secrets clear from the clipboard after 30 seconds.</p>
+  <p style="margin: 6px 20px 0; font-size: 12px; color: #6F6B64;">Revealed secrets hide again after 30 seconds.</p>
 
   <div style="margin: 12px 16px 0; background: #FFFFFF; border-radius: 16px;">
     <div style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid #EEEBE5;">

@@ -14,6 +14,12 @@ import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreFailure
 import dev.centraid.core.CoreOutcome
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okio.ByteString
 import okio.ByteString.Companion.decodeHex
@@ -29,7 +35,8 @@ import okio.ByteString.Companion.toByteString
  * a failed stage never holds one of the core's four places. A
  * BLAKE3 is the vault's identity and no Android API computes one, so the shell never names its own
  * bytes. A refusal ends the stage where it happened; there is no resume, and the core's
- * `already_held` makes a retry cheap.
+ * `already_held` makes a retry cheap. For a whole-vault archive, `end` returns an opaque staged
+ * receipt only; Rust performs the archive commit asynchronously after the screen accepts it.
  *
  * On the shelf's front core a stage goes to the vault in front (`centraid_core::vaults`).
  */
@@ -53,17 +60,61 @@ internal object Stage {
         osRef: String = "",
         forHash: String = "",
         tier: String = "",
+        archiveJobId: String = "",
+        archivePhotoId: String = "",
+        archiveHash: String = "",
+        read: suspend (max: Int) -> ByteArray,
+    ): Outcome = stage(
+        sendStage = { request -> core.send(request) },
+        mediaType = mediaType,
+        byteSize = byteSize,
+        osLibrary = osLibrary,
+        osRef = osRef,
+        forHash = forHash,
+        tier = tier,
+        archiveJobId = archiveJobId,
+        archivePhotoId = archivePhotoId,
+        archiveHash = archiveHash,
+        read = read,
+    )
+
+    /** Inject the stage door for deterministic protocol and cancellation tests. */
+    internal suspend fun stage(
+        sendStage: suspend (StageRequest) -> CoreOutcome<Envelope>,
+        mediaType: String,
+        byteSize: Long,
+        osLibrary: Boolean = false,
+        osRef: String = "",
+        forHash: String = "",
+        tier: String = "",
+        archiveJobId: String = "",
+        archivePhotoId: String = "",
+        archiveHash: String = "",
         read: suspend (max: Int) -> ByteArray,
     ): Outcome {
+        val archive = archiveJobId.isNotEmpty()
+        val archiveMetadataPresent = archiveJobId.isNotEmpty() || archivePhotoId.isNotEmpty() || archiveHash.isNotEmpty()
+        if (archiveMetadataPresent &&
+            (archiveJobId.isBlank() || archivePhotoId.isBlank() || raw(archiveHash).size != 32)
+        ) {
+            return Outcome.Refused("")
+        }
         val begin = StageBegin(
             media_type = mediaType,
             byte_size = byteSize.coerceAtLeast(0L),
-            source = if (osLibrary) StageSource.STAGE_SOURCE_OS_LIBRARY else StageSource.STAGE_SOURCE_OWNED,
+            source = when {
+                archive -> StageSource.STAGE_SOURCE_EXPORT_ARCHIVE
+                osLibrary -> StageSource.STAGE_SOURCE_OS_LIBRARY
+                else -> StageSource.STAGE_SOURCE_OWNED
+            },
             os_ref = osRef,
             for_hash = raw(forHash),
             tier = tier,
+            export_job_id = archiveJobId,
+            export_photo_id = archivePhotoId,
+            export_hash = raw(archiveHash),
         )
-        val begun = when (val answer = core.send(StageRequest(begin = begin))) {
+        val begun = when (val answer = sendStage(StageRequest(begin = begin))) {
             is CoreOutcome.Failed -> return Outcome.Refused(answer.failure.sentence, answer.failure.diskFull())
             is CoreOutcome.Answered -> answer.value.response?.stage?.begun
         } ?: return Outcome.Refused("")
@@ -73,40 +124,67 @@ internal object Stage {
             var seq = 0L
             while (true) {
                 val slice = read(chunkBytes)
+                currentCoroutineContext().ensureActive()
                 if (slice.isEmpty()) break
                 val chunk = StageChunk(staging_id = begun.staging_id, seq = seq, payload = slice.toByteString())
-                when (val answer = core.send(StageRequest(chunk = chunk))) {
+                when (val answer = sendStage(StageRequest(chunk = chunk))) {
                     is CoreOutcome.Failed -> return Outcome.Refused(answer.failure.sentence, answer.failure.diskFull())
                     is CoreOutcome.Answered -> Unit
                 }
                 seq += 1
             }
-            finished = true
-            val handle = when (val answer = core.send(StageRequest(end = StageEnd(staging_id = begun.staging_id)))) {
+            currentCoroutineContext().ensureActive()
+            val handle = when (val answer = sendStage(StageRequest(end = StageEnd(staging_id = begun.staging_id)))) {
                 is CoreOutcome.Failed -> return Outcome.Refused(answer.failure.sentence, answer.failure.diskFull())
                 is CoreOutcome.Answered -> answer.value.response?.stage?.handle
             } ?: return Outcome.Refused("")
+            currentCoroutineContext().ensureActive()
+            // Treat a missing/failed end response as not closed: abort is idempotent on the core,
+            // and also covers a request interrupted before its end reached Rust.
+            finished = true
             return Outcome.Staged(handle)
         } finally {
             // A read that threw, a cancelled coroutine or a refused chunk leaves the session open on the
             // core's side: drop it (the core forgives an id it already closed). `end` closes its own.
             if (!finished) {
-                withContext(NonCancellable) { core.send(StageRequest(abort = StageAbort(staging_id = begun.staging_id))) }
+                withContext(NonCancellable) {
+                    sendStage(StageRequest(abort = StageAbort(staging_id = begun.staging_id)))
+                }
             }
         }
     }
 
     /** Read a stream to its end in slices: `read` may short-read without being at the end. */
-    fun slices(input: java.io.InputStream): suspend (Int) -> ByteArray = { max ->
-        val buffer = ByteArray(max)
-        var filled = 0
-        while (filled < max) {
-            val count = input.read(buffer, filled, max - filled)
-            if (count < 0) break
-            filled += count
+    fun slices(input: java.io.InputStream): suspend (Int) -> ByteArray = { max -> readSlice(input, max) }
+
+    /** Run one bounded blocking read off-thread, closing its source if the stage is cancelled. */
+    private suspend fun readSlice(input: java.io.InputStream, max: Int): ByteArray =
+        suspendCancellableCoroutine { continuation ->
+            val worker = CoroutineScope(continuation.context + Dispatchers.IO).launch {
+                try {
+                    val buffer = ByteArray(max.coerceAtLeast(1))
+                    var filled = 0
+                    while (filled < buffer.size) {
+                        val count = input.read(buffer, filled, buffer.size - filled)
+                        if (count < 0) break
+                        if (count == 0) {
+                            val next = input.read()
+                            if (next < 0) break
+                            buffer[filled++] = next.toByte()
+                        } else {
+                            filled += count
+                        }
+                    }
+                    continuation.resumeWith(Result.success(if (filled == 0) ByteArray(0) else buffer.copyOf(filled)))
+                } catch (failure: Throwable) {
+                    continuation.resumeWith(Result.failure(failure))
+                }
+            }
+            continuation.invokeOnCancellation {
+                runCatching { input.close() }
+                worker.cancel()
+            }
         }
-        if (filled == 0) ByteArray(0) else buffer.copyOf(filled)
-    }
 
     /** 64 hex characters as the 32 raw bytes the wire carries; empty for anything else. */
     fun raw(hex: String): ByteString =

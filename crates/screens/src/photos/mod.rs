@@ -79,6 +79,7 @@ pub fn export_originals(
         chooser_title: words::photos_send_copy(locale),
         photo_stem: words::photograph(locale),
         video_stem: words::photos_cell_video(locale),
+        ..wire::ExportOriginals::default()
     }
 }
 

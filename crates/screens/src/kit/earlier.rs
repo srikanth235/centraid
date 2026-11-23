@@ -15,8 +15,8 @@
 //!   by restoring again. It ends in "Earlier version restored" with Undo, which is
 //!   `history.undo`. A refusal is the core's sentence over the list.
 //! - **Who made a change** reads in the member's words: a change a phone's store made says "From
-//!   your phone", "From the folder", "From Apple Health" or "From a statement"; a change the chat
-//!   made on the member's word says "Changed by Chat" (the commit's cause is `assist.<command>`,
+//!   your phone", "From the folder", the health store recorded for that workout, or "From a
+//!   statement"; a change the chat made on the member's word says "Changed by Chat" (the commit's cause is `assist.<command>`,
 //!   set only by the chat's door); the member's own say nothing. A creation carries no mark.
 //! - **A secret a version held** (Locker's replaced password; only an app with a [`Wall`]) is
 //!   drawn as dots with a Reveal on its row ([`wire::EarlierSecret`]), never worded in the line. A
@@ -163,6 +163,7 @@ pub fn build(spec: &'static EarlierSpec, route: &wire::Route) -> Option<Box<dyn 
         listing: Page::loading(),
         undo: Undo::default(),
         names: Names::new(),
+        source: None,
         secrets: Secrets::default(),
         effects: Vec::new(),
     }))
@@ -283,10 +284,29 @@ pub fn from(locale: Locale, system: &str, actor: &str) -> String {
         "" => String::new(),
         "contacts" | "calendar" => words::from_phone(locale),
         "files" => words::from_folder(locale),
-        "health" => words::from_health(locale),
+        // The revision cause names only `health`, not which store supplied it.
+        "health" => words::from_health_unknown(locale),
         "statement" => words::from_statement(locale),
         _ => words::from_import(locale),
     }
+}
+
+/// Name a health change by the persisted source attached to its record. The source relation is
+/// read from the vault and stays independent of the phone now displaying this history.
+#[must_use]
+pub fn from_recorded_source(
+    locale: Locale,
+    system: &str,
+    actor: &str,
+    source: Option<&wire::OriginOf>,
+) -> String {
+    if actor != "assist" && system == "health" {
+        return source
+            .filter(|source| source.system == "health")
+            .and_then(|source| crate::kit::origin::line(locale, &source.label))
+            .map_or_else(|| words::from_health_unknown(locale), |line| line.text);
+    }
+    from(locale, system, actor)
 }
 
 /// One loaded version, its values parsed.
@@ -318,6 +338,8 @@ struct Earlier {
     undo: Undo,
     /// What the spec's `know` hook read with the list.
     names: Names,
+    /// The record's persisted source, shared by all history rows on this page.
+    source: Option<wire::OriginOf>,
     /// The sealed values on screen, keyed `<seq>:<key>`.
     secrets: Secrets,
     /// Effects a change of state owes the shell (a shield that falls) until the event ends.
@@ -452,6 +474,7 @@ impl Earlier {
         // A shut wall is a wipe: nothing read before it stays, and nothing is read behind it.
         if let Some(denial) = self.walled(ctx) {
             self.names = Names::new();
+            self.source = None;
             self.undo.clear();
             self.listing = Page::Refused(denial);
             return;
@@ -459,6 +482,9 @@ impl Earlier {
         if let Some(know) = self.spec.know {
             self.names = know(ctx, &self.entity_id);
         }
+        self.source = (self.spec.app == "health")
+            .then(|| crate::kit::origin::read_source(ctx, &self.entity_id))
+            .flatten();
         let reading = match self.page(ctx, None) {
             Reading::Data((versions, next)) => Reading::Data(Listing { versions, next }),
             Reading::Denied(denial) => Reading::Denied(denial),
@@ -554,12 +580,22 @@ impl Earlier {
     }
 
     /// `Wed 4 November · 09:12 · From your phone`.
-    fn when(locale: Locale, cycle: HourCycle, local: &str, system: &str, actor: &str) -> String {
-        [dated(locale, cycle, local), from(locale, system, actor)]
-            .into_iter()
-            .filter(|part| !part.is_empty())
-            .collect::<Vec<_>>()
-            .join(" · ")
+    fn when(
+        &self,
+        locale: Locale,
+        cycle: HourCycle,
+        local: &str,
+        system: &str,
+        actor: &str,
+    ) -> String {
+        [
+            dated(locale, cycle, local),
+            from_recorded_source(locale, system, actor, self.source.as_ref()),
+        ]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ")
     }
 
     fn row(
@@ -653,7 +689,7 @@ impl Earlier {
         if let Some(newest) = versions.first() {
             rows.push(self.row(
                 look,
-                Self::when(
+                self.when(
                     locale,
                     cycle,
                     &newest.replaced_local,
@@ -669,7 +705,7 @@ impl Earlier {
         for version in versions {
             rows.push(self.row(
                 look,
-                Self::when(
+                self.when(
                     locale,
                     cycle,
                     &version.since_local,
@@ -696,7 +732,7 @@ impl Screen for Earlier {
                 self.undo.clear();
             }
             Some(E::TimerFired(fired)) => {
-                let effects = self.secrets.fired(&fired.timer);
+                let effects = self.secrets.fired(&fired.timer, ctx);
                 self.effects.extend(effects);
             }
             Some(E::EffectResult(result)) => self.secrets.answered(ctx, &result),
@@ -772,8 +808,9 @@ impl Screen for Earlier {
 
 #[cfg(test)]
 mod tests {
-    use super::from;
+    use super::{from, from_recorded_source};
     use crate::strings::Locale;
+    use centraid_api_proto::core_v1 as wire;
 
     #[test]
     fn a_change_the_chat_made_says_so_in_the_members_words() {
@@ -784,5 +821,22 @@ mod tests {
             "a member's own change says nothing"
         );
         assert_eq!(from(Locale::En, "contacts", ""), "From your phone");
+        assert_eq!(from(Locale::En, "health", ""), "From a health store");
+    }
+
+    #[test]
+    fn health_history_uses_the_recorded_origin_and_has_an_honest_fallback() {
+        let connect = wire::OriginOf {
+            system: "health".to_owned(),
+            label: "Health Connect".to_owned(),
+        };
+        assert_eq!(
+            from_recorded_source(Locale::En, "health", "", Some(&connect)),
+            "From Health Connect"
+        );
+        assert_eq!(
+            from_recorded_source(Locale::En, "health", "", None),
+            "From a health store"
+        );
     }
 }

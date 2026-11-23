@@ -10,11 +10,14 @@
        serif. -->
   <rect width="1200" height="630" fill="#FDFDFC" />
   <rect x="64" y="64" width="1072" height="502" rx="12" fill="#F5F4F2" stroke="#E5E4E1" stroke-width="1" />
-  <!-- The product mark, at the icon chip's own 26% radius. -->
-  <g transform="translate(104 104) scale(0.16)">
-    <rect width="512" height="512" rx="112" fill="#111317" />
-    <path d="M351 159a136 136 0 1 0 0 194" fill="none" stroke="#f4f1e9" stroke-width="54" stroke-linecap="round" />
-    <circle cx="349" cy="256" r="28" fill="#3EC8B4" />
+  <!-- The product mark: Courtyard on a white tile with a hairline edge. -->
+  <g transform="translate(104 104) scale(0.6833)">
+    <rect width="120" height="120" rx="27" fill="#FFFFFF" />
+    <rect x=".75" y=".75" width="118.5" height="118.5" rx="26.5" fill="none" stroke="#E4E0D8" stroke-width="1.5" />
+    <rect x="18" y="18" width="54" height="24" rx="8" fill="#00CEBE" />
+    <rect x="78" y="18" width="24" height="54" rx="8" fill="#783CFF" />
+    <rect x="48" y="78" width="54" height="24" rx="8" fill="#FFB800" />
+    <rect x="18" y="48" width="24" height="54" rx="8" fill="#FF2D6C" />
   </g>
   <text x="204" y="146" fill="#5A5A58" font-family="Instrument Sans, Helvetica Neue, system-ui, sans-serif" font-size="24" font-weight="600" letter-spacing="1.5">CENTRAID DOCS</text>
   <text x="104" y="312" fill="#5A5A58" font-family="Instrument Sans, Helvetica Neue, system-ui, sans-serif" font-size="76" font-weight="600" letter-spacing="-1.5">Your data. Your apps.</text>

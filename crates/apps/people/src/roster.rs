@@ -17,7 +17,7 @@ use centraid_apps_kit::reads::PageDoor;
 use crate::Denial;
 use crate::queries::{
     LinkedPerson, ListEntry, PersonCard, PersonRow, ROSTER_MAX, ROSTER_MIN, Reminder, asked, dates,
-    last_contacts, linked_people, list_of, lists, owner_card, people_among, read_circle,
+    last_contacts, linked_people, list_of, lists, owner_card, people_among_with, read_circle,
     read_trashed, reminders, starred, touch_stubs,
 };
 
@@ -198,15 +198,18 @@ pub fn load_people(
 
 /// `search` — the roster's row shape, in the order the index ranked it.
 ///
-/// The hits are filtered to the live circle: a trashed person, the owner and a
-/// pet are hits of the index and no one this app shows. A search row carries no
-/// reminders; the dates are the roster's read.
+/// The hits are filtered to live people: a trashed person and a pet are hits of
+/// the index and no one this app shows. My card remains findable. A search row
+/// carries no reminders; the dates are the roster's read.
 pub fn load_search(
     door: &dyn PageDoor,
     hits: &[SearchHit],
 ) -> KitResult<(SearchData, Option<Denial>)> {
     let ids: Vec<String> = hits.iter().map(|hit| hit.party_id.clone()).collect();
-    let live = asked!(people_among(door, &ids, true), SearchData::default());
+    let live = asked!(
+        people_among_with(door, &ids, true, true),
+        SearchData::default()
+    );
     let members: Vec<PersonRow> = hits
         .iter()
         .filter_map(|hit| live.get(&hit.party_id).cloned())

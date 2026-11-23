@@ -142,6 +142,253 @@ fn copy_puts_a_secret_on_the_clipboard_and_never_on_the_screen() {
 }
 
 #[test]
+fn copied_secret_survives_back_and_is_cleared_when_home_locks() {
+    let (mut d, item_id) = opened_item();
+    let home_id = home_instance(&d);
+    d.effects.clear();
+
+    verb(&mut d, item_id, "password", "copy");
+    let copy_effect_id = d
+        .effects
+        .iter()
+        .find_map(|request| {
+            matches!(
+                request.effect.as_ref().and_then(|effect| effect.kind.as_ref()),
+                Some(wire::effect::Kind::ClipboardSet(set))
+                    if set.text == "correct horse" && set.sensitive
+            )
+            .then_some(request.effect_id)
+        })
+        .expect("the copied secret is sent to the shell");
+    assert!(d.effects.iter().any(|request| matches!(
+        request.effect.as_ref().and_then(|effect| effect.kind.as_ref()),
+        Some(wire::effect::Kind::ClipboardSet(set))
+            if set.text == "correct horse" && set.sensitive
+    )));
+    assert!(
+        !d.effects.iter().any(|request| matches!(
+            request.effect.as_ref().and_then(|effect| effect.kind.as_ref()),
+            Some(wire::effect::Kind::OwnerCheck(check)) if check.ask
+        )),
+        "copying while Locker is open does not ask for another owner check"
+    );
+    d.send(
+        item_id,
+        E::EffectResult(wire::EffectResult {
+            effect_id: copy_effect_id,
+            outcome: Some(wire::effect_result::Outcome::Done(wire::EffectDone {})),
+        }),
+    );
+
+    let popped = d.pop(locker::TAB, item_id);
+    assert!(d.closed.contains(&item_id));
+    assert!(
+        !popped.effects.iter().any(|request| matches!(
+            request
+                .effect
+                .as_ref()
+                .and_then(|effect| effect.kind.as_ref()),
+            Some(wire::effect::Kind::ClipboardClearOwned(_))
+        )),
+        "Back conceals the item without clearing its still-live clipboard copy"
+    );
+    assert!(matches!(
+        &d.view(home_id).kind,
+        Some(wire::view_state::Kind::LockerHome(home)) if home.secure
+    ));
+
+    home_event(
+        &mut d,
+        home_id,
+        wire::locker_home_event::Kind::LockRequested(Default::default()),
+    );
+    assert!(matches!(
+        &d.view(home_id).kind,
+        Some(wire::view_state::Kind::LockerHome(home))
+            if !home.secure && home.wall.as_ref().is_some_and(|wall|
+                wall.phase == wire::locker_wall::Phase::Locked as i32)
+    ));
+    assert!(
+        d.effects.iter().any(|request| matches!(
+            request.effect.as_ref().and_then(|effect| effect.kind.as_ref()),
+            Some(wire::effect::Kind::ClipboardClearOwned(clear))
+                if clear.vault_id.is_empty()
+        )),
+        "explicit Lock clears the latest owned copy, even after the item was popped"
+    );
+}
+
+#[test]
+fn copied_secret_survives_background_relock_until_manual_lock_or_expiry() {
+    let (mut d, item_id) = opened_item();
+    let home_id = home_instance(&d);
+    d.effects.clear();
+
+    verb(&mut d, item_id, "password", "copy");
+    let copy_effect_id = d
+        .effects
+        .iter()
+        .find_map(|request| {
+            matches!(
+                request.effect.as_ref().and_then(|effect| effect.kind.as_ref()),
+                Some(wire::effect::Kind::ClipboardSet(set))
+                    if set.text == "correct horse" && set.sensitive
+            )
+            .then_some(request.effect_id)
+        })
+        .expect("the copied secret is sent to the shell");
+    d.send(
+        item_id,
+        E::EffectResult(wire::EffectResult {
+            effect_id: copy_effect_id,
+            outcome: Some(wire::effect_result::Outcome::Done(wire::EffectDone {})),
+        }),
+    );
+
+    d.pop(locker::TAB, item_id);
+    d.effects.clear();
+    let background = d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
+        foreground: false,
+    }));
+    assert!(
+        !background.effects.iter().any(|request| matches!(
+            request
+                .effect
+                .as_ref()
+                .and_then(|effect| effect.kind.as_ref()),
+            Some(wire::effect::Kind::ClipboardClearOwned(_))
+        )),
+        "background relocks Locker but leaves the copied secret to its original deadline"
+    );
+    assert!(matches!(
+        &d.view(home_id).kind,
+        Some(wire::view_state::Kind::LockerHome(home))
+            if !home.secure && home.wall.as_ref().is_some_and(|wall|
+                wall.phase == wire::locker_wall::Phase::Locked as i32)
+    ));
+
+    // Return, unlock again, then explicitly Lock. That Lock must still find the
+    // runtime-owned copy after both the item and its original controller closed.
+    d.call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
+        foreground: true,
+    }));
+    locker_support::tap_unlock(&mut d, home_id);
+    assert!(d.effects.iter().any(|request| matches!(
+        request.effect.as_ref().and_then(|effect| effect.kind.as_ref()),
+        Some(wire::effect::Kind::OwnerCheck(check)) if check.ask
+    )));
+    d.answer_effect(locker_support::passed(wire::Biometry::Face));
+    home_event(
+        &mut d,
+        home_id,
+        wire::locker_home_event::Kind::LockRequested(Default::default()),
+    );
+    assert!(
+        d.effects.iter().any(|request| matches!(
+            request.effect.as_ref().and_then(|effect| effect.kind.as_ref()),
+            Some(wire::effect::Kind::ClipboardClearOwned(clear))
+                if clear.vault_id.is_empty()
+        )),
+        "manual Lock clears the retained clipboard copy immediately"
+    );
+}
+
+#[test]
+fn manual_lock_sends_owned_clear_even_without_a_volatile_clipboard_owner() {
+    let (mut d, _) = opened_item();
+    let home_id = home_instance(&d);
+    d.effects.clear();
+
+    home_event(
+        &mut d,
+        home_id,
+        wire::locker_home_event::Kind::LockRequested(Default::default()),
+    );
+
+    assert!(
+        d.effects.iter().any(|request| matches!(
+            request.effect.as_ref().and_then(|effect| effect.kind.as_ref()),
+            Some(wire::effect::Kind::ClipboardClearOwned(clear)) if clear.vault_id.is_empty()
+        )),
+        "the native shell receives an owner-bound clear after a fresh Runtime starts"
+    );
+}
+
+#[test]
+fn a_failed_clipboard_set_after_back_is_accepted_and_lock_still_clears_its_vault_lease() {
+    let (mut d, item_id) = opened_item();
+    let home_id = home_instance(&d);
+    d.effects.clear();
+
+    verb(&mut d, item_id, "password", "copy");
+    let copy_set = d
+        .effects
+        .iter()
+        .find_map(|request| {
+            match request
+                .effect
+                .as_ref()
+                .and_then(|effect| effect.kind.as_ref())
+            {
+                Some(wire::effect::Kind::ClipboardSet(set))
+                    if set.text == "correct horse" && set.sensitive =>
+                {
+                    Some((request.effect_id, set.owner_vault_id.clone()))
+                }
+                _ => None,
+            }
+        })
+        .expect("the copied secret is sent to the shell");
+    let (copy_effect_id, owner_vault_id) = copy_set;
+    d.pop(locker::TAB, item_id);
+
+    // A platform answer can race Back. The runtime resolves this id while the popped owner's
+    // clipboard ticket still exists, then treats its now-closed instance as an expected late reply.
+    let event = wire::ScreenEvent {
+        kind: Some(E::EffectResult(wire::EffectResult {
+            effect_id: copy_effect_id,
+            outcome: Some(wire::effect_result::Outcome::Failed(
+                wire::EffectFailed::default(),
+            )),
+        })),
+    };
+    let wrong_sender = d.try_call(wire::screen_request::Kind::Send(wire::InstanceEvent {
+        instance: item_id + 10_000,
+        event: Some(event.clone()),
+    }));
+    assert!(
+        wrong_sender.is_err(),
+        "a tracked clipboard answer is still bound to its source instance"
+    );
+
+    let result = d.try_call(wire::screen_request::Kind::Send(wire::InstanceEvent {
+        instance: item_id,
+        event: Some(event),
+    }));
+    assert!(
+        result.is_ok(),
+        "a late result for a popped page is accepted"
+    );
+
+    home_event(
+        &mut d,
+        home_id,
+        wire::locker_home_event::Kind::LockRequested(Default::default()),
+    );
+    assert!(
+        d.effects.iter().any(|request| matches!(
+            request
+                .effect
+                .as_ref()
+                .and_then(|effect| effect.kind.as_ref()),
+            Some(wire::effect::Kind::ClipboardClearOwned(clear))
+                if clear.vault_id == owner_vault_id
+        )),
+        "explicit Lock always asks the shell to check this vault's persisted lease"
+    );
+}
+
+#[test]
 fn a_plain_value_copies_as_itself_and_is_not_marked_sensitive() {
     let (mut d, id) = opened_item();
     let before = d.effects.len();

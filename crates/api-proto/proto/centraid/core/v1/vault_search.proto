@@ -54,8 +54,8 @@ message VaultSearch {
   string corrected = 2;
 }
 
-// One row a member can open, from the index — five strings and the readings
-// the core adds, never a column the index does not carry.
+// One row a member can open, from the index — its text fields and the typed
+// readings the core adds, never a column the index does not carry.
 message VaultSearchHit {
   // The logical entity: `knowledge.note`, `core.party`, `core.event`,
   // `schedule.task`, `core.content_item`, `core.document`, or a
@@ -87,4 +87,7 @@ message VaultSearchHit {
   // and the row opens that item's Earlier versions. False for a hit on what it says now,
   // and for a kind with no Earlier versions page.
   bool in_earlier_version = 9;
+  // The owner's own person card. Used to identify My card in a Home Find result's spoken label;
+  // it does not change the row's visible person kind or destination.
+  bool is_my_card = 10;
 }

@@ -63,9 +63,9 @@ import dev.centraid.android.kit.SectionHead
 import dev.centraid.android.kit.CentraidRow
 import dev.centraid.android.kit.CentraidSearchField
 import dev.centraid.android.kit.EditableFieldRow
+import dev.centraid.android.kit.AnchoredOptionMenu
 import dev.centraid.android.kit.EditorRoom
 import dev.centraid.android.kit.IconKey
-import dev.centraid.android.kit.OptionSheet
 import dev.centraid.android.kit.OutlineButton
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.RoomAction
@@ -116,6 +116,37 @@ public fun NotesEditorScreen(
     }
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
     var menuOpen by remember(state.note_id) { mutableStateOf(false) }
+    val menuOptions = buildList {
+        if (draft != null && chrome != null) {
+            add(SheetOption(key = MENU_PIN, label = chrome.pin_label))
+            add(SheetOption(key = MENU_LINK, label = chrome.link_label))
+            state.attachments_entry?.let { entry ->
+                add(SheetOption(key = MENU_ATTACHMENTS, label = entry.label, detail = entry.count_label))
+            }
+            state.links_entry?.let { entry ->
+                add(SheetOption(key = MENU_LINKS, label = entry.label, detail = entry.count_label))
+            }
+            state.earlier?.takeIf { dev.centraid.android.kit.earlierEntryDrawn(it) }?.let { entry ->
+                add(SheetOption(key = MENU_EARLIER, label = entry.label, detail = entry.count_label))
+            }
+            if (state.send_to_agenda != null) add(SheetOption(key = MENU_SEND, label = chrome.send_to_agenda_label))
+            add(SheetOption(key = MENU_SHARE, label = chrome.share_label))
+            add(SheetOption(key = MENU_TRASH, label = chrome.trash_label, destructive = true))
+        }
+    }.filter { it.label.isNotEmpty() }
+    val pickMenuOption: (String) -> Unit = { key ->
+        menuOpen = false
+        when (key) {
+            MENU_PIN -> onEvent(NotesEditorEvent(pin = NotesEditorEvent.PinToggled()))
+            MENU_LINK -> onEvent(NotesEditorEvent(link_requested = NotesEditorEvent.LinkRequested()))
+            MENU_ATTACHMENTS -> onEvent(NotesEditorEvent(attachments_opened = NotesEditorEvent.AttachmentsOpened()))
+            MENU_LINKS -> onEvent(NotesEditorEvent(links_opened = NotesEditorEvent.LinksOpened()))
+            MENU_EARLIER -> state.earlier?.route?.let(onOpen)
+            MENU_SEND -> state.send_to_agenda?.let(onOpen)
+            MENU_SHARE -> onEvent(NotesEditorEvent(share_requested = NotesEditorEvent.ShareRequested()))
+            MENU_TRASH -> onEvent(NotesEditorEvent(trash_tapped = NotesEditorEvent.TrashTapped()))
+        }
+    }
     CompositionLocalProvider(LocalAppAccentId provides "notes") {
     EditorRoom(
         title = chrome?.title.orEmpty(),
@@ -126,9 +157,22 @@ public fun NotesEditorScreen(
         // The page's pop is the flush: Rust sends itself `Left`.
         onDeparted = {},
         trailing = if (draft != null && chrome != null) {
-            RoomAction(iconKey = "MoreHoriz", label = chrome.menu_label.ifEmpty { chrome.pin_label }, testTag = "notes-menu") {
-                menuOpen = true
-            }
+            RoomAction(
+                iconKey = "MoreHoriz",
+                label = chrome.menu_label.ifEmpty { chrome.pin_label },
+                testTag = "notes-menu",
+                onPress = { menuOpen = true },
+                anchoredMenu = {
+                    AnchoredOptionMenu(
+                        expanded = menuOpen,
+                        title = chrome.menu_label,
+                        options = menuOptions,
+                        onPick = pickMenuOption,
+                        onDismiss = { menuOpen = false },
+                        testTag = "notes-actions-menu",
+                    )
+                },
+            )
         } else {
             null
         },
@@ -237,45 +281,6 @@ public fun NotesEditorScreen(
             }
         }
     }
-    }
-    if (menuOpen && chrome != null && draft != null) {
-        val options = buildList {
-            add(SheetOption(key = MENU_PIN, label = chrome.pin_label))
-            add(SheetOption(key = MENU_LINK, label = chrome.link_label))
-            // ATTACHMENTS (#1185): the photos and files on the note; a sheet over the editor.
-            state.attachments_entry?.let { entry ->
-                add(SheetOption(key = MENU_ATTACHMENTS, label = entry.label, detail = entry.count_label))
-            }
-            // LINKED TO (#1185): everything the note is linked to; a sheet over the editor.
-            state.links_entry?.let { entry ->
-                add(SheetOption(key = MENU_LINKS, label = entry.label, detail = entry.count_label))
-            }
-            state.earlier?.takeIf { dev.centraid.android.kit.earlierEntryDrawn(it) }?.let { entry ->
-                add(SheetOption(key = MENU_EARLIER, label = entry.label, detail = entry.count_label))
-            }
-            if (state.send_to_agenda != null) add(SheetOption(key = MENU_SEND, label = chrome.send_to_agenda_label))
-            add(SheetOption(key = MENU_SHARE, label = chrome.share_label))
-            // MOVE TO TRASH asks nothing (`behaviour.md`): the last row, red; the page closes with an Undo beneath.
-            add(SheetOption(key = MENU_TRASH, label = chrome.trash_label, destructive = true))
-        }.filter { it.label.isNotEmpty() }
-        OptionSheet(
-            title = chrome.menu_label,
-            options = options,
-            onPick = { key ->
-                menuOpen = false
-                when (key) {
-                    MENU_PIN -> onEvent(NotesEditorEvent(pin = NotesEditorEvent.PinToggled()))
-                    MENU_LINK -> onEvent(NotesEditorEvent(link_requested = NotesEditorEvent.LinkRequested()))
-                    MENU_ATTACHMENTS -> onEvent(NotesEditorEvent(attachments_opened = NotesEditorEvent.AttachmentsOpened()))
-                    MENU_LINKS -> onEvent(NotesEditorEvent(links_opened = NotesEditorEvent.LinksOpened()))
-                    MENU_EARLIER -> state.earlier?.route?.let(onOpen)
-                    MENU_SEND -> state.send_to_agenda?.let(onOpen)
-                    MENU_SHARE -> onEvent(NotesEditorEvent(share_requested = NotesEditorEvent.ShareRequested()))
-                    MENU_TRASH -> onEvent(NotesEditorEvent(trash_tapped = NotesEditorEvent.TrashTapped()))
-                }
-            },
-            onDismiss = { menuOpen = false },
-        )
     }
     state.link?.let { sheet -> LinkSheet(sheet, send) }
     // THE "Linked to" SHEET (#1185): the kit's section and picker; Rust makes every word and row.

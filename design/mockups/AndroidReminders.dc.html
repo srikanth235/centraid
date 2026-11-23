@@ -120,6 +120,12 @@ button{font:inherit;color:inherit}
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4A4741" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
     </button>
   </div>
+  <!-- Focused quick-add state: TalkBack gets the destination label and the visible typed title remains editable text. -->
+  <div role="group" aria-label="Quick add" style="position: absolute; left: 16px; right: 16px; bottom: 80px; min-height: 52px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 4px 14px; border: 1px solid #E4E0D8; border-radius: 26px; background: #FBFAF8;">
+    <span aria-hidden="true" style="font-size: 20px; color: #6F6B64;">+</span>
+    <input id="agenda-quick-add" type="text" role="textbox" aria-label="Add to Inbox" value="Water the plants" style="flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: #1C1B19; font: 16px 'Roboto Flex', Roboto, system-ui, sans-serif;">
+    <button aria-label="Add reminder" style="height: 40px; padding: 0 14px; border: none; border-radius: 20px; background: #087668; color: #FFFFFF; font: 600 14px 'Roboto Flex', Roboto, system-ui, sans-serif;">Add</button>
+  </div>
   <div aria-hidden="true" style="position: absolute; left: 152px; bottom: 6px; width: 108px; height: 4px; border-radius: 2px; background: #1C1B19;"></div>
 </div>
 </x-dc>

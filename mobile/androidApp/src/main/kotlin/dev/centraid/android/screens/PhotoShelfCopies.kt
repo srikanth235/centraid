@@ -19,12 +19,16 @@ import centraid.core.v1.LoadRequest
 import centraid.core.v1.OriginalsExported
 import dev.centraid.android.kit.writeFailureReason
 import centraid.core.v1.Request
+import centraid.core.v1.StageHandle
 import centraid.core.v1.Value
 import dev.centraid.android.backup.LibraryRefs
 import dev.centraid.android.kit.EffectReason
+import dev.centraid.android.session.Stage
 import dev.centraid.core.CentraidCore
 import dev.centraid.core.CoreOutcome
 import java.io.File
+import java.io.InputStream
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -61,6 +65,9 @@ internal suspend fun performExportOriginals(
     core: CentraidCore,
     export: ExportOriginals,
 ): EffectResult {
+    if (export.mode == ExportOriginals.Mode.MODE_ARCHIVE) {
+        return performArchiveOriginal(context, core, export)
+    }
     val located = withContext(Dispatchers.IO) { locateOriginals(context, core, export.photo_ids) }
     val missing = located.missing
     val full = FullPhone()
@@ -97,6 +104,82 @@ internal suspend fun performExportOriginals(
         }
 
         else -> EffectResult(failed = EffectFailed(reason = EffectReason.UNSUPPORTED))
+    }
+}
+
+/** Supply one immutable OS original to the Rust-owned aggregate archive. */
+private suspend fun performArchiveOriginal(
+    context: Context,
+    core: CentraidCore,
+    export: ExportOriginals,
+): EffectResult {
+    // An incomplete archive descriptor must never fall through Stage's ordinary Owned path.
+    if (export.export_job_id.isBlank() || export.export_photo_id.isBlank() ||
+        Stage.raw(export.export_content_hash).size != 32 || export.export_byte_size < 0L
+    ) {
+        return EffectResult(
+            originals_exported = OriginalsExported(
+                status = OriginalsExported.Status.STATUS_FAILED,
+                archive_disposition = OriginalsExported.ArchiveDisposition.ARCHIVE_DISPOSITION_UNREADABLE,
+            ),
+        )
+    }
+    val input = withContext(Dispatchers.IO) { openLibraryOriginal(context, export.export_os_ref) }
+        ?: return EffectResult(
+            originals_exported = OriginalsExported(
+                status = OriginalsExported.Status.STATUS_NONE_HERE,
+                missing = 1,
+                archive_disposition = OriginalsExported.ArchiveDisposition.ARCHIVE_DISPOSITION_UNAVAILABLE,
+            ),
+        )
+    try {
+        input.use {
+            val read = Stage.slices(input)
+            return when (
+                val staged = Stage.stage(
+                    core = core,
+                    mediaType = export.export_media_type,
+                    byteSize = export.export_byte_size,
+                    archiveJobId = export.export_job_id,
+                    archivePhotoId = export.export_photo_id,
+                    archiveHash = export.export_content_hash,
+                ) { max ->
+                    withContext(Dispatchers.IO) { read(max) }
+                }
+            ) {
+                is Stage.Outcome.Staged -> {
+                    val stagedForArchive =
+                        staged.handle.export_disposition == StageHandle.ExportDisposition.EXPORT_DISPOSITION_STAGED &&
+                            staged.handle.export_stage_id.isNotEmpty()
+                    EffectResult(
+                        originals_exported = OriginalsExported(
+                            status = OriginalsExported.Status.STATUS_DONE,
+                            archive_disposition = if (stagedForArchive) {
+                                OriginalsExported.ArchiveDisposition.ARCHIVE_DISPOSITION_STAGED
+                            } else {
+                                OriginalsExported.ArchiveDisposition.ARCHIVE_DISPOSITION_UNREADABLE
+                            },
+                            archive_stage_id = staged.handle.export_stage_id.takeIf { stagedForArchive }.orEmpty(),
+                        ),
+                    )
+                }
+                is Stage.Outcome.Refused -> EffectResult(
+                    originals_exported = OriginalsExported(
+                        status = OriginalsExported.Status.STATUS_FAILED,
+                        archive_disposition = OriginalsExported.ArchiveDisposition.ARCHIVE_DISPOSITION_UNREADABLE,
+                    ),
+                )
+            }
+        }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        return EffectResult(
+            originals_exported = OriginalsExported(
+                status = OriginalsExported.Status.STATUS_FAILED,
+                archive_disposition = OriginalsExported.ArchiveDisposition.ARCHIVE_DISPOSITION_UNREADABLE,
+            ),
+        )
     }
 }
 
@@ -163,15 +246,22 @@ private suspend fun locateOriginals(context: Context, core: CentraidCore, photoI
  * The SwiftUI twin is `PhoneLibrary.exportOriginal`.
  */
 internal fun copyLibraryOriginal(context: Context, osRef: String): String? {
-    val row = LibraryRefs.row(osRef) ?: return null
-    val collection = if (row.video) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-    val uri = ContentUris.withAppendedId(collection, row.id)
+    val input = openLibraryOriginal(context, osRef) ?: return null
     val target = File.createTempFile("library-", ".bin", context.cacheDir)
     val copied = runCatching {
-        context.contentResolver.openInputStream(uri)?.use { input -> target.outputStream().use { input.copyTo(it) } } != null
+        input.use { source -> target.outputStream().use { source.copyTo(it) } }
+        true
     }.getOrDefault(false)
     if (!copied) target.delete()
     return if (copied) target.path else null
+}
+
+/** Open the OS original from the saved MediaStore ref, without making an intermediate copy. */
+internal fun openLibraryOriginal(context: Context, osRef: String): InputStream? {
+    val row = LibraryRefs.row(osRef) ?: return null
+    val collection = if (row.video) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+    val uri = ContentUris.withAppendedId(collection, row.id)
+    return runCatching { context.contentResolver.openInputStream(uri) }.getOrNull()
 }
 
 /** `<applicationId>.photocopies` — the manifest's one `FileProvider`, `PhotoHandOff`'s. */

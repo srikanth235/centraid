@@ -533,6 +533,9 @@ message Effect {
     // ---- photos (#1135, lane D) ----
     ExportOriginals export_originals = 22;
     CameraRoll camera_roll = 23;
+    // Clear only a still-matching sensitive Locker copy owned by this vault.
+    // The shell carries only a digest/owner lease across process restart.
+    ClipboardClearOwned clipboard_clear_owned = 28;
     RenderEdit render_edit = 25;
     ReadCamera read_camera = 26;
     LibraryDelete library_delete = 27;
@@ -618,16 +621,26 @@ message ClipboardSet {
   // A secret is marked so the OS keeps it out of clipboard history.
   bool sensitive = 2;
   // When the clip must be gone, in milliseconds from the set; 0 keeps it. A
-  // shell persists the DEADLINE with the clip, so a process killed before the
-  // Rust timer fires still clears it: it clears a stale clip it finds on its
-  // next launch. The Rust timer's `ClipboardClear` is the same clear while the
-  // app lives.
+  // shell persists the deadline and digest with the clip, so a process killed
+  // before the Rust timer fires still clears it. The Rust timer's
+  // `ClipboardClear` is the same conditional clear while the app lives.
   uint64 clear_after_ms = 3;
+  // Set only for sensitive Locker copies; empty for ordinary clipboard writes.
+  // Lets an explicit Lock clear its copy after a process restart without
+  // persisting the secret text in the shell.
+  string owner_vault_id = 4;
 }
 
 // Clears the clipboard only if it still holds what the core put there.
 message ClipboardClear {
   string expected_text = 1;
+}
+
+// Clears a sensitive Locker copy only when its current shell-owned lease is
+// still for `vault_id` and the clipboard still matches that lease's digest.
+// Carries no secret text.
+message ClipboardClearOwned {
+  string vault_id = 1;
 }
 
 enum HapticKind {
@@ -750,11 +763,21 @@ message ExportOriginals {
   // photograph's ("Photo") and a video's ("Video").
   string photo_stem = 5;
   string video_stem = 6;
+  // `MODE_ARCHIVE` supplies one OS original to a Rust-owned aggregate ZIP.
+  // These are the immutable descriptor from `VaultExportResponse`, not a
+  // request for the shell to re-read the current photo row.
+  string export_job_id = 7;
+  string export_photo_id = 8;
+  string export_os_ref = 9;
+  uint64 export_byte_size = 10;
+  string export_content_hash = 11;
+  string export_media_type = 12;
 
   enum Mode {
     MODE_UNSPECIFIED = 0;
     MODE_SEND = 1;
     MODE_SAVE = 2;
+    MODE_ARCHIVE = 3;
   }
 }
 
@@ -763,6 +786,17 @@ message OriginalsExported {
   // How many originals went, and how many of the pick were not on this phone.
   uint32 handed = 2;
   uint32 missing = 3;
+  // Set for `MODE_ARCHIVE`: how the core handled this snapshot original.
+  ArchiveDisposition archive_disposition = 4;
+  // Opaque Rust stage session id; used for the async ZIP commit, never a path.
+  string archive_stage_id = 5;
+
+  enum ArchiveDisposition {
+    ARCHIVE_DISPOSITION_UNSPECIFIED = 0;
+    ARCHIVE_DISPOSITION_UNREADABLE = 3;
+    ARCHIVE_DISPOSITION_UNAVAILABLE = 4;
+    ARCHIVE_DISPOSITION_STAGED = 5;
+  }
 
   enum Status {
     STATUS_UNSPECIFIED = 0;

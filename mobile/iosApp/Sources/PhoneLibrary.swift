@@ -22,6 +22,8 @@ import UniformTypeIdentifiers
 /// A library change while the app is on screen is told to the roll as `LibraryChanged`
 /// ([LibraryWatcher]).
 enum PhoneLibrary {
+    enum ArchiveStageResult { case unavailable, staged(String), unreadable }
+
     // MARK: The grant
 
     /// The grant as it stands; never prompts.
@@ -205,16 +207,7 @@ enum PhoneLibrary {
             return staged
         }
         let mediaType = asked.mediaType.isEmpty ? mime(of: resource.uniformTypeIdentifier) : asked.mediaType
-        let stream = LibraryStream()
-        let options = PHAssetResourceRequestOptions()
-        options.isNetworkAccessAllowed = asked.allowNetwork
-        let manager = PHAssetResourceManager.default()
-        let request = manager.requestData(for: resource,
-            options: options,
-            dataReceivedHandler: { stream.deliver($0) },
-            completionHandler: { stream.finish($0) }
-        )
-        stream.cancel = { manager.cancelDataRequest(request) }
+        let stream = libraryStream(resource: resource, allowNetwork: asked.allowNetwork)
         defer { stream.close() }
         switch await stream.first() {
         case .inCloud:
@@ -223,6 +216,9 @@ enum PhoneLibrary {
         case .nothing:
             staged.outcome = .gone
             return staged
+        case .failed, .cancelled:
+            staged.outcome = .failed
+            return staged
         case .data:
             break
         }
@@ -230,7 +226,15 @@ enum PhoneLibrary {
         // NOT MARKED EDITED (R-1127-5): an edit's ref names the `modificationDate` it was read
         // at, which is the delete guard's witness, and the camera's file is a resource of its own.
         begin.osRef = asked.ref
-        switch await StageDoor.stage(core, begin, read: { try await stream.read(max: $0) }) {
+        let stageOutcome = await withTaskCancellationHandler {
+            await StageDoor.stage(core, begin, read: { max in
+                try Task.checkCancellation()
+                return try await stream.read(max: max)
+            })
+        } onCancel: {
+            stream.close()
+        }
+        switch stageOutcome {
         case let .staged(handle):
             staged.outcome = .ready
             staged.mediaType = mediaType
@@ -245,31 +249,113 @@ enum PhoneLibrary {
         return staged
     }
 
+    /// THE ARCHIVE'S ONE OS ORIGINAL, STREAMED DIRECTLY THROUGH THE STAGE DOOR.
+    /// The snapshot descriptor is Rust's; this resolves the existing Photos ref with network
+    /// access disabled. No native temp copy is made before the core's bounded staging file.
+    static func stageArchiveOriginal(
+        ref: String,
+        jobID: String,
+        photoID: String,
+        hash: String,
+        byteSize: UInt64,
+        mediaType: String,
+        core: any ScreenCore
+    ) async -> ArchiveStageResult {
+        // An incomplete archive descriptor must never fall through StageDoor's normal OS-library path.
+        guard !jobID.isEmpty, !photoID.isEmpty, StageDoor.raw(hash).count == 32 else { return .unreadable }
+        guard let resource = resource(for: ref) else { return .unavailable }
+        let stream = libraryStream(resource: resource, allowNetwork: false)
+        defer { stream.close() }
+        return await withTaskCancellationHandler {
+            switch await stream.first() {
+            case .inCloud, .nothing:
+                return .unavailable
+            case .failed, .cancelled:
+                return .unreadable
+            case .data:
+                break
+            }
+            var begin = StageDoor.Begin(mediaType: mediaType, byteSize: byteSize)
+            begin.exportJobID = jobID
+            begin.exportPhotoID = photoID
+            begin.exportHash = hash
+            let staged = await StageDoor.stage(core, begin, read: { max in
+                try Task.checkCancellation()
+                return try await stream.read(max: max)
+            })
+            switch staged {
+            case let .staged(handle):
+                guard handle.exportDisposition == .staged, !handle.exportStageID.isEmpty else { return .unreadable }
+                return .staged(handle.exportStageID)
+            case .refused:
+                return .unreadable
+            }
+        } onCancel: {
+            stream.close()
+        }
+    }
+
+    /// One Photos resource stream. Original export and ordinary library staging share the same
+    /// stored-ref resolution and back-pressured callback path.
+    private static func libraryStream(resource: PHAssetResource, allowNetwork: Bool) -> LibraryStream {
+        let stream = LibraryStream()
+        let options = PHAssetResourceRequestOptions()
+        options.isNetworkAccessAllowed = allowNetwork
+        let manager = PHAssetResourceManager.default()
+        let request = manager.requestData(for: resource,
+            options: options,
+            dataReceivedHandler: { stream.deliver($0) },
+            completionHandler: { stream.finish($0) }
+        )
+        stream.cancel = { manager.cancelDataRequest(request) }
+        return stream
+    }
+
     /// THE ORIGINAL OF A LIBRARY REF, AS A FILE (#1135): a photograph whose bytes the operating
     /// system's library holds has no path in the store, so a hand-off (a copy to send, an edit to
-    /// render) reads the resource's bytes and writes the one file the hand-off needs, in the
-    /// temporary directory. Nil when the library no longer answers for it. Nothing is downloaded
-    /// from iCloud. The walker's staging never goes through here.
+    /// render) streams the resource into one temporary file. Nil when the library no longer answers
+    /// for it. Nothing is downloaded from iCloud. The walker's staging never goes through here.
     static func exportOriginal(ref: String) async -> URL? {
         guard let resource = resource(for: ref) else { return nil }
         let options = PHAssetResourceRequestOptions()
         options.isNetworkAccessAllowed = false
-        let sink = ResourceBytes()
-        let bytes: Data? = await withCheckedContinuation { (done: CheckedContinuation<Data?, Never>) in
-            PHAssetResourceManager.default().requestData(
-                for: resource,
-                options: options,
-                dataReceivedHandler: { sink.append($0) },
-                completionHandler: { error in done.resume(returning: error == nil ? sink.bytes : nil) }
-            )
-        }
-        guard let bytes, !bytes.isEmpty else { return nil }
+        let stream = LibraryStream()
+        let manager = PHAssetResourceManager.default()
+        let request = manager.requestData(for: resource,
+            options: options,
+            dataReceivedHandler: { stream.deliver($0) },
+            completionHandler: { stream.finish($0) }
+        )
+        stream.cancel = { manager.cancelDataRequest(request) }
         let target = FileManager.default.temporaryDirectory
-            .appendingPathComponent("library-\(UUID().uuidString)-\(resource.originalFilename)")
+            .appendingPathComponent("library-\(UUID().uuidString).bin")
+        guard FileManager.default.createFile(atPath: target.path, contents: nil) else {
+            stream.close()
+            return nil
+        }
+        guard let file = try? FileHandle(forWritingTo: target) else {
+            stream.close()
+            try? FileManager.default.removeItem(at: target)
+            return nil
+        }
+        defer { stream.close() }
         do {
-            try bytes.write(to: target, options: .atomic)
+            guard case .data = await stream.first() else {
+                try? file.close()
+                try? FileManager.default.removeItem(at: target)
+                return nil
+            }
+            while true {
+                let slice = try await stream.read(max: 64 * 1024)
+                if slice.isEmpty { break }
+                try file.write(contentsOf: slice)
+            }
+            try file.synchronize()
+            try file.close()
             return target
         } catch {
+            try? file.close()
+            try? FileManager.default.removeItem(at: target)
             return nil
         }
     }
@@ -556,11 +642,13 @@ private enum ChangeTokens {
 /// the backpressure: a 4K video is never in memory whole, and Photos reads no faster than the
 /// stage door hashes and seals. [close] cancels the request, so a stage refused half way leaves no
 /// Photos queue waiting on nobody.
-private final class LibraryStream: @unchecked Sendable {
+final class LibraryStream: @unchecked Sendable {
     enum First {
         case data
         case inCloud
         case nothing
+        case failed
+        case cancelled
     }
 
     /// `PHPhotosError.networkAccessRequired`: the original is only in iCloud and the request said
@@ -597,8 +685,14 @@ private final class LibraryStream: @unchecked Sendable {
         defer { condition.unlock() }
         if first == nil {
             let code = (error as NSError?)?.code
-            // NOTHING AT ALL is an empty resource, which is not a photograph.
-            first = code == Self.networkAccessRequired ? .inCloud : .nothing
+            // Only an empty, successful resource is absent; a provider error is unreadable.
+            if code == Self.networkAccessRequired {
+                first = .inCloud
+            } else if error != nil {
+                first = .failed
+            } else {
+                first = .nothing
+            }
         }
         if error != nil { broken = true }
         ended = true
@@ -610,8 +704,8 @@ private final class LibraryStream: @unchecked Sendable {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
                 self.condition.lock()
-                while self.first == nil { self.condition.wait() }
-                let first = self.first ?? .nothing
+                while self.first == nil, !self.closed { self.condition.wait() }
+                let first = self.first ?? (self.closed ? .cancelled : .nothing)
                 self.condition.unlock()
                 continuation.resume(returning: first)
             }
@@ -633,12 +727,12 @@ private final class LibraryStream: @unchecked Sendable {
         let result: Result<Data, Error> = await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
                 self.condition.lock()
-                while self.chunks.isEmpty, !self.ended { self.condition.wait() }
+                while self.chunks.isEmpty, !self.ended, !self.closed { self.condition.wait() }
                 let outcome: Result<Data, Error>
                 if !self.chunks.isEmpty {
                     outcome = .success(self.chunks.removeFirst())
                     self.condition.broadcast()
-                } else if self.broken {
+                } else if self.broken || self.closed {
                     outcome = .failure(CocoaError(.fileReadUnknown))
                 } else {
                     outcome = .success(Data())
@@ -690,21 +784,3 @@ final class LibraryWatcher: NSObject, PHPhotoLibraryChangeObserver {
     }
 }
 #endif
-
-/// The bytes of one resource as the library hands them over, in pieces, on its own queue.
-private final class ResourceBytes: @unchecked Sendable {
-    private let lock = NSLock()
-    private var buffer = Data()
-
-    func append(_ piece: Data) {
-        lock.lock()
-        buffer.append(piece)
-        lock.unlock()
-    }
-
-    var bytes: Data {
-        lock.lock()
-        defer { lock.unlock() }
-        return buffer
-    }
-}

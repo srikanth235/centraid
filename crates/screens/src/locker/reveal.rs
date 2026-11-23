@@ -195,14 +195,15 @@ impl Reveal {
         self.secrets.hide_all(ctx)
     }
 
-    /// A RELOCK IS A WIPE: nothing shown, nothing left on the clipboard.
+    /// A RELOCK WIPES SCREEN STATE; an existing clipboard copy keeps its original deadline.
     pub(crate) fn wipe(&mut self, ctx: &Ctx) -> Vec<wire::Effect> {
-        let mut effects = self.hide_all(ctx);
-        effects.extend(self.secrets.clear_clip(ctx));
+        let effects = self.hide_all(ctx);
+        self.secrets.conceal();
         effects
     }
 
-    /// LEAVING CONCEALS: the screen's effects are dropped with it, so only memory is emptied.
+    /// LEAVING CONCEALS: the screen drops its view, while the runtime-lifetime clipboard owner
+    /// keeps a copy until Lock or the original expiry.
     pub(crate) fn leave(&mut self, ctx: &Ctx) {
         ctx.cancel_timer(TICK);
         self.secrets.conceal();
@@ -215,8 +216,8 @@ impl Reveal {
     }
 
     /// A timer other than the tick fired. Effects when it was this controller's.
-    pub(crate) fn fired(&mut self, timer: &str) -> Vec<wire::Effect> {
-        let effects = self.secrets.fired(timer);
+    pub(crate) fn fired(&mut self, timer: &str, ctx: &Ctx) -> Vec<wire::Effect> {
+        let effects = self.secrets.fired(timer, ctx);
         if self.shown.as_ref().is_some_and(|shown| {
             self.secrets.value(&shown.column).is_none() && shown.code.is_none()
         }) {

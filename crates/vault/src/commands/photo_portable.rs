@@ -61,7 +61,7 @@ fn pre_export(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 }
 
 /// The extension a file of this media type is saved with.
-fn extension_of(media_type: &str) -> &'static str {
+pub(crate) fn extension_of(media_type: &str) -> &'static str {
     match media_type.to_ascii_lowercase().as_str() {
         "image/jpeg" | "image/jpg" => "jpg",
         "image/png" => "png",
@@ -87,9 +87,11 @@ fn extension_of(media_type: &str) -> &'static str {
 
 /// One photograph to write: its bytes' hash, its media type and its stamp (`YYYY-MM-DD HHMMSS`).
 pub(crate) struct Item {
-    blob: String,
-    media_type: String,
-    stamp: Option<String>,
+    pub(crate) id: String,
+    pub(crate) blob: String,
+    pub(crate) size: u64,
+    pub(crate) media_type: String,
+    pub(crate) stamp: Option<String>,
 }
 
 /// Every live photograph (or one album's) in the order it was taken.
@@ -97,11 +99,11 @@ pub(crate) fn live_photos(connection: &Connection, album: Option<&str>) -> Resul
     // The capture time on the clock where it was taken (SQLite does the date arithmetic), else
     // the day the photograph was imported.
     let mut statement = connection.prepare_cached(
-        "SELECT COALESCE(p.taken_at, e.created_at), e.n, p.blob, p.media_type,
+        "SELECT COALESCE(p.taken_at, e.created_at), e.n, p.id, p.blob, b.size, p.media_type,
                 strftime('%Y-%m-%d %H%M%S', COALESCE(p.taken_at, e.created_at),
                          printf('%+d minutes', CASE WHEN p.taken_at IS NULL
                                                     THEN 0 ELSE COALESCE(p.offset_min, 0) END))
-           FROM entity e JOIN photo p ON p.id = e.id
+           FROM entity e JOIN photo p ON p.id = e.id JOIN blob b ON b.hash = p.blob
           WHERE e.kind = 'photo' AND e.deleted_at IS NULL
             AND (?1 IS NULL OR EXISTS (SELECT 1 FROM edge m
                                         WHERE m.from_id = ?1 AND m.rel = 'contains'
@@ -113,9 +115,11 @@ pub(crate) fn live_photos(connection: &Connection, album: Option<&str>) -> Resul
             Ok((
                 (row.get::<_, String>(0)?, row.get::<_, i64>(1)?),
                 Item {
-                    blob: row.get(2)?,
-                    media_type: row.get(3)?,
-                    stamp: row.get(4)?,
+                    id: row.get(2)?,
+                    blob: row.get(3)?,
+                    size: u64::try_from(row.get::<_, i64>(4)?).unwrap_or_default(),
+                    media_type: row.get(5)?,
+                    stamp: row.get(6)?,
                 },
             ))
         })?

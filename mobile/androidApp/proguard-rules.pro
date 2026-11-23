@@ -13,3 +13,8 @@
 # a `Library` interface to the exported C symbol of the same NAME through a
 # proxy, so a renamed method is a symbol lookup that fails on the first call.
 -keep interface * extends com.sun.jna.Library { *; }
+
+# WorkManager's InitializationProvider loads its Room database implementation by name and invokes
+# the no-argument constructor reflectively. R8 otherwise removes/renames the constructor, so a
+# shrunk Release dies in WorkManagerInitializer before the first screen can open.
+-keep class androidx.work.impl.WorkDatabase_Impl { <init>(); }

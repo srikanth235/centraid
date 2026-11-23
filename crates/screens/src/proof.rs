@@ -100,6 +100,7 @@ impl Screen for Counter {
                                 sensitive: false,
                                 clear_after_ms: u64::try_from(self.clear_after.as_millis())
                                     .unwrap_or(u64::MAX),
+                                owner_vault_id: String::new(),
                             })),
                         },
                         wire::Effect {

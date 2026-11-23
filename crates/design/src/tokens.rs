@@ -43,7 +43,7 @@ pub const STATE_IDS: [&str; 3] = ["red", "amber", "green"];
 
 /// The eight list colours (`[list]`).
 /// The four colours of the app mark, clockwise from the top.
-pub const BRAND_IDS: [&str; 4] = ["teal", "orange", "blue", "pink"];
+pub const BRAND_IDS: [&str; 4] = ["teal", "violet", "gold", "rose"];
 
 pub const LIST_IDS: [&str; 8] = [
     "blue",
@@ -502,7 +502,7 @@ pub struct Tokens {
     pub app: BTreeMap<String, Accent>,
     pub state: BTreeMap<String, Accent>,
     pub list: BTreeMap<String, String>,
-    /// The four brand colours of the app mark (teal, orange, blue, pink). Not app keys.
+    /// The four brand colours of the app mark (teal, violet, gold, rose). Not app keys.
     pub brand: BTreeMap<String, String>,
     /// The app icon's tiles and its tinted and themed colours (`[icon]`).
     pub icon: Icon,
@@ -915,7 +915,10 @@ mod tests {
         assert_eq!(tokens.state.len(), 3);
         assert_eq!(tokens.list.len(), 8);
         assert_eq!(tokens.brand.len(), 4);
-        assert_eq!(tokens.brand["teal"], "#00AA98");
+        assert_eq!(tokens.brand["teal"], "#00CEBE");
+        assert_eq!(tokens.brand["violet"], "#783CFF");
+        assert_eq!(tokens.brand["gold"], "#FFB800");
+        assert_eq!(tokens.brand["rose"], "#FF2D6C");
         assert_eq!(tokens.native.colors.light.len(), 55);
         assert_eq!(tokens.native.colors.dark.len(), 55);
         assert_eq!(tokens.icons.len(), 153);

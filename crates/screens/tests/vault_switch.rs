@@ -327,6 +327,40 @@ fn a_switch_closes_and_reopens_the_tabs_and_every_read_follows_the_vault_in_fron
 }
 
 #[test]
+fn switching_vaults_sends_owned_clipboard_clear_without_a_volatile_board_entry() {
+    let (mut phone, a, b, _seen, _dir) = two_vaults();
+    phone.driver.effects.clear();
+
+    let switched = ask_switch(&mut phone, &b);
+
+    let clear = switched
+        .effects
+        .iter()
+        .find(|request| {
+            matches!(
+                request.effect.as_ref().and_then(|effect| effect.kind.as_ref()),
+                Some(wire::effect::Kind::ClipboardClearOwned(clear)) if clear.vault_id == a
+            )
+        })
+        .expect("the previous vault lease is cleared even after a fresh Runtime starts");
+    let answered = phone
+        .driver
+        .try_call(wire::screen_request::Kind::Send(wire::InstanceEvent {
+            instance: 0,
+            event: Some(wire::ScreenEvent {
+                kind: Some(E::EffectResult(wire::EffectResult {
+                    effect_id: clear.effect_id,
+                    outcome: Some(wire::effect_result::Outcome::Done(wire::EffectDone {})),
+                })),
+            }),
+        }));
+    assert!(
+        answered.is_ok(),
+        "the runtime accepts its own tracked instance-zero clear result"
+    );
+}
+
+#[test]
 fn what_was_typed_is_written_to_the_vault_it_was_typed_in() {
     let (mut phone, a, b, seen, _dir) = two_vaults();
     seen.lock().expect("seen").typed = Some("Typed in Alpha".to_owned());

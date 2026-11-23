@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Centraid — One home for your whole life. Right on your phone.</title>
+  <desc id="desc">A personal, local-first superapp for your phone. One private vault for your everyday apps and on-device assistant, backed up encrypted to your own machine.</desc>
+  <defs>
+    <radialGradient id="g-teal" cx="18%" cy="28%" r="48%">
+      <stop offset="0%" stop-color="#00CEBE" stop-opacity="0.22" />
+      <stop offset="100%" stop-color="#00CEBE" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="g-violet" cx="84%" cy="26%" r="46%">
+      <stop offset="0%" stop-color="#783CFF" stop-opacity="0.2" />
+      <stop offset="100%" stop-color="#783CFF" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="g-gold" cx="76%" cy="82%" r="44%">
+      <stop offset="0%" stop-color="#FFB800" stop-opacity="0.18" />
+      <stop offset="100%" stop-color="#FFB800" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="g-rose" cx="24%" cy="84%" r="44%">
+      <stop offset="0%" stop-color="#FF2D6C" stop-opacity="0.16" />
+      <stop offset="100%" stop-color="#FF2D6C" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="prism-bar" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#00CEBE" />
+      <stop offset="34%" stop-color="#783CFF" />
+      <stop offset="68%" stop-color="#FFB800" />
+      <stop offset="100%" stop-color="#FF2D6C" />
+    </linearGradient>
+    <linearGradient id="hl" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#008F84" />
+      <stop offset="52%" stop-color="#632EE6" />
+      <stop offset="100%" stop-color="#CF1F57" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#FCFBF9" />
+  <rect width="1200" height="630" fill="url(#g-teal)" />
+  <rect width="1200" height="630" fill="url(#g-violet)" />
+  <rect width="1200" height="630" fill="url(#g-gold)" />
+  <rect width="1200" height="630" fill="url(#g-rose)" />
+  <rect x="56" y="56" width="1088" height="518" rx="30" fill="#FFFFFF" fill-opacity="0.88" stroke="#E4E0D8" stroke-width="1.5" />
+  <rect x="86" y="56" width="1028" height="5" rx="2.5" fill="url(#prism-bar)" />
+  <g transform="translate(104 106) scale(0.75)">
+    <rect width="120" height="120" rx="27" fill="#FFFFFF" />
+    <rect x=".75" y=".75" width="118.5" height="118.5" rx="26.5" fill="none" stroke="#E4E0D8" stroke-width="1.5" />
+    <rect x="18" y="18" width="54" height="24" rx="8" fill="#00CEBE" />
+    <rect x="78" y="18" width="24" height="54" rx="8" fill="#783CFF" />
+    <rect x="48" y="78" width="54" height="24" rx="8" fill="#FFB800" />
+    <rect x="18" y="48" width="24" height="54" rx="8" fill="#FF2D6C" />
+  </g>
+  <text x="216" y="162" fill="#171614" font-family="Instrument Sans, Helvetica Neue, system-ui, sans-serif" font-size="34" font-weight="600" letter-spacing="-0.8">Centraid</text>
+  <text x="104" y="294" fill="#171614" font-family="Instrument Sans, Helvetica Neue, system-ui, sans-serif" font-size="66" font-weight="600" letter-spacing="-2.2">One home for your <tspan fill="url(#hl)">whole life.</tspan></text>
+  <text x="104" y="372" fill="#171614" font-family="Instrument Sans, Helvetica Neue, system-ui, sans-serif" font-size="66" font-weight="600" letter-spacing="-2.2">Right on your phone.</text>
+  <text x="104" y="446" fill="#4A463F" font-family="Instrument Sans, Helvetica Neue, system-ui, sans-serif" font-size="27">One private vault. Encrypted backup to your own machine. 24 words bring it all back.</text>
+  <text x="104" y="514" fill="#1A443F" font-family="Instrument Sans, Helvetica Neue, system-ui, sans-serif" font-size="22" font-weight="600">No account  ·  No subscription  ·  No cloud</text>
+</svg>

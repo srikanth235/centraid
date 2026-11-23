@@ -412,6 +412,29 @@ fn a_question_for_the_vault_that_finds_nothing_says_so() {
     assert!(answer.cards.is_empty());
 }
 
+#[test]
+fn a_repeated_invalid_find_is_a_failure_not_an_empty_read() {
+    // A selector without its kind is refused before any read runs. After the
+    // existing hint rung, another identical call ends in typed fail-soft, not
+    // a successful miss.
+    let invalid = step("plan: look", "find", &[("where", "status = \"open\"")]);
+    let model = script(&[invalid.clone(), invalid.clone(), invalid]);
+    let sample = native_sample(model.clone());
+    let session = sample.start("");
+    let sent = sample.send(session, 1, "What is open?");
+    let answer = answered(&sent);
+    assert_eq!(
+        answer.text,
+        "I couldn't finish that. Try a more specific question."
+    );
+    assert!(answer.cards.is_empty());
+    assert_eq!(
+        model.prompts().len(),
+        6,
+        "the same invalid call was repeated"
+    );
+}
+
 /// A reminder due today, added the way the Reminders app adds one (`task.add`), with the day the
 /// chat reads as today (UTC, the sample's zone).
 fn a_reminder_due_today(sample: &common::chat::Sample, title: &str) -> String {

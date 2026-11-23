@@ -2339,7 +2339,14 @@ pub const STAYING_EFFECTS: &[(&str, &str)] = &[
         "reads the phone's calendars into the vault's screens",
     ),
     ("camera_roll", "reads the camera roll into the vault"),
-    ("clipboard_clear", "empties the clipboard"),
+    (
+        "clipboard_clear",
+        "clears the clipboard only when it still holds the named text",
+    ),
+    (
+        "clipboard_clear_owned",
+        "clears only the current Locker clipboard lease for its owning vault",
+    ),
     (
         "clipboard_set",
         "one short value the member tapped Copy on; the clipboard clears itself",

@@ -40,6 +40,9 @@ enum ShelfCopyExport {
         _ export: Centraid_Core_V1_ExportOriginals,
         core: any ScreenCore
     ) async -> Centraid_Core_V1_EffectResult.OneOf_Outcome {
+        if export.mode == .archive {
+            return await archiveOriginal(export, core: core)
+        }
         let (originals, missing) = await locate(export.photoIds, core: core)
         let full = FullPhone()
         func exported(
@@ -74,6 +77,44 @@ enum ShelfCopyExport {
             failed.reason = EffectReason.unsupported
             return .failed(failed)
         }
+    }
+
+    /// Stream one immutable library original into the Rust-owned stage receipt.
+    private static func archiveOriginal(
+        _ export: Centraid_Core_V1_ExportOriginals,
+        core: any ScreenCore
+    ) async -> Centraid_Core_V1_EffectResult.OneOf_Outcome {
+        switch await PhoneLibrary.stageArchiveOriginal(
+            ref: export.exportOsRef,
+            jobID: export.exportJobID,
+            photoID: export.exportPhotoID,
+            hash: export.exportContentHash,
+            byteSize: export.exportByteSize,
+            mediaType: export.exportMediaType,
+            core: core
+        ) {
+        case .unavailable:
+            return archiveOutcome(.unavailable, status: .noneHere)
+        case let .staged(stageID):
+            return archiveOutcome(.staged, status: .done, stageID: stageID)
+        case .unreadable:
+            return archiveOutcome(.unreadable, status: .failed)
+        }
+    }
+
+    private static func archiveOutcome(
+        _ disposition: Centraid_Core_V1_OriginalsExported.ArchiveDisposition,
+        status: Centraid_Core_V1_OriginalsExported.Status,
+        handed: Int = 0,
+        stageID: String = ""
+    ) -> Centraid_Core_V1_EffectResult.OneOf_Outcome {
+        .originalsExported(.with {
+            $0.status = status
+            $0.handed = UInt32(handed)
+            $0.missing = disposition == .unavailable || disposition == .unreadable ? 1 : 0
+            $0.archiveDisposition = disposition
+            $0.archiveStageID = stageID
+        })
     }
 
     /// WHERE EACH PICKED ORIGINAL IS ON THIS DEVICE, in the pick's order, and how

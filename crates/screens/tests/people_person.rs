@@ -560,7 +560,8 @@ fn a_channel_tap_asks_the_os_to_call_mail_map_or_copy() {
         Some(K::ClipboardSet(wire::ClipboardSet {
             text: "@dana".into(),
             sensitive: false,
-            clear_after_ms: 0
+            clear_after_ms: 0,
+            owner_vault_id: String::new()
         }))
     );
 }

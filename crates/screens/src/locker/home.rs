@@ -4,8 +4,9 @@
 //! opening it lands on the search surface, which no tab names, and closing it
 //! goes back to Items.
 //!
-//! Nothing is read while the wall is up, and a relock drops every answer, the
-//! generator's candidate and the clipboard copy the screen made.
+//! Nothing is read while the wall is up, and a relock drops every answer and
+//! the generator's candidate. A copied secret stays on the clipboard to its
+//! original deadline through background relock; an explicit Lock clears it.
 
 use centraid_api_proto::core_v1 as wire;
 use wire::app_query_response::Answer;
@@ -270,8 +271,8 @@ impl Home {
         self.undo.clear();
         self.generator.forget();
         handoff::clear();
-        let mut effects = self.secrets.hide_all(ctx);
-        effects.extend(self.secrets.clear_clip(ctx));
+        let effects = self.secrets.hide_all(ctx);
+        self.secrets.conceal();
         if self.destination == wire::LockerDestination::Search {
             self.destination = wire::LockerDestination::Items;
         }
@@ -289,7 +290,9 @@ impl Home {
                 )),
             },
         );
-        self.walled(ctx, step)
+        let mut effects = self.walled(ctx, step);
+        effects.extend(self.secrets.clear_clip_on_lock(ctx));
+        effects
     }
 
     /// Apply what the wall did to the page under it.
@@ -441,7 +444,8 @@ impl Home {
                 if !output.is_empty() {
                     effects.extend(self.secrets.copy(ctx, &output, CLIPBOARD_LIFE));
                     self.undo.clear();
-                    self.status = shared::status(words::generated_copied(ctx.locale()));
+                    self.status =
+                        shared::status(words::generated_copied_for(ctx.locale(), ctx.platform()));
                 }
             }
             Some(H::GeneratorUsed(_)) => handoff::put(self.generator.output()),
@@ -1108,7 +1112,7 @@ impl Screen for Home {
                 }
                 self.walled(ctx, step)
             }
-            Some(E::TimerFired(fired)) => self.secrets.fired(&fired.timer),
+            Some(E::TimerFired(fired)) => self.secrets.fired(&fired.timer, ctx),
             Some(E::StatusActed(_)) => {
                 if self.undo.acted(ctx) && self.wall.is_open() {
                     self.reload(ctx);

@@ -44,9 +44,12 @@
 //! value large enough to deserve a cell of their own. [`version_state`] puts them back, so
 //! there is one state and one place each fact is kept. A commit that leaves a note's words as they
 //! were (a title or notebook edit) copies none: that version carries no `note.body`, and a reader
-//! takes the words from the next newer version that holds them, else from the note itself.
+//! takes the words from the next newer version that holds them, else from the note itself. If a
+//! later body edit arrives in that quiet session, it starts a new version so the earlier version
+//! can still reconstruct the original words without mutating history. Later body saves in the
+//! session fold into that new version normally.
 //!
-//! ## A sitting of autosaves is one version
+//! ## Quiet saves fold with one body-preservation boundary
 //!
 //! A QUIET save (an editor's autosave, which the caller says it is: `Command::quiet`, never
 //! inferred from a name) that continues the session of the newest version writes nothing: that
@@ -55,8 +58,10 @@
 //! actor, no more than [`SESSION_IDLE_MS`] (ten minutes) have passed since the session's last
 //! commit, no more than [`SESSION_CAP_MS`] (an hour) since its first, the command is not the
 //! history's own, and no sealed cell changed. Any act that offers an Undo is not quiet, so it is a
-//! version of its own and ends the session on both sides. A fold moves `revision.touched_at` and
-//! nothing else.
+//! version of its own and ends the session on both sides. A fold moves `revision.touched_at`. The
+//! exception for a note whose newest quiet version elides its body is deliberate: the first later
+//! body change starts a new version to preserve the words needed by the earlier state, and
+//! subsequent body saves fold into that new version.
 //!
 //! A trashed record offers no "Earlier versions" entry ([`offered`]); its versions are kept and the
 //! entry returns with the record.
@@ -185,7 +190,8 @@ pub const SESSION_CAP_MS: i64 = 60 * 60 * 1000;
 /// act that offers one in between has ended the session on both sides), it is the same actor
 /// (the same cause says so), the command is not the history's own, no secret was sealed anew,
 /// the last commit of the session was at most [`SESSION_IDLE_MS`] ago and its first at most
-/// [`SESSION_CAP_MS`] ago. A fold moves the version's `touched_at` and nothing else.
+/// [`SESSION_CAP_MS`] ago. A note body that would become unrecoverable starts a new version; the
+/// immutable earlier revision keeps using the newer revision's body as its source.
 pub(crate) fn folds(
     connection: &Connection,
     id: &str,
@@ -197,9 +203,9 @@ pub(crate) fn folds(
     if cause.starts_with("history.") {
         return Ok(false);
     }
-    let newest: Option<(i64, String, Option<String>, String, bool)> = connection
+    let newest: Option<(i64, String, Option<String>, String, bool, bool)> = connection
         .query_row(
-            "SELECT seq, at, touched_at, cause, autosave FROM revision
+            "SELECT seq, at, touched_at, cause, autosave, body IS NULL FROM revision
               WHERE entity_id = ?1 ORDER BY seq DESC LIMIT 1",
             [id],
             |row| {
@@ -209,11 +215,12 @@ pub(crate) fn folds(
                     row.get(2)?,
                     row.get(3)?,
                     row.get(4)?,
+                    row.get(5)?,
                 ))
             },
         )
         .optional()?;
-    let Some((seq, began, touched, newest_cause, quiet)) = newest else {
+    let Some((seq, began, touched, newest_cause, quiet, body_elided)) = newest else {
         return Ok(false);
     };
     if !quiet || newest_cause != cause {
@@ -233,11 +240,34 @@ pub(crate) fn folds(
     if sealed_changed(connection, before, after)? {
         return Ok(false);
     }
+    if note_body_would_be_lost(before, after, body_elided) {
+        return Ok(false);
+    }
     connection.execute(
         "UPDATE revision SET touched_at = ?3 WHERE entity_id = ?1 AND seq = ?2",
         rusqlite::params![id, seq, now],
     )?;
     Ok(true)
+}
+
+/// A note's body can be elided from a title-only version because the live note still has those
+/// words. If a later body edit tried to fold into that session, the body would no longer be live
+/// and could not be reconstructed. Keep that edit as a new version instead.
+fn note_body_would_be_lost(before: &str, after: &str, body_elided: bool) -> bool {
+    if !body_elided {
+        return false;
+    }
+    let parse = |state: &str| serde_json::from_str::<Json>(state).ok();
+    let (Some(before), Some(after)) = (parse(before), parse(after)) else {
+        return false;
+    };
+    let (Some(old_body), Some(new_body)) = (
+        before.pointer("/note/body").and_then(Json::as_str),
+        after.pointer("/note/body").and_then(Json::as_str),
+    ) else {
+        return false;
+    };
+    old_body != new_body
 }
 
 /// Whether a sealed cell (a Locker secret) differs between two states: a changed secret is

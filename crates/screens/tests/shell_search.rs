@@ -140,6 +140,68 @@ fn a_term_is_grouped_by_app_in_the_springboards_order_and_every_row_opens_its_pa
 }
 
 #[test]
+fn a_my_card_hit_from_home_opens_the_owners_people_page() {
+    let mut d = Driver::founded();
+    d.start();
+    let owner = d
+        .handle
+        .with_vault(|vault| Ok(vault.self_id()?.expect("the owner")))
+        .expect("the vault is open");
+    let edited = d.act(wire::ActRequest {
+        app: "people".to_owned(),
+        action: "edit-person".to_owned(),
+        input: [
+            (
+                "id".to_owned(),
+                wire::Value {
+                    kind: Some(wire::value::Kind::Text(owner.clone())),
+                },
+            ),
+            (
+                "title".to_owned(),
+                wire::Value {
+                    kind: Some(wire::value::Kind::Text("Quokka Owner".to_owned())),
+                },
+            ),
+            (
+                "role".to_owned(),
+                wire::Value {
+                    kind: Some(wire::value::Kind::Text("Keeper".to_owned())),
+                },
+            ),
+        ]
+        .into_iter()
+        .collect(),
+        invoke_key: "test:home-find-my-card".to_owned(),
+        ..wire::ActRequest::default()
+    });
+    assert_eq!(edited.status, wire::ActStatus::Executed as i32);
+
+    let i = d.push("home", shell::routes::search());
+    type_term(&mut d, i, "Keeper");
+    let hit = data(&d, i)
+        .groups
+        .into_iter()
+        .find(|group| group.app_id == "people")
+        .and_then(|group| group.rows.into_iter().next())
+        .expect("My card is a Home Find result");
+    let route = hit.route.expect("the search result opens its People row");
+    let Some(wire::route::Args::PeoplePerson(person)) = route.args.as_ref() else {
+        panic!("the My card result routes to a person page");
+    };
+    assert_eq!(person.party_id, owner);
+
+    let opened = d.push("home", route);
+    let Some(wire::view_state::Kind::PeoplePerson(state)) = &d.view(opened).kind else {
+        panic!("the My card search hit opens People");
+    };
+    let Some(wire::people_person_state::Content::Data(person)) = &state.content else {
+        panic!("the People page reads the owner's card");
+    };
+    assert!(person.is_me, "the destination remains My card");
+}
+
+#[test]
 fn a_term_that_finds_nothing_says_so_and_still_offers_the_ask() {
     let (mut d, i) = opened();
     type_term(&mut d, i, "zzqxjv");

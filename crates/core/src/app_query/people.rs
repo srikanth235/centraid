@@ -9,11 +9,11 @@
 //!
 //! # THE ROSTER IS THE CIRCLE
 //!
-//! Every live person of the vault but the owner and a pet is a People row, and
-//! the sheet, the dashboard and the search answer for the same people
-//! (`people::queries::read_circle`). A person made anywhere (a followed contact,
-//! a relationship, the assistant) is a row the sheet's actions accept, because
-//! those are `person.*` and the shared verbs.
+//! The ordinary circle, dashboard and roster leave out the owner and pets
+//! (`people::queries::read_circle`). Find includes My card, while still leaving
+//! pets out. A person made anywhere (a followed contact, a relationship, the
+//! assistant) is a row the sheet's actions accept, because those are `person.*`
+//! and the shared verbs.
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_apps_kit::civil as local;
@@ -244,8 +244,8 @@ pub(crate) fn trash(
     })
 }
 
-/// `people.search`: the vault's one index over `person`, ranked, folded to the
-/// live circle among the hits.
+/// `people.search`: the vault's one index over `person`, ranked, folded to live
+/// people among the hits, including My card but not pets.
 ///
 /// The index holds a person's nickname, role, where they were met, their contact
 /// points and the notes about them beside their name, so it is the whole search
@@ -274,9 +274,9 @@ pub(crate) fn search(
     let limit = usize::try_from(asked.limit)
         .unwrap_or(usize::MAX)
         .min(people::queries::SEARCH_LIMIT);
-    // THE CORRECTION RUNS ON THE ANSWER THE MEMBER SEES (#1097, R4, R8): the
-    // live circle among the hits, not the raw hits — the owner and a pet are
-    // hits of the index and no one here.
+    // THE CORRECTION RUNS ON THE ANSWER THE MEMBER SEES (#1097, R4, R8): live
+    // people among the hits, not raw hits — trashed people and pets are absent,
+    // while My card remains findable.
     let loaded = vault.read(|connection| {
         let index = match centraid_search::SqliteDoor::open(connection, vault.words()) {
             Ok(index) => index,
@@ -775,6 +775,35 @@ mod tests {
             "only the owner's sheet is My card"
         );
         assert!(scratch.search("Rex").people.is_empty());
+    }
+
+    #[test]
+    fn my_card_is_findable_in_people_and_the_result_opens_its_own_sheet() {
+        let scratch = Scratch::founded();
+        let owner = scratch
+            .handle()
+            .with_vault(|vault| Ok(vault.self_id()?.expect("an owner")))
+            .expect("the vault is open");
+        scratch.run(
+            "person.edit",
+            serde_json::json!({ "id": owner, "title": "Quokka Owner", "role": "Keeper" }),
+        );
+
+        let found = scratch.search("Keeper");
+        assert_eq!(found.people.len(), 1, "the typed My card field is findable");
+        assert_eq!(found.people[0].party_id, owner);
+        let mine = scratch
+            .person(&found.people[0].party_id)
+            .sheet
+            .expect("the result opens a People person sheet");
+        assert!(mine.is_me, "the destination recognizes My card");
+        assert!(
+            scratch
+                .roster(wire::PeopleRosterFilter::All)
+                .people
+                .is_empty(),
+            "ordinary circle rows still leave the owner out"
+        );
     }
 
     /// TRASH IS EXCLUDED from the roster, the dashboard, the sheet and search,

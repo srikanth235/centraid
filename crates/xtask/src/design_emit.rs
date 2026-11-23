@@ -1310,8 +1310,15 @@ pub fn emit(root: &Path) -> Result<Emitted> {
     ];
     owned.extend(SITE_ASSETS.iter().map(|dir| format!("{dir}/fonts")));
 
-    // The app icon: master SVGs, the iOS AppIcon set, the Android adaptive icon.
-    files.extend(crate::design_icon::files(&tokens)?);
+    // The app icon: master SVGs, the iOS AppIcon set, the Android adaptive icon,
+    // and the bare mark copied into each public site's assets directory.
+    let icon_files = crate::design_icon::files(&tokens)?;
+    if let Some(mark_bytes) = icon_files.get("design/icon/centraid-mark.svg") {
+        for dir in SITE_ASSETS {
+            files.insert(format!("{dir}/centraid-mark.svg"), mark_bytes.clone());
+        }
+    }
+    files.extend(icon_files);
     owned.extend(
         crate::design_icon::OWNED
             .iter()
@@ -1350,10 +1357,19 @@ fn list_files(root: &Path, dir: &str) -> Vec<String> {
 pub fn write(root: &Path) -> Result<usize> {
     let emitted = emit(root)?;
     for dir in &emitted.owned {
+        let dir_root = root.join(dir);
         for existing in list_files(root, dir) {
             if !emitted.files.contains_key(&existing) {
-                std::fs::remove_file(root.join(&existing))
-                    .with_context(|| format!("remove {existing}"))?;
+                let path = root.join(&existing);
+                std::fs::remove_file(&path).with_context(|| format!("remove {existing}"))?;
+                // Prune now-empty subdirectories (e.g. retired .colorset bundles).
+                let mut parent = path.parent();
+                while let Some(folder) = parent.filter(|p| *p != dir_root) {
+                    if std::fs::remove_dir(folder).is_err() {
+                        break;
+                    }
+                    parent = folder.parent();
+                }
             }
         }
     }

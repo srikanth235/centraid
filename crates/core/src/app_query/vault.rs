@@ -17,8 +17,8 @@
 //! The linkable rows come first and the containers after them, each with the app
 //! it opens in; every one opens by its `id`. A shell with no Chat tab draws no
 //! `chat` row. A photo opens by its own id (the index holds live photographs
-//! only, so none is trashed); a person is in People's circle only when live and
-//! neither the owner nor a pet, so those are dropped.
+//! only, so none is trashed); a person result is live and not a pet. My card is
+//! findable here even though People leaves it out of the ordinary circle.
 //!
 //! **A typo is corrected across all of those kinds**, only when the whole answer,
 //! rows and containers, is empty, and the answer says so in `corrected`.
@@ -70,6 +70,7 @@ pub(crate) fn search(
     door: &VaultDoor<'_>,
     asked: &wire::VaultSearchRequest,
 ) -> Result<Answer> {
+    let owner_id = vault.self_id()?;
     // THE CORRECTION SPANS THE LINKABLE AND THE NAMED KINDS and runs only when
     // the whole answer, after the rows that cannot be opened are dropped, is
     // empty; the vocabulary it reads is the one index's.
@@ -111,7 +112,7 @@ pub(crate) fn search(
                     let (found, rows): (Vec<Target>, Vec<Target>) = all
                         .into_iter()
                         .partition(|target| named::is_named(&target.entity));
-                    let people = live_people(door, &rows)?;
+                    let people = findable_people(door, &rows)?;
                     let workouts = workouts_among(door, &rows)?;
                     let targets = rows
                         .into_iter()
@@ -142,6 +143,8 @@ pub(crate) fn search(
                     } else {
                         String::new()
                     };
+                    let is_my_card = target.entity == PERSON_ENTITY
+                        && owner_id.as_deref() == Some(target.id.as_str());
                     wire::VaultSearchHit {
                         app_id: named::app_of(&target.entity).to_owned(),
                         subtitle_local_day: subtitle_day(zone.as_ref(), &target.subtitle),
@@ -152,6 +155,7 @@ pub(crate) fn search(
                         snippet: target.snippet,
                         open_id,
                         in_earlier_version: target.in_earlier_version,
+                        is_my_card,
                     }
                 })
                 .chain(found.into_iter().map(|container| wire::VaultSearchHit {
@@ -165,6 +169,7 @@ pub(crate) fn search(
                     open_id: String::new(),
                     // A container keeps no Earlier versions page, so none is found by its past.
                     in_earlier_version: false,
+                    is_my_card: false,
                 }))
                 .collect(),
         })
@@ -238,10 +243,8 @@ fn workouts_among(door: &dyn PageDoor, targets: &[Target]) -> KitResult<BTreeSet
         .collect())
 }
 
-/// The person hits People can show: the live circle. The index holds the owner
-/// and a pet too, and a Home row opens People at that person, so one that cannot
-/// be shown is not a hit.
-fn live_people(door: &dyn PageDoor, targets: &[Target]) -> KitResult<BTreeSet<String>> {
+/// The live people a Home Find result may open, including My card but not pets.
+fn findable_people(door: &dyn PageDoor, targets: &[Target]) -> KitResult<BTreeSet<String>> {
     let person_ids: Vec<String> = targets
         .iter()
         .filter(|target| target.entity == PERSON_ENTITY)
@@ -250,7 +253,7 @@ fn live_people(door: &dyn PageDoor, targets: &[Target]) -> KitResult<BTreeSet<St
     if person_ids.is_empty() {
         return Ok(BTreeSet::new());
     }
-    centraid_apps_people::queries::circle_among(door, &person_ids)
+    centraid_apps_people::queries::find_people_among(door, &person_ids)
 }
 
 #[cfg(test)]
@@ -397,6 +400,50 @@ mod tests {
             scratch.search("   ").hits.is_empty(),
             "a blank term reads nothing"
         );
+    }
+
+    #[test]
+    fn home_find_opens_a_my_card_hit() {
+        let scratch = Scratch::founded();
+        let owner = scratch
+            .handle
+            .with_vault(|vault| Ok(vault.self_id()?.expect("an owner")))
+            .expect("the vault is open");
+        scratch.run(
+            "person.edit",
+            serde_json::json!({ "id": owner, "title": "Quokka Owner", "role": "Keeper" }),
+        );
+        let ordinary = scratch.run(
+            "person.add",
+            serde_json::json!({ "title": "Quokka Friend" }),
+        )["id"]
+            .as_str()
+            .expect("the ordinary person's id")
+            .to_owned();
+        scratch.run(
+            "person.edit",
+            serde_json::json!({ "id": ordinary, "title": "Quokka Friend", "role": "Keeper" }),
+        );
+
+        let found = scratch.search("Keeper");
+        assert_eq!(found.hits.len(), 2, "both matching people are findable");
+        let own = found
+            .hits
+            .iter()
+            .find(|hit| hit.id == owner)
+            .expect("Home Find includes My card");
+        let other = found
+            .hits
+            .iter()
+            .find(|hit| hit.id == ordinary)
+            .expect("Home Find includes an ordinary person");
+        assert!(own.is_my_card);
+        assert!(!other.is_my_card);
+        assert!(
+            own.open_id.is_empty(),
+            "the normal People person id is used"
+        );
+        assert_eq!(own.title, "Quokka Owner");
     }
 
     /// THE CORRECTION SPANS THE SIX DOMAINS AND THE NAMED KINDS (#1097, R4, R8): a slip in a word

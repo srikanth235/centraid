@@ -78,6 +78,20 @@ final class TypedTextTests: XCTestCase {
         XCTAssertNil(t.answer(value: "a", shown: "a"))
     }
 
+    func testAcknowledgedTitleAdoptsRestoredVersion() {
+        let title = typed("A", "B")
+        XCTAssertNil(title.answer(value: "B", shown: "B"), "the saved title is an echo")
+        XCTAssertEqual(title.answer(value: "A", shown: "B"), "A", "a committed restore replaces the mounted title")
+        XCTAssertFalse(title.edited(next: "A"), "the adopted restore is not resent as typing")
+    }
+
+    func testRestoredTitleDoesNotReplaceNewerTitleTypingWithAStaleFrame() {
+        let title = typed("B", "Be")
+        XCTAssertNil(title.answer(value: "B", shown: "Be"), "the stale base title is not adopted over new typing")
+        XCTAssertNil(title.answer(value: "Be", shown: "Be"), "the current typed title echo settles normally")
+        XCTAssertEqual(title.answer(value: "A", shown: "Be"), "A", "a later committed restore is adopted once typing is acknowledged")
+    }
+
     func testAfterAnAdoptionTheAdoptedValueIsNotResent() {
         let t = typed("", "a")
         XCTAssertNil(t.answer(value: "a", shown: "a"))
