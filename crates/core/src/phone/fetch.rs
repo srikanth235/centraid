@@ -1,34 +1,28 @@
-//! FILES BACK FROM A GATEWAY, BY NAME (#1080 ruling 4).
+//! FILES BACK FROM A GATEWAY, BY REF (#1080 ruling 4, [#1209](https://github.com/srikanth235/centraid/issues/1209)).
 //!
-//! **The database plus the words is the whole index.** A file's parts are
-//! named from its plaintext hash, which the vault holds for every content item
-//! and derivative, so a phone asks for a file by computing names — no listing,
-//! no custody row. Each part opens under `K_backup` and the whole is checked
-//! against its hash before it lands in the app's own store: a gateway that
-//! substituted, truncated or reordered anything is refused, never stored.
+//! **The newest tree is the whole index.** A file's chunks are listed in the tree this phone last
+//! snapshotted or restored (`centraid_vault::backup::tree`), each a ref (name, digest, length,
+//! class), so a phone asks for a file by walking refs: no listing, no custody row. Every chunk
+//! opens under `K_backup` against its own ref and the whole is checked against the file's hash
+//! before it lands in the app's own store: a gateway that substituted, truncated or reordered
+//! anything is refused, never stored.
 //!
-//! Two callers: `fetch_original`, one original a member tapped, a part at a
-//! time into a file; and a restore, which brings back every derivative so the
-//! grid is whole, a thousand names to a fetch.
+//! Two callers: `fetch_original`, one original a member tapped, a chunk at a time into a file;
+//! and a restore, whose originals phase (R3) brings every original back newest first, a pass
+//! at a time ([`bring_originals`]).
 
-use std::collections::BTreeSet;
-use std::io::Write;
 use std::path::PathBuf;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_blobs::{ByteStore, ContentHash};
-use centraid_media::sealed::{self, Assembler};
-use centraid_vault::backup::files::{ContentFile, content_files};
-use centraid_vault::backup::naming::{
-    BackupKeys, Name, PlaintextHash, name as part_name, part_count,
-};
-use centraid_vault::backup::state::LocalSource;
-use centraid_vault::backup::store::{
-    BUNDLE_BYTES, FRAME_HEADER_BYTES, NAMES_PER_CALL, Store, StoreError,
-};
+use centraid_media::sealed::{self, BackupKeys, Class, PlaintextHash, Ref};
+use centraid_vault::backup::files::content_files;
+use centraid_vault::backup::state::{DeviceState, LocalSource};
+use centraid_vault::backup::store::{Store, StoreError};
+use centraid_vault::backup::tree;
 
 use super::link::GatewayStore;
-use super::{Keyring, hash_of, plane_error, store_error};
+use super::{Keyring, hash_of, plane_error, status, store_error};
 use crate::error::{CoreError, Result};
 use crate::handle::HandleState as Handle;
 
@@ -36,50 +30,35 @@ use crate::handle::HandleState as Handle;
 pub(crate) enum Assembled {
     /// Checked against its hash and stored; the file it is in.
     Landed(PathBuf),
-    /// The gateway answered and does not hold every part.
+    /// The gateway answered and does not hold every chunk.
     Missing,
     /// The gateway did not answer.
     Unreachable,
     /// The machine that answered is not the pinned gateway; nothing was
     /// taken from it.
     Untrusted,
-    /// The copy on the gateway did not open: bytes off their digest, a part
-    /// that does not open under the vault's key, or parts that are not the
-    /// file they are named for. Nothing landed.
+    /// The copy on the gateway did not open: bytes off their digest, a chunk
+    /// that does not open under the vault's key, or chunks that are not the
+    /// file they are listed for. Nothing landed.
     Damaged,
 }
 
-/// A byte store's write, wearing `std::io::Write` for the assembler.
-struct Into<'a>(&'a mut centraid_blobs::Writer);
-
-impl Write for Into<'_> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.0.write(buf).map_err(std::io::Error::other)?;
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
-/// Fetch the `len`-byte file `h` from `store` a part at a time, open each
-/// part, check the whole against `h`, and keep it in `bytes`. At most one
-/// part is in memory; a refused file leaves nothing in the store.
+/// Fetch the chunks `refs` of the file `h` from `store` one at a time, open each against its ref,
+/// check the whole against `h`, and keep it in `bytes`. At most one chunk is in memory; a refused
+/// file leaves nothing in the store.
 pub(crate) fn assemble_into(
     store: &dyn Store,
     keys: &BackupKeys,
     h: &PlaintextHash,
-    len: u64,
+    refs: &[Ref],
     bytes: &ByteStore,
 ) -> Result<Assembled> {
     let mut writer = bytes.writer().map_err(|error| CoreError::Invariant {
         context: format!("the content store would not take a fetched file: {error}"),
     })?;
-    let mut assembler = Assembler::new(*h, len);
-    while let Some(name) = assembler.next_name(keys) {
-        let mut sealed_bytes = Vec::new();
-        match store.get(&name, &mut sealed_bytes) {
+    for reference in refs {
+        let mut object = Vec::new();
+        match store.get(&reference.name, &mut object) {
             Ok(_) => {}
             Err(StoreError::Missing(_)) => return Ok(Assembled::Missing),
             Err(StoreError::Unreachable(reason)) => {
@@ -91,141 +70,55 @@ pub(crate) fn assemble_into(
                 return Ok(Assembled::Untrusted);
             }
             Err(StoreError::Damaged(reason)) => {
-                tracing::warn!(%reason, "a fetched part is off its digest");
+                tracing::warn!(%reason, "a fetched chunk is off its digest");
                 return Ok(Assembled::Damaged);
             }
             Err(error) => return Err(store_error(error)),
         }
-        if let Err(error) = assembler.part(keys, sealed_bytes.as_slice(), &mut Into(&mut writer)) {
-            tracing::warn!(%error, "a part of {h} the gateway answered would not open");
-            return Ok(Assembled::Damaged);
+        match sealed::open(keys, reference, &object) {
+            Ok(plain) => {
+                writer.write(&plain).map_err(|error| CoreError::Invariant {
+                    context: format!("the content store would not take a fetched chunk: {error}"),
+                })?;
+            }
+            Err(error) => {
+                tracing::warn!(%error, "a chunk of {h} the gateway answered would not open");
+                return Ok(Assembled::Damaged);
+            }
         }
-    }
-    if let Err(error) = assembler.finish() {
-        tracing::warn!(%error, "the parts of {h} are not the file it names");
-        return Ok(Assembled::Damaged);
     }
     let stored = writer.finish().map_err(|error| CoreError::Invariant {
         context: format!("the content store would not keep {h}: {error}"),
     })?;
     if stored.hash.as_bytes() != h.as_bytes() {
-        return Err(CoreError::Invariant {
-            context: format!("the content store named {h} as {}", stored.hash),
-        });
+        // The store keeps what hashed; take back a file that is not the one named.
+        tracing::warn!("the chunks listed for {h} are not the file it names");
+        let _ = bytes.remove(stored.hash);
+        return Ok(Assembled::Damaged);
     }
     Ok(Assembled::Landed(stored.path))
 }
 
-/// The most a one-part file of `len` plaintext bytes can seal to, with its
-/// bundle frame header: a fetch is sized by it before it is asked.
-fn sealed_bound(len: u64) -> u64 {
-    let chunk = sealed::CHUNK_BYTES as u64;
-    let per_chunk = (sealed::CHUNK_FRAME_BYTES + sealed::TAG_BYTES) as u64;
-    len.saturating_add(sealed::HEADER_BYTES as u64)
-        .saturating_add((len / chunk + 1).saturating_mul(per_chunk))
-        .saturating_add(FRAME_HEADER_BYTES)
-}
-
-/// Fetch every one of `files` the store holds and `bytes` does not, into
-/// `bytes`: one-part files a thousand names to a `fetch` whose answer fits a
-/// bundle, a larger file a part at a time. Answers how many landed. A file the
-/// gateway does not hold is skipped — the grid falls back for it as for any
-/// missing tier — and so is one whose copy does not open: **one damaged copy
-/// costs the grid that file alone**, never every file fetched after it.
-///
-/// # Errors
-/// A gateway that stopped answering, or a content store that will not keep a
-/// file.
-pub(crate) fn fetch_all(
-    store: &dyn Store,
+/// The refs of the original `h` in the newest tree this phone holds: the way to ask a gateway for
+/// it. Empty when the tree does not list its bytes.
+pub(crate) fn refs_of_original(
+    state: &DeviceState,
     keys: &BackupKeys,
-    files: &[&ContentFile],
-    bytes: &ByteStore,
-) -> Result<usize> {
-    let held = |file: &ContentFile| {
-        bytes
-            .is_complete(ContentHash::from_bytes(*file.h.as_bytes()))
-            .unwrap_or(false)
+    h: &PlaintextHash,
+) -> Result<Vec<Ref>> {
+    let Some((name, _)) = state.device().map_err(plane_error)?.newest else {
+        return Ok(Vec::new());
     };
-    let mut landed = 0_usize;
-    let mut batch: Vec<Name> = Vec::new();
-    let mut batch_bytes = 0_u64;
-    // Keep one fetched copy, or skip it when it does not open as its name.
-    let keep = |name: &Name, sealed_bytes: &[u8]| -> Result<bool> {
-        let plaintext = match sealed::open_whole(keys, name, sealed_bytes) {
-            Ok(plaintext) => plaintext,
-            Err(error) => {
-                tracing::warn!(%name, %error, "a fetched copy does not open; it is skipped");
-                return Ok(false);
-            }
-        };
-        bytes
-            .put_bytes(&plaintext)
-            .map_err(|error| CoreError::Invariant {
-                context: format!("the content store would not keep {name}: {error}"),
-            })?;
-        Ok(true)
+    let Some(reference) = status::node_ref(state, keys, &name) else {
+        return Ok(Vec::new());
     };
-    let fetch_batch = |batch: &mut Vec<Name>, landed: &mut usize| -> Result<()> {
-        if batch.is_empty() {
-            return Ok(());
-        }
-        let mut answered: BTreeSet<Name> = BTreeSet::new();
-        let mut refused: Option<CoreError> = None;
-        let fetched = store.get_many(batch, &mut |name, sealed_bytes| {
-            answered.insert(*name);
-            match keep(name, sealed_bytes) {
-                Ok(kept) => {
-                    *landed += usize::from(kept);
-                    Ok(())
-                }
-                Err(error) => {
-                    refused = Some(error);
-                    Err(std::io::Error::other("refused"))
-                }
-            }
-        });
-        match fetched {
-            Ok(_) => {}
-            // A FRAME OFF ITS DIGEST STOPS THE WHOLE FETCH at the client, so
-            // what it did not reach is asked for one at a time, and a copy
-            // that is damaged is skipped.
-            Err(StoreError::Damaged(reason)) => {
-                tracing::warn!(%reason, "a fetch met a damaged copy; the rest go one at a time");
-                for name in batch.iter().filter(|name| !answered.contains(name)) {
-                    let mut sealed_bytes = Vec::new();
-                    match store.get(name, &mut sealed_bytes) {
-                        Ok(_) => *landed += usize::from(keep(name, &sealed_bytes)?),
-                        Err(StoreError::Damaged(_) | StoreError::Missing(_)) => {}
-                        Err(error) => return Err(store_error(error)),
-                    }
-                }
-            }
-            Err(error) => return Err(refused.take().unwrap_or_else(|| store_error(error))),
-        }
-        batch.clear();
-        Ok(())
-    };
-    for file in files {
-        if held(file) {
-            continue;
-        }
-        if part_count(file.len) > 1 {
-            if let Assembled::Landed(_) = assemble_into(store, keys, &file.h, file.len, bytes)? {
-                landed += 1;
-            }
-            continue;
-        }
-        let bound = sealed_bound(file.len);
-        if batch.len() == NAMES_PER_CALL || batch_bytes.saturating_add(bound) > BUNDLE_BYTES {
-            fetch_batch(&mut batch, &mut landed)?;
-            batch_bytes = 0;
-        }
-        batch.push(part_name(keys, &file.h, 0));
-        batch_bytes = batch_bytes.saturating_add(bound);
-    }
-    fetch_batch(&mut batch, &mut landed)?;
-    Ok(landed)
+    let root = tree::root_of(state, &reference).map_err(plane_error)?;
+    Ok(tree::entries_of(state, &root.blobs)
+        .map_err(plane_error)?
+        .into_iter()
+        .find(|entry| entry.h == *h)
+        .map(|entry| entry.refs(Class::Originals).to_vec())
+        .unwrap_or_default())
 }
 
 /// **Bring one original back** (`fetch_original`).
@@ -297,6 +190,12 @@ pub(crate) fn fetch_original_cancellable(
         .ok_or_else(|| CoreError::InvalidRequest {
             detail: "this vault names no content with that hash".to_owned(),
         })?;
+    // THE TREE THIS PHONE HOLDS LISTS THE CHUNKS: a file the newest tree does not list as bytes
+    // (claimed since, or never readable) is not in any backup yet.
+    let refs = refs_of_original(&ledger, &keyring.backup, &h)?;
+    if refs.is_empty() && file.len > 0 {
+        return Ok(answer(wire::FetchOutcome::NotInBackup, None));
+    }
     // WHEN NONE LANDS, the gateway that said the most is answered: a copy that
     // would not open, then one that does not hold it, then a machine that is
     // not the pinned gateway, then silence.
@@ -320,7 +219,7 @@ pub(crate) fn fetch_original_cancellable(
             runtime,
         )?;
         store.set_cancellation(cancellation.clone());
-        let assembled = assemble_into(&store, &keyring.backup, &h, file.len, bytes);
+        let assembled = assemble_into(&store, &keyring.backup, &h, &refs, bytes);
         if assembled.is_err() {
             store.checkpoint()?;
         }
@@ -345,117 +244,162 @@ pub(crate) fn fetch_original_cancellable(
     Ok(answer(outcome, None))
 }
 
-#[cfg(test)]
-mod cancellation_tests {
-    use super::*;
-    use centraid_vault::backup::naming::Digest;
-    use centraid_vault::backup::store::{Deleted, Head, ObjectEntry, Put, SnapshotEntry};
-    use std::io::{Read, Write};
-
-    struct StopAfterFirstPart {
-        handle: crate::Handle,
-        stop: crate::handle::Cancellation,
-        sealed: Vec<u8>,
+/// **A RESTORE'S ORIGINALS PHASE (R3)**: every original the newest tree lists that this phone
+/// does not hold, newest first, a pass at a time. Runs only while the restore left the marker
+/// ([`Plane::originals_marker`](super::Plane::originals_marker)): an original the member freed
+/// from this phone on purpose is not one to bring back. At most `limit` files per call; the
+/// marker goes when nothing is missing.
+///
+/// Answers `(landed, still_missing)`.
+///
+/// # Errors
+/// The device state's or the content store's refusal; a stop.
+pub(crate) fn bring_originals(
+    handle: &Handle,
+    keyring: &Keyring,
+    runtime: &tokio::runtime::Handle,
+    cancellation: Option<crate::handle::Cancellation>,
+    admits: &dyn Fn(bool) -> bool,
+    out_of_time: &dyn Fn() -> bool,
+    limit: usize,
+) -> Result<(usize, usize)> {
+    let plane = handle.plane();
+    if !plane.originals_marker().exists() {
+        return Ok((0, 0));
     }
-
-    impl Store for StopAfterFirstPart {
-        fn gateway_id(&self) -> &str {
-            "test"
+    let Some(door) = handle.bytes() else {
+        return Ok((0, 0));
+    };
+    let bytes = door.store();
+    let state = plane.state()?;
+    let Some((root_name, _)) = state.device().map_err(plane_error)?.newest else {
+        return Ok((0, 0));
+    };
+    let Some(root_ref) = status::node_ref(&state, &keyring.backup, &root_name) else {
+        return Ok((0, 0));
+    };
+    let root = tree::root_of(&state, &root_ref).map_err(plane_error)?;
+    let mut entries = tree::entries_of(&state, &root.blobs).map_err(plane_error)?;
+    entries.sort_by_key(|entry| (std::cmp::Reverse(entry.taken_at_ms), entry.h));
+    let tokens = plane.tokens();
+    let mut stores = Vec::new();
+    for gateway in state.gateways().map_err(plane_error)? {
+        if gateway.moved_epoch.is_some() {
+            continue;
         }
-        fn get(&self, _name: &Name, sink: &mut dyn Write) -> std::result::Result<u64, StoreError> {
-            self.stop.check().map_err(|error| {
-                StoreError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Interrupted,
-                    error.to_string(),
-                ))
-            })?;
-            sink.write_all(&self.sealed)?;
-            self.handle
-                .cancel(42)
-                .expect("cancels before the next part");
-            Ok(self.sealed.len() as u64)
-        }
-        fn exists(&self, _: &[Name]) -> std::result::Result<Vec<Name>, StoreError> {
-            unreachable!("fetch only")
-        }
-        fn put(
-            &self,
-            _: &Name,
-            _: &Digest,
-            _: u64,
-            _: &mut dyn Read,
-        ) -> std::result::Result<Put, StoreError> {
-            unreachable!("fetch only")
-        }
-        fn head(&self) -> std::result::Result<Option<Head>, StoreError> {
-            unreachable!("fetch only")
-        }
-        fn set_head(
-            &self,
-            _: &Name,
-            _: Option<&Name>,
-            _: u64,
-            _: u64,
-        ) -> std::result::Result<Head, StoreError> {
-            unreachable!("fetch only")
-        }
-        fn snapshots(&self) -> std::result::Result<Vec<SnapshotEntry>, StoreError> {
-            unreachable!("fetch only")
-        }
-        fn list(
-            &self,
-            _: Option<&Name>,
-            _: usize,
-        ) -> std::result::Result<Vec<ObjectEntry>, StoreError> {
-            unreachable!("fetch only")
-        }
-        fn delete(&self, _: &[Name]) -> std::result::Result<Deleted, StoreError> {
-            unreachable!("fetch only")
-        }
-        fn held(
-            &self,
-            _: Option<&Name>,
-            _: usize,
-        ) -> std::result::Result<Vec<centraid_vault::backup::store::HeldEntry>, StoreError>
-        {
-            unreachable!("fetch only")
-        }
-        fn undo(&self, _: Option<&[Name]>) -> std::result::Result<u64, StoreError> {
-            unreachable!("fetch only")
-        }
-    }
-
-    #[test]
-    fn cancelling_after_a_part_discards_the_partial_plaintext_file() {
-        let dir = tempfile::tempdir().expect("a directory");
-        let handle =
-            crate::Core::open(crate::CoreConfig::new(dir.path().join("vault.db"))).expect("opens");
-        let stop = handle.registered_cancellation(42);
-        let keys = centraid_vault::backup::naming::keys_from_root(&[7; 32]);
-        let plaintext = vec![9; usize::try_from(sealed::PART_BYTES).expect("fits") + 1];
-        let hash = PlaintextHash::of(&plaintext);
-        let first =
-            sealed::seal_part(&keys, 0, &plaintext[..plaintext.len() - 1], true).expect("sealed");
-        let store = StopAfterFirstPart {
-            handle,
-            stop,
-            sealed: first,
+        let Some(token) = tokens.get(&gateway.gateway_id) else {
+            continue;
         };
-        let bytes = ByteStore::open(dir.path().join("bytes")).expect("a byte store");
-        assert!(assemble_into(&store, &keys, &hash, plaintext.len() as u64, &bytes).is_err());
-        assert!(
-            bytes.hashes().expect("hashes").is_empty(),
-            "no incomplete content is published"
-        );
-        let staging = bytes.root().join("incoming");
-        assert!(staging.is_dir());
-        {
-            assert_eq!(
-                std::fs::read_dir(staging).expect("staging").count(),
-                0,
-                "the partial writer is discarded"
-            );
+        let mut store =
+            GatewayStore::for_gateway(&gateway, *token, keyring.vault.identity.signing(), runtime)?;
+        store.set_cancellation(cancellation.clone());
+        stores.push(store);
+    }
+    let (mut landed, mut missing) = (0_usize, 0_usize);
+    for entry in entries {
+        if entry.original.is_empty() {
+            continue;
         }
-        store.handle.close();
+        let have = bytes
+            .path_of(ContentHash::from_bytes(*entry.h.as_bytes()))
+            .map_err(|error| CoreError::Invariant {
+                context: format!("the content store: {error}"),
+            })?
+            .is_some();
+        if have
+            || state
+                .local(&entry.h)
+                .map_err(plane_error)?
+                .is_some_and(|local| local.source == LocalSource::Os)
+        {
+            continue;
+        }
+        let video = entry
+            .media_type
+            .trim()
+            .to_ascii_lowercase()
+            .starts_with("video/");
+        if landed >= limit || out_of_time() || !admits(video) {
+            missing += 1;
+            continue;
+        }
+        let mut got = false;
+        for store in &stores {
+            if let Some(stop) = &cancellation {
+                stop.check()?;
+            }
+            if let Assembled::Landed(_) =
+                assemble_into(store, &keyring.backup, &entry.h, &entry.original, bytes)?
+            {
+                got = true;
+                break;
+            }
+        }
+        if got {
+            landed += 1;
+            let assets = handle.with_vault(|vault| {
+                centraid_vault::originals::assets_for_hashes(vault, &[entry.h.to_hex()])
+                    .map_err(CoreError::from)
+            })?;
+            crate::events::ChangeFeed::new(handle.events()).blobs_arrived(&assets);
+        } else {
+            missing += 1;
+        }
+    }
+    if missing == 0 {
+        let _ = std::fs::remove_file(plane.originals_marker());
+    }
+    Ok((landed, missing))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use centraid_vault::backup::store::{MemoryStore, Outgoing};
+
+    fn chunks(keys: &BackupKeys, plain: &[u8]) -> (Vec<Ref>, Vec<Outgoing>) {
+        let mut refs = Vec::new();
+        let mut frames = Vec::new();
+        for chunk in plain.chunks(sealed::CHUNK_BYTES) {
+            let sealed = sealed::seal(keys, Class::Originals, chunk).expect("seals");
+            refs.push(sealed.reference());
+            frames.push(Outgoing::of(sealed.name, sealed.object));
+        }
+        (refs, frames)
+    }
+
+    /// **A FILE LANDS ONLY WHEN EVERY CHUNK OPENS AND THE WHOLE IS THE FILE NAMED**, and a file
+    /// the gateway cannot complete leaves nothing in the store.
+    #[test]
+    fn a_file_lands_only_whole_and_a_refused_one_leaves_nothing() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let bytes = ByteStore::open(dir.path().join("bytes")).expect("a byte store");
+        let keys = centraid_vault::backup::naming::keys_from_root(&[7; 32]);
+        let plain: Vec<u8> = (0..sealed::CHUNK_BYTES + 1000)
+            .map(|n| (n % 251) as u8)
+            .collect();
+        let h = PlaintextHash::of(&plain);
+        let (refs, frames) = chunks(&keys, &plain);
+        let store = MemoryStore::new("gw");
+        store.bundle(&frames).expect("stores");
+        match assemble_into(&store, &keys, &h, &refs, &bytes).expect("assembles") {
+            Assembled::Landed(path) => assert_eq!(std::fs::read(path).expect("reads"), plain),
+            _ => panic!("a whole file lands"),
+        }
+        // A chunk the gateway lacks: nothing is published.
+        let other = MemoryStore::new("empty");
+        let again = ByteStore::open(dir.path().join("again")).expect("a byte store");
+        assert!(matches!(
+            assemble_into(&other, &keys, &h, &refs, &again).expect("assembles"),
+            Assembled::Missing
+        ));
+        assert!(again.hashes().expect("hashes").is_empty());
+        // Chunks that are not the file they are listed for: refused, and nothing is kept.
+        let wrong = PlaintextHash::of(b"another file");
+        assert!(matches!(
+            assemble_into(&store, &keys, &wrong, &refs, &again).expect("assembles"),
+            Assembled::Damaged
+        ));
+        assert!(again.hashes().expect("hashes").is_empty());
     }
 }

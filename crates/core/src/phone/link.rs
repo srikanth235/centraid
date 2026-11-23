@@ -37,34 +37,45 @@
 //! [`StoreError::Damaged`] — the copy on the gateway did not open. A phone
 //! away from home waits; these two are the member's to hear about.
 //!
-//! # A PART IS SENT FROM MEMORY OR FROM ITS SPOOL FILE
+//! # A BUNDLE IS FRAMES FROM MEMORY
 //!
-//! A bundle — ranges and derivatives, up to 256 MiB — streams from the spool
-//! files the mover names, never held whole. A single part arrives as a reader,
-//! which this store reads whole before the `PUT`: a part is at most 64 MiB of
-//! plaintext sealed, the protocol caps an object at 80 MiB, and one part in
-//! memory at a time is what a phone can afford where a whole film is not.
+//! `bundle` sends sealed objects (one per chunk, at most 4 MiB each) as the
+//! protocol's one upload, `POST bundle`; each frame is committed and answered
+//! on its own, so a connection that drops leaves every finished frame stored
+//! and a resend costs at most the frame that was cut. The driver builds a
+//! bundle from objects it rebuilt from their source (`centraid_vault::backup::engine`)
+//! and nothing here keeps one.
+//!
+//! # A DELETE NAMES ITS HEAD
+//!
+//! `delete` signs the root name of the head the keep set was computed at
+//! (spec §4), so a gateway rolled back to another head refuses it.
+//!
+//! # A TYPED REACH
+//!
+//! [`reach_of`] reads a store refusal as the plane's [`Reach`], with `too_old`
+//! its own word: the member updates the gateway.
 
 use std::collections::BTreeMap;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use centraid_gateway::client::{Client, ClientError, Destination as Pinned, Part, Source};
 use centraid_gateway::rules::code::Refusal as WireRefusal;
 use centraid_gateway::rules::ids::{GatewayId, Name as WireName, Token, VaultId};
-use centraid_gateway::rules::limits::MAX_OBJECT_BYTES;
 use centraid_gateway::rules::signing::{
     HeadFields, sign_check, sign_delete, sign_head, sign_undo, verify_claim,
 };
+use centraid_gateway::rules::wire::FrameResult;
 use centraid_gateway::rules::wire::{
     CheckRequest, ClaimView, DeleteRequest, Info, SetHead, UndoRequest,
 };
-use centraid_vault::backup::naming::{Digest, Name};
+use centraid_media::sealed::Name;
 use centraid_vault::backup::state::{DeviceState, Gateway, Reach};
 use centraid_vault::backup::store::{
-    Deleted, Head, HeldEntry, NameCheck, NameState, ObjectEntry, Outgoing, PartAnswer, Put,
-    Refusal, SnapshotEntry, Store, StoreError, check_of_state, error_of_wire_refusal, head_of_view,
+    Deleted, FrameAnswer, Head, HeldEntry, NameCheck, ObjectEntry, Outgoing, Refusal,
+    SnapshotEntry, Store, StoreError, check_of_state, error_of_wire_refusal, head_of_view,
     held_of_view, object_of_view, plane_digest, plane_name, snapshot_of_view, wire_digest,
     wire_name as store_wire_name,
 };
@@ -399,98 +410,30 @@ impl Store for GatewayStore {
         Ok(missing.iter().map(plane_name).collect())
     }
 
-    fn put(
-        &self,
-        name: &Name,
-        digest: &Digest,
-        len: u64,
-        body: &mut dyn Read,
-    ) -> std::result::Result<Put, StoreError> {
-        self.check_transfer()?;
-        if len > MAX_OBJECT_BYTES {
-            return Err(StoreError::Refused(Refusal::TooLarge));
-        }
-        let mut bytes = Vec::with_capacity(usize::try_from(len).unwrap_or(0));
-        body.take(len.saturating_add(1)).read_to_end(&mut bytes)?;
-        if bytes.len() as u64 != len {
-            return Err(StoreError::Refused(Refusal::DigestMismatch));
-        }
-        let answer = self.runtime.block_on(self.client.put(
-            &self.vault,
-            &wire_name(name),
-            &wire_digest(digest),
-            bytes,
-        ));
-        match answer {
-            Ok(centraid_gateway::client::Put::Stored(_)) => Ok(Put::Stored),
-            Ok(centraid_gateway::client::Put::AlreadyStored(_)) => Ok(Put::AlreadyStored),
-            // THE PHONE'S OWN BYTES UNDER THE NAME are stored; anything else
-            // is not, and the caller is told what holds the name (decision 30).
-            Ok(taken @ centraid_gateway::client::Put::NameTaken { held, state, .. }) => {
-                if taken.acknowledged() {
-                    Ok(Put::AlreadyStored)
-                } else {
-                    Err(StoreError::Refused(Refusal::NameTaken {
-                        held: plane_digest(&held),
-                        state,
-                    }))
-                }
-            }
-            Err(error) => Err(self.store_error(error)),
-        }
-    }
-
-    fn put_many(
+    /// `POST bundle`: each frame answered on its own, in the order sent.
+    fn bundle(
         &self,
         parts: &[Outgoing],
-    ) -> std::result::Result<Vec<(Name, PartAnswer)>, StoreError> {
+    ) -> std::result::Result<Vec<(Name, FrameAnswer)>, StoreError> {
         self.check_transfer()?;
         let sent: Vec<Part> = parts
             .iter()
             .map(|part| Part {
                 name: wire_name(&part.name),
                 digest: wire_digest(&part.digest),
-                source: Source::File(part.path.clone()),
+                source: Source::Bytes(bytes::Bytes::copy_from_slice(&part.bytes)),
             })
             .collect();
         let answer = self
             .runtime
             .block_on(self.client.bundle_parts(&self.vault, sent))
             .map_err(|error| self.store_error(error))?;
-        let sent_digest: BTreeMap<Name, Digest> =
-            parts.iter().map(|part| (part.name, part.digest)).collect();
-        let mut out: Vec<(Name, PartAnswer)> = Vec::with_capacity(parts.len());
-        out.extend(
-            answer
-                .stored
-                .iter()
-                .map(|name| (plane_name(name), Ok(Put::Stored))),
-        );
-        out.extend(
-            answer
-                .already
-                .iter()
-                .map(|name| (plane_name(name), Ok(Put::AlreadyStored))),
-        );
-        out.extend(answer.refused.iter().map(|refused| {
-            let name = plane_name(&refused.name);
-            let refusal = match (refused.digest, refused.state) {
-                (Some(held), state) if refused.code == centraid_gateway::rules::Code::NameTaken => {
-                    let held = plane_digest(&held);
-                    if sent_digest.get(&name) == Some(&held) {
-                        return (name, Ok(Put::AlreadyStored));
-                    }
-                    Refusal::NameTaken {
-                        held,
-                        state: state.unwrap_or(NameState::Live),
-                    }
-                }
-                _ => Refusal::from_wire_code(refused.code),
-            };
-            (name, Err(refusal))
-        }));
-        // IN THE ORDER SENT, as the trait promises: the answer groups by
-        // outcome, and a caller pairing answers with parts reads them in order.
+        let mut out: Vec<(Name, FrameAnswer)> = answer
+            .results
+            .iter()
+            .map(|result| (plane_name(&result.name()), frame_answer(result)))
+            .collect();
+        // IN THE ORDER SENT, as the trait promises.
         let order: BTreeMap<Name, usize> = parts
             .iter()
             .enumerate()
@@ -623,20 +566,27 @@ impl Store for GatewayStore {
     }
 
     /// Signed at the next generation, retried once above an `OUT_OF_ORDER`.
-    fn delete(&self, names: &[Name]) -> std::result::Result<Deleted, StoreError> {
+    fn delete(
+        &self,
+        names: &[Name],
+        head_root: Option<&Name>,
+    ) -> std::result::Result<Deleted, StoreError> {
         self.check_transfer()?;
         let asked: Vec<WireName> = names.iter().map(wire_name).collect();
+        let head_root = head_root.map(wire_name);
         let mut retried = false;
         let answer = loop {
             let generation = self.next_generation();
             let request = DeleteRequest {
                 names: asked.clone(),
                 generation,
+                head_root,
                 signature: sign_delete(
                     &self.identity,
                     &self.gateway,
                     self.epoch,
                     generation,
+                    head_root.as_ref(),
                     &asked,
                 ),
             };
@@ -747,6 +697,40 @@ impl Store for GatewayStore {
     }
 }
 
+/// One frame's answer, as the plane reads it (spec §4). `taken` carries the digest the gateway
+/// holds; whether it is an acknowledgement is the engine's to judge against the digest it sent.
+fn frame_answer(result: &FrameResult) -> FrameAnswer {
+    match result {
+        FrameResult::Stored { .. } => FrameAnswer::Stored,
+        FrameResult::There { .. } => FrameAnswer::There,
+        FrameResult::Held { .. } => FrameAnswer::Held,
+        FrameResult::Taken { digest, state, .. } => FrameAnswer::Taken {
+            digest: plane_digest(digest),
+            state: *state,
+        },
+        FrameResult::Full { .. } => FrameAnswer::Full,
+        FrameResult::TooLarge { .. } => FrameAnswer::TooLarge,
+        FrameResult::Refused { code, .. } => FrameAnswer::Refused(Refusal::from_wire_code(*code)),
+    }
+}
+
+/// What a store refusal says of the gateway's reach, in the plane's words: `too_old` is its own
+/// ("update your gateway"), never folded into unreachable. `None` when the refusal is about one
+/// call and not about the gateway.
+#[must_use]
+pub fn reach_of(error: &StoreError) -> Option<Reach> {
+    match error {
+        StoreError::Unreachable(_) | StoreError::Io(_) => Some(Reach::Unreachable),
+        StoreError::Untrusted(_) => Some(Reach::Untrusted),
+        StoreError::GatewayOld { .. } => Some(Reach::TooOld),
+        StoreError::Moved { .. } => Some(Reach::Moved),
+        StoreError::Refused(Refusal::Unauthorized) => Some(Reach::PairAgain),
+        StoreError::Refused(Refusal::Frozen) => Some(Reach::Frozen),
+        StoreError::Refused(Refusal::Busy) => Some(Reach::Busy),
+        _ => None,
+    }
+}
+
 /// The gateway tokens the shell handed the core, by gateway id (#1191, E12):
 /// kept in memory, never written.
 pub type Tokens = BTreeMap<String, Token>;
@@ -800,6 +784,8 @@ pub struct Fleet {
     pub reached: Vec<Reached>,
     pub silent: Vec<String>,
     pub untrusted: Vec<String>,
+    /// Gateways that run a protocol below this build's: the member updates them.
+    pub too_old: Vec<String>,
     /// Gateways the shell handed no token for (E12): they are marked to pair again and left out.
     pub pair_again: Vec<String>,
 }
@@ -849,6 +835,7 @@ pub fn reach_all_capped(
         reached: Vec::new(),
         silent: Vec::new(),
         untrusted: Vec::new(),
+        too_old: Vec::new(),
         pair_again: Vec::new(),
     };
     let mut ordered: Vec<&Gateway> = gateways
@@ -862,7 +849,7 @@ pub fn reach_all_capped(
             // NO TOKEN HELD (E12): the shell's secret store lost it, or never had it. The row says to
             // pair again; opening and every other door go on.
             state
-                .set_reach(&gateway.gateway_id, Reach::PairAgain, super::now_ms())
+                .set_reach(&gateway.gateway_id, Reach::PairAgain, None, super::now_ms())
                 .map_err(super::plane_error)?;
             fleet.pair_again.push(gateway.gateway_id.clone());
             continue;
@@ -880,7 +867,7 @@ pub fn reach_all_capped(
         match answer {
             Probe::Answered(time_ms) => {
                 state
-                    .touch_seen(&gateway.gateway_id, super::now_ms())
+                    .set_reach(&gateway.gateway_id, Reach::Ok, None, super::now_ms())
                     .map_err(super::plane_error)?;
                 fleet.reached.push(Reached {
                     gateway: gateway.clone(),
@@ -893,10 +880,28 @@ pub fn reach_all_capped(
                     gateway = %gateway.gateway_id,
                     "a machine that is not the pinned gateway answered"
                 );
+                state
+                    .set_reach(&gateway.gateway_id, Reach::Untrusted, None, super::now_ms())
+                    .map_err(super::plane_error)?;
                 fleet.untrusted.push(gateway.gateway_id.clone());
             }
-            Probe::Old | Probe::Silent => {
-                tracing::debug!(gateway = %gateway.gateway_id, "a paired gateway did not answer, or is older than this build");
+            Probe::Old => {
+                // "UPDATE YOUR GATEWAY": its own word, never folded into unreachable.
+                state
+                    .set_reach(&gateway.gateway_id, Reach::TooOld, None, super::now_ms())
+                    .map_err(super::plane_error)?;
+                fleet.too_old.push(gateway.gateway_id.clone());
+            }
+            Probe::Silent => {
+                tracing::debug!(gateway = %gateway.gateway_id, "a paired gateway did not answer");
+                state
+                    .set_reach(
+                        &gateway.gateway_id,
+                        Reach::Unreachable,
+                        None,
+                        super::now_ms(),
+                    )
+                    .map_err(super::plane_error)?;
                 fleet.silent.push(gateway.gateway_id.clone());
             }
         }

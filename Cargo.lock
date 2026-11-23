@@ -423,6 +423,7 @@ dependencies = [
  "centraid-core",
  "centraid-gateway",
  "centraid-identity",
+ "centraid-media",
  "centraid-ontology",
  "centraid-vault",
  "clap",
@@ -636,8 +637,10 @@ dependencies = [
 name = "centraid-core"
 version = "1.0.0-alpha.0"
 dependencies = [
+ "axum",
  "base64 0.22.1",
  "blake3",
+ "bytes",
  "centraid-api-proto",
  "centraid-apps-calendar",
  "centraid-apps-docs",

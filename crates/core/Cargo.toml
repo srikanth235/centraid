@@ -93,8 +93,10 @@ centraid-media = { path = "../media" }
 blake3.workspace = true
 # A vault id is hex in the ledger and on the wire.
 hex.workspace = true
-# The spool's budget is a tenth of the free space on its volume (`statvfs`).
+# The staging area's budget is a tenth of the free space on its volume (`statvfs`).
 rustix.workspace = true
+# A bundle frame's bytes, handed to the gateway client from memory.
+bytes.workspace = true
 # THE RUNTIME THE GATEWAY CLIENT RUNS ON, OWNED BY THE CORE (#1029 W15,
 # #1080). The client is asynchronous and a phone has nobody else to own a
 # runtime for it; `Handle::runtime_handle` builds one multi-threaded runtime
@@ -120,6 +122,8 @@ tracing.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+# The older-gateway stub of `tests/phone_backup.rs`: real TLS, `/v1/info` answering protocol 0.
+axum.workspace = true
 # The paused clock: a test that must not wait on seconds (the fleet probe's cap).
 tokio = { workspace = true, features = ["test-util"] }
 # A REAL GATEWAY ON A REAL SOCKET for the phone's flows (#1080): the gateway

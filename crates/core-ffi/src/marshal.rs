@@ -179,10 +179,10 @@ pub fn config_from_json(bytes: &[u8]) -> Result<CoreConfig, CoreError> {
         // nothing reads one. It is IGNORED rather than refused, for the reason
         // `role` is above.
         //
-        // THE SPOOL'S CEILING IS NOT SETTABLE ACROSS THE ABI: a phone's spool
+        // THE STAGING CEILING IS NOT SETTABLE ACROSS THE ABI: a phone's staging area
         // is bounded by its free space and 2 GiB, and a smaller ceiling is a
-        // drill's (`CoreConfig::with_spool_ceiling`).
-        spool_ceiling: None,
+        // drill's (`CoreConfig::with_staging_ceiling`).
+        staging_ceiling: None,
         shelf: None,
         // THE ADDITIVE KEY A SHELL SENDS ONLY AFTER `VAULT_DAMAGED` (decision 35, `CONTRACT.md`
         // §4a: an older core ignores it): a handle over the same path that opens no vault and

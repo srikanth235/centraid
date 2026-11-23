@@ -68,12 +68,48 @@ use centraid_gateway::rules::signing::{sign_claim, sign_pair, sign_read};
 use centraid_gateway::rules::wire::{
     ClaimBody, PairKind, PairRequest, Paired, ReadBody, SecretBody,
 };
-use centraid_vault::backup::naming::Name as PlaneName;
-use centraid_vault::backup::snapshot::{History, Root};
-use centraid_vault::backup::state::Gateway;
+use centraid_media::sealed::{self, Class, Name as PlaneName};
+use centraid_vault::Vault;
+use centraid_vault::backup::state::{Gateway, Reach};
+use centraid_vault::backup::tree::Node;
 
 use super::{Keyring, Plane, now_ms, plane_error, wire_destination};
 use crate::error::{CoreError, Result};
+
+/// How far a vault copy has run: `vault.writes` and `vault.written_at`, so a phone can tell
+/// whether a head holds writes its own copy never made (#1080, the sweep's F4) without opening it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct History {
+    /// `vault.writes`.
+    pub writes: u64,
+    /// `vault.written_at`, on the vault's clock; `None` for a vault nothing has been written to.
+    pub last_write_ms: Option<u64>,
+}
+
+impl History {
+    /// What `vault`'s `vault` row says; a file with no vault row has run nothing.
+    ///
+    /// # Errors
+    /// The vault's refusal to read.
+    pub fn of(vault: &Vault) -> Result<Self> {
+        let row: Option<(i64, Option<String>)> = vault.read(|connection| {
+            use centraid_vault::rusqlite::OptionalExtension as _;
+            Ok(connection
+                .query_row("SELECT writes, written_at FROM vault", [], |row| {
+                    Ok((row.get(0)?, row.get(1)?))
+                })
+                .optional()?)
+        })?;
+        let (writes, at) = row.unwrap_or((0, None));
+        Ok(Self {
+            writes: u64::try_from(writes).unwrap_or(0),
+            last_write_ms: at
+                .as_deref()
+                .and_then(centraid_vault::clock::parse_iso_ms)
+                .and_then(|at| u64::try_from(at).ok()),
+        })
+    }
+}
 
 /// What this phone calls itself to a gateway, which `pairings` prints.
 pub const DEVICE_LABEL: &str = "phone";
@@ -283,11 +319,22 @@ fn head_is_ahead(
         Err(error) => return Err(pairing_error(error)),
     };
     let name = PlaneName::from_bytes(*head.name.as_bytes());
-    let opened = centraid_media::sealed::open_whole(&keyring.backup, &name, &sealed_bytes)
-        .map_err(|error| error.to_string())
-        .and_then(|json| Root::from_json(&json).map_err(|error| error.to_string()));
+    let opened = sealed::open_checked(
+        &keyring.backup,
+        &name,
+        Class::Records,
+        None,
+        None,
+        &sealed_bytes,
+    )
+    .map_err(|error| error.to_string())
+    .and_then(|plain| Node::decode(&plain).map_err(|error| error.to_string()))
+    .and_then(|node| match node {
+        Node::Root(root) => Ok(root.writes),
+        _ => Err("the head is not a root".to_owned()),
+    });
     match opened {
-        Ok(root) => Ok(root.writes > own.writes),
+        Ok(writes) => Ok(writes > own.writes),
         Err(reason) => {
             tracing::warn!(%reason, "the gateway's head would not open; a claim cannot be judged against it");
             Ok(false)
@@ -427,7 +474,7 @@ pub fn pair(
                 Err(CoreError::VaultMoved { current_epoch, .. }) => {
                     if ledger.gateway(&gateway_hex).map_err(plane_error)?.is_some() {
                         ledger
-                            .set_moved(&gateway_hex, current_epoch, now_ms())
+                            .set_reach(&gateway_hex, Reach::Moved, Some(current_epoch), now_ms())
                             .map_err(plane_error)?;
                     }
                     return Err(superseded(current_epoch));
@@ -451,9 +498,10 @@ pub fn pair(
         paired.epoch,
         now,
     );
-    destination.seen_ms = Some(now);
-    destination.head =
-        head.map(|head| centraid_vault::backup::naming::Name::from_bytes(*head.as_bytes()));
+    destination.reach_ms = Some(now);
+    // The head the claim named is where the engine's first pass reads from: the pass learns the
+    // gateway's head itself, so nothing of it is kept here.
+    let _ = head;
     // A PAIRING STARTS THIS GATEWAY'S RECORD OVER (#1080, the sweep's B3 and
     // R-1080-C17). Whatever the ledger kept under this gateway's id from an
     // earlier pairing — every acknowledgement, the head this phone last set
@@ -471,9 +519,14 @@ pub fn pair(
     // again blindly: a pass asks `exists` about every name before it seals
     // one, which moves no bytes.
     ledger.remove_gateway(&gateway_id).map_err(plane_error)?;
-    ledger.put_gateway(&destination).map_err(plane_error)?;
+    ledger.add_gateway(&destination).map_err(plane_error)?;
     // THE DIRECTORY OF GATEWAYS CHANGED (E8): every gateway owes a snapshot that writes it.
-    ledger.mark_directories_dirty().map_err(plane_error)?;
+    for gateway in ledger.gateways().map_err(plane_error)? {
+        ledger
+            .set_directory_dirty(&gateway.gateway_id, true)
+            .map_err(plane_error)?;
+    }
+    plane.set_snapshot_owed(true);
     plane.set_tokens({
         let mut held = plane.tokens();
         held.insert(gateway_id.clone(), token);

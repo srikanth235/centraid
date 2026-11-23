@@ -22,7 +22,7 @@ The screen runtime's wire (route stacks, events, view states, effects) is part o
 | `error.proto` | `ErrorCode` (closed), `Error`, and `VaultMoved`, the one companion a refusal carries |
 | `envelope.proto` | `Envelope`, `Request`, `Response`, `Event`, `Cancel` |
 | `vault.proto` | `FoundRequest` — founding a vault over the ABI |
-| `phone.proto` | the phone's backup plane: pair, drain, hand-off, settle, reconcile, pins, fetch an original, restore, status, releasable/released, library_assets, and `TransferRule`, the member's one setting for originals ([#1080](https://github.com/srikanth235/centraid/issues/1080)) |
+| `phone.proto` | the phone's backup plane: pair, drain (with `os_uploads` and the `os_bundles` it answers), pins, fetch an original, restore, status per class (`ClassStatus`), `held_whole`, releasable/released, library_assets, and, deprecated in comments and answered empty, the old hand-off, settle and reconcile messages (`HandoffPart` stays: it is the shape of one bundle upload), and `TransferRule`, the member's one setting for originals ([#1080](https://github.com/srikanth235/centraid/issues/1080)) |
 | `originals.proto` | the originals on this phone and the albums whose originals stay |
 
 Each file carries its own reasoning in comments.
