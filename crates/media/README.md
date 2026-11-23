@@ -4,14 +4,14 @@ No policy: `crates/vault` decides, this crate moves bytes.
 
 | Module | What it is |
 | --- | --- |
-| `sealed` | **`centraid-sealed/2`** ([#1080](https://github.com/srikanth235/centraid/issues/1080)) — the one format every byte a gateway stores wears. A file is hashed and sealed in the same stream (`FileSealer`, `PartSealer`), and a file whose hash is already known can be sealed a window of parts per read (`WindowSealer`, R-1080-C39); each part ≤ 64 MiB carries a 30-byte clear header, is keyed from its own random salt under `K_backup`, framed in 4 MiB XChaCha20-Poly1305 chunks, and named `hex(keyed_hash(K_name, h ‖ u32be(i)))`, so the gateway holds ciphertext under names it cannot invert; `Assembler` and `open_whole` check a whole file against the `h` its names were computed from. Every sealer also returns one `ChunkDigest` per chunk (BLAKE3 of the payload as it opens, never of the ciphertext, so one manifest serves every gateway); `chunk_span` locates a chunk's frame from the sealed length and `open_chunk` / `verify_chunk` open one chunk on its own and compare its digest (#1191 B9, B13). |
+| `sealed` | **`centraid-sealed/3`** ([#1209](https://github.com/srikanth235/centraid/issues/1209)) — the one format every byte a gateway stores wears. One object per chunk of at most 4 MiB of plaintext: `name = blake3_keyed(K_name, "obj3" ‖ class ‖ plaintext)`, `nonce = blake3_keyed(K_nonce, name)[0..24]`, the body zstd when strictly shorter, XChaCha20-Poly1305 under `K_obj` with the header and name as AAD, and `digest = blake3(object)`. Sealing is deterministic, so a chunk is rebuilt from its source and a resend is byte-identical. `open` is strict: length, digest, header, class, derived nonce, tag, bounded decompression and a recomputed name, and any mismatch is `Damaged`. A `Ref` is `{name, digest, len, class}`. |
 | `format` | The BLAKE3 content hash, the BLAKE3 KDF, and canonical (ECMAScript-spelled) JSON. |
 | `models` | `models.lock.json`: the parser, and the one verify-then-fetch (`stat` size, then digest; temp file, digest, rename). A failure is **reported, never thrown**. Fetching is a trait; this crate opens no socket. |
 | `renditions` | The JPEG derivatives (thumbnail, preview) the core draws when the shell staged none. Pure: bytes in, bytes out. |
 
 ## The format is normative
 
-**A zstd upgrade is a format decision too:** chunk digests cover the compressed bytes, so the workspace pins `zstd` exactly and `contracts/crypto/chunk-digest-vectors.json` fails when its output moves (#1191 B9). Every context string, header field and framing rule in `sealed` is a **format** decision: editing one re-keys every backup a member holds. The contexts are `centraid backup v2 root`, `… name` and `… object`; the framing is canonical (every chunk but the last exactly 4 MiB, only an empty part ends in an empty chunk), so one payload has one sealed shape. The formats before it — the v0 frame format and `centraid-object/1` — left with the planes that wrote them (#1080); no member holds an artefact in either.
+**A zstd upgrade is a format decision too:** an object's digest covers the compressed bytes, so the workspace pins `zstd` exactly and `contracts/crypto/chunk-digest-vectors.json` fails when its output moves. Every context string, header field and derivation in `sealed` is a **format** decision: editing one re-keys every backup a member holds. The contexts are `centraid backup v2 root`, `… v2 name`, `… v3 object` and `… v3 nonce`.
 
 `canonical_json` spells numbers the way `JSON.stringify` does (hence `ryu-js`), not the way `serde_json` spells integers: `1e21` is `1e+21` and `9007199254740993` is `9007199254740992`.
 
@@ -19,7 +19,7 @@ No policy: `crates/vault` decides, this crate moves bytes.
 
 Two fixtures under `contracts/crypto/`, each with the test that reads it beside it:
 
-- `contracts/crypto/sealed-vectors.json`, read by [`tests/sealed_vectors.rs`](tests/sealed_vectors.rs) — `centraid-sealed/2`'s derived keys, names and committed sealed samples. Sealing is deliberately not reproducible (random salts, random nonces), so the samples are **opened** and checked against their plaintext rather than resealed.
+- `contracts/crypto/sealed3-vectors.json`, read by [`tests/sealed3_vectors.rs`](tests/sealed3_vectors.rs) — `centraid-sealed/3`'s derived keys, names, nonces, whole objects and digests. Sealing is deterministic, so every value is compared, and the committed objects are also opened.
 - `contracts/crypto/blake3-vectors.json`, read by [`tests/primitives.rs`](tests/primitives.rs) — the keyed hash and the KDF, as primitives.
 
 Both regenerate with `CENTRAID_UPDATE_FIXTURES=1`, and the comparison still runs afterwards, so the variable is a generator and never a way to go green.

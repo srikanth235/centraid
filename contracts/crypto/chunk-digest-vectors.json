@@ -1,138 +1,140 @@
 {
   "cases": [
     {
-      "chunkDigests": [
-        "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262"
-      ],
+      "class": 1,
       "compressed": false,
+      "digest": "7c21037b9a4609c030908c523d3227a9ccc1921009eed6fbf177e0d79defa48a",
       "input": "empty",
+      "name": "526630840b50fe5da65493cb01013e11ac7b24d44be4450ff705892d028d928c",
       "plaintextLen": 0,
-      "sealedLen": 74
+      "sealedLen": 47
     },
     {
-      "chunkDigests": [
-        "dcf5b9a7b68d91d66f8942a20d164d6bab419ad6ba3ac6da62c81c604f70b1b2"
-      ],
-      "compressed": true,
+      "class": 2,
+      "compressed": false,
+      "digest": "46496740d49e31c227385d48431f0dcd7ec6c5869986aeeb58c616f3a5379472",
       "input": "empty",
+      "name": "15a87452a42d5846a73f5b8e3b4f0ffea4c8aa4a817d026224bbdb397bb3535d",
       "plaintextLen": 0,
-      "sealedLen": 83
+      "sealedLen": 47
     },
     {
-      "chunkDigests": [
-        "041d91d0882463121bb19c94f29e5016b14ee2a67f1c085808c0c08159b62d53"
-      ],
+      "class": 3,
       "compressed": false,
+      "digest": "c48f7178758f874d6b190bddb035d1648902bdd765361279bc633091d7d1e888",
+      "input": "empty",
+      "name": "c62ede96739b8f5f13376320a3d6c488bac02ce19ef5517babae222be510832b",
+      "plaintextLen": 0,
+      "sealedLen": 47
+    },
+    {
+      "class": 1,
+      "compressed": true,
+      "digest": "ef1e0d3b5761ecb40a95035d90c885b97085d49590de16653fc5c3aacb1539bc",
       "input": "short, compressible",
+      "name": "0be73e8f9c2c5379d64485b5e34e57758b92531cfef118d7516766307b140420",
       "plaintextLen": 100,
-      "sealedLen": 174
+      "sealedLen": 101
     },
     {
-      "chunkDigests": [
-        "b20bd3e2aa865288a4e10d77300116daf0edb08445257da753d633cab5e9fdea"
-      ],
+      "class": 2,
       "compressed": true,
+      "digest": "09eb276b2a44eaf0d408432b53c75da44fb8b35625aa7703e8da6244bfe6fcf3",
       "input": "short, compressible",
+      "name": "8f2d8a43e7df5261445d40a0fde2da588dfb5c395fda66b77f946144c6f50e6f",
       "plaintextLen": 100,
-      "sealedLen": 128
+      "sealedLen": 101
     },
     {
-      "chunkDigests": [
-        "9f07617d81f276f4978bc1dc06a5b92d490939864c563a220159f31eee680fd1"
-      ],
+      "class": 3,
+      "compressed": true,
+      "digest": "b88bd2feca6d0ce9d47974c16b04901c1100181d01472421896522225ba752f8",
+      "input": "short, compressible",
+      "name": "9b0d045ac80d5c43b060e44208e8d11605aa307cd5b6b750ad7abb6c850574e4",
+      "plaintextLen": 100,
+      "sealedLen": 101
+    },
+    {
+      "class": 1,
       "compressed": false,
+      "digest": "324c9ff3728f449b34174103a3011f7b4261e0557a3dea0ab5914fdc00906be8",
       "input": "short, incompressible",
+      "name": "ff31edc411d02e22dc657c6e759155da781a2973996bd55fb0bf323d525dfe49",
       "plaintextLen": 100,
-      "sealedLen": 174
+      "sealedLen": 147
     },
     {
-      "chunkDigests": [
-        "46523f39259b263329b0eb92f3347cc155542cfd0424c365fa8e460cd2c5a7de"
-      ],
-      "compressed": true,
+      "class": 2,
+      "compressed": false,
+      "digest": "3eee9c79fc88813e9817a986550c78c5e25729bb1673cc75ee64a6e410fc560f",
       "input": "short, incompressible",
+      "name": "d2bf6b116f44090fb48f32c75fd3bee4988da5cba12de145a72f3bb9faaad1ae",
       "plaintextLen": 100,
-      "sealedLen": 183
+      "sealedLen": 147
     },
     {
-      "chunkDigests": [
-        "f7d02a735f46af107ff63412c0d7614d7f840dbd227a1dd9545d6a682248ec28"
-      ],
+      "class": 3,
       "compressed": false,
+      "digest": "80d0a05a72a2cdace9b32b5b74476f906a4f965d0312e4df6b276f062e47f4e8",
+      "input": "short, incompressible",
+      "name": "afd02e09779994d4e744a49446e31898ee3b2ac298c8a2e7cb06f631df9912c0",
+      "plaintextLen": 100,
+      "sealedLen": 147
+    },
+    {
+      "class": 1,
+      "compressed": true,
+      "digest": "179e67bf0a3fda8c5fe6312e29fa35c3e850cf485728caadb629896f084c5f7d",
       "input": "one chunk exactly, compressible",
+      "name": "cc2443782ae927478012b7b08634fa4b70ab2f321d91f2bcbfc33765f7b59bdf",
       "plaintextLen": 4194304,
-      "sealedLen": 4194378
+      "sealedLen": 478
     },
     {
-      "chunkDigests": [
-        "928b99e879e49451b13fbbcb7cf91a4a2fbef5e3f89e85aa7772f7d1e70e50ee"
-      ],
+      "class": 2,
       "compressed": true,
+      "digest": "39113ee6810289bc3013e52ddaba4ba7f221a998ce9f95ed49c6cac32aa1a53c",
       "input": "one chunk exactly, compressible",
+      "name": "f981837a13c143a56eeeca518442dcc91a89ed7e1080f30119a28152b098b79d",
       "plaintextLen": 4194304,
-      "sealedLen": 504
+      "sealedLen": 478
     },
     {
-      "chunkDigests": [
-        "91fed827d8194058b2da2bfd077c2efac1d770d606299c13043b8ee5ae897cb9"
-      ],
+      "class": 3,
+      "compressed": true,
+      "digest": "27c96548faa35f875fafab7328e582fa6e2874e7bdd828a4aa0c43f6cbea473a",
+      "input": "one chunk exactly, compressible",
+      "name": "a2297551a1405f88dee5c214bfa749bc121b91035534a145e8329b609840bc21",
+      "plaintextLen": 4194304,
+      "sealedLen": 478
+    },
+    {
+      "class": 1,
       "compressed": false,
+      "digest": "f13811db6724b90c435de1791822ddb5797d6943451a3784a920590ae1b03dff",
       "input": "one chunk exactly, incompressible",
+      "name": "ca96448a194c18073fa800e3e9a9756af679825ea32896784e1f2811e75e62ae",
       "plaintextLen": 4194304,
-      "sealedLen": 4194378
+      "sealedLen": 4194351
     },
     {
-      "chunkDigests": [
-        "2d0a681fcd51dd7d4c5dc35abc5682a09de9662fd62a6c4db25968a48e0b48d0",
-        "893d729ea3f7911998c9963b54a41e68957c27235f1a23b531bff4f078a9ce0a"
-      ],
-      "compressed": true,
+      "class": 2,
+      "compressed": false,
+      "digest": "d0ea189d105ad233bbab94f408a944e68b4e6032f39cf6a5df1d6f2b83c18d08",
       "input": "one chunk exactly, incompressible",
+      "name": "5e3600dc12582af0f39406013e774683766f5e8fa7d369ff0e11e451df12dce1",
       "plaintextLen": 4194304,
-      "sealedLen": 4194527
+      "sealedLen": 4194351
     },
     {
-      "chunkDigests": [
-        "f7d02a735f46af107ff63412c0d7614d7f840dbd227a1dd9545d6a682248ec28",
-        "a162ae617d7a7fe949d71d1c30097b7bfab6836bd6cc51c6f511b1860efd4250",
-        "6d34673da76d5688a85dbfaa2510b55c276e740c39e8aeab6adc97b3bf96f016"
-      ],
+      "class": 3,
       "compressed": false,
-      "input": "multi-chunk, compressible",
-      "plaintextLen": 8388708,
-      "sealedLen": 8388870
-    },
-    {
-      "chunkDigests": [
-        "aff2667484684d7c26e6ab607592ff272c2fb0b87f1e9b068d2cca3ee104d158"
-      ],
-      "compressed": true,
-      "input": "multi-chunk, compressible",
-      "plaintextLen": 8388708,
-      "sealedLen": 895
-    },
-    {
-      "chunkDigests": [
-        "91fed827d8194058b2da2bfd077c2efac1d770d606299c13043b8ee5ae897cb9",
-        "8fd1256e671c24720cf7e5a731fcf463a4a6d35729a02b7cd88cc549241ce491",
-        "c3472bafd0d3790fc114af58b51d0284f09d85714ce4583a758ab27e464c2c43"
-      ],
-      "compressed": false,
-      "input": "multi-chunk, incompressible",
-      "plaintextLen": 8388708,
-      "sealedLen": 8388870
-    },
-    {
-      "chunkDigests": [
-        "2d0a681fcd51dd7d4c5dc35abc5682a09de9662fd62a6c4db25968a48e0b48d0",
-        "db42653ed09753e920fc581edccde2091e88b0a032fc755445e73f3fadc1a47c",
-        "6a71ae119d7e2f61049cff9cf6d8973d046f5e1d5d0173eab4948fb7c187d756"
-      ],
-      "compressed": true,
-      "input": "multi-chunk, incompressible",
-      "plaintextLen": 8388708,
-      "sealedLen": 8389071
+      "digest": "aca0a896cc23abf45c1d88d531d1f36bf2759ee4c2b0c6f12e6a4984307eabe1",
+      "input": "one chunk exactly, incompressible",
+      "name": "71c40e55cd6cc8ee747f19a9df8625fddcaf7b963ce16b0e03d4cb429179289f",
+      "plaintextLen": 4194304,
+      "sealedLen": 4194351
     }
   ],
-  "format": "centraid-sealed/2"
+  "format": "centraid-sealed/3"
 }
