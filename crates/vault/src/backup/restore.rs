@@ -181,8 +181,7 @@ impl<'a> Restore<'a> {
                 },
             },
         };
-        let object = this.fetch(head)?;
-        let plaintext = sealed::open_checked(keys, head, Class::Records, None, None, &object)?;
+        let plaintext = this.fetch_root(head)?;
         this.root_ref = sealed::seal(keys, Class::Records, &plaintext)?.reference();
         let Node::Root(root) = Node::decode(&plaintext)? else {
             return Err(invariant("a head names something that is not a root"));
@@ -209,16 +208,24 @@ impl<'a> Restore<'a> {
         Ok(this)
     }
 
-    fn fetch(&self, name: &Name) -> Result<Vec<u8>> {
-        let mut last = StoreError::Missing(*name);
+    /// Fetch and open the root named by `head`, trying each gateway until one supplies bytes that
+    /// open under `keys` for `head`.
+    fn fetch_root(&self, head: &Name) -> Result<Vec<u8>> {
+        let mut last: Option<PlaneError> = None;
         for store in &self.stores {
             let mut object = Vec::new();
-            match store.get(name, &mut object) {
-                Ok(_) => return Ok(object),
-                Err(error) => last = error,
+            match store.get(head, &mut object) {
+                Ok(_) => {
+                    match sealed::open_checked(self.keys, head, Class::Records, None, None, &object)
+                    {
+                        Ok(plaintext) => return Ok(plaintext),
+                        Err(error) => last = Some(error.into()),
+                    }
+                }
+                Err(error) => last = Some(error.into()),
             }
         }
-        Err(last.into())
+        Err(last.unwrap_or_else(|| invariant("there is no gateway to restore from")))
     }
 
     /// Fetch and open against the ref, trying each gateway until one supplies bytes that open.
@@ -685,5 +692,29 @@ mod tests {
             "{error:?}"
         );
         assert!(!out.exists());
+    }
+
+    /// **12a.** A damaged root on the first gateway does not stop a restore when a second gateway
+    /// holds the intact root and tree.
+    #[test]
+    fn a_damaged_root_on_the_first_gateway_falls_back_to_the_second() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let (good, keys, head) = published(dir.path());
+        let bad = MemoryStore::new("gw-damaged");
+        bad.bundle(&[crate::backup::store::Outgoing::of(
+            head,
+            b"corrupted root bytes".to_vec(),
+        )])
+        .expect("stores damaged root");
+
+        // Alone, the damaged gateway is refused.
+        assert!(Restore::open(&keys, &[&bad], &head).is_err());
+
+        // With a sound second gateway, Restore::open falls back and restores cleanly.
+        let restore = Restore::open(&keys, &[&bad, &good], &head).expect("falls back to gateway 2");
+        let out = dir.path().join("restored.db");
+        let report = restore.records(&out).expect("restores");
+        assert!(report.ranges > 0);
+        assert!(out.exists());
     }
 }

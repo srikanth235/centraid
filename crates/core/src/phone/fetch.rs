@@ -11,14 +11,17 @@
 //! and a restore, whose originals phase (R3) brings every original back newest first, a pass
 //! at a time ([`bring_originals`]).
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_blobs::{ByteStore, ContentHash};
-use centraid_media::sealed::{self, BackupKeys, Class, PlaintextHash, Ref};
+use centraid_media::sealed::{self, BackupKeys, Class, Name, PlaintextHash, Ref};
 use centraid_vault::backup::files::content_files;
 use centraid_vault::backup::state::{DeviceState, LocalSource};
-use centraid_vault::backup::store::{Store, StoreError};
+use centraid_vault::backup::store::{
+    BUNDLE_BYTES, FRAME_HEADER_BYTES, NAMES_PER_CALL, Store, StoreError,
+};
 use centraid_vault::backup::tree;
 
 use super::link::GatewayStore;
@@ -73,7 +76,13 @@ pub(crate) fn assemble_into(
                 tracing::warn!(%reason, "a fetched chunk is off its digest");
                 return Ok(Assembled::Damaged);
             }
-            Err(error) => return Err(store_error(error)),
+            Err(StoreError::Io(error)) if error.kind() == std::io::ErrorKind::Interrupted => {
+                return Err(store_error(StoreError::Io(error)));
+            }
+            Err(error) => {
+                tracing::debug!(%error, "the gateway refused a fetch");
+                return Ok(Assembled::Unreachable);
+            }
         }
         match sealed::open(keys, reference, &object) {
             Ok(plain) => {
@@ -244,16 +253,281 @@ pub(crate) fn fetch_original_cancellable(
     Ok(answer(outcome, None))
 }
 
-/// **A RESTORE'S ORIGINALS PHASE (R3)**: every original the newest tree lists that this phone
-/// does not hold, newest first, a pass at a time. Runs only while the restore left the marker
+fn have_local(state: &DeviceState, bytes: &ByteStore, h: &PlaintextHash) -> Result<bool> {
+    let in_store = bytes
+        .path_of(ContentHash::from_bytes(*h.as_bytes()))
+        .map_err(|error| CoreError::Invariant {
+            context: format!("the content store: {error}"),
+        })?
+        .is_some();
+    if in_store {
+        return Ok(true);
+    }
+    Ok(state
+        .local(h)
+        .map_err(plane_error)?
+        .is_some_and(|local| local.source == LocalSource::Os))
+}
+
+fn store_plain(bytes: &ByteStore, h: &PlaintextHash, plain: &[u8]) -> Result<bool> {
+    let mut writer = bytes.writer().map_err(|error| CoreError::Invariant {
+        context: format!("the content store would not take a fetched file: {error}"),
+    })?;
+    writer.write(plain).map_err(|error| CoreError::Invariant {
+        context: format!("the content store would not take a fetched chunk: {error}"),
+    })?;
+    let stored = writer.finish().map_err(|error| CoreError::Invariant {
+        context: format!("the content store would not keep {h}: {error}"),
+    })?;
+    if stored.hash.as_bytes() != h.as_bytes() {
+        tracing::warn!("the chunks listed for {h} are not the file it names");
+        let _ = bytes.remove(stored.hash);
+        return Ok(false);
+    }
+    Ok(true)
+}
+
+/// Fetch one batch of single-chunk thumbnails via `POST fetch` (`Store::get_many`).
+/// Returns `Ok(true)` if the store stayed healthy, `Ok(false)` if it became unreachable/refused.
+fn fetch_thumb_batch(
+    store: &dyn Store,
+    keys: &BackupKeys,
+    bytes: &ByteStore,
+    batch: &[(usize, &tree::Entry)],
+    landed: &mut [bool],
+    cancellation: &Option<crate::handle::Cancellation>,
+) -> Result<bool> {
+    if batch.is_empty() {
+        return Ok(true);
+    }
+    let mut names = Vec::with_capacity(batch.len());
+    let mut by_name: BTreeMap<Name, Vec<usize>> = BTreeMap::new();
+    for (pos, (_, entry)) in batch.iter().enumerate() {
+        let name = entry.thumbnail[0].name;
+        let slots = by_name.entry(name).or_default();
+        if slots.is_empty() {
+            names.push(name);
+        }
+        slots.push(pos);
+    }
+    let mut store_err: Option<CoreError> = None;
+    let outcome = store.get_many(&names, &mut |name, object| {
+        if let Some(positions) = by_name.get(name) {
+            for &pos in positions {
+                let (idx, entry) = batch[pos];
+                if landed[idx] {
+                    continue;
+                }
+                let Ok(plain) = sealed::open(keys, &entry.thumbnail[0], object) else {
+                    tracing::warn!(h = %entry.h, "a thumbnail chunk would not open");
+                    continue;
+                };
+                if PlaintextHash::of(&plain) != entry.h {
+                    tracing::warn!(h = %entry.h, "a thumbnail did not hash to its entry");
+                    continue;
+                }
+                match store_plain(bytes, &entry.h, &plain) {
+                    Ok(true) => landed[idx] = true,
+                    Ok(false) => {}
+                    Err(error) => {
+                        store_err = Some(error);
+                        return Err(std::io::Error::other("content store write failed"));
+                    }
+                }
+            }
+        }
+        Ok(())
+    });
+    if let Some(error) = store_err {
+        return Err(error);
+    }
+    if let Some(stop) = cancellation {
+        stop.check()?;
+    }
+    match outcome {
+        Ok(_) | Err(StoreError::Missing(_)) => Ok(true),
+        Err(StoreError::Damaged(_)) => {
+            // A frame in the bundle was damaged on the wire, which stopped the stream; fall back
+            // to individual fetches for the remaining items in this batch so one damaged thumbnail
+            // never costs the rest of the batch.
+            for &(idx, entry) in batch {
+                if landed[idx] {
+                    continue;
+                }
+                if let Some(stop) = cancellation {
+                    stop.check()?;
+                }
+                match assemble_into(store, keys, &entry.h, &entry.thumbnail, bytes) {
+                    Ok(Assembled::Landed(_)) => landed[idx] = true,
+                    Ok(Assembled::Unreachable | Assembled::Untrusted) => return Ok(false),
+                    Ok(Assembled::Missing | Assembled::Damaged) => {}
+                    Err(error) => {
+                        if let Some(stop) = cancellation {
+                            stop.check()?;
+                        }
+                        tracing::debug!(%error, "thumbnail fallback fetch failed");
+                        return Ok(false);
+                    }
+                }
+            }
+            Ok(true)
+        }
+        Err(error) => {
+            tracing::debug!(%error, "the gateway stopped answering during thumbnail fetch");
+            Ok(false)
+        }
+    }
+}
+
+/// R3, phase 2: fetch every missing thumbnail in `entries` (newest first) in `get_many` batches
+/// before any originals are fetched. Returns `(landed, still_missing)`.
+#[allow(clippy::too_many_arguments)]
+fn bring_thumbnails(
+    entries: &[tree::Entry],
+    state: &DeviceState,
+    bytes: &ByteStore,
+    keys: &BackupKeys,
+    stores: &[GatewayStore],
+    dead: &mut [bool],
+    paired_count: usize,
+    cancellation: &Option<crate::handle::Cancellation>,
+    out_of_time: &dyn Fn() -> bool,
+) -> Result<(usize, usize)> {
+    let mut needed: Vec<&tree::Entry> = Vec::new();
+    for entry in entries {
+        if entry.thumbnail.is_empty() || have_local(state, bytes, &entry.h)? {
+            continue;
+        }
+        needed.push(entry);
+    }
+    if needed.is_empty() {
+        return Ok((0, 0));
+    }
+    let mut thumb_landed = vec![false; needed.len()];
+    let mut timed_out = false;
+
+    for (store_idx, store) in stores.iter().enumerate() {
+        if dead[store_idx] {
+            continue;
+        }
+        if thumb_landed.iter().all(|&done| done) {
+            break;
+        }
+        let mut batch: Vec<(usize, &tree::Entry)> = Vec::new();
+        let mut batch_bytes = 0_u64;
+        for (idx, entry) in needed.iter().copied().enumerate() {
+            if thumb_landed[idx] {
+                continue;
+            }
+            if out_of_time() {
+                timed_out = true;
+                break;
+            }
+            let single_cost = if entry.thumbnail.len() == 1 {
+                u64::from(entry.thumbnail[0].len).saturating_add(FRAME_HEADER_BYTES)
+            } else {
+                u64::MAX
+            };
+            if entry.thumbnail.len() == 1 && single_cost <= BUNDLE_BYTES {
+                if !batch.is_empty()
+                    && (batch.len() >= NAMES_PER_CALL
+                        || batch_bytes.saturating_add(single_cost) > BUNDLE_BYTES)
+                {
+                    if !fetch_thumb_batch(
+                        store,
+                        keys,
+                        bytes,
+                        &batch,
+                        &mut thumb_landed,
+                        cancellation,
+                    )? {
+                        dead[store_idx] = true;
+                        break;
+                    }
+                    batch.clear();
+                    batch_bytes = 0;
+                    if out_of_time() {
+                        timed_out = true;
+                        break;
+                    }
+                }
+                batch.push((idx, entry));
+                batch_bytes = batch_bytes.saturating_add(single_cost);
+            } else {
+                // Flush any pending single-chunk batch first to preserve newest-first order.
+                if !batch.is_empty() {
+                    if !fetch_thumb_batch(
+                        store,
+                        keys,
+                        bytes,
+                        &batch,
+                        &mut thumb_landed,
+                        cancellation,
+                    )? {
+                        dead[store_idx] = true;
+                        break;
+                    }
+                    batch.clear();
+                    batch_bytes = 0;
+                }
+                if let Some(stop) = cancellation {
+                    stop.check()?;
+                }
+                match assemble_into(store, keys, &entry.h, &entry.thumbnail, bytes) {
+                    Ok(Assembled::Landed(_)) => thumb_landed[idx] = true,
+                    Ok(Assembled::Unreachable | Assembled::Untrusted) => {
+                        dead[store_idx] = true;
+                        break;
+                    }
+                    Ok(Assembled::Missing | Assembled::Damaged) => {}
+                    Err(error) => {
+                        if let Some(stop) = cancellation {
+                            stop.check()?;
+                        }
+                        tracing::debug!(%error, "multi-chunk thumbnail fetch failed");
+                        dead[store_idx] = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if !dead[store_idx] && !batch.is_empty() && !out_of_time() {
+            if !fetch_thumb_batch(store, keys, bytes, &batch, &mut thumb_landed, cancellation)? {
+                dead[store_idx] = true;
+            }
+        } else if !batch.is_empty() && out_of_time() {
+            timed_out = true;
+        }
+        if timed_out {
+            break;
+        }
+    }
+
+    let landed = thumb_landed.iter().filter(|&&done| done).count();
+    let unlanded = needed.len() - landed;
+    let all_gateways_answered =
+        paired_count > 0 && stores.len() == paired_count && !dead.iter().any(|&d| d);
+    let still_missing = if !timed_out && all_gateways_answered {
+        // Every paired gateway answered and none held an openable copy: confirmed absent.
+        0
+    } else {
+        unlanded
+    };
+    Ok((landed, still_missing))
+}
+
+/// **A RESTORE'S MEDIA PHASES (R3)**: thumbnails first (batched via `fetch`, newest first), then
+/// every original the newest tree lists that this phone does not hold, newest first, a pass at a
+/// time. Runs only while the restore left the marker
 /// ([`Plane::originals_marker`](super::Plane::originals_marker)): an original the member freed
-/// from this phone on purpose is not one to bring back. At most `limit` files per call; the
-/// marker goes when nothing is missing.
+/// from this phone on purpose is not one to bring back. At most `limit` originals per call; the
+/// marker goes when only excluded or confirmed-absent items remain.
 ///
 /// Answers `(landed, still_missing)`.
 ///
 /// # Errors
 /// The device state's or the content store's refusal; a stop.
+#[allow(clippy::too_many_lines)]
 pub(crate) fn bring_originals(
     handle: &Handle,
     keyring: &Keyring,
@@ -281,9 +555,15 @@ pub(crate) fn bring_originals(
     let root = tree::root_of(&state, &root_ref).map_err(plane_error)?;
     let mut entries = tree::entries_of(&state, &root.blobs).map_err(plane_error)?;
     entries.sort_by_key(|entry| (std::cmp::Reverse(entry.taken_at_ms), entry.h));
+
+    let gateways = state.gateways().map_err(plane_error)?;
+    let paired_count = gateways
+        .iter()
+        .filter(|gateway| gateway.moved_epoch.is_none())
+        .count();
     let tokens = plane.tokens();
     let mut stores = Vec::new();
-    for gateway in state.gateways().map_err(plane_error)? {
+    for gateway in gateways {
         if gateway.moved_epoch.is_some() {
             continue;
         }
@@ -295,23 +575,28 @@ pub(crate) fn bring_originals(
         store.set_cancellation(cancellation.clone());
         stores.push(store);
     }
-    let (mut landed, mut missing) = (0_usize, 0_usize);
-    for entry in entries {
-        if entry.original.is_empty() {
-            continue;
-        }
-        let have = bytes
-            .path_of(ContentHash::from_bytes(*entry.h.as_bytes()))
-            .map_err(|error| CoreError::Invariant {
-                context: format!("the content store: {error}"),
-            })?
-            .is_some();
-        if have
-            || state
-                .local(&entry.h)
-                .map_err(plane_error)?
-                .is_some_and(|local| local.source == LocalSource::Os)
-        {
+    let mut dead = vec![false; stores.len()];
+    let exclude_videos = plane.remembered().is_some_and(|c| c.exclude_videos);
+
+    // R3, PHASE 2: missing thumbnails first, in batches, retried on subsequent passes until held
+    // or confirmed absent on every paired gateway.
+    let (thumbs_landed, thumbs_missing) = bring_thumbnails(
+        &entries,
+        &state,
+        bytes,
+        &keyring.backup,
+        &stores,
+        &mut dead,
+        paired_count,
+        &cancellation,
+        out_of_time,
+    )?;
+
+    // R3, PHASE 3: originals, newest first, bounded by `limit`, deadline, and the member's rule.
+    let mut originals_landed = 0_usize;
+    let mut missing = thumbs_missing;
+    for entry in &entries {
+        if entry.original.is_empty() || have_local(&state, bytes, &entry.h)? {
             continue;
         }
         let video = entry
@@ -319,37 +604,60 @@ pub(crate) fn bring_originals(
             .trim()
             .to_ascii_lowercase()
             .starts_with("video/");
-        if landed >= limit || out_of_time() || !admits(video) {
+        if video && exclude_videos {
+            continue;
+        }
+        if originals_landed >= limit || out_of_time() || !admits(video) {
             missing += 1;
             continue;
         }
         let mut got = false;
-        for store in &stores {
+        let mut answered_absent = 0_usize;
+        for (store_idx, store) in stores.iter().enumerate() {
+            if dead[store_idx] {
+                continue;
+            }
             if let Some(stop) = &cancellation {
                 stop.check()?;
             }
-            if let Assembled::Landed(_) =
-                assemble_into(store, &keyring.backup, &entry.h, &entry.original, bytes)?
-            {
-                got = true;
-                break;
+            match assemble_into(store, &keyring.backup, &entry.h, &entry.original, bytes) {
+                Ok(Assembled::Landed(_)) => {
+                    got = true;
+                    break;
+                }
+                Ok(Assembled::Unreachable | Assembled::Untrusted) => {
+                    dead[store_idx] = true;
+                }
+                Ok(Assembled::Missing | Assembled::Damaged) => {
+                    answered_absent += 1;
+                }
+                Err(error) => {
+                    if let Some(stop) = &cancellation {
+                        stop.check()?;
+                    }
+                    tracing::debug!(%error, "original fetch failed");
+                    dead[store_idx] = true;
+                }
             }
         }
         if got {
-            landed += 1;
+            originals_landed += 1;
             let assets = handle.with_vault(|vault| {
                 centraid_vault::originals::assets_for_hashes(vault, &[entry.h.to_hex()])
                     .map_err(CoreError::from)
             })?;
             crate::events::ChangeFeed::new(handle.events()).blobs_arrived(&assets);
         } else {
-            missing += 1;
+            let confirmed_absent = paired_count > 0 && answered_absent == paired_count;
+            if !confirmed_absent {
+                missing += 1;
+            }
         }
     }
     if missing == 0 {
         let _ = std::fs::remove_file(plane.originals_marker());
     }
-    Ok((landed, missing))
+    Ok((thumbs_landed + originals_landed, missing))
 }
 
 #[cfg(test)]

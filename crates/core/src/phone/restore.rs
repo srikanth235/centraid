@@ -1323,90 +1323,28 @@ impl Scan<'_> {
         // at a time, newest first.
         let _ = std::fs::write(plane.originals_marker(), b"");
 
-        // THE FILE FIRST: it takes the name `vault.db`, so a failure fetching the grid below can
-        // never lose the vault itself.
-        std::fs::rename(&staged.file, kept).map_err(|error| CoreError::Invariant {
-            context: format!("keeping the restored vault as {}: {error}", kept.display()),
-        })?;
-        // THE GRID, WHOLE: every derivative, in fetch bundles. A gateway that
-        // stops answering here does not undo a claim that landed; what did
-        // not come back is fetched on demand like any original, and the answer
-        // says how many landed of how many.
-        let (landed, total) = self.bring_derivatives(staged, kept);
-        Ok(wire::RestoredVault {
-            vault_id: staged.keyring.vault_hex(),
-            index: staged.index,
-            path: kept.to_string_lossy().into_owned(),
-            rows: i64::try_from(manifest.census.values().sum::<u64>()).unwrap_or(i64::MAX),
-            safety_number: pair::safety_number(&staged.keyring, &staged.pin),
-            derivatives_landed: landed,
-            derivatives_total: total,
-        })
-    }
-
-    /// R3, phase 2: every thumbnail the restored tree lists, newest first, into the content
-    /// store; `(landed, of)`. A failure is logged and leaves the rest to on-demand fetches, and the
-    /// originals (phase 3) follow in the passes after.
-    fn bring_derivatives(&self, staged: &Staged, kept: &Path) -> (u32, u32) {
-        let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
-        let bytes = match centraid_blobs::ByteStore::open(kept.with_extension("bytes")) {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                tracing::warn!(%error, "a restore could not open the content store");
-                return (0, 0);
-            }
-        };
-        let stores: [&dyn centraid_vault::backup::store::Store; 1] = [&staged.store];
-        let restore = match Restore::open(
-            &staged.keyring.backup,
-            &stores,
-            &staged.restored.manifest_name,
-        ) {
-            Ok(restore) => restore,
-            Err(error) => {
-                tracing::warn!(%error, "a restore's thumbnails could not be listed");
-                return (0, 0);
-            }
-        };
-        let total = tree::entries_of(&restore, &restore.root.blobs)
+        let derivatives_total = tree::entries_of(&ledger, &manifest.blobs)
             .map(|entries| {
                 entries
                     .iter()
                     .filter(|entry| !entry.thumbnail.is_empty())
                     .count()
             })
-            .map_or(0, count);
-        let mut landed = 0_u32;
-        let report = restore.thumbnails(&mut |entry, content| {
-            let mut writer = bytes.writer().map_err(|error| PlaneError::Invariant {
-                context: format!("the content store: {error}"),
-            })?;
-            writer
-                .write(content)
-                .map_err(|error| PlaneError::Invariant {
-                    context: format!("the content store would not take {}: {error}", entry.h),
-                })?;
-            writer.finish().map_err(|error| PlaneError::Invariant {
-                context: format!("the content store would not keep {}: {error}", entry.h),
-            })?;
-            landed += 1;
-            Ok(())
-        });
-        match report {
-            Ok(report) => {
-                tracing::info!(
-                    landed,
-                    of = total,
-                    missing = report.missing,
-                    "a restore brought the thumbnails back"
-                );
-                (landed, total)
-            }
-            Err(error) => {
-                tracing::warn!(%error, "a restore's thumbnails did not all come back");
-                (landed, total)
-            }
-        }
+            .map_or(0, |n| u32::try_from(n).unwrap_or(u32::MAX));
+        // THE FILE FIRST: it takes the name `vault.db`, so the vault opens immediately once the
+        // records are in (R3). Thumbnails and then originals follow in background passes.
+        std::fs::rename(&staged.file, kept).map_err(|error| CoreError::Invariant {
+            context: format!("keeping the restored vault as {}: {error}", kept.display()),
+        })?;
+        Ok(wire::RestoredVault {
+            vault_id: staged.keyring.vault_hex(),
+            index: staged.index,
+            path: kept.to_string_lossy().into_owned(),
+            rows: i64::try_from(manifest.census.values().sum::<u64>()).unwrap_or(i64::MAX),
+            safety_number: pair::safety_number(&staged.keyring, &staged.pin),
+            derivatives_landed: 0,
+            derivatives_total,
+        })
     }
 }
 

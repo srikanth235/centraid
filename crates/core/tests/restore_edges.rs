@@ -125,10 +125,15 @@ fn a_damaged_thumbnail_costs_a_restore_that_thumbnail_alone() {
     let restored = restore(new_dir.path(), &gateway);
     assert_eq!(restored.vaults.len(), 1, "{restored:?}");
     let path = PathBuf::from(&restored.vaults[0].path);
-    // THE ANSWER SAYS HOW MANY CAME BACK OF HOW MANY (#1188): the vault is kept first, then the
-    // grid is fetched, and a damaged one is the one that did not land.
+    // R3 (12c): the vault opens as soon as records are in; thumbnails follow in background passes.
     assert_eq!(restored.vaults[0].derivatives_total, 3, "{restored:?}");
-    assert_eq!(restored.vaults[0].derivatives_landed, 2, "{restored:?}");
+    assert_eq!(restored.vaults[0].derivatives_landed, 0, "{restored:?}");
+    let phone = reopen(&path);
+    drain(&phone, at_home());
+    assert!(
+        status(&phone).restoring.is_none(),
+        "confirmed-damaged thumbnail does not keep restoring forever"
+    );
     let bytes = centraid_blobs::ByteStore::open(path.with_extension("bytes")).expect("opens");
     for (hash, thumb) in &thumbs {
         let held = bytes
@@ -1041,6 +1046,14 @@ fn a_restored_phones_walk_is_told_which_derivatives_the_vault_already_holds() {
     let new_dir = tempfile::tempdir().expect("a directory");
     let path = PathBuf::from(&restore(new_dir.path(), &gateway).vaults[0].path);
     let phone = reopen(&path);
+    // R3 (12c): thumbnails arrive in the background pass, even when Manual keeps originals home.
+    drain(
+        &phone,
+        wire::DrainRequest {
+            rule: wire::TransferRule::Manual as i32,
+            ..wire::DrainRequest::default()
+        },
+    );
     let walked = stage(
         &phone,
         library("image/heic", "lib-derived", &photo, false),
@@ -1493,5 +1506,178 @@ fn a_restore_scan_reuses_one_connection() {
         dialled <= 3,
         "{} indices were asked about over {dialled} connections",
         restored.gap_scanned
+    );
+}
+
+/// **RESTORE OPENS BEFORE THUMBNAILS AND RETRIES INTERRUPTED THUMBNAILS** (R3, 12c & 12d).
+/// Restore returns as soon as records are in without waiting on thumbnails; a pass while the
+/// gateway is offline keeps the restoring marker, and the next pass once the gateway is back
+/// fetches every missing thumbnail and original and clears the marker.
+#[test]
+fn restore_opens_before_thumbnails_and_retries_interrupted_thumbnails() {
+    let gateway = gateway();
+    let old_dir = tempfile::tempdir().expect("a directory");
+    let old = phone(old_dir.path());
+    pair(&old, &gateway);
+    let mut thumbs = Vec::new();
+    for index in 0..4 {
+        let photo = bytes_of(&format!("retry photo {index}"), 40_000);
+        let staged = stage(&old, owned("image/heic", &photo), &photo);
+        let thumb = bytes_of(&format!("retry thumb {index}"), 4_000);
+        add_asset(&old, &staged, "photo");
+        let thumb_handle = stage(&old, thumb_of(&staged, &thumb), &thumb);
+        thumbs.push((thumb_handle.content_hash, thumb));
+    }
+    drain(&old, at_home());
+
+    let new_dir = tempfile::tempdir().expect("a directory");
+    let restored = restore(new_dir.path(), &gateway);
+    assert_eq!(restored.vaults.len(), 1, "{restored:?}");
+    assert_eq!(restored.vaults[0].derivatives_total, 4, "{restored:?}");
+    assert_eq!(
+        restored.vaults[0].derivatives_landed, 0,
+        "vault opens immediately without blocking on thumbnails"
+    );
+    let path = PathBuf::from(&restored.vaults[0].path);
+    let bytes = centraid_blobs::ByteStore::open(path.with_extension("bytes")).expect("opens");
+    for (hash, _) in &thumbs {
+        assert!(
+            bytes
+                .read(centraid_blobs::ContentHash::parse_hex(hash).expect("hex"))
+                .is_err(),
+            "thumbnails have not been fetched before the vault opens"
+        );
+    }
+
+    let phone = reopen(&path);
+    // Pass 1 while offline: thumbnails are not fetched and the restoring marker stays.
+    gateway.cable().cut();
+    drain(&phone, at_home());
+    let progress = status(&phone)
+        .restoring
+        .expect("interrupted thumbnails keep restoring active");
+    assert_eq!(progress.previews_total, 4, "{progress:?}");
+    assert_eq!(progress.previews_back, 0, "{progress:?}");
+
+    // Pass 2 once back online: thumbnails are retried and complete, then originals land.
+    gateway.cable().mend();
+    drain(&phone, at_home());
+    assert!(
+        status(&phone).restoring.is_none(),
+        "restoring clears once retried thumbnails and originals complete"
+    );
+    for (hash, thumb) in &thumbs {
+        let held = bytes
+            .read(centraid_blobs::ContentHash::parse_hex(hash).expect("hex"))
+            .expect("thumbnail landed on retry");
+        assert_eq!(&held, thumb);
+    }
+}
+
+/// **EXCLUDED VIDEOS AND CONFIRMED-ABSENT ORIGINALS STILL CLEAR RESTORING** (12e).
+/// When the member excludes videos and another original is absent from every paired gateway,
+/// finishing the fetchable items clears the restoring marker rather than leaving "Restoring…"
+/// stuck forever.
+#[test]
+fn excluded_videos_and_absent_originals_still_clear_restoring() {
+    let gateway = gateway();
+    let old_dir = tempfile::tempdir().expect("a directory");
+    let old = phone(old_dir.path());
+    pair(&old, &gateway);
+
+    let photo = bytes_of("fetchable photo", 50_000);
+    let photo_handle = stage(&old, owned("image/heic", &photo), &photo);
+    add_asset(&old, &photo_handle, "photo");
+
+    let video = bytes_of("excluded video", 60_000);
+    let video_handle = stage(&old, owned("video/mp4", &video), &video);
+    add_asset(&old, &video_handle, "video");
+
+    let absent = bytes_of("absent photo", 45_000);
+    let absent_handle = stage(&old, owned("image/heic", &absent), &absent);
+    add_asset(&old, &absent_handle, "photo");
+    drain(&old, at_home());
+
+    // Delete the absent photo's chunk from the only paired gateway.
+    gateway
+        .spawned
+        .lose(
+            &vault_id(),
+            &chunk_of(&absent, 0, centraid_media::sealed::Class::Originals),
+        )
+        .expect("removes absent original chunk");
+
+    let new_dir = tempfile::tempdir().expect("a directory");
+    let path = PathBuf::from(&restore(new_dir.path(), &gateway).vaults[0].path);
+    let phone = reopen(&path);
+
+    let mut request = at_home();
+    request.exclude_videos = true;
+    drain(&phone, request);
+
+    assert!(
+        status(&phone).restoring.is_none(),
+        "restoring clears when only excluded videos and confirmed-absent originals remain"
+    );
+    assert!(
+        !phone.plane().originals_marker().exists(),
+        "originals marker is removed"
+    );
+    let bytes = centraid_blobs::ByteStore::open(path.with_extension("bytes")).expect("opens");
+    assert!(
+        bytes
+            .path_of(
+                centraid_blobs::ContentHash::parse_hex(&photo_handle.content_hash).expect("hex")
+            )
+            .expect("checks")
+            .is_some(),
+        "fetchable photo landed"
+    );
+    assert!(
+        bytes
+            .path_of(
+                centraid_blobs::ContentHash::parse_hex(&video_handle.content_hash).expect("hex")
+            )
+            .expect("checks")
+            .is_none(),
+        "excluded video was not fetched"
+    );
+}
+
+/// **AN OFFLINE GATEWAY IS DIALLED AT MOST ONCE PER RESTORE FETCH PASS** (12g).
+/// With many originals owed, an unreachable gateway is skipped for the rest of the pass after
+/// the first `Unreachable` instead of being redialled for every entry.
+#[test]
+fn offline_gateway_is_dialled_at_most_once_during_restore_fetch() {
+    let gateway = gateway();
+    let old_dir = tempfile::tempdir().expect("a directory");
+    let old = phone(old_dir.path());
+    pair(&old, &gateway);
+    for index in 0..12 {
+        let photo = bytes_of(&format!("offline photo {index}"), 20_000);
+        let staged = stage(&old, owned("image/heic", &photo), &photo);
+        add_asset(&old, &staged, "photo");
+    }
+    drain(&old, at_home());
+
+    let new_dir = tempfile::tempdir().expect("a directory");
+    let path = PathBuf::from(&restore(new_dir.path(), &gateway).vaults[0].path);
+    let phone = reopen(&path);
+
+    gateway.cable().cut();
+    let before = gateway.cable().connections();
+    drain(&phone, at_home());
+    let dialled = gateway.cable().connections() - before;
+
+    assert!(
+        status(&phone).restoring.is_some(),
+        "restoring stays active while the gateway is offline"
+    );
+    // `reach_all` dials once (up to 4 attempts with client retries) and `bring_originals` dials
+    // once (up to 4 attempts) before skipping the offline gateway for all remaining 11 entries.
+    // Without 12g, 12 entries would make 12 * 4 = 48+ connections.
+    assert!(
+        dialled <= 8,
+        "offline gateway was redialled for multiple entries: {dialled} connections for 12 originals"
     );
 }

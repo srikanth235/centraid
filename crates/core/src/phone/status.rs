@@ -130,15 +130,46 @@ pub(crate) fn restore_progress(
     }
     let state = plane.state()?;
     let mut out = wire::RestoreProgress::default();
-    for file in content_files(vault).map_err(plane_error)? {
-        let have = bytes
-            .path_of(centraid_blobs::ContentHash::from_bytes(*file.h.as_bytes()))
+    let exclude_videos = plane.remembered().is_some_and(|c| c.exclude_videos);
+    let have_local = |h: &PlaintextHash| -> Result<bool> {
+        Ok(bytes
+            .path_of(centraid_blobs::ContentHash::from_bytes(*h.as_bytes()))
             .map(|path| path.is_some())
             .unwrap_or(false)
             || state
-                .local(&file.h)
+                .local(h)
                 .map_err(plane_error)?
-                .is_some_and(|local| local.source == LocalSource::Os);
+                .is_some_and(|local| local.source == LocalSource::Os))
+    };
+    if let Some((root_name, _)) = state.device().map_err(plane_error)?.newest
+        && let Some(plaintext) = state.get_node(&root_name).map_err(plane_error)?
+        && let Ok(tree::Node::Root(root)) = tree::Node::decode(&plaintext)
+        && let Ok(entries) = tree::entries_of(&state, &root.blobs)
+    {
+        for entry in entries {
+            if !entry.thumbnail.is_empty() {
+                out.previews_total += 1;
+                out.previews_back += u64::from(have_local(&entry.h)?);
+            } else if !entry.original.is_empty() {
+                let video = entry
+                    .media_type
+                    .trim()
+                    .to_ascii_lowercase()
+                    .starts_with("video/");
+                if video && exclude_videos {
+                    continue;
+                }
+                out.originals_total += 1;
+                out.originals_back += u64::from(have_local(&entry.h)?);
+            }
+        }
+        return Ok(Some(out));
+    }
+    for file in content_files(vault).map_err(plane_error)? {
+        if file.is_original() && file.video && exclude_videos {
+            continue;
+        }
+        let have = have_local(&file.h)?;
         let (total, back) = if file.is_original() {
             (&mut out.originals_total, &mut out.originals_back)
         } else {

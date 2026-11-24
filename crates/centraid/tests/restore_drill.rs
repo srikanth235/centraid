@@ -516,18 +516,13 @@ fn lose_the_phone_restore_from_the_words_and_the_old_phone_freezes() {
         );
     }
     let bytes = centraid_blobs::ByteStore::open(path.with_extension("bytes")).expect("opens");
-    for file in &derivatives {
-        let hash = centraid_blobs::ContentHash::from_bytes(*file.h.as_bytes());
-        assert!(
-            bytes.is_complete(hash).expect("answers"),
-            "the {:?} of a {} is not back",
-            file.variant,
-            file.media_type
-        );
-    }
     assert_eq!(
-        restored.vaults[0].derivatives_landed, restored.vaults[0].derivatives_total,
-        "every thumbnail came back with the records: {restored:?}"
+        restored.vaults[0].derivatives_landed, 0,
+        "the vault opens before thumbnails arrive in the background (R3): {restored:?}"
+    );
+    assert!(
+        restored.vaults[0].derivatives_total > 0,
+        "the restore reports how many thumbnails are owed: {restored:?}"
     );
     let film_hash = centraid_blobs::ContentHash::parse_hex(&film_handle.content_hash).expect("hex");
     assert!(
@@ -546,11 +541,20 @@ fn lose_the_phone_restore_from_the_words_and_the_old_phone_freezes() {
             tokens: restored.tokens.clone(),
         }),
     );
-    // R3, PHASE 3: the pass after the restore brings the originals back, and it owes the gateway
-    // nothing (the restored tree is the head it holds).
+    // R3, PHASES 2 & 3: the pass after the restore brings the thumbnails (batched) and originals
+    // back, and it owes the gateway nothing (the restored tree is the head it holds).
     let after = drain(&phone);
     assert_eq!(after.stopped, wire::DrainStop::Empty as i32, "{after:?}");
     assert!(after.need_bytes.is_empty(), "{after:?}");
+    for file in &derivatives {
+        let hash = centraid_blobs::ContentHash::from_bytes(*file.h.as_bytes());
+        assert!(
+            bytes.is_complete(hash).expect("answers"),
+            "the {:?} of a {} did not arrive in the background pass",
+            file.variant,
+            file.media_type
+        );
+    }
     let wire::response::Kind::FetchOriginal(fetched) = ask(
         &phone,
         wire::request::Kind::FetchOriginal(wire::FetchOriginalRequest {
