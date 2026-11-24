@@ -58,11 +58,12 @@ fn the_schema_has_no_outbox_and_one_rung() {
             "gateway",
             "local_bytes",
             "node",
+            "os_bundle",
             "os_chunk",
             "staged",
             "undone"
         ],
-        "pairings, what each confirmed, the node cache, staging, the device row, undone names, local bytes, the chunks handed to the OS"
+        "pairings, what each confirmed, the node cache, staging, the device row, undone names, local bytes, the chunks and bundles handed to the OS"
     );
     assert!(!tables.iter().any(|table| table.contains("outbox")));
     let (application_id, version): (i64, i64) = (
@@ -209,6 +210,23 @@ fn every_constraint_the_code_states_is_in_the_database_too() {
             [&hex]
         ),
         "only a library item is edited"
+    );
+    // os_bundle
+    assert!(
+        refused(
+            c,
+            "INSERT INTO os_bundle (name, path) VALUES ('short', '/tmp/x')",
+            []
+        ),
+        "an os_bundle name is 64 hex"
+    );
+    assert!(
+        refused(
+            c,
+            "INSERT INTO os_bundle (name, path) VALUES (?1, '')",
+            [&hex]
+        ),
+        "an os_bundle path is non-empty"
     );
 }
 
@@ -462,4 +480,37 @@ fn a_crash_between_fsync_and_rename_leaves_only_a_partial_which_open_sweeps() {
         Some(&b"whole"[..])
     );
     assert!(reopened.get(&name(2)).expect("reads").is_none());
+}
+
+#[test]
+fn os_bundles_persist_across_reopen_and_rotate_by_set_difference() {
+    use std::path::PathBuf;
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let db = dir.path().join("v.state.db");
+    let p1 = PathBuf::from("/tmp/bundle-1");
+    let p2 = PathBuf::from("/tmp/bundle-2");
+    let p3 = PathBuf::from("/tmp/bundle-3");
+    {
+        let state = DeviceState::open(&db).expect("opens");
+        state.put_os_bundle(&name(1), "/tmp/bundle-1").expect("puts");
+        let gone = state
+            .rotate_os_bundles(&[(name(1), p1.clone()), (name(2), p2.clone())])
+            .expect("rotates");
+        assert!(gone.is_empty(), "p1 is still in current: {gone:?}");
+    }
+    let state = DeviceState::open(&db).expect("reopens");
+    assert_eq!(
+        state.os_bundles().expect("lists"),
+        vec![(name(1), p1.clone()), (name(2), p2.clone())]
+    );
+    // Rotating with overlapping p2 and new p3 retires only p1.
+    let gone = state
+        .rotate_os_bundles(&[(name(2), p2.clone()), (name(3), p3.clone())])
+        .expect("rotates");
+    assert_eq!(gone, vec![p1]);
+    // Rotating to empty retires p2 and p3.
+    let mut gone = state.rotate_os_bundles(&[]).expect("clears");
+    gone.sort();
+    assert_eq!(gone, vec![p2, p3]);
+    assert!(state.os_bundles().expect("empty").is_empty());
 }

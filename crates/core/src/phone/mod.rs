@@ -172,11 +172,8 @@ pub struct Plane {
     snapshot_owed: std::sync::atomic::AtomicBool,
     /// What the last pass learned of each gateway that the status shows and does not dial for.
     notes: std::sync::Mutex<BTreeMap<String, GatewayNotes>>,
-    /// The last snapshot could not be staged for want of room.
+    /// The last snapshot or OS bundle could not be staged for want of room.
     no_room: std::sync::atomic::AtomicBool,
-    /// The bundle files the last pass handed the OS: they stay until the pass after next, so
-    /// a task still reading one is not undone by the next pass's housekeeping.
-    os_files: std::sync::Mutex<Vec<Vec<PathBuf>>>,
 }
 
 impl Plane {
@@ -194,7 +191,6 @@ impl Plane {
             snapshot_owed: std::sync::atomic::AtomicBool::new(false),
             notes: std::sync::Mutex::new(BTreeMap::new()),
             no_room: std::sync::atomic::AtomicBool::new(false),
-            os_files: std::sync::Mutex::new(Vec::new()),
         }
     }
 
@@ -401,22 +397,6 @@ impl Plane {
             0_u64
         };
         free.min(self.pretend_free.load(std::sync::atomic::Ordering::SeqCst))
-    }
-
-    /// Hand the files of this pass's OS bundles over, and take the ones to remove: the files of
-    /// the generation before. A task the OS has not finished by the next pass lost its file, and
-    /// that only wakes a pass: the pass re-reads the head and diffs.
-    pub(crate) fn rotate_os_files(&self, mine: Vec<PathBuf>) -> Vec<PathBuf> {
-        let mut held = self
-            .os_files
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        held.push(mine);
-        if held.len() > 1 {
-            held.remove(0)
-        } else {
-            Vec::new()
-        }
     }
 }
 

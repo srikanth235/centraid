@@ -377,23 +377,37 @@ pub(crate) fn run_cancellable(
             .with_vault(|vault| snapshot_due(plane, &state, vault, keyring, request, phone_ms))?;
         if due || restage {
             let directory = directory_of(&state)?;
-            let outcome = handle.with_vault(|vault| {
-                Ok(snapshot::take(
-                    vault,
-                    &keyring.backup,
-                    &state,
-                    &staging,
-                    &directory,
-                    Options {
-                        // A gateway that confirmed nothing yet is owed every range, and ranges a
-                        // gateway confirmed were released: the snapshot stages them all again.
-                        restage_all: restage || new_gateway,
-                        // Every range is read to be staged: a clean one is not otherwise read.
-                        force_full: restage || new_gateway,
-                        ..Options::at(phone_ms)
-                    },
-                ))
-            })?;
+            let take_snapshot = || {
+                handle.with_vault(|vault| {
+                    Ok(snapshot::take(
+                        vault,
+                        &keyring.backup,
+                        &state,
+                        &staging,
+                        &directory,
+                        Options {
+                            // A gateway that confirmed nothing yet is owed every range, and ranges a
+                            // gateway confirmed were released: the snapshot stages them all again.
+                            restage_all: restage || new_gateway,
+                            // Every range is read to be staged: a clean one is not otherwise read.
+                            force_full: restage || new_gateway,
+                            ..Options::at(phone_ms)
+                        },
+                    ))
+                })
+            };
+            let mut outcome = take_snapshot()?;
+            if matches!(outcome, Err(PlaneError::StagingFull)) {
+                // Records take precedence over background media bundles: if old OS bundle files
+                // (e.g. left over from before a restart) occupy staging, reclaim them and retry.
+                let gone = state.rotate_os_bundles(&[]).map_err(plane_error)?;
+                if !gone.is_empty() {
+                    for path in gone {
+                        let _ = std::fs::remove_file(path);
+                    }
+                    outcome = take_snapshot()?;
+                }
+            }
             match outcome {
                 Ok(taken) => {
                     handle.note_walk(taken.ranges_read);
@@ -600,8 +614,11 @@ pub(crate) fn run_cancellable(
     )?;
     handle.plan_library(plan);
     let os_bundles = if request.os_uploads {
-        hand_to_the_os(plane, &env, &fleet, keyring, &conditions, &state)?
+        hand_to_the_os(plane, &env, &fleet, keyring, &conditions, &state, room_stop)?
     } else {
+        for gone in state.rotate_os_bundles(&[]).map_err(plane_error)? {
+            let _ = std::fs::remove_file(gone);
+        }
         Vec::new()
     };
 
@@ -793,8 +810,9 @@ fn need_bytes(
 }
 
 /// Write the OS's bundle files for the classes still owed and describe each as one whole
-/// `POST bundle`, at most [`OS_BUNDLES`] in all (§6.5). The previous pass's files go first: a
-/// task still reading one only fails and wakes a pass.
+/// `POST bundle`, at most [`OS_BUNDLES`] in all (§6.5). Previous pass files not referenced by
+/// this pass go at the end: a task still reading one only fails and wakes a pass, while a file
+/// still needed in this pass is kept intact.
 fn hand_to_the_os(
     plane: &Plane,
     env: &Env<'_>,
@@ -802,10 +820,16 @@ fn hand_to_the_os(
     keyring: &Keyring,
     conditions: &Conditions,
     state: &DeviceState,
+    room_stop: bool,
 ) -> Result<Vec<wire::HandoffPart>> {
     let mut parts = Vec::new();
-    let mut written: Vec<std::path::PathBuf> = Vec::new();
+    let mut written: Vec<(Name, std::path::PathBuf)> = Vec::new();
+    let mut written_paths: BTreeSet<std::path::PathBuf> = BTreeSet::new();
+    let mut staging_full = false;
     'gateways: for reached in &fleet.reached {
+        if parts.len() >= OS_BUNDLES {
+            break 'gateways;
+        }
         let gateway_id = &reached.gateway.gateway_id;
         let Some(row) = state.gateway(gateway_id).map_err(plane_error)? else {
             continue;
@@ -818,35 +842,39 @@ fn hand_to_the_os(
             (Class::Thumbnails, debt.thumbnails),
             (Class::Originals, debt.originals),
         ] {
+            if parts.len() >= OS_BUNDLES {
+                break 'gateways;
+            }
             if owed == 0 || !conditions.admits(class, false) {
                 continue;
             }
-            for bundle in
-                engine::write_os_bundles(env, &reached.store, class).map_err(plane_error)?
-            {
+            let remaining = OS_BUNDLES - parts.len();
+            let (bundles, full) =
+                engine::write_os_bundles_capped(env, &reached.store, class, remaining)
+                    .map_err(plane_error)?;
+            for bundle in bundles {
                 if parts.len() >= OS_BUNDLES {
-                    let _ = std::fs::remove_file(&bundle.path);
-                    continue;
+                    break 'gateways;
                 }
                 let name = bundle
                     .path
                     .file_name()
                     .map(|name| name.to_string_lossy().into_owned())
                     .unwrap_or_default();
-                // THE FILE IS THE OS'S NOW, not staging's: housekeeping must not release it
-                // under a task that is reading it.
-                if let Ok(staged) = Name::from_hex(&name) {
-                    state.unstage(&staged).map_err(plane_error)?;
-                }
                 let Ok(handoff) = reached
                     .store
                     .client()
                     .presign_bundle(&keyring.vault_id(), bundle.bytes)
                 else {
-                    let _ = std::fs::remove_file(&bundle.path);
+                    // Do not unlink here: an earlier part may share this deterministic path,
+                    // and `rotate_os_bundles` below unlinks every bundle not in `written`.
                     continue;
                 };
-                written.push(bundle.path.clone());
+                if let Ok(bundle_name) = Name::from_hex(&name)
+                    && written_paths.insert(bundle.path.clone())
+                {
+                    written.push((bundle_name, bundle.path.clone()));
+                }
                 parts.push(wire::HandoffPart {
                     name,
                     path: bundle.path.to_string_lossy().into_owned(),
@@ -863,12 +891,21 @@ fn hand_to_the_os(
                     allows_cellular: conditions.rule == wire::TransferRule::WifiAndCellularPhotos,
                 });
                 if parts.len() >= OS_BUNDLES {
-                    continue 'gateways;
+                    break 'gateways;
                 }
+            }
+            if full {
+                staging_full = true;
+                break 'gateways;
             }
         }
     }
-    for gone in plane.rotate_os_files(written) {
+    if staging_full {
+        plane.set_no_room(true);
+    } else if !room_stop {
+        plane.set_no_room(false);
+    }
+    for gone in state.rotate_os_bundles(&written).map_err(plane_error)? {
         let _ = std::fs::remove_file(gone);
     }
     Ok(parts)

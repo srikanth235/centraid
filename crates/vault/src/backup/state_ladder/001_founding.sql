@@ -97,3 +97,11 @@ CREATE TABLE undone (
   until_ms   INTEGER NOT NULL,
   PRIMARY KEY (gateway_id, name)
 ) STRICT, WITHOUT ROWID;
+
+-- Bundle files handed to the OS background session (§6.5): kept out of `staged` so
+-- housekeeping does not release them under an in-flight upload, and persisted so a crash
+-- or restart does not leak them against the staging budget.
+CREATE TABLE os_bundle (
+  name TEXT PRIMARY KEY CHECK (length(name) = 64 AND name NOT GLOB '*[^0-9a-f]*'),
+  path TEXT NOT NULL CHECK (length(path) > 0)
+) STRICT, WITHOUT ROWID;

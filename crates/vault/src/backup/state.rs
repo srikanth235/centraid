@@ -982,6 +982,75 @@ impl DeviceState {
             .collect::<rusqlite::Result<Vec<_>>>()?;
         names.iter().map(|name| name_of(name)).collect()
     }
+
+    // ── OS background bundles ──
+
+    /// Record a bundle file written into staging for the OS background session (§6.5).
+    /// Persisted immediately so a crash before rotation still leaves it tracked.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn put_os_bundle(&self, name: &Name, path: &str) -> Result<()> {
+        self.connection.execute(
+            "INSERT INTO os_bundle (name, path) VALUES (?1, ?2)
+             ON CONFLICT (name) DO UPDATE SET path = excluded.path",
+            params![name.to_hex(), path],
+        )?;
+        Ok(())
+    }
+
+    /// Every persisted OS bundle file, by name.
+    ///
+    /// # Errors
+    /// SQLite's refusal, or a row that will not read back.
+    pub fn os_bundles(&self) -> Result<Vec<(Name, PathBuf)>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT name, path FROM os_bundle ORDER BY name")?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        rows.into_iter()
+            .map(|(name, path)| Ok((name_of(&name)?, PathBuf::from(path))))
+            .collect()
+    }
+
+    /// Replace the persisted set of OS bundle files with `current` and return the paths from
+    /// the previous set that are no longer in `current`, so the caller can unlink them without
+    /// ever deleting a file still referenced by `current`.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn rotate_os_bundles(&self, current: &[(Name, PathBuf)]) -> Result<Vec<PathBuf>> {
+        let transaction = self.connection.unchecked_transaction()?;
+        let previous: Vec<PathBuf> = {
+            let mut statement = transaction.prepare("SELECT path FROM os_bundle ORDER BY name")?;
+            let rows = statement
+                .query_map([], |row| row.get::<_, String>(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            rows.into_iter().map(PathBuf::from).collect()
+        };
+        transaction.execute("DELETE FROM os_bundle", [])?;
+        for (name, path) in current {
+            transaction.execute(
+                "INSERT INTO os_bundle (name, path) VALUES (?1, ?2)
+                 ON CONFLICT (name) DO UPDATE SET path = excluded.path",
+                params![name.to_hex(), path.to_string_lossy().as_ref()],
+            )?;
+        }
+        transaction.commit()?;
+        let keep: BTreeSet<&Path> = current.iter().map(|(_, path)| path.as_path()).collect();
+        let mut seen: BTreeSet<PathBuf> = BTreeSet::new();
+        let mut gone = Vec::new();
+        for path in previous {
+            if !keep.contains(path.as_path()) && seen.insert(path.clone()) {
+                gone.push(path);
+            }
+        }
+        Ok(gone)
+    }
 }
 
 impl NodeSource for DeviceState {

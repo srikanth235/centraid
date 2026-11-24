@@ -980,3 +980,202 @@ fn a_phone_with_no_room_says_so() {
     );
     assert!(home.held(&vault_id()).is_empty(), "nothing went anywhere");
 }
+
+#[test]
+fn two_os_bundle_passes_over_the_same_missing_set_do_not_self_delete() {
+    let home = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    pair(&phone, &home);
+    for label in ["a", "b"] {
+        owned_photo(&phone, label, 300_000);
+    }
+    let req = wire::DrainRequest {
+        deadline_ms: 1,
+        os_uploads: true,
+        ..at_home()
+    };
+    let first = drain(&phone, req);
+    assert!(!first.os_bundles.is_empty(), "{first:?}");
+    for part in &first.os_bundles {
+        assert!(
+            std::path::Path::new(&part.path).exists(),
+            "first pass bundle exists: {}",
+            part.path
+        );
+    }
+    // A second pass while the OS upload is still in flight sees the exact same missing set
+    // and deterministic bundle path; rotation must not unlink the path still in use.
+    let second = drain(&phone, req);
+    assert_eq!(second.os_bundles.len(), first.os_bundles.len());
+    for part in &second.os_bundles {
+        assert!(
+            std::path::Path::new(&part.path).exists(),
+            "second pass bundle was self-deleted: {}",
+            part.path
+        );
+    }
+    assert_eq!(
+        the_os_uploads(&home, &second.os_bundles),
+        second.os_bundles.len()
+    );
+}
+
+#[test]
+fn restarting_after_os_bundle_handoff_does_not_leak_staging_bytes() {
+    let home = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let vault_path = dir.path().join("vault.db");
+    let first = {
+        let phone = phone(dir.path());
+        pair(&phone, &home);
+        for label in ["a", "b"] {
+            owned_photo(&phone, label, 300_000);
+        }
+        let window = drain(
+            &phone,
+            wire::DrainRequest {
+                deadline_ms: 1,
+                os_uploads: true,
+                ..at_home()
+            },
+        );
+        assert!(!window.os_bundles.is_empty(), "{window:?}");
+        assert!(status(&phone).spool_bytes > 0);
+        window
+    };
+    // Simulate an app kill and relaunch: files stay on disk until the next pass rotates them,
+    // so an in-flight OS upload is not disrupted by reopen.
+    let phone = reopen(&vault_path);
+    for part in &first.os_bundles {
+        assert!(
+            std::path::Path::new(&part.path).exists(),
+            "in-flight bundle survives reopen: {}",
+            part.path
+        );
+    }
+    assert_eq!(
+        the_os_uploads(&home, &first.os_bundles),
+        first.os_bundles.len()
+    );
+    // The next pass confirms the uploads and reclaims the persisted OS bundle files.
+    let woken = drain(&phone, at_home());
+    assert_eq!(woken.stopped, wire::DrainStop::Empty as i32, "{woken:?}");
+    for part in &first.os_bundles {
+        assert!(
+            !std::path::Path::new(&part.path).exists(),
+            "old OS bundle leaked across restart: {}",
+            part.path
+        );
+    }
+    assert_eq!(
+        status(&phone).spool_bytes,
+        0,
+        "staging bytes are reclaimed after restart"
+    );
+}
+
+#[test]
+fn multiple_gateways_with_identical_missing_sets_keep_bundles_and_respect_cap() {
+    let (one, two, three) = (gateway(), gateway(), gateway());
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    pair(&phone, &one);
+    pair(&phone, &two);
+    pair(&phone, &three);
+
+    // One photo with a thumbnail gives 2 classes x 3 gateways = 6 potential bundles,
+    // exceeding OS_BUNDLES (4), all with identical missing sets per class across gateways.
+    let photo = bytes_of("shared photo", 200_000);
+    let photo_handle = stage(&phone, owned("image/heic", &photo), &photo);
+    add_asset(&phone, &photo_handle, "photo");
+    let thumb = bytes_of("shared thumb", 8_000);
+    stage(&phone, thumb_of(&photo_handle, &thumb), &thumb);
+
+    let window = drain(
+        &phone,
+        wire::DrainRequest {
+            deadline_ms: 1,
+            os_uploads: true,
+            ..at_home()
+        },
+    );
+    assert_eq!(
+        window.os_bundles.len(),
+        centraid_vault::backup::engine::OS_BUNDLES,
+        "capped at OS_BUNDLES: {window:?}"
+    );
+    for part in &window.os_bundles {
+        assert!(
+            std::path::Path::new(&part.path).exists(),
+            "shared bundle file was unlinked by another gateway: {}",
+            part.path
+        );
+        assert!(
+            std::fs::read(&part.path).is_ok_and(|bytes| bytes.len() as u64 == part.size),
+            "bundle file is readable and whole"
+        );
+    }
+}
+
+#[test]
+fn staging_full_during_os_bundles_returns_parts_built_so_far_and_sets_no_room() {
+    let home = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    // Large enough for the snapshot and the small thumbnail bundle, too small for the 300 KiB
+    // original bundle.
+    let phone = phone_with(dir.path(), |config| config.with_staging_ceiling(120_000));
+    pair(&phone, &home);
+
+    let photo = bytes_of("large original", 300_000);
+    let photo_handle = stage(&phone, owned("image/heic", &photo), &photo);
+    add_asset(&phone, &photo_handle, "photo");
+    let thumb = bytes_of("small thumb", 6_000);
+    stage(&phone, thumb_of(&photo_handle, &thumb), &thumb);
+
+    // Confirm records first on a metered tap so snapshot ranges are released from staging
+    // while both the thumbnail and the original remain owed.
+    let records = drain(
+        &phone,
+        wire::DrainRequest {
+            metered: true,
+            asked: true,
+            os_uploads: false,
+            ..at_home()
+        },
+    );
+    assert_eq!(
+        records.stopped,
+        wire::DrainStop::Empty as i32,
+        "{records:?}"
+    );
+    assert_eq!(status(&phone).spool_bytes, 0);
+
+    // Now build OS bundles: thumbnails fit, originals hit StagingFull. The drain must succeed
+    // with the thumbnail bundle built so far and flag NoRoom.
+    let window = drain(
+        &phone,
+        wire::DrainRequest {
+            deadline_ms: 1,
+            os_uploads: true,
+            ..at_home()
+        },
+    );
+    assert_eq!(
+        window.os_bundles.len(),
+        1,
+        "returns the thumbnail bundle built before StagingFull: {window:?}"
+    );
+    assert!(
+        std::path::Path::new(&window.os_bundles[0].path).exists(),
+        "returned bundle exists on disk"
+    );
+    assert!(
+        status(&phone)
+            .waiting
+            .iter()
+            .any(|row| row.reason == wire::WaitReason::NoRoom as i32),
+        "sets the no-room note: {:?}",
+        status(&phone).waiting
+    );
+}

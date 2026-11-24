@@ -1276,9 +1276,33 @@ pub const fn os_event_wakes_a_pass() -> bool {
 /// # Errors
 /// The store's, staging's or state's refusal.
 pub fn write_os_bundles(env: &Env<'_>, store: &dyn Store, class: Class) -> Result<Vec<OsBundle>> {
+    let (bundles, staging_full) = write_os_bundles_capped(env, store, class, OS_BUNDLES)?;
+    if staging_full && bundles.is_empty() {
+        return Err(PlaneError::StagingFull);
+    }
+    Ok(bundles)
+}
+
+/// Like [`write_os_bundles`], but writes at most `max_bundles` files and treats
+/// [`PlaneError::StagingFull`] as "no more bundles this pass", returning the bundles already
+/// written alongside a flag indicating staging ran out of room. Each written bundle is recorded
+/// in `os_bundle` immediately (not `staged`) so housekeeping leaves it alone while the OS reads
+/// it and a crash cannot leak it against the staging budget.
+///
+/// # Errors
+/// The store's, staging's (other than [`PlaneError::StagingFull`]) or state's refusal.
+pub fn write_os_bundles_capped(
+    env: &Env<'_>,
+    store: &dyn Store,
+    class: Class,
+    max_bundles: usize,
+) -> Result<(Vec<OsBundle>, bool)> {
     use centraid_gateway::rules::bundle::{self, Frame};
+    if max_bundles == 0 {
+        return Ok((Vec::new(), false));
+    }
     let Some(target) = env.newest()? else {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), false));
     };
     let root = tree::root_of(env.state, &target)?;
     let entries = tree::entries_of(env.state, &root.blobs)?;
@@ -1304,13 +1328,14 @@ pub fn write_os_bundles(env: &Env<'_>, store: &dyn Store, class: Class) -> Resul
     let mut frames: Vec<Frame> = Vec::new();
     let mut listed: Vec<Name> = Vec::new();
     let mut bytes = 0_u64;
+    let mut staging_full = false;
     let flush = |frames: &mut Vec<Frame>,
                  listed: &mut Vec<Name>,
                  bytes: &mut u64,
                  out: &mut Vec<OsBundle>|
-     -> Result<()> {
+     -> Result<bool> {
         if frames.is_empty() {
-            return Ok(());
+            return Ok(true);
         }
         let body = bundle::encode(frames);
         let mut hasher = blake3::Hasher::new();
@@ -1318,9 +1343,18 @@ pub fn write_os_bundles(env: &Env<'_>, store: &dyn Store, class: Class) -> Resul
             hasher.update(name.as_bytes());
         }
         let file_name = Name::from_bytes(*hasher.finalize().as_bytes());
-        let path = env.staging.put(&file_name, &body)?;
+        let path = match env.staging.put(&file_name, &body) {
+            Ok(path) => path,
+            Err(PlaneError::StagingFull) => {
+                frames.clear();
+                listed.clear();
+                *bytes = 0;
+                return Ok(false);
+            }
+            Err(error) => return Err(error),
+        };
         env.state
-            .stage(&file_name, &path.to_string_lossy(), body.len() as u64)?;
+            .put_os_bundle(&file_name, &path.to_string_lossy())?;
         out.push(OsBundle {
             path,
             names: std::mem::take(listed),
@@ -1328,7 +1362,7 @@ pub fn write_os_bundles(env: &Env<'_>, store: &dyn Store, class: Class) -> Resul
         });
         frames.clear();
         *bytes = 0;
-        Ok(())
+        Ok(true)
     };
     for chunk in chunks {
         if !missing.contains(&chunk.name) {
@@ -1337,10 +1371,14 @@ pub fn write_os_bundles(env: &Env<'_>, store: &dyn Store, class: Class) -> Resul
         let Some(object) = env.rebuild(&chunk, &lookup)? else {
             continue;
         };
-        if bytes + object.len() as u64 > OS_BUNDLE_BYTES && !frames.is_empty() {
-            flush(&mut frames, &mut listed, &mut bytes, &mut out)?;
+        if bytes + object.len() as u64 > OS_BUNDLE_BYTES
+            && !frames.is_empty()
+            && !flush(&mut frames, &mut listed, &mut bytes, &mut out)?
+        {
+            staging_full = true;
+            break;
         }
-        if out.len() >= OS_BUNDLES {
+        if out.len() >= max_bundles {
             break;
         }
         bytes += object.len() as u64;
@@ -1350,10 +1388,13 @@ pub fn write_os_bundles(env: &Env<'_>, store: &dyn Store, class: Class) -> Resul
             object,
         ));
     }
-    if out.len() < OS_BUNDLES {
-        flush(&mut frames, &mut listed, &mut bytes, &mut out)?;
+    if !staging_full
+        && out.len() < max_bundles
+        && !flush(&mut frames, &mut listed, &mut bytes, &mut out)?
+    {
+        staging_full = true;
     }
-    Ok(out)
+    Ok((out, staging_full))
 }
 
 // ─── read-back (E10) ────────────────────────────────────────────────────────
