@@ -154,7 +154,11 @@ fn entry_of(
 /// main file untouched until the core checkpoints after a snapshot. Any checkpoint behind the
 /// core's back — including SQLite's checkpoint on last-connection close — writes dirty pages into
 /// the main file and changes this mark, telling the next snapshot to take a full read.
-fn disk_mark(path: &Path, page_size: u64, vault_root_page: Option<u64>) -> Result<Option<[u8; 32]>> {
+fn disk_mark(
+    path: &Path,
+    page_size: u64,
+    vault_root_page: Option<u64>,
+) -> Result<Option<[u8; 32]>> {
     let page_len = usize::try_from(page_size).unwrap_or(0);
     if page_len == 0 {
         return Ok(None);
@@ -254,7 +258,11 @@ pub fn take(
         .as_ref()
         .is_none_or(|(_, root)| root.page_count != page_count)
     {
-        dirty.extend((prior_ranges.len() as u64).saturating_sub(1)..range_count);
+        dirty.extend(
+            (prior_ranges.len() as u64)
+                .min(range_count)
+                .saturating_sub(1)..range_count,
+        );
     }
 
     let mut ranges: Vec<Ref> = Vec::with_capacity(usize::try_from(range_count).unwrap_or(0));
@@ -398,9 +406,7 @@ pub fn take(
                 row.get::<_, i64>(0)
             })
             .is_ok_and(|busy| busy == 0);
-        if checkpointed
-            && let Ok(mark @ Some(_)) = disk_mark(&path, page_size, vault_root_page)
-        {
+        if checkpointed && let Ok(mark @ Some(_)) = disk_mark(&path, page_size, vault_root_page) {
             let _ = state.set_disk_mark(mark.as_ref());
         }
         Ok(())

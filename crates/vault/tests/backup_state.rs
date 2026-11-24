@@ -501,7 +501,9 @@ fn os_bundles_persist_across_reopen_and_rotate_by_set_difference() {
     let p3 = PathBuf::from("/tmp/bundle-3");
     {
         let state = DeviceState::open(&db).expect("opens");
-        state.put_os_bundle(&name(1), "/tmp/bundle-1").expect("puts");
+        state
+            .put_os_bundle(&name(1), "/tmp/bundle-1")
+            .expect("puts");
         let gone = state
             .rotate_os_bundles(&[(name(1), p1.clone()), (name(2), p2.clone())])
             .expect("rotates");

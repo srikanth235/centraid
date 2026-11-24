@@ -1263,21 +1263,14 @@ impl Scan<'_> {
         // the writer now, so the head is moved to the backup it restored, and the first pass
         // continues from a head that opens.
         if let Some((older, taken)) = &staged.older {
-            use centraid_vault::backup::store::Store as _;
             staged.store.client().set_token(paired.token);
-            staged
-                .store
-                .set_head(
-                    &Name::from_bytes(*older.as_bytes()),
-                    Some(&Name::from_bytes(*staged.head.as_bytes())),
-                    u64::try_from(*taken).unwrap_or(0),
-                    staged.restored.manifest.writes,
-                )
-                .map_err(|error| CoreError::Unavailable {
-                    reason: format!(
-                        "the backup device did not take the older backup as its head: {error}"
-                    ),
-                })?;
+            move_head_to_older(
+                &staged.store,
+                &Name::from_bytes(*older.as_bytes()),
+                &Name::from_bytes(*staged.head.as_bytes()),
+                u64::try_from(*taken).unwrap_or(0),
+                staged.restored.manifest.writes,
+            )?;
         }
         let plane = Plane::of(kept);
         // THE SAME PHONE: a copy this one held is an older copy of this vault, and its device
@@ -1689,5 +1682,135 @@ mod held_tests {
             !held_is_newer(&held, &restored),
             "a damaged held copy answers not newer"
         );
+    }
+
+    #[test]
+    fn move_head_to_older_treats_head_already_equal_to_older_as_success() {
+        use centraid_vault::backup::store::{
+            Deleted, FrameAnswer, Head, HeldEntry, ObjectEntry, Outgoing, SnapshotEntry, Store,
+            StoreError,
+        };
+
+        struct ConflictStore {
+            current: Option<Head>,
+        }
+
+        impl Store for ConflictStore {
+            fn gateway_id(&self) -> &str {
+                "gw"
+            }
+            fn head(&self) -> std::result::Result<Option<Head>, StoreError> {
+                Ok(self.current)
+            }
+            fn set_head(
+                &self,
+                _name: &Name,
+                _prev: Option<&Name>,
+                _taken_at_ms: u64,
+                _writes: u64,
+            ) -> std::result::Result<Head, StoreError> {
+                Err(StoreError::HeadConflict {
+                    current: self.current,
+                })
+            }
+            fn snapshots(&self) -> std::result::Result<Vec<SnapshotEntry>, StoreError> {
+                Ok(Vec::new())
+            }
+            fn exists(&self, _names: &[Name]) -> std::result::Result<Vec<Name>, StoreError> {
+                Ok(Vec::new())
+            }
+            fn bundle(
+                &self,
+                _parts: &[Outgoing],
+            ) -> std::result::Result<Vec<(Name, FrameAnswer)>, StoreError> {
+                Ok(Vec::new())
+            }
+            fn get(
+                &self,
+                name: &Name,
+                _sink: &mut dyn std::io::Write,
+            ) -> std::result::Result<u64, StoreError> {
+                Err(StoreError::Missing(*name))
+            }
+            fn list(
+                &self,
+                _after: Option<&Name>,
+                _limit: usize,
+            ) -> std::result::Result<Vec<ObjectEntry>, StoreError> {
+                Ok(Vec::new())
+            }
+            fn held(
+                &self,
+                _after: Option<&Name>,
+                _limit: usize,
+            ) -> std::result::Result<Vec<HeldEntry>, StoreError> {
+                Ok(Vec::new())
+            }
+            fn delete(
+                &self,
+                _names: &[Name],
+                _head_root: Option<&Name>,
+            ) -> std::result::Result<Deleted, StoreError> {
+                Ok(Deleted {
+                    deleted: Vec::new(),
+                    freed: Vec::new(),
+                    refused: Vec::new(),
+                })
+            }
+            fn undo(&self, _names: Option<&[Name]>) -> std::result::Result<u64, StoreError> {
+                Ok(0)
+            }
+        }
+
+        let older = Name::from_bytes([1; 32]);
+        let prev = Name::from_bytes([2; 32]);
+        let other = Name::from_bytes([3; 32]);
+        let head_of = |name| Head {
+            name,
+            prev: None,
+            taken_at_ms: 100,
+            epoch: 2,
+            generation: 1,
+            writes: 5,
+            set_at_ms: 100,
+        };
+
+        let already = ConflictStore {
+            current: Some(head_of(older)),
+        };
+        assert!(
+            move_head_to_older(&already, &older, &prev, 100, 5).is_ok(),
+            "head already equal to older succeeds on retry"
+        );
+
+        let moved_elsewhere = ConflictStore {
+            current: Some(head_of(other)),
+        };
+        assert!(
+            move_head_to_older(&moved_elsewhere, &older, &prev, 100, 5).is_err(),
+            "head equal to a different snapshot still fails"
+        );
+    }
+}
+
+/// Move a gateway's head from `prev` to `older` during restore adoption. If a prior attempt
+/// already landed `older` as the gateway's head, the resulting `HeadConflict` is treated as
+/// success so retrying adoption is idempotent.
+fn move_head_to_older(
+    store: &dyn centraid_vault::backup::store::Store,
+    older: &Name,
+    prev: &Name,
+    taken_at_ms: u64,
+    writes: u64,
+) -> Result<()> {
+    use centraid_vault::backup::store::StoreError;
+    match store.set_head(older, Some(prev), taken_at_ms, writes) {
+        Ok(_) => Ok(()),
+        Err(StoreError::HeadConflict {
+            current: Some(head),
+        }) if head.name == *older => Ok(()),
+        Err(error) => Err(CoreError::Unavailable {
+            reason: format!("the backup device did not take the older backup as its head: {error}"),
+        }),
     }
 }

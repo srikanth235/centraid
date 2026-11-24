@@ -135,6 +135,9 @@ pub(crate) struct GatewayNotes {
     /// Why the last pass stopped at this gateway when it refused (its disk is full, an object
     /// too large, another code): the reason the status names, until a pass is not refused there.
     pub refusal: Option<wire::WaitReason>,
+    /// Whether the last read-back found missing or damaged chunks at this gateway, until a clean
+    /// repair or clean read-back clears it.
+    pub damaged: bool,
 }
 
 /// THE PLANE'S FILES FOR ONE VAULT, beside the vault file, stated once.

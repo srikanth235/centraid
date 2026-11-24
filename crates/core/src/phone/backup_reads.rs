@@ -39,6 +39,8 @@ pub(crate) fn moves_the_ledger(request: &wire::Request) -> bool {
                 | K::Settle(_)
                 | K::Reconcile(_)
                 | K::Released(_)
+                | K::CheckBackup(_)
+                | K::UndoHeld(_)
         )
     )
 }

@@ -41,14 +41,23 @@ fn month_of(ms: u64) -> i64 {
 
 /// The snapshots to keep: the newest of each of the 7 most recent days that have one, of each of
 /// the 4 most recent weeks, of each of the 6 most recent months, and the newest of all. A held
-/// snapshot (its delete already in its week) is not a candidate.
+/// snapshot (its delete already in its week) is not a candidate. A snapshot dated after `now_ms`
+/// is judged as taken at `now_ms`, and snapshots are ordered by signed `(epoch, generation)`
+/// before any clock.
 #[must_use]
-pub fn keep(snapshots: &[SnapshotEntry]) -> BTreeSet<Name> {
+pub fn keep_at(snapshots: &[SnapshotEntry], now_ms: u64) -> BTreeSet<Name> {
     let mut live: Vec<&SnapshotEntry> = snapshots
         .iter()
         .filter(|snapshot| snapshot.held_at_ms.is_none())
         .collect();
-    live.sort_by_key(|snapshot| std::cmp::Reverse((snapshot.taken_at_ms, snapshot.name)));
+    live.sort_by_key(|snapshot| {
+        std::cmp::Reverse((
+            snapshot.epoch,
+            snapshot.generation,
+            snapshot.taken_at_ms.min(now_ms),
+            snapshot.name,
+        ))
+    });
     let mut kept = BTreeSet::new();
     if let Some(newest) = live.first() {
         kept.insert(newest.name);
@@ -59,8 +68,9 @@ pub fn keep(snapshots: &[SnapshotEntry]) -> BTreeSet<Name> {
         (BTreeSet::new(), KEEP_MONTHLY),
     ];
     for snapshot in live {
-        let day = i64::try_from(snapshot.taken_at_ms / DAY_MS).unwrap_or(0);
-        let keys = [day, day / 7, month_of(snapshot.taken_at_ms)];
+        let taken = snapshot.taken_at_ms.min(now_ms);
+        let day = i64::try_from(taken / DAY_MS).unwrap_or(0);
+        let keys = [day, day / 7, month_of(taken)];
         for ((seen, limit), key) in buckets.iter_mut().zip(keys) {
             if seen.len() < *limit && seen.insert(key) {
                 kept.insert(snapshot.name);
@@ -68,6 +78,12 @@ pub fn keep(snapshots: &[SnapshotEntry]) -> BTreeSet<Name> {
         }
     }
     kept
+}
+
+/// [`keep_at`] without a clock bound, for callers that do not pass `now_ms`.
+#[must_use]
+pub fn keep(snapshots: &[SnapshotEntry]) -> BTreeSet<Name> {
+    keep_at(snapshots, u64::MAX)
 }
 
 /// What a collection did.
@@ -133,7 +149,7 @@ pub fn collect(env: &Env<'_>, store: &dyn Store) -> Result<Collected> {
         return Ok(Collected::Doubt("the gateway has no head".to_owned()));
     };
     let snapshots = store.snapshots()?;
-    let kept = keep(&snapshots);
+    let kept = keep_at(&snapshots, env.now_ms);
     let listing = list_all(store)?;
 
     let source = Fetching { env, store };
@@ -221,4 +237,58 @@ pub fn reachable(source: &dyn NodeSource, roots: &[Ref]) -> Result<BTreeMap<Name
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn snap(id: u8, epoch: u64, generation: u64, taken_at_ms: u64) -> SnapshotEntry {
+        SnapshotEntry {
+            name: Name::from_bytes([id; 32]),
+            taken_at_ms,
+            registered_at_ms: taken_at_ms,
+            epoch,
+            generation,
+            held_at_ms: None,
+            purge_after_ms: None,
+        }
+    }
+
+    #[test]
+    fn future_dated_snapshots_are_clamped_to_now_and_signed_order_wins() {
+        let now = 1_750_000_000_000_u64;
+        // Ten distinct days in the past (days 0..9 before now).
+        let mut entries: Vec<SnapshotEntry> = (1..=10_u8)
+            .map(|d| snap(d, 1, u64::from(11 - d), now - u64::from(d) * DAY_MS))
+            .collect();
+        // A snapshot from an older generation with a clock set far into the future,
+        // and a newer generation taken at `now`.
+        let future_old = snap(200, 1, 11, now + 365 * DAY_MS);
+        let current = snap(201, 1, 12, now);
+        entries.push(future_old);
+        entries.push(current);
+
+        let kept = keep_at(&entries, now);
+        assert!(
+            kept.contains(&current.name),
+            "highest (epoch, generation) is newest and kept"
+        );
+        // Both `future_old` (clamped to `now`) and `current` (at `now`) fall in the same day/week/month
+        // bucket, and `current` wins the bucket because its signed (epoch, generation) is greater.
+        assert!(
+            !kept.contains(&future_old.name),
+            "future-dated older generation is clamped to now and loses the bucket to current"
+        );
+    }
+
+    #[test]
+    fn higher_epoch_orders_ahead_of_higher_generation_and_later_clock() {
+        let now = 1_750_000_000_000_u64;
+        let old_epoch = snap(1, 1, 99, now);
+        let new_epoch = snap(2, 2, 1, now - 10_000);
+        let kept = keep_at(&[old_epoch, new_epoch], now);
+        // Same UTC day/week/month, so only the first in signed order is kept.
+        assert_eq!(kept, BTreeSet::from([new_epoch.name]));
+    }
 }

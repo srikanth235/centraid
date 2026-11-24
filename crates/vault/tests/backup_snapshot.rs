@@ -477,7 +477,15 @@ fn a_clean_close_after_a_write_forces_a_full_read_and_restores_all_rows() {
     let first = snapshot::take(&vault, &keys, &state, &staging, &directory, Options::at(T0))
         .expect("first snapshot");
     assert!(first.full);
-    let _ = upload_and_restore(&vault, &keys, &state, &staging, &store, &first.root.name, T0);
+    let _ = upload_and_restore(
+        &vault,
+        &keys,
+        &state,
+        &staging,
+        &store,
+        &first.root.name,
+        T0,
+    );
 
     // A normal write without closing stays incremental.
     backup_support::common::insert_note(&vault, "normal incremental write").expect("commits");
@@ -490,7 +498,10 @@ fn a_clean_close_after_a_write_forces_a_full_read_and_restores_all_rows() {
         Options::at(T0 + 1_000),
     )
     .expect("incremental snapshot");
-    assert!(!incremental.full, "normal write without close stays incremental");
+    assert!(
+        !incremental.full,
+        "normal write without close stays incremental"
+    );
     let _ = upload_and_restore(
         &vault,
         &keys,
@@ -536,7 +547,10 @@ fn a_clean_close_after_a_write_forces_a_full_read_and_restores_all_rows() {
         &after_close.root.name,
         T0 + 2_000,
     );
-    assert_eq!(restored, live, "restored rows equal live rows after clean close");
+    assert_eq!(
+        restored, live,
+        "restored rows equal live rows after clean close"
+    );
 }
 
 #[test]
@@ -578,7 +592,15 @@ fn a_clean_close_then_new_write_forces_a_full_read_and_restores_both_writes() {
     let first = snapshot::take(&vault, &keys, &state, &staging, &directory, Options::at(T0))
         .expect("first snapshot");
     assert!(first.full);
-    let _ = upload_and_restore(&vault, &keys, &state, &staging, &store, &first.root.name, T0);
+    let _ = upload_and_restore(
+        &vault,
+        &keys,
+        &state,
+        &staging,
+        &store,
+        &first.root.name,
+        T0,
+    );
 
     // Write 1 before clean close (folded into vault.db on close).
     backup_support::common::insert_note(&vault, "before clean close").expect("commits 1");
@@ -620,4 +642,3 @@ fn a_clean_close_then_new_write_forces_a_full_read_and_restores_both_writes() {
         "restored rows include both the pre-close write and the post-reopen write"
     );
 }
-

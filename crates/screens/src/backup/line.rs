@@ -217,7 +217,7 @@ pub fn line(
             &words::backup_line_backlog(locale, reading.unconfirmed()),
             &[("count", &count), ("when", &oldest)],
         )
-    } else if running || reading.unconfirmed() == 0 {
+    } else if running || reading.unconfirmed() == 0 || !reading.records_held() {
         fill(&words::backup_line_records(locale), &[("when", &when)])
     } else {
         // RECORDS ARE BACKED UP and photos wait: said as it is, the waiting rows under it say
@@ -235,8 +235,8 @@ pub fn line(
             &words::backup_status_catching_up(locale),
             &[("when", &short_ago(locale, acked, now_ms))],
         )
-    } else if waiting.is_empty() {
-        // NOTHING NAMED WAITS but the records are not held yet: only the records are claimed.
+    } else if waiting.is_empty() || !reading.records_held() {
+        // NOTHING NAMED WAITS or the records are not held yet: only the records are claimed.
         fill(
             &words::backup_status_records(locale),
             &[("when", &short_ago(locale, acked, now_ms))],
@@ -245,7 +245,7 @@ pub fn line(
         // "Backed up 2 min ago. 120 photos waiting for Wi-Fi."
         let reasons = waiting
             .iter()
-            .map(|row| row.sentence.clone())
+            .map(|row| row.sentence.trim_end_matches('.'))
             .collect::<Vec<_>>()
             .join(". ");
         fill(
@@ -612,9 +612,13 @@ fn row_reason(reason: wire::WaitReason) -> wire::backup_waiting_row::Reason {
 fn finish(mut line: wire::BackupLine) -> wire::BackupLine {
     let mut parts = vec![
         line.sentence.trim_end_matches('.').to_owned(),
-        line.detail.clone(),
+        line.detail.trim_end_matches('.').to_owned(),
     ];
-    parts.extend(line.waiting.iter().map(|row| row.sentence.clone()));
+    parts.extend(
+        line.waiting
+            .iter()
+            .map(|row| row.sentence.trim_end_matches('.').to_owned()),
+    );
     line.accessibility_label = parts
         .into_iter()
         .filter(|part| !part.is_empty())

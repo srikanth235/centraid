@@ -446,10 +446,7 @@ fn frame_with_nonce(
 ) -> Result<Vec<u8>, SealedError> {
     let cipher = XChaCha20Poly1305::new(&Key::from(*keys.k_obj()));
     let sealed = cipher
-        .encrypt(
-            &XNonce::from(nonce),
-            Payload { msg: body, aad },
-        )
+        .encrypt(&XNonce::from(nonce), Payload { msg: body, aad })
         .map_err(|_| SealedError::Seal)?;
     let mut object = Vec::with_capacity(HEADER_BYTES + NONCE_BYTES + sealed.len());
     object.extend_from_slice(&MAGIC);
@@ -563,13 +560,14 @@ pub fn open_checked(
     let plaintext = if flags & FLAG_ZSTD == 0 {
         body
     } else {
-        let plain = zstd::bulk::decompress(&body, CHUNK_BYTES)
+        let mut plain = zstd::bulk::decompress(&body, CHUNK_BYTES)
             .map_err(|_| SealedError::Damaged("its body does not decompress within a chunk"))?;
         if body.len() >= plain.len() {
             return Err(SealedError::Damaged(
                 "it is flagged compressed but is not shorter",
             ));
         }
+        plain.shrink_to_fit();
         plain
     };
     if plaintext.len() > CHUNK_BYTES {

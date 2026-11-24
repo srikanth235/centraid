@@ -182,8 +182,9 @@ fn directory_of(state: &DeviceState) -> Result<Directory> {
 }
 
 /// Whether a snapshot is due (§5): never while the vault is unchanged and nothing owes one; at
-/// once when asked, when a gateway's directory is stale, or when something staged since the last
-/// snapshot needs listing; otherwise once a change has settled.
+/// once when asked, when a gateway's directory is stale, when a gateway's head went backwards,
+/// or when something staged since the last snapshot needs listing; otherwise once a change has
+/// settled.
 fn snapshot_due(
     plane: &Plane,
     state: &DeviceState,
@@ -201,9 +202,12 @@ fn snapshot_due(
         return Ok(true);
     };
     let dirty = gateways.iter().any(|gateway| gateway.directory_dirty);
+    let regressed = gateways
+        .iter()
+        .any(|gateway| gateway.moved_epoch.is_none() && gateway.regressed);
     let video_setting_changed =
         state.exclude_videos().map_err(plane_error)? != request.exclude_videos;
-    if plane.snapshot_owed() || dirty || video_setting_changed {
+    if plane.snapshot_owed() || dirty || regressed || video_setting_changed {
         return Ok(true);
     }
     let reference = status::node_ref(state, &keyring.backup, &name);
@@ -501,7 +505,19 @@ pub(crate) fn run_cancellable(
                         Some(Stop::Refused(_)) => Some(wire::WaitReason::RefusedOther),
                         _ => None,
                     };
-                    plane.note(pass.gateway_id(), |notes| notes.refusal = refusal);
+                    let repaired = pass.stop_reason().is_none()
+                        && pass.is_over()
+                        && state
+                            .gateway(pass.gateway_id())
+                            .ok()
+                            .flatten()
+                            .is_some_and(|row| row.conf.is_some());
+                    plane.note(pass.gateway_id(), |notes| {
+                        notes.refusal = refusal;
+                        if repaired {
+                            notes.damaged = false;
+                        }
+                    });
                 }
             }
             drop(passes);
@@ -519,21 +535,9 @@ pub(crate) fn run_cancellable(
 
     // Every gateway that is not whole at records stops the claim "backed up" on its own: the
     // engine wrote the reach; what a stop says of the member's gateway is the status's to draw.
-    let moved: Vec<u64> = stops
-        .iter()
-        .filter_map(|stop| match stop {
-            Stop::Moved { epoch } => Some(*epoch),
-            _ => None,
-        })
-        .collect();
-    if !moved.is_empty()
-        && moved.len() == fleet.reached.len()
-        && fleet.silent.is_empty()
-        && fleet.untrusted.is_empty()
-        && fleet.too_old.is_empty()
-    {
+    if let Some(epoch) = super::superseded_everywhere(&state)? {
         return Err(CoreError::VaultMoved {
-            current_epoch: moved.into_iter().max().unwrap_or(0),
+            current_epoch: epoch,
             moved_at_ms: 0,
         });
     }
@@ -575,6 +579,7 @@ pub(crate) fn run_cancellable(
                 plane.note(gateway_id, |notes| {
                     notes.sample_checked = u32::try_from(report.read).unwrap_or(u32::MAX);
                     notes.sample_of = u32::try_from(report.population).unwrap_or(u32::MAX);
+                    notes.damaged = !report.damaged.is_empty();
                 });
             }
             // Collecting lists everything the gateway holds: once in a while, never on a metered

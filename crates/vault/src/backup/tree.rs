@@ -104,7 +104,9 @@ impl Root {
     /// How many 64 KiB ranges the vault is.
     #[must_use]
     pub const fn range_count(&self) -> u64 {
-        (self.page_size * self.page_count).div_ceil(RANGE_BYTES as u64)
+        self.page_size
+            .saturating_mul(self.page_count)
+            .div_ceil(RANGE_BYTES as u64)
     }
 }
 
@@ -200,7 +202,7 @@ impl<'a> Reader<'a> {
         Ok(u64::from_be_bytes(bytes))
     }
 
-    fn count(&mut self, most: usize) -> Result<usize> {
+    fn count(&mut self, most: usize, min_item_bytes: usize) -> Result<usize> {
         let count = u32::from_be_bytes(
             self.take(4)?
                 .try_into()
@@ -209,6 +211,9 @@ impl<'a> Reader<'a> {
         let count = usize::try_from(count).unwrap_or(usize::MAX);
         if count > most {
             return Err(invariant("a tree node lists more than it may"));
+        }
+        if count > self.0.len() / min_item_bytes.max(1) {
+            return Err(invariant("a tree node is cut short"));
         }
         Ok(count)
     }
@@ -325,8 +330,11 @@ impl Node {
                 let user_version = r.int()?;
                 let page_size = r.int()?;
                 let page_count = r.int()?;
+                if page_size.checked_mul(page_count).is_none() {
+                    return Err(invariant("a root's page_size * page_count overflows"));
+                }
                 let taken_at_ms = r.int()?;
-                let tables = r.count(100_000)?;
+                let tables = r.count(100_000, 4 + 12)?;
                 let mut census = BTreeMap::new();
                 for _ in 0..tables {
                     let table = std::str::from_utf8(r.field()?)
@@ -344,7 +352,7 @@ impl Node {
                             .map_err(|_| invariant("a db_hash is not 32 bytes"))?,
                     ),
                 };
-                let leaves = r.count(1 << 20)?;
+                let leaves = r.count(1 << 20, 4 + REF_BYTES)?;
                 let mut range_leaves = Vec::with_capacity(leaves);
                 for _ in 0..leaves {
                     range_leaves.push(r.reference(Class::Records)?);
@@ -366,7 +374,7 @@ impl Node {
             }
             KIND_LEAF => {
                 let first = r.int()?;
-                let count = r.count(LEAF_RANGES)?;
+                let count = r.count(LEAF_RANGES, 4 + REF_BYTES)?;
                 let mut ranges = Vec::with_capacity(count);
                 for _ in 0..count {
                     ranges.push(r.reference(Class::Records)?);
@@ -381,7 +389,7 @@ impl Node {
                 }
                 let body = match r.byte()? {
                     0 => {
-                        let count = r.count(256)?;
+                        let count = r.count(256, 5 + 4 + REF_BYTES)?;
                         let mut children: Vec<(u8, Ref)> = Vec::with_capacity(count);
                         for _ in 0..count {
                             let byte = r.byte()?;
@@ -393,7 +401,7 @@ impl Node {
                         BlobsBody::Children(children)
                     }
                     1 => {
-                        let count = r.count(LEAF_ENTRIES)?;
+                        let count = r.count(LEAF_ENTRIES, 72)?;
                         let mut entries: Vec<Entry> = Vec::with_capacity(count);
                         for _ in 0..count {
                             let h = PlaintextHash::from_bytes(
@@ -408,12 +416,12 @@ impl Node {
                                 .map_err(|_| invariant("a media type is not text"))?
                                 .to_owned();
                             let taken_at_ms = r.int()?;
-                            let originals = r.count(1 << 24)?;
+                            let originals = r.count(1 << 24, 4 + REF_BYTES)?;
                             let mut original = Vec::with_capacity(originals);
                             for _ in 0..originals {
                                 original.push(r.reference(Class::Originals)?);
                             }
-                            let thumbs = r.count(1 << 24)?;
+                            let thumbs = r.count(1 << 24, 4 + REF_BYTES)?;
                             let mut thumbnail = Vec::with_capacity(thumbs);
                             for _ in 0..thumbs {
                                 thumbnail.push(r.reference(Class::Thumbnails)?);
@@ -503,6 +511,29 @@ pub fn build_blobs(keys: &BackupKeys, entries: &[Entry], out: &mut Vec<Made>) ->
     blobs_node(keys, entries, 0, out)
 }
 
+/// Split a blobs leaf before it approaches [`CHUNK_BYTES`] (4 MiB), even when
+/// it holds fewer than [`LEAF_ENTRIES`] entries (e.g. large videos with many
+/// chunk refs).
+const LEAF_TARGET_BYTES: usize = 3 * 1024 * 1024;
+
+/// Exact encoded byte length of a [`BlobsNode`] carrying `entries` at `depth`.
+fn entries_encoded_bytes(depth: usize, entries: &[Entry]) -> usize {
+    let mut total = 28_usize.saturating_add(depth);
+    let ref_bytes = 4 + REF_BYTES;
+    for entry in entries {
+        let refs = entry
+            .original
+            .len()
+            .saturating_add(entry.thumbnail.len())
+            .saturating_mul(ref_bytes);
+        total = total
+            .saturating_add(72)
+            .saturating_add(entry.media_type.len())
+            .saturating_add(refs);
+    }
+    total
+}
+
 fn blobs_node(
     keys: &BackupKeys,
     entries: &[Entry],
@@ -514,7 +545,11 @@ fn blobs_node(
         .map(|entry| entry.h.as_bytes()[..depth].to_vec())
         .unwrap_or_default();
     let depth_byte = u8::try_from(depth).map_err(|_| invariant("a blobs tree is too deep"))?;
-    if entries.len() <= LEAF_ENTRIES || depth >= 32 {
+    let fits_leaf = entries.len() <= 1
+        || depth >= 32
+        || (entries.len() <= LEAF_ENTRIES
+            && entries_encoded_bytes(depth, entries) <= LEAF_TARGET_BYTES);
+    if fits_leaf {
         return make(
             keys,
             &Node::Blobs(BlobsNode {

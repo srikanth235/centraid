@@ -195,7 +195,9 @@ mod tests {
         assert!(!staging.contains(&whole));
         assert!(!staging.contains(&partial));
 
-        staging.write_partial(&partial, b"partial").expect("partial");
+        staging
+            .write_partial(&partial, b"partial")
+            .expect("partial");
         assert!(
             !staging.contains(&partial),
             "partial file must not count as present"

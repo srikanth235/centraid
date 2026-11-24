@@ -3323,4 +3323,103 @@ mod what_a_member_reads {
             assert!(effects.is_empty());
         }
     }
+
+    #[test]
+    fn records_row_shows_last_backup_even_when_no_device_holds_newest_records() {
+        let status = one(|r| {
+            r.acked_at_ms = Some(NOW - 10 * MINUTE);
+            r.destinations[0].records_behind = true;
+            r.classes = vec![
+                wire::ClassStatus {
+                    class: wire::BackupClass::Records as i32,
+                    total: 1,
+                    held: 0,
+                    backed_up: false,
+                    ..Default::default()
+                },
+                wire::ClassStatus {
+                    class: wire::BackupClass::Thumbnails as i32,
+                    total: 10,
+                    held: 10,
+                    backed_up: true,
+                    ..Default::default()
+                },
+                wire::ClassStatus {
+                    class: wire::BackupClass::Originals as i32,
+                    total: 10,
+                    held: 10,
+                    backed_up: true,
+                    ..Default::default()
+                },
+            ];
+            r.destinations[0].classes = r.classes.clone();
+        });
+        let rows = crate::backup::classes::rows(EN, &reading(&status), NOW);
+        let records = rows
+            .iter()
+            .find(|r| r.app_id == "records")
+            .expect("records row");
+        assert_eq!(records.detail, "Last backup 10 minutes ago");
+        assert_eq!(records.status, "Waiting");
+    }
+
+    #[test]
+    fn line_and_status_do_not_claim_backed_up_when_records_are_not_held() {
+        let r = reading(&one(|r| {
+            r.content_confirmed = 7;
+            r.waiting = waiting(&[(wire::WaitReason::Wifi, 3)]);
+            r.classes = vec![wire::ClassStatus {
+                class: wire::BackupClass::Records as i32,
+                total: 1,
+                held: 0,
+                backed_up: false,
+                ..Default::default()
+            }];
+        }));
+        assert!(!r.records_held());
+        let built = line::line(EN, Some(&r), false, false, NOW);
+        assert_eq!(built.sentence, "Records backed up 2 minutes ago.");
+        assert_eq!(built.status, "Records backed up 2 min ago");
+    }
+
+    #[test]
+    fn waiting_sentences_ending_in_period_never_produce_double_periods() {
+        let r = reading(&one(|r| {
+            r.content_confirmed = 7;
+            r.waiting = waiting(&[(wire::WaitReason::Ask, 3)]);
+        }));
+        let built = line::line(EN, Some(&r), false, false, NOW);
+        assert!(
+            !built.status.contains(".."),
+            "no double period in status: {}",
+            built.status
+        );
+        assert!(
+            !built.accessibility_label.contains(".."),
+            "no double period in accessibility_label: {}",
+            built.accessibility_label
+        );
+        assert_eq!(
+            built.status,
+            "Backed up 2 min ago. 3 waiting. Tap Back up now."
+        );
+    }
+
+    #[test]
+    fn restoring_sets_backup_condition_to_catching_up() {
+        let restoring = one(|r| {
+            r.restoring = Some(wire::RestoreProgress {
+                previews_back: 10,
+                previews_total: 10,
+                originals_back: 3,
+                originals_total: 10,
+            });
+        });
+        let data = Page::open(restoring).data();
+        assert_eq!(data.condition(), C::CatchingUp);
+        assert_eq!(
+            data.line.as_ref().map(|l| l.sentence.as_str()),
+            Some("Restoring photos. 3 of 10 back.")
+        );
+    }
 }

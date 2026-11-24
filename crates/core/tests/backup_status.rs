@@ -246,3 +246,76 @@ fn a_refusal_is_read_as_the_reason_the_gateway_gave() {
     );
     assert_eq!(waiting(&refused, wire::WaitReason::Refused), 0);
 }
+
+#[test]
+fn a_paired_gateway_with_no_snapshot_is_not_backed_up() {
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    let gw = gateway();
+    let id = id_of(&phone, &gw);
+
+    let before = status(&phone);
+    let dest = row(&before, &id);
+    assert!(
+        dest.classes.iter().all(|c| !c.backed_up),
+        "no class may be backed_up before a snapshot is confirmed: {:?}",
+        dest.classes
+    );
+    assert!(
+        before.classes.iter().all(|c| !c.backed_up),
+        "aggregate classes must not be backed_up before a snapshot is confirmed: {:?}",
+        before.classes
+    );
+}
+
+#[test]
+fn read_back_damage_drives_repairing_until_repaired() {
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    let gw = gateway();
+    let id = id_of(&phone, &gw);
+    photo(&phone, "a photograph for read-back damage", 40_000);
+    let first = drain(&phone, at_home());
+    assert_eq!(first.stopped, wire::DrainStop::Empty as i32, "{first:?}");
+    assert_eq!(
+        row(&status(&phone), &id).reach_state,
+        wire::DestinationReach::Ok as i32
+    );
+
+    // Corrupt every object held on the gateway so the next read-back is guaranteed to find damage.
+    let vault = vault_id();
+    for name in gw.held(&vault) {
+        gw.spawned
+            .corrupt(
+                &vault,
+                &centraid_gateway::rules::ids::Name::from_bytes(*name.as_bytes()),
+            )
+            .expect("a bit flips");
+    }
+    let found = drain(&phone, quietly());
+    assert_eq!(found.stopped, wire::DrainStop::Empty as i32, "{found:?}");
+    let after_damage = status(&phone);
+    assert_eq!(
+        row(&after_damage, &id).reach_state,
+        wire::DestinationReach::Repairing as i32,
+        "read-back damage must drive DestinationReach::Repairing: {after_damage:?}"
+    );
+    assert!(
+        !row(&after_damage, &id).rolled_back,
+        "damage is not rolled_back"
+    );
+
+    // The next pass repairs the damaged objects and clears Repairing back to Ok.
+    let repaired = drain(&phone, quietly());
+    assert_eq!(
+        repaired.stopped,
+        wire::DrainStop::Empty as i32,
+        "{repaired:?}"
+    );
+    let after_repair = status(&phone);
+    assert_eq!(
+        row(&after_repair, &id).reach_state,
+        wire::DestinationReach::Ok as i32,
+        "clean repair must clear DestinationReach::Repairing: {after_repair:?}"
+    );
+}

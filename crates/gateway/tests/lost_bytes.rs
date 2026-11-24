@@ -126,3 +126,63 @@ async fn a_bundle_brings_back_a_name_whose_file_is_gone() {
     );
     assert_eq!(std::fs::read(&file).expect("the bytes are back"), first);
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_held_name_whose_file_is_gone_reads_missing_and_a_put_brings_it_back() {
+    use centraid_gateway::rules::signing;
+    use centraid_gateway::rules::wire::DeleteRequest;
+
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let gateway = spawn(dir.path()).await.expect("spawned");
+    let identity = ed25519_dalek::SigningKey::from_bytes(&[9; 32]);
+    let vault = VaultId::from_bytes(identity.verifying_key().to_bytes());
+    let phone = gateway.first_contact();
+    let paired = pair_secret(
+        &phone,
+        &identity,
+        "a phone".to_owned(),
+        gateway.mint_pairing_secret(),
+    )
+    .await
+    .expect("pairs");
+    let client = gateway.client(paired.token);
+
+    let lost = name("held-lost");
+    let bytes = sealed("held-lost");
+    let digest = Digest::of(&bytes);
+    put(&client, &vault, &lost, &digest, bytes.clone())
+        .await
+        .expect("stores");
+
+    // Soft-delete `lost` so its row is held (`hold.is_some()`, `!is_live()`).
+    let delete_sig = signing::sign_delete(
+        &identity,
+        &paired.gateway_id,
+        paired.epoch,
+        1,
+        None,
+        &[lost],
+    );
+    client
+        .delete(
+            &vault,
+            &DeleteRequest {
+                generation: 1,
+                head_root: None,
+                names: vec![lost],
+                signature: delete_sig,
+            },
+        )
+        .await
+        .expect("holds");
+
+    let file = gateway.shared().store().path(&vault, &lost);
+    std::fs::remove_file(&file).expect("the bytes go behind the gateway's back");
+
+    // Putting the held name again must notice the missing file, mark it missing, and restore bytes.
+    let answer = put(&client, &vault, &lost, &digest, bytes.clone())
+        .await
+        .expect("answers");
+    assert!(matches!(answer, FrameResult::Stored { .. }), "{answer:?}");
+    assert_eq!(std::fs::read(&file).expect("the bytes are back"), bytes);
+}

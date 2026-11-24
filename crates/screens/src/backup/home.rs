@@ -762,6 +762,12 @@ impl Backup {
             C::Unpaired
         } else if self.backing_up_now {
             C::Running
+        } else if !reading.damaged
+            && reading.restoring.as_ref().is_some_and(|r| {
+                r.previews_back < r.previews_total || r.originals_back < r.originals_total
+            })
+        {
+            C::CatchingUp
         } else if line::unreached(reading, now) {
             C::NotReached
         } else if line::warns(reading, now, self.backing_up_now) {

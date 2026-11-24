@@ -348,7 +348,10 @@ pub fn backup_status(
             None => (BTreeSet::new(), BTreeSet::new()),
         };
         replicas.push(Replica {
-            current: gateway.conf.map(|(name, _)| name) == newest.as_ref().map(|root| root.name),
+            current: gateway
+                .conf
+                .zip(newest.as_ref())
+                .is_some_and(|((name, _), root)| name == root.name),
             gateway: gateway.clone(),
             originals,
             thumbnails,
@@ -502,7 +505,7 @@ pub fn backup_status(
         row.reach_state = if replica.refusal.is_some() {
             wire::DestinationReach::Refused
         } else {
-            reach_state_of(gateway.reach, row.rolled_back)
+            reach_state_of(gateway.reach, notes.damaged)
         } as i32;
         row.reach = replica
             .refusal

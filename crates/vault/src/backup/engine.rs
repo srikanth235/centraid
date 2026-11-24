@@ -749,7 +749,7 @@ impl<'e, 's> GatewayPass<'e, 's> {
             .iter()
             .filter_map(|frame| self.records.get(&frame.name).copied())
             .collect();
-        match self.send(&frames, &sent)? {
+        match self.send(&frames, &sent, false)? {
             Sent::Done(retry) => {
                 for reference in retry.into_iter().rev() {
                     queue.push_front(reference);
@@ -762,16 +762,24 @@ impl<'e, 's> GatewayPass<'e, 's> {
     }
 
     /// Send one bundle and absorb every frame's answer. `Done` carries the refs to try again.
-    fn send(&mut self, frames: &[Outgoing], refs: &[Ref]) -> Result<Sent> {
+    ///
+    /// When `retry_unanswered` is true (media phases, which have no commit-rule check), any sent
+    /// ref omitted from `answers` is returned in `retry` so it is resent rather than silently
+    /// dropped; a response that answers none of the sent refs stops the pass rather than looping.
+    fn send(&mut self, frames: &[Outgoing], refs: &[Ref], retry_unanswered: bool) -> Result<Sent> {
         let answers = match self.store.bundle(frames) {
             Ok(answers) => answers,
             Err(error) => return Ok(Sent::Stop(self.stopped(error)?)),
         };
         self.stats.bundles += 1;
         let by_name: BTreeMap<Name, &Ref> = refs.iter().map(|r| (r.name, r)).collect();
+        let mut answered: BTreeSet<Name> = BTreeSet::new();
         let mut retry = Vec::new();
         let mut damaged = Vec::new();
         for (name, answer) in answers {
+            if by_name.contains_key(&name) {
+                answered.insert(name);
+            }
             match answer {
                 FrameAnswer::Stored => {
                     self.stats.stored += 1;
@@ -812,6 +820,18 @@ impl<'e, 's> GatewayPass<'e, 's> {
                     return Ok(Sent::Stop(
                         self.stop(Stop::Refused(refusal.code().to_owned()))?,
                     ));
+                }
+            }
+        }
+        if retry_unanswered && answered.len() < by_name.len() {
+            if answered.is_empty() {
+                return Ok(Sent::Stop(
+                    self.stop(Stop::Refused("SHORT_BUNDLE".to_owned()))?,
+                ));
+            }
+            for reference in refs {
+                if !answered.contains(&reference.name) {
+                    retry.push(*reference);
                 }
             }
         }
@@ -1005,7 +1025,7 @@ impl<'e, 's> GatewayPass<'e, 's> {
             self.stage = Stage::Media(Box::new(phase));
             return Ok(Step::Worked);
         }
-        match self.send(&frames, &sent) {
+        match self.send(&frames, &sent, true) {
             Ok(Sent::Done(retry)) => {
                 for reference in retry.into_iter().rev() {
                     phase.ready.push_front(reference);

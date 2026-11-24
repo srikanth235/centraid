@@ -260,3 +260,86 @@ fn a_missing_node_is_a_typed_refusal_not_a_guess() {
         Err(centraid_vault::backup::PlaneError::NodeMissing(_))
     ));
 }
+
+#[test]
+fn a_blobs_leaf_with_large_entries_splits_before_hitting_four_mib() {
+    // Each entry carries 1200 chunk refs (~87 KiB encoded), so 50 entries (~4.3 MiB)
+    // is well under LEAF_ENTRIES (1024) but over 3 MiB and over CHUNK_BYTES (4 MiB).
+    let shared_ref = chunk_ref(Class::Originals, 1, 0);
+    let entries = sorted(
+        (0..50_u64)
+            .map(|seed| Entry {
+                h: PlaintextHash::of(&seed.to_be_bytes()),
+                size: 1200 * 4 * 1024 * 1024,
+                media_type: "video/mp4".to_owned(),
+                taken_at_ms: seed,
+                original: vec![shared_ref; 1200],
+                thumbnail: Vec::new(),
+            })
+            .collect(),
+    );
+    let mut made = Vec::new();
+    let root = tree::build_blobs(&keys(), &entries, &mut made).expect("splits before 4 MiB");
+    assert!(
+        made.iter()
+            .all(|node| node.plaintext.len() <= centraid_media::sealed::CHUNK_BYTES),
+        "every built node fits inside CHUNK_BYTES"
+    );
+    let source: BTreeMap<Name, Vec<u8>> = made
+        .iter()
+        .map(|node| (node.sealed.name, node.plaintext.clone()))
+        .collect();
+    let top = Node::decode(&source[&root.name]).expect("decodes");
+    assert!(
+        matches!(
+            top,
+            Node::Blobs(BlobsNode {
+                body: BlobsBody::Children(_),
+                ..
+            })
+        ),
+        "top blobs node split into children instead of exceeding 4 MiB"
+    );
+    assert_eq!(
+        tree::entries_of(&source, &root).expect("walks"),
+        entries,
+        "all entries round-trip through the split tree"
+    );
+}
+
+#[test]
+fn crafted_huge_counts_and_page_size_overflow_are_refused() {
+    // 1. Crafted huge range count in a tiny Leaf buffer must fail without OOM.
+    let mut tiny_leaf = Vec::new();
+    for field in [&[2_u8][..], &[5_u8][..], &0_u64.to_be_bytes()[..]] {
+        tiny_leaf.extend_from_slice(&(field.len() as u32).to_be_bytes());
+        tiny_leaf.extend_from_slice(field);
+    }
+    tiny_leaf.extend_from_slice(&1024_u32.to_be_bytes());
+    assert!(Node::decode(&tiny_leaf).is_err());
+
+    // 2. Crafted huge u32::MAX count in a tiny Root census must fail without OOM.
+    let mut tiny_root = Vec::new();
+    for field in [
+        &[1_u8][..],
+        &[5_u8][..],
+        &1_u64.to_be_bytes()[..],    // writes
+        &1_u64.to_be_bytes()[..],    // user_version
+        &4096_u64.to_be_bytes()[..], // page_size
+        &1_u64.to_be_bytes()[..],    // page_count
+        &1_u64.to_be_bytes()[..],    // taken_at_ms
+    ] {
+        tiny_root.extend_from_slice(&(field.len() as u32).to_be_bytes());
+        tiny_root.extend_from_slice(field);
+    }
+    tiny_root.extend_from_slice(&u32::MAX.to_be_bytes());
+    assert!(Node::decode(&tiny_root).is_err());
+
+    // 3. page_size * page_count overflow in a valid-looking Root must be refused.
+    let assembled = build(&[range_ref(0)], &[]);
+    let mut root = tree::root_of(&assembled.source(), &assembled.root).expect("a root");
+    root.page_size = u64::MAX;
+    root.page_count = 2;
+    let encoded = Node::Root(Box::new(root)).encode();
+    assert!(Node::decode(&encoded).is_err());
+}

@@ -1023,3 +1023,116 @@ fn full_and_restage_do_not_persist_reach_unreachable() {
         "Stop::Restage must not overwrite Reach::Ok with Reach::Unreachable"
     );
 }
+
+struct TruncatingStore {
+    inner: MemoryStore,
+    /// Number of multi-frame bundle calls left to truncate to a single frame.
+    truncate_left: std::cell::Cell<usize>,
+}
+
+impl Store for TruncatingStore {
+    fn gateway_id(&self) -> &str {
+        self.inner.gateway_id()
+    }
+    fn exists(&self, names: &[Name]) -> Result<Vec<Name>, StoreError> {
+        self.inner.exists(names)
+    }
+    fn bundle(&self, parts: &[Outgoing]) -> Result<Vec<(Name, FrameAnswer)>, StoreError> {
+        let left = self.truncate_left.get();
+        if left > 0 && parts.len() > 1 && self.inner.head()?.is_some() {
+            self.truncate_left.set(left - 1);
+            // Only store and answer the first frame; omit the rest from the response.
+            return self.inner.bundle(&parts[..1]);
+        }
+        self.inner.bundle(parts)
+    }
+    fn get(&self, name: &Name, sink: &mut dyn std::io::Write) -> Result<u64, StoreError> {
+        self.inner.get(name, sink)
+    }
+    fn check_name(&self, name: &Name) -> Result<NameCheck, StoreError> {
+        self.inner.check_name(name)
+    }
+    fn head(&self) -> Result<Option<Head>, StoreError> {
+        self.inner.head()
+    }
+    fn generation(&self) -> u64 {
+        self.inner.generation()
+    }
+    fn set_head(
+        &self,
+        name: &Name,
+        prev: Option<&Name>,
+        at: u64,
+        writes: u64,
+    ) -> Result<Head, StoreError> {
+        self.inner.set_head(name, prev, at, writes)
+    }
+    fn snapshots(&self) -> Result<Vec<SnapshotEntry>, StoreError> {
+        self.inner.snapshots()
+    }
+    fn list(&self, after: Option<&Name>, limit: usize) -> Result<Vec<ObjectEntry>, StoreError> {
+        self.inner.list(after, limit)
+    }
+    fn delete(&self, names: &[Name], head_root: Option<&Name>) -> Result<Deleted, StoreError> {
+        self.inner.delete(names, head_root)
+    }
+    fn held(&self, after: Option<&Name>, limit: usize) -> Result<Vec<HeldEntry>, StoreError> {
+        self.inner.held(after, limit)
+    }
+    fn undo(&self, names: Option<&[Name]>) -> Result<u64, StoreError> {
+        self.inner.undo(names)
+    }
+}
+
+#[test]
+fn partial_bundle_response_retries_unanswered_frames() {
+    let rig = Rig::new("partial_bundle");
+    photos(&rig, 4);
+    let (inner, taken) = front(&rig);
+    let store = TruncatingStore {
+        inner,
+        // Truncate once during records and once during media (thumbnails/originals).
+        truncate_left: std::cell::Cell::new(3),
+    };
+    let env = rig.env(T0);
+    let mut pass = GatewayPass::new(&env, &store).expect("a pass");
+    loop {
+        match pass.step().expect("steps") {
+            Step::Worked | Step::Restarted => {}
+            Step::Done => break,
+            Step::Stopped(stop) => panic!("unexpected stop: {stop:?}"),
+        }
+    }
+    assert_eq!(
+        store.truncate_left.get(),
+        0,
+        "all three truncated bundle responses should have been exercised"
+    );
+    let standing = engine::standing(&rig.state, store.gateway_id()).expect("standing");
+    assert!(standing.records.is_some());
+    assert!(standing.thumbnails);
+    assert!(standing.originals);
+
+    // Every single record, thumbnail, and original chunk in the tree must actually be present
+    // in the store — none silently dropped by the truncated bundle responses.
+    let mut expected: Vec<Name> = tree::records_of(&rig.state, &taken)
+        .expect("records")
+        .into_keys()
+        .collect();
+    expected.extend(
+        tree::media_of(&rig.state, &taken, Class::Thumbnails)
+            .expect("thumbs")
+            .into_keys(),
+    );
+    expected.extend(
+        tree::media_of(&rig.state, &taken, Class::Originals)
+            .expect("originals")
+            .into_keys(),
+    );
+    let missing = store.inner.exists(&expected).expect("exists");
+    assert!(
+        missing.is_empty(),
+        "unanswered frames must be retried, not silently dropped; missing: {}",
+        missing.len()
+    );
+}

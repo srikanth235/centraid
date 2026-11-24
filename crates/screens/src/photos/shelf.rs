@@ -111,6 +111,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         gate: OwnerGate::default(),
         sending: None,
         rename_rev: None,
+        restoring: false,
     }))
 }
 
@@ -153,6 +154,8 @@ struct Shelf {
     dismissed: bool,
     /// A hand-off is with the platform; a second is not started over it.
     copying: Option<Mode>,
+    /// Whether a restore still owes originals (#1209, R3).
+    restoring: bool,
 }
 
 fn view_of(kind: wire::PhotosShelfKind) -> load::photos::ShelfView {
@@ -252,6 +255,8 @@ impl Shelf {
         if self.is_album() && self.head.is_none() {
             self.dismissed = true;
         }
+        self.restoring =
+            crate::kit::restoring::originals_owed(crate::kit::restoring::owed(ctx).as_ref());
         self.load_keep(ctx);
     }
 
@@ -735,8 +740,15 @@ impl Shelf {
             .map(|(at, cell)| {
                 let low = at.saturating_sub(NEIGHBOURS);
                 let high = (at + NEIGHBOURS + 1).min(ids.len());
+                let mut tile = cells::tile(cell, Link::default(), locale);
+                if self.restoring
+                    && tile.held == wire::photo_tile::Held::ThumbnailOnly as i32
+                    && !tile.content_id.is_empty()
+                {
+                    tile.held = wire::photo_tile::Held::ComingBack as i32;
+                }
                 wire::PhotosShelfCell {
-                    tile: Some(cells::tile(cell, Link::default(), locale)),
+                    tile: Some(tile),
                     open: Some(routes::lightbox(&cell.photo_id, &ids[low..high], album_id)),
                 }
             })
@@ -962,5 +974,59 @@ impl Screen for Shelf {
             kind: Some(wire::view_state::Kind::PhotosShelf(Box::new(state))),
             ..wire::ViewState::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod restore_tests {
+    use super::*;
+
+    #[test]
+    fn shelf_emits_coming_back_for_thumbnail_only_tiles_during_restore() {
+        let mut shelf = Shelf {
+            kind: wire::PhotosShelfKind::Favorites,
+            id: String::new(),
+            route_title: String::new(),
+            page: Page::Ready {
+                data: (),
+                note: None,
+            },
+            more_failed: false,
+            cells: vec![wire::PhotosCell {
+                photo_id: "p1".to_owned(),
+                content_id: "c1".to_owned(),
+                thumbnail_path: Some("/tmp/t1.jpg".to_owned()),
+                original_held: false,
+                ..Default::default()
+            }],
+            next: None,
+            head: None,
+            place: None,
+            selection: Selection::new(Offer::Favorites, Drain::Settled, Wording::Chosen),
+            choice: AlbumChoice::new(),
+            prompt: Prompt::Unspecified,
+            unbacked: 0,
+            notice: String::new(),
+            keep: None,
+            dismissed: false,
+            copying: None,
+            gate: OwnerGate::default(),
+            sending: None,
+            rename_rev: None,
+            restoring: false,
+        };
+
+        let before = shelf.data(Locale::default());
+        assert_eq!(
+            before.cells[0].tile.as_ref().unwrap().held,
+            wire::photo_tile::Held::ThumbnailOnly as i32
+        );
+
+        shelf.restoring = true;
+        let during = shelf.data(Locale::default());
+        assert_eq!(
+            during.cells[0].tile.as_ref().unwrap().held,
+            wire::photo_tile::Held::ComingBack as i32
+        );
     }
 }

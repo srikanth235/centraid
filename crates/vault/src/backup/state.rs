@@ -776,11 +776,11 @@ impl DeviceState {
     /// # Errors
     /// SQLite's refusal, or a stored mark that is not 32 bytes.
     pub fn disk_mark(&self) -> Result<Option<[u8; 32]>> {
-        let bytes: Option<Vec<u8>> = self.connection.query_row(
-            "SELECT disk_mark FROM device WHERE id = 1",
-            [],
-            |row| row.get(0),
-        )?;
+        let bytes: Option<Vec<u8>> =
+            self.connection
+                .query_row("SELECT disk_mark FROM device WHERE id = 1", [], |row| {
+                    row.get(0)
+                })?;
         bytes
             .map(|raw| {
                 <[u8; 32]>::try_from(raw.as_slice())

@@ -71,11 +71,11 @@ fn row(
     };
     let detail = if !media {
         match reading.last_ack_ms {
-            Some(at) if !holders.is_empty() => fill(
+            Some(at) => fill(
                 &words::backup_dest_acked(locale),
                 &[("when", &super::line::ago(locale, at, now_ms))],
             ),
-            _ => words::backup_dest_acked_never(locale),
+            None => words::backup_dest_acked_never(locale),
         }
     } else if aggregate.total == 0 {
         String::new()

@@ -102,7 +102,7 @@ fn mark_if_gone(
     let Some(record) = gateway.state.object(vault, name)? else {
         return Ok(false);
     };
-    if !record.is_live() || store.path(vault, name).is_file() {
+    if record.damaged_at_ms.is_some() || store.path(vault, name).is_file() {
         return Ok(false);
     }
     gateway.record_scrub(vault, &record, Finding::Missing, now_ms)?;
@@ -692,10 +692,15 @@ async fn advance(
             };
             let result = match frame.staged {
                 Err(result) => result,
-                Ok(staged) => {
-                    let file = staged.finish().await?;
-                    admit_frame(shared, vault, token, frame.header, file).await?
-                }
+                Ok(staged) => match staged.finish().await {
+                    Ok(file) => admit_frame(shared, vault, token, frame.header, file).await?,
+                    Err(error) => match Fault::from(error) {
+                        Fault::Refused(Refusal::DiskFull) => FrameResult::Full {
+                            name: frame.header.name,
+                        },
+                        other => return Err(other),
+                    },
+                },
             };
             answer.results.push(result);
         }

@@ -251,7 +251,11 @@ impl Drop for Scratch {
 fn unreachable(error: &StoreError) -> bool {
     matches!(
         error,
-        StoreError::Unreachable(_) | StoreError::Untrusted(_) | StoreError::Refused(_)
+        StoreError::Unreachable(_)
+            | StoreError::Untrusted(_)
+            | StoreError::Refused(_)
+            | StoreError::GatewayOld { .. }
+            | StoreError::Moved { .. }
     )
 }
 
@@ -590,5 +594,19 @@ fn open_file(
         Ok(())
     } else {
         Err(OpenFailed::Bad(None))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gateway_old_and_moved_do_not_abort_other_gateways() {
+        assert!(unreachable(&StoreError::GatewayOld {
+            found: 1,
+            required: 2,
+        }));
+        assert!(unreachable(&StoreError::Moved { epoch: 2 }));
     }
 }
