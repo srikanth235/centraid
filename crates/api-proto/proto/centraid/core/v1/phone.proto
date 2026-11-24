@@ -974,11 +974,10 @@ message HandoffPart {
   string vault_id = 8;
   // WHETHER THE OPERATING SYSTEM MAY MOVE THIS PART OVER A METERED LINK
   // (#1080, the root's ruling A10), so the member's rule holds for uploads
-  // that run while the app is suspended: thumbnails and previews always, a
-  // video's original never, a photograph's original under
-  // `TRANSFER_RULE_WIFI_AND_CELLULAR_PHOTOS`, and everything else — the
-  // vault's own snapshot among it — exactly when the rule lets photographs
-  // cross cellular. The rule is the one the last `drain` carried.
+  // that run while the app is suspended: true under
+  // `TRANSFER_RULE_WIFI_AND_CELLULAR_PHOTOS`, and false for any bundle
+  // containing video frames (a video's original never crosses cellular). The
+  // rule is the one the last `drain` carried.
   bool allows_cellular = 9;
 }
 

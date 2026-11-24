@@ -434,6 +434,7 @@ pub(crate) fn run_cancellable(
                 passes.push(GatewayPass::new(&env, &reached.store).map_err(plane_error)?);
             }
             let recheck = engine::head_recheck_every(passes.len(), WINDOW_STEPS);
+            let mut stepped = vec![false; passes.len()];
             let mut steps = 0_usize;
             let mut turn = 0_usize;
             'run: loop {
@@ -465,6 +466,7 @@ pub(crate) fn run_cancellable(
                     if owed(&passes[index]) == Some(best) {
                         turn = index + 1;
                         steps += 1;
+                        stepped[index] = true;
                         match passes[index].step().map_err(plane_error)? {
                             Step::Worked | Step::Done | Step::Restarted | Step::Stopped(_) => {}
                         }
@@ -473,7 +475,7 @@ pub(crate) fn run_cancellable(
                 }
                 break;
             }
-            for pass in &passes {
+            for (pass, ran) in passes.iter().zip(stepped) {
                 stats.stored += pass.stats.stored;
                 stats.there += pass.stats.there;
                 stats.held += pass.stats.held;
@@ -482,16 +484,20 @@ pub(crate) fn run_cancellable(
                 if let Some(stop) = pass.stop_reason() {
                     stops.push(stop.clone());
                 }
-                // A REFUSAL IS NAMED BY ITS REASON, at the gateway that gave it and no other.
-                let refusal = match pass.stop_reason() {
-                    Some(Stop::Full) => Some(wire::WaitReason::Refused),
-                    Some(Stop::Refused(code)) if code == "TOO_LARGE" => {
-                        Some(wire::WaitReason::TooLarge)
-                    }
-                    Some(Stop::Refused(_)) => Some(wire::WaitReason::RefusedOther),
-                    _ => None,
-                };
-                plane.note(pass.gateway_id(), |notes| notes.refusal = refusal);
+                if ran {
+                    // A REFUSAL IS NAMED BY ITS REASON, at the gateway that gave it and no other.
+                    // Only updated when this pass actually stepped the gateway: a zero-step pass
+                    // (e.g. metered under Wi-Fi-only) must not clear an earlier refusal.
+                    let refusal = match pass.stop_reason() {
+                        Some(Stop::Full) => Some(wire::WaitReason::Refused),
+                        Some(Stop::Refused(code)) if code == "TOO_LARGE" => {
+                            Some(wire::WaitReason::TooLarge)
+                        }
+                        Some(Stop::Refused(_)) => Some(wire::WaitReason::RefusedOther),
+                        _ => None,
+                    };
+                    plane.note(pass.gateway_id(), |notes| notes.refusal = refusal);
+                }
             }
             drop(passes);
         }
@@ -544,7 +550,10 @@ pub(crate) fn run_cancellable(
     }
 
     // Read-back and retention, only for a gateway whose pass ended whole, and retention only once
-    // in a while: it lists everything the gateway holds.
+    // in a while: it lists everything the gateway holds. On a metered link, read-back only runs
+    // when the member's rule allows cellular transfers (never under Wi-Fi-only or Manual).
+    let read_back_allowed =
+        !conditions.metered || conditions.rule == wire::TransferRule::WifiAndCellularPhotos;
     if !deadline_hit && !room_stop {
         for reached in &fleet.reached {
             check()?;
@@ -555,7 +564,7 @@ pub(crate) fn run_cancellable(
             if row.reach != centraid_vault::backup::state::Reach::Ok {
                 continue;
             }
-            if let Ok(report) = engine::read_back(&env, &reached.store) {
+            if read_back_allowed && let Ok(report) = engine::read_back(&env, &reached.store) {
                 plane.note(gateway_id, |notes| {
                     notes.sample_checked = u32::try_from(report.read).unwrap_or(u32::MAX);
                     notes.sample_of = u32::try_from(report.population).unwrap_or(u32::MAX);
@@ -780,7 +789,7 @@ fn need_bytes(
                 .iter()
                 .copied()
                 .filter(|name| !held_everywhere.contains(name))
-                .filter(|name| staging.get(name).ok().flatten().is_none())
+                .filter(|name| !staging.contains(name))
                 .collect();
             if owed.is_empty() {
                 continue;
@@ -884,7 +893,8 @@ fn hand_to_the_os(
                     size: bundle.bytes,
                     gateway_id: gateway_id.clone(),
                     vault_id: keyring.vault_hex(),
-                    allows_cellular: conditions.rule == wire::TransferRule::WifiAndCellularPhotos,
+                    allows_cellular: conditions.rule == wire::TransferRule::WifiAndCellularPhotos
+                        && !bundle.has_video,
                 });
                 if parts.len() >= OS_BUNDLES {
                     break 'gateways;

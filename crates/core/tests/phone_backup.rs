@@ -1323,3 +1323,225 @@ fn exclude_videos_confirms_originals_without_stalling_and_toggling_back_uploads_
     );
 }
 
+#[test]
+fn a_metered_wifi_only_pass_skips_read_back_with_zero_gets() {
+    let home = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    let gateway_id = pair(&phone, &home)
+        .destination
+        .expect("a destination")
+        .gateway_id;
+    owned_photo(&phone, "a photograph on the gateway", 250_000);
+
+    // First pass on unmetered Wi-Fi backs everything up and runs one read-back sample.
+    let first = drain(&phone, at_home());
+    assert_eq!(first.stopped, wire::DrainStop::Empty as i32, "{first:?}");
+    let sample_counter = || {
+        centraid_core::phone::Plane::of(&dir.path().join("vault.db"))
+            .state()
+            .expect("opens")
+            .gateway(&gateway_id)
+            .expect("reads")
+            .expect("gateway row")
+            .sample_counter
+    };
+    let after_wifi = sample_counter();
+    assert_eq!(
+        after_wifi, 1,
+        "unmetered pass should have run one read-back sample"
+    );
+
+    // METERED + WI-FI ONLY: read-back must NOT run (0 object GETs). Cap gateway response bytes
+    // well below the 250 KiB photo so any object GET would cut the cable and fail the pass.
+    home.cable().cut_after_answers(16 * 1024);
+    let wifi_only = drain(
+        &phone,
+        wire::DrainRequest {
+            metered: true,
+            rule: wire::TransferRule::WifiOnly as i32,
+            ..at_home()
+        },
+    );
+    assert_eq!(
+        wifi_only.stopped,
+        wire::DrainStop::Empty as i32,
+        "metered Wi-Fi-only pass must not issue object GETs: {wifi_only:?}"
+    );
+    assert_eq!(
+        sample_counter(),
+        after_wifi,
+        "read-back must not advance sample_counter under metered Wi-Fi-only"
+    );
+
+    // METERED + MANUAL: read-back must also be skipped (0 object GETs).
+    home.cable().cut_after_answers(16 * 1024);
+    let manual = drain(
+        &phone,
+        wire::DrainRequest {
+            metered: true,
+            rule: wire::TransferRule::Manual as i32,
+            ..at_home()
+        },
+    );
+    assert_eq!(
+        manual.stopped,
+        wire::DrainStop::Empty as i32,
+        "metered Manual pass must not issue object GETs: {manual:?}"
+    );
+    assert_eq!(
+        sample_counter(),
+        after_wifi,
+        "read-back must not advance sample_counter under metered Manual"
+    );
+
+    // METERED + WIFI_AND_CELLULAR_PHOTOS: read-back runs with the metered sample size.
+    home.cable().mend();
+    let cellular_photos = drain(
+        &phone,
+        wire::DrainRequest {
+            metered: true,
+            rule: wire::TransferRule::WifiAndCellularPhotos as i32,
+            ..at_home()
+        },
+    );
+    assert_eq!(
+        cellular_photos.stopped,
+        wire::DrainStop::Empty as i32,
+        "{cellular_photos:?}"
+    );
+    assert_eq!(
+        sample_counter(),
+        after_wifi + 1,
+        "read-back should run under metered WifiAndCellularPhotos"
+    );
+}
+
+#[test]
+fn os_bundles_never_allow_cellular_for_video_frames() {
+    let home = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    pair(&phone, &home);
+
+    let photo = owned_photo(&phone, "a photograph for os bundle", 300_000);
+    let film = bytes_of("a video for os bundle", 300_000);
+    let film_handle = stage(&phone, owned("video/mp4", &film), &film);
+    add_asset(&phone, &film_handle, "video");
+
+    let photo_names: BTreeSet<Name> = names_of(Class::Originals, &photo).into_iter().collect();
+    let film_names: BTreeSet<Name> = names_of(Class::Originals, &film).into_iter().collect();
+
+    // Unmetered Wi-Fi with WifiAndCellularPhotos and a tight deadline so originals are handed off
+    // to the OS as bundle files.
+    let window = drain(
+        &phone,
+        wire::DrainRequest {
+            deadline_ms: 1,
+            os_uploads: true,
+            rule: wire::TransferRule::WifiAndCellularPhotos as i32,
+            ..at_home()
+        },
+    );
+    assert!(
+        window.os_bundles.len() >= 2,
+        "photo and video originals must be packed into separate OS bundles: {window:?}"
+    );
+
+    let mut saw_photo_bundle = false;
+    let mut saw_video_bundle = false;
+    for part in &window.os_bundles {
+        let body = std::fs::read(&part.path).expect("os bundle file exists");
+        let frames = centraid_gateway::rules::bundle::decode(&body).expect("valid bundle framing");
+        let frame_names: BTreeSet<Name> = frames
+            .iter()
+            .map(|frame| Name::from_bytes(*frame.name.as_bytes()))
+            .collect();
+        let has_photo = !frame_names.is_disjoint(&photo_names);
+        let has_video = !frame_names.is_disjoint(&film_names);
+        assert!(
+            !(has_photo && has_video),
+            "photo and video frames must not share an OS bundle"
+        );
+        if has_video {
+            saw_video_bundle = true;
+            assert!(
+                !part.allows_cellular,
+                "any OS bundle containing a video frame must have allows_cellular == false: {part:?}"
+            );
+        }
+        if has_photo {
+            saw_photo_bundle = true;
+            assert!(
+                part.allows_cellular,
+                "photo-only OS bundle should have allows_cellular == true under WifiAndCellularPhotos: {part:?}"
+            );
+        }
+    }
+    assert!(saw_photo_bundle, "expected a photo-only OS bundle");
+    assert!(saw_video_bundle, "expected a video OS bundle");
+}
+
+#[test]
+fn a_zero_step_metered_pass_does_not_clear_an_earlier_refusal() {
+    let home = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    pair(&phone, &home);
+    owned_photo(&phone, "a photograph", 60_000);
+
+    // Gateway disk full -> refusal is recorded in plane notes.
+    home.spawned.fill_disk(true);
+    let refused = drain(&phone, at_home());
+    assert_eq!(
+        refused.stopped,
+        wire::DrainStop::Refused as i32,
+        "{refused:?}"
+    );
+    assert!(
+        waiting(&status(&phone), wire::WaitReason::Refused) > 0,
+        "disk-full refusal should be surfaced"
+    );
+
+    // A metered Wi-Fi-only pass runs zero engine steps; it must not clear `notes.refusal`.
+    // (Note: `link::reach_all` probed `/v1/info` and temporarily set `reach = Ok`, so once the
+    // gateway is unreachable again, `status` surfaces `notes.refusal` if and only if the zero-step
+    // pass preserved it.)
+    let metered_noop = drain(
+        &phone,
+        wire::DrainRequest {
+            metered: true,
+            rule: wire::TransferRule::WifiOnly as i32,
+            ..at_home()
+        },
+    );
+    assert_eq!(metered_noop.confirmed_parts, 0, "{metered_noop:?}");
+
+    home.cable().cut();
+    let offline = drain(&phone, at_home());
+    assert_eq!(
+        offline.stopped,
+        wire::DrainStop::Unreachable as i32,
+        "{offline:?}"
+    );
+    assert!(
+        waiting(&status(&phone), wire::WaitReason::Refused) > 0,
+        "zero-step metered pass must not clear an earlier gateway refusal"
+    );
+
+    // Once the gateway has room again and a step actually runs, the refusal clears.
+    home.cable().mend();
+    home.spawned.fill_disk(false);
+    let recovered = drain(&phone, at_home());
+    assert_eq!(
+        recovered.stopped,
+        wire::DrainStop::Empty as i32,
+        "{recovered:?}"
+    );
+    assert_eq!(
+        waiting(&status(&phone), wire::WaitReason::Refused),
+        0,
+        "refusal clears once a pass actually steps and succeeds"
+    );
+}
+

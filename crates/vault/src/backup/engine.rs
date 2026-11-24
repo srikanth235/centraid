@@ -1261,6 +1261,8 @@ pub struct OsBundle {
     pub path: std::path::PathBuf,
     pub names: Vec<Name>,
     pub bytes: u64,
+    /// Whether this bundle carries any video original frame (never allowed over cellular).
+    pub has_video: bool,
 }
 
 /// The OS says a background task finished, failed or was lost. **It only wakes a pass** (R7): the
@@ -1289,6 +1291,9 @@ pub fn write_os_bundles(env: &Env<'_>, store: &dyn Store, class: Class) -> Resul
 /// in `os_bundle` immediately (not `staged`) so housekeeping leaves it alone while the OS reads
 /// it and a crash cannot leak it against the staging budget.
 ///
+/// Video original frames are packed separately from non-video frames so a bundle carrying video
+/// never rides with `allows_cellular = true` and never prevents photos from using cellular.
+///
 /// # Errors
 /// The store's, staging's (other than [`PlaneError::StagingFull`]) or state's refusal.
 pub fn write_os_bundles_capped(
@@ -1309,17 +1314,28 @@ pub fn write_os_bundles_capped(
     let mut ordered: Vec<&Entry> = entries.iter().collect();
     ordered.sort_by_key(|entry| (std::cmp::Reverse(entry.taken_at_ms), entry.h));
     let mut lookup = BTreeMap::new();
-    let mut chunks: Vec<Ref> = Vec::new();
+    let mut non_video: Vec<Ref> = Vec::new();
+    let mut video_chunks: Vec<Ref> = Vec::new();
     for entry in ordered {
-        if class == Class::Originals && !env.policy.allows(class, video_of(entry)) {
+        let is_video = class == Class::Originals && video_of(entry);
+        if class == Class::Originals && !env.policy.allows(class, is_video) {
             continue;
         }
+        let bucket = if is_video {
+            &mut video_chunks
+        } else {
+            &mut non_video
+        };
         for (index, reference) in entry.refs(class).iter().enumerate() {
             lookup.insert(reference.name, (entry.h, index as u64));
-            chunks.push(*reference);
+            bucket.push(*reference);
         }
     }
-    let names: Vec<Name> = chunks.iter().map(|chunk| chunk.name).collect();
+    let names: Vec<Name> = non_video
+        .iter()
+        .chain(&video_chunks)
+        .map(|chunk| chunk.name)
+        .collect();
     let mut missing: BTreeSet<Name> = BTreeSet::new();
     for batch in names.chunks(NAMES_PER_CALL) {
         missing.extend(store.exists(batch)?);
@@ -1332,6 +1348,7 @@ pub fn write_os_bundles_capped(
     let flush = |frames: &mut Vec<Frame>,
                  listed: &mut Vec<Name>,
                  bytes: &mut u64,
+                 has_video: bool,
                  out: &mut Vec<OsBundle>|
      -> Result<bool> {
         if frames.is_empty() {
@@ -1359,40 +1376,46 @@ pub fn write_os_bundles_capped(
             path,
             names: std::mem::take(listed),
             bytes: body.len() as u64,
+            has_video,
         });
         frames.clear();
         *bytes = 0;
         Ok(true)
     };
-    for chunk in chunks {
-        if !missing.contains(&chunk.name) {
-            continue;
+    for (chunks, has_video) in [(non_video, false), (video_chunks, true)] {
+        if staging_full || out.len() >= max_bundles {
+            break;
         }
-        let Some(object) = env.rebuild(&chunk, &lookup)? else {
-            continue;
-        };
-        if bytes + object.len() as u64 > OS_BUNDLE_BYTES
-            && !frames.is_empty()
-            && !flush(&mut frames, &mut listed, &mut bytes, &mut out)?
+        for chunk in chunks {
+            if !missing.contains(&chunk.name) {
+                continue;
+            }
+            let Some(object) = env.rebuild(&chunk, &lookup)? else {
+                continue;
+            };
+            if bytes + object.len() as u64 > OS_BUNDLE_BYTES
+                && !frames.is_empty()
+                && !flush(&mut frames, &mut listed, &mut bytes, has_video, &mut out)?
+            {
+                staging_full = true;
+                break;
+            }
+            if out.len() >= max_bundles {
+                break;
+            }
+            bytes += object.len() as u64;
+            listed.push(chunk.name);
+            frames.push(Frame::of(
+                centraid_gateway::rules::ids::Name::from_bytes(*chunk.name.as_bytes()),
+                object,
+            ));
+        }
+        if !staging_full
+            && out.len() < max_bundles
+            && !flush(&mut frames, &mut listed, &mut bytes, has_video, &mut out)?
         {
             staging_full = true;
-            break;
         }
-        if out.len() >= max_bundles {
-            break;
-        }
-        bytes += object.len() as u64;
-        listed.push(chunk.name);
-        frames.push(Frame::of(
-            centraid_gateway::rules::ids::Name::from_bytes(*chunk.name.as_bytes()),
-            object,
-        ));
-    }
-    if !staging_full
-        && out.len() < max_bundles
-        && !flush(&mut frames, &mut listed, &mut bytes, &mut out)?
-    {
-        staging_full = true;
     }
     Ok((out, staging_full))
 }

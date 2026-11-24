@@ -134,6 +134,12 @@ impl Staging {
         Ok(partial)
     }
 
+    /// Whether `name` is whole in the area, without reading its bytes.
+    #[must_use]
+    pub fn contains(&self, name: &Name) -> bool {
+        self.path_of(name).exists()
+    }
+
     /// The bytes staged under `name`, when whole.
     ///
     /// # Errors
@@ -172,5 +178,33 @@ impl Staging {
         }
         out.sort();
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn contains_tracks_whole_files_only() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let staging = Staging::open(dir.path(), 1024).expect("open");
+        let whole = Name::from_bytes([1; 32]);
+        let partial = Name::from_bytes([2; 32]);
+
+        assert!(!staging.contains(&whole));
+        assert!(!staging.contains(&partial));
+
+        staging.write_partial(&partial, b"partial").expect("partial");
+        assert!(
+            !staging.contains(&partial),
+            "partial file must not count as present"
+        );
+
+        staging.put(&whole, b"hello").expect("put");
+        assert!(staging.contains(&whole));
+
+        staging.release(&whole).expect("release");
+        assert!(!staging.contains(&whole));
     }
 }
