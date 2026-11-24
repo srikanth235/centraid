@@ -9,11 +9,17 @@
 //!   frames name (plus the pages written during the previous pin, which the
 //!   checkpoint has since folded away) are read, named and sealed; every
 //!   other range reuses the previous snapshot's ref.
-//! - **The periodic full read and checkpoint detection.** Every [`FULL_EVERY`]th
-//!   snapshot, at least daily, and whenever the main vault file's on-disk
-//!   fingerprint (`disk_mark`) changed behind the core's back (for instance on
-//!   last-connection close), every range is read and the root carries `db_hash`.
-//!   Other roots carry no `db_hash`.
+//! - **The periodic full read and write-behind detection.** Every [`FULL_EVERY`]th
+//!   snapshot, at least daily, and whenever the main vault file may have been written
+//!   behind the core's back, every range is read and the root carries `db_hash`. Other
+//!   roots carry no `db_hash`. Two independent guards, neither depending on which tables
+//!   a commit touched (search-index, `sqlite_stat1` and bookkeeping writes bump no
+//!   counter): (1) `disk_mark`, recorded right after the core's own
+//!   `wal_checkpoint(TRUNCATE)`, hashes the main file's length, mtime (ns), ctime, inode
+//!   and device plus page 1 and the `vault` root page, so any later write to the file
+//!   changes it; (2) a [`Vault`] handle's first snapshot is always full (`fresh_open`),
+//!   since every close (which runs `PRAGMA optimize` and checkpoints) is followed by an
+//!   open. A steady, unclosed vault still reads only WAL-dirty ranges.
 //! - The pin covers reading, hashing and sealing and never network I/O. The
 //!   sealed range objects that changed go to staging; the tree's nodes go to
 //!   the node cache. The checkpoint comes after the pin ends, and the device
@@ -146,14 +152,16 @@ fn entry_of(
     })
 }
 
-/// Fingerprint of the main vault file on disk (ignoring `-wal`): its length, page 1 (which carries
-/// SQLite's file change counter, page count, freelist and schema cookie), and the `vault` table's
-/// root page (which carries `vault.writes` and `vault.written_at`, updated on every commit).
+/// Fingerprint of the main vault file on disk (ignoring `-wal`): its filesystem identity and
+/// metadata (length, modification time at full precision, and on unix inode and device), its page 1
+/// and the `vault` table's root page.
 ///
 /// In WAL mode with `wal_autocheckpoint = 0`, normal commits write only to `-wal` and leave the
-/// main file untouched until the core checkpoints after a snapshot. Any checkpoint behind the
-/// core's back — including SQLite's checkpoint on last-connection close — writes dirty pages into
-/// the main file and changes this mark, telling the next snapshot to take a full read.
+/// main file untouched until the core checkpoints after a snapshot. Anything else that reaches the
+/// main file (SQLite's checkpoint on last-connection close, which follows `PRAGMA optimize`; a
+/// search-only commit that a later close folds in) changes its modification time, whatever pages
+/// it wrote, so the mark does not depend on which tables a commit touched. The page hashes are
+/// kept as a second witness for filesystems with coarse timestamps.
 fn disk_mark(
     path: &Path,
     page_size: u64,
@@ -164,12 +172,27 @@ fn disk_mark(
         return Ok(None);
     }
     let mut file = File::open(path)?;
-    let len = file.metadata()?.len();
+    let meta = file.metadata()?;
+    let len = meta.len();
     if len < page_size {
         return Ok(None);
     }
     let mut hasher = blake3::Hasher::new();
     hasher.update(&len.to_le_bytes());
+    let modified = meta
+        .modified()
+        .ok()
+        .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |since| since.as_nanos());
+    hasher.update(&modified.to_le_bytes());
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        hasher.update(&meta.ino().to_le_bytes());
+        hasher.update(&meta.dev().to_le_bytes());
+        hasher.update(&meta.ctime().to_le_bytes());
+        hasher.update(&meta.ctime_nsec().to_le_bytes());
+    }
 
     let mut page = vec![0_u8; page_len];
     file.seek(SeekFrom::Start(0))?;
@@ -235,7 +258,10 @@ pub fn take(
     let range_count = pinned.range_count();
     let vault_root_page = pinned.root_page("vault")?;
     let live_disk_mark = disk_mark(&path, page_size, vault_root_page)?;
-    let disk_changed = prior_disk_mark.is_none() || prior_disk_mark != live_disk_mark;
+    // A handle's first snapshot trusts nothing: the file may have been closed (checkpointed and
+    // optimized) and reopened since the last one.
+    let disk_changed =
+        vault.fresh_open.get() || prior_disk_mark.is_none() || prior_disk_mark != live_disk_mark;
 
     let cadence = device.since_full + 1 >= FULL_EVERY
         || device
@@ -393,6 +419,9 @@ pub fn take(
                 carry,
             })?;
             state.set_exclude_videos(options.exclude_videos)?;
+            if full {
+                vault.fresh_open.set(false);
+            }
             Ok(())
         })();
         if let Err(error) = step {

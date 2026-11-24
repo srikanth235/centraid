@@ -231,6 +231,10 @@ pub struct Vault {
     /// ([`Vault::sweep_unclaimed_files`]): the batches of a pass resume from it by name, and it
     /// is dropped when the pass ends, so no batch lists the library again.
     pub(crate) sweep_listing: RefCell<Option<Vec<String>>>,
+    /// True from open until the first snapshot has been taken from this handle: the file may have
+    /// been closed (checkpointed, `PRAGMA optimize`d) behind the core's back since the last
+    /// snapshot, so that snapshot reads every range ([`crate::backup::snapshot`]).
+    pub(crate) fresh_open: Cell<bool>,
 }
 
 impl Vault {
@@ -515,6 +519,7 @@ impl Vault {
             page_tap: RefCell::new(None),
             blobs: None,
             sweep_listing: RefCell::new(None),
+            fresh_open: Cell::new(true),
         })
     }
 

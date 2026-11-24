@@ -642,3 +642,183 @@ fn a_clean_close_then_new_write_forces_a_full_read_and_restores_both_writes() {
         "restored rows include both the pre-close write and the post-reopen write"
     );
 }
+
+/// A founded, seeded vault with a first (full) snapshot uploaded, for the tests that close and
+/// reopen it.
+struct Closing {
+    _dir: tempfile::TempDir,
+    path: std::path::PathBuf,
+    keys: sealed::BackupKeys,
+    state: centraid_vault::backup::state::DeviceState,
+    staging: centraid_vault::backup::staging::Staging,
+    directory: centraid_vault::backup::directory::Directory,
+    store: centraid_vault::backup::store::MemoryStore,
+}
+
+impl Closing {
+    fn new() -> (Self, centraid_vault::Vault) {
+        use centraid_vault::Vault;
+        use centraid_vault::backup::directory::Directory;
+        use centraid_vault::backup::staging::Staging;
+        use centraid_vault::backup::state::{DeviceState, Gateway};
+        use centraid_vault::backup::store::{MemoryStore, Store as _};
+
+        let dir = tempfile::tempdir().expect("a directory");
+        let path = dir.path().join("vault.db");
+        let vault = Vault::create(&path).expect("creates vault");
+        vault.found("The Household", "Ada").expect("founds");
+        for round in 0..40 {
+            backup_support::common::insert_note(
+                &vault,
+                &format!("seed {round} {}", "x".repeat(900)),
+            )
+            .expect("inserts");
+        }
+        let state = DeviceState::open_beside(&path).expect("state");
+        let staging =
+            Staging::open(dir.path().join("vault.staging"), 512 * 1024 * 1024).expect("s");
+        let store = MemoryStore::new("desk");
+        store.set_clock_ms(T0 * 2);
+        state
+            .add_gateway(&Gateway::paired(
+                store.gateway_id().to_owned(),
+                vec!["192.168.1.20:7443".to_owned()],
+                vec![0x30],
+                "desk".to_owned(),
+                store.epoch(),
+                T0,
+            ))
+            .expect("pairs");
+        let rig = Self {
+            _dir: dir,
+            path,
+            keys: sealed::BackupKeys::from_root(&[0x44; 32]),
+            state,
+            staging,
+            directory: Directory::new(Vec::new()).expect("directory"),
+            store,
+        };
+        let first = rig.take(&vault, T0);
+        assert!(first.full);
+        (rig, vault)
+    }
+
+    fn take(
+        &self,
+        vault: &centraid_vault::Vault,
+        now_ms: u64,
+    ) -> centraid_vault::backup::snapshot::Taken {
+        centraid_vault::backup::snapshot::take(
+            vault,
+            &self.keys,
+            &self.state,
+            &self.staging,
+            &self.directory,
+            Options::at(now_ms),
+        )
+        .expect("a snapshot")
+    }
+
+    /// Close, reopen and snapshot once, so the vault's close-time statistics exist.
+    fn cycle(&self, vault: centraid_vault::Vault, now_ms: u64) -> centraid_vault::Vault {
+        vault.close().expect("clean close");
+        let reopened = centraid_vault::Vault::open(&self.path).expect("reopens");
+        let _ = self.take(&reopened, now_ms);
+        reopened
+    }
+
+    /// Upload `taken`, restore it, check the copy, and compare it with the live vault.
+    fn restores_to_live(
+        &self,
+        vault: &centraid_vault::Vault,
+        taken: &centraid_vault::backup::snapshot::Taken,
+        now_ms: u64,
+    ) {
+        use centraid_vault::backup::drill::dump;
+        use centraid_vault::backup::restore::Restore;
+        use centraid_vault::backup::store::Store;
+        let live = dump(vault).expect("dumps live");
+        let restored = upload_and_restore(
+            vault,
+            &self.keys,
+            &self.state,
+            &self.staging,
+            &self.store,
+            &taken.root.name,
+            now_ms,
+        );
+        assert_eq!(restored, live, "restored rows equal live rows");
+        let dir = tempfile::tempdir().expect("a directory");
+        let out = dir.path().join("restored.db");
+        Restore::open(&self.keys, &[&self.store as &dyn Store], &taken.root.name)
+            .expect("opens")
+            .records(&out)
+            .expect("restores");
+        let check = rusqlite::Connection::open(&out).expect("opens restored file");
+        let verdict: String = check
+            .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+            .expect("integrity_check");
+        assert_eq!(verdict, "ok", "the restored file is whole");
+    }
+}
+
+#[test]
+fn a_search_only_write_then_clean_close_forces_a_full_read_and_restores_a_whole_file() {
+    use centraid_vault::Vault;
+    let (rig, vault) = Closing::new();
+    // One close first, so `sqlite_stat1` exists and page 1 no longer changes on the next close.
+    let vault = rig.cycle(vault, T0 + 500);
+    // Notes leave several search segments; a snapshot makes the file's mark current.
+    for round in 0..30 {
+        backup_support::common::insert_note(&vault, &format!("more {round} words to index"))
+            .expect("inserts");
+    }
+    let _ = rig.take(&vault, T0 + 600);
+    vault.compact_search().expect("compacts");
+    let _ = rig.take(&vault, T0 + 600);
+    // Commits that touch only the search index leave `vault.writes` alone, and (the file already
+    // holding the pages) change neither its length nor page 1.
+    vault
+        .commit(|tx| {
+            tx.connection().execute(
+                "INSERT INTO search_owed (id, after) VALUES ('nothing', '')",
+                [],
+            )?;
+            Ok(())
+        })
+        .expect("owes");
+    vault.reindex_owed().expect("reindexes");
+    vault.close().expect("clean close");
+
+    let reopened = Vault::open(&rig.path).expect("reopens");
+    let taken = rig.take(&reopened, T0 + 1_000);
+    assert!(
+        taken.full,
+        "a close folds search pages the WAL no longer names"
+    );
+    rig.restores_to_live(&reopened, &taken, T0 + 1_000);
+}
+
+#[test]
+fn a_clean_close_with_no_member_write_forces_a_full_read() {
+    use centraid_vault::Vault;
+    let (rig, vault) = Closing::new();
+    let vault = rig.cycle(vault, T0 + 500);
+    // Only the close-time PRAGMA optimize writes anything.
+    vault.close().expect("clean close");
+
+    let reopened = Vault::open(&rig.path).expect("reopens");
+    let taken = rig.take(&reopened, T0 + 1_000);
+    assert!(taken.full, "a reopen is never trusted to be unchanged");
+    rig.restores_to_live(&reopened, &taken, T0 + 1_000);
+}
+
+#[test]
+fn a_steady_vault_that_is_not_closed_reads_no_range_snapshot_after_snapshot() {
+    let (rig, vault) = Closing::new();
+    for step in 1..=2 {
+        let taken = rig.take(&vault, T0 + step);
+        assert_eq!(taken.ranges_read, 0, "snapshot {step} read nothing");
+        assert!(!taken.full);
+    }
+}
