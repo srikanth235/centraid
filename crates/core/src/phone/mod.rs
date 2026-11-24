@@ -215,21 +215,55 @@ impl Plane {
 
     /// What the last pass learned of `gateway_id`.
     pub(crate) fn notes(&self, gateway_id: &str) -> GatewayNotes {
-        self.notes
+        let mut current = self
+            .notes
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get(gateway_id)
             .copied()
-            .unwrap_or_default()
+            .unwrap_or_default();
+        if let Ok(state) = self.state()
+            && let Ok(rec) = state.gateway_notes(gateway_id)
+        {
+            current.collected_ms = rec.collected_ms;
+            current.held_count = u32::try_from(rec.held_count).unwrap_or(u32::MAX);
+            current.held_purge_at_ms = rec.held_purge_at_ms.unwrap_or(0);
+            current.refusal = rec
+                .refusal_code
+                .and_then(|c| wire::WaitReason::try_from(c).ok())
+                .filter(|r| *r != wire::WaitReason::Unspecified);
+            current.damaged = rec.damaged;
+            current.sample_checked = u32::try_from(rec.sample_checked).unwrap_or(u32::MAX);
+            current.sample_of = u32::try_from(rec.sample_of).unwrap_or(u32::MAX);
+            current.manifest_unreadable = rec.manifest_unreadable;
+        }
+        current
     }
 
     /// Change what is known of `gateway_id`.
     pub(crate) fn note(&self, gateway_id: &str, change: impl FnOnce(&mut GatewayNotes)) {
-        let mut held = self
-            .notes
+        let mut current = self.notes(gateway_id);
+        change(&mut current);
+        self.notes
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        change(held.entry(gateway_id.to_owned()).or_default());
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(gateway_id.to_owned(), current);
+        if let Ok(state) = self.state() {
+            let _ = state.set_gateway_notes(
+                gateway_id,
+                &centraid_vault::backup::state::GatewayNotesRecord {
+                    collected_ms: current.collected_ms,
+                    held_count: u64::from(current.held_count),
+                    held_purge_at_ms: (current.held_purge_at_ms > 0)
+                        .then_some(current.held_purge_at_ms),
+                    refusal_code: current.refusal.map(|r| r as i32),
+                    damaged: current.damaged,
+                    sample_checked: u64::from(current.sample_checked),
+                    sample_of: u64::from(current.sample_of),
+                    manifest_unreadable: current.manifest_unreadable,
+                },
+            );
+        }
     }
 
     /// Whether a snapshot something asked for is still owed.
@@ -741,6 +775,11 @@ pub fn forget_destination(
     state
         .remove_gateway(&request.gateway_id)
         .map_err(plane_error)?;
+    plane
+        .notes
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .remove(&request.gateway_id);
     // THE DIRECTORY OF GATEWAYS CHANGED (E8): every gateway left owes a snapshot that writes it.
     for left in state.gateways().map_err(plane_error)? {
         state
@@ -828,13 +867,7 @@ pub fn refresh_destination(
             addrs: destination.addrs,
         });
     }
-    let mut addrs = answered;
-    for recorded in &destination.addrs {
-        if !addrs.contains(recorded) {
-            addrs.push(recorded.clone());
-        }
-    }
-    addrs.truncate(ADDRESS_CAP);
+    let addrs = merge_refreshed_addrs(answered, &destination.addrs);
     let mut renewed = destination.clone();
     renewed.addrs.clone_from(&addrs);
     // The row is written over, and what it confirmed stays (the epoch is the same): only where
@@ -873,6 +906,37 @@ pub(crate) fn refresh_candidates(given: &[String]) -> Vec<String> {
         }
     }
     kept
+}
+
+/// Merge newly answered IP socket addresses with previously recorded addresses,
+/// keeping non-IP hostnames (e.g. `.local`, Tailscale DNS) within [`ADDRESS_CAP`].
+pub(crate) fn merge_refreshed_addrs(answered: Vec<String>, recorded: &[String]) -> Vec<String> {
+    let hostnames: Vec<String> = recorded
+        .iter()
+        .filter(|addr| addr.parse::<std::net::SocketAddr>().is_err() && !answered.contains(addr))
+        .cloned()
+        .collect();
+    let mut addrs = Vec::new();
+    for addr in answered {
+        if !addrs.contains(&addr) {
+            addrs.push(addr);
+        }
+    }
+    for old in recorded {
+        if old.parse::<std::net::SocketAddr>().is_ok() && !addrs.contains(old) {
+            addrs.push(old.clone());
+        }
+    }
+    addrs.truncate(ADDRESS_CAP.saturating_sub(hostnames.len().min(2)));
+    for hostname in hostnames {
+        if addrs.len() >= ADDRESS_CAP {
+            break;
+        }
+        if !addrs.contains(&hostname) {
+            addrs.push(hostname);
+        }
+    }
+    addrs
 }
 
 /// Ask `destination` to revoke this phone's token for `vault`. Whether the
@@ -1296,5 +1360,26 @@ mod refresh_tests {
         assert_eq!(kept, given(&["192.168.1.44:7443", "[2001:db8::7]:7443"]));
         let many: Vec<String> = (1..=20).map(|n| format!("10.0.0.{n}:7443")).collect();
         assert_eq!(super::refresh_candidates(&many).len(), super::ADDRESS_CAP);
+    }
+
+    #[test]
+    fn merge_refreshed_addrs_preserves_hostnames_within_cap() {
+        let answered = (1..=8).map(|n| format!("10.0.0.{n}:8443")).collect();
+        let recorded = given(&[
+            "192.168.1.9:8443",
+            "nas.tailnet.ts.net:8443",
+            "desk.local:8443",
+        ]);
+        let merged = super::merge_refreshed_addrs(answered, &recorded);
+        assert_eq!(merged.len(), super::ADDRESS_CAP);
+        assert!(merged.contains(&"nas.tailnet.ts.net:8443".to_owned()));
+        assert!(merged.contains(&"desk.local:8443".to_owned()));
+        assert_eq!(
+            merged
+                .iter()
+                .filter(|addr| addr.parse::<std::net::SocketAddr>().is_ok())
+                .count(),
+            super::ADDRESS_CAP - 2
+        );
     }
 }

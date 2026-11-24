@@ -303,6 +303,33 @@ impl Spawned {
         self.shared.store().flip_bit(vault, loc, record.size)
     }
 
+    /// Return `(pack_path, pack_offset, size)` for a stored object in the index.
+    ///
+    /// # Errors
+    ///
+    /// If the object is not in the index.
+    pub fn object_slice(
+        &self,
+        vault: &VaultId,
+        name: &Name,
+    ) -> std::io::Result<(std::path::PathBuf, u64, u64)> {
+        let found = self
+            .shared
+            .rules(|gateway| Ok(gateway.state.object_with_location(vault, name)?))
+            .map_err(|fault| std::io::Error::other(fault.to_string()))?;
+        let Some((record, loc)) = found else {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "no such object in index",
+            ));
+        };
+        Ok((
+            self.shared.store().pack_path(vault, &loc.pack_id),
+            loc.pack_offset,
+            record.size,
+        ))
+    }
+
     /// Make the gateway's disk read as full — every upload is refused
     /// `DISK_FULL` — or as having room again.
     pub fn fill_disk(&self, full: bool) {

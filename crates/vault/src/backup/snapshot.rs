@@ -630,6 +630,75 @@ pub fn take(
     Ok(taken)
 }
 
+/// Take one snapshot using brief lock acquisitions via `with_vault` only to read clock/path
+/// metadata before pinning and to checkpoint via `with_exclusive_connection` at the end,
+/// keeping the caller's vault mutex unlocked throughout `PinnedPages`, page hashing/sealing,
+/// blob sealing, and tree assembly (spec §5).
+///
+/// # Errors
+/// A damaged vault (`VaultError::Damaged`: no head may be signed over it), a
+/// vault that will not read, a full staging area, or a node that will not seal.
+pub fn take_with_vault_slot(
+    blobs: Option<&dyn BlobStore>,
+    keys: &BackupKeys,
+    state: &DeviceState,
+    staging: &Staging,
+    directory: &Directory,
+    options: Options<'_>,
+    mut with_vault: impl FnMut(
+        &mut dyn FnMut(&Vault) -> crate::error::Result<()>,
+    ) -> crate::error::Result<()>,
+) -> Result<Taken> {
+    let mut meta: Option<(std::path::PathBuf, bool, String, i64)> = None;
+    with_vault(&mut |vault| {
+        if vault.depth.get() > 0 {
+            return Err(crate::error::VaultError::Invariant {
+                context:
+                    "a snapshot was asked for inside a commit; a snapshot is taken between commits"
+                        .to_owned(),
+            });
+        }
+        meta = Some((
+            vault.path().to_owned(),
+            vault.fresh_open.get(),
+            vault.clock().now_text(),
+            vault.clock().now_ms(),
+        ));
+        Ok(())
+    })?;
+    let (vault_path, fresh_open, now_text, now_clock_ms) =
+        meta.ok_or_else(|| invariant("vault metadata missing during snapshot"))?;
+    let taken = take_unlocked(
+        &vault_path,
+        blobs,
+        fresh_open,
+        &now_text,
+        now_clock_ms,
+        keys,
+        state,
+        staging,
+        directory,
+        options,
+        |step| {
+            with_vault(&mut |vault| {
+                vault.with_exclusive_connection(|connection| {
+                    step(connection).map_err(|err| match err {
+                        crate::error::VaultError::Sqlite(sql) => sql,
+                        other => rusqlite::Error::ToSqlConversionFailure(Box::new(other)),
+                    })
+                })
+            })
+        },
+    )?;
+    if taken.full {
+        with_vault(&mut |vault| {
+            vault.fresh_open.set(false);
+            Ok(())
+        })?;
+    }
+    Ok(taken)
+}
+
 /// A directory with no gateways, for a vault with nothing paired.
 ///
 /// # Errors

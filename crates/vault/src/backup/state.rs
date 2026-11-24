@@ -79,6 +79,7 @@ pub struct GatewayNotesRecord {
     pub refusal_code: Option<i32>,
     pub damaged: bool,
     pub sample_checked: u64,
+    pub sample_of: u64,
     pub manifest_unreadable: bool,
 }
 
@@ -146,6 +147,7 @@ impl Gateway {
                 refusal_code: None,
                 damaged: false,
                 sample_checked: 0,
+                sample_of: 0,
                 manifest_unreadable: false,
             },
         }
@@ -239,7 +241,7 @@ fn pair_of(name: Option<String>, ms: Option<i64>) -> Result<Option<(Name, u64)>>
 const GATEWAY_COLUMNS: &str = "gateway_id, addrs, cert_der, label, epoch, generation, conf, conf_ms, \
      troot, troot_ms, oroot, oroot_ms, reach, moved_epoch, reach_ms, paired_ms, sample_counter, \
      scrub_cursor, directory_dirty, regressed, collected_ms, held_count, held_purge_at_ms, \
-     refusal_code, damaged_flag, sample_checked, manifest_unreadable";
+     refusal_code, damaged_flag, sample_checked, sample_of, manifest_unreadable";
 
 impl DeviceState {
     /// Open (founding when new) the state at `path`.
@@ -384,7 +386,8 @@ impl DeviceState {
                     .map(|code| i32::try_from(code).unwrap_or(i32::MAX)),
                 damaged: row.get::<_, i64>(24)? != 0,
                 sample_checked: unsigned(row.get(25)?),
-                manifest_unreadable: row.get::<_, i64>(26)? != 0,
+                sample_of: unsigned(row.get(26)?),
+                manifest_unreadable: row.get::<_, i64>(27)? != 0,
             },
         };
         // The text columns are parsed by the caller, which can fail with the plane's error.
@@ -613,7 +616,7 @@ impl DeviceState {
             .connection
             .query_row(
                 "SELECT collected_ms, held_count, held_purge_at_ms, refusal_code, damaged_flag,
-                        sample_checked, manifest_unreadable
+                        sample_checked, sample_of, manifest_unreadable
                  FROM gateway WHERE gateway_id = ?1",
                 [gateway_id],
                 |row| {
@@ -626,7 +629,8 @@ impl DeviceState {
                             .map(|code| i32::try_from(code).unwrap_or(i32::MAX)),
                         damaged: row.get::<_, i64>(4)? != 0,
                         sample_checked: unsigned(row.get(5)?),
-                        manifest_unreadable: row.get::<_, i64>(6)? != 0,
+                        sample_of: unsigned(row.get(6)?),
+                        manifest_unreadable: row.get::<_, i64>(7)? != 0,
                     })
                 },
             )
@@ -647,7 +651,8 @@ impl DeviceState {
                 refusal_code = ?5,
                 damaged_flag = ?6,
                 sample_checked = ?7,
-                manifest_unreadable = ?8
+                sample_of = ?8,
+                manifest_unreadable = ?9
              WHERE gateway_id = ?1",
             params![
                 gateway_id,
@@ -657,6 +662,7 @@ impl DeviceState {
                 notes.refusal_code.map(i64::from),
                 i64::from(notes.damaged),
                 signed(notes.sample_checked),
+                signed(notes.sample_of),
                 i64::from(notes.manifest_unreadable),
             ],
         )?;

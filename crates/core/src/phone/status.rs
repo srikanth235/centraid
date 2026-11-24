@@ -62,6 +62,18 @@ pub(crate) fn node_ref(state: &DeviceState, keys: &sealed::BackupKeys, name: &Na
     (reference.name == *name).then_some(reference)
 }
 
+/// The blobs subtree ref of a confirmed root, reading only the root node (1 SQLite lookup).
+fn root_blobs_of(
+    state: &DeviceState,
+    keys: &sealed::BackupKeys,
+    pointer: Option<(Name, u64)>,
+) -> Option<Ref> {
+    let (name, _) = pointer?;
+    let reference = node_ref(state, keys, &name)?;
+    let root = tree::root_of(state, &reference).ok()?;
+    Some(root.blobs)
+}
+
 /// The hashes a confirmed root lists whole, by class: originals whose chunks are all listed, and
 /// derivatives whose chunks are.
 pub(crate) fn listed_hashes(
@@ -71,21 +83,19 @@ pub(crate) fn listed_hashes(
     class: Class,
 ) -> BTreeSet<PlaintextHash> {
     let mut out = BTreeSet::new();
-    let Some((name, _)) = pointer else {
+    let Some(blobs) = root_blobs_of(state, keys, pointer) else {
         return out;
     };
-    let Some(reference) = node_ref(state, keys, &name) else {
+    let Ok(entries) = tree::entries_of(state, &blobs) else {
         return out;
     };
-    let Ok(root) = tree::root_of(state, &reference) else {
-        return out;
-    };
-    let Ok(entries) = tree::entries_of(state, &root.blobs) else {
-        return out;
+    let want = match class {
+        Class::Originals => tree::EntryKind::Original,
+        Class::Thumbnails => tree::EntryKind::Thumbnail,
+        Class::Records => return out,
     };
     for entry in entries {
-        let refs = entry.refs(class);
-        if !refs.is_empty() || (entry.size == 0 && class == Class::Originals) {
+        if entry.kind == want && entry.has_bytes() {
             out.insert(entry.h);
         }
     }
@@ -93,8 +103,8 @@ pub(crate) fn listed_hashes(
 }
 
 /// R4: the gateways that hold the original `h` whole, from the device state alone: every chunk of
-/// it listed in the tree the gateway's `oroot` names. A gateway a newer writer superseded is not
-/// one this phone feeds, and not one that counts.
+/// it listed in the tree the gateway's `oroot` names, checked in `O(depth)` via `lookup_entry`. A
+/// gateway a newer writer superseded is not one this phone feeds, and not one that counts.
 ///
 /// # Errors
 /// The device state's refusal.
@@ -106,7 +116,11 @@ pub(crate) fn holders(
     let mut out = Vec::new();
     for gateway in state.gateways().map_err(plane_error)? {
         if gateway.moved_epoch.is_none()
-            && listed_hashes(state, keys, gateway.oroot, Class::Originals).contains(h)
+            && let Some(blobs_ref) = root_blobs_of(state, keys, gateway.oroot)
+            && tree::lookup_entry(state, &blobs_ref, h)
+                .ok()
+                .flatten()
+                .is_some_and(|e| e.kind == tree::EntryKind::Original && e.has_bytes())
         {
             out.push(gateway.gateway_id);
         }
@@ -147,20 +161,24 @@ pub(crate) fn restore_progress(
         && let Ok(entries) = tree::entries_of(&state, &root.blobs)
     {
         for entry in entries {
-            if !entry.thumbnail.is_empty() {
-                out.previews_total += 1;
-                out.previews_back += u64::from(have_local(&entry.h)?);
-            } else if !entry.original.is_empty() {
-                let video = entry
-                    .media_type
-                    .trim()
-                    .to_ascii_lowercase()
-                    .starts_with("video/");
-                if video && exclude_videos {
-                    continue;
+            match entry.kind {
+                tree::EntryKind::ExcludedOriginal => {}
+                tree::EntryKind::Thumbnail => {
+                    out.previews_total += 1;
+                    out.previews_back += u64::from(have_local(&entry.h)?);
                 }
-                out.originals_total += 1;
-                out.originals_back += u64::from(have_local(&entry.h)?);
+                tree::EntryKind::Original => {
+                    let video = entry
+                        .media_type
+                        .trim()
+                        .to_ascii_lowercase()
+                        .starts_with("video/");
+                    if video && exclude_videos {
+                        continue;
+                    }
+                    out.originals_total += 1;
+                    out.originals_back += u64::from(have_local(&entry.h)?);
+                }
             }
         }
         return Ok(Some(out));
@@ -182,7 +200,8 @@ pub(crate) fn restore_progress(
 }
 
 /// R4 for many at once: of `hashes`, the ones no gateway holds whole, in the order given and
-/// without repeats. Each gateway's originals tree is listed once, whatever the count.
+/// without repeats. Each gateway's `oroot` blobs ref is resolved once, then each hash is checked
+/// in `O(depth)` via `lookup_entry`.
 ///
 /// # Errors
 /// The device state's refusal.
@@ -191,16 +210,26 @@ pub(crate) fn unheld(
     keys: &sealed::BackupKeys,
     hashes: &[PlaintextHash],
 ) -> Result<Vec<PlaintextHash>> {
-    let mut listed = Vec::new();
+    let mut blobs_refs = Vec::new();
     for gateway in state.gateways().map_err(plane_error)? {
-        if gateway.moved_epoch.is_none() {
-            listed.push(listed_hashes(state, keys, gateway.oroot, Class::Originals));
+        if gateway.moved_epoch.is_none()
+            && let Some(blobs_ref) = root_blobs_of(state, keys, gateway.oroot)
+        {
+            blobs_refs.push(blobs_ref);
         }
     }
     let mut seen = BTreeSet::new();
     Ok(hashes
         .iter()
-        .filter(|h| seen.insert(**h) && !listed.iter().any(|set| set.contains(*h)))
+        .filter(|h| {
+            seen.insert(**h)
+                && !blobs_refs.iter().any(|blobs| {
+                    tree::lookup_entry(state, blobs, h)
+                        .ok()
+                        .flatten()
+                        .is_some_and(|e| e.kind == tree::EntryKind::Original && e.has_bytes())
+                })
+        })
         .copied()
         .collect())
 }
@@ -236,8 +265,8 @@ impl Replica {
     fn classes(&self, total: &Totals) -> Vec<wire::ClassStatus> {
         class_rows(
             self.current,
-            self.current && self.standing.thumbnails,
-            self.current && self.standing.originals,
+            self.current && self.standing.thumbnails && self.held_thumbnails == total.thumbnails,
+            self.current && self.standing.originals && self.held_originals == total.originals,
             self.debt,
             total,
             (self.held_thumbnails, self.held_originals),

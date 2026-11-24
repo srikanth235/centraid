@@ -457,20 +457,25 @@ fn files_of(
             .trim()
             .to_ascii_lowercase()
             .starts_with("video/");
-        if !(entry.original.is_empty() || request.exclude_videos && video) {
-            files.push(Listed {
-                entry: entry.clone(),
-                class: Class::Originals,
-            });
-        }
-        if !entry.thumbnail.is_empty() {
-            files.push(Listed {
-                entry,
-                class: Class::Thumbnails,
-            });
+        match entry.kind {
+            tree::EntryKind::ExcludedOriginal => {}
+            tree::EntryKind::Original => {
+                if !(request.exclude_videos && video) {
+                    files.push(Listed {
+                        entry,
+                        class: Class::Originals,
+                    });
+                }
+            }
+            tree::EntryKind::Thumbnail => {
+                files.push(Listed {
+                    entry,
+                    class: Class::Thumbnails,
+                });
+            }
         }
     }
-    // 2. BY NAME: which files have a chunk the device does not hold.
+    // 2. BY NAME: which files have a chunk the device does not hold (or lack sealed chunk refs).
     let all: Vec<Name> = files
         .iter()
         .flat_map(|file| file.refs().iter().map(|reference| reference.name))
@@ -487,9 +492,11 @@ fn files_of(
         }
     }
     let lacks = |file: &Listed| {
-        file.refs()
-            .iter()
-            .any(|reference| absent.contains(&reference.name))
+        file.entry.is_unheld()
+            || file
+                .refs()
+                .iter()
+                .any(|reference| absent.contains(&reference.name))
     };
     let missing_files = files.iter().filter(|file| lacks(file)).count() as u64;
     // WHAT IT LACKS WITHDRAWS EVERY CLAIM: the next pass asks the device what it holds and sends

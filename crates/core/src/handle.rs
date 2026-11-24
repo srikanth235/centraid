@@ -1118,7 +1118,7 @@ impl HandleState {
         let changes = crate::events::ChangeFeed::new(self.events());
         let owner = self.owner();
         self.with_vault(|vault| {
-            crate::act::act(
+            let response = crate::act::act(
                 &crate::act::Ctx {
                     vault,
                     locker: &self.locker,
@@ -1129,8 +1129,24 @@ impl HandleState {
                     actor: None,
                 },
                 request,
-            )
+            )?;
+            self.fold_wal_if_oversized(vault);
+            Ok(response)
         })
+    }
+
+    fn fold_wal_if_oversized(&self, vault: &Vault) {
+        if centraid_vault::backup::wal::frame_pages(vault.path())
+            .is_ok_and(|f| f.len() >= centraid_vault::backup::snapshot::WAL_FOLD_FRAMES)
+            && let Ok(state) = self.plane.state()
+        {
+            let _ = centraid_vault::backup::snapshot::fold_wal_if_needed(
+                vault,
+                &state,
+                crate::phone::now_ms(),
+                centraid_vault::backup::snapshot::WAL_FOLD_FRAMES,
+            );
+        }
     }
 
     /// Attach the screen runtime. Once per core: a second attach is ignored,
@@ -1528,7 +1544,7 @@ impl HandleState {
         let changes = crate::events::ChangeFeed::new(self.events());
         let owner = self.owner();
         self.with_vault(|vault| {
-            crate::api::command(
+            let outcome = crate::api::command(
                 vault,
                 &self.locker,
                 &self.registry,
@@ -1536,7 +1552,9 @@ impl HandleState {
                 &call,
                 &changes,
                 None,
-            )
+            )?;
+            self.fold_wal_if_oversized(vault);
+            Ok(outcome)
         })
     }
 
@@ -2841,7 +2859,7 @@ impl HandleState {
                 // what the next snapshot lists, and the ones that fit are staged for a gateway.
                 if let Some(sealed) = sealed {
                     ledger
-                        .put_os_chunks(&h, &sealed.refs)
+                        .put_blob_chunks(&h, centraid_media::sealed::Class::Originals, &sealed.refs)
                         .map_err(crate::phone::plane_error)?;
                     for chunk in &sealed.staged {
                         ledger

@@ -353,6 +353,11 @@ pub(crate) fn run_cancellable(
         .unwrap_or_else(super::now_ms);
 
     let carrier = Carrier::open(plane, handle)?;
+    let peer_stores: Vec<&dyn centraid_vault::backup::store::Store> = fleet
+        .reached
+        .iter()
+        .map(|reached| &reached.store as &dyn centraid_vault::backup::store::Store)
+        .collect();
     let env = Env::new(
         carrier.vault(),
         &keyring.backup,
@@ -360,7 +365,12 @@ pub(crate) fn run_cancellable(
         &staging,
         conditions.policy(),
         now_ms,
-    );
+    )
+    .with_peers(peer_stores);
+    let blobs_door = handle.bytes();
+    let blobs_ref: Option<&dyn centraid_vault::bytes::BlobStore> = blobs_door
+        .as_ref()
+        .map(|b| b as &dyn centraid_vault::bytes::BlobStore);
     let mut room_stop = false;
     let mut restage = false;
     let mut attempts = 0_u8;
@@ -374,30 +384,42 @@ pub(crate) fn run_cancellable(
             .map_err(plane_error)?
             .iter()
             .any(|gateway| gateway.moved_epoch.is_none() && gateway.conf.is_none());
-        // A snapshot, when one is due: the vault is held for it and for nothing after.
+        // A snapshot, when one is due: the vault is held only briefly for metadata before the pin
+        // and for checkpointing after tree assembly, never during the pin/sealing work.
         let due = handle
             .with_vault(|vault| snapshot_due(plane, &state, vault, keyring, request, phone_ms))?;
         if due || restage {
             let directory = directory_of(&state)?;
-            let take_snapshot = || {
-                handle.with_vault(|vault| {
-                    Ok(snapshot::take(
-                        vault,
-                        &keyring.backup,
-                        &state,
-                        &staging,
-                        &directory,
-                        Options {
-                            // A gateway that confirmed nothing yet is owed every range, and ranges a
-                            // gateway confirmed were released: the snapshot stages them all again.
-                            restage_all: restage || new_gateway,
-                            // Every range is read to be staged: a clean one is not otherwise read.
-                            force_full: restage || new_gateway,
-                            exclude_videos: conditions.exclude_videos,
-                            ..Options::at(phone_ms)
-                        },
-                    ))
-                })
+            let take_snapshot = || -> Result<std::result::Result<snapshot::Taken, PlaneError>> {
+                let mut core_err: Option<CoreError> = None;
+                let out = snapshot::take_with_vault_slot(
+                    blobs_ref,
+                    &keyring.backup,
+                    &state,
+                    &staging,
+                    &directory,
+                    Options {
+                        // A gateway that confirmed nothing yet is owed every range, and ranges a
+                        // gateway confirmed were released: the snapshot stages them all again.
+                        restage_all: restage || new_gateway,
+                        // Every range is read to be staged: a clean one is not otherwise read.
+                        force_full: restage || new_gateway,
+                        exclude_videos: conditions.exclude_videos,
+                        ..Options::at(phone_ms)
+                    },
+                    |step| {
+                        handle.with_vault(|vault| Ok(step(vault)?)).map_err(|err| {
+                            core_err = Some(err);
+                            centraid_vault::VaultError::Invariant {
+                                context: "core vault slot unavailable during snapshot".to_owned(),
+                            }
+                        })
+                    },
+                );
+                if let Some(err) = core_err {
+                    return Err(err);
+                }
+                Ok(out)
             };
             let mut outcome = take_snapshot()?;
             if matches!(outcome, Err(PlaneError::StagingFull)) {
@@ -429,6 +451,18 @@ pub(crate) fn run_cancellable(
                 }
                 Err(error) => return Err(plane_error(error)),
             }
+        } else {
+            // Unpaired, offline, or inside the settle window: fold oversized WALs so `-wal`
+            // stays bounded while preserving `dirty_range` for the next snapshot (spec §5, R5).
+            handle.with_vault(|vault| {
+                let _ = snapshot::fold_wal_if_needed(
+                    vault,
+                    &state,
+                    phone_ms,
+                    snapshot::WAL_FOLD_FRAMES,
+                );
+                Ok(())
+            })?;
         }
 
         stats = PassStats::default();
@@ -542,11 +576,16 @@ pub(crate) fn run_cancellable(
         });
     }
 
-    // R3, PHASE 3: the originals a restore left behind come back, newest first, a pass at a time,
-    // inside the same window and under the member's rule for originals.
+    // R3, PHASE 3: the originals a restore left behind come back, newest first; an asked or
+    // unbounded pass fetches until done, cancellation, or deadline.
     if !deadline_hit && !room_stop {
         let admits = |video: bool| conditions.admits(Class::Originals, video);
         let out_of_time = || deadline.is_some_and(|limit| started.elapsed() >= limit);
+        let restore_limit = if deadline.is_none() || conditions.asked {
+            usize::MAX
+        } else {
+            ORIGINALS_PER_PASS
+        };
         super::fetch::bring_originals(
             handle,
             keyring,
@@ -554,7 +593,7 @@ pub(crate) fn run_cancellable(
             cancellation.clone(),
             &admits,
             &out_of_time,
-            ORIGINALS_PER_PASS,
+            restore_limit,
         )?;
     }
 
@@ -598,13 +637,38 @@ pub(crate) fn run_cancellable(
             } else {
                 plane.note(gateway_id, |notes| notes.manifest_unreadable = false);
             }
-            if let Ok(held) = reached.store.held(None, 200) {
+            let mut total_held = 0_usize;
+            let mut earliest_purge: Option<u64> = None;
+            let mut after = None;
+            let mut held_ok = true;
+            loop {
+                match reached.store.held(after.as_ref(), 200) {
+                    Ok(page) => {
+                        let Some(last) = page.last().map(|entry| entry.name) else {
+                            break;
+                        };
+                        total_held = total_held.saturating_add(page.len());
+                        for entry in &page {
+                            earliest_purge = Some(match earliest_purge {
+                                Some(min) => min.min(entry.purge_after_ms),
+                                None => entry.purge_after_ms,
+                            });
+                        }
+                        if page.len() < 200 {
+                            break;
+                        }
+                        after = Some(last);
+                    }
+                    Err(_) => {
+                        held_ok = false;
+                        break;
+                    }
+                }
+            }
+            if held_ok {
                 plane.note(gateway_id, |notes| {
-                    notes.held_count = u32::try_from(held.len()).unwrap_or(u32::MAX);
-                    notes.held_purge_at_ms = held
-                        .iter()
-                        .map(|entry| entry.purge_after_ms)
-                        .min()
+                    notes.held_count = u32::try_from(total_held).unwrap_or(u32::MAX);
+                    notes.held_purge_at_ms = earliest_purge
                         .and_then(|ms| i64::try_from(ms).ok())
                         .unwrap_or(0);
                 });
@@ -750,7 +814,9 @@ fn need_bytes(
         };
         if whole.iter().all(|listed| listed.contains(&local.hash)) {
             // Whatever of it is still staged is released below, by name.
-            let refs = state.os_chunks(&local.hash).map_err(plane_error)?;
+            let refs = state
+                .blob_chunks(&local.hash, Class::Originals)
+                .map_err(plane_error)?;
             for reference in refs {
                 staging.release(&reference.name).map_err(plane_error)?;
                 state.unstage(&reference.name).map_err(plane_error)?;
@@ -758,7 +824,7 @@ fn need_bytes(
             continue;
         }
         let names = state
-            .os_chunks(&local.hash)
+            .blob_chunks(&local.hash, Class::Originals)
             .map_err(plane_error)?
             .iter()
             .map(|reference| reference.name)

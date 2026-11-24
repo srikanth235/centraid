@@ -524,6 +524,39 @@ fn an_original_larger_than_the_spool_is_fed_again_while_its_windows_move_and_sto
 }
 
 #[test]
+fn back_up_now_streams_all_batches_past_max_rounds_while_asks_advance() {
+    let mut sim = Sim::new(vec![held("a", true)]);
+    let mut round = 0u8;
+    sim.answer = Box::new(move |_| {
+        round += 1;
+        if round <= 20 {
+            with_needs(vec![need(round)], 1)
+        } else {
+            empty()
+        }
+    });
+    let actions = sim.conductor.trigger(Reason::BackUpNow, 0);
+    sim.run(actions);
+    assert_eq!(sim.seen.len(), 21);
+    assert!(!sim.conductor.facts().backing_up);
+
+    // Non-BackUpNow runs remain bounded at MAX_ROUNDS even when asks advance.
+    let mut active = Sim::new(vec![held("a", true)]);
+    let mut active_round = 0u8;
+    active.answer = Box::new(move |_| {
+        active_round += 1;
+        if active_round <= 20 {
+            with_needs(vec![need(active_round)], 1)
+        } else {
+            empty()
+        }
+    });
+    let actions = active.conductor.trigger(Reason::BecameActive, 0);
+    active.run(actions);
+    assert_eq!(active.seen.len(), MAX_ROUNDS as usize);
+}
+
+#[test]
 fn a_round_stops_when_too_little_of_the_budget_is_left() {
     let mut sim = Sim::new(vec![held("a", true)]);
     sim.answer = Box::new(|_| with_needs(vec![need(4)], 0));

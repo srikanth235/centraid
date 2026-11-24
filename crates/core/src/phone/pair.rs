@@ -34,7 +34,7 @@
 //! backed up (the root's simulator repro, #1080). The way back is a restore
 //! from the 24 words, which starts from the gateway's head.
 //!
-//! # A TAKEOVER BY AN OLDER COPY IS REFUSED TOO (the sweep's F4)
+//! # A TAKEOVER BY AN OLDER COPY IS REFUSED TOO (the sweep's F4, spec §6)
 //!
 //! A phone with no record of the gateway — its ledger was lost — cannot be
 //! told it was superseded, and its copy can still be older than the head:
@@ -42,16 +42,14 @@
 //! this one, frozen and then stripped of its ledger, pairs again. The claim
 //! would make the older copy the vault: its next pass sets its snapshot as the
 //! head, and the newer phone's records leave the history. So the claim first
-//! compares the head with the copy. The head's `taken_at_ms` is the cheap gate
-//! — a copy that wrote after the head was taken is not behind it — and when
-//! the head is later than the copy's last write, the head's manifest says how
-//! many writes (the vault's `writes` counter, which only grows) the vault had
-//! made when it was taken: more than this copy has made, and the head holds
-//! writes this copy never saw, so it is refused `VAULT_MOVED` and the way back
-//! is a restore. A head taken after the copy's last write that holds no more of
-//! them is this phone's own, with nothing written since. The files the
-//! newer phone backed up are kept regardless, as long as a kept snapshot names
-//! them (the exact collection in `drain::retain`).
+//! compares the head with the copy: the head's manifest says how many writes
+//! (the vault's `writes` counter, which only grows) the vault had made when
+//! it was taken: more than this copy has made, and the head holds writes this
+//! copy never saw, so it is refused `VAULT_MOVED` and the way back is a
+//! restore. A local timestamp never masks a remote head with more writes. A
+//! head that holds no more writes than this copy has made is this phone's own.
+//! The files the newer phone backed up are kept regardless, as long as a kept
+//! snapshot names them (the exact collection in `drain::retain`).
 //!
 //! # THE NUMBER THE MEMBER READS ALOUD (#1029 W15-D5, the root's ruling A17)
 //!
@@ -288,9 +286,9 @@ const fn superseded(current_epoch: u64) -> CoreError {
     }
 }
 
-/// **WHETHER THE HEAD HOLDS WRITES THIS COPY NEVER MADE** (the sweep's F4):
-/// the head was taken after this copy's last write, and its manifest counts
-/// more writes than this copy holds. See the module header. A head that
+/// **WHETHER THE HEAD HOLDS WRITES THIS COPY NEVER MADE** (the sweep's F4, spec §6):
+/// its manifest counts more writes than this copy holds (`writes > own.writes`).
+/// A local timestamp never masks a remote head with more writes. A head that
 /// will not open cannot be judged — and holds nothing a claim would lose — so
 /// it is not newer.
 fn head_is_ahead(
@@ -300,11 +298,6 @@ fn head_is_ahead(
     own: &History,
     runtime: &tokio::runtime::Handle,
 ) -> Result<bool> {
-    let taken = u64::try_from(head.taken_at_ms).unwrap_or(0);
-    // A COPY THAT WROTE AFTER THE HEAD WAS TAKEN is not behind it.
-    if own.last_write_ms.is_some_and(|written| written >= taken) {
-        return Ok(false);
-    }
     let sealed_bytes = match runtime.block_on(client.get(&keyring.vault_id(), &head.name, None)) {
         Ok(bytes) => bytes,
         Err(ClientError::Refused(Refusal::NotFound { .. })) => return Ok(false),
@@ -512,6 +505,60 @@ pub fn pair(
     // one, which moves no bytes.
     ledger.remove_gateway(&gateway_id).map_err(plane_error)?;
     ledger.add_gateway(&destination).map_err(plane_error)?;
+    // When taking over an existing vault on VAULT_KNOWN, hydrate `blob_chunk` from the standing
+    // head before the next snapshot runs so freed-up cloud-only originals keep their chunk refs
+    // after a `state.db` reset (spec §5).
+    if let Some(head_name) = head {
+        match super::link::GatewayStore::for_gateway(
+            &destination,
+            token,
+            keyring.vault.identity.signing(),
+            runtime,
+        ) {
+            Ok(store) => {
+                let root_name = PlaneName::from_bytes(*head_name.as_bytes());
+                let stores: [&dyn centraid_vault::backup::store::Store; 1] = [&store];
+                match centraid_vault::backup::restore::Restore::open(
+                    &keyring.backup,
+                    &stores,
+                    &root_name,
+                ) {
+                    Ok(restore) => {
+                        for node_name in
+                            centraid_vault::backup::tree::nodes_of(&restore, &restore.root_ref)
+                                .unwrap_or_default()
+                        {
+                            if let Ok(Some(plain)) =
+                                centraid_vault::backup::tree::NodeSource::plaintext(
+                                    &restore, &node_name,
+                                )
+                            {
+                                let _ = ledger.put_node(&node_name, &plain);
+                            }
+                        }
+                        let _ = centraid_vault::backup::snapshot::hydrate_blob_chunks_from_root(
+                            &ledger,
+                            &restore.root_ref,
+                        );
+                    }
+                    Err(error) => {
+                        tracing::warn!(
+                            %error,
+                            gateway = %gateway_id,
+                            "standing head did not open during re-pair; skipping blob_chunk hydration"
+                        );
+                    }
+                }
+            }
+            Err(error) => {
+                tracing::warn!(
+                    %error,
+                    gateway = %gateway_id,
+                    "gateway store did not open during re-pair; skipping blob_chunk hydration"
+                );
+            }
+        }
+    }
     // THE DIRECTORY OF GATEWAYS CHANGED (E8): every gateway owes a snapshot that writes it.
     for gateway in ledger.gateways().map_err(plane_error)? {
         ledger
@@ -544,10 +591,18 @@ pub(crate) fn safety_number(keyring: &Keyring, pin: &Pin) -> String {
     .grouped()
 }
 
-/// What a destination is called on this phone: the host of the first address
-/// the code names — `laptop.local`, `192.168.1.20` — which is what a member
-/// recognises. The payload carries no name of its own.
+/// What a destination is called on this phone: the gateway's configured label
+/// (`--name` or clean hostname) when the payload carries one, else the host of
+/// the first address the code names — `laptop.local`, `192.168.1.20`.
 pub(crate) fn label_of(payload: &PairPayload) -> String {
+    if let Some(label) = payload
+        .label
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        return label.to_owned();
+    }
     payload
         .addrs
         .first()

@@ -35,6 +35,7 @@ CREATE TABLE gateway (
   refusal_code        INTEGER,
   damaged_flag        INTEGER NOT NULL DEFAULT 0 CHECK (damaged_flag IN (0, 1)),
   sample_checked      INTEGER NOT NULL DEFAULT 0 CHECK (sample_checked >= 0),
+  sample_of           INTEGER NOT NULL DEFAULT 0 CHECK (sample_of >= 0),
   manifest_unreadable INTEGER NOT NULL DEFAULT 0 CHECK (manifest_unreadable IN (0, 1)),
   CHECK ((conf IS NULL) = (conf_ms IS NULL)),
   CHECK ((troot IS NULL) = (troot_ms IS NULL)),

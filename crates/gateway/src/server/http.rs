@@ -570,25 +570,42 @@ async fn bundle(
             gateway.authorize(&vault, &token, Access::Read)
         })
         .await?;
-        let mut stream = body.into_data_stream();
-        let received = async {
-            blocking(&shared, move |gateway| {
-                gateway.authorize(&vault, &token, Access::Write)
-            })
-            .await?;
-            if content_length(&headers).is_some_and(|length| length > MAX_BUNDLE_BYTES) {
-                return Err(Refusal::TooLarge {
-                    limit: MAX_BUNDLE_BYTES,
+        let (_drop_tx, mut drop_rx) = tokio::sync::oneshot::channel::<()>();
+        let task_shared = Arc::clone(&shared);
+        let worker = tokio::spawn(async move {
+            let _active = task_shared.bundle_guard();
+            let mut stream = body.into_data_stream();
+            let mut stream_dead = false;
+            let received = async {
+                blocking(&task_shared, move |gateway| {
+                    gateway.authorize(&vault, &token, Access::Write)
+                })
+                .await?;
+                if content_length(&headers).is_some_and(|length| length > MAX_BUNDLE_BYTES) {
+                    return Err(Refusal::TooLarge {
+                        limit: MAX_BUNDLE_BYTES,
+                    }
+                    .into());
                 }
-                .into());
+                receive_bundle(
+                    &task_shared,
+                    &vault,
+                    &token,
+                    &mut stream,
+                    &mut drop_rx,
+                    &mut stream_dead,
+                )
+                .await
             }
-            receive_bundle(&shared, &vault, &token, &mut stream).await
-        }
-        .await;
-        if received.is_err() {
-            drain(&mut stream, DRAIN_BUNDLE_BYTES).await;
-        }
-        received
+            .await;
+            if received.is_err() && !stream_dead {
+                drain(&mut stream, DRAIN_BUNDLE_BYTES).await;
+            }
+            received
+        });
+        worker
+            .await
+            .map_err(|err| Fault::from(StoreFault::new(err.to_string())))?
     }
     .await;
     answer(&shared, StatusCode::OK, outcome)
@@ -612,6 +629,8 @@ async fn receive_bundle(
     vault: &VaultId,
     token: &Token,
     stream: &mut BodyDataStream,
+    aborted: &mut tokio::sync::oneshot::Receiver<()>,
+    stream_dead: &mut bool,
 ) -> Result<BundleAnswer, Fault> {
     let mut slots: Vec<Option<FrameResult>> = Vec::new();
     let mut valid: Vec<ValidFrame> = Vec::new();
@@ -620,8 +639,26 @@ async fn receive_bundle(
     let mut current: Option<CurrentFrame> = None;
 
     let decode_outcome: Result<(), Fault> = async {
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|_| Refusal::BadRequest)?;
+        loop {
+            let next = tokio::select! {
+                biased;
+                chunk = stream.next() => chunk,
+                _ = &mut *aborted => {
+                    *stream_dead = true;
+                    return Err(Refusal::BadRequest.into());
+                }
+                () = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
+                    *stream_dead = true;
+                    return Err(Refusal::BadRequest.into());
+                }
+            };
+            let Some(chunk) = next else {
+                break;
+            };
+            let chunk = chunk.map_err(|_| {
+                *stream_dead = true;
+                Refusal::BadRequest
+            })?;
             let mut rest: &[u8] = &chunk;
             loop {
                 let (step, used) = decoder.step(rest)?;

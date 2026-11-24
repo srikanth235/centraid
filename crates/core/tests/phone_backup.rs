@@ -1624,3 +1624,113 @@ fn revoked_token_stops_with_pair_again_and_persists_across_restart() {
         "pair_again flag must still be set after restart: {dest_after:?}"
     );
 }
+
+#[test]
+fn newly_paired_second_gateway_repairs_cloud_only_original_from_first_gateway() {
+    use centraid_vault::bytes::BlobStore as _;
+
+    let first = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    pair(&phone, &first);
+
+    // Stage and commit an owned original photo + thumbnail, then back up to the first gateway.
+    let photo = owned_photo(&phone, "a freed-up cloud-only photo", 80_000);
+    let photo_hash_hex = centraid_media::sealed::PlaintextHash::of(&photo).to_hex();
+    let photo_handle = stage(&phone, owned("image/heic", &photo), &photo);
+    let thumb = bytes_of("its thumbnail", 4_000);
+    stage(&phone, thumb_of(&photo_handle, &thumb), &thumb);
+    let initial = drain(&phone, at_home());
+    assert_eq!(
+        initial.stopped,
+        wire::DrainStop::Empty as i32,
+        "{initial:?}"
+    );
+
+    // Simulate "Free up space" by removing the local original from the phone's byte store
+    // and confirming staging is empty.
+    let store = phone.bytes().expect("byte door");
+    assert!(
+        store
+            .remove(&photo_hash_hex)
+            .expect("removes local original"),
+        "local original existed before free-up-space"
+    );
+    assert_eq!(status(&phone).spool_bytes, 0);
+
+    // Pair a second gateway and drain: the driver passes `first` as a peer store, so `second`
+    // repairs the cloud-only original directly from `first` without failing or blocking `oroot`.
+    let second = gateway();
+    let second_id = pair(&phone, &second)
+        .destination
+        .expect("second destination")
+        .gateway_id;
+    let repaired = drain(&phone, at_home());
+    assert_eq!(
+        repaired.stopped,
+        wire::DrainStop::Empty as i32,
+        "{repaired:?}"
+    );
+
+    let expected = names_of(Class::Originals, &photo);
+    let held_second = second.held(&vault_id());
+    for name in &expected {
+        assert!(
+            held_second.contains(name),
+            "second gateway must hold repaired cloud-only chunk {name}"
+        );
+    }
+
+    let st = status(&phone);
+    assert_eq!(st.content_confirmed, st.content_total, "{st:?}");
+    let dest_second = st
+        .destinations
+        .iter()
+        .find(|d| d.gateway_id == second_id)
+        .expect("second gateway row");
+    assert!(
+        dest_second.classes.iter().all(|c| c.backed_up),
+        "second gateway must report all classes backed up after peer repair: {dest_second:?}"
+    );
+}
+
+#[test]
+fn gateway_notes_persist_across_core_reopen() {
+    let gw = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    let id = pair(&phone, &gw)
+        .destination
+        .expect("destination")
+        .gateway_id;
+    let photo = owned_photo(&phone, "persisted sample notes", 24_000);
+    let handle = stage(&phone, owned("image/heic", &photo), &photo);
+    let thumb = bytes_of("persisted thumb", 2_000);
+    stage(&phone, thumb_of(&handle, &thumb), &thumb);
+    assert_eq!(
+        drain(&phone, at_home()).stopped,
+        wire::DrainStop::Empty as i32
+    );
+
+    let before = status(&phone);
+    let row_before = before
+        .destinations
+        .iter()
+        .find(|d| d.gateway_id == id)
+        .expect("gateway row before restart");
+    assert!(row_before.sample_checked > 0, "{row_before:?}");
+    assert!(row_before.sample_of > 0, "{row_before:?}");
+
+    let path = phone.path().to_owned();
+    drop(phone);
+    gw.cable().cut();
+    let reopened = reopen(&path);
+    let after = status(&reopened);
+    let row_after = after
+        .destinations
+        .iter()
+        .find(|d| d.gateway_id == id)
+        .expect("gateway row after restart");
+    assert_eq!(row_after.sample_checked, row_before.sample_checked);
+    assert_eq!(row_after.sample_of, row_before.sample_of);
+}

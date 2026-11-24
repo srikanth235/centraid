@@ -278,17 +278,18 @@ enum Damage {
 }
 
 impl Damage {
-    fn apply(self, file: &std::path::Path) {
+    fn apply(self, file: &std::path::Path, offset: u64, size: u64) {
         match self {
             Self::Flip => {
                 let mut bytes = std::fs::read(file).expect("reads");
-                let middle = bytes.len() / 2;
+                let middle = usize::try_from(offset + size / 2).expect("fits");
                 bytes[middle] ^= 1;
                 std::fs::write(file, bytes).expect("writes");
             }
             Self::Truncate => {
                 let bytes = std::fs::read(file).expect("reads");
-                std::fs::write(file, &bytes[..bytes.len() / 2]).expect("writes");
+                let cut = usize::try_from(offset + size / 2).expect("fits");
+                std::fs::write(file, &bytes[..cut]).expect("writes");
             }
             Self::Remove => std::fs::remove_file(file).expect("removes"),
         }
@@ -318,18 +319,20 @@ fn damage_on_the_gateway_is_refused_before_any_claim() {
         .filter(|name| *name != head)
         .collect();
     let range = records[records.len() / 2];
-    let store = gateway.spawned.shared().store();
-    let file_of = |name: centraid_media::sealed::Name| {
-        store.path(
-            &vault_id(),
-            &centraid_gateway::rules::ids::Name::from_bytes(*name.as_bytes()),
-        )
+    let slice_of = |name: centraid_media::sealed::Name| {
+        gateway
+            .spawned
+            .object_slice(
+                &vault_id(),
+                &centraid_gateway::rules::ids::Name::from_bytes(*name.as_bytes()),
+            )
+            .expect("object in pack")
     };
     for (what, name) in [("a range", range), ("the manifest", head)] {
         for damage in [Damage::Flip, Damage::Truncate, Damage::Remove] {
-            let file = file_of(name);
+            let (file, offset, size) = slice_of(name);
             let sound = std::fs::read(&file).expect("reads");
-            damage.apply(&file);
+            damage.apply(&file, offset, size);
             let new_dir = tempfile::tempdir().expect("a directory");
             let refused = try_restore(new_dir.path(), &gateway.payload());
             assert!(refused.is_err(), "{damage:?} {what}: {refused:?}");
@@ -948,11 +951,13 @@ fn after_a_restore_only_what_is_new_is_sent() {
         photo_handle.content_hash,
         "the source's BLAKE3"
     );
-    std::fs::remove_file(gateway.spawned.shared().store().path(
-        &vault_id(),
-        &chunk_of(&gone, 0, centraid_media::sealed::Class::Originals),
-    ))
-    .expect("the gateway loses it");
+    gateway
+        .spawned
+        .lose(
+            &vault_id(),
+            &chunk_of(&gone, 0, centraid_media::sealed::Class::Originals),
+        )
+        .expect("the gateway loses it");
     assert!(
         store
             .remove(
@@ -1322,15 +1327,18 @@ fn an_older_backup_is_offered_when_the_newest_will_not_open() {
     let newest = head_of(&old_path, &id);
     assert_ne!(older, newest, "two backups");
 
-    let store = gateway.spawned.shared().store();
-    let file_of = |name: centraid_media::sealed::Name| {
-        store.path(
-            &vault_id(),
-            &centraid_gateway::rules::ids::Name::from_bytes(*name.as_bytes()),
-        )
+    let slice_of = |name: centraid_media::sealed::Name| {
+        gateway
+            .spawned
+            .object_slice(
+                &vault_id(),
+                &centraid_gateway::rules::ids::Name::from_bytes(*name.as_bytes()),
+            )
+            .expect("object in pack")
     };
-    let sound = std::fs::read(file_of(newest)).expect("reads");
-    Damage::Flip.apply(&file_of(newest));
+    let (newest_file, newest_off, newest_size) = slice_of(newest);
+    let sound = std::fs::read(&newest_file).expect("reads");
+    Damage::Flip.apply(&newest_file, newest_off, newest_size);
 
     // THE OFFER: nothing restored, nothing claimed, nothing laid down.
     let asked = tempfile::tempdir().expect("a directory");
@@ -1342,7 +1350,7 @@ fn an_older_backup_is_offered_when_the_newest_will_not_open() {
         offer.offered_taken_at_ms < offer.newest_taken_at_ms,
         "{offer:?}"
     );
-    assert_eq!(offer.device, "127.0.0.1");
+    assert_eq!(offer.device, gateway.spawned.shared().label());
     assert!(nothing_laid_down(asked.path()).is_empty());
     assert_eq!(gateway.writer(&vault_id()), (1, Some(newest)), "no claim");
 
@@ -1376,9 +1384,11 @@ fn an_older_backup_is_offered_when_the_newest_will_not_open() {
     );
 
     // WITH EVERY BACKUP DAMAGED THERE IS NOTHING TO OFFER.
-    std::fs::write(file_of(newest), sound).expect("mends");
-    Damage::Flip.apply(&file_of(newest));
-    Damage::Flip.apply(&file_of(older));
+    std::fs::write(&newest_file, sound).expect("mends");
+    let (newest_file, newest_off, newest_size) = slice_of(newest);
+    Damage::Flip.apply(&newest_file, newest_off, newest_size);
+    let (older_file, older_off, older_size) = slice_of(older);
+    Damage::Flip.apply(&older_file, older_off, older_size);
     let none = tempfile::tempdir().expect("a directory");
     let refused = try_restore(none.path(), &gateway.payload()).expect_err("nothing opens");
     assert_eq!(
@@ -1679,5 +1689,81 @@ fn offline_gateway_is_dialled_at_most_once_during_restore_fetch() {
     assert!(
         dialled <= 8,
         "offline gateway was redialled for multiple entries: {dialled} connections for 12 originals"
+    );
+}
+
+/// **A STALE SPLIT-BRAIN PHONE WITH A LATER WALL CLOCK CANNOT CLAIM OVER A HIGHER-WRITES HEAD**
+/// (spec §6, #1212): Phone A pairs, writes 1 note, drains. Phone B restores, writes 5 notes at an
+/// earlier wall clock, drains. Phone A loses its `state.db`, writes 1 note at a later timestamp
+/// (so `own.last_write_ms >= head.taken_at_ms` while `own.writes < head.writes`), and pairs again.
+/// `pair` must refuse with `VaultMoved`, and the gateway's head must remain Phone B's.
+#[test]
+fn split_brain_stale_vault_with_later_timestamp_cannot_claim_over_higher_writes_head() {
+    let gateway = gateway();
+    let clock_a = std::sync::Arc::new(centraid_vault::clock::FixedClock::frozen());
+    let clock_b = std::sync::Arc::new(centraid_vault::clock::FixedClock::frozen());
+
+    let a_dir = tempfile::tempdir().expect("a directory");
+    let a_path = a_dir.path().join("vault.db");
+    let a = phone_with(a_dir.path(), {
+        let clock = std::sync::Arc::clone(&clock_a);
+        move |config| {
+            config.with_clock(
+                clock.clone(),
+                std::sync::Arc::new(centraid_vault::clock::ClockIds::new(Box::new(clock))),
+            )
+        }
+    });
+    pair(&a, &gateway);
+    note(&a, "On A", "initial note before split");
+    drain(&a, at_home());
+
+    // Phone B restores onto a fresh vault and runs 5 writes at an earlier timestamp than A's
+    // later clock, then backs up.
+    let b_dir = tempfile::tempdir().expect("a directory");
+    let b_path = PathBuf::from(&restore(b_dir.path(), &gateway).vaults[0].path);
+    let b = centraid_core::Core::open(
+        centraid_core::CoreConfig::new(&b_path)
+            .with_seed(seed(), 0)
+            .with_clock(
+                clock_b.clone(),
+                std::sync::Arc::new(centraid_vault::clock::ClockIds::new(Box::new(clock_b))),
+            ),
+    )
+    .expect("reopens B");
+    b.open_own_bytes(b_path.with_extension("bytes"))
+        .expect("opens B bytes");
+    hand_over_tokens(&b);
+    for i in 0..5 {
+        note(&b, &format!("On B {i}"), "newer phone writes");
+    }
+    assert!(drain(&b, at_home()).acked_at_ms.is_some());
+    let writer_b = gateway.writer(&vault_id());
+    assert_eq!(writer_b.0, 2);
+
+    // Phone A loses its state.db, advances its vault clock far ahead of B's head, writes 1 note
+    // (fewer total writes than B's head, but strictly newer `written_at`), and tries to pair.
+    drop(a);
+    lose_the_ledger(&a_path);
+    clock_a.advance_days(10);
+    let a = centraid_core::Core::open(
+        centraid_core::CoreConfig::new(&a_path)
+            .with_seed(seed(), 0)
+            .with_clock(
+                clock_a.clone(),
+                std::sync::Arc::new(centraid_vault::clock::ClockIds::new(Box::new(clock_a))),
+            ),
+    )
+    .expect("reopens A");
+    a.open_own_bytes(a_path.with_extension("bytes"))
+        .expect("opens A bytes");
+    note(&a, "Split on A", "written at later clock with fewer writes");
+
+    let refused = try_pair(&a, &gateway).expect_err("stale split-brain vault cannot take over");
+    assert_eq!(refused.code(), wire::ErrorCode::VaultMoved, "{refused}");
+    assert_eq!(
+        gateway.writer(&vault_id()),
+        writer_b,
+        "gateway head and epoch remain Phone B's"
     );
 }

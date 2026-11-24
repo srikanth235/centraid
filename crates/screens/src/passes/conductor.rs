@@ -36,7 +36,9 @@
 //! ([`Answer::need_bytes`]), the shell streams them in ([`Action::Stream`]) and
 //! the pass runs again inside the same budget, and only while the ask changes or
 //! the last round moved objects, so a library that will not produce a photograph
-//! cannot spin. A window that keeps moving still ends at [`MAX_ROUNDS`].
+//! cannot spin. A scheduled or background window still ends at [`MAX_ROUNDS`];
+//! `"Back up now"` loops across as many distinct batches as the library has,
+//! capping only identical repeating asks at [`MAX_ROUNDS`].
 //!
 //! ## The OS's uploads
 //!
@@ -72,9 +74,12 @@ pub const FOREGROUND_DEADLINE_MS: u64 = 0;
 /// commit or a link change inside the window arms ONE timer for its end, so the
 /// last of a burst is moved without a pass per keystroke.
 pub const DEBOUNCE: Duration = Duration::from_secs(5);
-/// Passes (the first and its rounds of "stream what was asked, pass again") one
-/// vault's run may take.
+/// Passes (the first and its rounds of "stream what was asked, pass again") a
+/// bounded window or a stalled identical ask may take.
 pub const MAX_ROUNDS: u32 = 8;
+/// Safety ceiling on total rounds inside a single `"Back up now"` run so a
+/// pathological core cannot loop forever even with changing asks.
+const MAX_BACK_UP_NOW_ROUNDS: u32 = 100_000;
 /// Below this much budget a further round would be killed mid-part.
 pub const MIN_ROUND_MS: u64 = 2_000;
 /// What the app is granted after leaving the screen: under the ~30 seconds iOS
@@ -384,6 +389,7 @@ struct Cur {
     started: u64,
     asked: BTreeSet<Vec<u8>>,
     rounds: u32,
+    same_ask_rounds: u32,
     stage: Stage,
     /// The latest outcome of this vault's run: the one that is reported.
     outcome: Option<Pass>,
@@ -1022,6 +1028,7 @@ impl Inner {
                                 started: now,
                                 asked: BTreeSet::new(),
                                 rounds: 0,
+                                same_ask_rounds: 0,
                                 stage: Stage::Start,
                                 outcome: None,
                             });
@@ -1080,17 +1087,17 @@ impl Inner {
         let Some(run) = self.runs.get_mut(&id) else {
             return;
         };
+        let reason = run.reason;
         let each = run.each;
         let Some(cur) = run.cur.as_mut() else {
             return;
         };
         cur.outcome = Some(pass.clone());
-        let rounds_left = cur.rounds < MAX_ROUNDS;
         let Pass::Ran(answer) = &pass else {
             self.finish_cur(id, out);
             return;
         };
-        if answer.stopped != Stopped::Empty || answer.need_bytes.is_empty() || !rounds_left {
+        if answer.stopped != Stopped::Empty || answer.need_bytes.is_empty() {
             self.finish_cur(id, out);
             return;
         }
@@ -1102,8 +1109,22 @@ impl Inner {
         // THE SAME ASK TWICE IS NO PROGRESS: the library would not produce those
         // bytes, and asking again would spin the window away, unless the round
         // moved parts. An original larger than the spool is asked for again, for
-        // its next window, once the last one moved (R-1080-C39).
-        if ask == cur.asked && answer.confirmed_parts == 0 {
+        // its next window, once the last one moved (R-1080-C39), up to MAX_ROUNDS.
+        if ask == cur.asked {
+            if answer.confirmed_parts == 0 {
+                self.finish_cur(id, out);
+                return;
+            }
+            cur.same_ask_rounds += 1;
+        } else {
+            cur.same_ask_rounds = 1;
+        }
+        let rounds_left = if reason == Reason::BackUpNow {
+            cur.same_ask_rounds < MAX_ROUNDS && cur.rounds < MAX_BACK_UP_NOW_ROUNDS
+        } else {
+            cur.rounds < MAX_ROUNDS && cur.same_ask_rounds < MAX_ROUNDS
+        };
+        if !rounds_left {
             self.finish_cur(id, out);
             return;
         }

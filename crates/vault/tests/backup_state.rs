@@ -606,6 +606,7 @@ fn gateway_notes_blob_chunks_and_dirty_ranges_round_trip() {
         refusal_code: Some(42),
         damaged: true,
         sample_checked: 64,
+        sample_of: 120,
         manifest_unreadable: true,
     };
     state

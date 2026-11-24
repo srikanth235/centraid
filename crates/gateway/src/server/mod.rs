@@ -207,6 +207,9 @@ pub struct Shared {
     /// How many commits are between a file's rename and its row, in this
     /// process: the orphan sweep stands aside while any is.
     committing: std::sync::atomic::AtomicUsize,
+    /// Detached bundle workers still streaming or committing completed frames
+    /// after an HTTP/2 stream reset.
+    active_bundles: (Mutex<usize>, std::sync::Condvar),
 }
 
 /// A commit between rename and row. While one is alive the orphan sweep
@@ -217,6 +220,23 @@ pub struct CommitGuard<'a>(&'a std::sync::atomic::AtomicUsize);
 impl Drop for CommitGuard<'_> {
     fn drop(&mut self) {
         self.0.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// A detached bundle worker in flight.
+pub struct BundleGuard<'a>(&'a (Mutex<usize>, std::sync::Condvar));
+
+impl Drop for BundleGuard<'_> {
+    fn drop(&mut self) {
+        let mut count = self
+            .0
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *count = count.saturating_sub(1);
+        if *count == 0 {
+            self.0.1.notify_all();
+        }
     }
 }
 
@@ -310,6 +330,7 @@ impl Shared {
             data_dir: data_dir.to_path_buf(),
             announcer: None,
             committing: std::sync::atomic::AtomicUsize::new(0),
+            active_bundles: (Mutex::new(0), std::sync::Condvar::new()),
         })
     }
 
@@ -434,6 +455,34 @@ impl Shared {
     #[must_use]
     pub fn commits_in_flight(&self) -> bool {
         self.committing.load(std::sync::atomic::Ordering::SeqCst) > 0
+    }
+
+    /// Track an active bundle upload / partial-pack commit worker.
+    pub fn bundle_guard(&self) -> BundleGuard<'_> {
+        let mut count = self
+            .active_bundles
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *count += 1;
+        drop(count);
+        BundleGuard(&self.active_bundles)
+    }
+
+    /// Wait until any in-flight bundle worker finishes committing completed frames.
+    pub fn wait_active_bundles(&self) {
+        let mut count = self
+            .active_bundles
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        while *count > 0 {
+            count = self
+                .active_bundles
+                .1
+                .wait(count)
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+        }
     }
 
     /// A fresh nonce, from the OS.
