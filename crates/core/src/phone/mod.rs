@@ -936,6 +936,7 @@ fn revoke(
 // ─── status ─────────────────────────────────────────────────────────────────
 
 pub use status::backup_status;
+pub(crate) use status::restore_progress;
 
 /// THE MEMBER'S FIRST ITEM: the earliest `created_at` of a row they made or imported. One bounded
 /// read, a `MIN` per kind over the `entity_by_created` index (nothing is scanned or counted). The

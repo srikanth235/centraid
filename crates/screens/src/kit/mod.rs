@@ -22,6 +22,7 @@ pub mod owner;
 pub mod permission;
 pub mod quantity;
 pub mod read;
+pub mod restoring;
 pub mod reads_page;
 pub mod schedule;
 pub mod search;

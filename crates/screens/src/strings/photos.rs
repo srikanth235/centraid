@@ -294,6 +294,7 @@ catalog! {
     plain photos_slideshow_leave = ("Leave", "Leave");
     plain photos_slideshow_line = ("Leaving the slideshow keeps the photo you stopped on", "Leaving the slideshow keeps the photo you stopped on");
     plain photos_slideshow_meta = ("{position} of {total}, {seconds} seconds a photo", "{position} of {total}, {seconds} seconds a photo");
+    plain photos_coming_back = ("This photo is still coming back. Showing its preview.", "This photo is still coming back. Showing its preview.");
     plain photos_smaller_copy_only = ("This phone holds a smaller copy; the original is not downloaded.", "This phone holds a smaller copy; the original is not downloaded.");
     plain photos_tile_size = ("Tile size", "Tile size");
     plain photos_title = ("Photos", "Photos");

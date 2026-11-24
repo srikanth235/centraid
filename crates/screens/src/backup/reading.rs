@@ -177,6 +177,8 @@ pub struct Reading {
     /// WHAT IS BACKED UP, PER CLASS (#1209): records, thumbnails, originals, with the counts and
     /// the reasons the core gives. Backed up here means every paired device holds the class.
     pub classes: Vec<ClassRow>,
+    /// WHAT A RESTORE STILL HAS TO BRING BACK (#1209, R3), while one is owed.
+    pub restoring: Option<wire::RestoreProgress>,
     /// Every app's bytes, the videos left out not among them, and of those
     /// what a gateway acknowledged.
     pub total_bytes: u64,
@@ -273,6 +275,7 @@ impl Reading {
             first_item_ms: status.first_item_ms.filter(|at| *at > 0),
             frozen: status.frozen,
             classes: status.classes.iter().map(ClassRow::from_wire).collect(),
+            restoring: status.restoring,
             total_bytes: status.total_bytes,
             confirmed_bytes: status.confirmed_bytes,
             left_out_items: status.left_out_items,

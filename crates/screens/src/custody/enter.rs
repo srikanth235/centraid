@@ -745,6 +745,9 @@ impl Enter {
         let from_pairing = rekey && self.origin == Origin::Pairing;
         let held = self.purpose == Purpose::RestoreHeld;
         let done = phase == Phase::Done;
+        // A RESTORE IS RUNNING (#1209, R3): the vault opens when its records are back, then the
+        // previews, then the originals, newest first, in the background.
+        let restoring_now = phase == Phase::Working && !rekey && !self.loading;
         if self.loading {
             return wire::WordsEnterState {
                 phase: Phase::Working as i32,
@@ -798,6 +801,8 @@ impl Enter {
             words::rekeyed_title(locale)
         } else if rekey {
             words::rekey_title(locale)
+        } else if restoring_now {
+            words::restoring_title(locale)
         } else if held {
             words::restore_held_title(locale)
         } else {
@@ -813,6 +818,8 @@ impl Enter {
             words::rekey_pair_body(locale)
         } else if rekey {
             words::rekey_body(locale)
+        } else if restoring_now {
+            words::restoring_body(locale)
         } else if held {
             words::restore_held_body(locale)
         } else {
@@ -900,6 +907,27 @@ impl Enter {
                 words::cancel(locale)
             } else {
                 String::new()
+            },
+            restore_rows: if restoring_now {
+                vec![
+                    wire::WordsRestoreRow {
+                        name: words::restore_step_records(locale),
+                        detail: String::new(),
+                        state: words::restore_step_now(locale),
+                    },
+                    wire::WordsRestoreRow {
+                        name: words::restore_step_previews(locale),
+                        detail: words::restore_step_previews_detail(locale),
+                        state: words::restore_step_next(locale),
+                    },
+                    wire::WordsRestoreRow {
+                        name: words::restore_step_originals(locale),
+                        detail: words::restore_step_originals_detail(locale),
+                        state: words::restore_step_then(locale),
+                    },
+                ]
+            } else {
+                Vec::new()
             },
             progress: if phase == Phase::Working {
                 if rekey {

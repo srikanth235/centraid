@@ -76,6 +76,16 @@ catalog! {
     plain restore_primary = ("Restore", "Restore");
     plain restore_title = ("Restore with your recovery key", "Restore with your recovery key");
     plain restore_unreachable = ("Couldn't reach your backup device. Check it is on and connected, or paste a new pairing code.", "Couldn't reach your backup device. Check it is on and connected, or paste a new pairing code.");
+    plain restoring_title = ("Restoring your vault", "Restoring your vault");
+    plain restoring_body = ("Your vault opens when your records are back. Photos follow.", "Your vault opens when your records are back. Photos follow.");
+    plain restore_step_records = ("Records", "Records");
+    plain restore_step_previews = ("Photo previews", "Photo previews");
+    plain restore_step_previews_detail = ("Small versions, so you can browse.", "Small versions, so you can browse.");
+    plain restore_step_originals = ("Photos and files", "Photos and files");
+    plain restore_step_originals_detail = ("Newest first, in the background.", "Newest first, in the background.");
+    plain restore_step_now = ("Restoring", "Restoring");
+    plain restore_step_next = ("Next", "Next");
+    plain restore_step_then = ("Then", "Then");
     plain restoring = ("Looking for your backup device and checking what it holds. This can take a minute.", "Looking for your backup device and checking what it holds. This can take a minute.");
     plain save_label = ("Save a copy", "Save a copy");
     plain save_subject = ("Centraid recovery key", "Centraid recovery key");

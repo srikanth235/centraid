@@ -147,6 +147,17 @@ pub fn line(
             ..Default::default()
         });
     }
+    // A RESTORE IS BRINGING THE PHOTOS BACK (#1209, R3): the vault is open, and the line says how
+    // far, previews first, then the originals. Counts only, never a time.
+    if let Some(sentence) = reading.restoring.as_ref().and_then(|r| restore_sentence(locale, r)) {
+        return finish(wire::BackupLine {
+            confirmed: reading.content_confirmed,
+            status: sentence.clone(),
+            sentence,
+            tone: Tone::Quiet as i32,
+            ..Default::default()
+        });
+    }
     let waiting = waiting_rows(locale, reading);
     if reading.destinations.is_empty() {
         return finish(wire::BackupLine {
@@ -255,6 +266,31 @@ pub fn line(
         ..Default::default()
     };
     finish(name_the_one_behind(locale, reading, built))
+}
+
+/// "Restoring previews. 312 of 1,240 back." while previews are missing, then "Restoring photos. 410
+/// of 1,282 back."; `None` when both are back.
+#[must_use]
+pub fn restore_sentence(locale: Locale, restoring: &wire::RestoreProgress) -> Option<String> {
+    let (template, back, total) = if restoring.previews_back < restoring.previews_total {
+        (
+            words::backup_restoring_previews(locale),
+            restoring.previews_back,
+            restoring.previews_total,
+        )
+    } else if restoring.originals_back < restoring.originals_total {
+        (
+            words::backup_restoring_originals(locale),
+            restoring.originals_back,
+            restoring.originals_total,
+        )
+    } else {
+        return None;
+    };
+    Some(fill(
+        &template,
+        &[("back", &grouped(back)), ("total", &grouped(total))],
+    ))
 }
 
 /// The name the member gave a backup device, or the plain word for one with none.

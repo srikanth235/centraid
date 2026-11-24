@@ -96,6 +96,8 @@ catalog! {
     plain backup_status_done = ("Backed up {when}", "Backed up {when}");
     plain backup_status_frozen = ("Moved to your other phone", "Moved to your other phone");
     plain backup_status_waiting = ("Backed up {when}. {waiting}.", "Backed up {when}. {waiting}.");
+    plain backup_restoring_previews = ("Restoring previews. {back} of {total} back.", "Restoring previews. {back} of {total} back.");
+    plain backup_restoring_originals = ("Restoring photos. {back} of {total} back.", "Restoring photos. {back} of {total} back.");
     plain backup_status_records = ("Records backed up {when}", "Records backed up {when}");
     plain backup_status_never = ("Not backed up yet", "Not backed up yet");
     plain backup_status_pair_again = ("Pair your backup device again", "Pair your backup device again");

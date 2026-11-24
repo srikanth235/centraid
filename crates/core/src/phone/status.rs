@@ -114,6 +114,42 @@ pub(crate) fn holders(
     Ok(out)
 }
 
+/// **A RESTORE'S PROGRESS** (R3): `None` unless the restore left its marker. Previews and originals
+/// are counted from the vault's content rows against the content store; what the OS library holds
+/// is not owed, and counts as back.
+///
+/// # Errors
+/// The device state's or the vault's refusal.
+pub(crate) fn restore_progress(
+    plane: &Plane,
+    vault: &Vault,
+    bytes: &centraid_blobs::ByteStore,
+) -> Result<Option<wire::RestoreProgress>> {
+    if !plane.originals_marker().exists() {
+        return Ok(None);
+    }
+    let state = plane.state()?;
+    let mut out = wire::RestoreProgress::default();
+    for file in content_files(vault).map_err(plane_error)? {
+        let have = bytes
+            .path_of(centraid_blobs::ContentHash::from_bytes(*file.h.as_bytes()))
+            .map(|path| path.is_some())
+            .unwrap_or(false)
+            || state
+                .local(&file.h)
+                .map_err(plane_error)?
+                .is_some_and(|local| local.source == LocalSource::Os);
+        let (total, back) = if file.is_original() {
+            (&mut out.originals_total, &mut out.originals_back)
+        } else {
+            (&mut out.previews_total, &mut out.previews_back)
+        };
+        *total += 1;
+        *back += u64::from(have);
+    }
+    Ok(Some(out))
+}
+
 /// R4 for many at once: of `hashes`, the ones no gateway holds whole, in the order given and
 /// without repeats. Each gateway's originals tree is listed once, whatever the count.
 ///
@@ -472,6 +508,7 @@ pub fn backup_status(
         oldest_waiting_ms: counted.oldest_waiting_ms,
         first_item_ms: vault.and_then(first_item_ms),
         classes,
+        restoring: None,
     })
 }
 

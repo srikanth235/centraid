@@ -251,6 +251,17 @@ message ClassStatus {
   repeated Waiting waiting = 6;
 }
 
+// HOW FAR A RESTORE HAS BROUGHT THE PHOTOS BACK (#1209, R3), counted from the vault's own content
+// rows against what the content store holds on this phone. Previews and originals are files, not
+// chunks; an original the member freed from this phone on purpose, or one the OS library holds, is
+// counted as back, because a restore does not owe it.
+message RestoreProgress {
+  uint64 previews_total = 1;
+  uint64 previews_back = 2;
+  uint64 originals_total = 3;
+  uint64 originals_back = 4;
+}
+
 // WHICH GATEWAYS HOLD ONE ORIGINAL WHOLE (#1209, R4). The delete warning asks before a photo
 // is deleted that no gateway holds whole. Read from the device state; nothing is dialled.
 message HeldWholeRequest {
@@ -628,6 +639,9 @@ message BackupStatusResponse {
   optional int64 first_item_ms = 18;
   // WHAT IS BACKED UP, PER CLASS (#1209, §6.6): records, thumbnails, originals.
   repeated ClassStatus classes = 19;
+  // WHAT A RESTORE STILL HAS TO BRING BACK (#1209, R3), present only from a restore until every
+  // preview and original it owes is on this phone: the vault is open and the screens say so.
+  optional RestoreProgress restoring = 20;
 }
 
 // ONE APP'S PART OF THE BACKUP (#1144). Counts come from the app's own

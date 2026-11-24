@@ -2057,6 +2057,40 @@ fn no_class_rows_before_a_device_is_paired_or_after_the_vault_moved() {
     assert!(moved.apps.is_empty());
 }
 
+// ---- a restore brings the photos back (#1209, R3) ----------------------------
+
+#[test]
+fn a_restore_says_how_far_previews_then_originals_are_back_in_counts_only() {
+    let restoring = |previews: (u64, u64), originals: (u64, u64)| {
+        let status = wire::BackupStatusResponse {
+            restoring: Some(wire::RestoreProgress {
+                previews_back: previews.0,
+                previews_total: previews.1,
+                originals_back: originals.0,
+                originals_total: originals.1,
+            }),
+            ..with_classes(all_held())
+        };
+        line::line(EN, Some(&reading(&status)), false, false, NOW)
+    };
+    // THE VAULT IS OPEN, and Home says the previews first.
+    let previews = restoring((312, 1_240), (0, 1_282));
+    assert_eq!(previews.status, "Restoring previews. 312 of 1,240 back.");
+    assert_eq!(previews.sentence, previews.status);
+    assert_eq!(previews.tone, Tone::Quiet as i32);
+    // THEN THE ORIGINALS, once every preview is here.
+    let originals = restoring((1_240, 1_240), (410, 1_282));
+    assert_eq!(originals.status, "Restoring photos. 410 of 1,282 back.");
+    // BOTH BACK: the line is the backup's own again, and no restore is said.
+    let done = restoring((1_240, 1_240), (1_282, 1_282));
+    assert_eq!(done.sentence, "Backed up 2 minutes ago.");
+    // NO TIME IS ESTIMATED.
+    assert!(!previews.sentence.contains("minute") && !originals.sentence.contains("left"));
+    // A VAULT THAT IS NOT RESTORING says nothing of it.
+    let calm = line::line(EN, Some(&reading(&with_classes(all_held()))), false, false, NOW);
+    assert!(!calm.sentence.contains("Restoring"));
+}
+
 // ---- THE SETTINGS-STYLE PAGE (#1173) ----
 
 fn condition_of(status: wire::BackupStatusResponse) -> wire::BackupCondition {
