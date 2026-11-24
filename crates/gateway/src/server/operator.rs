@@ -136,10 +136,13 @@ pub fn run(
                 ));
             }
             let store = shared.store();
-            let deleted =
-                expect(shared.rules(|gateway| {
-                    gateway.delete_vault(vault, |name| store.remove(vault, name))
-                })?)?;
+            let deleted = expect(shared.rules(|gateway| {
+                let outcome = gateway.delete_vault(vault, |_name| Ok(()))?;
+                if matches!(outcome, Operated::Done(_)) {
+                    store.remove_vault_packs(vault)?;
+                }
+                Ok(outcome)
+            })?)?;
             Ok(vec![format!(
                 "deleted   vault {short}: {} objects and {} tokens removed",
                 deleted.objects, deleted.tokens

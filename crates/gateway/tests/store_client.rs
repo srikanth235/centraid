@@ -197,7 +197,20 @@ impl Upload {
     }
 }
 
-/// Wait until `count` frames are committed, by event, not by clock.
+/// Wait until `count` frames are staged on disk, by event, not by clock.
+fn staged_events(gateway: &Spawned) -> std::sync::mpsc::Receiver<u64> {
+    let (tx, rx) = std::sync::mpsc::channel::<u64>();
+    gateway
+        .shared()
+        .store()
+        .knobs()
+        .on_staged(Some(std::sync::Arc::new(move |size| {
+            let _ = tx.send(size);
+        })));
+    rx
+}
+
+/// Wait until `count` frames are committed in `state.db`, by event, not by clock.
 fn committed_events(gateway: &Spawned) -> std::sync::mpsc::Receiver<usize> {
     let (tx, rx) = std::sync::mpsc::channel::<usize>();
     gateway
@@ -210,21 +223,32 @@ fn committed_events(gateway: &Spawned) -> std::sync::mpsc::Receiver<usize> {
     rx
 }
 
-async fn wait_for(rx: std::sync::mpsc::Receiver<usize>, nth: usize) {
+async fn wait_for_staged(rx: std::sync::mpsc::Receiver<u64>, count: usize) {
+    tokio::task::spawn_blocking(move || {
+        for _ in 0..count {
+            rx.recv().expect("the gateway is running");
+        }
+    })
+    .await
+    .expect("the staged waiter");
+}
+
+async fn wait_for_committed(rx: std::sync::mpsc::Receiver<usize>, nth: usize) {
     tokio::task::spawn_blocking(
         move || {
             while rx.recv().expect("the gateway is running") < nth {}
         },
     )
     .await
-    .expect("the waiter");
+    .expect("the committed waiter");
 }
 
-/// A FRAME IS COMMITTED AS IT ARRIVES (spec §4, B7, E14). The body is fed by
-/// hand: the first frame whole and the second frame's header, then nothing.
-/// **The first frame is committed while the body is still open**, which a
-/// gateway that held the body, or admitted the bundle at its end, would not
-/// do: another connection sees the first name held and the second missing.
+/// A FRAME IS STREAMED TO THE STAGED PACKFILE ON ARRIVAL (spec §4, B7, E14).
+/// The body is fed by hand: the first frame whole and the second frame's header,
+/// then nothing. **The first frame is written and verified on disk while the
+/// body is still open**, proving the gateway streams frames incrementally rather
+/// than buffering the whole HTTP body in memory; when the second frame arrives
+/// and the stream closes, both frames commit together in one `.pack` file.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_bundle_frame_is_committed_on_arrival_not_with_the_rest() {
     let dir = tempfile::tempdir().expect("a temp dir");
@@ -233,7 +257,7 @@ async fn a_bundle_frame_is_committed_on_arrival_not_with_the_rest() {
     let (first, first_bytes) = part("first frame", 64 * 1024);
     let (second, second_bytes) = part("second frame", 64 * 1024);
     let length = 2 * (HEADER_LEN + 64 * 1024);
-    let committed = committed_events(&gateway);
+    let staged = staged_events(&gateway);
 
     let upload = Upload::open(&gateway, &vault, &token, length).await;
     upload.send(&frame_header(
@@ -247,15 +271,16 @@ async fn a_bundle_frame_is_committed_on_arrival_not_with_the_rest() {
         &Digest::of(&second_bytes),
         second_bytes.len() as u64,
     ));
-    wait_for(committed, 1).await;
-    let missing = phone
-        .exists(&vault, &[first, second])
-        .await
-        .expect("exists");
+    wait_for_staged(staged, 1).await;
     assert_eq!(
-        missing,
-        vec![second],
-        "the first frame is held while the body is still open"
+        gateway
+            .shared()
+            .store()
+            .staged_entries()
+            .expect("staging")
+            .len(),
+        1,
+        "the staged packfile is already on disk while the body is still open"
     );
 
     upload.send(&second_bytes);
@@ -275,10 +300,10 @@ async fn a_bundle_frame_is_committed_on_arrival_not_with_the_rest() {
 }
 
 /// A BODY CUT INSIDE FRAME k LEAVES FRAMES BEFORE k COMMITTED AND k ABSENT
-/// (spec §4, G1). Three frames are sent over a real connection: the first two
-/// whole, the third's header and half its bytes. The cable is then cut. After
-/// the gateway is mended, counted: two names held, the third missing, two
-/// object files on disk and no staged file left once the gateway has stopped.
+/// (spec §4, G1, G2). Three frames are sent over a real connection: the first
+/// two whole, the third's header and half its bytes. The cable is then cut.
+/// After the gateway is mended, counted: two names held, the third missing, one
+/// `.pack` file on disk and no staged file left once the gateway has stopped.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_body_cut_inside_a_frame_leaves_the_frames_before_it_committed() {
     let dir = tempfile::tempdir().expect("a temp dir");
@@ -288,6 +313,7 @@ async fn a_body_cut_inside_a_frame_leaves_the_frames_before_it_committed() {
         .map(|index| part(&format!("frame {index}"), 64 * 1024))
         .collect();
     let length = 3 * (HEADER_LEN + 64 * 1024);
+    let staged = staged_events(&gateway);
     let committed = committed_events(&gateway);
 
     let upload = Upload::open(&gateway, &vault, &token, length).await;
@@ -302,13 +328,14 @@ async fn a_body_cut_inside_a_frame_leaves_the_frames_before_it_committed() {
         cut_bytes.len() as u64,
     ));
     upload.send(&cut_bytes[..cut_bytes.len() / 2]);
-    wait_for(committed, 2).await;
+    wait_for_staged(staged, 2).await;
 
     gateway.cable().cut();
     assert!(
         upload.answered.await.expect("the request task").is_none(),
         "a cut body is not answered"
     );
+    wait_for_committed(committed, 2).await;
     gateway.cable().mend();
 
     let names: Vec<Name> = parts.iter().map(|(name, _)| *name).collect();
@@ -337,9 +364,13 @@ async fn a_body_cut_inside_a_frame_leaves_the_frames_before_it_committed() {
         }
         count
     };
-    assert_eq!(on_disk("objects"), 2, "two object files");
     assert_eq!(
-        on_disk("incoming"),
+        on_disk("packs"),
+        1,
+        "one packfile holds both committed frames"
+    );
+    assert_eq!(
+        on_disk("staging"),
         0,
         "the cut frame's staged bytes are gone"
     );

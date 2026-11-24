@@ -62,12 +62,19 @@ statement!(SNAPSHOTS_DELETE_VAULT, "snapshots_delete_vault.sql");
 statement!(CLAIM_DELETE, "claim_delete.sql");
 statement!(REVOKED_DELETE_VAULT, "revoked_delete_vault.sql");
 statement!(OBJECT_SELECT, "object_select.sql");
+statement!(OBJECT_WITH_PACK_SELECT, "object_with_pack_select.sql");
 statement!(OBJECT_UPSERT, "object_upsert.sql");
+statement!(OBJECT_META_UPDATE, "object_meta_update.sql");
+statement!(OBJECT_REMAP_PACK, "object_remap_pack.sql");
 statement!(OBJECT_DELETE, "object_delete.sql");
 statement!(OBJECTS_LIVE_SELECT, "objects_live_select.sql");
 statement!(OBJECTS_HELD_SELECT, "objects_held_select.sql");
 statement!(OBJECTS_VAULT_SELECT, "objects_vault_select.sql");
 statement!(OBJECTS_ALL_SELECT, "objects_all_select.sql");
+statement!(OBJECTS_BY_PACK_SELECT, "objects_by_pack_select.sql");
+statement!(OBJECTS_IN_PACK_SELECT, "objects_in_pack_select.sql");
+statement!(OBJECT_PACK_STATS, "object_pack_stats.sql");
+statement!(OBJECT_PACK_EXISTS, "object_pack_exists.sql");
 statement!(PURGEABLE_SELECT, "purgeable_select.sql");
 statement!(HOLD_OBJECT_SET, "hold_object_set.sql");
 statement!(HOLD_SNAPSHOT_SET, "hold_snapshot_set.sql");
@@ -125,6 +132,26 @@ pub const LISTINGS: &[(&str, &str, Option<&str>)] = &[
     ),
     ("objects_vault_select", OBJECTS_VAULT_SELECT, None),
     ("objects_all_select", OBJECTS_ALL_SELECT, None),
+    (
+        "objects_by_pack_select",
+        OBJECTS_BY_PACK_SELECT,
+        Some("object_by_pack"),
+    ),
+    (
+        "objects_in_pack_select",
+        OBJECTS_IN_PACK_SELECT,
+        Some("object_by_pack"),
+    ),
+    (
+        "object_pack_stats",
+        OBJECT_PACK_STATS,
+        Some("object_by_pack"),
+    ),
+    (
+        "object_pack_exists",
+        OBJECT_PACK_EXISTS,
+        Some("object_by_pack"),
+    ),
     (
         "purgeable_select",
         PURGEABLE_SELECT,

@@ -22,6 +22,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::rules::ids::{GatewayId, Pin, Secret};
+use crate::rules::limits::MAX_LABEL_BYTES;
 
 /// The payload version this build mints and accepts.
 pub const PAYLOAD_VERSION: u32 = 2;
@@ -39,6 +40,8 @@ pub struct PairPayload {
     pub pin: Pin,
     pub secret: Secret,
     pub exp_ms: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 /// A payload that is not one.
@@ -78,6 +81,11 @@ impl PairPayload {
             || !payload.addrs.iter().all(|addr| is_host_port(addr))
         {
             return Err(PayloadError::Addresses);
+        }
+        if let Some(label) = &payload.label
+            && (label.len() > MAX_LABEL_BYTES || label.chars().any(char::is_control))
+        {
+            return Err(PayloadError::Malformed("invalid gateway label".to_owned()));
         }
         Ok(payload)
     }
@@ -127,6 +135,7 @@ mod tests {
             pin: Pin::from_bytes([0xb2; 32]),
             secret: Secret::from_bytes([0xc3; 16]),
             exp_ms: 1_790_000_000_000,
+            label: None,
         }
     }
 
@@ -134,7 +143,14 @@ mod tests {
     fn a_payload_round_trips_through_its_text() {
         let text = payload().to_json();
         assert!(text.starts_with(r#"{"v":2,"gw":""#), "{text}");
+        assert!(!text.contains("\"label\""), "{text}");
         assert_eq!(PairPayload::parse(&format!("  {text}\n")), Ok(payload()));
+
+        let mut named = payload();
+        named.label = Some("Home NAS".to_owned());
+        let named_text = named.to_json();
+        assert!(named_text.contains(r#""label":"Home NAS""#), "{named_text}");
+        assert_eq!(PairPayload::parse(&named_text), Ok(named));
     }
 
     /// Each of these is a payload a lenient parser would half-accept.

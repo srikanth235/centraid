@@ -54,6 +54,7 @@ mod tests {
             pin: Pin::from_bytes([0xb2; 32]),
             secret: Secret::from_bytes([0xc3; 16]),
             exp_ms: 1_790_000_000_000,
+            label: Some("adas-macbook-pro".to_owned()),
         }
         .to_json();
         let modules = width(&payload).expect("fits");

@@ -1,4 +1,4 @@
-//! axum over the rules: the routes of protocol v3 (#1080).
+//! axum over the rules: the routes of protocol 1 (`CGW4`, #1080, #1212).
 //!
 //! **Every answer comes out of [`crate::rules`].** A handler parses what
 //! arrived, hands it to [`Shared::rules`], and renders what came back; the one
@@ -8,42 +8,25 @@
 //! # WHAT A HANDLER DECIDES
 //!
 //! How a token, a digest and a range arrive in headers; how a body becomes a
-//! typed request; how bytes stream to and from a file. Never whether something
-//! is allowed.
+//! typed request; how bytes stream into a staged packfile and out of committed
+//! packfiles by `(pack_id, pack_offset, size)`. Never whether something is
+//! allowed.
 //!
 //! # BYTES NEVER SIT IN MEMORY WHOLE
 //!
 //! A bundle is cut into frames by [`crate::rules::bundle::Decoder`] as it
-//! arrives, each frame into its own staged file, hashed as it is written and
-//! committed on its own when its last byte is in; a `GET` and a `fetch` stream
-//! from the files. The bytes are authorised before they are read, and
-//! admitted only after they are on disk and hashed. There is no single-object
-//! upload route: a frame is the one way in (spec §4).
-//!
-//! # A ROW WHOSE BYTES ARE GONE IS NOT HELD
-//!
-//! The object index is `state.db` and the bytes are files, and the two can
-//! disagree behind the gateway's back: a file removed by hand from
-//! `objects/`, a disk that lost it. The scrub finds that within a quarter; a
-//! phone asking now is told now. `exists` and a bundle frame look at
-//! the file of a name the index holds, and one with no file is marked as the
-//! scrub marks it (`Finding::Missing`, through
-//! [`crate::rules::engine::Gateway::record_scrub`]): `exists` answers it
-//! missing, so the phone sends it again, and the frame that brings it stores
-//! it rather than answering "already held" over nothing. The file is the
-//! fact this module reads; whether the name is held is still the rules'.
-//!
-//! # A REFUSAL A PHONE CAN READ IS ONE SENT AFTER ITS BODY
-//!
-//! An HTTP/1.1 client still writing a body when the answer arrives sees a
-//! broken pipe, not the answer — and `MOVED` lost that way is a superseded
-//! phone that retries instead of freezing. So once a request's token is known,
-//! a refusal decided before its body was consumed (`MOVED`, `TOO_LARGE`,
-//! `DISK_FULL`, a malformed body) first reads and discards what is left of
-//! the body, up to a bound. A stranger's body is never read: `UNAUTHORIZED`
-//! is answered at once.
+//! arrives, streaming valid frames sequentially into one staged packfile
+//! (`staging/<pack>.pack`) while hashing each frame incrementally. When the
+//! stream completes — or cuts off mid-frame — partial trailing bytes are
+//! truncated back to the end of the last complete valid frame, the packfile is
+//! `fsync`ed once, renamed into `packs/<vault>/<pack>.pack`, and all completed
+//! frames commit in one `BEGIN IMMEDIATE … COMMIT` transaction. `GET` and
+//! `fetch` serve slices directly via positioned reads (`pread`) without loading
+//! whole packfiles into memory or reopening a packfile per object.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use axum::Router;
 use axum::body::{Body, BodyDataStream, Bytes};
@@ -55,7 +38,6 @@ use axum::routing::{get, post};
 use futures::StreamExt as _;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use tokio::io::{AsyncReadExt as _, AsyncSeekExt as _};
 
 use crate::rules::bundle::{Decoder, FrameHeader, HEADER_LEN, Step, header as frame_header};
 use crate::rules::code::{Code, Refusal, RefusalBody};
@@ -65,14 +47,17 @@ use crate::rules::limits::{
     LIST_LIMIT, MAX_BUNDLE_BYTES, MAX_JSON_BYTES, MAX_NAMES, MAX_OBJECT_BYTES,
 };
 use crate::rules::range::resolve;
-use crate::rules::state::{Fault, ObjectRecord, State as _, StoreFault};
+use crate::rules::state::{Fault, ObjectRecord, StoreFault};
 use crate::rules::wire::{
     BundleAnswer, CODE_HEADER, CheckRequest, DIGEST_HEADER, DeleteRequest, FrameResult, Missing,
     Names, PairRequest, Revoked, SetHead, UndoRequest,
 };
 use crate::server::state::SqliteState;
-use crate::server::store::{ObjectStore, Staged, StagedFile};
+use crate::server::store::{ObjectStore, PackId, PackLocation, PackStaging, StagedPack};
 use crate::server::{Event, Handle, Shared};
+
+/// Chunk size for positioned packfile streaming reads (256 KiB).
+const STREAM_CHUNK_BYTES: u64 = 256 * 1024;
 
 /// **Every call into the rules and every file it touches runs on the blocking
 /// pool**, never on an async worker: a transaction with `synchronous = FULL`
@@ -82,15 +67,15 @@ async fn blocking<T: Send + 'static>(
     shared: &Handle,
     op: impl FnOnce(&mut Gateway<SqliteState>) -> Result<T, Fault> + Send + 'static,
 ) -> Result<T, Fault> {
-    let shared = std::sync::Arc::clone(shared);
+    let shared = Arc::clone(shared);
     match tokio::task::spawn_blocking(move || shared.rules(op)).await {
         Ok(outcome) => outcome,
         Err(error) => Err(StoreFault::new(format!("a blocking task failed: {error}")).into()),
     }
 }
 
-/// Mark `name` as the scrub marks a file it cannot find, when the index holds
-/// it and its file is gone (the module header's "a row whose bytes are gone").
+/// Mark `name` as the scrub marks a slice it cannot find, when the index holds
+/// it and its packfile is missing or truncated shorter than `pack_offset + size`.
 /// Answers whether it did.
 fn mark_if_gone(
     gateway: &mut Gateway<SqliteState>,
@@ -99,10 +84,10 @@ fn mark_if_gone(
     name: &Name,
     now_ms: i64,
 ) -> Result<bool, Fault> {
-    let Some(record) = gateway.state.object(vault, name)? else {
+    let Some((record, loc)) = gateway.state.object_with_location(vault, name)? else {
         return Ok(false);
     };
-    if record.damaged_at_ms.is_some() || store.path(vault, name).is_file() {
+    if record.damaged_at_ms.is_some() || store.has_slice(vault, loc, record.size) {
         return Ok(false);
     }
     gateway.record_scrub(vault, &record, Finding::Missing, now_ms)?;
@@ -362,23 +347,33 @@ async fn exists(
             );
         }
     }
-    // THE NAMES THE INDEX HOLDS are asked of their files; one whose file is
-    // gone is marked, and the rules answer again (the module header). A
-    // request the rules refused is answered as refused. All of it on the
-    // blocking pool: it stats up to a thousand files.
-    let worker = std::sync::Arc::clone(&shared);
+    let worker = Arc::clone(&shared);
     let outcome = blocking(&shared, move |gateway| {
         let missing = gateway.exists(&vault, &token, &names.names)?;
         if names.names.len() > MAX_NAMES {
             return Ok(missing);
         }
+        let missing_set: BTreeSet<Name> = missing.iter().copied().collect();
         let store = worker.store();
-        let gone: Vec<Name> = names
-            .names
-            .iter()
-            .filter(|name| !missing.contains(name) && !store.path(&vault, name).is_file())
-            .copied()
-            .collect();
+        let mut pack_lens: BTreeMap<PackId, Option<u64>> = BTreeMap::new();
+        let mut gone = Vec::new();
+        for name in &names.names {
+            if missing_set.contains(name) {
+                continue;
+            }
+            if let Some((record, loc)) = gateway.state.object_with_location(&vault, name)? {
+                let pack_len = *pack_lens
+                    .entry(loc.pack_id)
+                    .or_insert_with(|| store.pack_len(&vault, &loc.pack_id));
+                let present = loc
+                    .pack_offset
+                    .checked_add(record.size)
+                    .is_some_and(|end| pack_len.is_some_and(|len| len >= end));
+                if !present {
+                    gone.push(*name);
+                }
+            }
+        }
         if gone.is_empty() {
             return Ok(missing);
         }
@@ -399,8 +394,7 @@ async fn exists(
 /// The most of a bundle's body read and discarded so its refusal is heard.
 const DRAIN_BUNDLE_BYTES: u64 = MAX_BUNDLE_BYTES;
 
-/// Read and discard what is left of a body, up to `limit` bytes. See the
-/// module header.
+/// Read and discard what is left of a body, up to `limit` bytes.
 async fn drain(stream: &mut BodyDataStream, limit: u64) {
     let mut read = 0_u64;
     while read <= limit {
@@ -411,24 +405,25 @@ async fn drain(stream: &mut BodyDataStream, limit: u64) {
     }
 }
 
-/// The object a `GET` or `HEAD` serves, and where its bytes are.
+/// The object a `GET` or `HEAD` serves, and its packfile path and offset.
 async fn served(
     shared: &Handle,
     path: Result<Path<(String, String)>, PathRejection>,
     headers: &HeaderMap,
-) -> Result<(ObjectRecord, PathBuf), Fault> {
+) -> Result<(ObjectRecord, PathBuf, u64), Fault> {
     let (vault, name) = object_of(path)?;
     let token = bearer(headers)?;
-    let worker = std::sync::Arc::clone(shared);
+    let worker = Arc::clone(shared);
     blocking(shared, move |gateway| {
         let record = gateway.object(&vault, &token, &name)?;
-        let file = worker.store().path(&vault, &name);
-        if !file.is_file() {
-            // A row whose bytes are gone: the scrub will mark it, and the
-            // phone that asks is told the truth now.
+        let Some((_, loc)) = gateway.state.object_with_location(&vault, &name)? else {
+            return Err(Refusal::NotFound { name: Some(name) }.into());
+        };
+        if !worker.store().has_slice(&vault, loc, record.size) {
             return Err(Refusal::NotFound { name: Some(name) }.into());
         }
-        Ok((record, file))
+        let pack_file = worker.store().pack_path(&vault, &loc.pack_id);
+        Ok((record, pack_file, loc.pack_offset))
     })
     .await
 }
@@ -438,7 +433,7 @@ async fn get_object(
     path: Result<Path<(String, String)>, PathRejection>,
     headers: HeaderMap,
 ) -> Response {
-    let (record, file) = match served(&shared, path, &headers).await {
+    let (record, pack_file, pack_offset) = match served(&shared, path, &headers).await {
         Ok(served) => served,
         Err(fault) => return faulted(&fault, shared.now()),
     };
@@ -456,9 +451,16 @@ async fn get_object(
         }
     };
     let (first, length) = span.map_or((0, record.size), |span| (span.first, span.len()));
-    let mut handle = match tokio::fs::File::open(&file).await {
-        Ok(handle) => handle,
-        Err(_) => {
+    let Some(start_offset) = pack_offset.checked_add(first) else {
+        return faulted(
+            &StoreFault::new("pack slice offset overflow").into(),
+            shared.now(),
+        );
+    };
+    let opened = tokio::task::spawn_blocking(move || std::fs::File::open(pack_file)).await;
+    let file = match opened {
+        Ok(Ok(file)) => Arc::new(file),
+        _ => {
             return refused(
                 &Refusal::NotFound {
                     name: Some(record.name),
@@ -467,13 +469,7 @@ async fn get_object(
             );
         }
     };
-    if first > 0 && handle.seek(std::io::SeekFrom::Start(first)).await.is_err() {
-        return faulted(
-            &crate::rules::state::StoreFault::new("seeking an object").into(),
-            shared.now(),
-        );
-    }
-    let mut response = Response::new(Body::from_stream(file_stream(handle, length)));
+    let mut response = Response::new(Body::from_stream(slice_stream(file, start_offset, length)));
     let headers = response.headers_mut();
     headers.insert(
         header::CONTENT_TYPE,
@@ -502,7 +498,7 @@ async fn head_object(
     path: Result<Path<(String, String)>, PathRejection>,
     headers: HeaderMap,
 ) -> Response {
-    let (record, _) = match served(&shared, path, &headers).await {
+    let (record, _, _) = match served(&shared, path, &headers).await {
         Ok(served) => served,
         Err(fault) => return faulted(&fault, shared.now()),
     };
@@ -520,43 +516,46 @@ async fn head_object(
     response
 }
 
-/// `length` bytes of an open file, in pieces of at most 256 KiB. A file that
-/// ends early ends the stream with an error, which ends the connection: a
-/// short body is never passed off as a whole one.
-fn file_stream(
-    handle: tokio::fs::File,
+/// Stream exactly `length` bytes starting at `offset` in `file` via positioned
+/// reads in pieces of at most 256 KiB.
+fn slice_stream(
+    file: Arc<std::fs::File>,
+    offset: u64,
     length: u64,
 ) -> impl futures::Stream<Item = Result<Bytes, std::io::Error>> + Send + 'static {
-    futures::stream::unfold((Some(handle), length), |(handle, remaining)| async move {
-        let mut handle = handle?;
-        if remaining == 0 {
-            return None;
-        }
-        let want = usize::try_from(remaining.min(256 * 1024)).unwrap_or(256 * 1024);
-        let mut buffer = vec![0_u8; want];
-        match handle.read(&mut buffer).await {
-            Ok(0) => Some((
-                Err(std::io::Error::from(std::io::ErrorKind::UnexpectedEof)),
-                (None, 0),
-            )),
-            Ok(read) => {
-                buffer.truncate(read);
-                Some((
-                    Ok(Bytes::from(buffer)),
-                    (Some(handle), remaining - read as u64),
-                ))
+    futures::stream::unfold(
+        (Some(file), offset, length),
+        |(file, pos, remaining)| async move {
+            let file = file?;
+            if remaining == 0 {
+                return None;
             }
-            Err(error) => Some((Err(error), (None, 0))),
-        }
-    })
+            let want = usize::try_from(remaining.min(STREAM_CHUNK_BYTES)).unwrap_or(256 * 1024);
+            let reader = Arc::clone(&file);
+            let outcome = tokio::task::spawn_blocking(move || {
+                let mut buffer = vec![0_u8; want];
+                ObjectStore::read_at(&reader, pos, &mut buffer)?;
+                Ok::<Bytes, std::io::Error>(Bytes::from(buffer))
+            })
+            .await;
+            match outcome {
+                Ok(Ok(bytes)) => {
+                    let read = bytes.len() as u64;
+                    Some((Ok(bytes), (Some(file), pos + read, remaining - read)))
+                }
+                Ok(Err(error)) => Some((Err(error), (None, pos, 0))),
+                Err(join_err) => Some((
+                    Err(std::io::Error::other(join_err.to_string())),
+                    (None, pos, 0),
+                )),
+            }
+        },
+    )
 }
 
-/// `POST bundle`: authorise once, then each frame is staged, judged and
-/// **committed on its own as it arrives** (stage, fsync, rename, row), and
-/// answered: `stored`, `there`, `held`, `taken`, `full` or `too_large`
-/// (spec §4). A frame cut off mid-way is discarded; every finished frame
-/// stays committed. A body that is malformed or over the cap is refused
-/// whole, and the frames before it stay committed.
+/// `POST bundle`: authorise once, stream frames into one staged packfile, and
+/// commit all completed valid frames in one `BEGIN IMMEDIATE … COMMIT`
+/// transaction — both on clean EOF and if the stream cuts off mid-frame.
 async fn bundle(
     State(shared): State<Handle>,
     path: Result<Path<String>, PathRejection>,
@@ -595,166 +594,250 @@ async fn bundle(
     answer(&shared, StatusCode::OK, outcome)
 }
 
-/// The frame the decoder is inside: its header, and where its bytes go. No
-/// file means the frame is read past: over the object cap, or the disk
-/// refused it; its answer is already known.
-struct Current {
-    header: FrameHeader,
-    staged: Result<Staged, FrameResult>,
+struct ValidFrame {
+    slot: usize,
+    arrival: Arrival,
+    pack_offset: u64,
 }
 
-/// Cut the body into frames as it arrives, committing each frame the moment
-/// its last byte is in.
+enum CurrentFrame {
+    /// Writing bytes into the staged packfile.
+    Writing { slot: usize, header: FrameHeader },
+    /// Reading past an oversize or disk-full frame whose result is already recorded.
+    Skipping,
+}
+
 async fn receive_bundle(
     shared: &Handle,
     vault: &VaultId,
     token: &Token,
     stream: &mut BodyDataStream,
 ) -> Result<BundleAnswer, Fault> {
-    let mut answer = BundleAnswer::default();
+    let mut slots: Vec<Option<FrameResult>> = Vec::new();
+    let mut valid: Vec<ValidFrame> = Vec::new();
+    let mut staging = shared.store().stage_pack();
     let mut decoder = Decoder::new();
-    let mut current: Option<Current> = None;
-    while let Some(chunk) = stream.next().await {
-        // A connection that dropped mid-frame ends here; `current`, the
-        // frame in flight, is dropped with its staged file.
-        let chunk = chunk.map_err(|_| Refusal::BadRequest)?;
-        let mut rest: &[u8] = &chunk;
-        loop {
-            let (step, used) = decoder.step(rest)?;
-            rest = &rest[used..];
-            match step {
-                None => break,
-                Some(step) => {
-                    advance(shared, vault, token, &mut answer, &mut current, step).await?;
+    let mut current: Option<CurrentFrame> = None;
+
+    let decode_outcome: Result<(), Fault> = async {
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|_| Refusal::BadRequest)?;
+            let mut rest: &[u8] = &chunk;
+            loop {
+                let (step, used) = decoder.step(rest)?;
+                rest = &rest[used..];
+                match step {
+                    None => break,
+                    Some(step) => {
+                        advance_pack(&mut staging, &mut slots, &mut valid, &mut current, step)
+                            .await?;
+                    }
                 }
             }
         }
+        while let (Some(step), _) = decoder.step(&[])? {
+            advance_pack(&mut staging, &mut slots, &mut valid, &mut current, step).await?;
+        }
+        decoder.finish()?;
+        Ok(())
     }
-    while let (Some(step), _) = decoder.step(&[])? {
-        advance(shared, vault, token, &mut answer, &mut current, step).await?;
+    .await;
+
+    if !valid.is_empty() {
+        match staging.finish_pack().await {
+            Ok(Some(staged_pack)) => {
+                let outcomes =
+                    commit_pack_bundle(shared, vault, token, staged_pack, &valid).await?;
+                for (frame, outcome) in valid.iter().zip(outcomes) {
+                    let name = frame.arrival.name;
+                    slots[frame.slot] = Some(match outcome {
+                        Ok(PutOutcome::Stored(_)) => FrameResult::Stored { name },
+                        Ok(PutOutcome::AlreadyStored(_)) => FrameResult::There { name },
+                        Ok(PutOutcome::Lifted(_)) => FrameResult::Held { name },
+                        Err(refusal) => FrameResult::of_refusal(name, &refusal),
+                    });
+                }
+            }
+            Ok(None) => {
+                return Err(StoreFault::new("staged frames had no staged packfile").into());
+            }
+            Err(error) => match Fault::from(error) {
+                Fault::Refused(Refusal::DiskFull) if decode_outcome.is_ok() => {
+                    for frame in &valid {
+                        slots[frame.slot] = Some(FrameResult::Full {
+                            name: frame.arrival.name,
+                        });
+                    }
+                }
+                other => return Err(other),
+            },
+        }
     }
-    decoder.finish()?;
-    Ok(answer)
+
+    decode_outcome?;
+
+    let mut results = Vec::with_capacity(slots.len());
+    for slot in slots {
+        results.push(slot.ok_or_else(|| StoreFault::new("a bundle frame had no result"))?);
+    }
+    Ok(BundleAnswer { results })
 }
 
-async fn advance(
-    shared: &Handle,
-    vault: &VaultId,
-    token: &Token,
-    answer: &mut BundleAnswer,
-    current: &mut Option<Current>,
+async fn advance_pack(
+    staging: &mut PackStaging,
+    slots: &mut Vec<Option<FrameResult>>,
+    valid: &mut Vec<ValidFrame>,
+    current: &mut Option<CurrentFrame>,
     step: Step<'_>,
 ) -> Result<(), Fault> {
     match step {
         Step::Header(header) => {
-            // A frame over the object cap is read past, not staged, and
-            // answered on its own; the frames around it are unaffected.
-            let staged = if header.len > MAX_OBJECT_BYTES {
-                Err(FrameResult::TooLarge { name: header.name })
-            } else {
-                match shared.store().stage(header.len).await {
-                    Ok(staged) => Ok(staged),
-                    Err(error) => match Fault::from(error) {
+            let slot = slots.len();
+            slots.push(None);
+            if header.len > MAX_OBJECT_BYTES {
+                slots[slot] = Some(FrameResult::TooLarge { name: header.name });
+                *current = Some(CurrentFrame::Skipping);
+                return Ok(());
+            }
+            match staging.begin_frame(header.len).await {
+                Ok(_) => {
+                    *current = Some(CurrentFrame::Writing { slot, header });
+                }
+                Err(error) => match Fault::from(error) {
+                    Fault::Refused(Refusal::DiskFull) => {
+                        slots[slot] = Some(FrameResult::Full { name: header.name });
+                        *current = Some(CurrentFrame::Skipping);
+                    }
+                    Fault::Refused(Refusal::TooLarge { .. }) => {
+                        slots[slot] = Some(FrameResult::TooLarge { name: header.name });
+                        *current = Some(CurrentFrame::Skipping);
+                    }
+                    other => return Err(other),
+                },
+            }
+        }
+        Step::Body(bytes) => {
+            if let Some(CurrentFrame::Writing { slot, header }) = current {
+                let (slot_idx, name) = (*slot, header.name);
+                if let Err(error) = staging.write_frame(bytes).await {
+                    match Fault::from(error) {
                         Fault::Refused(Refusal::DiskFull) => {
-                            Err(FrameResult::Full { name: header.name })
+                            slots[slot_idx] = Some(FrameResult::Full { name });
+                            *current = Some(CurrentFrame::Skipping);
                         }
                         Fault::Refused(Refusal::TooLarge { .. }) => {
-                            Err(FrameResult::TooLarge { name: header.name })
+                            slots[slot_idx] = Some(FrameResult::TooLarge { name });
+                            *current = Some(CurrentFrame::Skipping);
+                        }
+                        other => return Err(other),
+                    }
+                }
+            }
+        }
+        Step::End => {
+            let Some(finished) = current.take() else {
+                return Ok(());
+            };
+            if let CurrentFrame::Writing { slot, header } = finished {
+                match staging.finish_frame(&header.digest).await {
+                    Ok(Some((computed, size, pack_offset))) => {
+                        valid.push(ValidFrame {
+                            slot,
+                            arrival: Arrival {
+                                name: header.name,
+                                declared: header.digest,
+                                digest: computed,
+                                size,
+                            },
+                            pack_offset,
+                        });
+                    }
+                    Ok(None) => {
+                        slots[slot] = Some(FrameResult::Refused {
+                            name: header.name,
+                            code: Code::DigestMismatch,
+                        });
+                    }
+                    Err(error) => match Fault::from(error) {
+                        Fault::Refused(Refusal::DiskFull) => {
+                            slots[slot] = Some(FrameResult::Full { name: header.name });
                         }
                         other => return Err(other),
                     },
                 }
-            };
-            *current = Some(Current { header, staged });
-        }
-        Step::Body(bytes) => {
-            if let Some(Current {
-                staged: Ok(staged), ..
-            }) = current
-                && let Err(error) = staged.write(bytes).await
-            {
-                return match Fault::from(error) {
-                    Fault::Refused(Refusal::DiskFull) => {
-                        // Read the rest of the frame past, and say so.
-                        let name = current.as_ref().map(|frame| frame.header.name);
-                        if let (Some(frame), Some(name)) = (current.as_mut(), name) {
-                            frame.staged = Err(FrameResult::Full { name });
-                        }
-                        Ok(())
-                    }
-                    other => Err(other),
-                };
             }
-        }
-        Step::End => {
-            let Some(frame) = current.take() else {
-                return Ok(());
-            };
-            let result = match frame.staged {
-                Err(result) => result,
-                Ok(staged) => match staged.finish().await {
-                    Ok(file) => admit_frame(shared, vault, token, frame.header, file).await?,
-                    Err(error) => match Fault::from(error) {
-                        Fault::Refused(Refusal::DiskFull) => FrameResult::Full {
-                            name: frame.header.name,
-                        },
-                        other => return Err(other),
-                    },
-                },
-            };
-            answer.results.push(result);
         }
     }
     Ok(())
 }
 
-/// Judge and commit one finished frame on its own. A name the index holds but
-/// whose file is gone is marked first, as the scrub marks it.
-async fn admit_frame(
+/// Promote `staged_pack` into `packs/<vault>/` and admit all `valid` frames in
+/// **one** SQLite transaction (`BEGIN IMMEDIATE … COMMIT`). If zero frames end
+/// up `Stored`, unlink the packfile.
+async fn commit_pack_bundle(
     shared: &Handle,
     vault: &VaultId,
     token: &Token,
-    header: FrameHeader,
-    file: StagedFile,
-) -> Result<FrameResult, Fault> {
-    let arrival = Arrival {
-        name: header.name,
-        declared: header.digest,
-        digest: file.digest,
-        size: file.size,
-    };
+    staged_pack: StagedPack,
+    valid: &[ValidFrame],
+) -> Result<Vec<Result<PutOutcome, Refusal>>, Fault> {
     let now = shared.now();
-    let (vault, token, worker) = (*vault, *token, std::sync::Arc::clone(shared));
-    let outcome = blocking(shared, move |gateway| {
+    let (vault, token, worker) = (*vault, *token, Arc::clone(shared));
+    let arrivals: Vec<Arrival> = valid.iter().map(|frame| frame.arrival).collect();
+    let offsets: Vec<u64> = valid.iter().map(|frame| frame.pack_offset).collect();
+    let outcomes = blocking(shared, move |gateway| {
         let store = worker.store();
         let _committing = worker.commit_guard();
-        mark_if_gone(gateway, store, &vault, &arrival.name, now)?;
-        let mut file = Some(file);
-        let mut outcomes =
-            gateway.put_bundle(&vault, &token, std::slice::from_ref(&arrival), now, |_| {
-                let file = file
-                    .take()
-                    .ok_or_else(|| StoreFault::new("a bundle frame committed twice"))?;
-                store.commit(file, &vault, &arrival.name)
+        let pack_id = store.promote_pack(staged_pack, &vault)?;
+        let result = (|| -> Result<Vec<Result<PutOutcome, Refusal>>, Fault> {
+            let mut checked = BTreeSet::new();
+            for arrival in &arrivals {
+                if checked.insert(arrival.name) {
+                    mark_if_gone(gateway, store, &vault, &arrival.name, now)?;
+                }
+            }
+            let slot = gateway.state.pack_slot();
+            let outcomes = gateway.put_bundle(&vault, &token, &arrivals, now, |index| {
+                #[cfg(feature = "test-harness")]
+                if store.knobs().commit_fails() {
+                    return Err(StoreFault::new("a commit the test made fail").into());
+                }
+                *slot
+                    .lock()
+                    .map_err(|_| StoreFault::new("the pack slot lock was poisoned"))? =
+                    Some(PackLocation {
+                        pack_id,
+                        pack_offset: offsets[index],
+                    });
+                #[cfg(feature = "test-harness")]
+                store.knobs().object_committed();
+                Ok(())
             })?;
-        Ok(outcomes.pop())
+            let any_stored = outcomes
+                .iter()
+                .any(|outcome| matches!(outcome, Ok(PutOutcome::Stored(_))));
+            if !any_stored {
+                store.remove_pack(&vault, &pack_id)?;
+            }
+            Ok(outcomes)
+        })();
+        if result.is_err() {
+            let _ = store.remove_pack(&vault, &pack_id);
+        }
+        result
     })
     .await?;
     #[cfg(feature = "test-harness")]
-    shared.store().knobs().frame_done();
-    Ok(match outcome {
-        Some(Ok(PutOutcome::Stored(_))) => FrameResult::Stored { name: header.name },
-        Some(Ok(PutOutcome::AlreadyStored(_))) => FrameResult::There { name: header.name },
-        Some(Ok(PutOutcome::Lifted(_))) => FrameResult::Held { name: header.name },
-        Some(Err(refusal)) => FrameResult::of_refusal(header.name, &refusal),
-        None => return Err(StoreFault::new("a frame with no outcome").into()),
-    })
+    for _ in 0..outcomes.len() {
+        shared.store().knobs().frame_done();
+    }
+    Ok(outcomes)
 }
 
 /// `POST fetch`: the rules plan which objects, in which order; the answer
-/// streams them in the bundle framing. An object whose file is gone or the
-/// wrong length is left out like an unknown name, rather than promised in a
-/// header and cut short.
+/// streams them in the bundle framing using positioned reads over cached
+/// packfile handles. An object whose packfile slice is missing or truncated is
+/// left out like an unknown name, rather than promised in a header and cut short.
 async fn fetch(
     State(shared): State<Handle>,
     path: Result<Path<String>, PathRejection>,
@@ -770,28 +853,39 @@ async fn fetch(
         Ok(names) => names,
         Err(refusal) => return refused(&refusal, shared.now()),
     };
-    let worker = std::sync::Arc::clone(&shared);
+    let worker = Arc::clone(&shared);
     let planned = blocking(&shared, move |gateway| {
         let plan = gateway.fetch(&vault, &token, &names.names)?;
-        Ok(plan
-            .into_iter()
-            .filter_map(|record| {
-                let file = worker.store().path(&vault, &record.name);
-                let length = std::fs::metadata(&file).ok()?.len();
-                (length == record.size).then_some((record, file))
-            })
-            .collect::<Vec<(ObjectRecord, PathBuf)>>())
+        let store = worker.store();
+        let mut pack_lens: BTreeMap<PackId, Option<u64>> = BTreeMap::new();
+        let mut entries = Vec::with_capacity(plan.len());
+        for record in plan {
+            let Some((_, loc)) = gateway.state.object_with_location(&vault, &record.name)? else {
+                continue;
+            };
+            let pack_len = *pack_lens
+                .entry(loc.pack_id)
+                .or_insert_with(|| store.pack_len(&vault, &loc.pack_id));
+            let ok_slice = loc
+                .pack_offset
+                .checked_add(record.size)
+                .is_some_and(|end| pack_len.is_some_and(|len| len >= end));
+            if ok_slice {
+                entries.push((record, loc));
+            }
+        }
+        Ok((store.vault_packs_dir(&vault), entries))
     })
     .await;
-    let entries = match planned {
-        Ok(entries) => entries,
+    let (vault_packs_dir, entries) = match planned {
+        Ok(planned) => planned,
         Err(fault) => return faulted(&fault, shared.now()),
     };
     let total: u64 = entries
         .iter()
         .map(|(record, _)| HEADER_LEN as u64 + record.size)
         .sum();
-    let mut response = Response::new(Body::from_stream(fetch_stream(entries)));
+    let mut response = Response::new(Body::from_stream(fetch_stream(vault_packs_dir, entries)));
     response.headers_mut().insert(
         header::CONTENT_TYPE,
         HeaderValue::from_static("application/octet-stream"),
@@ -802,21 +896,82 @@ async fn fetch(
     response
 }
 
-/// Each planned object's header, then its bytes, one after the other.
+struct FetchState {
+    vault_packs_dir: PathBuf,
+    entries: std::vec::IntoIter<(ObjectRecord, PackLocation)>,
+    handles: BTreeMap<PackId, Arc<std::fs::File>>,
+    active: Option<(Arc<std::fs::File>, u64, u64)>,
+}
+
+/// Stream each planned object's 68-byte header followed by its positioned slice
+/// `[pack_offset .. pack_offset + size]`, opening each referenced `.pack` file
+/// at most once for the entire `fetch` response.
 fn fetch_stream(
-    entries: Vec<(ObjectRecord, PathBuf)>,
+    vault_packs_dir: PathBuf,
+    entries: Vec<(ObjectRecord, PackLocation)>,
 ) -> impl futures::Stream<Item = Result<Bytes, std::io::Error>> + Send + 'static {
-    futures::stream::iter(entries)
-        .then(|(record, file)| async move {
+    let state = FetchState {
+        vault_packs_dir,
+        entries: entries.into_iter(),
+        handles: BTreeMap::new(),
+        active: None,
+    };
+    futures::stream::unfold(Some(state), |state| async move {
+        let mut state = state?;
+        loop {
+            if let Some((file, pos, remaining)) = state.active.take() {
+                if remaining == 0 {
+                    continue;
+                }
+                let want = usize::try_from(remaining.min(STREAM_CHUNK_BYTES)).unwrap_or(256 * 1024);
+                let reader = Arc::clone(&file);
+                let outcome = tokio::task::spawn_blocking(move || {
+                    let mut buffer = vec![0_u8; want];
+                    ObjectStore::read_at(&reader, pos, &mut buffer)?;
+                    Ok::<Bytes, std::io::Error>(Bytes::from(buffer))
+                })
+                .await;
+                return match outcome {
+                    Ok(Ok(bytes)) => {
+                        let read = bytes.len() as u64;
+                        if remaining > read {
+                            state.active = Some((file, pos + read, remaining - read));
+                        }
+                        Some((Ok(bytes), Some(state)))
+                    }
+                    Ok(Err(error)) => Some((Err(error), None)),
+                    Err(join_err) => Some((Err(std::io::Error::other(join_err.to_string())), None)),
+                };
+            }
+
+            let (record, loc) = state.entries.next()?;
+            let file = if let Some(cached) = state.handles.get(&loc.pack_id) {
+                Arc::clone(cached)
+            } else {
+                let path = state
+                    .vault_packs_dir
+                    .join(format!("{}.pack", loc.pack_id.hex()));
+                let opened = tokio::task::spawn_blocking(move || std::fs::File::open(path)).await;
+                match opened {
+                    Ok(Ok(opened)) => {
+                        let shared_file = Arc::new(opened);
+                        state.handles.insert(loc.pack_id, Arc::clone(&shared_file));
+                        shared_file
+                    }
+                    Ok(Err(error)) => return Some((Err(error), None)),
+                    Err(join_err) => {
+                        return Some((Err(std::io::Error::other(join_err.to_string())), None));
+                    }
+                }
+            };
             let header =
                 Bytes::copy_from_slice(&frame_header(&record.name, &record.digest, record.size));
-            let body = match tokio::fs::File::open(&file).await {
-                Ok(handle) => file_stream(handle, record.size).left_stream(),
-                Err(error) => futures::stream::once(async move { Err(error) }).right_stream(),
-            };
-            futures::stream::once(async move { Ok(header) }).chain(body)
-        })
-        .flatten()
+            if record.size > 0 {
+                state.active = Some((file, loc.pack_offset, record.size));
+            }
+            return Some((Ok(header), Some(state)));
+        }
+    })
 }
 
 /// `?after=&limit=` of a listing.
@@ -891,11 +1046,31 @@ async fn delete(
         Err(refusal) => return refused(&refusal, shared.now()),
     };
     let now = shared.now();
-    let worker = std::sync::Arc::clone(&shared);
+    let worker = Arc::clone(&shared);
     let outcome = blocking(&shared, move |gateway| {
-        gateway.delete(&vault, &token, &request, now, |name| {
-            worker.store().remove(&vault, name)
-        })
+        let mut damaged_packs: BTreeMap<Name, PackId> = BTreeMap::new();
+        if request.names.len() <= MAX_NAMES {
+            for name in &request.names {
+                if let Some((record, loc)) = gateway.state.object_with_location(&vault, name)?
+                    && record.damaged_at_ms.is_some()
+                {
+                    damaged_packs.insert(*name, loc.pack_id);
+                }
+            }
+        }
+        let deleted = gateway.delete(&vault, &token, &request, now, |_name| Ok(()))?;
+        let mut candidate_packs = BTreeSet::new();
+        for freed_name in &deleted.freed {
+            if let Some(pack_id) = damaged_packs.get(freed_name) {
+                candidate_packs.insert(*pack_id);
+            }
+        }
+        for pack_id in candidate_packs {
+            if !gateway.state.pack_has_objects(&vault, &pack_id)? {
+                worker.store().remove_pack(&vault, &pack_id)?;
+            }
+        }
+        Ok(deleted)
     })
     .await;
     answer(&shared, StatusCode::OK, outcome)
@@ -917,14 +1092,17 @@ async fn check(
         Err(refusal) => return refused(&refusal, shared.now()),
     };
     let now = shared.now();
-    let worker = std::sync::Arc::clone(&shared);
+    let worker = Arc::clone(&shared);
     let outcome = blocking(&shared, move |gateway| {
-        gateway.check(&vault, &token, &request, now, |name| {
-            Ok(worker
+        let target = gateway.state.object_with_location(&vault, &request.name)?;
+        gateway.check(&vault, &token, &request, now, |_name| {
+            let Some((record, loc)) = target else {
+                return Ok(None);
+            };
+            worker
                 .store()
-                .read_digest(&vault, name)
-                .map_err(|error| StoreFault::new(error.to_string()))?
-                .map(|(digest, _)| digest))
+                .read_slice_digest(&vault, loc, record.size)
+                .map_err(|error| StoreFault::new(error.to_string()).into())
         })
     })
     .await;

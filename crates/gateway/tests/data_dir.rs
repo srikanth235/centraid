@@ -1,7 +1,7 @@
-//! THE DATA DIRECTORY'S VERSION (#1191, B1, E13).
+//! THE DATA DIRECTORY'S VERSION (#1191, #1212, B1, E13).
 //!
-//! A gateway's `state.db` carries `application_id` `CGW3` and a `user_version`
-//! ladder. A folder an earlier gateway made — no application id —
+//! A gateway's `state.db` carries `application_id` `CGW4` and a `user_version`
+//! ladder. A folder an earlier gateway made — no application id or `CGW3` —
 //! is refused with the owner's sentence and exit code 2, and **its bytes are
 //! not touched**: the member moves it aside, or reads it with the old
 //! gateway. Nothing is migrated.
@@ -73,6 +73,11 @@ fn the_sentence_is_the_owners_words() {
 
 #[test]
 fn a_new_folder_is_founded_with_its_id_and_rung_and_reopens() {
+    assert_eq!(
+        APPLICATION_ID.to_be_bytes(),
+        *b"CGW4",
+        "application_id is CGW4"
+    );
     let dir = tempfile::tempdir().expect("a temp dir");
     let file = dir.path().join("state.db");
     drop(SqliteState::open(&file).expect("founds"));
@@ -87,6 +92,45 @@ fn a_new_folder_is_founded_with_its_id_and_rung_and_reopens() {
     assert_eq!(version, 1);
     drop(connection);
     drop(SqliteState::open(&file).expect("reopens a founded file"));
+}
+
+#[test]
+fn object_table_check_constraints_reject_bad_pack_id_and_negative_pack_offset() {
+    for (what, fixture) in [
+        (
+            "short pack_id",
+            include_str!("fixtures/bad_pack_id_short.sql"),
+        ),
+        (
+            "long pack_id",
+            include_str!("fixtures/bad_pack_id_long.sql"),
+        ),
+        (
+            "negative pack_offset",
+            include_str!("fixtures/bad_pack_offset_negative.sql"),
+        ),
+    ] {
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let file = dir.path().join("state.db");
+        drop(SqliteState::open(&file).expect("founds"));
+        let connection = rusqlite::Connection::open(&file).expect("opens");
+        let err = connection
+            .execute_batch(fixture)
+            .expect_err("CHECK constraint must reject invalid pack columns");
+        assert!(
+            matches!(
+                err,
+                rusqlite::Error::SqliteFailure(
+                    rusqlite::ffi::Error {
+                        code: rusqlite::ErrorCode::ConstraintViolation,
+                        ..
+                    },
+                    _
+                )
+            ),
+            "{what}: {err:?}"
+        );
+    }
 }
 
 #[test]
@@ -154,9 +198,7 @@ fn folder(dir: &std::path::Path) -> Vec<(String, Vec<u8>)> {
 }
 
 /// R7: A FOLDER THE GATEWAY WILL NOT OPEN IS LEFT EXACTLY AS IT WAS — the file
-/// list as well as the bytes. The state is inspected before an identity, a
-/// nonce key or an object directory is made beside it, so a `state.db` copied
-/// alone into an empty folder is refused without a single new file.
+/// list as well as the bytes.
 #[test]
 fn a_refused_folder_is_byte_identical_including_its_file_list() {
     let dir = v2_data_dir();

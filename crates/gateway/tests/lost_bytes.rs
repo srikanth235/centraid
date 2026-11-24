@@ -1,20 +1,15 @@
-//! A ROW WHOSE BYTES ARE GONE (#1080, the sweep's B3).
+//! A ROW WHOSE BYTES ARE GONE (`CGW4`, #1080, #1212).
 //!
-//! The object index lives in `state.db` and the bytes in `objects/`, so the
-//! two can disagree behind the gateway's back: a member "cleaning up"
-//! `objects/`, a disk that lost files, a copy of the data directory taken
-//! while it changed. The documents promise that such a name reads as missing
-//! and that the phone sends it again. `GET` and `fetch` already answered from
-//! the file; `exists` and `PUT` answered from the row alone, so the phone was
-//! told the name was held, and a phone that sent it again anyway was told
-//! "already stored" while nothing was written — until a quarterly scrub.
+//! The object index lives in `state.db` and the bytes in `packs/`, so the two
+//! can disagree behind the gateway's back: a member removing a `.pack` file, a
+//! disk that lost files, or a truncated packfile. Such a name reads as missing
+//! on `exists` so the phone sends it again, and only the recorded digest may
+//! heal it.
 
 use centraid_gateway::client::{Client, Part, Source};
 use centraid_gateway::rules::ids::{Digest, Name, VaultId};
-
 use centraid_gateway::rules::wire::FrameResult;
-use centraid_gateway::server::harness::pair_secret;
-use centraid_gateway::server::harness::{Spawned, put, spawn};
+use centraid_gateway::server::harness::{Spawned, pair_secret, put, spawn};
 
 /// A vault paired with `gateway`, and the client holding its token.
 async fn paired(gateway: &Spawned, seed: u8) -> (VaultId, Client) {
@@ -32,7 +27,6 @@ async fn paired(gateway: &Spawned, seed: u8) -> (VaultId, Client) {
     (vault, gateway.client(paired.token))
 }
 
-/// Bytes nobody can open, from a seed, under a name from another.
 fn sealed(seed: &str) -> Vec<u8> {
     let mut bytes = vec![0_u8; 1_000];
     blake3::Hasher::new()
@@ -57,23 +51,31 @@ async fn a_name_whose_file_is_gone_reads_missing_and_a_put_brings_it_back() {
             .await
             .expect("stores");
     }
-    let file = gateway.shared().store().path(&vault, &lost);
-    std::fs::remove_file(&file).expect("the bytes go behind the gateway's back");
+    gateway
+        .lose(&vault, &lost)
+        .expect("the packfile goes behind the gateway's back");
+    assert_eq!(
+        gateway.shared().store().pack_files().expect("lists").len(),
+        1,
+        "kept's packfile stands; lost's is gone"
+    );
 
-    // EXISTS TELLS THE TRUTH: the phone is asked for it again.
+    // EXISTS TELLS THE TRUTH: the phone is asked for `lost` again.
     let missing = client.exists(&vault, &[kept, lost]).await.expect("answers");
     assert_eq!(missing, vec![lost], "a name with no bytes is not held");
 
-    // A PUT BRINGS IT BACK — with the bytes the row records (#1191, R3). A
-    // sealing the phone makes afresh has another digest, and a gateway that
-    // took any bytes over a name it holds a row for would let a writer token
-    // swap garbage in: it is NAME_TAKEN, and nothing changes.
+    // Different digest is refused as `Taken` and writes no packfile.
     let again = sealed("lost, sealed again");
     let answer = put(&client, &vault, &lost, &Digest::of(&again), again.clone())
         .await
         .expect("answers");
     assert!(matches!(answer, FrameResult::Taken { .. }), "{answer:?}");
-    assert!(!file.exists(), "and no file was written");
+    assert_eq!(
+        gateway.shared().store().pack_files().expect("lists").len(),
+        1,
+        "no new packfile was kept for the taken frame"
+    );
+
     let original = sealed("lost");
     let answer = put(
         &client,
@@ -85,7 +87,10 @@ async fn a_name_whose_file_is_gone_reads_missing_and_a_put_brings_it_back() {
     .await
     .expect("answers");
     assert!(matches!(answer, FrameResult::Stored { .. }), "{answer:?}");
-    assert_eq!(std::fs::read(&file).expect("the bytes are back"), original);
+    assert_eq!(
+        client.get(&vault, &lost, None).await.expect("bytes back"),
+        original
+    );
     assert!(
         client
             .exists(&vault, &[lost])
@@ -93,6 +98,7 @@ async fn a_name_whose_file_is_gone_reads_missing_and_a_put_brings_it_back() {
             .expect("answers")
             .is_empty()
     );
+    gateway.shutdown().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -105,8 +111,9 @@ async fn a_bundle_brings_back_a_name_whose_file_is_gone() {
     put(&client, &vault, &lost, &Digest::of(&first), first.clone())
         .await
         .expect("stores");
-    let file = gateway.shared().store().path(&vault, &lost);
-    std::fs::remove_file(&file).expect("the bytes go behind the gateway's back");
+    gateway
+        .lose(&vault, &lost)
+        .expect("the packfile goes behind the gateway's back");
 
     let answer = client
         .bundle_parts(
@@ -124,7 +131,11 @@ async fn a_bundle_brings_back_a_name_whose_file_is_gone() {
         vec![FrameResult::Stored { name: lost }],
         "{answer:?}"
     );
-    assert_eq!(std::fs::read(&file).expect("the bytes are back"), first);
+    assert_eq!(
+        client.get(&vault, &lost, None).await.expect("bytes back"),
+        first
+    );
+    gateway.shutdown().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -154,7 +165,6 @@ async fn a_held_name_whose_file_is_gone_reads_missing_and_a_put_brings_it_back()
         .await
         .expect("stores");
 
-    // Soft-delete `lost` so its row is held (`hold.is_some()`, `!is_live()`).
     let delete_sig = signing::sign_delete(
         &identity,
         &paired.gateway_id,
@@ -176,13 +186,17 @@ async fn a_held_name_whose_file_is_gone_reads_missing_and_a_put_brings_it_back()
         .await
         .expect("holds");
 
-    let file = gateway.shared().store().path(&vault, &lost);
-    std::fs::remove_file(&file).expect("the bytes go behind the gateway's back");
+    gateway
+        .lose(&vault, &lost)
+        .expect("the packfile goes behind the gateway's back");
 
-    // Putting the held name again must notice the missing file, mark it missing, and restore bytes.
     let answer = put(&client, &vault, &lost, &digest, bytes.clone())
         .await
         .expect("answers");
     assert!(matches!(answer, FrameResult::Stored { .. }), "{answer:?}");
-    assert_eq!(std::fs::read(&file).expect("the bytes are back"), bytes);
+    assert_eq!(
+        client.get(&vault, &lost, None).await.expect("bytes back"),
+        bytes
+    );
+    gateway.shutdown().await;
 }

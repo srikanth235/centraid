@@ -284,13 +284,23 @@ impl Spawned {
             .map_err(|error| StoreFault::new(error.to_string()))?
     }
 
-    /// Flip the first bit of a stored object.
+    /// Flip the first bit of a stored object's slice inside its `.pack` file.
     ///
     /// # Errors
     ///
-    /// If the object cannot be read or rewritten.
+    /// If the object is not in the index or its packfile slice cannot be rewritten.
     pub fn corrupt(&self, vault: &VaultId, name: &Name) -> std::io::Result<()> {
-        self.shared.store().flip_bit(vault, name)
+        let found = self
+            .shared
+            .rules(|gateway| Ok(gateway.state.object_with_location(vault, name)?))
+            .map_err(|fault| std::io::Error::other(fault.to_string()))?;
+        let Some((record, loc)) = found else {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "no such object in index",
+            ));
+        };
+        self.shared.store().flip_bit(vault, loc, record.size)
     }
 
     /// Make the gateway's disk read as full — every upload is refused
@@ -325,13 +335,47 @@ impl Spawned {
             .pretend_to_hold_everything(lying);
     }
 
-    /// Delete a stored object from disk, leaving the index as it was: a gateway that lost a file.
+    /// Lose one stored object's backing bytes on disk while leaving its
+    /// `ObjectRecord` in the index untouched (and preserving any sibling
+    /// objects that shared its packfile): simulates a gateway that lost bytes.
     ///
     /// # Errors
     ///
-    /// If the object cannot be removed.
+    /// If the object is not in the index or its packfile cannot be removed/unlinked.
     pub fn lose(&self, vault: &VaultId, name: &Name) -> std::io::Result<()> {
-        std::fs::remove_file(self.shared.store().path(vault, name))
+        use crate::rules::state::State as _;
+        use crate::server::store::{PackId, PackLocation};
+
+        let store = self.shared.store();
+        let outcome = self.shared.rules(|gateway| {
+            let Some((_, loc)) = gateway.state.object_with_location(vault, name)? else {
+                return Ok(None);
+            };
+            let (rows_in_pack, _) = gateway.state.pack_stats(vault, &loc.pack_id)?;
+            if rows_in_pack <= 1 {
+                return Ok(Some(Some(loc.pack_id)));
+            }
+            let missing_loc = PackLocation {
+                pack_id: PackId::random(),
+                pack_offset: 0,
+            };
+            gateway.state.atomically(|state| {
+                state.remap_object_pack(vault, name, loc, missing_loc)?;
+                Ok(())
+            })?;
+            Ok(Some(None))
+        });
+        match outcome {
+            Ok(Some(Some(sole_pack_id))) => {
+                std::fs::remove_file(store.pack_path(vault, &sole_pack_id))
+            }
+            Ok(Some(None)) => Ok(()),
+            Ok(None) => Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "no such object in index",
+            )),
+            Err(fault) => Err(std::io::Error::other(fault.to_string())),
+        }
     }
 
     /// Stop serving and wait for the server to finish.

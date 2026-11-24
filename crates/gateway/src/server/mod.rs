@@ -12,10 +12,10 @@
 //! | --- | --- |
 //! | `tls.key`, `tls.crt`, `gateway.id` | the identity, minted together at first `serve`, mode 0600 ([`tls`]) |
 //! | `nonce.key` | the key nonces are MAC'd under, minted with the identity, mode 0600; never leaves |
-//! | `state.db` (with `-wal`, `-shm`) | vaults, hashed tokens and secrets, heads, snapshots, the object index; `application_id` `CGW3` and a `user_version` ladder ([`state`]) |
-//! | `objects/<vault>/<nn>/<name>` | one sealed object per file ([`store`]) |
-//! | `incoming/` | uploads being staged; emptied at start |
-//! | `serve.json` | the address `serve` last bound, which `pair` and `health` read |
+//! | `state.db` (with `-wal`, `-shm`) | vaults, hashed tokens and secrets, heads, snapshots, the object index; `application_id` `CGW4` and a `user_version` ladder ([`state`]) |
+//! | `packs/<vault>/<pack>.pack` | append-only sealed object packfiles ([`store`]) |
+//! | `staging/` | packfiles being staged or compacted; emptied at start |
+//! | `serve.json` | the bound address, name and announced addresses `serve` last recorded, which `pair` and `health` read |
 //! | `sweeps.json` | when the purge and the scrub last finished ([`sweeps`]) |
 //!
 //! Plain files: copying the directory anywhere — a VPS, a NAS, a disk in a
@@ -74,40 +74,72 @@ use crate::server::tls::{Identity, IdentityError};
 /// The port `serve` binds when told nothing.
 pub const DEFAULT_PORT: u16 = 8443;
 
-/// Where `serve` records the address it bound, for `pair` and `health`: they
-/// run as second processes beside it and cannot ask the socket.
+/// Where `serve` records the address, name and announced addresses it ran with,
+/// for `pair` and `health`: they run as second processes beside it and cannot
+/// ask the socket.
 pub const SERVE_FILE: &str = "serve.json";
 
-#[derive(serde::Serialize, serde::Deserialize)]
-struct Served {
-    bind: String,
+/// Configuration persisted by `serve` in [`SERVE_FILE`] so `pair` and `health`
+/// inherit the bound address, `--name`, and `--announce` entries by default.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ServeRecord {
+    pub bind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub announce: Vec<String>,
 }
 
-/// Record the address `serve` bound. Written whole and renamed into place, so
-/// a reader never sees half of it; it holds no key.
+/// Record the bound address, optional gateway name, and announced addresses
+/// `serve` started with. Written whole and renamed into place, so a reader
+/// never sees half of it; it holds no key.
 ///
 /// # Errors
 ///
 /// If the data directory cannot be written.
-pub fn record_bound(data_dir: &Path, bound: SocketAddr) -> std::io::Result<()> {
+pub fn record_served(
+    data_dir: &Path,
+    bound: SocketAddr,
+    name: Option<&str>,
+    announce: &[String],
+) -> std::io::Result<()> {
     let staged = data_dir.join(format!("{SERVE_FILE}.tmp"));
-    let text = serde_json::to_string(&Served {
+    let text = serde_json::to_string(&ServeRecord {
         bind: bound.to_string(),
+        name: name.map(str::to_owned),
+        announce: announce.to_vec(),
     })
     .map_err(std::io::Error::other)?;
     std::fs::write(&staged, text)?;
     std::fs::rename(&staged, data_dir.join(SERVE_FILE))
 }
 
+/// Record the address `serve` bound.
+///
+/// # Errors
+///
+/// If the data directory cannot be written.
+pub fn record_bound(data_dir: &Path, bound: SocketAddr) -> std::io::Result<()> {
+    let existing = last_served(data_dir);
+    record_served(
+        data_dir,
+        bound,
+        existing.as_ref().and_then(|s| s.name.as_deref()),
+        existing.as_ref().map_or(&[], |s| s.announce.as_slice()),
+    )
+}
+
+/// Everything `serve` last recorded in [`SERVE_FILE`], if it ever ran here.
+#[must_use]
+pub fn last_served(data_dir: &Path) -> Option<ServeRecord> {
+    let text = std::fs::read_to_string(data_dir.join(SERVE_FILE)).ok()?;
+    serde_json::from_str::<ServeRecord>(&text).ok()
+}
+
 /// The address `serve` last recorded, if it ever ran here.
 #[must_use]
 pub fn last_bound(data_dir: &Path) -> Option<SocketAddr> {
-    let text = std::fs::read_to_string(data_dir.join(SERVE_FILE)).ok()?;
-    serde_json::from_str::<Served>(&text)
-        .ok()?
-        .bind
-        .parse()
-        .ok()
+    last_served(data_dir)?.bind.parse().ok()
 }
 
 /// The gateway's clock, in milliseconds since the Unix epoch. The rules take
@@ -265,8 +297,13 @@ impl Shared {
         let nonce_key = load_or_mint_nonce_key(data_dir)?;
         let store = ObjectStore::open(data_dir)
             .map_err(|error| OpenError::Io(data_dir.display().to_string(), error))?;
+        let persisted_name = last_served(data_dir).and_then(|record| record.name);
+        let default_label = addrs::clean_gateway_name(persisted_name.as_deref());
         Ok(Self {
-            gateway: Mutex::new(Gateway::new(state, identity.gateway_id(), nonce_key)),
+            gateway: Mutex::new(
+                Gateway::new(state, identity.gateway_id(), nonce_key)
+                    .with_label(Some(default_label)),
+            ),
             store,
             identity,
             clock,
@@ -274,6 +311,23 @@ impl Shared {
             announcer: None,
             committing: std::sync::atomic::AtomicUsize::new(0),
         })
+    }
+
+    /// Override the gateway's human-readable label (`/v1/info` and `PairPayload`).
+    pub fn set_label(&self, label: String) {
+        if let Ok(mut gateway) = self.gateway.lock() {
+            gateway.set_label(Some(addrs::clean_gateway_name(Some(&label))));
+        }
+    }
+
+    /// This gateway's human-readable label.
+    #[must_use]
+    pub fn label(&self) -> String {
+        self.gateway
+            .lock()
+            .ok()
+            .and_then(|gateway| gateway.label().map(str::to_owned))
+            .unwrap_or_else(|| addrs::clean_gateway_name(None))
     }
 
     /// Tell `announcer` about every [`Event`].
@@ -353,6 +407,7 @@ impl Shared {
             pin: self.identity.pin(),
             secret,
             exp_ms: now.saturating_add(SECRET_TTL_MS),
+            label: Some(self.label()),
         })
     }
 

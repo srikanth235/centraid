@@ -94,6 +94,8 @@ CREATE TABLE object (
   name             BLOB    NOT NULL CHECK (length(name) = 32),
   digest           BLOB    NOT NULL CHECK (length(digest) = 32),
   size             INTEGER NOT NULL CHECK (size >= 0),
+  pack_id          BLOB    NOT NULL CHECK (length(pack_id) = 16),
+  pack_pos         INTEGER NOT NULL CHECK (pack_pos >= 0),
   stored_at_ms     INTEGER NOT NULL,
   held_at_ms       INTEGER,
   purge_after_ms   INTEGER,
@@ -107,6 +109,10 @@ CREATE INDEX object_by_purge ON object (purge_after_ms, vault, name)
 
 -- The held objects of a vault, by name: `held`, undo, unfreeze, purge-now.
 CREATE INDEX object_held ON object (vault, name) WHERE held_at_ms IS NOT NULL;
+
+-- Every object in physical packfile order: scrub and compaction walk each
+-- packfile sequentially without table scans or temporary sorts.
+CREATE INDEX object_by_pack ON object (vault, pack_id, pack_pos);
 
 -- One row per signed head ever accepted that is still kept: a copy of the
 -- record, and the hold of its manifest when that is held.

@@ -16,7 +16,7 @@ HTTPS, straight from the phone to the gateway: HTTP/2 when the client offers it 
 
 | Route | Auth | What |
 | --- | --- | --- |
-| `GET /v1/info` | none | `{gateway_id, protocol: 1, time_ms}` |
+| `GET /v1/info` | none | `{gateway_id, protocol: 1, time_ms, label?}` |
 | `POST /v1/nonce` | none | no body → `{nonce: 80 hex, ttl_ms: 300000}`: a single-use nonce for one pair request. **It writes nothing**: the nonce is 16 random bytes, 8 bytes of issue time and a 16-byte MAC over them and the gateway id, keyed by `nonce.key`, so ten thousand unauthenticated calls leave the database as it was. Names no vault. At 4096 _spent_ nonces still inside their five minutes: `BUSY` |
 | `POST /v1/pair` | none | `{vault_id, label, kind, nonce, secret? \| claim? \| read?}` → `{token, epoch, gateway_id}` (see [Pairing](#pairing)) |
 | `GET /v1/v/{vault}/head` | bearer | the head **as the phone signed it**: `{name, prev, taken_at_ms, epoch, generation, writes, set_at_ms, signature, claim}`, or `NO_HEAD` carrying the writer epoch and the `claim`. `epoch` is what the phone signed; `claim` is the vault's standing claim (`{epoch, head_seen, nonce, signature}`, null before any claim), the same shape `MOVED` carries: the phone takes the writer epoch as the greater of the verified head's and the verified claim's epoch, and acts on no unsigned number |
@@ -24,7 +24,7 @@ HTTPS, straight from the phone to the gateway: HTTP/2 when the client offers it 
 | `GET /v1/v/{vault}/snapshots?after=&limit=` | bearer | `[{name, taken_at_ms, registered_at_ms, held_at_ms?, purge_after_ms?}]` by name, at most 1000 a page; a snapshot whose manifest is held for deletion stays listed, with its dates |
 | `POST /v1/v/{vault}/exists` | bearer | `{names}` (at most 1000) → `{missing}`: the names not live (absent, held for deletion, or damaged) |
 | `GET` and `HEAD /v1/v/{vault}/o/{name}` | bearer | the bytes, or one `Range` of them (`206`); a whole answer and a `HEAD` carry the size and `Content-Digest`. A held object is still served. Objects arrive only through `POST bundle`: any other method on this path is `NOT_FOUND` |
-| `POST /v1/v/{vault}/bundle` | bearer, write | **the one upload.** A streamed body of frames `name (32) ‖ digest (32) ‖ u32be len ‖ object`, all raw, at most 256 MiB → `{results: [...]}`, one result per frame in the order sent: `stored`, `there` (same digest, live), `held` (same digest under a hold: the hold is lifted and the file kept), `taken {digest, state: live\|held\|damaged}` (the name is not free under another digest: **not an acknowledgement**), `full` (the disk refused it), `too_large` (over `MAX_OBJECT_BYTES`: read past, not stored), or `refused {code}` (`DIGEST_MISMATCH`: the bytes are not the digest the frame named). **Each frame is hashed as it arrives and committed on its own** (stage, fsync, rename, then its row, its own transaction), so a frame cut off mid-way is discarded and every finished frame stays committed. A refused frame never stops the frames after it |
+| `POST /v1/v/{vault}/bundle` | bearer, write | **the one upload.** A streamed body of frames `name (32) ‖ digest (32) ‖ u32be len ‖ object`, all raw, at most 256 MiB → `{results: [...]}`, one result per frame in the order sent: `stored`, `there` (same digest, live), `held` (same digest under a hold: the hold is lifted and the slice kept), `taken {digest, state: live\|held\|damaged}` (the name is not free under another digest: **not an acknowledgement**), `full` (the disk refused it), `too_large` (over `MAX_OBJECT_BYTES`: read past, not stored), or `refused {code}` (`DIGEST_MISMATCH`: truncated out of the staged packfile). **Frames stream sequentially into a staged packfile, `fsync` once at stream end (or disconnect), and commit together in one SQLite transaction**; any truncated trailing frame is truncated before promotion |
 | `POST /v1/v/{vault}/fetch` | bearer | `{names}` → the held-or-live objects in the same framing, in the order asked |
 | `GET /v1/v/{vault}/objects?after=&limit=` | bearer | `[{name, size, digest, stored_at_ms}]` of what is live, sorted by name, at most 1000 a page |
 | `GET /v1/v/{vault}/held?after=&limit=` | bearer | `[{name, size, digest, kind: "object" \| "snapshot", held_at_ms, purge_after_ms}]` by name: what the vault key asked to delete and the gateway is holding for seven days |
@@ -54,7 +54,7 @@ HTTPS, straight from the phone to the gateway: HTTP/2 when the client offers it 
 | `OUT_OF_ORDER` | 409 | `epoch`, `generation`, `writes` | a signed record not newer than the standing one, or more than 256 ahead, or whose writes fell |
 | `NAME_TAKEN` | 409 | `digest` (the one held), `state`: `live` \| `held` \| `damaged` (additive; absent reads as live) | the name is held under another digest. A bundle frame answers it as `taken`, with the same companions |
 | `HEAD_IN_USE` | 409 | `name` | deleting the head's manifest |
-| `TOO_LARGE` | 413 | `limit` | an object over 4 MiB + 47 bytes (a bundle frame answers it as `too_large`) or a bundle over 256 MiB |
+| `TOO_LARGE` | 413 | `limit` | an object over 4 MiB + 51 bytes (`4,194,355`, `CSB4`; a bundle frame answers it as `too_large`) or a bundle over 256 MiB |
 | `TOO_MANY` | 413 | `limit` | more than 1000 names |
 | `BAD_RANGE` | 416 | `size` | a `Range` the object cannot satisfy |
 | `FROZEN` | 423 | `since_ms` | the operator froze the vault: every state-changing route, a claim and a pairing by secret are refused; reads, `nonce` and read grants answer |
@@ -64,7 +64,7 @@ HTTPS, straight from the phone to the gateway: HTTP/2 when the client offers it 
 
 ### Pairing
 
-`centraid-gateway pair` prints a payload, as JSON and as a terminal QR: `{v: 2, gw, addrs, pin, secret, exp_ms}`. The secret is 16 random bytes, good for one new vault, once, for a day; the gateway keeps only its BLAKE3, and at most 64 unused ones are live (minting another drops the oldest; a used or expired one is pruned a week later). The phone parses the payload (`rules::payload::PairPayload::parse`), dials the addresses trusting the pin, asks `POST nonce` for a single-use nonce, and pairs with one of three kinds. **Every kind signs the nonce, and a request whose signature verifies spends it**, so a recorded request cannot be replayed. A nonce is judged first (MAC, gateway, age), then the signature, and only a valid signature writes the nonce's id to the spent table: a forged, expired, foreign or wrong-key request writes nothing and leaves the nonce unspent:
+`centraid-gateway pair` prints a payload, as JSON and as a terminal QR: `{v: 2, gw, addrs, pin, secret, exp_ms, label?}`. The secret is 16 random bytes, good for one new vault, once, for a day; the gateway keeps only its BLAKE3, and at most 64 unused ones are live (minting another drops the oldest; a used or expired one is pruned a week later). The phone parses the payload (`rules::payload::PairPayload::parse`), dials the addresses trusting the pin, asks `POST nonce` for a single-use nonce, and pairs with one of three kinds. **Every kind signs the nonce, and a request whose signature verifies spends it**, so a recorded request cannot be replayed. A nonce is judged first (MAC, gateway, age), then the signature, and only a valid signature writes the nonce's id to the spent table: a forged, expired, foreign or wrong-key request writes nothing and leaves the nonce unspent:
 
 - **`secret`** admits a vault this gateway has never seen, at writer epoch 1, **to a phone that holds the vault key**: `{secret, signature}` where the signature is over `"centraid-gateway-pair-v1" ‖ gateway_id ‖ vault_id ‖ blake3(secret) ‖ nonce`. The nonce, then the secret, then the signature are checked, and any failure is `UNAUTHORIZED` and spends neither the secret nor the nonce. A known vault is refused `VAULT_KNOWN` (`FROZEN` if frozen) and the secret is not spent. **What this stops and what it does not:** someone with the QR cannot squat the member's vault id on this gateway. A photographer who pairs _their own_ vault with the secret first still spends the member's code; the member sees `UNAUTHORIZED`, prints another code, and the console printed the stranger's safety number as it landed (decision 25: accepted).
 - **`claim`** is a restore or a takeover by a phone holding the vault identity key. It signs, with Ed25519, `"centraid-gateway-claim-v1" ‖ gateway_id ‖ vault_id ‖ u64be(epoch) ‖ head_seen ‖ nonce` (`rules::signing::claim_preimage`, which the phone calls too). `epoch` must be the writer epoch plus one and `head_seen` the current head, or nothing moves. In one step the gateway deletes **every** older token (reads included) leaving tombstones, lifts every held delete, stores the claim to be carried by `MOVED`, and resets the generation and writes. There is no delay on a takeover.
@@ -86,7 +86,7 @@ The `store/` cases of the suite hold these, and the vault's `MemoryStore` models
 
 ### Bodies stream at both ends
 
-A backup is thousands of sealed chunks (at most 4 MiB and 47 bytes each) sent through `bundle` and restored through `fetch`, in bodies of up to 256 MiB (the root's ruling A14). The gateway stages each arriving frame to its own file while hashing it and commits it before it reads the next, and serves `fetch` and `GET` from the files. The client sends `bundle_parts` from memory or straight from staged files and hands a `fetch_each` answer over one verified frame at a time. `tests/store_client.rs` sends 252 MiB up and back while the process grows by a few MiB.
+A backup is thousands of sealed chunks (at most 4 MiB and 51 bytes each) sent through `bundle` and restored through `fetch`, in bodies of up to 256 MiB (the root's ruling A14). The gateway streams arriving frames into a staged packfile while hashing each frame, `fsync`s once, promotes the packfile and commits all completed frames in one SQLite transaction, and serves `fetch` and `GET` via positioned slice reads (`pread`). The client sends `bundle_parts` from memory or straight from staged files and hands a `fetch_each` answer over one verified frame at a time. `tests/store_client.rs` sends 252 MiB up and back while the process grows by a few MiB.
 
 ## The data directory
 
@@ -96,10 +96,10 @@ Everything a gateway has is one directory of plain files. Copying it anywhere co
 | --- | --- |
 | `tls.key`, `tls.crt`, `gateway.id` | the identity, minted together at the first `serve`, mode 0600 |
 | `nonce.key` | 32 random bytes that key the nonce MAC, minted after the state is accepted and before any socket is bound, mode 0600. A lost key only makes the nonces in flight fail |
-| `state.db` (and its `-wal`, `-shm`) | SQLite: vaults, BLAKE3 of tokens and pairing secrets, heads, snapshot history, the object index. `application_id` `CGW3`, `user_version` = the number of ladder rungs (`src/server/sql/ladder/`). An older gateway's folder, or another program's file, is refused with the sentence below, exit code 2, the file untouched; a newer rung is refused too. Nothing is migrated |
-| `objects/<vault>/<nn>/<name>` | one sealed object per file |
-| `incoming/` | uploads being staged; emptied when `serve` starts |
-| `serve.json` | the address `serve` last bound, which `pair` and `health` read |
+| `state.db` (and its `-wal`, `-shm`) | SQLite: vaults, BLAKE3 of tokens and pairing secrets, heads, snapshot history, the object index (`pack_id`, `pack_offset`). `application_id` `CGW4`, `user_version` = the number of ladder rungs (`src/server/sql/ladder/`). An older gateway's folder, or another program's file, is refused with the sentence below, exit code 2, the file untouched; a newer rung is refused too. Nothing is migrated |
+| `packs/<vault>/<pack>.pack` | append-only sealed object packfiles |
+| `staging/` | packfiles being staged or compacted; emptied when `serve` starts |
+| `serve.json` | the bound address, `--name` and `--announce` addresses `serve` last recorded, which `pair` and `health` read |
 | `sweeps.json` | when the purge and the scrub last finished |
 | `logs/` | macOS only: the launchd agent's output |
 
@@ -109,27 +109,27 @@ Everything a gateway has is one directory of plain files. Copying it anywhere co
 
 ## The sweeps
 
-- **Purge, hourly**: every held delete past its seven days loses its file and its row (a frozen vault's are skipped), then the housekeeping prunes expired nonces, pairing secrets a week after they were used or expired, and revoked-token tombstones a year after their claim, and removes **orphan** files: one listing of `objects/`, and a file with no row that is also over an hour old goes (what a crash between a frame's rename and its row leaves). **A hold counts only the time the gateway watched.** If more than three sweep intervals (three hours) passed since the last sweep, the whole gap is added to every hold's due time, in the same transaction and before anything is purged, so a gateway that slept for a month, or whose clock jumped a year, never ends a hold early, and a hold keeps all the time it had left. A clock that goes backwards purges nothing and shortens nothing.
-- **Scrub, quarterly**, and on demand with the `scrub` verb: every stored object is read and re-hashed against its digest — no key involved — and what fails is marked damaged.
+- **Purge & compaction, hourly**: every held delete past its seven days loses its row (a frozen vault's are skipped), sparse packfiles (≥ 50% dead bytes) and multiple small packfiles (< 16 MiB) are compacted into dense packfiles up to 256 MiB, expired nonces/pairing secrets/revoked-token tombstones are pruned, and **orphan** staging and `.pack` files older than an hour with zero referencing rows are removed. **A hold counts only the time the gateway watched.** If more than three sweep intervals (three hours) passed since the last sweep, the whole gap is added to every hold's due time, in the same transaction and before anything is purged, so a gateway that slept for a month, or whose clock jumped a year, never ends a hold early, and a hold keeps all the time it had left. A clock that goes backwards purges nothing and shortens nothing.
+- **Scrub, quarterly**, and on demand with the `scrub` verb: walks `object_by_pack` in `(vault, pack_id, pack_offset)` order, opening each packfile once and hashing every object slice sequentially against its digest — no key involved — and what fails is marked damaged.
 
 Each is due one interval after it last finished, by the gateway's clock, as `sweeps.json` records: a restart or a night asleep does not reset the quarter, a gateway off for a month sweeps once when it wakes, and a failed sweep is tried again an hour later. Both log counts only, never a name. Every listing a sweep or a route runs is a seek by key, never an offset (`tests/plans.rs`).
 
 ## The CLI
 
 ```text
-centraid-gateway serve    --data-dir DIR [--bind 0.0.0.0:8443] [--no-mdns]
-centraid-gateway pair     --data-dir DIR [--port 8443]
+centraid-gateway serve    --data-dir DIR [--bind 0.0.0.0:8443] [--name NAME] [--announce HOST:PORT]... [--no-mdns]
+centraid-gateway pair     --data-dir DIR [--port 8443] [--name NAME] [--announce HOST:PORT]...
 centraid-gateway pairings --data-dir DIR [revoke <token id>]
 centraid-gateway vault    <id8> freeze|unfreeze|undo|purge-now [--yes]|delete-vault [--yes] --data-dir DIR
 centraid-gateway scrub    --data-dir DIR
 centraid-gateway health   [--data-dir DIR] [--addr HOST:PORT] [--pin HEX]
-centraid-gateway install  --data-dir DIR [--bind 0.0.0.0:8443] [--dry-run] [--label dev.centraid.gateway]
+centraid-gateway install  --data-dir DIR [--bind 0.0.0.0:8443] [--name NAME] [--announce HOST:PORT]... [--dry-run] [--label dev.centraid.gateway]
 ```
 
-`--data-dir` and `--bind` also read `CENTRAID_GATEWAY_DATA_DIR` and `CENTRAID_GATEWAY_BIND`.
+`--data-dir`, `--bind`, `--name` and `--announce` also read `CENTRAID_GATEWAY_DATA_DIR`, `CENTRAID_GATEWAY_BIND`, `CENTRAID_GATEWAY_NAME` and `CENTRAID_GATEWAY_ANNOUNCE`.
 
-- **`serve`** runs with no vault. On an empty directory it mints the identity, listens, and prints the gateway id, the pin and the first pairing QR; nothing is stored until a phone pairs. It advertises `_centraid-gateway._tcp` on the LAN (TXT `gw`, `v=1`) unless told `--no-mdns`, runs the sweeps, and stops on Ctrl-C or `SIGTERM`.
-- **`pair`** prints a fresh payload and QR beside a running `serve`, listing this machine's addresses on the port `serve` bound.
+- **`serve`** runs with no vault. On an empty directory it mints the identity, listens, persists its bound address, name and announced addresses in `serve.json`, and prints the gateway id, name, pin and the first pairing QR; nothing is stored until a phone pairs. It advertises `_centraid-gateway._tcp` on the LAN (TXT `gw`, `v=1`, `label`) unless told `--no-mdns`, runs the sweeps, and stops on Ctrl-C or `SIGTERM`.
+- **`pair`** prints a fresh payload and QR beside a running `serve`, inheriting the persisted port, `--name` and `--announce` entries unless overridden. Address discovery ranks RFC1918 LAN (`192.168.0.0/16`, `10.0.0.0/8`) and Tailscale CGNAT (`100.64.0.0/10`) ahead of `172.16.0.0/12` Docker bridges.
 - **`pairings`** lists each vault: its writer epoch, safety number, head and tokens — each with its id, the first 12 hex characters of its BLAKE3 — and how many pairing secrets wait, were spent or expired. **`pairings revoke <token id>`** forgets one token, for a phone that is lost and cannot revoke itself.
 - **`vault <id8> <verb>`** is the member's last word over one vault, `id8` the first 8 hex that `pairings` prints (refused when it names more than one). Local and unsigned, through the same rules a phone's request goes through; each prints counts, never a name; a refusal exits 3. **`freeze`** refuses every state-changing route (`FROZEN`) and skips the vault in the purge; reads, nonces and read grants still answer. **`unfreeze`** lifts it and adds the time it lasted to every hold, so freezing does not burn the week. **`undo`** lifts every hold, no signature, frozen or not. **`purge-now --yes`** makes every hold of an unfrozen vault due and runs the purge once. **`delete-vault --yes`** removes a **frozen** vault: tokens, tombstones, head, snapshots, claim, then every object in pages by name; not held.
 - **`scrub`** runs the scrub now.
@@ -158,10 +158,11 @@ The container image is [`deploy/gateway/Dockerfile`](../../deploy/gateway/Docker
 | `tests/pair_from_payload.rs` | a phone pairing from the text of a QR and handing a bundle upload to a client that is not ours; the safety line printed when a pairing lands |
 | `tests/store_client.rs` | a frame's answers and which are acknowledgements; a frame committed while the body is still open; a body cut inside a frame leaving the frames before it committed; a quarter-gibibyte up and back in a few MiB |
 | `tests/revoke.rs` | a phone revoking its own token, and the operator revoking a lost phone's by the id `pairings` prints: the token's bundle and `GET` are refused `UNAUTHORIZED` after, with no tombstone |
-| `tests/data_dir.rs` | an earlier gateway's folder refused with the sentence and exit code 2, its bytes unchanged; a newer rung refused; a new folder founded at `CGW3` rung 1 |
-| `tests/operator.rs` | `purge-now` needs `--yes` and an unfrozen vault; `delete-vault` needs a frozen one and removes everything; the binary's exit codes |
+| `tests/data_dir.rs` | an earlier gateway's folder refused with the sentence and exit code 2, its bytes unchanged; a newer rung refused; a new folder founded at `CGW4` rung 1; raw SQL `CHECK` constraints on `object` |
+| `tests/operator.rs` | `purge-now` needs `--yes` and an unfrozen vault; `delete-vault` needs a frozen one and removes everything including `packs/<vault>/`; the binary's exit codes |
 | `tests/plans.rs` | every listing seeks an index, and the test sees a planted scan, sort and offset |
-| `tests/bundle_commit.rs` | each frame of a bundle is its own transaction; a child process killed with SIGKILL between a frame's rename and its row leaves a file and no row (the frames before it committed), and the orphan sweep takes it once the clock says it is old; a sweep during an open bundle removes nothing; a frame that faults leaves the frames before it committed |
+| `tests/bundle_commit.rs` | one SQLite transaction per bundle; a child process killed with `SIGKILL` between pack rename and SQLite commit leaves zero rows and one orphan `.pack` file cleaned up after `ORPHAN_MIN_AGE_MS`; a sweep during an open bundle commit removes nothing; orphan sweep concurrency safety |
+| `tests/pack_compaction.rs` | sparse packfile compaction after `purge` (≥ 50% dead bytes) and small-pack coalescing (< 16 MiB) preserve every byte and digest across `GET`, ranged `GET`, `fetch`, and `scrub` |
 | `tests/head_state.rs` | `Client::head_state` verifies the head and the standing claim against the vault key and the paired gateway id before it hands out an epoch: a stub that lies in each field, and the wrong gateway or vault, is `Unverified` |
 | `tests/older_gateway.rs` | a stub playing a gateway below protocol 1: the real client returns `GatewayTooOld` |
 | `tests/signing_vectors.rs` | the vectors in `contracts/crypto/gateway-signing-vectors.json` (the delete vector carries `head_root`) |

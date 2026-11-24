@@ -2,28 +2,28 @@
 //!
 //! A disk that reads full, an upload refused as too large, an `exists` that
 //! lies, a count of the questions asked, the order objects were committed in,
-//! a hook that runs (or stops the process) the moment a file has been
-//! renamed into place and before its row is written, and one that runs when
-//! a bundle frame is done. None of it may be in the
-//! gateway a member runs, so this whole module is behind the `test-harness`
-//! cargo feature, as [`crate::server::harness`] is, and the few places the
-//! store and the routes consult it are each behind the same attribute.
-//! `cargo xtask rules` fails if either is not.
+//! a hook that runs (or stops the process) the moment a packfile has been
+//! renamed into place and before its rows are written, and one that runs when
+//! a bundle frame is done. None of it may be in the gateway a member runs, so
+//! this whole module is behind the `test-harness` cargo feature, as
+//! [`crate::server::harness`] is, and the few places the store and the routes
+//! consult it are each behind the same attribute. `cargo xtask rules` fails if
+//! either is not.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::server::store::StageError;
 
-/// Called after the `n`th file (1-based, in this process) was renamed into
-/// place by a commit, before its row is written.
+/// Called after the `n`th packfile (1-based, in this process) was renamed into
+/// place by a commit, before its rows are written.
 pub type RenameHook = Arc<dyn Fn(usize) + Send + Sync>;
 
-/// Called with the size of each upload the moment it has been staged.
+/// Called with the size of each frame the moment it has been staged.
 pub type StagedHook = Arc<dyn Fn(u64) + Send + Sync>;
 
-/// Called with how many bundle frames this gateway has committed (row and
-/// file) in this process, the moment each one's transaction has ended.
+/// Called with how many bundle frames this gateway has committed in this
+/// process, the moment the bundle's transaction has ended.
 pub type CommittedHook = Arc<dyn Fn(usize) + Send + Sync>;
 
 /// The knobs of one gateway.
@@ -69,22 +69,22 @@ impl Knobs {
         self.lying.store(lying, Ordering::SeqCst);
     }
 
-    /// Make the `nth` commit from now (1 is the next) fail with a store
-    /// fault before it touches a file: the fault a bundle's transaction must
-    /// survive. `0` takes it away.
+    /// Make the `nth` object commit from now (1 is the next) fail with a store
+    /// fault inside the bundle's transaction: the fault a bundle's transaction
+    /// must roll back cleanly. `0` takes it away.
     pub fn fail_commit(&self, nth: u64) {
         self.attempts.store(0, Ordering::SeqCst);
         self.fail_at.store(nth, Ordering::SeqCst);
     }
 
-    /// Whether this commit must fail.
+    /// Whether this object commit must fail.
     pub(crate) fn commit_fails(&self) -> bool {
         let fail_at = self.fail_at.load(Ordering::SeqCst);
         fail_at != 0 && self.attempts.fetch_add(1, Ordering::SeqCst) + 1 == fail_at
     }
 
-    /// Run `hook` after every file a commit renames into place, before its
-    /// row is written; `None` takes it away.
+    /// Run `hook` after every packfile a commit renames into place, before its
+    /// rows are written; `None` takes it away.
     pub fn after_rename(&self, hook: Option<RenameHook>) {
         if let Ok(mut held) = self.after_rename.lock() {
             *held = hook;
@@ -99,26 +99,24 @@ impl Knobs {
         }
     }
 
-    /// Run `hook` with the size of every upload the moment it has been fully
-    /// staged (written, synced, hashed), before it is admitted; `None` takes
-    /// it away. A test waits on this instead of looking at the clock.
+    /// Run `hook` with the size of every frame the moment it has been staged
+    /// and verified in the staged packfile; `None` takes it away. A test waits
+    /// on this instead of looking at the clock.
     pub fn on_staged(&self, hook: Option<StagedHook>) {
         if let Ok(mut held) = self.on_staged.lock() {
             *held = hook;
         }
     }
 
-    /// Run `hook` with the running count of bundle frames committed (stage,
-    /// fsync, rename and row) the moment each one is: a test waits on this to
-    /// know a frame is whole before it cuts the connection after it; `None`
-    /// takes it away.
+    /// Run `hook` with the running count of bundle frames committed the moment
+    /// a bundle's transaction ends; `None` takes it away.
     pub fn on_committed(&self, hook: Option<CommittedHook>) {
         if let Ok(mut held) = self.on_committed.lock() {
             *held = hook;
         }
     }
 
-    /// A bundle frame was judged and, if it was stored, committed.
+    /// A bundle frame was judged and committed.
     pub(crate) fn frame_done(&self) {
         let nth = usize::try_from(self.committed.fetch_add(1, Ordering::SeqCst) + 1).unwrap_or(0);
         let hook = self.on_committed.lock().ok().and_then(|held| held.clone());
@@ -171,7 +169,7 @@ impl Knobs {
         )
     }
 
-    /// The order every object was committed in, from one process-wide counter.
+    /// The order every stored object was committed in, from one process-wide counter.
     #[must_use]
     pub fn commit_order(&self) -> Vec<u64> {
         self.commits
@@ -180,12 +178,16 @@ impl Knobs {
             .unwrap_or_default()
     }
 
-    /// A file was just renamed into place.
-    pub(crate) fn renamed(&self) {
+    /// One stored object row was admitted into the index.
+    pub(crate) fn object_committed(&self) {
         static ORDER: AtomicU64 = AtomicU64::new(0);
         if let Ok(mut commits) = self.commits.lock() {
             commits.push(ORDER.fetch_add(1, Ordering::SeqCst));
         }
+    }
+
+    /// A packfile was just renamed into place.
+    pub(crate) fn renamed(&self) {
         let nth = usize::try_from(self.renames.fetch_add(1, Ordering::SeqCst) + 1).unwrap_or(0);
         let hook = self.after_rename.lock().ok().and_then(|held| held.clone());
         if let Some(hook) = hook {

@@ -194,6 +194,7 @@ pub struct Cable {
     /// beyond `cut`.
     budgeted: AtomicBool,
     budgets: Mutex<Budgets>,
+    wakers: Mutex<Vec<std::task::Waker>>,
     /// Every byte the phones have sent.
     sent: AtomicU64,
     /// Every TCP connection accepted: what "one handshake, not one per question" counts.
@@ -229,6 +230,11 @@ impl Cable {
     /// Cut every connection now, and fail every new one in its handshake.
     pub fn cut(&self) {
         self.cut.store(true, Ordering::SeqCst);
+        let wakers =
+            std::mem::take(&mut *self.wakers.lock().unwrap_or_else(PoisonError::into_inner));
+        for waker in wakers {
+            waker.wake();
+        }
     }
 
     /// Hold every connection open and answer nothing on it: a read or a write on it waits for
@@ -251,6 +257,10 @@ impl Cable {
     /// Join the cable again: no cut, and no budget either way.
     pub fn mend(&self) {
         *self.budgets() = Budgets::default();
+        self.wakers
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
         self.budgeted.store(false, Ordering::SeqCst);
         self.cut.store(false, Ordering::SeqCst);
         self.stalled.store(false, Ordering::SeqCst);
@@ -283,6 +293,23 @@ impl Cable {
 
     fn is_cut(&self) -> bool {
         self.cut.load(Ordering::SeqCst)
+    }
+
+    fn on_pending<T>(
+        &self,
+        context: &Context<'_>,
+        polled: Poll<io::Result<T>>,
+    ) -> Poll<io::Result<T>> {
+        if polled.is_pending() {
+            self.wakers
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push(context.waker().clone());
+            if self.is_cut() {
+                return Poll::Ready(Err(cut_error()));
+            }
+        }
+        polled
     }
 }
 
@@ -317,7 +344,7 @@ impl AsyncRead for Cabled {
             let polled = Pin::new(&mut this.socket).poll_read(context, buf);
             let read = buf.filled().len() - before;
             this.cable.sent.fetch_add(read as u64, Ordering::SeqCst);
-            return polled;
+            return this.cable.on_pending(context, polled);
         }
         // BUDGETED: the lock is held across the read, which never blocks, so
         // two connections cannot both spend what is left.
@@ -326,9 +353,11 @@ impl AsyncRead for Cabled {
             let polled = Pin::new(&mut this.socket).poll_read(context, buf);
             let read = buf.filled().len() - before;
             this.cable.sent.fetch_add(read as u64, Ordering::SeqCst);
-            return polled;
+            drop(budgets);
+            return this.cable.on_pending(context, polled);
         };
         if left == 0 {
+            drop(budgets);
             this.cable.cut();
             return Poll::Ready(Err(cut_error()));
         }
@@ -338,6 +367,7 @@ impl AsyncRead for Cabled {
         let mut window = vec![0_u8; room];
         let mut limited = ReadBuf::new(&mut window);
         let polled = Pin::new(&mut this.socket).poll_read(context, &mut limited);
+        let mut cut_now = false;
         if let Poll::Ready(Ok(())) = polled {
             let read = limited.filled();
             buf.put_slice(read);
@@ -346,11 +376,13 @@ impl AsyncRead for Cabled {
                 .fetch_add(read.len() as u64, Ordering::SeqCst);
             let after = left.saturating_sub(read.len() as u64);
             *budgets.of(Way::Sent) = Some(after);
-            if after == 0 {
-                this.cable.cut();
-            }
+            cut_now = after == 0;
         }
-        polled
+        drop(budgets);
+        if cut_now {
+            this.cable.cut();
+        }
+        this.cable.on_pending(context, polled)
     }
 }
 
@@ -368,34 +400,45 @@ impl AsyncWrite for Cabled {
             return Poll::Pending;
         }
         if !this.cable.budgeted.load(Ordering::SeqCst) {
-            return Pin::new(&mut this.socket).poll_write(context, data);
+            let polled = Pin::new(&mut this.socket).poll_write(context, data);
+            return this.cable.on_pending(context, polled);
         }
         let mut budgets = this.cable.budgets();
         let Some(left) = *budgets.of(Way::Answered) else {
-            return Pin::new(&mut this.socket).poll_write(context, data);
+            let polled = Pin::new(&mut this.socket).poll_write(context, data);
+            drop(budgets);
+            return this.cable.on_pending(context, polled);
         };
         if left == 0 {
+            drop(budgets);
             this.cable.cut();
             return Poll::Ready(Err(cut_error()));
         }
         let room = data.len().min(usize::try_from(left).unwrap_or(usize::MAX));
         let polled = Pin::new(&mut this.socket).poll_write(context, &data[..room]);
+        let mut cut_now = false;
         if let Poll::Ready(Ok(written)) = polled {
             let after = left.saturating_sub(written as u64);
             *budgets.of(Way::Answered) = Some(after);
-            if after == 0 {
-                this.cable.cut();
-            }
+            cut_now = after == 0;
         }
-        polled
+        drop(budgets);
+        if cut_now {
+            this.cable.cut();
+        }
+        this.cable.on_pending(context, polled)
     }
 
     fn poll_flush(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.get_mut().socket).poll_flush(context)
+        let this = self.get_mut();
+        let polled = Pin::new(&mut this.socket).poll_flush(context);
+        this.cable.on_pending(context, polled)
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.get_mut().socket).poll_shutdown(context)
+        let this = self.get_mut();
+        let polled = Pin::new(&mut this.socket).poll_shutdown(context);
+        this.cable.on_pending(context, polled)
     }
 }
 
@@ -452,17 +495,38 @@ impl Advertisement {
     ///
     /// If the responder cannot start or the record is malformed.
     pub fn start(gateway_id: GatewayId, host: &str, port: u16) -> Result<Self, mdns_sd::Error> {
+        Self::start_with_label(gateway_id, host, port, None)
+    }
+
+    /// [`Self::start`], also carrying an optional gateway `label` in TXT (`label=<name>`).
+    ///
+    /// # Errors
+    ///
+    /// If the responder cannot start or the record is malformed.
+    pub fn start_with_label(
+        gateway_id: GatewayId,
+        host: &str,
+        port: u16,
+        label: Option<&str>,
+    ) -> Result<Self, mdns_sd::Error> {
         let daemon = mdns_sd::ServiceDaemon::new()?;
         let id = gateway_id.hex();
         let protocol = crate::rules::limits::PROTOCOL.to_string();
-        let properties = [("gw", id.as_str()), ("v", protocol.as_str())];
+        let mut properties = vec![("gw", id.as_str()), ("v", protocol.as_str())];
+        if let Some(label) = label
+            && !label.is_empty()
+            && label.len() <= 128
+            && !label.contains('=')
+        {
+            properties.push(("label", label));
+        }
         let service = mdns_sd::ServiceInfo::new(
             SERVICE_TYPE,
             &format!("centraid-gateway-{}", &id[..8]),
             &format!("{host}.local."),
             "",
             port,
-            &properties[..],
+            properties.as_slice(),
         )?
         .enable_addr_auto();
         daemon.register(service)?;
