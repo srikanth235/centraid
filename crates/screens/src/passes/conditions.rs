@@ -124,8 +124,9 @@ impl Link {
 pub struct Conditions {
     pub rules: Rules,
     pub link: Link,
-    /// The OS carries bundle files while the app is suspended (iOS's background session,
-    /// Android's WorkManager): the pass writes them (`DrainRequest.os_uploads`).
+    /// The OS carries bundle files while the app is suspended (iOS's background session;
+    /// Android writes none — WorkManager runs the pass itself inside its window): the pass
+    /// writes them (`DrainRequest.os_uploads`).
     pub uploads: bool,
 }
 

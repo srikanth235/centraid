@@ -166,8 +166,6 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `backup-battery` | Backup | the battery-optimisation remedy — **Android only**; iOS has no such setting |
 | `home-band-chat` | Home | the band's Chat tab (the second place, after Home) |
 | `import-banner` | every route, at the foot above the band | an import's status line: progress and outcome (`import-sentence`), its one action (`import-action`, "Open People" after a made vault's imports) and its close key (`import-close`) |
-| `vault-row-<vaultId>` | Home | one switcher row (and `vault-forget-<vaultId>`, its **Delete**) |
-| `vault-rename-<vaultId>` | Home | one switcher row's Rename (a swipe on iOS, also in the row's long-press menu; a button on Android), and `vault-rename-field` / `vault-rename-save` in its dialog |
 | `first-launch` | First launch | the welcome screen (`first-launch-title`, `first-launch-claim-<n>`, and `first-launch-primary` / `first-launch-secondary` for its two doors) |
 | `chat` | Chat | the tab's root |
 | `chat-field` | Chat | the composer's text field (ready phase only) |

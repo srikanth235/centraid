@@ -149,10 +149,11 @@ message DrainRequest {
   // shell that sent `wants_snapshot` for both meant two things by one bit,
   // and MANUAL means the member's own tap.
   bool asked = 7;
-  // THE SHELL RUNS UPLOADS THE OS CONTINUES WHILE THE APP IS SUSPENDED (#1209, §6.5): a
-  // background `URLSession` or WorkManager. The core then writes up to four bundle files of at
-  // most 32 MiB each for the thumbnails and originals a gateway lacks and answers them in
-  // `DrainResponse.os_bundles`. What the OS reports of them only wakes a pass.
+  // THE SHELL RUNS UPLOADS THE OS CONTINUES WHILE THE APP IS SUSPENDED (#1209, §6.5): iOS's
+  // background `URLSession` (Android writes no bundle files — WorkManager runs the pass itself
+  // inside its window). The core then writes up to four bundle files of at most 32 MiB each for
+  // the thumbnails and originals a gateway lacks and answers them in `DrainResponse.os_bundles`.
+  // What the OS reports of them only wakes a pass.
   bool os_uploads = 8;
 }
 

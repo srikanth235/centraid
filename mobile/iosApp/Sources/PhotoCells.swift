@@ -233,8 +233,8 @@ struct PhotoHeldMark: View {
                 .background(Theme.color("bg", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("sm", scheme)))
                 .padding(4)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                .accessibilityIdentifier("photos.cell.coming-back.\(cell.photoID)")
                 .accessibilityHidden(true)
+                .accessibilityIdentifier("photos.cell.coming-back.\(cell.photoID)")
         }
     }
 }

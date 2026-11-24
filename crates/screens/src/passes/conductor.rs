@@ -41,7 +41,8 @@
 //! ## The OS's uploads
 //!
 //! The OS moves bytes while the app is suspended: iOS through a background
-//! `URLSession`, Android through WorkManager. A pass asked with `os_uploads`
+//! `URLSession` (Android writes no bundle files — WorkManager runs the pass
+//! itself inside its window). A pass asked with `os_uploads`
 //! answers the bundle files for the thumbnails and originals the gateways still
 //! lack ([`Answer::os_bundles`]); the conductor asks the OS how many tasks it
 //! holds ([`Action::UploadsPending`]) and enqueues the files only when it holds

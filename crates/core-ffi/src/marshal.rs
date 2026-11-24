@@ -180,7 +180,7 @@ pub fn config_from_json(bytes: &[u8]) -> Result<CoreConfig, CoreError> {
         // `role` is above.
         //
         // THE STAGING CEILING IS NOT SETTABLE ACROSS THE ABI: a phone's staging area
-        // is bounded by its free space and 2 GiB, and a smaller ceiling is a
+        // is bounded by its free space and 512 MiB, and a smaller ceiling is a
         // drill's (`CoreConfig::with_staging_ceiling`).
         staging_ceiling: None,
         shelf: None,

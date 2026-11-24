@@ -473,7 +473,7 @@ impl Screen for Service {
             return out;
         };
         // THE PLATFORM CARRIES THE BUNDLE FILES while the app is suspended: iOS's
-        // background session today; Android's WorkManager takes them when its shell does (wave 4).
+        // background session only; Android writes none (WorkManager runs the pass itself inside its window).
         self.conductor.set_uploads(ctx.platform() == "ios");
         match kind {
             E::Appeared(_) => {
