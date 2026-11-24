@@ -63,7 +63,7 @@ impl Options<'_> {
             now_ms,
             force_full: false,
             restage_all: false,
-            bugs: super::engine::Bugs::default(),
+            bugs: super::engine::Bugs::none(),
             on_pin: None,
         }
     }

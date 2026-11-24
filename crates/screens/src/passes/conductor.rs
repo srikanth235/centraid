@@ -1200,13 +1200,13 @@ impl Inner {
         out.push(Action::Changed);
         // A PASS THAT NAMED BUNDLE FILES for the OS to carry while the app is suspended: ask how
         // many tasks the OS holds, and enqueue them only if it holds none.
-        if self.uploads && !self.moved.contains(&cur.vault) {
-            if let Some(Pass::Ran(answer)) = self.last.get(&cur.vault) {
-                if !answer.os_bundles.is_empty() {
-                    self.parked = Some(answer.os_bundles.clone());
-                    out.push(Action::UploadsPending);
-                }
-            }
+        if self.uploads
+            && !self.moved.contains(&cur.vault)
+            && let Some(Pass::Ran(answer)) = self.last.get(&cur.vault)
+            && !answer.os_bundles.is_empty()
+        {
+            self.parked = Some(answer.os_bundles.clone());
+            out.push(Action::UploadsPending);
         }
     }
 

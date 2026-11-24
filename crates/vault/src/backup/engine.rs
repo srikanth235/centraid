@@ -99,6 +99,25 @@ pub struct Bugs {
 pub struct Bugs;
 
 impl Bugs {
+    /// No planted bugs.
+    #[must_use]
+    pub const fn none() -> Self {
+        #[cfg(feature = "plant-bugs")]
+        {
+            Self {
+                ack_taken: false,
+                trust_os: false,
+                skip_head_check: false,
+                no_full_read: false,
+                head_before_records: false,
+                unbound_delete: false,
+            }
+        }
+        #[cfg(not(feature = "plant-bugs"))]
+        {
+            Self
+        }
+    }
     #[cfg(feature = "plant-bugs")]
     const fn ack_taken(&self) -> bool {
         self.ack_taken
@@ -223,7 +242,7 @@ impl<'a> Env<'a> {
             staging,
             policy,
             now_ms,
-            bugs: Bugs::default(),
+            bugs: Bugs::none(),
             cache: RefCell::new(HashMap::new()),
             source_reads: Cell::new(0),
         }
