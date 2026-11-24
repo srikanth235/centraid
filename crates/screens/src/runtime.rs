@@ -954,7 +954,7 @@ impl Runtime {
                     state,
                     core,
                     |instance| {
-                        instance.service.then(|| wire::ScreenEvent {
+                        instance.service.then_some(wire::ScreenEvent {
                             kind: Some(wire::screen_event::Kind::VaultCommanded(command)),
                         })
                     },

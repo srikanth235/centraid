@@ -268,17 +268,6 @@ fn shown(phone: &Phone) -> String {
     }
 }
 
-fn ask_switch(phone: &mut Phone, vault_id: &str) -> wire::ScreenUpdate {
-    let switcher = root_of(phone, "switcher");
-    phone.driver.send(
-        switcher,
-        E::OffThreadDone(wire::OffThreadDone {
-            tag: "switch".to_owned(),
-            bytes: vault_id.as_bytes().to_vec(),
-        }),
-    )
-}
-
 fn person_in_front(phone: &Phone, name: &str) {
     people_support::person(&phone.driver, name);
 }

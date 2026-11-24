@@ -257,13 +257,6 @@ fn the_rows_say_where_things_stand_and_open_the_pages_that_own_them() {
     assert_eq!(data.about_title, "About");
 }
 
-fn home_state(d: &Driver, i: u64) -> wire::HomeState {
-    match &d.view(i).kind {
-        Some(wire::view_state::Kind::Home(state)) => (**state).clone(),
-        other => panic!("not Home: {other:?}"),
-    }
-}
-
 #[test]
 fn settings_has_no_vault_section_and_only_the_download_row_is_pressed() {
     let (mut d, _home, i) = started();

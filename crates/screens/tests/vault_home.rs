@@ -47,14 +47,6 @@ fn launched(phone: &mut Phone) {
     phone.driver.pump(Duration::from_millis(800));
 }
 
-fn vault_name(phone: &Phone) -> String {
-    state(phone)
-        .bar
-        .and_then(|bar| bar.vault)
-        .map(|vault| vault.name)
-        .unwrap_or_default()
-}
-
 /// Home's page is the failed state (no vault to read).
 fn failed(phone: &Phone) -> bool {
     matches!(
