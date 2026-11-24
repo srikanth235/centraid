@@ -3,7 +3,7 @@
     {
       "class": 1,
       "compressed": false,
-      "digest": "7c21037b9a4609c030908c523d3227a9ccc1921009eed6fbf177e0d79defa48a",
+      "digest": "faa6ee8ca7cdd66fe194c6c0eb3563e6f26e4b07ddb40c64b4a41ae59539ca35",
       "input": "empty",
       "name": "526630840b50fe5da65493cb01013e11ac7b24d44be4450ff705892d028d928c",
       "plaintextLen": 0,
@@ -12,7 +12,7 @@
     {
       "class": 2,
       "compressed": false,
-      "digest": "46496740d49e31c227385d48431f0dcd7ec6c5869986aeeb58c616f3a5379472",
+      "digest": "4ddbce14a11612f9325b2eabcda78f892d23e7bfde836e91d629ff0f7cefcb53",
       "input": "empty",
       "name": "15a87452a42d5846a73f5b8e3b4f0ffea4c8aa4a817d026224bbdb397bb3535d",
       "plaintextLen": 0,
@@ -21,7 +21,7 @@
     {
       "class": 3,
       "compressed": false,
-      "digest": "c48f7178758f874d6b190bddb035d1648902bdd765361279bc633091d7d1e888",
+      "digest": "ac442bdbf02db9086b4aff9d2a8fb62461c3fd2eb04db6f7fffaa9d13e94798a",
       "input": "empty",
       "name": "c62ede96739b8f5f13376320a3d6c488bac02ce19ef5517babae222be510832b",
       "plaintextLen": 0,
@@ -30,7 +30,7 @@
     {
       "class": 1,
       "compressed": true,
-      "digest": "ef1e0d3b5761ecb40a95035d90c885b97085d49590de16653fc5c3aacb1539bc",
+      "digest": "9f5dc6f260839896acc366b9d33bf5e819a6e50b76f1a29f30f729f0f1908996",
       "input": "short, compressible",
       "name": "0be73e8f9c2c5379d64485b5e34e57758b92531cfef118d7516766307b140420",
       "plaintextLen": 100,
@@ -39,7 +39,7 @@
     {
       "class": 2,
       "compressed": true,
-      "digest": "09eb276b2a44eaf0d408432b53c75da44fb8b35625aa7703e8da6244bfe6fcf3",
+      "digest": "a44deef47a9ad8f025f598285c27850d7a9b95aa202ec620e9d4744a861f5c1a",
       "input": "short, compressible",
       "name": "8f2d8a43e7df5261445d40a0fde2da588dfb5c395fda66b77f946144c6f50e6f",
       "plaintextLen": 100,
@@ -48,7 +48,7 @@
     {
       "class": 3,
       "compressed": true,
-      "digest": "b88bd2feca6d0ce9d47974c16b04901c1100181d01472421896522225ba752f8",
+      "digest": "87ffd09238912d339146345aad4683be3578a1157d726d8a79317406a594d69d",
       "input": "short, compressible",
       "name": "9b0d045ac80d5c43b060e44208e8d11605aa307cd5b6b750ad7abb6c850574e4",
       "plaintextLen": 100,
@@ -57,7 +57,7 @@
     {
       "class": 1,
       "compressed": false,
-      "digest": "324c9ff3728f449b34174103a3011f7b4261e0557a3dea0ab5914fdc00906be8",
+      "digest": "b2eeaeebe8d6fb6b6b195328914c4627fe2e08747990a4fece6f4a4a341fa95d",
       "input": "short, incompressible",
       "name": "ff31edc411d02e22dc657c6e759155da781a2973996bd55fb0bf323d525dfe49",
       "plaintextLen": 100,
@@ -66,7 +66,7 @@
     {
       "class": 2,
       "compressed": false,
-      "digest": "3eee9c79fc88813e9817a986550c78c5e25729bb1673cc75ee64a6e410fc560f",
+      "digest": "4f8f765a6b715bbcc6c25a37c64a784b0fe6ecea9d9260d994441ed4d9ccd847",
       "input": "short, incompressible",
       "name": "d2bf6b116f44090fb48f32c75fd3bee4988da5cba12de145a72f3bb9faaad1ae",
       "plaintextLen": 100,
@@ -75,7 +75,7 @@
     {
       "class": 3,
       "compressed": false,
-      "digest": "80d0a05a72a2cdace9b32b5b74476f906a4f965d0312e4df6b276f062e47f4e8",
+      "digest": "521f83670326d9c066d0e1a3f5c26507a825f17d1ed0f6410a56c3471af0917f",
       "input": "short, incompressible",
       "name": "afd02e09779994d4e744a49446e31898ee3b2ac298c8a2e7cb06f631df9912c0",
       "plaintextLen": 100,
@@ -84,7 +84,7 @@
     {
       "class": 1,
       "compressed": true,
-      "digest": "179e67bf0a3fda8c5fe6312e29fa35c3e850cf485728caadb629896f084c5f7d",
+      "digest": "a69f20839d8b3497c3d161e9f32b8531cbc5c59593174036af67e95abf4e7503",
       "input": "one chunk exactly, compressible",
       "name": "cc2443782ae927478012b7b08634fa4b70ab2f321d91f2bcbfc33765f7b59bdf",
       "plaintextLen": 4194304,
@@ -93,7 +93,7 @@
     {
       "class": 2,
       "compressed": true,
-      "digest": "39113ee6810289bc3013e52ddaba4ba7f221a998ce9f95ed49c6cac32aa1a53c",
+      "digest": "22a13ca025457b2337b9625f368d92543f4e0994520d2df573fc7abfe44eabaf",
       "input": "one chunk exactly, compressible",
       "name": "f981837a13c143a56eeeca518442dcc91a89ed7e1080f30119a28152b098b79d",
       "plaintextLen": 4194304,
@@ -102,7 +102,7 @@
     {
       "class": 3,
       "compressed": true,
-      "digest": "27c96548faa35f875fafab7328e582fa6e2874e7bdd828a4aa0c43f6cbea473a",
+      "digest": "d669bacdaf20a876dc5c2d01526cde7c7aaf6c740e28f4c365650d10f9c001c6",
       "input": "one chunk exactly, compressible",
       "name": "a2297551a1405f88dee5c214bfa749bc121b91035534a145e8329b609840bc21",
       "plaintextLen": 4194304,
@@ -111,7 +111,7 @@
     {
       "class": 1,
       "compressed": false,
-      "digest": "f13811db6724b90c435de1791822ddb5797d6943451a3784a920590ae1b03dff",
+      "digest": "b14d2749150e85026239dd0491e44f5b83c9e80bde48199ded25f6732faade6d",
       "input": "one chunk exactly, incompressible",
       "name": "ca96448a194c18073fa800e3e9a9756af679825ea32896784e1f2811e75e62ae",
       "plaintextLen": 4194304,
@@ -120,7 +120,7 @@
     {
       "class": 2,
       "compressed": false,
-      "digest": "d0ea189d105ad233bbab94f408a944e68b4e6032f39cf6a5df1d6f2b83c18d08",
+      "digest": "1c27eb72d965e4dd9e3efb2ad808d3e5ec454692853add8eeb5730dc79f3dcbb",
       "input": "one chunk exactly, incompressible",
       "name": "5e3600dc12582af0f39406013e774683766f5e8fa7d369ff0e11e451df12dce1",
       "plaintextLen": 4194304,
@@ -129,7 +129,7 @@
     {
       "class": 3,
       "compressed": false,
-      "digest": "aca0a896cc23abf45c1d88d531d1f36bf2759ee4c2b0c6f12e6a4984307eabe1",
+      "digest": "d9f7688d37dba21f8ed90aede2906f08d22cb386c8484ed1a7c4e9f76e26d9c5",
       "input": "one chunk exactly, incompressible",
       "name": "71c40e55cd6cc8ee747f19a9df8625fddcaf7b963ce16b0e03d4cb429179289f",
       "plaintextLen": 4194304,

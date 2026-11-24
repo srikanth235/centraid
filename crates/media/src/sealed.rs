@@ -9,8 +9,8 @@
 //! ```text
 //! name   = blake3_keyed(K_name, "obj3" ‖ c ‖ p)                       32 bytes
 //! body   = zstd(p) if strictly shorter, else p;  flags bit0 = compressed
-//! nonce  = blake3_keyed(K_nonce, name)[0..24]
 //! aad    = "CSB3" ‖ u8(3) ‖ flags ‖ c ‖ name
+//! nonce  = blake3_keyed(K_nonce, aad ‖ blake3(body))[0..24]
 //! object = "CSB3" ‖ u8(3) ‖ flags ‖ c ‖ nonce ‖ XChaCha20-Poly1305(K_obj, nonce, aad, body)
 //! digest = blake3(object)                                            32 bytes
 //! ```
@@ -21,12 +21,12 @@
 //!
 //! The same plaintext and class under the same vault's keys give the same
 //! name, object and digest, so a chunk is rebuilt from its source rather than
-//! kept, and a resend is byte-identical. The nonce is derived from the name,
-//! and the name is a keyed hash of the whole plaintext, so one nonce is never
-//! used for two different plaintexts; the same plaintext under the same nonce
-//! is the same object, which is the point. What a gateway learns is equality
-//! of chunks within one vault, which the keyed name already reveals, plus the
-//! sealed length.
+//! kept, and a resend is byte-identical. The nonce is derived from
+//! `aad ‖ blake3(body)` (SIV-style), so no `(K_obj, nonce)` pair ever meets
+//! two bodies, even if zstd's output changed; the same plaintext and body
+//! under the same nonce is the same object, which is the point. What a
+//! gateway learns is equality of chunks within one vault, which the keyed
+//! name already reveals, plus the sealed length.
 //!
 //! ## EVERY CONSTANT HERE IS A FORMAT DECISION
 //!
@@ -40,8 +40,8 @@
 //! [`open`] runs the strict procedure and any failure is [`SealedError::Damaged`]
 //! in one of its named forms: a length other than the reference's, a digest
 //! that is not the object's, a bad magic or version, an unknown flag, a class
-//! other than the one asked for, a name in the header's AAD other than the
-//! one asked for, a nonce other than the derived one, a failed tag, a
+//! other than the one asked for, a failed tag over the header's AAD naming
+//! `name`, a nonce other than the one derived from `aad ‖ blake3(body)`, a
 //! decompression past [`CHUNK_BYTES`], a body flagged compressed that is not
 //! shorter than the plaintext, and a plaintext whose recomputed name is not
 //! the one the object was asked for.
@@ -51,6 +51,7 @@ use std::str::FromStr;
 
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{Key, XChaCha20Poly1305, XNonce};
+use zeroize::Zeroize;
 
 /// The format's name, as a vector file spells it.
 pub const FORMAT_NAME: &str = "centraid-sealed/3";
@@ -138,6 +139,15 @@ impl BackupKeys {
     #[must_use]
     pub const fn k_nonce(&self) -> &[u8; 32] {
         &self.k_nonce
+    }
+}
+
+impl Drop for BackupKeys {
+    fn drop(&mut self) {
+        self.k_backup.zeroize();
+        self.k_name.zeroize();
+        self.k_obj.zeroize();
+        self.k_nonce.zeroize();
     }
 }
 
@@ -405,8 +415,12 @@ pub fn name_of(keys: &BackupKeys, class: Class, plaintext: &[u8]) -> Name {
     Name(*hasher.finalize().as_bytes())
 }
 
-fn nonce_of(keys: &BackupKeys, name: &Name) -> [u8; NONCE_BYTES] {
-    let full = blake3::keyed_hash(keys.k_nonce(), name.as_bytes());
+fn nonce_of(keys: &BackupKeys, aad: &[u8; 39], body: &[u8]) -> [u8; NONCE_BYTES] {
+    let body_hash = blake3::hash(body);
+    let mut hasher = blake3::Hasher::new_keyed(keys.k_nonce());
+    hasher.update(aad);
+    hasher.update(body_hash.as_bytes());
+    let full = hasher.finalize();
     let mut nonce = [0_u8; NONCE_BYTES];
     nonce.copy_from_slice(&full.as_bytes()[..NONCE_BYTES]);
     nonce
@@ -422,25 +436,19 @@ fn aad_of(flags: u8, class: u8, name: &Name) -> [u8; 39] {
     aad
 }
 
-/// Frame `body` as an object under `name`, `flags` and `class`: the part of
-/// sealing after the body is chosen. Public to the crate's tests only.
-fn frame(
+fn frame_with_nonce(
     keys: &BackupKeys,
-    name: &Name,
+    aad: &[u8; 39],
+    nonce: [u8; NONCE_BYTES],
     flags: u8,
     class: u8,
     body: &[u8],
 ) -> Result<Vec<u8>, SealedError> {
-    let nonce = nonce_of(keys, name);
     let cipher = XChaCha20Poly1305::new(&Key::from(*keys.k_obj()));
-    let aad = aad_of(flags, class, name);
     let sealed = cipher
         .encrypt(
             &XNonce::from(nonce),
-            Payload {
-                msg: body,
-                aad: &aad,
-            },
+            Payload { msg: body, aad },
         )
         .map_err(|_| SealedError::Seal)?;
     let mut object = Vec::with_capacity(HEADER_BYTES + NONCE_BYTES + sealed.len());
@@ -451,6 +459,20 @@ fn frame(
     object.extend_from_slice(&nonce);
     object.extend_from_slice(&sealed);
     Ok(object)
+}
+
+/// Frame `body` as an object under `name`, `flags` and `class`: the part of
+/// sealing after the body is chosen.
+fn frame(
+    keys: &BackupKeys,
+    name: &Name,
+    flags: u8,
+    class: u8,
+    body: &[u8],
+) -> Result<Vec<u8>, SealedError> {
+    let aad = aad_of(flags, class, name);
+    let nonce = nonce_of(keys, &aad, body);
+    frame_with_nonce(keys, &aad, nonce, flags, class, body)
 }
 
 /// Seal one chunk.
@@ -478,8 +500,9 @@ pub fn seal(keys: &BackupKeys, class: Class, plaintext: &[u8]) -> Result<Sealed,
 }
 
 /// Open an object **strictly**: the reference's length and digest, the
-/// header, the class, the derived nonce, the tag over the AAD naming `name`,
-/// a bounded decompression, and a recomputed name that equals `name`.
+/// header, the class, the tag over the AAD naming `name`, the nonce derived
+/// from `aad ‖ blake3(body)`, a bounded decompression, and a recomputed name
+/// that equals `name`.
 ///
 /// `digest` and `len` are `None` only when opening an object known by name
 /// alone (a head's root).
@@ -520,24 +543,23 @@ pub fn open_checked(
     if object[6] != class.byte() {
         return Err(SealedError::Damaged("its class is not the one asked for"));
     }
-    let nonce = &object[HEADER_BYTES..HEADER_BYTES + NONCE_BYTES];
-    if nonce != nonce_of(keys, name) {
-        return Err(SealedError::Damaged("its nonce is not the derived one"));
-    }
+    let nonce: [u8; NONCE_BYTES] = object[HEADER_BYTES..HEADER_BYTES + NONCE_BYTES]
+        .try_into()
+        .map_err(|_| SealedError::Damaged("its nonce is cut short"))?;
     let cipher = XChaCha20Poly1305::new(&Key::from(*keys.k_obj()));
     let aad = aad_of(flags, object[6], name);
     let body = cipher
         .decrypt(
-            &XNonce::from(
-                <[u8; NONCE_BYTES]>::try_from(nonce)
-                    .map_err(|_| SealedError::Damaged("its nonce is cut short"))?,
-            ),
+            &XNonce::from(nonce),
             Payload {
                 msg: &object[HEADER_BYTES + NONCE_BYTES..],
                 aad: &aad,
             },
         )
         .map_err(|_| SealedError::Damaged("it does not open"))?;
+    if nonce != nonce_of(keys, &aad, &body) {
+        return Err(SealedError::Damaged("its nonce is not the derived one"));
+    }
     let plaintext = if flags & FLAG_ZSTD == 0 {
         body
     } else {
@@ -576,6 +598,7 @@ pub fn open(keys: &BackupKeys, reference: &Ref, object: &[u8]) -> Result<Vec<u8>
 
 /// Seal with chosen flags and body, for tests that forge an object whose
 /// every layer is valid except the one under test.
+#[cfg(test)]
 #[doc(hidden)]
 pub fn forge(
     keys: &BackupKeys,
@@ -707,12 +730,18 @@ mod tests {
             "the flag is in the AAD"
         );
         assert!(retarget(&|o| o[6] = Class::Originals.byte()).contains("class"));
-        assert!(retarget(&|o| o[HEADER_BYTES] ^= 1).contains("nonce"));
+        assert!(
+            retarget(&|o| o[HEADER_BYTES] ^= 1).contains("open"),
+            "a flipped header nonce fails AEAD before the post-decrypt nonce check"
+        );
 
         // The name: another name asked for.
         let mut other = reference;
         other.name = Name::from_bytes([9; 32]);
-        assert!(damaged(open(&keys(), &other, &sealed.object)).contains("nonce"));
+        assert!(
+            damaged(open(&keys(), &other, &sealed.object)).contains("open"),
+            "the name is in the AAD"
+        );
 
         // A valid object for other plaintext, handed under this name.
         let forged = forge(&keys(), &sealed.name, 0, Class::Records.byte(), b"not it").unwrap();
@@ -728,8 +757,53 @@ mod tests {
                 &reference,
                 &sealed.object
             ))
-            .contains("nonce")
+            .contains("open")
         );
+    }
+
+    #[test]
+    fn nonce_depends_on_body_and_aad() {
+        let k = keys();
+        let name = name_of(&k, Class::Records, b"same name");
+        let aad_plain = aad_of(0, Class::Records.byte(), &name);
+        let aad_zstd = aad_of(FLAG_ZSTD, Class::Records.byte(), &name);
+
+        let n_body_a = nonce_of(&k, &aad_plain, b"body A");
+        let n_body_b = nonce_of(&k, &aad_plain, b"body B");
+        assert_ne!(
+            n_body_a, n_body_b,
+            "different bodies under the same name must never share a nonce"
+        );
+
+        let n_flag_zstd = nonce_of(&k, &aad_zstd, b"body A");
+        assert_ne!(
+            n_body_a, n_flag_zstd,
+            "different flags under the same name and body must never share a nonce"
+        );
+    }
+
+    #[test]
+    fn a_valid_aead_object_with_a_non_derived_nonce_is_refused() {
+        let k = keys();
+        let plain = b"valid plaintext";
+        let name = name_of(&k, Class::Records, plain);
+        let aad = aad_of(0, Class::Records.byte(), &name);
+        let mut wrong_nonce = nonce_of(&k, &aad, plain);
+        wrong_nonce[0] ^= 1;
+
+        // Encrypted with the wrong nonce so AEAD decrypt succeeds, then the
+        // post-decrypt nonce check must reject it.
+        let forged =
+            frame_with_nonce(&k, &aad, wrong_nonce, 0, Class::Records.byte(), plain).unwrap();
+        let why = damaged(open_checked(
+            &k,
+            &name,
+            Class::Records,
+            Some(&Digest::of(&forged)),
+            Some(u32::try_from(forged.len()).unwrap()),
+            &forged,
+        ));
+        assert!(why.contains("nonce"), "{why}");
     }
 
     #[test]
