@@ -1,5 +1,5 @@
 {
-  "$comment": "What a member reads of the new backup (#1191, lane B, row B16), one case per sentence. Read by crates/screens/tests/backup_page.rs. Both shells draw the same view state the Rust screens build from these words, so there is one fixture and no per-platform copy; the shells' own tests read the generated Words tables, not these. Dates are in the zone below; now_ms is Fri 13 Nov 2026 09:00 UTC; 1795176000000 is Fri 20 Nov 2026 12:00 UTC.",
+  "$comment": "What a member reads of the new backup (#1191, lane B, row B16), one case per sentence. Read by crates/screens/tests/backup_page.rs. Both shells draw the same view state the Rust screens build from these words, so there is one fixture and no per-platform copy; the shells' own tests read the generated Words tables, not these. Dates are in the zone below; now_ms is Fri 13 Nov 2026 09:00 UTC; 1795176000000 is Fri 20 Nov 2026 12:00 UTC. `classes` holds the three \"In this backup\" rows each reading draws (#1209), `photos_waiting` the card's sentence and Home's one line.",
   "zone": "UTC",
   "now_ms": 1794560400000,
   "devices": [
@@ -205,7 +205,7 @@
         ]
       },
       "sentence": "Office NAS needs an update",
-      "reason": "Office NAS runs an older version. Update it, then pair again.",
+      "reason": "Office NAS runs an older version than this phone. Update it, then back up again.",
       "tone": "attention"
     },
     {
@@ -269,6 +269,638 @@
       "date": "Sunday 8 November",
       "label": "Office NAS",
       "sentence": "The newest backup found is from Sunday 8 November, on Office NAS. A newer one may be on a backup device that didn't answer. Restore this one?"
+    }
+  ],
+  "classes": [
+    {
+      "name": "every_class_is_backed_up",
+      "reading": {
+        "last_ack_ms": 1794560280000,
+        "content_total": 10,
+        "content_confirmed": 10,
+        "total_bytes": 5000000000,
+        "confirmed_bytes": 5000000000,
+        "devices": [
+          {
+            "label": "Mac mini",
+            "last_ack_ms": 1794560280000,
+            "classes": [
+              {
+                "class": "records",
+                "backed_up": true
+              },
+              {
+                "class": "thumbnails",
+                "backed_up": true,
+                "total": 1240,
+                "held": 1240
+              },
+              {
+                "class": "originals",
+                "backed_up": true,
+                "total": 1282,
+                "held": 1282
+              }
+            ]
+          }
+        ],
+        "classes": [
+          {
+            "class": "records",
+            "backed_up": true
+          },
+          {
+            "class": "thumbnails",
+            "backed_up": true,
+            "total": 1240,
+            "held": 1240
+          },
+          {
+            "class": "originals",
+            "backed_up": true,
+            "total": 1282,
+            "held": 1282
+          }
+        ]
+      },
+      "rows": [
+        {
+          "name": "Records",
+          "detail": "Last backup 2 minutes ago",
+          "note": "",
+          "status": "Backed up",
+          "waiting": false
+        },
+        {
+          "name": "Photo previews",
+          "detail": "1,240 photos",
+          "note": "",
+          "status": "Backed up",
+          "waiting": false
+        },
+        {
+          "name": "Photos and files",
+          "detail": "1,282 photos and files · 5.0 GB",
+          "note": "",
+          "status": "Backed up",
+          "waiting": false
+        }
+      ]
+    },
+    {
+      "name": "photos_wait_for_wifi",
+      "reading": {
+        "last_ack_ms": 1794560280000,
+        "content_total": 1282,
+        "content_confirmed": 1162,
+        "devices": [
+          {
+            "label": "Mac mini",
+            "last_ack_ms": 1794560280000,
+            "classes": [
+              {
+                "class": "records",
+                "backed_up": true
+              },
+              {
+                "class": "thumbnails",
+                "backed_up": true,
+                "total": 1240,
+                "held": 1240
+              },
+              {
+                "class": "originals",
+                "backed_up": false,
+                "total": 1282,
+                "held": 1162
+              }
+            ]
+          }
+        ],
+        "classes": [
+          {
+            "class": "records",
+            "backed_up": true
+          },
+          {
+            "class": "thumbnails",
+            "backed_up": true,
+            "total": 1240,
+            "held": 1240
+          },
+          {
+            "class": "originals",
+            "backed_up": false,
+            "total": 1282,
+            "held": 1162,
+            "waiting": [
+              {
+                "reason": "wifi",
+                "count": 120
+              }
+            ]
+          }
+        ]
+      },
+      "rows": [
+        {
+          "name": "Records",
+          "detail": "Last backup 2 minutes ago",
+          "note": "",
+          "status": "Backed up",
+          "waiting": false
+        },
+        {
+          "name": "Photo previews",
+          "detail": "1,240 photos",
+          "note": "",
+          "status": "Backed up",
+          "waiting": false
+        },
+        {
+          "name": "Photos and files",
+          "detail": "1,162 of 1,282 backed up",
+          "note": "120 waiting for Wi-Fi",
+          "status": "Waiting",
+          "waiting": true
+        }
+      ]
+    },
+    {
+      "name": "the_phone_is_too_full",
+      "reading": {
+        "last_ack_ms": 1794560280000,
+        "content_total": 2522,
+        "content_confirmed": 2126,
+        "devices": [
+          {
+            "label": "Mac mini",
+            "last_ack_ms": 1794560280000,
+            "classes": [
+              {
+                "class": "records",
+                "backed_up": true
+              },
+              {
+                "class": "thumbnails",
+                "backed_up": false,
+                "total": 1240,
+                "held": 1056
+              },
+              {
+                "class": "originals",
+                "backed_up": false,
+                "total": 1282,
+                "held": 1070
+              }
+            ]
+          }
+        ],
+        "classes": [
+          {
+            "class": "records",
+            "backed_up": true
+          },
+          {
+            "class": "thumbnails",
+            "backed_up": false,
+            "total": 1240,
+            "held": 1056,
+            "waiting": [
+              {
+                "reason": "no_room",
+                "count": 184
+              }
+            ]
+          },
+          {
+            "class": "originals",
+            "backed_up": false,
+            "total": 1282,
+            "held": 1070,
+            "waiting": [
+              {
+                "reason": "no_room",
+                "count": 212
+              }
+            ]
+          }
+        ]
+      },
+      "rows": [
+        {
+          "name": "Records",
+          "detail": "Last backup 2 minutes ago",
+          "note": "",
+          "status": "Backed up",
+          "waiting": false
+        },
+        {
+          "name": "Photo previews",
+          "detail": "1,056 of 1,240 photos",
+          "note": "184 waiting for space on this phone",
+          "status": "Waiting",
+          "waiting": true
+        },
+        {
+          "name": "Photos and files",
+          "detail": "1,070 of 1,282 backed up",
+          "note": "212 waiting for space on this phone",
+          "status": "Waiting",
+          "waiting": true
+        }
+      ]
+    },
+    {
+      "name": "the_only_device_does_not_answer",
+      "reading": {
+        "last_ack_ms": 1794560280000,
+        "content_total": 2522,
+        "content_confirmed": 2126,
+        "devices": [
+          {
+            "label": "Mac mini",
+            "last_ack_ms": 1794560280000,
+            "classes": [
+              {
+                "class": "records",
+                "backed_up": true
+              },
+              {
+                "class": "thumbnails",
+                "backed_up": false,
+                "total": 1240,
+                "held": 1056
+              },
+              {
+                "class": "originals",
+                "backed_up": false,
+                "total": 1282,
+                "held": 1070
+              }
+            ]
+          }
+        ],
+        "classes": [
+          {
+            "class": "records",
+            "backed_up": true
+          },
+          {
+            "class": "thumbnails",
+            "backed_up": false,
+            "total": 1240,
+            "held": 1056,
+            "waiting": [
+              {
+                "reason": "gateway",
+                "count": 184
+              }
+            ]
+          },
+          {
+            "class": "originals",
+            "backed_up": false,
+            "total": 1282,
+            "held": 1070,
+            "waiting": [
+              {
+                "reason": "gateway",
+                "count": 212
+              }
+            ]
+          }
+        ]
+      },
+      "rows": [
+        {
+          "name": "Records",
+          "detail": "Last backup 2 minutes ago",
+          "note": "",
+          "status": "Backed up",
+          "waiting": false
+        },
+        {
+          "name": "Photo previews",
+          "detail": "1,056 of 1,240 photos",
+          "note": "184 waiting for your backup device",
+          "status": "Waiting",
+          "waiting": true
+        },
+        {
+          "name": "Photos and files",
+          "detail": "1,070 of 1,282 backed up",
+          "note": "212 waiting for your backup device",
+          "status": "Waiting",
+          "waiting": true
+        }
+      ]
+    },
+    {
+      "name": "one_of_two_devices_holds_it",
+      "reading": {
+        "last_ack_ms": 1794560280000,
+        "content_total": 2522,
+        "content_confirmed": 0,
+        "devices": [
+          {
+            "label": "Mac mini",
+            "last_ack_ms": 1794560280000,
+            "classes": [
+              {
+                "class": "records",
+                "backed_up": true
+              },
+              {
+                "class": "thumbnails",
+                "backed_up": true,
+                "total": 1240,
+                "held": 1240
+              },
+              {
+                "class": "originals",
+                "backed_up": true,
+                "total": 1282,
+                "held": 1282
+              }
+            ]
+          },
+          {
+            "label": "Office NAS",
+            "last_ack_ms": 1794473880000,
+            "classes": [
+              {
+                "class": "records",
+                "backed_up": true
+              },
+              {
+                "class": "thumbnails",
+                "backed_up": false,
+                "total": 1240,
+                "held": 1056
+              },
+              {
+                "class": "originals",
+                "backed_up": false,
+                "total": 1282,
+                "held": 1098
+              }
+            ]
+          }
+        ],
+        "classes": [
+          {
+            "class": "records",
+            "backed_up": true
+          },
+          {
+            "class": "thumbnails",
+            "backed_up": false,
+            "total": 1240,
+            "held": 1056,
+            "waiting": [
+              {
+                "reason": "gateway",
+                "count": 184
+              }
+            ]
+          },
+          {
+            "class": "originals",
+            "backed_up": false,
+            "total": 1282,
+            "held": 1098,
+            "waiting": [
+              {
+                "reason": "gateway",
+                "count": 184
+              }
+            ]
+          }
+        ]
+      },
+      "rows": [
+        {
+          "name": "Records",
+          "detail": "Last backup 2 minutes ago",
+          "note": "",
+          "status": "Backed up",
+          "waiting": false
+        },
+        {
+          "name": "Photo previews",
+          "detail": "All 1,240 on Mac mini",
+          "note": "184 waiting for Office NAS",
+          "status": "1 of 2 devices",
+          "waiting": true
+        },
+        {
+          "name": "Photos and files",
+          "detail": "All 1,282 on Mac mini",
+          "note": "184 waiting for Office NAS",
+          "status": "1 of 2 devices",
+          "waiting": true
+        }
+      ]
+    },
+    {
+      "name": "videos_left_out_are_said_apart",
+      "reading": {
+        "last_ack_ms": 1794560280000,
+        "content_total": 10,
+        "content_confirmed": 10,
+        "total_bytes": 2100000,
+        "confirmed_bytes": 2100000,
+        "left_out_items": 1,
+        "left_out_bytes": 100000,
+        "devices": [
+          {
+            "label": "Mac mini",
+            "last_ack_ms": 1794560280000,
+            "classes": [
+              {
+                "class": "records",
+                "backed_up": true
+              },
+              {
+                "class": "thumbnails",
+                "backed_up": true,
+                "total": 1240,
+                "held": 1240
+              },
+              {
+                "class": "originals",
+                "backed_up": true,
+                "total": 1282,
+                "held": 1282
+              }
+            ]
+          }
+        ],
+        "classes": [
+          {
+            "class": "records",
+            "backed_up": true
+          },
+          {
+            "class": "thumbnails",
+            "backed_up": true,
+            "total": 1240,
+            "held": 1240
+          },
+          {
+            "class": "originals",
+            "backed_up": true,
+            "total": 1282,
+            "held": 1282
+          }
+        ]
+      },
+      "rows": [
+        {
+          "name": "Records",
+          "detail": "Last backup 2 minutes ago",
+          "note": "",
+          "status": "Backed up",
+          "waiting": false
+        },
+        {
+          "name": "Photo previews",
+          "detail": "1,240 photos",
+          "note": "",
+          "status": "Backed up",
+          "waiting": false
+        },
+        {
+          "name": "Photos and files",
+          "detail": "1,282 photos and files · 2.1 MB",
+          "note": "1 video, 100 KB, left out",
+          "status": "Backed up",
+          "waiting": false
+        }
+      ]
+    }
+  ],
+  "photos_waiting": [
+    {
+      "name": "records_backed_up_photos_wait_for_wifi",
+      "reading": {
+        "last_ack_ms": 1794560280000,
+        "content_total": 1282,
+        "content_confirmed": 1162,
+        "devices": [
+          {
+            "label": "Mac mini",
+            "last_ack_ms": 1794560280000,
+            "classes": [
+              {
+                "class": "records",
+                "backed_up": true
+              },
+              {
+                "class": "thumbnails",
+                "backed_up": true,
+                "total": 1240,
+                "held": 1240
+              },
+              {
+                "class": "originals",
+                "backed_up": false,
+                "total": 1282,
+                "held": 1162
+              }
+            ]
+          }
+        ],
+        "classes": [
+          {
+            "class": "records",
+            "backed_up": true
+          },
+          {
+            "class": "thumbnails",
+            "backed_up": true,
+            "total": 1240,
+            "held": 1240
+          },
+          {
+            "class": "originals",
+            "backed_up": false,
+            "total": 1282,
+            "held": 1162,
+            "waiting": [
+              {
+                "reason": "wifi",
+                "count": 120
+              }
+            ]
+          }
+        ],
+        "waiting": [
+          {
+            "reason": "wifi",
+            "count": 120
+          }
+        ]
+      },
+      "sentence": "Backed up 2 minutes ago.",
+      "status": "Backed up 2 min ago. 120 photos waiting for Wi-Fi.",
+      "waiting": ["120 photos waiting for Wi-Fi"]
+    },
+    {
+      "name": "everything_is_backed_up",
+      "reading": {
+        "last_ack_ms": 1794560280000,
+        "content_total": 10,
+        "content_confirmed": 10,
+        "total_bytes": 5000000000,
+        "confirmed_bytes": 5000000000,
+        "devices": [
+          {
+            "label": "Mac mini",
+            "last_ack_ms": 1794560280000,
+            "classes": [
+              {
+                "class": "records",
+                "backed_up": true
+              },
+              {
+                "class": "thumbnails",
+                "backed_up": true,
+                "total": 1240,
+                "held": 1240
+              },
+              {
+                "class": "originals",
+                "backed_up": true,
+                "total": 1282,
+                "held": 1282
+              }
+            ]
+          }
+        ],
+        "classes": [
+          {
+            "class": "records",
+            "backed_up": true
+          },
+          {
+            "class": "thumbnails",
+            "backed_up": true,
+            "total": 1240,
+            "held": 1240
+          },
+          {
+            "class": "originals",
+            "backed_up": true,
+            "total": 1282,
+            "held": 1282
+          }
+        ]
+      },
+      "sentence": "Backed up 2 minutes ago.",
+      "status": "Backed up 2 min ago",
+      "waiting": []
     }
   ],
   "never_said": ["verified", "gateway", "sealed", "24 words"],

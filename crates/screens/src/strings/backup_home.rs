@@ -89,7 +89,7 @@ catalog! {
     plain unpaired_step_one = ("On a computer you own, run “centraid-gateway pair”.", "On a computer you own, run “centraid-gateway pair”.");
     plain unpaired_step_two = ("Scan the QR code it shows.", "Scan the QR code it shows.");
     plain unpaired_foot = ("The recovery key comes after the first backup.", "The recovery key comes after the first backup.");
-    plain device_too_old_reason = ("{name} runs an older version. Update it, then pair again.", "{name} runs an older version. Update it, then pair again.");
+    plain device_too_old_reason = ("{name} runs an older version than this phone. Update it, then back up again.", "{name} runs an older version than this phone. Update it, then back up again.");
     plain device_moved_reason = ("Not you? Ask whoever runs your backup device to pause it.", "Not you? Ask whoever runs your backup device to pause it.");
 
     // THE ONE-TIME PROMPT after the first confirmed backup (#1188, NB5): "recovery key", never

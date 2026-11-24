@@ -126,6 +126,9 @@ struct Replica {
     behind_files: u64,
     behind_bytes: u64,
     held_bytes: u64,
+    /// Files of each media class this gateway holds whole (the counts behind `ClassStatus.held`).
+    held_thumbnails: u64,
+    held_originals: u64,
     /// The reason the gateway gave when it refused the last pass, while it has not been fed since.
     refusal: Option<wire::WaitReason>,
 }
@@ -139,12 +142,14 @@ impl Replica {
         }
     }
 
-    fn classes(&self) -> Vec<wire::ClassStatus> {
+    fn classes(&self, total: &Totals) -> Vec<wire::ClassStatus> {
         class_rows(
             self.current,
             self.current && self.standing.thumbnails,
             self.current && self.standing.originals,
             self.debt,
+            total,
+            (self.held_thumbnails, self.held_originals),
         )
     }
 }
@@ -154,24 +159,44 @@ fn class_rows(
     thumbnails: bool,
     originals: bool,
     debt: engine::Debt,
+    total: &Totals,
+    held: (u64, u64),
 ) -> Vec<wire::ClassStatus> {
     vec![
         wire::ClassStatus {
             class: wire::BackupClass::Records as i32,
             backed_up: records,
             owed: debt.records,
+            total: 0,
+            held: 0,
+            waiting: Vec::new(),
         },
         wire::ClassStatus {
             class: wire::BackupClass::Thumbnails as i32,
             backed_up: thumbnails,
             owed: debt.thumbnails,
+            total: total.thumbnails,
+            held: held.0,
+            waiting: Vec::new(),
         },
         wire::ClassStatus {
             class: wire::BackupClass::Originals as i32,
             backed_up: originals,
             owed: debt.originals,
+            total: total.originals,
+            held: held.1,
+            waiting: Vec::new(),
         },
     ]
+}
+
+/// How many files each media class covers, a video the member left out not among them.
+#[derive(Default, Clone)]
+struct Totals {
+    thumbnails: u64,
+    originals: u64,
+    /// Why files wait, by class: (thumbnails, originals).
+    waiting: (BTreeMap<i32, u64>, BTreeMap<i32, u64>),
 }
 
 /// What the files say, in the shape the status needs.
@@ -241,6 +266,8 @@ pub fn backup_status(
             behind_files: 0,
             behind_bytes: 0,
             held_bytes: 0,
+            held_thumbnails: 0,
+            held_originals: 0,
             refusal: plane
                 .notes(&gateway.gateway_id)
                 .refusal
@@ -256,6 +283,7 @@ pub fn backup_status(
         .collect();
 
     let mut counted = Counted::default();
+    let mut totals = Totals::default();
     if let Some(vault) = vault
         && keys.is_some()
     {
@@ -273,6 +301,11 @@ pub fn backup_status(
                 continue;
             }
             counted.total_bytes = counted.total_bytes.saturating_add(file.len);
+            if file.is_original() {
+                totals.originals += 1;
+            } else {
+                totals.thumbnails += 1;
+            }
             let lagging: Vec<usize> = fed
                 .iter()
                 .copied()
@@ -282,6 +315,11 @@ pub fn backup_status(
                 if replicas[*index].holds(&file) {
                     replicas[*index].held_bytes =
                         replicas[*index].held_bytes.saturating_add(file.len);
+                    if file.is_original() {
+                        replicas[*index].held_originals += 1;
+                    } else {
+                        replicas[*index].held_thumbnails += 1;
+                    }
                 }
             }
             if !fed.is_empty() && lagging.is_empty() {
@@ -306,6 +344,12 @@ pub fn backup_status(
                 }
             };
             *counted.waiting.entry(reason as i32).or_default() += 1;
+            let class = if file.is_original() {
+                &mut totals.waiting.1
+            } else {
+                &mut totals.waiting.0
+            };
+            *class.entry(reason as i32).or_default() += 1;
         }
         counted.oldest_waiting_ms = counted
             .oldest_waiting_ms
@@ -373,10 +417,10 @@ pub fn backup_status(
             .refusal
             .or_else(|| wait_reason_of(gateway.reach))
             .unwrap_or(wire::WaitReason::Unspecified) as i32;
-        row.classes = replica.classes();
+        row.classes = replica.classes(&totals);
         wired.push(row);
     }
-    let classes = aggregate(&replicas, &fed);
+    let classes = aggregate(&replicas, &fed, &totals);
     Ok(wire::BackupStatusResponse {
         destinations: wired,
         acked_at_ms: acked_at_ms.and_then(|ms| i64::try_from(ms).ok()),
@@ -399,7 +443,7 @@ pub fn backup_status(
         left_out_items: counted.left_out_items,
         left_out_bytes: counted.left_out_bytes,
         // THE PER-APP ROWS WENT WITH THE VAULT'S PER-APP COUNTS (#1209): the Backup screen's
-        // "In this backup" is drawn from `classes` and the totals above until wave 4 redraws it.
+        // "In this backup" is drawn from `classes`: the three rows, with their counts.
         apps: Vec::new(),
         oldest_waiting_ms: counted.oldest_waiting_ms,
         first_item_ms: vault.and_then(first_item_ms),
@@ -409,19 +453,36 @@ pub fn backup_status(
 
 /// Every class, least advanced gateway first: backed up only if every fed gateway has it, and
 /// the most any of them is still owed.
-fn aggregate(replicas: &[Replica], fed: &[usize]) -> Vec<wire::ClassStatus> {
+fn aggregate(replicas: &[Replica], fed: &[usize], totals: &Totals) -> Vec<wire::ClassStatus> {
+    let waiting_rows = |by: &BTreeMap<i32, u64>| {
+        by.iter()
+            .map(|(reason, count)| wire::Waiting {
+                reason: *reason,
+                count: *count,
+            })
+            .collect::<Vec<_>>()
+    };
     let mut rows = class_rows(
         !fed.is_empty(),
         !fed.is_empty(),
         !fed.is_empty(),
         engine::Debt::default(),
+        totals,
+        if fed.is_empty() {
+            (0, 0)
+        } else {
+            (totals.thumbnails, totals.originals)
+        },
     );
     for index in fed {
-        for (row, theirs) in rows.iter_mut().zip(replicas[*index].classes()) {
+        for (row, theirs) in rows.iter_mut().zip(replicas[*index].classes(totals)) {
             row.backed_up &= theirs.backed_up;
             row.owed = row.owed.max(theirs.owed);
+            row.held = row.held.min(theirs.held);
         }
     }
+    rows[1].waiting = waiting_rows(&totals.waiting.0);
+    rows[2].waiting = waiting_rows(&totals.waiting.1);
     rows
 }
 

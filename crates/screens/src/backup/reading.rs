@@ -17,6 +17,38 @@ use crate::catalog;
 use crate::kit::read::{Reading as Read, read};
 use crate::screen::Ctx;
 
+/// One class's standing, from the core's `ClassStatus` (#1209, §6.6).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ClassRow {
+    pub class: i32,
+    /// Every device the row speaks for holds the class whole.
+    pub backed_up: bool,
+    /// Objects still owed in the class.
+    pub owed: u64,
+    /// Files the class covers and files held of them (zero for records).
+    pub total: u64,
+    pub held: u64,
+    /// Why the class's files that are not backed up wait: `(reason, count)`, aggregate only.
+    pub waiting: Vec<(i32, u64)>,
+}
+
+impl ClassRow {
+    fn from_wire(row: &wire::ClassStatus) -> Self {
+        Self {
+            class: row.class,
+            backed_up: row.backed_up,
+            owed: row.owed,
+            total: row.total,
+            held: row.held,
+            waiting: row
+                .waiting
+                .iter()
+                .map(|waiting| (waiting.reason, waiting.count))
+                .collect(),
+        }
+    }
+}
+
 /// One paired gateway, as the ledger remembers it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Destination {
@@ -47,8 +79,8 @@ pub struct Destination {
     pub rolled_back: bool,
     /// When this phone paired with it, phone clock; `None` when the core did not say.
     pub paired_at_ms: Option<i64>,
-    /// The originals it still owes, per app: (app id, files).
-    pub waiting_apps: Vec<(String, u64)>,
+    /// What it holds, per class: records, thumbnails, originals (#1209, §6.6).
+    pub classes: Vec<ClassRow>,
     /// ANOTHER PHONE TOOK OVER HERE (#1191, E4): this device answered with a claim, verified by the
     /// core, above the epoch this phone holds. Only this device's pass stops.
     pub moved: bool,
@@ -142,9 +174,9 @@ pub struct Reading {
     pub first_item_ms: Option<i64>,
     /// The vault moved to another phone; this one is read-only.
     pub frozen: bool,
-    /// WHAT EACH APP'S BACKUP HOLDS (#1144), in the catalogue's order; empty
-    /// when the core could not say (no vault, or no keys to name its files).
-    pub apps: Vec<wire::AppHolding>,
+    /// WHAT IS BACKED UP, PER CLASS (#1209): records, thumbnails, originals, with the counts and
+    /// the reasons the core gives. Backed up here means every paired device holds the class.
+    pub classes: Vec<ClassRow>,
     /// Every app's bytes, the videos left out not among them, and of those
     /// what a gateway acknowledged.
     pub total_bytes: u64,
@@ -166,13 +198,18 @@ impl Reading {
         self.content_total.saturating_sub(self.content_confirmed)
     }
 
-    /// Record rows written since the latest snapshot a gateway acknowledged.
-    /// File acknowledgements alone do not cover these later changes.
+    /// Whether every paired device holds the vault's records as of the newest snapshot. A core
+    /// that names no classes says nothing against it.
     #[must_use]
-    pub fn edits_waiting(&self) -> u64 {
-        self.apps
-            .iter()
-            .fold(0_u64, |count, app| count.saturating_add(app.edits_waiting))
+    pub fn records_held(&self) -> bool {
+        self.class(wire::BackupClass::Records)
+            .is_none_or(|class| class.backed_up)
+    }
+
+    /// One class's aggregate row, when the core sent it.
+    #[must_use]
+    pub fn class(&self, class: wire::BackupClass) -> Option<&ClassRow> {
+        self.classes.iter().find(|row| row.class == class as i32)
     }
 
     /// Items waiting for `reason`.
@@ -210,11 +247,7 @@ impl Reading {
                     refused_limit_bytes: destination.refused_limit_bytes,
                     rolled_back: destination.rolled_back,
                     paired_at_ms: Some(destination.paired_at_ms).filter(|at| *at > 0),
-                    waiting_apps: destination
-                        .waiting_apps
-                        .iter()
-                        .map(|w| (w.app_id.clone(), w.files))
-                        .collect(),
+                    classes: destination.classes.iter().map(ClassRow::from_wire).collect(),
                     // HOW IT STANDS, in the core's one word (#1191, B16). Each of these is
                     // a device's own state and stops only that device's pass.
                     moved: destination.reach_state == wire::DestinationReach::Moved as i32,
@@ -239,7 +272,7 @@ impl Reading {
             oldest_waiting_ms: status.oldest_waiting_ms.filter(|at| *at > 0),
             first_item_ms: status.first_item_ms.filter(|at| *at > 0),
             frozen: status.frozen,
-            apps: status.apps.clone(),
+            classes: status.classes.iter().map(ClassRow::from_wire).collect(),
             total_bytes: status.total_bytes,
             confirmed_bytes: status.confirmed_bytes,
             left_out_items: status.left_out_items,

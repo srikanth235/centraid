@@ -238,6 +238,17 @@ message ClassStatus {
   BackupClass class = 1;
   bool backed_up = 2;
   uint64 owed = 3;
+  // HOW MANY FILES THE CLASS COVERS AND HOW MANY ARE HELD (#1209, wave 4b): the photos and files
+  // behind "1,162 of 1,282 backed up", counted from the vault's content rows, a video the member
+  // left out not among them. `held` is the files this gateway holds whole (the originals tree or
+  // the thumbnail tree lists them); on the aggregate it is the least any fed gateway holds. Zero
+  // for records, which are one tree and not counted in files.
+  uint64 total = 4;
+  uint64 held = 5;
+  // WHY THE FILES OF THIS CLASS THAT ARE NOT BACKED UP WAIT, one row per reason with a count: the
+  // class's share of `BackupStatusResponse.waiting`. Set on the aggregate rows only (those of
+  // `BackupStatusResponse.classes`); empty for records and on a gateway's own rows.
+  repeated Waiting waiting = 6;
 }
 
 // WHICH GATEWAYS HOLD ONE ORIGINAL WHOLE (#1209, R4). The delete warning asks before a photo
