@@ -9,8 +9,8 @@ import UserNotifications
 /// gone, iOS relaunches it into the background, calls this with a completion
 /// handler, and delivers the finished tasks to whichever session is recreated
 /// under the same identifier. The handler is iOS's to get back once the
-/// events are settled — `UploadSettlement` holds it and calls it after the
-/// core has settled and chained the next batch, or after its cap.
+/// events are delivered — `UploadSettlement` holds it and calls it after the
+/// core has been woken for a pass, or after its cap.
 ///
 /// It is also the earliest moment to RECONNECT the session at an ordinary
 /// launch, which is what delivers tasks that finished while the app was not
@@ -42,7 +42,7 @@ final class CentraidAppDelegate: NSObject, UIApplicationDelegate {
         UploadSettlement.shared.awaitingFinish(completionHandler)
         BackgroundUploader.shared.reconnect()
         // THE VAULTS OPEN NOW, not when a scene connects: a background
-        // relaunch may never connect one, and the settles need the core.
+        // relaunch may never connect one, and the wakes need the core.
         _ = ShellModel.shared
     }
 }

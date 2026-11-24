@@ -3,19 +3,20 @@ import Foundation
 import Security
 import UIKit
 
-// THE BACKGROUND MOVER (#1080 rulings 1, 2, 7; seam contract §2, A6, A10).
+// THE BACKGROUND MOVER (#1080 rulings 1, 2; #1209 R7; backup spec §6.5).
 //
 // iOS continues exactly one kind of transfer while an app is suspended: a file
-// upload or download handed to a background `URLSession`. That is why the
-// carrier is HTTPS to the member's own gateway (ruling 2): the core prepares
-// sealed parts in the spool while the app is alive, the pass scheduler in Rust
-// (`crates/screens/src/passes`) asks the core for a `handoff` batch and hands it
-// here as an `UploadsOp` effect, the OS moves the files with the app suspended,
-// and every finished task is reported back as a `ShellFact` (`UploadSettled`,
-// `UploadsDrained`) so Rust can `settle` it. The decisions (reconcile before
-// handoff, the batch caps) are Rust's; this file is the OS adapter and the hold
-// that keeps a relaunch's reports until a runtime exists. Android does all of
-// this in-process and has no twin of this file.
+// upload handed to a background `URLSession`. That is why the carrier is HTTPS
+// to the member's own gateway: the core writes bundle files into staging while
+// the app is alive and a pass answers them as `os_bundles`, each a whole
+// `POST bundle` request (file path, URL, method, headers). The pass conductor
+// (`crates/screens/src/passes`) asks this file how many upload tasks it holds
+// (`UploadsOp.pending`) and sends `UploadsOp.enqueue` only when it holds none;
+// the OS moves the files with the app suspended. A finished, failed or lost
+// task is reported to Rust as a `ShellFact` (`UploadSettled`, `UploadsDrained`)
+// and that only WAKES a pass: the pass re-reads the gateway's head and diffs.
+// Nothing this file hears from the OS is recorded as stored. Android does all
+// of this in-process and has no twin of this file.
 //
 // Four rules this file keeps, each with its reason:
 //
@@ -30,28 +31,26 @@ import UIKit
 // 2. **THE PIN IS EXACT DER EQUALITY** (ruling 1). The gateway mints its own
 //    certificate; the pairing QR carried its BLAKE3 fingerprint and the core
 //    kept the certificate's DER. The leaf the server presents is accepted only
-//    when its bytes equal the DER pinned for THAT task's gateway — no
+//    when its bytes equal the DER pinned for THAT task's gateway: no
 //    certificate authority, no hostname rule, no trust-on-first-use, and a
 //    plain `http` URL is refused before a task exists.
-// 3. **EACH PART CARRIES THE MEMBER'S RULE** (#1080 A10, R-1080-E11). The core
-//    marks every part it hands off `allows_cellular`, from the rule and the
-//    part's kind: a photograph's original under `WIFI_AND_CELLULAR_PHOTOS`,
-//    thumbnails and previews always, a video's original never. The request's
-//    cellular and expensive-network flags are that verdict, so the rule holds
-//    for the uploads iOS runs with the app suspended. The session allows both,
-//    because a request can only narrow its session: a session that refused
-//    cellular would refuse every part's allowance. Low Data Mode is refused
-//    on the session and on every request, and a part from a core that never
-//    set the flag stays on Wi-Fi. A changed rule cancels what iOS holds
-//    (`ShellModel.setTransferRule`); the core requeues each part, and the
-//    next handoff carries the new verdict.
-// 4. **A SETTLE THAT CANNOT BE DELIVERED IS HELD, NEVER DROPPED, AND NEVER THE
+// 3. **EACH PART CARRIES THE MEMBER'S RULE** (R-1080-E11). The core marks every
+//    part `allows_cellular`, from the rule and the part's kind: a photograph's
+//    original under `WIFI_AND_CELLULAR_PHOTOS`, thumbnails always, a video's
+//    original never. The request's cellular and expensive-network flags are
+//    that verdict, so the rule holds for the uploads iOS runs with the app
+//    suspended. The session allows both, because a request can only narrow its
+//    session: a session that refused cellular would refuse every part's
+//    allowance. Low Data Mode is refused on the session and on every request,
+//    and a part from a core that never set the flag stays on Wi-Fi. A changed
+//    rule cancels what iOS holds (`ShellModel.setTransferRule`); the next pass
+//    writes the files again with the new verdict.
+// 4. **A REPORT IS A WAKE, HELD UNTIL THERE IS SOMEONE TO WAKE, AND NEVER THE
 //    TRUTH.** The OS may relaunch the app to report a task before the vaults
-//    are open; reports wait in order until the core's sink is attached. And a
-//    report that is lost anyway costs nothing: the ledger is a cache of the
-//    gateway's own `exists` answer and `reconcile` repairs it (ruling 7).
+//    are open; wakes wait in order until the core's sink is attached. A wake
+//    that is lost anyway costs nothing: the next pass diffs the head.
 
-/// One upload the OS says is finished, as the core's `settle` reads it (#1080 A6).
+/// One upload the OS says is finished, as the wake fact carries it. It only wakes a pass.
 struct SettledUpload: Equatable {
     let name: String
     /// The gateway's HTTP status, or 0 when no response arrived.
@@ -61,18 +60,21 @@ struct SettledUpload: Equatable {
     /// `TRANSPORT_<n>`, `HTTP_<status>`, or one of [UploadOrder.Refusal].
     let error: String?
     let gateway: String
-    /// The vault the part belongs to, hex — what routes the settle to that
-    /// vault's core (A6).
+    /// The vault the part belongs to, hex.
     let vault: String
 }
 
 /// What a task is FOR, kept on the task itself (`taskDescription`) so a
-/// relaunch that reconnects the session can still say which part, which
-/// gateway and which vault a finished upload was (A6).
+/// relaunch that reconnects the session can still say which gateway's pin
+/// answers its challenge, and de-duplicate against it.
 struct UploadTag: Codable, Equatable {
     let name: String
     let gateway: String
     let vault: String
+
+    /// A task whose description is gone: it still counts as held and its finish still wakes a
+    /// pass, and its pin is found by the host the challenge names.
+    static let unknown = UploadTag(name: "", gateway: "", vault: "")
 
     /// The de-duplication key: one part, to one gateway, at a time.
     var key: String { "\(gateway)/\(vault)/\(name)" }
@@ -86,37 +88,9 @@ struct UploadTag: Codable, Equatable {
         guard let text, let data = text.data(using: .utf8) else { return nil }
         return try? JSONDecoder().decode(UploadTag.self, from: data)
     }
-
-    /// THE FALLBACK WHEN THE TAG IS GONE: the request's own path,
-    /// `/v1/v/{vault}/o/{name}` (#1080 protocol table, A6). Both segments must
-    /// be 64 lowercase hex — a vault id is an Ed25519 public key and a name is
-    /// a keyed BLAKE3 — so a path this file did not build names nothing.
-    static func parse(url: URL?) -> (vault: String, name: String)? {
-        guard let url else { return nil }
-        let segments = url.pathComponents
-        guard segments.count == 6,
-              segments[0] == "/", segments[1] == "v1", segments[2] == "v", segments[4] == "o",
-              isHex64(segments[3]), isHex64(segments[5])
-        else { return nil }
-        return (segments[3], segments[5])
-    }
-
-    static func isHex64(_ text: String) -> Bool {
-        text.utf8.count == 64 && text.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
-    }
-
-    /// A finished task's tag: its own description first, else its URL, with
-    /// the gateway recovered from the pinned addresses.
-    static func recover(_ task: URLSessionTask, pins: UploadPins) -> UploadTag? {
-        if let tag = decode(task.taskDescription) { return tag }
-        let url = task.originalRequest?.url ?? task.currentRequest?.url
-        guard let (vault, name) = parse(url: url) else { return nil }
-        let gateway = url?.host(percentEncoded: false).flatMap { pins.gateway(serving: $0) } ?? ""
-        return UploadTag(name: name, gateway: gateway, vault: vault)
-    }
 }
 
-/// One part the core handed off, in this file's own terms — so the delegate
+/// One bundle file the core named in `os_bundles`, in this file's own terms — so the delegate
 /// and its tests never need the wire types.
 struct UploadOrder: Equatable {
     let name: String
@@ -127,7 +101,7 @@ struct UploadOrder: Equatable {
     let size: UInt64
     let gateway: String
     let vault: String
-    /// RULE 3: whether this part may cross cellular, as the core decided it.
+    /// RULE 3: whether this bundle may cross cellular, as the core decided it.
     /// False unless the core said so — a part from a core that never set the
     /// flag stays on Wi-Fi.
     var allowsCellular = false
@@ -143,8 +117,8 @@ struct UploadOrder: Equatable {
     enum Refusal: String, Swift.Error {
         /// Not `https`, or not a URL at all: an upload outside TLS would skip the pin.
         case notHTTPS = "HANDOFF_NOT_HTTPS"
-        /// The spool file the core named is not on disk.
-        case noFile = "SPOOL_FILE_MISSING"
+        /// The staging file the core named is not on disk.
+        case noFile = "STAGING_FILE_MISSING"
     }
 
     /// The request the core presigned: its method, URL and headers, verbatim.
@@ -323,7 +297,7 @@ final class BackgroundUploader: NSObject, @unchecked Sendable {
 
     /// A day. A task to a laptop that is off waits rather than failing at
     /// once; past this it fails, the core requeues the part and the next
-    /// handoff carries it again.
+    /// next pass writes its file again.
     static let resourceTimeoutSeconds: TimeInterval = 24 * 60 * 60
 
     /// How much of a refusal body is kept: a code fits in far less.
@@ -378,15 +352,13 @@ final class BackgroundUploader: NSObject, @unchecked Sendable {
         session.getAllTasks { [weak self] tasks in
             guard let self else { return }
             for task in tasks where task.state == .running || task.state == .suspended {
-                guard let tag = UploadTag.recover(task, pins: self.pins) else { continue }
-                self.track(task.taskIdentifier, tag)
+                self.track(task.taskIdentifier, UploadTag.decode(task.taskDescription) ?? .unknown)
             }
         }
     }
 
     /// Hand each order to the OS as a file upload. An order already in flight
-    /// is skipped: the core hands a part off again only after it was settled
-    /// or requeued, and a duplicate here would race its own twin.
+    /// is skipped: a duplicate would race its own twin.
     func enqueue(_ orders: [UploadOrder]) {
         let uploads = self.session
         for order in orders {
@@ -418,8 +390,8 @@ final class BackgroundUploader: NSObject, @unchecked Sendable {
         return inFlight.count
     }
 
-    /// Cancel every task. Each one still finishes — as `CANCELLED` — and is
-    /// settled, so the core requeues it rather than believing it moved.
+    /// Cancel every task. Each one still finishes, as `CANCELLED`, and wakes a
+    /// pass; the pass diffs the head and writes what is owed again.
     func cancelEverything() {
         session.getAllTasks { tasks in tasks.forEach { $0.cancel() } }
     }
@@ -449,7 +421,7 @@ final class BackgroundUploader: NSObject, @unchecked Sendable {
         lock.lock()
         let known = inFlight[task.taskIdentifier]
         lock.unlock()
-        return known ?? UploadTag.recover(task, pins: pins)
+        return known ?? UploadTag.decode(task.taskDescription)
     }
 
     /// Forget a finished task, answering what it left behind.
@@ -492,7 +464,7 @@ extension BackgroundUploader: URLSessionDataDelegate {
         }
     }
 
-    /// A refusal's body, so its code can travel with the settle.
+    /// A refusal's body, so its code can travel with the wake.
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         lock.lock()
         defer { lock.unlock() }
@@ -502,13 +474,10 @@ extension BackgroundUploader: URLSessionDataDelegate {
         replies[dataTask.taskIdentifier] = reply
     }
 
-    /// ONE TASK FINISHED: report it, in order, to the core's `settle`.
+    /// ONE TASK FINISHED, FAILED OR LOST: wake a pass, in order. Nothing is marked stored.
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Swift.Error)?) {
         let left = finish(task.taskIdentifier)
-        guard let tag = left.tag ?? UploadTag.recover(task, pins: pins) else {
-            NSLog("centraid: an upload finished that names no part")
-            return
-        }
+        let tag = left.tag ?? UploadTag.decode(task.taskDescription) ?? .unknown
         let status = (task.response as? HTTPURLResponse)?.statusCode ?? 0
         let settled = SettledUpload(
             name: tag.name,
@@ -522,19 +491,23 @@ extension BackgroundUploader: URLSessionDataDelegate {
         MainActor.assumeIsolated { UploadSettlement.shared.report(settled) }
     }
 
-    /// Every event of a relaunch has been delivered: settle, chain the next
-    /// batch, then hand iOS back its completion handler.
+    /// Every event of a relaunch has been delivered: wake a pass, which writes
+    /// the next bundle files, then hand iOS back its completion handler.
     func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
         MainActor.assumeIsolated { UploadSettlement.shared.eventsFinished() }
     }
 }
 
-/// THE HAND-OFF, AS RUST ASKS FOR IT (`UploadsOp`): the whole requests the core prepared, in this
-/// file's own terms. Rust decides what to hand off and when (reconcile, then the batch, never more
-/// than the cap); this only gives the OS what it was handed.
+/// THE HAND-OFF, AS RUST ASKS FOR IT (`UploadsOp.enqueue`): the bundle requests `os_bundles` named,
+/// in this file's own terms. Rust decides whether to send them (only when [pendingCount] is 0);
+/// this only gives the OS what it was handed.
 extension BackgroundUploader {
     func enqueue(parts: [Centraid_Core_V1_HandoffPart]) {
-        enqueue(parts.map { part in
+        enqueue(Self.orders(from: parts))
+    }
+
+    static func orders(from parts: [Centraid_Core_V1_HandoffPart]) -> [UploadOrder] {
+        parts.map { part in
             UploadOrder(
                 name: part.name,
                 path: part.path,
@@ -546,11 +519,11 @@ extension BackgroundUploader {
                 vault: part.vaultID,
                 allowsCellular: part.allowsCellular
             )
-        })
+        }
     }
 }
 
-/// Where finished uploads go: the pass scheduler, or a hold until it is attached.
+/// Where wakes go: the pass scheduler, or a hold until it is attached.
 protocol UploadSink: AnyObject {
     @MainActor func settled(_ upload: SettledUpload) async
     @MainActor func drained() async
@@ -561,7 +534,7 @@ protocol UploadSink: AnyObject {
 /// Every report is chained behind the one before it, because a report to
 /// Rust is awaited and two awaited calls started together would land in
 /// either order. iOS's completion handler for a relaunch is held here and
-/// called once the core has settled and chained the next batch — or after
+/// called once the core has been woken and the pass has run — or after
 /// [finishWithinSeconds], whichever is first, because iOS suspends an app
 /// that keeps it longer and stops relaunching one that never answers.
 @MainActor
@@ -576,7 +549,7 @@ final class UploadSettlement {
     private var finish: (() -> Void)?
     private var tail: Task<Void, Never>?
 
-    /// The core's sink is ready: deliver what waited, in order.
+    /// The core's sink is ready: deliver the wakes that waited, in order.
     func attach(_ sink: UploadSink) {
         self.sink = sink
         let waiting = held
@@ -609,8 +582,8 @@ final class UploadSettlement {
     }
 
     private func drain(_ sink: UploadSink) {
-        // HELD AGAINST SUSPENSION while the core settles and hands off the
-        // next batch: a relaunched app is otherwise suspended as soon as the
+        // HELD AGAINST SUSPENSION while the core runs the pass the wake asked
+        // for: a relaunched app is otherwise suspended as soon as the
         // handler returns, mid-call.
         let grace = ForegroundGrace(name: "dev.centraid.uploads.settle")
         chain { [weak self] in
@@ -636,7 +609,7 @@ final class UploadSettlement {
 }
 
 /// The pass scheduler's sink: what the OS reports goes to Rust as facts (`UploadSettled`,
-/// `UploadsDrained`), in order. `@MainActor` because the store is.
+/// `UploadsDrained`), in order. Each only wakes a pass. `@MainActor` because the store is.
 @MainActor
 final class ScreenUploadSink: UploadSink {
     private let store: ScreenStore

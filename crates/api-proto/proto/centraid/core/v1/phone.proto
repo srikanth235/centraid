@@ -611,6 +611,8 @@ message BackupStatusResponse {
   // A GATEWAY ANSWERED `VAULT_MOVED`: another phone holds this vault's writer
   // epoch, and this one is read-only for it (#1029 F1). Nothing is wiped.
   bool frozen = 11;
+  // DEPRECATED (#1209): the Backup screen draws per class (`classes`), so this is never filled.
+  // The field stays: proto changes are additive only.
   // WHAT EACH APP'S BACKUP HOLDS (#1144), one row per app in the product's
   // order. Empty on a core holding no vault, or no keys to name its files by.
   repeated AppHolding apps = 12;
@@ -787,6 +789,7 @@ message Destination {
   // When this phone paired with it, on this phone's clock (#1188, NB2): the age a device that
   // never confirmed anything is counted from.
   int64 paired_at_ms = 15;
+  // DEPRECATED (#1209): what a device owes is `classes`, and the screens read no per-app rows.
   // WHAT IT STILL OWES, BY APP (#1188, NB1): the originals this gateway has not acknowledged whole,
   // per app, for the Backup screen's "waiting for <device>" rows. Set only by `backup_status`.
   repeated DeviceWaiting waiting_apps = 16;

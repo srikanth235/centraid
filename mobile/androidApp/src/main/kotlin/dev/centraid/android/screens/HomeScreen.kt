@@ -3,7 +3,6 @@ package dev.centraid.android.screens
 import dev.centraid.android.kit.LocalShellLine
 import dev.centraid.android.kit.ReadStateView
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,22 +54,16 @@ import centraid.core.v1.HomeTileBody
 import centraid.core.v1.HomeTileStatus
 import centraid.core.v1.HomeTone
 import centraid.core.v1.HomeVault
-import centraid.core.v1.HomeVaultAsk
-import centraid.core.v1.HomeVaultSheet
 import centraid.core.v1.HomeVaultState
 import centraid.core.v1.Route
 import centraid.core.v1.ShellBand
 import centraid.core.v1.ShellBandTab
 import centraid.core.v1.Confirm
 import dev.centraid.android.kit.AppMark
-import dev.centraid.android.kit.CentraidIcon
-import dev.centraid.android.kit.ConfirmSheet
 import dev.centraid.android.kit.ContentImage
 import dev.centraid.android.kit.HomeBand
 import dev.centraid.android.kit.Surface
 import dev.centraid.android.kit.IconKey
-import dev.centraid.android.kit.SheetPrimary
-import dev.centraid.android.kit.SheetRoom
 import dev.centraid.android.kit.VaultHeader
 import dev.centraid.android.kit.rememberLargestText
 import dev.centraid.android.theme.LocalCentraidTokens
@@ -151,7 +144,6 @@ public fun HomeScreen(
         if (bar != null) {
             VaultHeader(
                 bar = bar,
-                onSwitchVault = { onEvent(HomeEvent(vault = HomeEvent.VaultPressed())) },
                 onDownloadSettings = { onEvent(HomeEvent(transfer_rules_pressed = HomeEvent.TransferRulesPressed())) },
                 // THE LOCKUP'S SECOND LINE IS THE BACKUP'S STATUS (R-ONBOARD-11),
                 // and its door. Nothing between it and the grid: no backup
@@ -202,11 +194,6 @@ public fun HomeScreen(
         LocalShellLine.current?.invoke()
         Band(band, onSelectTab)
     }
-    // THE SWITCHER IS A SHEET and never a destination. It is a sibling of the
-    // column above rather than a child of it, because a sheet inside a
-    // scrolling page would scroll.
-    val sheet = state.sheet
-    if (sheet != null) VaultSheet(sheet, onEvent)
     state.transfer_sheet?.let { rules ->
         TransferRulesSheet(
             sheet = rules,
@@ -222,238 +209,8 @@ internal fun Band(band: ShellBand?, onSelectTab: (String) -> Unit) {
     HomeBand(tabs = band?.tabs.orEmpty(), onSelect = onSelectTab)
 }
 
-/**
- * THE VAULT SWITCHER (#1020, wave A).
- *
- * It lists EVERY vault the device holds, the open one included and ticked. A
- * switcher that listed only the others would never show a member where they
- * already are, which is the fact most of them opened it to check.
- *
- * Dismissing sends `sheet_closed`, which shuts the sheet and changes no vault.
- * Every sentence, the roster's order and each row's second line (the header's own
- * wording, finished by Rust) arrive in [HomeVaultSheet].
- *
- * **EVERY ROW CAN BE FORGOTTEN.** Forgetting DELETES the vault: the file, its
- * byte store and its sidecars. That is why it is one tap behind a dialog that
- * NAMES the vault rather than a bare icon — a destructive act that a mis-hit
- * thumb can complete is a destructive act that will be completed by mis-hit
- * thumbs. The question is Rust's (`sheet.ask`); this draws it.
- */
-@Composable
-private fun VaultSheet(sheet: HomeVaultSheet, onEvent: (HomeEvent) -> Unit) {
-    SheetRoom(
-        title = sheet.title,
-        onDismiss = { onEvent(HomeEvent(sheet_closed = HomeEvent.SheetClosed())) },
-    ) {
-        Column(Modifier.fillMaxWidth().testTag("home-vault-sheet")) {
-            // ZERO VAULTS NEVER REACHES THIS SHEET: a device that holds none
-            // opens onto `FirstLaunchScreen` instead of Home (`MainActivity`),
-            // which is where "make" and "restore" live now.
-            if (sheet.one_line.isNotEmpty()) {
-                Text(
-                    text = sheet.one_line,
-                    style = centraidType("small"),
-                    color = centraidColor("textSoft"),
-                    modifier = Modifier.padding(horizontal = PAGE_MARGIN),
-                )
-            }
-            for (vault in sheet.vaults) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable { onEvent(HomeEvent(vault_picked = HomeEvent.VaultPicked(vault_id = vault.vault_id))) }
-                        .heightIn(min = 48.dp)
-                        .padding(horizontal = PAGE_MARGIN)
-                        .testTag("vault-row-${vault.vault_id}"),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    // THE AVATAR GROWS WITH ITS LETTER (#1202): a fixed 30dp square cut the letter to its top half.
-                    Box(
-                        Modifier
-                            .size((30 * LocalDensity.current.fontScale.coerceIn(1f, 2f)).dp)
-                            .clip(controlShape())
-                            .background(centraidColor("bgSunken")),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(text = vault.initial, style = centraidType("smallStrong"), color = centraidColor("text"))
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            text = vault.name,
-                            style = centraidType("smallStrong"),
-                            color = centraidColor("text"),
-                            // THE NAME WRAPS and is never cut at the largest text (#1202).
-                            maxLines = if (rememberLargestText()) Int.MAX_VALUE else 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        // The same sentence the lockup draws: Rust words one
-                        // state once. An empty line draws nothing, so the row is
-                        // a name alone rather than a name over a blank caption.
-                        if (vault.state_line.isNotEmpty()) {
-                            Text(
-                                text = vault.state_line,
-                                style = centraidType("mono"),
-                                color = centraidColor("textFaint"),
-                                maxLines = if (rememberLargestText()) Int.MAX_VALUE else 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                    // THE TICK IS THE WHOLE POINT of listing the open one.
-                    if (vault.vault_id == sheet.active_vault_id) {
-                        CentraidIcon(
-                            iconKey = "Check",
-                            tint = centraidColor("link"),
-                            size = 18.dp,
-                            modifier = Modifier.semantics { contentDescription = sheet.current_label },
-                        )
-                    }
-                    // RENAME, beside Forget and with its own target for the
-                    // same reason. A vault that moved is read-only: no rename.
-                    if (vault.state != HomeVaultState.HOME_VAULT_STATE_FROZEN) {
-                        IconKey(
-                            iconKey = "Pencil",
-                            label = sheet.rename_label,
-                            testTag = "vault-rename-${vault.vault_id}",
-                            bordered = false,
-                        ) { onEvent(HomeEvent(rename_asked = HomeEvent.RenameAsked(vault_id = vault.vault_id))) }
-                    }
-                    // OUTSIDE the row's own `clickable`, with its own 44dp
-                    // target: a forget that shared the row's tap area would be
-                    // a switch and a deletion behind one gesture.
-                    IconKey(
-                        iconKey = "Trash",
-                        label = vault.accessibility_label.let { "${sheet.forget_label} $it" },
-                        testTag = "vault-forget-${vault.vault_id}",
-                        bordered = false,
-                    ) { onEvent(HomeEvent(forget_asked = HomeEvent.ForgetAsked(vault_id = vault.vault_id))) }
-                }
-            }
-            // MAKING AND RESTORING A VAULT LIVE HERE (R-ONBOARD-11): this is
-            // the sheet about the vaults this phone holds, and Home has no
-            // settings gear to hide them behind.
-            Box(
-                Modifier
-                    .padding(horizontal = PAGE_MARGIN, vertical = 8.dp)
-                    .fillMaxWidth()
-                    .height(CentraidGeometry.HAIRLINE.dp)
-                    .background(centraidColor("line")),
-            )
-            SwitcherAction(sheet.make_label, "Plus", "vault-found-button", spoken = sheet.make_spoken) {
-                onEvent(HomeEvent(make = HomeEvent.MakePressed()))
-            }
-            SwitcherAction(sheet.restore_label, "Refresh", "vault-restore-button") {
-                onEvent(HomeEvent(restore = HomeEvent.RestorePressed()))
-            }
-            if (sheet.status_line.isNotEmpty()) {
-                Text(
-                    sheet.status_line,
-                    style = centraidType("small"),
-                    color = centraidColor("textSoft"),
-                    modifier = Modifier.padding(horizontal = PAGE_MARGIN, vertical = 8.dp).testTag("vault-status"),
-                )
-            }
-        }
-    }
-    val ask = sheet.ask
-    val rename = ask?.rename
-    if (rename != null) RenameSheet(rename, onEvent)
-    val forget = ask?.forget
-    if (forget != null) {
-        // IT NAMES THE VAULT. A confirmation that says "this vault" in a
-        // sheet listing several is a confirmation that confirms nothing.
-        ConfirmSheet(
-            confirm = Confirm(
-                title = forget.title,
-                body = forget.body,
-                confirm_label = forget.confirm_label,
-                destructive = true,
-            ),
-            // Rust shuts the sheet and asks the shelf; nothing here sequences it.
-            onConfirm = { onEvent(HomeEvent(ask_confirmed = HomeEvent.AskConfirmed())) },
-            onDismiss = { onEvent(HomeEvent(ask_dismissed = HomeEvent.AskDismissed())) },
-            cancelLabel = forget.cancel_label,
-            confirmTag = "vault-forget-confirm",
-        )
-    }
-}
-
-/** The rename step: the field starts on the vault's own name, so a small fix is a small edit. */
-@Composable
-private fun RenameSheet(rename: HomeVaultAsk.Rename, onEvent: (HomeEvent) -> Unit) {
-    // THE TEXT IS HELD HERE WHILE THE IME HAS IT and reported on every change:
-    // a field that took its value from the round trip would jump its cursor.
-    var typed by remember(rename.vault_id) { mutableStateOf(rename.name) }
-    SheetRoom(
-        title = rename.title,
-        onDismiss = { onEvent(HomeEvent(ask_dismissed = HomeEvent.AskDismissed())) },
-        // A BLANK NAME IS NOT A RENAME: the one act is drawn, but cannot be
-        // pressed until there is a name to save (Rust says so in `can_save`).
-        primary = SheetPrimary(
-            label = rename.save_label,
-            testTag = "vault-rename-save",
-            enabled = rename.can_save,
-        ) { onEvent(HomeEvent(ask_confirmed = HomeEvent.AskConfirmed())) },
-    ) {
-        androidx.compose.material3.OutlinedTextField(
-            value = typed,
-            onValueChange = {
-                typed = it
-                onEvent(HomeEvent(rename_typed = HomeEvent.RenameTyped(name = it)))
-            },
-            label = { Text(rename.field_label) },
-            singleLine = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .imePadding()
-                .padding(horizontal = PAGE_MARGIN)
-                .testTag("vault-rename-field"),
-        )
-        if (rename.failure.isNotEmpty()) {
-            Text(
-                rename.failure,
-                style = centraidType("small"),
-                color = centraidColor("textSoft"),
-                modifier = Modifier.padding(horizontal = PAGE_MARGIN, vertical = 8.dp),
-            )
-        }
-    }
-}
-
-/** The control rung from the token scale (`radii.md`), never a typed number. */
 @Composable
 private fun controlShape() = RoundedCornerShape((LocalCentraidTokens.current.radii["md"] ?: 0).dp)
-
-/**
- * One of the switcher's two acts: a mark and a label, a full-width row. [spoken]
- * is what TalkBack reads in place of [label] when Rust carries a longer one
- * (`HomeVaultSheet.make_spoken`); empty, the label is read.
- */
-@Composable
-private fun SwitcherAction(label: String, iconKey: String, testTag: String, spoken: String = "", onPress: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onPress)
-            .semantics { if (spoken.isNotEmpty()) contentDescription = spoken }
-            .heightIn(min = 48.dp)
-            .padding(horizontal = PAGE_MARGIN)
-            .testTag(testTag),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Box(
-            Modifier
-                .size(30.dp)
-                .border(CentraidGeometry.HAIRLINE.dp, centraidColor("lineStrong"), controlShape()),
-            contentAlignment = Alignment.Center,
-        ) {
-            CentraidIcon(iconKey = iconKey, tint = centraidColor("text"), size = 18.dp)
-        }
-        Text(label, style = centraidType("smallStrong"), color = centraidColor("text"))
-    }
-}
 
 /**
  * The vault at a glance, and how it stands on this device.

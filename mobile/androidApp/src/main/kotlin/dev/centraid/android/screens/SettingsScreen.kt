@@ -71,7 +71,7 @@ internal fun SettingsScreen(
     onOpen: (Route) -> Unit,
     onBack: () -> Unit,
 ) {
-    // THE PAGE HANDED ITS JOB TO HOME (the vault switcher is Home's sheet): it steps aside.
+    // A PAGE THAT HANDS ITS JOB ELSEWHERE (`finished`) steps aside.
     LaunchedEffect(state.finished) { if (state.finished) onBack() }
     PushedPage(
         title = state.title,

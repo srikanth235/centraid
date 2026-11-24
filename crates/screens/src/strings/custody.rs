@@ -80,7 +80,7 @@ catalog! {
     plain restoring_body = ("Your vault opens when your records are back. Photos follow.", "Your vault opens when your records are back. Photos follow.");
     plain restore_step_records = ("Records", "Records");
     plain restore_step_previews = ("Photo previews", "Photo previews");
-    plain restore_step_previews_detail = ("Small versions, so you can browse.", "Small versions, so you can browse.");
+    plain restore_step_previews_detail = ("Small versions, for browsing.", "Small versions, for browsing.");
     plain restore_step_originals = ("Photos and files", "Photos and files");
     plain restore_step_originals_detail = ("Newest first, in the background.", "Newest first, in the background.");
     plain restore_step_now = ("Restoring", "Restoring");

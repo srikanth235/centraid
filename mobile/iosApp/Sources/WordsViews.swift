@@ -279,6 +279,28 @@ struct WordsEntryView: View {
                     KitSpinner(label: state.progress)
                         .accessibilityIdentifier("words-progress")
                 }
+                // R3 (#1209): the order the vault comes back in. The vault opens when the records
+                // are back; previews, then originals, follow. Counts are said on Home afterwards.
+                if !state.restoreRows.isEmpty {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(state.restoreRows.enumerated()), id: \.offset) { _, row in
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(row.name).kitType(.row).foregroundStyle(Surface.ink)
+                                    if !row.detail.isEmpty {
+                                        Text(row.detail).kitType(.meta).foregroundStyle(Surface.meta)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                Text(row.state).kitType(.meta).foregroundStyle(Surface.meta)
+                            }
+                            .padding(.vertical, 8)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityIdentifier("words-restore-\(row.name)")
+                        }
+                    }
+                    .accessibilityIdentifier("words-restore-rows")
+                }
             } footer: {
                 // LEAVE THE HELD SEED for the grid: a link, then the scan, then the verb.
                 if !state.wordsLabel.isEmpty {
