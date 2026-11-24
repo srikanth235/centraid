@@ -132,6 +132,9 @@ pub(crate) struct GatewayNotes {
     /// When retention last collected there, on the phone's clock; 0 until the gateway was first
     /// seen by a pass.
     pub collected_ms: u64,
+    /// Why the last pass stopped at this gateway when it refused (its disk is full, an object
+    /// too large, another code): the reason the status names, until a pass is not refused there.
+    pub refusal: Option<wire::WaitReason>,
 }
 
 /// THE PLANE'S FILES FOR ONE VAULT, beside the vault file, stated once.
@@ -520,7 +523,7 @@ pub fn wire_destination(gateway: &Gateway) -> wire::Destination {
         records_behind: false,
         head_snapshot_ms: None,
         reach: wire::WaitReason::Unspecified as i32,
-        rolled_back: false,
+        rolled_back: gateway.regressed,
         paired_at_ms: i64::try_from(gateway.paired_ms).unwrap_or(0),
         waiting_apps: Vec::new(),
         refused_limit_bytes: 0,

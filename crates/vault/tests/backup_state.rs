@@ -132,6 +132,7 @@ fn every_constraint_the_code_states_is_in_the_database_too() {
     assert!(refused(c, "UPDATE gateway SET generation = -1", []));
     assert!(refused(c, "UPDATE gateway SET directory_dirty = 2", []));
     assert!(refused(c, "UPDATE gateway SET scrub_cursor = 'x'", []));
+    assert!(refused(c, "UPDATE gateway SET regressed = 2", []));
     // node
     assert!(refused(
         c,
@@ -250,6 +251,40 @@ fn what_a_gateway_confirmed_survives_a_reopen_and_a_new_epoch_is_a_new_ask() {
     state.withdraw(GATEWAY).expect("withdraws");
     let withdrawn = state.gateway(GATEWAY).expect("reads").expect("there");
     assert!(withdrawn.conf.is_none() && withdrawn.troot.is_none() && withdrawn.oroot.is_none());
+}
+
+#[test]
+fn a_regressed_head_is_kept_until_a_new_head_is_confirmed_there() {
+    let (_dir, state) = open();
+    state.add_gateway(&paired(GATEWAY, 1)).expect("pairs");
+    let flag = |state: &DeviceState| {
+        let raw: i64 = state
+            .connection()
+            .query_row(
+                "SELECT regressed FROM gateway WHERE gateway_id = ?1",
+                [GATEWAY],
+                |row| row.get(0),
+            )
+            .expect("the column");
+        let read = state.gateway(GATEWAY).expect("reads").expect("there");
+        assert_eq!(read.regressed, raw == 1, "the row and the column agree");
+        read.regressed
+    };
+    assert!(!flag(&state), "a pairing has gone backwards from nothing");
+    state.confirm_records(GATEWAY, &name(1), 10).expect("conf");
+    state.set_regressed(GATEWAY, true).expect("flags");
+    assert!(flag(&state));
+    // A recovery drops what was confirmed; the claim that it went backwards stays.
+    state.withdraw(GATEWAY).expect("withdraws");
+    assert!(flag(&state), "withdrawing is not a new head");
+    // The same writer pairing again keeps it; a new writer epoch is a new ask.
+    state.add_gateway(&paired(GATEWAY, 1)).expect("repairs");
+    assert!(flag(&state));
+    state.confirm_records(GATEWAY, &name(2), 20).expect("conf");
+    assert!(!flag(&state), "a new confirmed head clears it");
+    state.set_regressed(GATEWAY, true).expect("flags");
+    state.add_gateway(&paired(GATEWAY, 2)).expect("a new epoch");
+    assert!(!flag(&state), "a new epoch forgets it");
 }
 
 #[test]

@@ -472,6 +472,16 @@ pub(crate) fn run_cancellable(
                 if let Some(stop) = pass.stop_reason() {
                     stops.push(stop.clone());
                 }
+                // A REFUSAL IS NAMED BY ITS REASON, at the gateway that gave it and no other.
+                let refusal = match pass.stop_reason() {
+                    Some(Stop::Full) => Some(wire::WaitReason::Refused),
+                    Some(Stop::Refused(code)) if code == "TOO_LARGE" => {
+                        Some(wire::WaitReason::TooLarge)
+                    }
+                    Some(Stop::Refused(_)) => Some(wire::WaitReason::RefusedOther),
+                    _ => None,
+                };
+                plane.note(pass.gateway_id(), |notes| notes.refusal = refusal);
             }
             drop(passes);
         }

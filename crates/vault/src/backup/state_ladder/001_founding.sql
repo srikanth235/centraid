@@ -26,6 +26,9 @@ CREATE TABLE gateway (
   sample_counter  INTEGER NOT NULL DEFAULT 0 CHECK (sample_counter >= 0),
   scrub_cursor    TEXT CHECK (scrub_cursor IS NULL OR (length(scrub_cursor) = 64 AND scrub_cursor NOT GLOB '*[^0-9a-f]*')),
   directory_dirty INTEGER NOT NULL DEFAULT 1 CHECK (directory_dirty IN (0, 1)),
+  -- The last head that did not match `conf` went backwards (a lower writer position, or no head, or
+  -- not a successor of `conf`): the gateway reads as rolled back until a new head is confirmed there.
+  regressed       INTEGER NOT NULL DEFAULT 0 CHECK (regressed IN (0, 1)),
   CHECK ((conf IS NULL) = (conf_ms IS NULL)),
   CHECK ((troot IS NULL) = (troot_ms IS NULL)),
   CHECK ((oroot IS NULL) = (oroot_ms IS NULL))

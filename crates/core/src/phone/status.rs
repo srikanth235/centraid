@@ -126,6 +126,8 @@ struct Replica {
     behind_files: u64,
     behind_bytes: u64,
     held_bytes: u64,
+    /// The reason the gateway gave when it refused the last pass, while it has not been fed since.
+    refusal: Option<wire::WaitReason>,
 }
 
 impl Replica {
@@ -239,6 +241,10 @@ pub fn backup_status(
             behind_files: 0,
             behind_bytes: 0,
             held_bytes: 0,
+            refusal: plane
+                .notes(&gateway.gateway_id)
+                .refusal
+                .filter(|_| gateway.reach == Reach::Unreachable),
         });
     }
     // A GATEWAY A NEWER WRITER SUPERSEDED IS NOT FED, and so is not one a file waits for.
@@ -348,9 +354,9 @@ pub fn backup_status(
             (Some(held), Some(newest)) => held < newest,
             (Some(_), None) => false,
         };
-        // A gateway whose head went backwards is found and mended by the engine's recovery pass
-        // (§6.2 step 1); the status draws the repair as `Repairing` only while it runs.
-        row.rolled_back = false;
+        // A gateway whose head went backwards is found by the engine's recovery pass (§6.2 step
+        // 1), which keeps that on the gateway's row until a new head is confirmed there.
+        row.rolled_back = gateway.regressed;
         let notes = plane.notes(&gateway.gateway_id);
         row.held_count = notes.held_count;
         row.held_purge_at_ms = notes.held_purge_at_ms;
@@ -358,8 +364,15 @@ pub fn backup_status(
         row.sample_checked = notes.sample_checked;
         row.sample_of = notes.sample_of;
         row.manifest_unreadable = notes.manifest_unreadable;
-        row.reach_state = reach_state_of(gateway.reach, row.rolled_back) as i32;
-        row.reach = wait_reason_of(gateway.reach).unwrap_or(wire::WaitReason::Unspecified) as i32;
+        row.reach_state = if replica.refusal.is_some() {
+            wire::DestinationReach::Refused
+        } else {
+            reach_state_of(gateway.reach, row.rolled_back)
+        } as i32;
+        row.reach = replica
+            .refusal
+            .or_else(|| wait_reason_of(gateway.reach))
+            .unwrap_or(wire::WaitReason::Unspecified) as i32;
         row.classes = replica.classes();
         wired.push(row);
     }
@@ -423,7 +436,10 @@ fn waiting_reason(
     file: &ContentFile,
     newest: Option<&Ref>,
 ) -> Result<wire::WaitReason> {
-    if let Some(reason) = wait_reason_of(replica.gateway.reach) {
+    if let Some(reason) = replica
+        .refusal
+        .or_else(|| wait_reason_of(replica.gateway.reach))
+    {
         return Ok(reason);
     }
     if plane.no_room() {

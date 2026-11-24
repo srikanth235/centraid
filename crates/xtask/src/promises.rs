@@ -3220,6 +3220,14 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 9] = [
                 "a_machine_that_is_not_the_pinned_gateway_is_untrusted_and_a_damaged_copy_is_damaged",
             ),
             (
+                "crates/core/tests/backup_status.rs",
+                "a_refusal_is_read_as_the_reason_the_gateway_gave",
+            ),
+            (
+                "crates/core/tests/backup_status.rs",
+                "a_full_gateway_is_named_while_the_other_is_fed",
+            ),
+            (
                 "crates/screens/src/backup/tests.rs",
                 "a_refusal_is_worded_for_its_own_remedy",
             ),
