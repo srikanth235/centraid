@@ -307,48 +307,6 @@ message HomeBackupLine {
   string action = 5;
 }
 
-// A vault the member is asked to delete or rename: the sheet's second step.
-message HomeVaultAsk {
-  oneof kind {
-    Forget forget = 1;
-    Rename rename = 2;
-  }
-  message Forget {
-    string vault_id = 1;
-    string title = 2;
-    string body = 3;
-    string confirm_label = 4;
-    string cancel_label = 5;
-  }
-  message Rename {
-    string vault_id = 1;
-    string title = 2;
-    string field_label = 3;
-    string name = 4;
-    string save_label = 5;
-    bool can_save = 6;
-    // Set after a rename the shelf refused.
-    string failure = 7;
-  }
-}
-
-message HomeVaultSheet {
-  string title = 1;
-  // "This phone has one vault." when it has one.
-  string one_line = 2;
-  repeated HomeVault vaults = 3;
-  string active_vault_id = 4;
-  string current_label = 5;
-  string make_label = 6;
-  string make_spoken = 7;
-  string restore_label = 8;
-  string forget_label = 9;
-  string rename_label = 10;
-  optional HomeVaultAsk ask = 11;
-  // The last outcome of a make or a restore, in the member's words.
-  string status_line = 12;
-}
-
 // THE LOCKUP AND THE KEYS BESIDE IT.
 message HomeBar {
   optional HomeVault vault = 1;
@@ -371,9 +329,12 @@ message HomeBar {
   // 7 was `backup_open_spoken`: nothing read it (#1152).
   reserved 7;
   reserved "backup_open_spoken";
-  // The finished spoken sentences (the lockup's switch press, the backup line's door):
-  // a shell speaks them as given and joins nothing.
-  string switch_label = 10;
+  // 10 was `switch_label`, the lockup's spoken switch press: a phone holds one vault (#1209, R1), so
+  // the lockup is not a press.
+  reserved 10;
+  reserved "switch_label";
+  // The finished spoken sentence of the backup line's door: a shell speaks it as given and joins
+  // nothing.
   string backup_open_label = 11;
 }
 
@@ -395,7 +356,9 @@ message HomeState {
   oneof content {
     HomeData data = 5;
   }
-  optional HomeVaultSheet sheet = 6;
+  // 6 was `sheet`, the vault switcher: a phone holds one vault (#1209, R1).
+  reserved 6;
+  reserved "sheet";
   HomeScheme scheme = 7;
   // "Loading".
   string loading_label = 8;
@@ -444,19 +407,11 @@ message HomeEvent {
   oneof kind {
     BackupPressed backup = 3;
     StatusPressed status = 4;
-    VaultPressed vault = 6;
-    VaultPicked vault_picked = 7;
-    SheetClosed sheet_closed = 8;
     // Home is on screen again (the shell sends it when a cover is popped): the
     // Locker's open state and any tile may have moved without a table changing.
     Shown shown = 16;
     MakePressed make = 9;
     RestorePressed restore = 10;
-    ForgetAsked forget_asked = 11;
-    RenameAsked rename_asked = 12;
-    RenameTyped rename_typed = 13;
-    AskConfirmed ask_confirmed = 14;
-    AskDismissed ask_dismissed = 15;
     // The gear beside "N originals waiting": open the transfer rules sheet.
     TransferRulesPressed transfer_rules_pressed = 17;
     // A choice in that sheet (`BackupRuleChoice.stored`): kept, the pass service told in the
@@ -483,30 +438,27 @@ message HomeEvent {
   // 5 was `appearance`, the key that flipped light and dark: Settings chooses it now.
   reserved 5;
   reserved "appearance";
+  // 6 to 8 and 11 to 15 were the vault switcher's events (the lockup's press, a pick, the sheet's
+  // close, forget and rename): a phone holds one vault (#1209, R1).
+  reserved 6, 7, 8, 11, 12, 13, 14, 15;
+  reserved "vault", "vault_picked", "sheet_closed", "forget_asked", "rename_asked", "rename_typed", "ask_confirmed", "ask_dismissed";
 
   message BackupPressed {}
   message StatusPressed {}
   // `stored` is what the Keychain holds: "", "light" or "dark".
   message AppearanceChosen { string stored = 1; }
-  message VaultPressed {}
-  message VaultPicked { string vault_id = 1; }
-  message SheetClosed {}
   message Shown {}
   message MakePressed {}
   message RestorePressed {}
-  message ForgetAsked { string vault_id = 1; }
-  message RenameAsked { string vault_id = 1; }
-  message RenameTyped { string name = 1; }
-  message AskConfirmed {}
-  message AskDismissed {}
   message TransferRulesPressed {}
   message TransferRuleChosen { string stored = 1; }
   message TransferRulesClosed {}
 
   message VaultsTold {
-    // The one in front, and the roster in the shelf's order.
+    // The one vault this phone holds. 2 was `vaults`, the roster (#1209, R1).
     optional ShellVault vault = 1;
-    repeated ShellVault vaults = 2;
+    reserved 2;
+    reserved "vaults";
     // Whether the device holds no vault at all.
     bool none = 3;
   }
@@ -524,10 +476,11 @@ message HomeEvent {
   }
   message BackupLineTold { optional HomeBackupLine line = 1; }
   message StatusTold { optional HomeStatus status = 1; }
-  // How a make, a restore, a rename or a forget came out, in the member's words.
+  // How a make or a restore came out, in the member's words. 2 was `rename_failed`.
   message OutcomeTold {
     string status_line = 1;
-    bool rename_failed = 2;
+    reserved 2;
+    reserved "rename_failed";
   }
 }
 
@@ -537,18 +490,14 @@ message HomeEvent {
 // ---------------------------------------------------------------------------
 message VaultCommand {
   oneof kind {
-    string switch_to = 1;
     bool make = 2;
     bool restore = 3;
-    string forget = 4;
-    Rename rename = 5;
     // Open the backup tab, the transfer rules or the notifications settings.
     HomeStatus.Destination open = 6;
   }
-  message Rename {
-    string vault_id = 1;
-    string name = 2;
-  }
+  // 1, 4 and 5 were switch, forget and rename: a phone holds one vault (#1209, R1).
+  reserved 1, 4, 5;
+  reserved "switch_to", "forget", "rename";
 }
 
 // ---------------------------------------------------------------------------

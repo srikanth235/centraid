@@ -1,11 +1,10 @@
-//! SETTINGS (#1173): the appearance the member chooses, where the vault, the backup and the
-//! recovery key stand, and the version.
+//! SETTINGS (#1173): the appearance the member chooses, where the backup and the recovery key
+//! stand, and the version. There is no Vault section: a phone holds one vault (#1209, R1).
 //!
 //! | Section | What it holds |
 //! |---|---|
 //! | Appearance | System, Light or Dark: one choice, kept in the Keychain under the key Home reads |
 //! | Units | Phone's setting, Metric or Imperial: one switch for every app, kept on the phone ([`quantity::set_op`]); Phone's setting (nothing stored) follows the region |
-//! | Vault | how many vaults this phone holds; a tap opens Home's vault switcher |
 //! | Backup | the one honest line ([`crate::backup::line`]) and the Backup page behind it; "Export everything", every app but Locker as one archive ([`super::export`]) |
 //! | Recovery key | where the key is ([`crate::backup::key`]) and the page that shows it |
 //! | About | the version |
@@ -27,7 +26,6 @@ use wire::screen_event::Kind as E;
 use wire::settings_event::Kind as S;
 
 use crate::backup::{self, key::KeyCustody, line, reading};
-use crate::catalog::load;
 use crate::custody::secrets::{self as secrets, VaultSecrets};
 use crate::kit::quantity::{self, UnitsPref};
 use crate::kit::read::Reading;
@@ -35,8 +33,6 @@ use crate::passes::{Rules, TransferRule, rule};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{home as home_words, settings as words};
 
-/// The id of the row that shows the vaults.
-const VAULTS_ROW: &str = "vaults";
 
 /// The id of the row that opens the download settings sheet.
 const DOWNLOAD_ROW: &str = "download-settings";
@@ -131,10 +127,6 @@ struct Settings {
     appearance: Option<Appearance>,
     standing: Option<reading::Standing>,
     synced: Option<wire::SyncedSecretsStatus>,
-    /// The name of the vault in front, whose first letter is the vault row's avatar.
-    vault_name: Option<String>,
-    /// The vault row was pressed: Home draws the switcher, so this page is done.
-    finished: bool,
     /// THE DOWNLOAD SETTINGS SHEET is open.
     transfer_open: bool,
     /// The writes to the device store that are out, oldest first: the answers come back in the
@@ -157,8 +149,6 @@ impl Settings {
             appearance: None,
             standing: None,
             synced: None,
-            vault_name: None,
-            finished: false,
             transfer_open: false,
             keeping: std::collections::VecDeque::new(),
             keeping_appearance: std::collections::VecDeque::new(),
@@ -171,16 +161,6 @@ impl Settings {
         // A refresh that fails keeps what was read; the Backup row then says what it knew.
         if let Reading::Data(standing) = reading::load(ctx) {
             self.standing = Some(standing);
-        }
-        if let Ok(loaded) = ctx.load(load::shell::Holdings {}.into())
-            && let Some(wire::app_query_response::Answer::Holdings(held)) =
-                loaded.answer.and_then(|answer| answer.answer)
-        {
-            self.vault_name = held
-                .vaults
-                .iter()
-                .find(|vault| vault.foreground)
-                .map(|vault| vault.name.clone());
         }
     }
 
@@ -338,7 +318,6 @@ impl Settings {
 
     fn data(&self, ctx: &Ctx, appearance: Appearance) -> wire::SettingsData {
         let locale = ctx.locale();
-        let held = ctx.vaults().map_or(1, |vaults| vaults.held().len().max(1)) as u64;
         let custody = KeyCustody::read(locale, &self.secrets, ctx.platform(), self.synced.as_ref());
         let row = |id: &str,
                    title: String,
@@ -390,52 +369,6 @@ impl Settings {
             units: Some(self.units(locale)),
             notifications: Some(self.notifications(locale)),
             sections: vec![
-                wire::SettingsSection {
-                    key: "vault".to_owned(),
-                    title: words::settings_vault(locale),
-                    rows: vec![
-                        {
-                            // THE VAULT ROW WEARS THE VAULT'S OWN ROUND INITIAL, as the lockup does,
-                            // and is called by the vault's name.
-                            let mut vaults = row(
-                                "vaults",
-                                self.vault_name
-                                    .as_deref()
-                                    .map(str::trim)
-                                    .filter(|name| !name.is_empty())
-                                    .map_or_else(
-                                        || words::settings_vaults_row(locale),
-                                        str::to_owned,
-                                    ),
-                                words::settings_vaults_held(locale, held),
-                                "Lock",
-                                None,
-                                "initial",
-                                String::new(),
-                            );
-                            // THE VAULT ROW OPENS HOME'S SWITCHER (the lockup's sheet): a tap is an
-                            // event, and the chevron says it is a row that goes somewhere.
-                            vaults.pressable = true;
-                            vaults.initial = self
-                                .vault_name
-                                .as_deref()
-                                .and_then(|name| name.trim().chars().next())
-                                .map(|first| first.to_uppercase().collect())
-                                .unwrap_or_else(|| "V".to_owned());
-                            vaults
-                        },
-                        // MAKE A VAULT is the pushed page Home's switcher and the welcome open.
-                        row(
-                            "make-vault",
-                            words::settings_make_vault(locale),
-                            String::new(),
-                            "Plus",
-                            Some(crate::custody::routes::make()),
-                            "add",
-                            String::new(),
-                        ),
-                    ],
-                },
                 wire::SettingsSection {
                     key: "backup".to_owned(),
                     title: words::settings_backup(locale),
@@ -562,25 +495,10 @@ impl Screen for Settings {
                 _ => {}
             },
             Some(E::Settings(settings)) => {
-                // THE VAULT ROW: Home's switcher is the one list of vaults, so Home is asked to
-                // open it, and this page, which sits over Home, steps aside.
                 if let Some(S::RowPressed(pressed)) = &settings.kind {
                     if pressed.id == DOWNLOAD_ROW {
                         self.transfer_open = true;
                         return Vec::new();
-                    }
-                    if pressed.id == VAULTS_ROW && !self.finished {
-                        self.finished = true;
-                        ctx.post(
-                            super::HOME,
-                            wire::ScreenEvent {
-                                kind: Some(E::Home(wire::HomeEvent {
-                                    kind: Some(wire::home_event::Kind::Vault(
-                                        wire::home_event::VaultPressed {},
-                                    )),
-                                })),
-                            },
-                        );
                     }
                     return Vec::new();
                 }
@@ -683,7 +601,7 @@ impl Screen for Settings {
                 back_label: home_words::band_home(locale),
                 content,
                 page: Some(page),
-                finished: self.finished,
+                finished: false,
                 transfer_sheet: self.transfer_sheet(locale),
                 status: self.refused.clone().map(|sentence| wire::StatusLine {
                     sentence,

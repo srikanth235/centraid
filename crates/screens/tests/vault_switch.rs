@@ -81,9 +81,6 @@ impl Screen for Switcher {
     fn update(&mut self, event: wire::ScreenEvent, ctx: &Ctx) -> Vec<wire::Effect> {
         match event.kind {
             Some(E::Appeared(_) | E::DataChanged(_)) => self.read(ctx),
-            Some(E::OffThreadDone(done)) if done.tag == "switch" => {
-                ctx.switch_vault(&String::from_utf8_lossy(&done.bytes));
-            }
             Some(E::Left(_)) => {
                 let mut seen = self.seen.lock().expect("seen");
                 seen.left += 1;
@@ -295,129 +292,6 @@ fn a_launch_moves_the_tabs_onto_the_vault_the_shelf_opened() {
 }
 
 #[test]
-fn a_switch_closes_and_reopens_the_tabs_and_every_read_follows_the_vault_in_front() {
-    let (mut phone, a, b, _seen, _dir) = two_vaults();
-    person_in_front(&phone, "Alice");
-    phone.driver.pump(Duration::from_millis(500));
-    assert!(people_names(&phone).contains(&"Alice".to_owned()));
-
-    let old_people = root_of(&phone, people::TAB);
-    let old_switcher = root_of(&phone, "switcher");
-    let update = ask_switch(&mut phone, &b);
-
-    // THE SHELL SEES AN ORDINARY UPDATE: both roots closed, both reopened.
-    assert!(update.closed.contains(&old_people) && update.closed.contains(&old_switcher));
-    let nav = update.navigation.expect("a new navigation");
-    assert_eq!(nav.tabs.len(), 2);
-    assert_ne!(root_of(&phone, people::TAB), old_people);
-    assert_eq!(phone.holdings().foreground, b);
-    assert_eq!(shown(&phone), "*Bravo,Alpha");
-    // A vault of its own: Alice is not in it.
-    assert!(!people_names(&phone).contains(&"Alice".to_owned()));
-    person_in_front(&phone, "Bob");
-    phone.driver.pump(Duration::from_millis(500));
-    assert!(people_names(&phone).contains(&"Bob".to_owned()));
-
-    // AND BACK: the first vault's rows are still its own.
-    ask_switch(&mut phone, &a);
-    assert_eq!(phone.holdings().foreground, a);
-    let back = people_names(&phone);
-    assert!(back.contains(&"Alice".to_owned()), "{back:?}");
-    assert!(!back.contains(&"Bob".to_owned()), "{back:?}");
-}
-
-#[test]
-fn switching_vaults_sends_owned_clipboard_clear_without_a_volatile_board_entry() {
-    let (mut phone, a, b, _seen, _dir) = two_vaults();
-    phone.driver.effects.clear();
-
-    let switched = ask_switch(&mut phone, &b);
-
-    let clear = switched
-        .effects
-        .iter()
-        .find(|request| {
-            matches!(
-                request.effect.as_ref().and_then(|effect| effect.kind.as_ref()),
-                Some(wire::effect::Kind::ClipboardClearOwned(clear)) if clear.vault_id == a
-            )
-        })
-        .expect("the previous vault lease is cleared even after a fresh Runtime starts");
-    let answered = phone
-        .driver
-        .try_call(wire::screen_request::Kind::Send(wire::InstanceEvent {
-            instance: 0,
-            event: Some(wire::ScreenEvent {
-                kind: Some(E::EffectResult(wire::EffectResult {
-                    effect_id: clear.effect_id,
-                    outcome: Some(wire::effect_result::Outcome::Done(wire::EffectDone {})),
-                })),
-            }),
-        }));
-    assert!(
-        answered.is_ok(),
-        "the runtime accepts its own tracked instance-zero clear result"
-    );
-}
-
-#[test]
-fn what_was_typed_is_written_to_the_vault_it_was_typed_in() {
-    let (mut phone, a, b, seen, _dir) = two_vaults();
-    seen.lock().expect("seen").typed = Some("Typed in Alpha".to_owned());
-    ask_switch(&mut phone, &b);
-    assert_eq!(
-        seen.lock().expect("seen").left,
-        1,
-        "the screens were told first"
-    );
-    assert!(
-        !people_names(&phone).contains(&"Typed in Alpha".to_owned()),
-        "the vault now in front did not get it"
-    );
-    ask_switch(&mut phone, &a);
-    assert!(people_names(&phone).contains(&"Typed in Alpha".to_owned()));
-}
-
-#[test]
-fn a_switch_to_a_vault_nothing_holds_leaves_the_phone_where_it_was() {
-    let (mut phone, a, _b, seen, _dir) = two_vaults();
-    let root = root_of(&phone, people::TAB);
-    let update = ask_switch(&mut phone, "nobody");
-    assert!(update.closed.is_empty());
-    assert!(update.navigation.is_none());
-    assert_eq!(root_of(&phone, people::TAB), root);
-    assert_eq!(phone.holdings().foreground, a);
-    assert_eq!(
-        seen.lock().expect("seen").left,
-        0,
-        "no screen was left for nothing"
-    );
-    // Switching to the vault already in front is the same: nothing to follow.
-    let again = ask_switch(&mut phone, &a);
-    assert!(again.closed.is_empty());
-}
-
-#[test]
-fn a_vault_made_while_another_is_in_front_moves_the_tabs_and_sends_no_last_event() {
-    let (mut phone, a, _b, seen, _dir) = two_vaults();
-    seen.lock().expect("seen").typed = Some("Never written".to_owned());
-    let old = root_of(&phone, people::TAB);
-    let found = phone.shelf.found(None, "Charlie");
-    assert!(matches!(found.value, vault::Found::Made(_)));
-    // The shelf announced itself; the shell's event thread follows.
-    assert!(phone.driver.pump(Duration::from_secs(2)) >= 1);
-    assert!(phone.driver.closed.contains(&old));
-    assert_ne!(root_of(&phone, people::TAB), old);
-    assert_eq!(shown(&phone), "*Charlie,Alpha,Bravo");
-    // THE VAULT THEY WOULD HAVE WRITTEN TO IS NOT THE ONE THEY WERE TYPED IN:
-    // the last event is not sent, and nothing was written anywhere.
-    assert_eq!(seen.lock().expect("seen").left, 0);
-    assert!(!people_names(&phone).contains(&"Never written".to_owned()));
-    ask_switch(&mut phone, &a);
-    assert!(!people_names(&phone).contains(&"Never written".to_owned()));
-}
-
-#[test]
 fn forgetting_the_vault_in_front_moves_the_tabs_to_the_next_and_the_last_to_none() {
     let (mut phone, a, b, _seen, _dir) = two_vaults();
     phone.shelf.forget(&a);
@@ -464,43 +338,6 @@ fn a_screen_that_read_the_holdings_hears_every_change_to_them() {
     assert!(phone.shelf.rename(&a, "Alpine"));
     phone.driver.pump(Duration::from_secs(1));
     assert_eq!(shown(&phone), "*Alpine,Bravo~!");
-}
-
-#[test]
-fn a_job_started_on_one_vault_finishes_on_it_after_a_switch_and_a_service_outlives_the_switch() {
-    let (mut phone, a, b, seen, _dir) = two_vaults();
-    // The probe service starts a slow job bound to the vault in front (A) ...
-    phone
-        .driver
-        .call(wire::screen_request::Kind::Environment(wire::Environment {
-            locale: "en".to_owned(),
-            zone: "UTC".to_owned(),
-            platform: "ios".to_owned(),
-            ..Default::default()
-        }));
-    // ... and the member switches to B before it is done.
-    ask_switch(&mut phone, &b);
-    assert_eq!(phone.holdings().foreground, b);
-    phone.driver.pump(Duration::from_secs(2));
-    // The service was not closed by the switch, and heard its job answer from
-    // the vault it was asked on.
-    assert_eq!(seen.lock().expect("seen").jobs, [a]);
-}
-
-#[test]
-fn a_door_asked_of_the_vault_in_front_runs_on_it_even_when_the_call_is_made_after_a_switch() {
-    let (mut phone, a, b, seen, _dir) = two_vaults();
-    // The service asks `found` of the vault in front (A); the job is bound then.
-    phone
-        .driver
-        .call(wire::screen_request::Kind::Lifecycle(wire::AppLifecycle {
-            foreground: true,
-        }));
-    ask_switch(&mut phone, &b);
-    phone.driver.pump(Duration::from_secs(2));
-    let jobs = seen.lock().expect("seen").jobs.clone();
-    assert_eq!(jobs.len(), 1, "{jobs:?}");
-    assert!(jobs[0].contains(&a) && !jobs[0].contains(&b), "{jobs:?}");
 }
 
 #[test]
@@ -598,35 +435,4 @@ fn a_request_for_the_vault_goes_to_the_vault_in_front_and_the_front_keeps_its_ow
     assert_eq!(name_of(&phone), a);
     assert!(phone.shelf.bring_to_front(&b));
     assert_eq!(name_of(&phone), b);
-}
-
-#[test]
-fn recent_searches_do_not_follow_a_switch_to_another_vault() {
-    use centraid_screens::shell;
-    use wire::home_search_event::Kind as S;
-    let (mut phone, _a, b, _seen, _dir) = two_vaults();
-    let search = |phone: &mut Phone| phone.driver.push("switcher", shell::routes::search());
-    let recent = |phone: &Phone, i: u64| match &phone.driver.view(i).kind {
-        Some(wire::view_state::Kind::HomeSearch(state)) => state.recent.clone(),
-        other => panic!("not Home's search: {other:?}"),
-    };
-    let i = search(&mut phone);
-    for kind in [
-        S::Term(wire::home_search_event::TermChanged {
-            term: "tahoe".to_owned(),
-        }),
-        S::Committed(wire::home_search_event::Committed {}),
-    ] {
-        phone
-            .driver
-            .send(i, E::HomeSearch(wire::HomeSearchEvent { kind: Some(kind) }));
-    }
-    phone.driver.pop("switcher", i);
-    let i = search(&mut phone);
-    assert_eq!(recent(&phone, i), ["tahoe"], "kept within the vault");
-    phone.driver.pop("switcher", i);
-    ask_switch(&mut phone, &b);
-    phone.driver.pump(Duration::from_millis(500));
-    let i = search(&mut phone);
-    assert!(recent(&phone, i).is_empty(), "another vault shows none");
 }

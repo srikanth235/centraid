@@ -69,19 +69,6 @@ impl Appearance {
     }
 }
 
-/// The step after a vault was picked in the sheet.
-enum Ask {
-    None,
-    Forget {
-        vault_id: String,
-    },
-    Rename {
-        vault_id: String,
-        name: String,
-        failed: bool,
-    },
-}
-
 struct Home {
     /// Each widget read, with the app it belongs to: one per app in
     /// [`policy::ORDER`], and Agenda's second while something is owed.
@@ -90,13 +77,9 @@ struct Home {
     /// The one in front, the roster in the shelf's order, and whether the phone
     /// holds none: all told.
     vault: Option<wire::ShellVault>,
-    vaults: Vec<wire::ShellVault>,
     none: bool,
     backup: Option<wire::HomeBackupLine>,
     status: Option<wire::HomeStatus>,
-    sheet_open: bool,
-    ask: Ask,
-    outcome: String,
     appearance: Appearance,
     /// The cache of what the shell keeps, shared with the pass service: the
     /// transfer rule is read from it and written through it.
@@ -157,13 +140,9 @@ impl Home {
             tiles: loading_tiles(),
             read: false,
             vault: None,
-            vaults: Vec::new(),
             none: false,
             backup: None,
             status: None,
-            sheet_open: false,
-            ask: Ask::None,
-            outcome: String::new(),
             appearance: Appearance::System,
             transfer_sheet_open: false,
             photo_access: wire::PhotosMediaPermission::Unspecified,
@@ -267,12 +246,7 @@ impl Home {
         }
     }
 
-    fn vault_named(&self, vault_id: &str) -> Option<&wire::ShellVault> {
-        self.vaults.iter().find(|vault| vault.vault_id == vault_id)
-    }
-
     fn on_home(&mut self, event: H, ctx: &Ctx) -> Vec<wire::Effect> {
-        let locale = ctx.locale();
         match event {
             H::Backup(_) => return self.backup_pressed(),
             H::Status(_) => return self.status_pressed(),
@@ -289,63 +263,13 @@ impl Home {
                 self.photo_access = wire::PhotosMediaPermission::try_from(told.permission)
                     .unwrap_or(wire::PhotosMediaPermission::Unspecified);
             }
-            H::Vault(_) => self.sheet_open = true,
-            H::VaultPicked(picked) => {
-                self.sheet_open = false;
-                self.ask = Ask::None;
-                // Choosing the vault already open is a dismissal and nothing else:
-                // re-opening the same file would throw away every tile that had
-                // landed, to arrive back at the same rows.
-                let open = self.vault.as_ref().map(|vault| vault.vault_id.as_str());
-                if !picked.vault_id.is_empty() && open != Some(picked.vault_id.as_str()) {
-                    return vec![command(wire::vault_command::Kind::SwitchTo(
-                        picked.vault_id,
-                    ))];
-                }
-            }
-            H::SheetClosed(_) => {
-                self.sheet_open = false;
-                self.ask = Ask::None;
-            }
             H::Shown(_) => self.reload(ctx),
-            // THE PAGE COVERS THE SHEET: a sheet left open under a pushed make or restore page is
-            // drawn over it on iOS (the page shows dimmed behind the roster), so it closes first.
             H::Make(_) => {
-                self.sheet_open = false;
-                self.outcome.clear();
                 return vec![command(wire::vault_command::Kind::Make(true))];
             }
             H::Restore(_) => {
-                self.sheet_open = false;
-                self.outcome.clear();
                 return vec![command(wire::vault_command::Kind::Restore(true))];
             }
-            H::ForgetAsked(asked) => {
-                self.ask = Ask::Forget {
-                    vault_id: asked.vault_id,
-                };
-            }
-            H::RenameAsked(asked) => {
-                // A vault that moved is read-only and offers no rename.
-                if let Some(vault) = self
-                    .vault_named(&asked.vault_id)
-                    .filter(|vault| vault.state() != wire::HomeVaultState::Frozen)
-                {
-                    self.ask = Ask::Rename {
-                        vault_id: asked.vault_id.clone(),
-                        name: vault.name.clone(),
-                        failed: false,
-                    };
-                }
-            }
-            H::RenameTyped(typed) => {
-                if let Ask::Rename { name, failed, .. } = &mut self.ask {
-                    *name = typed.name;
-                    *failed = false;
-                }
-            }
-            H::AskConfirmed(_) => return self.ask_confirmed(),
-            H::AskDismissed(_) => self.ask = Ask::None,
             H::TransferRulesPressed(_) => self.transfer_sheet_open = true,
             H::TransferRulesClosed(_) => self.transfer_sheet_open = false,
             H::TransferRuleChosen(chosen) => {
@@ -361,11 +285,8 @@ impl Home {
                 let switched = self.vault_changed(&told);
                 let was_none = self.none;
                 self.vault = told.vault.clone();
-                self.vaults = told.vaults;
                 self.none = told.none;
                 if switched {
-                    self.sheet_open = false;
-                    self.ask = Ask::None;
                     self.tiles = loading_tiles();
                 }
                 // Founding a vault leaves the failed Home (its tiles ask to be read),
@@ -377,16 +298,8 @@ impl Home {
             }
             H::BackupTold(told) => self.backup = told.line,
             H::StatusTold(told) => self.status = told.status,
-            H::OutcomeTold(told) => {
-                self.outcome = told.status_line;
-                if told.rename_failed {
-                    if let Ask::Rename { failed, .. } = &mut self.ask {
-                        *failed = true;
-                    } else {
-                        self.outcome = words::vaults_rename_failed(locale);
-                    }
-                }
-            }
+            // A make or a restore's own outcome is the words page's; nothing here keeps it.
+            H::OutcomeTold(_) => {}
         }
         Vec::new()
     }
@@ -451,35 +364,6 @@ impl Home {
                 vec![command(wire::vault_command::Kind::Open(status.destination))]
             }
             D::Unspecified | D::None => Vec::new(),
-        }
-    }
-
-    fn ask_confirmed(&mut self) -> Vec<wire::Effect> {
-        match std::mem::replace(&mut self.ask, Ask::None) {
-            Ask::None => Vec::new(),
-            Ask::Forget { vault_id } => {
-                self.sheet_open = false;
-                vec![command(wire::vault_command::Kind::Forget(vault_id))]
-            }
-            Ask::Rename {
-                vault_id,
-                name,
-                failed,
-            } => {
-                let name = name.trim().to_owned();
-                if name.is_empty() {
-                    // Nothing to save: the sheet stays.
-                    self.ask = Ask::Rename {
-                        vault_id,
-                        name,
-                        failed,
-                    };
-                    return Vec::new();
-                }
-                vec![command(wire::vault_command::Kind::Rename(
-                    wire::vault_command::Rename { vault_id, name },
-                ))]
-            }
         }
     }
 
@@ -602,25 +486,6 @@ impl Home {
             .clone()
             .filter(|_| vault.state() != wire::HomeVaultState::Frozen)
             .filter(|line| !(day_zero && line.route.is_some()));
-        let switch_label = format!(
-            "{}. {}",
-            [
-                vault.name.as_str(),
-                // The state line stands in only where the backup's status does not.
-                if backup.is_some() {
-                    ""
-                } else {
-                    vault.state_line.as_str()
-                },
-                vault.originals_line.as_str(),
-            ]
-            .iter()
-            .filter(|part| !part.is_empty())
-            .copied()
-            .collect::<Vec<_>>()
-            .join(", "),
-            words::vault_switch_spoken(locale),
-        );
         let backup_open_label = backup
             .as_ref()
             .map(|line| {
@@ -635,7 +500,6 @@ impl Home {
         wire::HomeBar {
             vault: Some(vault),
             backup,
-            switch_label,
             backup_open_label,
             search_label: words::home_search_placeholder(locale),
             search_route: Some(routes::search()),
@@ -643,85 +507,6 @@ impl Home {
             settings_label: crate::strings::settings::settings_title(locale),
             settings_route: Some(routes::settings()),
         }
-    }
-
-    fn sheet(&self, locale: Locale) -> Option<wire::HomeVaultSheet> {
-        if !self.sheet_open {
-            return None;
-        }
-        let ask = match &self.ask {
-            Ask::None => None,
-            Ask::Forget { vault_id } => {
-                let named = self
-                    .vault_named(vault_id)
-                    .map(|vault| vault.name.trim().to_owned())
-                    .unwrap_or_default();
-                let name = if named.is_empty() {
-                    words::vaults_forget_this(locale)
-                } else {
-                    named
-                };
-                Some(wire::HomeVaultAsk {
-                    kind: Some(wire::home_vault_ask::Kind::Forget(
-                        wire::home_vault_ask::Forget {
-                            vault_id: vault_id.clone(),
-                            title: fill(&words::vaults_forget_title(locale), &[("name", &name)]),
-                            body: words::vaults_forget_body(locale),
-                            confirm_label: words::vaults_forget(locale),
-                            cancel_label: crate::strings::shared::kit_cancel(locale),
-                        },
-                    )),
-                })
-            }
-            Ask::Rename {
-                vault_id,
-                name,
-                failed,
-            } => Some(wire::HomeVaultAsk {
-                kind: Some(wire::home_vault_ask::Kind::Rename(
-                    wire::home_vault_ask::Rename {
-                        vault_id: vault_id.clone(),
-                        title: words::vaults_rename_title(locale),
-                        field_label: words::vaults_rename_field(locale),
-                        name: name.clone(),
-                        save_label: words::vaults_rename_save(locale),
-                        can_save: !name.trim().is_empty(),
-                        failure: if *failed {
-                            words::vaults_rename_failed(locale)
-                        } else {
-                            String::new()
-                        },
-                    },
-                )),
-            }),
-        };
-        let open = self.vault.as_ref().map(|vault| vault.vault_id.clone());
-        Some(wire::HomeVaultSheet {
-            title: words::vaults_title(locale),
-            // ONE VAULT keeps the sentence (switching is not a choice of one, but
-            // forgetting still is). Zero never reaches this sheet: a phone with
-            // none opens onto the way to make one.
-            one_line: if self.vaults.len() == 1 {
-                words::vaults_one(locale)
-            } else {
-                String::new()
-            },
-            // THE ROSTER IS DRAWN AS THE SHELF LISTS IT: the order is the shelf's.
-            vaults: self
-                .vaults
-                .iter()
-                .map(|vault| finish_vault(locale, vault))
-                .collect(),
-            active_vault_id: open.unwrap_or_default(),
-            current_label: words::vaults_current(locale),
-            make_label: words::vaults_make(locale),
-            make_spoken: words::vaults_make_spoken(locale),
-            restore_label: words::restore_first_action(locale),
-            forget_label: words::vaults_forget(locale),
-            rename_label: words::vaults_rename(locale),
-            ask,
-            status_line: self.outcome.clone(),
-        })
     }
 }
 
@@ -812,7 +597,6 @@ impl Screen for Home {
                 }),
                 content,
                 page: Some(page),
-                sheet: self.sheet(locale),
                 scheme: match self.appearance {
                     Appearance::System => wire::HomeScheme::System,
                     Appearance::Light => wire::HomeScheme::Light,
@@ -977,7 +761,7 @@ fn initial_of(name: &str) -> String {
 fn finish_vault(locale: Locale, vault: &wire::ShellVault) -> wire::HomeVault {
     let trimmed = vault.name.trim();
     let name = if trimmed.is_empty() {
-        words::vaults_unnamed(locale)
+        words::vault_unnamed(locale)
     } else {
         trimmed.to_owned()
     };

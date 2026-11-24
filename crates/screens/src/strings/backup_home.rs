@@ -24,7 +24,7 @@ catalog! {
     // Store hands the key back during the new-phone setup and at no other time.
     plain key_place_ios = ("iCloud Keychain", "iCloud Keychain");
     plain key_place_android = ("Google", "Google");
-    plain key_saved_ios = ("Saved in iCloud Keychain. Sign in to iCloud on a new iPhone to restore your vaults.", "Saved in iCloud Keychain. Sign in to iCloud on a new iPhone to restore your vaults.");
+    plain key_saved_ios = ("Saved in iCloud Keychain. Sign in to iCloud on a new iPhone to restore your vault.", "Saved in iCloud Keychain. Sign in to iCloud on a new iPhone to restore your vault.");
     plain key_saved_ios_off = ("iCloud Keychain is off, so your recovery key is only on this iPhone. Save a copy.", "iCloud Keychain is off, so your recovery key is only on this iPhone. Save a copy.");
     plain key_saved_android = ("Backed up with Google. It returns when you restore this phone's backup while setting up a new one. If you skip that step, you'll need your recovery key.", "Backed up with Google. It returns when you restore this phone's backup while setting up a new one. If you skip that step, you'll need your recovery key.");
     plain key_saved_unknown = ("Can't tell whether your recovery key is saved elsewhere. Save a copy.", "Can't tell whether your recovery key is saved elsewhere. Save a copy.");

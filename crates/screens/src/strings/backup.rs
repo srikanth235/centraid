@@ -65,7 +65,7 @@ catalog! {
     plain backup_forgotten_revoked = ("Forgot {name}. It now refuses this phone.", "Forgot {name}. It now refuses this phone.");
     plain backup_include_videos = ("Include videos", "Include videos");
     plain backup_key_heading = ("Recovery key", "Recovery key");
-    plain backup_key_phone_only = ("Your recovery key is only on this phone. Lose it and your vaults can't be restored. Save a copy.", "Your recovery key is only on this phone. Lose it and your vaults can't be restored. Save a copy.");
+    plain backup_key_phone_only = ("Your recovery key is only on this phone. Lose it and your vault can't be restored. Save a copy.", "Your recovery key is only on this phone. Lose it and your vault can't be restored. Save a copy.");
     plain backup_key_phone_only_saved = ("On this phone and in your saved copy. Keep that copy safe.", "On this phone and in your saved copy. Keep that copy safe.");
     plain backup_key_show = ("Show recovery key", "Show recovery key");
     plain backup_key_sync_failed = ("Couldn't update {place}. Try again.", "Couldn't update {place}. Try again.");

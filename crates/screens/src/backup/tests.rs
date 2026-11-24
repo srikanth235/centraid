@@ -1349,7 +1349,7 @@ fn a_key_in_the_keychain_is_one_quiet_sentence_the_show_control_and_the_way_off_
     assert_eq!(data.key_heading, words::backup_key_heading(EN));
     assert_eq!(
         data.key_line,
-        "Saved in iCloud Keychain. Sign in to iCloud on a new iPhone to restore your vaults."
+        "Saved in iCloud Keychain. Sign in to iCloud on a new iPhone to restore your vault."
     );
     assert!(!data.key_warning);
     assert_eq!(data.key_show_label, words::backup_key_show(EN));
@@ -2227,7 +2227,7 @@ fn what_travels_when_has_one_row_worth_the_rules_short_word_and_the_sentences_be
 #[test]
 fn recovery_has_a_summary_and_a_restore_row_and_a_moved_vault_has_no_restore() {
     let data = Page::open(both()).data();
-    assert_eq!(data.restore_label, "Restore my vaults");
+    assert_eq!(data.restore_label, "Restore my vault");
     assert_eq!(data.key_summary, "Saved in iCloud Keychain");
     let moved = Page::open(wire::BackupStatusResponse {
         frozen: true,

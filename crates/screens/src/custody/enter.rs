@@ -296,7 +296,6 @@ impl Enter {
                                 kind: Some(wire::home_event::Kind::OutcomeTold(
                                     wire::home_event::OutcomeTold {
                                         status_line,
-                                        rename_failed: false,
                                     },
                                 )),
                             })),

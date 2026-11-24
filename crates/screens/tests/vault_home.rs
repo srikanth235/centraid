@@ -55,26 +55,6 @@ fn vault_name(phone: &Phone) -> String {
         .unwrap_or_default()
 }
 
-#[test]
-fn home_is_told_the_vault_in_front_and_the_roster_by_the_shelf() {
-    let dir = scratch();
-    let a = lay_down(&dir, "a", "Alpha");
-    let _b = lay_down(&dir, "b", "Bravo");
-    let mut phone = Phone::standard(&dir);
-    launched(&mut phone);
-    assert_eq!(vault_name(&phone), "Alpha");
-    press(&mut phone, H::Vault(wire::home_event::VaultPressed {}));
-    let sheet = state(&phone).sheet.expect("the switcher is open");
-    assert_eq!(sheet.active_vault_id, a);
-    assert_eq!(
-        sheet
-            .vaults
-            .iter()
-            .map(|v| v.name.as_str())
-            .collect::<Vec<_>>(),
-        ["Alpha", "Bravo"]
-    );
-}
 
 /// Home's page is the failed state (no vault to read).
 fn failed(phone: &Phone) -> bool {
@@ -103,92 +83,8 @@ fn a_phone_with_no_vault_settles_on_the_failed_branch_not_loading() {
     assert!(failure.permanent);
 }
 
-#[test]
-fn picking_another_vault_switches_the_tabs_and_home_reads_it() {
-    let dir = scratch();
-    let _a = lay_down(&dir, "a", "Alpha");
-    let b = lay_down(&dir, "b", "Bravo");
-    let mut phone = Phone::standard(&dir);
-    launched(&mut phone);
-    let old = home_of(&phone);
-    press(&mut phone, H::Vault(wire::home_event::VaultPressed {}));
-    let update = press(
-        &mut phone,
-        H::VaultPicked(wire::home_event::VaultPicked {
-            vault_id: b.clone(),
-        }),
-    );
-    // The shell sees an ordinary update, and no `VaultCommand` ever reaches it.
-    assert!(update.closed.contains(&old), "the old Home is closed");
-    assert!(
-        phone.driver.effects.iter().all(|e| !matches!(
-            e.effect.as_ref().and_then(|e| e.kind.as_ref()),
-            Some(wire::effect::Kind::VaultCommand(_))
-        )),
-        "the shelf's commands are Rust's"
-    );
-    assert_ne!(home_of(&phone), old);
-    phone.driver.pump(Duration::from_millis(500));
-    assert_eq!(phone.holdings().foreground, b);
-    assert_eq!(vault_name(&phone), "Bravo");
-}
 
-#[test]
-fn forgetting_a_vault_from_the_sheet_deletes_it_and_the_next_comes_forward() {
-    let dir = scratch();
-    let a = lay_down(&dir, "a", "Alpha");
-    let b = lay_down(&dir, "b", "Bravo");
-    let mut phone = Phone::standard(&dir);
-    phone.keep_seed();
-    phone.record_index(&a, 0);
-    launched(&mut phone);
-    press(&mut phone, H::Vault(wire::home_event::VaultPressed {}));
-    press(
-        &mut phone,
-        H::ForgetAsked(wire::home_event::ForgetAsked {
-            vault_id: a.clone(),
-        }),
-    );
-    press(
-        &mut phone,
-        H::AskConfirmed(wire::home_event::AskConfirmed {}),
-    );
-    // The index goes with the vault: the writes are the shell's to perform.
-    phone.driver.serve(&mut phone.shell);
-    phone.driver.pump(Duration::from_millis(800));
-    assert!(!dir.join("a").exists());
-    assert_eq!(phone.ids(), [b]);
-    assert_eq!(vault_name(&phone), "Bravo");
-    assert!(!phone.shell.device.contains_key(&format!("vault-index.{a}")));
-}
 
-#[test]
-fn renaming_a_vault_from_the_sheet_writes_its_name_and_home_draws_it() {
-    let dir = scratch();
-    let a = lay_down(&dir, "a", "Alpha");
-    let mut phone = Phone::standard(&dir);
-    launched(&mut phone);
-    press(&mut phone, H::Vault(wire::home_event::VaultPressed {}));
-    press(
-        &mut phone,
-        H::RenameAsked(wire::home_event::RenameAsked {
-            vault_id: a.clone(),
-        }),
-    );
-    press(
-        &mut phone,
-        H::RenameTyped(wire::home_event::RenameTyped {
-            name: "House".to_owned(),
-        }),
-    );
-    press(
-        &mut phone,
-        H::AskConfirmed(wire::home_event::AskConfirmed {}),
-    );
-    phone.driver.pump(Duration::from_millis(800));
-    assert_eq!(vault_name(&phone), "House");
-    assert_eq!(phone.held(&a).name, "House");
-}
 
 #[test]
 fn making_and_restoring_open_the_words_pages() {
@@ -234,21 +130,6 @@ fn the_backup_key_selects_the_backup_tab_the_runtime_registers() {
     );
 }
 
-#[test]
-fn a_vault_made_says_so_on_homes_sheet_once() {
-    let dir = scratch();
-    let mut phone = Phone::standard(&dir);
-    launched(&mut phone);
-    let found = phone.shelf.found(None, "Family");
-    assert!(matches!(
-        found.value,
-        centraid_screens::vault::Found::Made(_)
-    ));
-    phone.driver.pump(Duration::from_millis(800));
-    press(&mut phone, H::Vault(wire::home_event::VaultPressed {}));
-    let line = state(&phone).sheet.expect("the sheet").status_line;
-    assert!(line.starts_with("Family is on this phone"), "{line}");
-}
 
 #[test]
 fn the_backup_line_under_the_vault_is_the_backup_lanes_reading_of_it() {

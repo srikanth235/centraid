@@ -909,6 +909,6 @@
     "title": "Vault damaged",
     "line": "This phone's vault is damaged. No new backup is made.",
     "safe": "The backups already on your backup devices are untouched.",
-    "action": "Restore my vaults"
+    "action": "Restore my vault"
   }
 }
