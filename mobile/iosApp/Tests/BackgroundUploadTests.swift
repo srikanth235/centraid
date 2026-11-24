@@ -130,6 +130,15 @@ final class BackgroundUploadTests: XCTestCase {
         XCTAssertFalse(configuration.isDiscretionary)
     }
 
+    func testEmptyMethodDefaultsToPOST() throws {
+        let order = UploadOrder(
+            name: part, path: "/tmp/part", url: "https://gw.local:8443/v1/v/\(vault)/bundle", method: "",
+            headers: [], size: 12, gateway: "gw-1", vault: vault
+        )
+        let request = try order.request().get()
+        XCTAssertEqual(request.httpMethod, "POST")
+    }
+
     func testAnUploadOutsideTLSIsRefusedBeforeATaskExists() {
         let order = UploadOrder(
             name: part, path: "/tmp/part", url: "http://gw.local:8443/v1/v/\(vault)/o/\(part)", method: "PUT",
@@ -186,6 +195,94 @@ final class BackgroundUploadTests: XCTestCase {
         XCTAssertEqual(sink.settledNames.count, 4)
     }
 
+    @MainActor
+    func testAttachDoesNotDrainBeforeEventsFinished() async {
+        let tracker = SettlementTracker()
+        let settlement = UploadSettlement(beginGrace: { name in tracker.beginGrace(name) })
+        let sink = CountingSink()
+
+        settlement.awaitingFinish { tracker.finishCalls += 1 }
+        settlement.report(SettledUpload(name: "a", httpStatus: 201, error: nil, gateway: "gw", vault: vault))
+        settlement.attach(sink)
+
+        await sink.waitForSettled(1)
+        for _ in 0..<5 { await Task.yield() }
+
+        XCTAssertEqual(sink.settledNames, ["a"])
+        XCTAssertEqual(sink.drainedCount, 0, "attach must not drain before urlSessionDidFinishEvents")
+        XCTAssertEqual(tracker.finishCalls, 0)
+        XCTAssertEqual(tracker.graceStarted, 0)
+        XCTAssertEqual(tracker.graceEnded, 0)
+
+        settlement.eventsFinished()
+        await sink.waitForDrained(1)
+        await tracker.waitForGraceEnd()
+
+        XCTAssertEqual(sink.drainedCount, 1)
+        XCTAssertEqual(tracker.finishCalls, 1)
+        XCTAssertEqual(tracker.graceStarted, 1)
+        XCTAssertEqual(tracker.graceEnded, 1)
+    }
+
+    @MainActor
+    func testEventsFinishedBeforeAttachDrainsAfterHeldUploads() async {
+        let tracker = SettlementTracker()
+        let settlement = UploadSettlement(beginGrace: { name in tracker.beginGrace(name) })
+        let sink = CountingSink()
+
+        settlement.awaitingFinish { tracker.finishCalls += 1 }
+        settlement.report(SettledUpload(name: "a", httpStatus: 201, error: nil, gateway: "gw", vault: vault))
+        settlement.eventsFinished()
+        XCTAssertEqual(tracker.finishCalls, 0)
+        XCTAssertEqual(tracker.graceEnded, 0)
+
+        settlement.attach(sink)
+        await sink.waitForDrained(1)
+        await tracker.waitForGraceEnd()
+
+        XCTAssertEqual(sink.settledNames, ["a"])
+        XCTAssertEqual(sink.drainedCount, 1)
+        XCTAssertEqual(tracker.finishCalls, 1)
+        XCTAssertEqual(tracker.graceEnded, 1)
+    }
+
+    @MainActor
+    func testFinishAndGraceWaitUntilAsyncReportCompletes() async {
+        let oldWatcher = LibraryWatcher.shared.onChange
+        defer { LibraryWatcher.shared.onChange = oldWatcher }
+
+        let core = UploadTestCore()
+        defer { core.finish() }
+        let store = ScreenStore(core: core)
+        let sink = ScreenUploadSink(store)
+        let tracker = SettlementTracker()
+        let settlement = UploadSettlement(beginGrace: { name in tracker.beginGrace(name) })
+
+        settlement.awaitingFinish { tracker.finishCalls += 1 }
+        settlement.attach(sink)
+        settlement.report(SettledUpload(name: "b1", httpStatus: 201, error: nil, gateway: "gw-1", vault: vault))
+        settlement.eventsFinished()
+
+        var facts = core.facts.makeAsyncIterator()
+        let first = await facts.next()
+        XCTAssertEqual(first, "settled:b1")
+        let second = await facts.next()
+        XCTAssertEqual(second, "drained")
+
+        // The drained fact has reached the core, but has not returned yet:
+        // neither iOS's completion handler nor grace.end() may fire yet.
+        for _ in 0..<5 { await Task.yield() }
+        XCTAssertEqual(tracker.graceStarted, 1)
+        XCTAssertEqual(tracker.finishCalls, 0)
+        XCTAssertEqual(tracker.graceEnded, 0)
+
+        await core.releaseDrained()
+        await tracker.waitForGraceEnd()
+
+        XCTAssertEqual(tracker.finishCalls, 1)
+        XCTAssertEqual(tracker.graceEnded, 1)
+    }
+
     // MARK: the pinned addresses
 
     func testAnAddressAnswersForItsHost() {
@@ -206,6 +303,27 @@ final class BackgroundUploadTests: XCTestCase {
         XCTAssertNil(reopened.gateway(serving: "192.168.1.5"))
         XCTAssertNil(reopened.certificate(of: "gw-2"))
     }
+
+    func testEmptyTagGatewayFallsBackToHostPin() {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("pins-\(UUID().uuidString).plist")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let der = Data([0x30, 0x82, 0x01])
+        let pins = UploadPins(at: file)
+        pins.replace(with: ["gw-1": .init(certificate: der, hosts: ["192.168.1.4"])])
+        let uploader = BackgroundUploader(pins: pins)
+
+        XCTAssertEqual(uploader.gateway(for: .unknown, host: "192.168.1.4"), "gw-1")
+        XCTAssertEqual(
+            uploader.gateway(for: UploadTag(name: part, gateway: "", vault: vault), host: "192.168.1.4"),
+            "gw-1"
+        )
+        XCTAssertEqual(uploader.gateway(for: nil, host: "192.168.1.4"), "gw-1")
+        XCTAssertEqual(
+            uploader.gateway(for: UploadTag(name: part, gateway: "gw-2", vault: vault), host: "192.168.1.4"),
+            "gw-2"
+        )
+        XCTAssertNil(uploader.gateway(for: .unknown, host: "192.168.1.5"))
+    }
 }
 
 /// A sink that counts the wakes it is given.
@@ -219,5 +337,73 @@ private final class CountingSink: UploadSink {
 
     func waitForSettled(_ count: Int) async {
         while settledNames.count < count { await Task.yield() }
+    }
+
+    func waitForDrained(_ count: Int) async {
+        while drainedCount < count { await Task.yield() }
+    }
+}
+
+/// Records `awaitingFinish` and UIKit grace callbacks on the main actor.
+@MainActor
+private final class SettlementTracker {
+    var finishCalls = 0
+    var graceStarted = 0
+    var graceEnded = 0
+
+    func beginGrace(_ name: String) -> (@MainActor () -> Void) {
+        graceStarted += 1
+        return { self.graceEnded += 1 }
+    }
+
+    func waitForGraceEnd() async {
+        while graceEnded == 0 { await Task.yield() }
+    }
+}
+
+/// A fake core that suspends on `UploadsDrained` until the test releases it.
+private actor UploadTestCore: ScreenCore {
+    nonisolated private let pushed: AsyncStream<Centraid_Core_V1_ScreenUpdate>
+    nonisolated private let push: AsyncStream<Centraid_Core_V1_ScreenUpdate>.Continuation
+    nonisolated let facts: AsyncStream<String>
+    nonisolated private let factEvents: AsyncStream<String>.Continuation
+    nonisolated var updates: AsyncStream<Centraid_Core_V1_ScreenUpdate> { pushed }
+
+    private var drainedRelease: CheckedContinuation<Void, Never>?
+
+    init() {
+        (pushed, push) = AsyncStream.makeStream()
+        (facts, factEvents) = AsyncStream.makeStream()
+    }
+
+    func call(_ request: Centraid_Core_V1_Request) async throws -> Centraid_Core_V1_Response {
+        if case .screen(let screen)? = request.kind, case .shellFact(let shell)? = screen.kind {
+            switch shell.fact {
+            case .settled(let settled)?:
+                factEvents.yield("settled:\(settled.name)")
+            case .drained?:
+                await withCheckedContinuation { continuation in
+                    drainedRelease = continuation
+                    factEvents.yield("drained")
+                }
+            default:
+                break
+            }
+        }
+        return .with { $0.kind = .screen(.init()) }
+    }
+
+    func call(_ request: Centraid_Core_V1_Request, lane: Core.Lane) async throws -> Centraid_Core_V1_Response {
+        try await call(request)
+    }
+
+    func releaseDrained() {
+        drainedRelease?.resume()
+        drainedRelease = nil
+    }
+
+    nonisolated func finish() {
+        push.finish()
+        factEvents.finish()
     }
 }

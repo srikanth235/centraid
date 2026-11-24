@@ -127,7 +127,7 @@ struct UploadOrder: Equatable {
             return .failure(.notHTTPS)
         }
         var request = URLRequest(url: target)
-        request.httpMethod = method.isEmpty ? "PUT" : method
+        request.httpMethod = method.isEmpty ? "POST" : method
         for header in headers {
             request.setValue(header.value, forHTTPHeaderField: header.name)
         }
@@ -417,6 +417,14 @@ final class BackgroundUploader: NSObject, @unchecked Sendable {
         return keys.contains(tag.key)
     }
 
+    /// Resolve the gateway whose pin answers a challenge for `tag` against `host`.
+    /// An empty `tag.gateway` (e.g. `UploadTag.unknown` after a relaunch with no
+    /// task description) falls back to the host the challenge names.
+    func gateway(for tag: UploadTag?, host: String) -> String? {
+        if let tagged = tag?.gateway, !tagged.isEmpty { return tagged }
+        return pins.gateway(serving: host)
+    }
+
     private func tag(of task: URLSessionTask) -> UploadTag? {
         lock.lock()
         let known = inFlight[task.taskIdentifier]
@@ -451,7 +459,7 @@ extension BackgroundUploader: URLSessionDataDelegate {
             completionHandler(.performDefaultHandling, nil)
             return
         }
-        let gateway = tag(of: task)?.gateway ?? pins.gateway(serving: challenge.protectionSpace.host)
+        let gateway = gateway(for: tag(of: task), host: challenge.protectionSpace.host)
         let pinned = gateway.flatMap { pins.certificate(of: $0) }
         switch UploadPinning.verdict(presented: UploadPinning.leaf(of: trust), pinned: pinned) {
         case .trust:
@@ -544,10 +552,23 @@ final class UploadSettlement {
     /// A relaunch gets about thirty seconds; this leaves the handler margin.
     static let finishWithinSeconds: TimeInterval = 25
 
+    typealias GraceStarter = @MainActor (String) -> (@MainActor () -> Void)
+
+    private let beginGrace: GraceStarter
     private var sink: UploadSink?
     private var held: [SettledUpload] = []
     private var finish: (() -> Void)?
+    private var eventsDidFinish = false
     private var tail: Task<Void, Never>?
+
+    init(beginGrace: @escaping GraceStarter = UploadSettlement.startGrace) {
+        self.beginGrace = beginGrace
+    }
+
+    private static func startGrace(_ name: String) -> (@MainActor () -> Void) {
+        let grace = ForegroundGrace(name: name)
+        return { grace.end() }
+    }
 
     /// The core's sink is ready: deliver the wakes that waited, in order.
     func attach(_ sink: UploadSink) {
@@ -557,7 +578,10 @@ final class UploadSettlement {
         for upload in waiting {
             chain { await sink.settled(upload) }
         }
-        if finish != nil { drain(sink) }
+        if eventsDidFinish {
+            eventsDidFinish = false
+            drain(sink)
+        }
     }
 
     func report(_ upload: SettledUpload) {
@@ -577,7 +601,10 @@ final class UploadSettlement {
     }
 
     func eventsFinished() {
-        guard let sink else { return }
+        guard let sink else {
+            eventsDidFinish = true
+            return
+        }
         drain(sink)
     }
 
@@ -585,11 +612,11 @@ final class UploadSettlement {
         // HELD AGAINST SUSPENSION while the core runs the pass the wake asked
         // for: a relaunched app is otherwise suspended as soon as the
         // handler returns, mid-call.
-        let grace = ForegroundGrace(name: "dev.centraid.uploads.settle")
+        let endGrace = beginGrace("dev.centraid.uploads.settle")
         chain { [weak self] in
             await sink.drained()
             self?.callFinish()
-            grace.end()
+            endGrace()
         }
     }
 
@@ -625,11 +652,11 @@ final class ScreenUploadSink: UploadSink {
         fact.error = upload.error ?? ""
         fact.gatewayID = upload.gateway
         fact.vaultID = upload.vault
-        store.report(.settled(fact))
+        await store.reportAndWait(.settled(fact))
     }
 
     func drained() async {
-        store.report(.drained(Centraid_Core_V1_UploadsDrained()))
+        await store.reportAndWait(.drained(Centraid_Core_V1_UploadsDrained()))
     }
 }
 
