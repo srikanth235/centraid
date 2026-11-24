@@ -59,10 +59,7 @@ proptest = "1"
 # `commit_hook` (backup device state) and `authorizer` (read-only connections).
 # `backup` is enabled only in `centraid-vault`'s `[dev-dependencies]` for
 # `tests/page_source.rs`'s comparison against SQLite's online-backup API.
-rusqlite = { version = "0.41", features = [
-  "bundled",
-  "hooks",
-] }
+rusqlite = { version = "0.41", features = ["bundled", "hooks"] }
 serde = { version = "1", features = ["derive"] }
 # `float_roundtrip` is NOT optional here (#1020, D-1020-D1-18). serde_json's
 # default float parser is fast and approximate: it can land one ULP away, and
