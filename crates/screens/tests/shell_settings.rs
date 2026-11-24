@@ -271,7 +271,10 @@ fn settings_has_no_vault_section_and_only_the_download_row_is_pressed() {
     // A PHONE HOLDS ONE VAULT (#1209, R1): there is no section for it, no row that lists vaults and
     // none that makes another.
     assert!(
-        data(&d, i).sections.iter().all(|section| section.key != "vault"),
+        data(&d, i)
+            .sections
+            .iter()
+            .all(|section| section.key != "vault"),
         "no Vault section"
     );
     assert!(

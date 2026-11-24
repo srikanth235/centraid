@@ -681,7 +681,8 @@ impl Lightbox {
                     .detail()
                     .map(|detail| detail.cell.content_id.clone())
                     .filter(|content| !content.is_empty());
-                self.unbacked = content.map_or(0, |content| super::unbacked::count(ctx, &[content]));
+                self.unbacked =
+                    content.map_or(0, |content| super::unbacked::count(ctx, &[content]));
                 self.confirm = true;
             }
             // (i) TOGGLES THE DETAILS: they open under the photograph and the same key closes them.
@@ -1335,15 +1336,17 @@ impl Screen for Lightbox {
         let locale = ctx.locale();
         match event.kind {
             Some(E::Appeared(_)) => {
-                self.restoring =
-                    crate::kit::restoring::originals_owed(crate::kit::restoring::owed(ctx).as_ref());
+                self.restoring = crate::kit::restoring::originals_owed(
+                    crate::kit::restoring::owed(ctx).as_ref(),
+                );
                 let id = self.photo_id.clone();
                 return self.open(ctx, &id);
             }
             Some(E::EnvironmentChanged(_)) => return self.reload(ctx),
             Some(E::DataChanged(_)) => {
-                self.restoring =
-                    crate::kit::restoring::originals_owed(crate::kit::restoring::owed(ctx).as_ref());
+                self.restoring = crate::kit::restoring::originals_owed(
+                    crate::kit::restoring::owed(ctx).as_ref(),
+                );
                 self.albums.reload(ctx);
                 // THE EDITOR ABOVE CLOSED: its line and Undo are drawn here.
                 let effects = self.reload(ctx);

@@ -249,7 +249,11 @@ impl Reading {
                     refused_limit_bytes: destination.refused_limit_bytes,
                     rolled_back: destination.rolled_back,
                     paired_at_ms: Some(destination.paired_at_ms).filter(|at| *at > 0),
-                    classes: destination.classes.iter().map(ClassRow::from_wire).collect(),
+                    classes: destination
+                        .classes
+                        .iter()
+                        .map(ClassRow::from_wire)
+                        .collect(),
                     // HOW IT STANDS, in the core's one word (#1191, B16). Each of these is
                     // a device's own state and stops only that device's pass.
                     moved: destination.reach_state == wire::DestinationReach::Moved as i32,

@@ -33,7 +33,6 @@ use crate::passes::{Rules, TransferRule, rule};
 use crate::screen::{Ctx, Screen};
 use crate::strings::{home as home_words, settings as words};
 
-
 /// The id of the row that opens the download settings sheet.
 const DOWNLOAD_ROW: &str = "download-settings";
 

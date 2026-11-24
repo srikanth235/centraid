@@ -264,7 +264,11 @@ fn the_card_and_home_say_backed_up_and_what_waits_in_one_voice() {
         let built = line::line(EN, Some(&read), false, false, now);
         assert_eq!(built.sentence, text(case, "sentence"), "{name}: the card");
         assert_eq!(built.status, text(case, "status"), "{name}: Home's line");
-        let waiting: Vec<&str> = built.waiting.iter().map(|row| row.sentence.as_str()).collect();
+        let waiting: Vec<&str> = built
+            .waiting
+            .iter()
+            .map(|row| row.sentence.as_str())
+            .collect();
         let want: Vec<String> = case["waiting"]
             .as_array()
             .unwrap()

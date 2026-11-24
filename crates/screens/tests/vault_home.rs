@@ -55,7 +55,6 @@ fn vault_name(phone: &Phone) -> String {
         .unwrap_or_default()
 }
 
-
 /// Home's page is the failed state (no vault to read).
 fn failed(phone: &Phone) -> bool {
     matches!(
@@ -82,9 +81,6 @@ fn a_phone_with_no_vault_settles_on_the_failed_branch_not_loading() {
     };
     assert!(failure.permanent);
 }
-
-
-
 
 #[test]
 fn making_and_restoring_open_the_words_pages() {
@@ -129,7 +125,6 @@ fn the_backup_key_selects_the_backup_tab_the_runtime_registers() {
         "backup"
     );
 }
-
 
 #[test]
 fn the_backup_line_under_the_vault_is_the_backup_lanes_reading_of_it() {

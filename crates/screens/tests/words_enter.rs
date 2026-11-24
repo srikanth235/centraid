@@ -395,7 +395,11 @@ fn a_valid_phrase_opens_the_one_control_and_a_restore_answer_drops_every_word() 
         [
             ("Records", "", "Restoring"),
             ("Photo previews", "Small versions, for browsing.", "Next"),
-            ("Photos and files", "Newest first, in the background.", "Then"),
+            (
+                "Photos and files",
+                "Newest first, in the background.",
+                "Then"
+            ),
         ]
     );
 

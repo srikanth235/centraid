@@ -965,16 +965,15 @@ pub fn held_whole(
     request: &wire::HeldWholeRequest,
 ) -> Result<wire::HeldWholeResponse> {
     let state = plane.state()?;
-    let (gateway_ids, held_whole) = if request.content_hash.is_empty()
-        && !request.content_hashes.is_empty()
-    {
-        (Vec::new(), false)
-    } else {
-        let h = hash_of(&request.content_hash)?;
-        let gateway_ids = status::holders(&state, &keyring.backup, &h)?;
-        let held = !gateway_ids.is_empty();
-        (gateway_ids, held)
-    };
+    let (gateway_ids, held_whole) =
+        if request.content_hash.is_empty() && !request.content_hashes.is_empty() {
+            (Vec::new(), false)
+        } else {
+            let h = hash_of(&request.content_hash)?;
+            let gateway_ids = status::holders(&state, &keyring.backup, &h)?;
+            let held = !gateway_ids.is_empty();
+            (gateway_ids, held)
+        };
     let many = request
         .content_hashes
         .iter()

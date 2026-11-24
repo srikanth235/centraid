@@ -28,9 +28,9 @@ use crate::Registry;
 use crate::custody::secrets::VaultSecrets;
 
 pub mod alerts;
-pub mod classes;
 pub mod check;
 pub mod claim;
+pub mod classes;
 mod doors;
 pub mod freeze;
 pub mod home;

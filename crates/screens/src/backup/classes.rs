@@ -91,7 +91,10 @@ fn row(
     } else if !holders.is_empty() {
         fill(
             &words::backup_class_all_on(locale),
-            &[("count", &grouped(aggregate.total)), ("names", &held_names())],
+            &[
+                ("count", &grouped(aggregate.total)),
+                ("names", &held_names()),
+            ],
         )
     } else {
         // NO DEVICE HOLDS IT WHOLE: the most any holds.
@@ -209,7 +212,11 @@ fn waiting_notes(
             })
             .collect();
     }
-    let mut reasons: Vec<&(i32, u64)> = aggregate.waiting.iter().filter(|(_, count)| *count > 0).collect();
+    let mut reasons: Vec<&(i32, u64)> = aggregate
+        .waiting
+        .iter()
+        .filter(|(_, count)| *count > 0)
+        .collect();
     reasons.sort_by_key(|(reason, _)| super::line::reason_rank(*reason));
     reasons
         .into_iter()

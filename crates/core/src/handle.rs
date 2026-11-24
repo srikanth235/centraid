@@ -1455,7 +1455,8 @@ impl HandleState {
             let mut status = crate::phone::backup_status(&self.plane, vault, self.keys.as_ref())?;
             // A RESTORE'S PROGRESS, while one is owed (R3): previews and originals back so far.
             if let (Some(vault), Some(door)) = (vault, self.bytes()) {
-                status.restoring = crate::phone::restore_progress(&self.plane, vault, door.store())?;
+                status.restoring =
+                    crate::phone::restore_progress(&self.plane, vault, door.store())?;
             }
             Ok(status)
         })

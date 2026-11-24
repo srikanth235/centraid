@@ -294,9 +294,7 @@ impl Enter {
                         wire::ScreenEvent {
                             kind: Some(E::Home(wire::HomeEvent {
                                 kind: Some(wire::home_event::Kind::OutcomeTold(
-                                    wire::home_event::OutcomeTold {
-                                        status_line,
-                                    },
+                                    wire::home_event::OutcomeTold { status_line },
                                 )),
                             })),
                         },

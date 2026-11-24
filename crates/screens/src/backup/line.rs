@@ -149,7 +149,11 @@ pub fn line(
     }
     // A RESTORE IS BRINGING THE PHOTOS BACK (#1209, R3): the vault is open, and the line says how
     // far, previews first, then the originals. Counts only, never a time.
-    if let Some(sentence) = reading.restoring.as_ref().and_then(|r| restore_sentence(locale, r)) {
+    if let Some(sentence) = reading
+        .restoring
+        .as_ref()
+        .and_then(|r| restore_sentence(locale, r))
+    {
         return finish(wire::BackupLine {
             confirmed: reading.content_confirmed,
             status: sentence.clone(),

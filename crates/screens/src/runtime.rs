@@ -608,7 +608,7 @@ impl Runtime {
                 && !matches!(command.kind, Some(wire::vault_command::Kind::Open(_)))
                 && core.vaults().is_some()
             {
-                state.commands.push(command.clone());
+                state.commands.push(*command);
                 continue;
             }
             if let Some(wire::effect::Kind::Announce(note)) = &effect.kind {
@@ -955,7 +955,7 @@ impl Runtime {
                     core,
                     |instance| {
                         instance.service.then(|| wire::ScreenEvent {
-                            kind: Some(wire::screen_event::Kind::VaultCommanded(command.clone())),
+                            kind: Some(wire::screen_event::Kind::VaultCommanded(command)),
                         })
                     },
                     out,

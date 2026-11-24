@@ -601,7 +601,9 @@ impl Selection {
             title,
             actions,
             cancel_label: words::photos_cancel(locale),
-            confirm: self.confirming.map(|_| confirm(locale, count, self.unbacked)),
+            confirm: self
+                .confirming
+                .map(|_| confirm(locale, count, self.unbacked)),
         }
     }
 }

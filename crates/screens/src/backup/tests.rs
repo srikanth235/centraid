@@ -1824,7 +1824,11 @@ fn records_not_yet_held_never_read_all_backed_up() {
     let data = page.data();
     let line = data.line.expect("the same backup line used by Home");
     assert_eq!(line.sentence, "Records backed up 2 minutes ago.");
-    assert!(!line.accessibility_label.contains("All 5.0 GB is backed up. "));
+    assert!(
+        !line
+            .accessibility_label
+            .contains("All 5.0 GB is backed up. ")
+    );
     assert_eq!(line.status, "Records backed up 2 min ago");
     assert_eq!(line.tone, Tone::Attention as i32);
     assert_eq!(
@@ -2011,7 +2015,10 @@ fn with_two_devices_a_class_says_which_hold_it_and_which_it_waits_for() {
     let previews = &data.apps[1];
     assert_eq!(previews.detail, "All 1,240 on Home laptop");
     assert_eq!(previews.note, "184 waiting for Office NAS");
-    assert_eq!((previews.status.as_str(), previews.waiting), ("1 of 2 devices", true));
+    assert_eq!(
+        (previews.status.as_str(), previews.waiting),
+        ("1 of 2 devices", true)
+    );
     assert_eq!(data.apps[2].note, "282 waiting for Office NAS");
 }
 
@@ -2087,7 +2094,13 @@ fn a_restore_says_how_far_previews_then_originals_are_back_in_counts_only() {
     // NO TIME IS ESTIMATED.
     assert!(!previews.sentence.contains("minute") && !originals.sentence.contains("left"));
     // A VAULT THAT IS NOT RESTORING says nothing of it.
-    let calm = line::line(EN, Some(&reading(&with_classes(all_held()))), false, false, NOW);
+    let calm = line::line(
+        EN,
+        Some(&reading(&with_classes(all_held()))),
+        false,
+        false,
+        NOW,
+    );
     assert!(!calm.sentence.contains("Restoring"));
 }
 
