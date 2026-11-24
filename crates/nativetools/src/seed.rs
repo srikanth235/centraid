@@ -181,6 +181,14 @@ const SECTIONS: &[&str] = &[
     "today",
     "people",
     "lists",
+    "calendars",
+    "people_lists",
+    "sections",
+    "places",
+    "contact_points",
+    "important_dates",
+    "gifts",
+    "journal_entries",
     "events",
     "tasks",
     "notebooks",
@@ -190,6 +198,8 @@ const SECTIONS: &[&str] = &[
     "albums",
     "photos",
     "locker",
+    "locker_fields",
+    "locker_passkeys",
     "accounts",
     "transactions",
     "health_days",
@@ -289,6 +299,12 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         if let Some(area) = str_of(row, "area") {
             input["parent"] = json!(seeder.area(area)?);
         }
+        if let Some(color) = str_of(row, "color") {
+            input["color"] = json!(color);
+        }
+        if let Some(icon) = str_of(row, "icon") {
+            input["icon"] = json!(icon);
+        }
         seeder.run("container.create", input)?;
         seeder.key(row, Kind::List, id)?;
     }
@@ -296,17 +312,117 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         ("notebooks", "notebook", Kind::Notebook, "notebook"),
         ("folders", "folder", Kind::Folder, "folder"),
         ("albums", "album", Kind::Album, "album"),
+        ("calendars", "calendar", Kind::Calendar, "calendar"),
+        ("people_lists", "people list", Kind::PeopleList, "list"),
     ] {
         for row in rows(world, section) {
             seeder.clock_for(row, "created")?;
             let id = seeder.mint();
             let title = str_of(row, "name").ok_or_else(|| format!("a {noun} needs a name"))?;
-            seeder.run(
-                "container.create",
-                json!({"id": id, "kind": vault_kind, "title": title}),
-            )?;
+            let mut input = json!({"id": id, "kind": vault_kind, "title": title});
+            if kind == Kind::Calendar {
+                if let Some(color) = str_of(row, "color") {
+                    input["color"] = json!(color);
+                }
+                if let Some(icon) = str_of(row, "icon") {
+                    input["icon"] = json!(icon);
+                }
+            }
+            seeder.run("container.create", input)?;
             seeder.key(row, kind, id)?;
         }
+    }
+    for row in rows(world, "sections") {
+        seeder.clock_for(row, "created")?;
+        let id = seeder.mint();
+        let title = str_of(row, "name").ok_or("a section needs a name")?;
+        let list_key = str_of(row, "list").ok_or("a section needs a list")?;
+        let list_id = seeder.id(list_key, Kind::List)?;
+        let mut input = json!({"id": id, "kind": "section", "title": title, "parent": list_id});
+        if let Some(pos) = row.get("position").and_then(Value::as_f64) {
+            input["position"] = json!(pos);
+        }
+        seeder.run("container.create", input)?;
+        seeder.key(row, Kind::Section, id)?;
+    }
+    for row in rows(world, "places") {
+        seeder.clock_for(row, "created")?;
+        let id = seeder.mint();
+        let title = str_of(row, "name").ok_or("a place needs a name")?;
+        let mut input = json!({"id": id, "title": title});
+        if let Some(address) = str_of(row, "address") {
+            input["address"] = json!(address);
+        }
+        seeder.run("place.add", input)?;
+        seeder.key(row, Kind::Place, id)?;
+    }
+    for row in rows(world, "contact_points") {
+        seeder.clock_for(row, "created")?;
+        let person_key = str_of(row, "person").ok_or("a contact point needs a person")?;
+        let person_id = seeder.id(person_key, Kind::Person)?;
+        let channel = str_of(row, "channel").unwrap_or("phone");
+        let value = str_of(row, "value").ok_or("a contact point needs a value")?;
+        let mut input = json!({"id": person_id, "kind": channel, "value": value});
+        if let Some(label) = str_of(row, "label") {
+            input["label"] = json!(label);
+        }
+        if let Some(preferred) = row.get("preferred").and_then(Value::as_bool) {
+            input["preferred"] = json!(preferred);
+        }
+        let out = seeder.run("person.save_contact_point", input)?;
+        let point_id = out["point_id"]
+            .as_str()
+            .ok_or("person.save_contact_point answered no point_id")?
+            .to_owned();
+        seeder.key(row, Kind::ContactPoint, point_id)?;
+    }
+    for row in rows(world, "important_dates") {
+        seeder.clock_for(row, "created")?;
+        let person_key = str_of(row, "person").ok_or("an important date needs a person")?;
+        let person_id = seeder.id(person_key, Kind::Person)?;
+        let label = str_of(row, "name").ok_or("an important date needs a name")?;
+        let month_day = str_of(row, "month_day").ok_or("an important date needs month_day")?;
+        let mut input = json!({"id": person_id, "label": label, "month_day": month_day});
+        if let Some(rem) = row.get("reminder_on").and_then(Value::as_bool) {
+            input["reminder_on"] = json!(rem);
+        }
+        let out = seeder.run("person.add_date", input)?;
+        let date_id = out["date_id"]
+            .as_str()
+            .ok_or("person.add_date answered no date_id")?
+            .to_owned();
+        seeder.key(row, Kind::ImportantDate, date_id)?;
+    }
+    for row in rows(world, "gifts") {
+        seeder.clock_for(row, "created")?;
+        let person_key = str_of(row, "person").ok_or("a gift needs a person")?;
+        let person_id = seeder.id(person_key, Kind::Person)?;
+        let text = str_of(row, "name").ok_or("a gift needs a name")?;
+        let out = seeder.run("person.add_gift", json!({"id": person_id, "text": text}))?;
+        let task_id = out["task_id"]
+            .as_str()
+            .ok_or("person.add_gift answered no task_id")?
+            .to_owned();
+        seeder.key(row, Kind::Gift, task_id)?;
+    }
+    for row in rows(world, "journal_entries") {
+        seeder.clock_for(row, "created")?;
+        let mood = str_of(row, "mood")
+            .or_else(|| str_of(row, "name"))
+            .ok_or("a journal entry needs a mood")?;
+        let body = str_of(row, "body")
+            .or_else(|| str_of(row, "text"))
+            .ok_or("a journal entry needs body text")?;
+        let mut input = json!({"mood": mood, "text": body});
+        if let Some(day) = str_of(row, "date") {
+            input["entry_date"] = json!(day);
+        }
+        let out = seeder.run("person.add_journal_entry", input)?;
+        let entry_id = out["entry_id"]
+            .as_str()
+            .ok_or("person.add_journal_entry answered no entry_id")?
+            .to_owned();
+        seeder.key(row, Kind::JournalEntry, entry_id)?;
     }
     for row in rows(world, "events") {
         seeder.clock_for(row, "created")?;
@@ -526,6 +642,58 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         seeder.run("locker.add_item", input)?;
         seeder.key(row, Kind::LockerItem, id)?;
     }
+    for row in rows(world, "locker_fields") {
+        seeder.clock_for(row, "created")?;
+        let item_key = str_of(row, "item").ok_or("a locker field needs an item")?;
+        let item_id = seeder.id(item_key, Kind::LockerItem)?;
+        let label = str_of(row, "label")
+            .or_else(|| str_of(row, "name"))
+            .ok_or("a locker field needs a label")?;
+        let field_kind = str_of(row, "field_kind").unwrap_or("text");
+        let field_id = seeder.mint();
+        let mut input = json!({
+            "item_id": item_id,
+            "field_id": field_id,
+            "section": str_of(row, "section").unwrap_or(""),
+            "label": label,
+            "kind": field_kind,
+            "position": row.get("position").and_then(Value::as_i64).unwrap_or(0),
+        });
+        if let Some(val) = str_of(row, "value") {
+            if matches!(field_kind, "sealed" | "otp") {
+                if seeder.locker.is_none() {
+                    seeder.locker = Some(seeder.handle.locker_key()?);
+                }
+                let (key_id, key) = seeder.locker.clone().unwrap_or_default();
+                let sealed = centraid_vault::custody::locker_key::encrypt_under_locker_key(
+                    &key, &key_id, &field_id, val,
+                )
+                .map_err(|error| error.to_string())?;
+                input["value"] = json!(sealed);
+            } else {
+                input["value"] = json!(val);
+            }
+        }
+        seeder.run("locker.set_field", input)?;
+        seeder.key(row, Kind::LockerField, field_id)?;
+    }
+    for row in rows(world, "locker_passkeys") {
+        seeder.clock_for(row, "created")?;
+        let item_key = str_of(row, "item").ok_or("a locker passkey needs an item")?;
+        let item_id = seeder.id(item_key, Kind::LockerItem)?;
+        let rp_id = str_of(row, "rp_id")
+            .or_else(|| str_of(row, "name"))
+            .ok_or("a locker passkey needs rp_id")?;
+        let mut input = json!({"item_id": item_id, "rp_id": rp_id});
+        if let Some(handle) = str_of(row, "user_handle") {
+            input["user_handle"] = json!(handle);
+        }
+        if let Some(dn) = str_of(row, "display_name") {
+            input["display_name"] = json!(dn);
+        }
+        seeder.run("locker.set_passkey", input)?;
+        seeder.key(row, Kind::LockerPasskey, item_id)?;
+    }
     // MONEY (#1099): accounts, then each transaction as one followed statement line, so a row has
     // the instant of its own.
     let mut accounts: BTreeMap<String, (String, String, String)> = BTreeMap::new();
@@ -653,15 +821,25 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         seeder.clock_for(row, "created")?;
         let id = seeder.mint();
         let category = str_of(row, "category").ok_or("a rule needs a category")?;
-        seeder.run(
-            "rule.add",
-            json!({
-                "id": id,
-                "match": str_of(row, "match").unwrap_or("contains"),
-                "text": str_of(row, "text").ok_or("a rule needs text")?,
-                "category_id": format!("category:{category}"),
-            }),
-        )?;
+        let mut input = json!({
+            "id": id,
+            "match": str_of(row, "match").unwrap_or("contains"),
+            "text": str_of(row, "text").ok_or("a rule needs text")?,
+            "category_id": format!("category:{category}"),
+        });
+        if let Some(dn) = str_of(row, "display_name") {
+            input["display_name"] = json!(dn);
+        }
+        if let Some(min) = row.get("min").and_then(Value::as_i64) {
+            input["min"] = json!(min);
+        }
+        if let Some(max) = row.get("max").and_then(Value::as_i64) {
+            input["max"] = json!(max);
+        }
+        if let Some(pos) = row.get("position").and_then(Value::as_f64) {
+            input["position"] = json!(pos);
+        }
+        seeder.run("rule.add", input)?;
         seeder.key(row, Kind::Rule, id)?;
     }
     // A budget is a month's plan for a category in currency units (the vault's default currency).
@@ -745,15 +923,22 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
 /// Stars, completions, cancellations, contacts, edits, trash —
 /// the states a row reaches after it is created, each at its own time.
 fn states(seeder: &mut Seeder, world: &Value) -> Result<(), String> {
-    let sections: [(&str, Kind); 11] = [
+    let sections: [(&str, Kind); 18] = [
         ("people", Kind::Person),
         ("lists", Kind::List),
+        ("calendars", Kind::Calendar),
+        ("people_lists", Kind::PeopleList),
+        ("sections", Kind::Section),
+        ("places", Kind::Place),
         ("notebooks", Kind::Notebook),
         ("folders", Kind::Folder),
         ("albums", Kind::Album),
         ("events", Kind::Event),
+        ("important_dates", Kind::ImportantDate),
         ("tasks", Kind::Task),
+        ("gifts", Kind::Gift),
         ("notes", Kind::Note),
+        ("journal_entries", Kind::JournalEntry),
         ("documents", Kind::Document),
         ("photos", Kind::Photo),
         ("locker", Kind::LockerItem),

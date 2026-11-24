@@ -114,6 +114,7 @@ thread.clear
 thread.save_turn
 thread.settle_proposal
 txn.categorize
+txn.edit
 txn.export_csv
 txn.link_transfer
 txn.unlink_transfer

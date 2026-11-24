@@ -219,7 +219,7 @@ fn a_corrected_date_and_a_changed_place_read_as_the_sheet_reads_them() {
     run(
         &d,
         act::photos::SetPlace {
-            id: id.clone(),
+            photo_id: id.clone(),
             place_id: Field::Is(there),
         }
         .request(),

@@ -43,12 +43,11 @@
 //!    `figures` it returns. A missing field is a parse error, so a new action
 //!    cannot ship without saying what chat does with it.
 //!
-//!    **Whether chat runs an action itself or hands the member a card is never
-//!    written down**: [`ActionEntry::surface`] derives it from those same facts,
-//!    so the two cannot disagree. It is a card when the action has no inverse
-//!    (a `log` is the one append-only exception), acts on many items, requires a
-//!    sealed value, or requires a value chat has no word for (a property with no
-//!    `aliases`). Two direct actions are never the same (verb, kind, qualifier).
+//!    **Whether chat runs an action itself or hands the member a card is**
+//!    derived by [`ActionEntry::surface`]: every pure vault action is
+//!    `Direct`, and only OS/binary/device-store actions marked `"handoff": true`
+//!    are `Card`. Two direct actions within one manifest are never the same
+//!    (verb, kind, qualifier).
 //!    The assistant's kind and verb tables (`centraid-assist`'s `build.rs`) are
 //!    generated from these fields and the `kinds` block, so the catalog and the
 //!    chat surface cannot drift.
@@ -156,6 +155,8 @@ pub struct ActionEntry {
     pub sealed: Vec<String>,
     /// Whether it acts on many items at once (an array of ids, a whole history).
     pub bulk: bool,
+    /// Whether this action requires an OS/binary/device-store handoff (`ChatSurface::Card`).
+    pub handoff: bool,
     /// The vault command it invokes (`schema.name`).
     pub command: String,
     /// Three to five requests a member might make for it.
@@ -230,45 +231,12 @@ impl ActionEntry {
         self.input.get("properties")?.get(property)?.get("default")
     }
 
-    /// Whether chat can state a required property itself: it names the row, the
-    /// core mints it, it can only be one value or has a default, the verb says it
-    /// (`flag`), or chat has a word for it.
-    fn chat_can_state(&self, property: &str) -> bool {
-        self.id_property() == Some(property)
-            || self.minted.iter().any(|minted| minted == property)
-            || self.constant_of(property).is_some()
-            || property == "flag"
-            || self.default_of(property).is_some()
-            || !self.aliases_of(property).is_empty()
-    }
-
-    /// WHAT THE CONVERSATION SURFACE DOES WITH THIS ACTION, derived and never
-    /// declared: [`ChatSurface::Direct`] when the assistant can run it on the
-    /// member's words, [`ChatSurface::Card`] when the member finishes it.
-    ///
-    /// A card when it cannot be taken back (no `inverse`; a `log` appends a fact
-    /// and is the one exception), acts on many items (`bulk`), requires a sealed
-    /// value (an action whose purpose is a secret; an edit that merely MAY carry
-    /// one stays direct, the door seals what the member typed), or requires a
-    /// value chat has no word for (a file, a person only the member can name).
+    /// WHAT THE CONVERSATION SURFACE DOES WITH THIS ACTION:
+    /// [`ChatSurface::Card`] iff `"handoff": true` (OS/binary/device-store
+    /// handoff), otherwise [`ChatSurface::Direct`].
     #[must_use]
     pub fn surface(&self) -> ChatSurface {
-        let required: Vec<&str> = self
-            .input
-            .get("required")
-            .and_then(Value::as_array)
-            .map(|names| names.iter().filter_map(Value::as_str).collect())
-            .unwrap_or_default();
-        let irreversible = self
-            .inverse
-            .as_deref()
-            .is_none_or(|inverse| SHELL_UNDOS.contains(&inverse))
-            && self.verb != "log";
-        let sealed_required = required
-            .iter()
-            .any(|name| self.sealed.iter().any(|s| s == name));
-        let unsayable = required.iter().any(|name| !self.chat_can_state(name));
-        if irreversible || self.bulk || sealed_required || unsayable {
+        if self.handoff {
             ChatSurface::Card
         } else {
             ChatSurface::Direct
@@ -611,7 +579,7 @@ pub fn parse_manifest(text: &str) -> KitResult<Manifest> {
     let states = parse_states(&raw)?;
     let vault = parse_vault(&raw)?;
     let kinds = parse_kinds(&raw)?;
-    check_classification(&actions, &kinds)?;
+    check_classification(&id, &actions, &kinds)?;
     let ext_tables = match field(&raw, "ext").and_then(|ext| field(ext, "tables")) {
         Some(Value::Array(tables)) => tables
             .iter()
@@ -720,6 +688,7 @@ fn parse_actions(raw: &Value) -> KitResult<Vec<ActionEntry>> {
             inverse: class.inverse,
             sealed: class.sealed,
             bulk: class.bulk,
+            handoff: class.handoff,
             command: class.command,
             phrasings: class.phrasings,
             minted,
@@ -883,6 +852,7 @@ struct ActionClass {
     inverse: Option<String>,
     sealed: Vec<String>,
     bulk: bool,
+    handoff: bool,
     command: String,
     phrasings: Vec<String>,
 }
@@ -962,6 +932,15 @@ fn parse_action_class(
             )));
         }
     };
+    let handoff = match entry.get("handoff") {
+        None | Some(Value::Bool(false)) => false,
+        Some(Value::Bool(true)) => true,
+        Some(_) => {
+            return Err(refuse(format!(
+                "{who} declares \"handoff\" as something but true"
+            )));
+        }
+    };
     if let Some(qualifier) = &qualifier {
         let names_it = |name: &str| {
             properties.is_some_and(|properties| {
@@ -1013,6 +992,7 @@ fn parse_action_class(
         inverse,
         sealed,
         bulk,
+        handoff,
         command,
         phrasings,
     })
@@ -1042,11 +1022,18 @@ fn parse_kinds(raw: &Value) -> KitResult<Vec<KindDecl>> {
     Ok(kinds)
 }
 
+/// Cross-app shortcut kinds declared by another app's manifest and validated
+/// globally across all 9 manifests in `crates/assist/build.rs`.
+const CROSS_APP_KINDS: &[&str] = &["task", "note", "place"];
+
 /// The cross-checks a per-entry parse cannot make: an `inverse` names an action
 /// of this manifest (an edit may name itself) or one of the shell's [`SHELL_UNDOS`], a direct action acts on a kind
-/// this manifest declares, and no two direct actions are the same (verb, kind,
+/// this manifest declares (or one of the cross-app shortcut kinds `task`, `note`, `place`), and no two direct actions are the same (verb, kind,
 /// qualifier) to the chat surface — the assistant looks up one action per triple.
-fn check_classification(actions: &[ActionEntry], kinds: &[KindDecl]) -> KitResult<()> {
+///
+/// The `"shell"` manifest is exempt from the chat-surface kind and triple checks because it is
+/// never carried in the assistant's chat catalog and declares no `"kinds"` table.
+fn check_classification(id: &str, actions: &[ActionEntry], kinds: &[KindDecl]) -> KitResult<()> {
     let refuse = |message: String| KitError::manifest("invalid_handler_entry", message, None);
     for action in actions {
         if let Some(inverse) = &action.inverse
@@ -1059,13 +1046,16 @@ fn check_classification(actions: &[ActionEntry], kinds: &[KindDecl]) -> KitResul
             )));
         }
     }
+    if id == "shell" {
+        return Ok(());
+    }
     let declared = |kind: &str| kinds.iter().any(|decl| decl.id == kind);
     let mut pairs: Vec<(&str, &str, Option<&str>, &str)> = Vec::new();
     for action in actions
         .iter()
         .filter(|a| a.surface() == ChatSurface::Direct)
     {
-        if !declared(&action.kind) {
+        if !declared(&action.kind) && !CROSS_APP_KINDS.contains(&action.kind.as_str()) {
             return Err(refuse(format!(
                 "the direct action \"{}\" acts on the kind \"{}\", which this manifest does not declare under \"kinds\"",
                 action.name, action.kind
@@ -1325,7 +1315,7 @@ mod tests {
     #[test]
     fn one_name_in_both_lists_is_allowed_and_two_in_one_is_not() {
         let both = minimal(&format!(
-            r#", "actions": [{}], "queries": [{}]"#,
+            r#", "actions": [{}], "queries": [{}]{THING}"#,
             action("search", ""),
             query("search")
         ));
@@ -1370,7 +1360,7 @@ mod tests {
                 "{declared}: {error}"
             );
         }
-        let plain = minimal(&format!(r#", "actions": [{}]"#, action("add", "")));
+        let plain = minimal(&format!(r#", "actions": [{}]{THING}"#, action("add", "")));
         assert_eq!(parse_manifest(&plain).unwrap().actions[0].name, "add");
     }
 
@@ -1477,9 +1467,10 @@ mod tests {
         }
     }
 
-    /// WHAT CHAT DOES WITH AN ACTION IS DERIVED, never written: a `chat` key is refused, and the
-    /// surface follows from the inverse, the seal, `bulk` and whether chat has a word for what
-    /// the action requires.
+    /// WHAT CHAT DOES WITH AN ACTION IS DERIVED FROM `handoff`: a `chat` key is
+    /// refused, pure vault actions (including null/shell inverses, `bulk: true`,
+    /// sealed required fields, and unsayable required fields) are `Direct`, and
+    /// only `"handoff": true` produces `Card`.
     #[test]
     fn the_chat_surface_is_derived_from_the_facts_and_never_declared() {
         let with = |extra: &str| {
@@ -1501,31 +1492,44 @@ mod tests {
             ),
             "{error}"
         );
-        // no inverse: a card
-        assert_eq!(with("").actions[0].surface(), ChatSurface::Card);
-        let undoable = |manifest: &str| {
-            let entry =
-                action("add", manifest).replace("\"inverse\": null", "\"inverse\": \"add\"");
-            parse_manifest(&minimal(&format!(r#", "actions": [{entry}]{THING}"#))).unwrap()
-        };
-        assert_eq!(undoable("").actions[0].surface(), ChatSurface::Direct);
-        // an inverse chat cannot run (the shell's Undo) leaves it a card, as no inverse does
-        let shell_undo = |name: &str| {
+        // invalid handoff is refused
+        let bad_handoff = parse_manifest(&minimal(&format!(
+            r#", "actions": [{}]{THING}"#,
+            action("add", r#", "handoff": "yes""#)
+        )))
+        .unwrap_err();
+        assert!(matches!(
+            bad_handoff,
+            KitError::Manifest {
+                code: "invalid_handler_entry",
+                ..
+            }
+        ));
+        // default (no handoff) is Direct, even with null inverse
+        assert!(!with("").actions[0].handoff);
+        assert_eq!(with("").actions[0].surface(), ChatSurface::Direct);
+        // explicit handoff: false is Direct
+        assert_eq!(
+            with(r#", "handoff": false"#).actions[0].surface(),
+            ChatSurface::Direct
+        );
+        // handoff: true is Card
+        let card = with(r#", "handoff": true"#);
+        assert!(card.actions[0].handoff);
+        assert_eq!(card.actions[0].surface(), ChatSurface::Card);
+        // shell Undo inverses and bulk stay Direct unless handoff: true
+        for name in SHELL_UNDOS {
             let entry =
                 action("add", "").replace("\"inverse\": null", &format!("\"inverse\": \"{name}\""));
-            parse_manifest(&minimal(&format!(r#", "actions": [{entry}]{THING}"#))).unwrap()
-        };
-        for name in SHELL_UNDOS {
-            let parsed = shell_undo(name);
+            let parsed = parse_manifest(&minimal(&format!(r#", "actions": [{entry}]{THING}"#))).unwrap();
             assert_eq!(parsed.actions[0].inverse.as_deref(), Some(name));
-            assert_eq!(parsed.actions[0].surface(), ChatSurface::Card);
+            assert_eq!(parsed.actions[0].surface(), ChatSurface::Direct);
         }
-        // bulk: a card
         assert_eq!(
-            undoable(r#", "bulk": true"#).actions[0].surface(),
-            ChatSurface::Card
+            with(r#", "bulk": true"#).actions[0].surface(),
+            ChatSurface::Direct
         );
-        // a required sealed value: a card; an optional one does not make it one
+        // sealed required and unsayable required pure vault actions are Direct
         let input = |required: &str| {
             format!(
                 r#", "input": {{"type": "object", "properties": {{"secret": {{"type": "string", "aliases": ["secret"]}}, "title": {{"type": "string", "aliases": ["name"]}}}}, "required": [{required}]}}"#
@@ -1544,9 +1548,8 @@ mod tests {
         );
         assert_eq!(
             shaped("\"secret\"", "\"secret\"").actions[0].surface(),
-            ChatSurface::Card
+            ChatSurface::Direct
         );
-        // a required value chat has no word for: a card
         let unsayable = action("add", "").replace("\"inverse\": null", "\"inverse\": \"add\"");
         let unsayable = unsayable.replace(
             "\"input\": {}",
@@ -1554,7 +1557,7 @@ mod tests {
         );
         let manifest =
             parse_manifest(&minimal(&format!(r#", "actions": [{unsayable}]{THING}"#))).unwrap();
-        assert_eq!(manifest.actions[0].surface(), ChatSurface::Card);
+        assert_eq!(manifest.actions[0].surface(), ChatSurface::Direct);
     }
 
     #[test]
@@ -1609,6 +1612,20 @@ mod tests {
         // a direct action on a kind the manifest never declared
         let orphan = minimal(&format!(r#", "actions": [{}]"#, direct("add", "create")));
         assert!(parse_manifest(&orphan).is_err());
+        // cross-app shortcut kinds (`task`, `note`, `place`) are allowed per-manifest
+        for shortcut_kind in CROSS_APP_KINDS {
+            let shortcut = direct("add", "create")
+                .replace(r#""kind": "thing""#, &format!(r#""kind": "{shortcut_kind}""#));
+            parse_manifest(&minimal(&format!(r#", "actions": [{shortcut}]"#))).unwrap();
+        }
+        // the shell manifest is outside the assistant's catalog and declares no `"kinds"` block
+        let shell = minimal(&format!(
+            r#", "actions": [{}, {}]"#,
+            direct("first", "edit"),
+            direct("second", "edit")
+        ))
+        .replace(r#""id": "sample""#, r#""id": "shell""#);
+        parse_manifest(&shell).unwrap();
     }
 
     /// AN ALIAS NAMES ONE PROPERTY, and an `x-minted` mark sits on a text property only.
@@ -1619,7 +1636,7 @@ mod tests {
                 "\"input\": {}",
                 &format!(r#""input": {{"type": "object", "properties": {properties}}}"#),
             );
-            parse_manifest(&minimal(&format!(r#", "actions": [{entry}]"#)))
+            parse_manifest(&minimal(&format!(r#", "actions": [{entry}]{THING}"#)))
         };
         assert!(shaped(r#"{"a": {"type": "string", "aliases": ["x"]}, "b": {"type": "string", "aliases": ["y"]}}"#).is_ok());
         assert!(shaped(r#"{"a": {"type": "string", "aliases": ["x"]}, "b": {"type": "string", "aliases": ["x"]}}"#).is_err());
@@ -1642,7 +1659,7 @@ mod tests {
             ("docs", 24),
             ("health", 17),
             ("locker", 23),
-            ("money", 31),
+            ("money", 32),
             ("notes", 22),
             ("people", 36),
             ("photos", 27),
@@ -1683,7 +1700,7 @@ mod tests {
                 assert!(!query.figures.is_empty(), "{app}/{}", query.name);
             }
         }
-        assert_eq!(total, 227);
+        assert_eq!(total, 228);
         // the orders are 0..N with no hole, so the generated enum is dense
         let expected: BTreeSet<u32> = (0..u32::try_from(orders.len()).unwrap()).collect();
         assert_eq!(orders, expected);

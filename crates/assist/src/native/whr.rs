@@ -455,9 +455,11 @@ pub fn resolve_value(kind: Kind, field: &str, literal: &str) -> Option<&'static 
 
 /// The currency words a person says, and the codes each may be (nt13 R1): the vault's own codes
 /// decide which one is meant.
-const CURRENCY_NAMES: [(&str, &[&str]); 29] = [
+const CURRENCY_NAMES: [(&str, &[&str]); 33] = [
     ("dollar", &["USD", "CAD", "AUD", "NZD", "SGD", "HKD"]),
     ("buck", &["USD"]),
+    ("singapore dollar", &["SGD"]),
+    ("sgd", &["SGD"]),
     ("euro", &["EUR"]),
     ("pound", &["GBP"]),
     ("sterling", &["GBP"]),
@@ -467,6 +469,7 @@ const CURRENCY_NAMES: [(&str, &[&str]); 29] = [
         &["MXN", "COP", "ARS", "CLP", "PHP", "UYU", "DOP", "CUP"],
     ),
     ("rupee", &["INR", "PKR", "LKR", "NPR"]),
+    ("inr", &["INR"]),
     ("yen", &["JPY"]),
     ("yuan", &["CNY"]),
     ("renminbi", &["CNY"]),
@@ -478,6 +481,7 @@ const CURRENCY_NAMES: [(&str, &[&str]); 29] = [
     ("real", &["BRL"]),
     ("rand", &["ZAR"]),
     ("dirham", &["AED", "MAD"]),
+    ("aed", &["AED"]),
     ("riyal", &["SAR", "QAR"]),
     ("shekel", &["ILS"]),
     ("lira", &["TRY"]),
@@ -638,6 +642,7 @@ pub fn resolve_where(kind: Kind, text: &str, held: &[String]) -> (String, Vec<St
                 if !op.is_empty()
                     && let (Some(number), Some(code), None) =
                         (words.next(), words.next(), words.next())
+                    && scale_factor(code).is_none()
                     && let Some(resolved) = resolve_currency(code, held)
                 {
                     let code = read(code, Some(resolved));
@@ -758,27 +763,51 @@ pub fn number_arg(field: &meta::Field, text: &str) -> Result<i64, String> {
     Ok(parsed.round() as i64)
 }
 
-/// The currency symbols an amount may start with, and the ISO codes each names (nt12 B5). A
-/// symbol names a currency: `€` is the euro, `$` is any of the dollars.
-const SYMBOLS: [(char, &[&str]); 4] = [
-    ('$', &["USD", "CAD", "AUD", "NZD", "SGD", "HKD", "MXN"]),
-    ('\u{20ac}', &["EUR"]),
-    ('\u{a3}', &["GBP"]),
-    ('\u{a5}', &["JPY", "CNY"]),
+/// The currency symbols and prefixes an amount may start with, and the ISO codes each names
+/// (nt12 B5). Multi-character prefixes (`S$`, `Rs.`, `Rs`, `AED`) appear before `$` so `S$85` is
+/// read as `SGD` rather than generic `$`.
+const SYMBOLS: [(&str, &[&str]); 9] = [
+    ("S$", &["SGD"]),
+    ("Rs.", &["INR"]),
+    ("Rs", &["INR"]),
+    ("AED", &["AED"]),
+    ("\u{20b9}", &["INR"]),
+    ("$", &["USD", "CAD", "AUD", "NZD", "SGD", "HKD", "MXN"]),
+    ("\u{20ac}", &["EUR"]),
+    ("\u{a3}", &["GBP"]),
+    ("\u{a5}", &["JPY", "CNY"]),
 ];
 
-/// The currency symbol an amount starts with.
-fn symbol_of(text: &str) -> Option<char> {
-    let first = text.trim().chars().next()?;
-    SYMBOLS
-        .iter()
-        .any(|(symbol, _)| *symbol == first)
-        .then_some(first)
+fn strip_symbol_prefix(text: &str) -> Option<(&'static str, &'static [&'static str], &str)> {
+    let trimmed = text.trim_start();
+    for &(symbol, codes) in &SYMBOLS {
+        if symbol.is_ascii() && symbol.chars().any(|c| c.is_ascii_alphabetic()) {
+            if let Some(head) = trimmed.get(..symbol.len())
+                && head.eq_ignore_ascii_case(symbol)
+            {
+                let rest = &trimmed[symbol.len()..];
+                if matches!(symbol, "Rs" | "AED")
+                    && rest.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+                {
+                    continue;
+                }
+                return Some((symbol, codes, rest));
+            }
+        } else if let Some(rest) = trimmed.strip_prefix(symbol) {
+            return Some((symbol, codes, rest));
+        }
+    }
+    None
+}
+
+/// The currency symbol or prefix an amount starts with (ignoring an optional leading minus).
+fn symbol_of(text: &str) -> Option<&'static str> {
+    let without_sign = text.trim().strip_prefix(['-', '\u{2212}']).unwrap_or(text);
+    strip_symbol_prefix(without_sign).map(|(symbol, _, _)| symbol)
 }
 
 fn is_symbol(text: &str) -> bool {
-    let mut chars = text.chars();
-    matches!((chars.next(), chars.next()), (Some(symbol), None) if SYMBOLS.iter().any(|(known, _)| *known == symbol))
+    SYMBOLS.iter().any(|(known, _)| *known == text)
 }
 
 /// `Err` when the amount `text` starts with a symbol that names another currency than the
@@ -804,8 +833,9 @@ pub fn symbol_conflict(text: &str, currency: &str) -> Result<(), String> {
 
 /// Settle the currency symbols of a parsed `where` against the currencies the vault holds
 /// (`codes`): a symbol is the one code of its family the vault has; with none it is the family's
-/// first code when the family has one meaning (`€`, `£`) or its common one (`$` is USD, `¥` is
-/// JPY); with several (`$` in a vault of USD and CAD) it is an error naming them.
+/// first code when the family has one meaning (`€`, `£`, `₹`, `S$`, `AED`) or its common one
+/// (`$` is USD, `¥` is JPY); with several (`$` in a vault of USD and CAD) it is an error naming
+/// them.
 pub(crate) fn settle_currencies(conds: &mut [Cond], codes: &[String]) -> Result<(), String> {
     for cond in conds {
         let Cond::Number {
@@ -818,12 +848,9 @@ pub(crate) fn settle_currencies(conds: &mut [Cond], codes: &[String]) -> Result<
         if !is_symbol(symbol) {
             continue;
         }
-        let Some(symbol_char) = symbol.chars().next() else {
-            continue;
-        };
         let family = SYMBOLS
             .iter()
-            .find(|(known, _)| *known == symbol_char)
+            .find(|(known, _)| *known == symbol.as_str())
             .map_or(&[][..], |(_, codes)| *codes);
         let held: Vec<&str> = family
             .iter()
@@ -835,7 +862,7 @@ pub(crate) fn settle_currencies(conds: &mut [Cond], codes: &[String]) -> Result<
             [only] => (*only).to_owned(),
             several => {
                 return Err(format!(
-                    "error: {symbol_char} names more than one currency here ({}); write the amount with its code (50 {}).",
+                    "error: {symbol} names more than one currency here ({}); write the amount with its code (50 {}).",
                     several.join(", "),
                     several[0]
                 ));
@@ -845,45 +872,161 @@ pub(crate) fn settle_currencies(conds: &mut [Cond], codes: &[String]) -> Result<
     Ok(())
 }
 
-/// An amount as a person writes it, in currency units: `12`, `12.50`,
-/// `1,500`, `$2k`, `500k`, `2.5K`, `1.2m`. A trailing `k` is a thousand and
-/// `m` a million; a currency symbol in front is dropped. `None` for anything
-/// else ("fifty", "500kk", "1e3"). Only money takes these suffixes: on a
-/// number of minutes or days "30m" stays an error.
+/// Whether `whole` has valid international (`1,500`) or Indian (`1,20,000`, `12,34,567`) comma
+/// grouping.
+fn valid_comma_grouping(whole: &str) -> bool {
+    let groups: Vec<&str> = whole.split(',').collect();
+    if groups.len() < 2
+        || groups
+            .iter()
+            .any(|g| g.is_empty() || !g.chars().all(|c| c.is_ascii_digit()))
+    {
+        return false;
+    }
+    let intl = (1..=3).contains(&groups[0].len()) && groups[1..].iter().all(|g| g.len() == 3);
+    let indian = groups.len() >= 3
+        && (1..=2).contains(&groups[0].len())
+        && groups[1..groups.len() - 1]
+            .iter()
+            .all(|g| g.len() == 2)
+        && groups.last().is_some_and(|g| g.len() == 3);
+    intl || indian
+}
+
+fn scale_factor(word: &str) -> Option<f64> {
+    match word.to_ascii_lowercase().as_str() {
+        "k" => Some(1_000.0),
+        "m" => Some(1_000_000.0),
+        "lakh" | "lakhs" | "lac" | "lacs" => Some(100_000.0),
+        "crore" | "crores" | "cr" => Some(10_000_000.0),
+        _ => None,
+    }
+}
+
+fn parse_money_internal(
+    text: &str,
+    allow_trailing_currency: bool,
+) -> Result<(f64, Option<String>), String> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Err("error: amount is empty.".to_owned());
+    }
+    let (neg_before, rest) = trimmed
+        .strip_prefix(['-', '\u{2212}'])
+        .map_or((false, trimmed), |r| (true, r.trim_start()));
+    let (prefix_sym, prefix_family, rest) = match strip_symbol_prefix(rest) {
+        Some((sym, fam, after)) => (Some(sym), Some(fam), after.trim_start()),
+        None => (None, None, rest),
+    };
+    let (neg_after, rest) = if prefix_sym.is_some() {
+        rest.strip_prefix(['-', '\u{2212}'])
+            .map_or((false, rest), |r| (true, r.trim_start()))
+    } else {
+        (false, rest)
+    };
+    if neg_before && neg_after {
+        return Err(format!("error: \"{trimmed}\" is not a valid amount."));
+    }
+    let negative = neg_before || neg_after;
+    let num_end = rest
+        .char_indices()
+        .find(|(_, c)| !(c.is_ascii_digit() || *c == ',' || *c == '.'))
+        .map_or(rest.len(), |(idx, _)| idx);
+    let num_str = &rest[..num_end];
+    let after_num = &rest[num_end..];
+    if num_str.is_empty()
+        || num_str.starts_with('.')
+        || num_str.ends_with('.')
+        || num_str.starts_with(',')
+        || num_str.ends_with(',')
+        || num_str.split('.').count() > 2
+    {
+        return Err(format!("error: \"{trimmed}\" is not a valid amount."));
+    }
+    let (whole_raw, frac_raw) = num_str.split_once('.').unwrap_or((num_str, ""));
+    if frac_raw.contains(',') || (whole_raw.contains(',') && !valid_comma_grouping(whole_raw)) {
+        return Err(format!("error: \"{trimmed}\" is not a valid amount."));
+    }
+    let whole_clean = whole_raw.replace(',', "");
+    if whole_clean.is_empty()
+        || !whole_clean.chars().all(|c| c.is_ascii_digit())
+        || !frac_raw.chars().all(|c| c.is_ascii_digit())
+    {
+        return Err(format!("error: \"{trimmed}\" is not a valid amount."));
+    }
+    let numeric_str = if frac_raw.is_empty() {
+        whole_clean
+    } else {
+        format!("{whole_clean}.{frac_raw}")
+    };
+    let base = numeric_str
+        .parse::<f64>()
+        .map_err(|_| format!("error: \"{trimmed}\" is not a valid amount."))?;
+    let tokens: Vec<&str> = after_num.split_whitespace().collect();
+    let (scale, trailing_code) = match tokens.as_slice() {
+        [] => (1.0, None),
+        [first] => {
+            if let Some(s) = scale_factor(first) {
+                (s, None)
+            } else if allow_trailing_currency
+                && first.len() == 3
+                && first.chars().all(|c| c.is_ascii_alphabetic())
+            {
+                (1.0, Some(first.to_uppercase()))
+            } else {
+                return Err(format!("error: \"{trimmed}\" is not a valid amount."));
+            }
+        }
+        [first, second] if allow_trailing_currency => {
+            if let Some(s) = scale_factor(first)
+                && second.len() == 3
+                && second.chars().all(|c| c.is_ascii_alphabetic())
+            {
+                (s, Some(second.to_uppercase()))
+            } else {
+                return Err(format!("error: \"{trimmed}\" is not a valid amount."));
+            }
+        }
+        _ => return Err(format!("error: \"{trimmed}\" is not a valid amount.")),
+    };
+    let amount = base * scale;
+    let amount = if negative { -amount } else { amount };
+    let currency = match (prefix_sym, prefix_family, trailing_code) {
+        (Some(sym), Some(fam), Some(code)) => {
+            if !fam.contains(&code.as_str()) {
+                return Err(format!("error: \"{trimmed}\" mixes {sym} with {code}."));
+            }
+            Some(code)
+        }
+        (None, None, Some(code)) => Some(code),
+        (Some(sym), Some(fam), None) => Some(if fam.len() == 1 {
+            fam[0].to_owned()
+        } else {
+            sym.to_owned()
+        }),
+        _ => None,
+    };
+    Ok((amount, currency))
+}
+
+/// Parse a money value with optional leading sign, currency symbol/prefix (`S$`, `₹`, `Rs.`,
+/// `Rs`, `AED`, `$`, `€`, `£`, `¥`), international or Indian comma grouping, scale suffix/word
+/// (`k`/`K`, `m`/`M`, `lakh`/`lakhs`/`lac`/`lacs`, `crore`/`crores`/`cr`), and optional trailing
+/// 3-letter ISO currency code.
+pub fn parse_money_value(text: &str) -> Result<(f64, Option<String>), String> {
+    parse_money_internal(text, true)
+}
+
+/// An amount as a person writes it, in currency units: `12`, `12.50`, `1,500`, `1,50,000`,
+/// `$2k`, `500k`, `2.5K`, `1.2m`, `Rs. 2.5 lakh`, `1.2 crore`, `S$85`, `AED 320`. A trailing `k`
+/// is a thousand, `m` a million, `lakh`/`lac` 100,000, `crore`/`cr` 10,000,000; a currency
+/// symbol/prefix in front is dropped. `None` for anything else ("fifty", "500kk", "1e3", "1,2,3").
+/// Only money takes these suffixes: on a number of minutes or days "30m" stays an error.
 #[must_use]
 pub fn parse_amount(text: &str) -> Option<f64> {
-    let text = text
-        .trim()
-        .trim_start_matches(['$', '\u{20ac}', '\u{a3}', '\u{a5}']);
-    let (digits, scale) = match text.chars().last()? {
-        'k' | 'K' => (&text[..text.len() - 1], 1_000.0),
-        'm' | 'M' => (&text[..text.len() - 1], 1_000_000.0),
-        _ => (text, 1.0),
-    };
-    let grouped = digits.split_once('.').map_or(digits, |(whole, _)| whole);
-    let digits = if grouped.contains(',') {
-        let mut groups = grouped.split(',');
-        let first = groups.next().unwrap_or_default();
-        let ok = (1..=3).contains(&first.len()) && groups.all(|group| group.len() == 3);
-        if !ok {
-            return None;
-        }
-        digits.replace(',', "")
-    } else {
-        digits.to_owned()
-    };
-    let mut dots = 0;
-    let plain = !digits.is_empty()
-        && digits.chars().all(|c| {
-            dots += usize::from(c == '.');
-            c.is_ascii_digit() || c == '.'
-        })
-        && dots <= 1
-        && digits.chars().any(|c| c.is_ascii_digit());
-    plain
-        .then(|| digits.parse::<f64>().ok())
-        .flatten()
-        .map(|n| n * scale)
+    parse_money_internal(text, false)
+        .ok()
+        .map(|(amount, _)| amount)
 }
 
 /// THE ONE BOOL PARSER (SPEC §3.3, nt12 B2): `yes`, `true`, `1`, `on` and `no`, `false`, `0`,
@@ -1050,58 +1193,49 @@ pub(crate) fn parse_cond(kind: Kind, part: &str) -> Result<Cond, String> {
         )
     })?;
     match field.ty {
-        FieldType::Number | FieldType::Money => {
-            let mut words = value.split_whitespace();
-            let written = words.next().unwrap_or_default();
-            // A MONEY FIELD MAY BE SIGNED (a transaction's `amount`: money out is negative), so a
-            // leading minus is read before the symbol (`-50`, `-$50`) and applied after.
-            let (negative, written) = match field.ty {
-                FieldType::Money => written
-                    .strip_prefix(['-', '\u{2212}'])
-                    .map_or((false, written), |rest| (true, rest)),
-                _ => (false, written),
-            };
-            let number = written.trim_start_matches(['$', '\u{20ac}', '\u{a3}', '\u{a5}']);
-            let symbol = (field.ty == FieldType::Money)
-                .then(|| symbol_of(written))
-                .flatten();
-            let parsed = if field.ty == FieldType::Money {
-                parse_amount(number).map(|amount| if negative { -amount } else { amount })
-            } else {
-                number.parse::<f64>().ok()
-            }
-            .ok_or_else(|| format!("error: {} is a number; \"{value}\" is not.", field.name))?;
-            // THE WORD AFTER THE NUMBER is a money field's currency code or a
-            // number field's own unit spelled out ("60 min"); anything else
-            // ("1 hour") is refused, never dropped, since dropping it would
-            // compare against a different quantity than the one asked for.
-            let rest: Vec<&str> = words.collect();
-            let refuse = || {
-                let shape = match (field.ty, field.unit) {
-                    (FieldType::Money, _) => {
-                        "an amount, optionally with a currency code (50 EUR)".to_owned()
-                    }
-                    (_, Some("min")) => "a number of minutes (60, not 1 hour)".to_owned(),
-                    (_, Some("days")) => "a number of days (14, not 2 weeks)".to_owned(),
-                    _ => "a number".to_owned(),
-                };
-                format!("error: {} is {shape}; \"{value}\" is not.", field.name)
-            };
-            let currency = match (field.ty, rest.as_slice()) {
-                (_, []) => symbol.map(String::from),
-                (FieldType::Money, [code])
-                    if code.len() == 3 && code.chars().all(|c| c.is_ascii_alphabetic()) =>
-                {
-                    Some(code.to_uppercase())
-                }
-                (FieldType::Number, [word]) if unit_word(field.unit, word) => None,
-                _ => return Err(refuse()),
-            };
+        FieldType::Money => {
+            let (parsed, currency) = parse_money_value(value).map_err(|_| {
+                format!(
+                    "error: {} is an amount, optionally with a currency code (50 EUR); \"{value}\" is not.",
+                    field.name
+                )
+            })?;
             Ok(Cond::Number {
                 field: field.name,
                 op,
                 value: parsed,
                 currency,
+            })
+        }
+        FieldType::Number => {
+            let mut words = value.split_whitespace();
+            let number = words.next().unwrap_or_default();
+            let parsed = number
+                .parse::<f64>()
+                .ok()
+                .ok_or_else(|| format!("error: {} is a number; \"{value}\" is not.", field.name))?;
+            // THE WORD AFTER THE NUMBER is a number field's own unit spelled out ("60 min");
+            // anything else ("1 hour") is refused, never dropped, since dropping it would compare
+            // against a different quantity than the one asked for.
+            let rest: Vec<&str> = words.collect();
+            let refuse = || {
+                let shape = match field.unit {
+                    Some("min") => "a number of minutes (60, not 1 hour)".to_owned(),
+                    Some("days") => "a number of days (14, not 2 weeks)".to_owned(),
+                    _ => "a number".to_owned(),
+                };
+                format!("error: {} is {shape}; \"{value}\" is not.", field.name)
+            };
+            match rest.as_slice() {
+                [] => {}
+                [word] if unit_word(field.unit, word) => {}
+                _ => return Err(refuse()),
+            }
+            Ok(Cond::Number {
+                field: field.name,
+                op,
+                value: parsed,
+                currency: None,
             })
         }
         FieldType::Text => {
@@ -1295,5 +1429,204 @@ fn holds(world: &World, row: &Row, cond: &Cond) -> bool {
             });
             op.holds(i64::try_from(linked).unwrap_or(i64::MAX).cmp(count))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::{BTreeMap, BTreeSet};
+
+    fn test_world(currency: &str) -> World {
+        World {
+            rows: BTreeMap::new(),
+            edges: Vec::new(),
+            me: String::new(),
+            currency: currency.to_owned(),
+            calendar: String::new(),
+            locker_key: None,
+            areas: Vec::new(),
+            health_store: None,
+            zone: "UTC".to_owned(),
+            older: BTreeSet::new(),
+        }
+    }
+
+    fn tx_row(amount_minor: i64, currency: &str) -> Row {
+        let mut fields = BTreeMap::new();
+        fields.insert("amount", Val::Money(amount_minor, currency.to_owned()));
+        Row {
+            kind: Kind::Transaction,
+            id: "tx-1".to_owned(),
+            name: "Test".to_owned(),
+            date: None,
+            fields,
+            trashed: false,
+            created: String::new(),
+            updated: String::new(),
+            extra: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn parse_money_and_amounts_multi_currency_and_indian_grouping() {
+        assert_eq!(
+            parse_money_value("₹1,50,000"),
+            Ok((150_000.0, Some("INR".to_owned())))
+        );
+        assert_eq!(
+            parse_money_value("Rs. 2.5 lakh"),
+            Ok((250_000.0, Some("INR".to_owned())))
+        );
+        assert_eq!(
+            parse_money_value("Rs 450"),
+            Ok((450.0, Some("INR".to_owned())))
+        );
+        assert_eq!(
+            parse_money_value("12,34,567.50 INR"),
+            Ok((1_234_567.5, Some("INR".to_owned())))
+        );
+        assert_eq!(parse_money_value("1.2 crore"), Ok((12_000_000.0, None)));
+        assert_eq!(
+            parse_money_value("S$85"),
+            Ok((85.0, Some("SGD".to_owned())))
+        );
+        assert_eq!(
+            parse_money_value("-S$20"),
+            Ok((-20.0, Some("SGD".to_owned())))
+        );
+        assert_eq!(
+            parse_money_value("-₹500"),
+            Ok((-500.0, Some("INR".to_owned())))
+        );
+        assert_eq!(
+            parse_money_value("-$50"),
+            Ok((-50.0, Some("$".to_owned())))
+        );
+        assert_eq!(
+            parse_money_value("AED 320"),
+            Ok((320.0, Some("AED".to_owned())))
+        );
+        assert_eq!(
+            parse_money_value("320 AED"),
+            Ok((320.0, Some("AED".to_owned())))
+        );
+        assert_eq!(
+            parse_money_value("$2k"),
+            Ok((2_000.0, Some("$".to_owned())))
+        );
+        assert_eq!(
+            parse_money_value("€45.50"),
+            Ok((45.5, Some("EUR".to_owned())))
+        );
+        assert_eq!(
+            parse_money_value("€-45.25"),
+            Ok((-45.25, Some("EUR".to_owned())))
+        );
+        assert_eq!(
+            parse_money_value("-€45.25"),
+            Ok((-45.25, Some("EUR".to_owned())))
+        );
+        assert_eq!(
+            parse_money_value("₹-1,500"),
+            Ok((-1_500.0, Some("INR".to_owned())))
+        );
+        assert_eq!(
+            parse_money_value("Rs -500"),
+            Ok((-500.0, Some("INR".to_owned())))
+        );
+        assert_eq!(
+            parse_money_value("S$-20"),
+            Ok((-20.0, Some("SGD".to_owned())))
+        );
+        assert_eq!(
+            parse_money_value("AED -100"),
+            Ok((-100.0, Some("AED".to_owned())))
+        );
+        assert!(parse_money_value("-€-5").is_err());
+        assert!(symbol_conflict("€-45.25", "USD").is_err());
+        assert!(symbol_conflict("€-45.25", "EUR").is_ok());
+        assert_eq!(
+            parse_money_value("£120"),
+            Ok((120.0, Some("GBP".to_owned())))
+        );
+        assert_eq!(parse_amount("1,50,000"), Some(150_000.0));
+        assert_eq!(parse_amount("1,500"), Some(1_500.0));
+        assert_eq!(parse_amount("1.2m"), Some(1_200_000.0));
+        assert_eq!(parse_amount("1,2,3"), None);
+        assert_eq!(parse_amount("12,34"), None);
+        assert_eq!(parse_amount("500kk"), None);
+    }
+
+    #[test]
+    fn currency_names_and_symbol_conflicts() {
+        let held = vec![
+            "USD".to_owned(),
+            "INR".to_owned(),
+            "AED".to_owned(),
+            "SGD".to_owned(),
+        ];
+        assert_eq!(
+            resolve_currency("rupees", &["USD".to_owned(), "INR".to_owned()]),
+            Some("INR".to_owned())
+        );
+        assert_eq!(
+            resolve_currency("dirhams", &["USD".to_owned(), "AED".to_owned()]),
+            Some("AED".to_owned())
+        );
+        assert_eq!(
+            resolve_currency("singapore dollars", &held),
+            Some("SGD".to_owned())
+        );
+        assert_eq!(resolve_currency("inr", &["USD".to_owned()]), None);
+
+        assert!(symbol_conflict("₹500", "INR").is_ok());
+        assert!(symbol_conflict("-₹500", "INR").is_ok());
+        assert!(symbol_conflict("Rs. 250", "INR").is_ok());
+        assert!(symbol_conflict("S$85", "SGD").is_ok());
+        assert!(symbol_conflict("AED 320", "AED").is_ok());
+        assert!(symbol_conflict("₹500", "USD").is_err());
+        assert!(symbol_conflict("S$85", "USD").is_err());
+        assert!(symbol_conflict("AED 320", "USD").is_err());
+        assert!(symbol_conflict("€50", "USD").is_err());
+    }
+
+    #[test]
+    fn where_parsing_settle_and_bare_threshold_in_vault_currency() {
+        let conds = parse(Kind::Transaction, "amount > Rs. 2.5 lakh").unwrap();
+        assert_eq!(
+            conds,
+            vec![Cond::Number {
+                field: "amount",
+                op: Op::Gt,
+                value: 250_000.0,
+                currency: Some("INR".to_owned()),
+            }]
+        );
+
+        let mut sgd_conds = vec![Cond::Number {
+            field: "amount",
+            op: Op::Ge,
+            value: 85.0,
+            currency: Some("S$".to_owned()),
+        }];
+        settle_currencies(&mut sgd_conds, &["USD".to_owned(), "SGD".to_owned()]).unwrap();
+        assert_eq!(
+            sgd_conds,
+            vec![Cond::Number {
+                field: "amount",
+                op: Op::Ge,
+                value: 85.0,
+                currency: Some("SGD".to_owned()),
+            }]
+        );
+
+        // Bare threshold compares using world.currency
+        let bare = parse(Kind::Transaction, "amount > 1,000").unwrap();
+        let inr_world = test_world("INR");
+        let usd_world = test_world("USD");
+        let inr_row = tx_row(150_000, "INR"); // 1500.00 INR
+        assert!(matches(&inr_world, &inr_row, &bare));
+        assert!(!matches(&usd_world, &inr_row, &bare));
     }
 }

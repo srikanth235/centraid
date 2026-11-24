@@ -165,10 +165,13 @@ pub struct RowChange {
     pub date_label: &'static str,
 }
 
-/// Whether a verb deletes, removes or cancels: the writes a card asks twice for.
+/// Whether a verb deletes, purges, merges, unfollows, removes or cancels: the writes a card asks twice for.
 #[must_use]
 pub fn destructive_verb(verb: &str) -> bool {
-    matches!(verb, "delete" | "remove_from" | "cancel")
+    matches!(
+        verb,
+        "delete" | "remove_from" | "cancel" | "purge" | "empty_trash" | "merge" | "unfollow"
+    )
 }
 
 /// What the session remembers of a conversation that a write changes, as it was when the turn
@@ -437,6 +440,16 @@ pub(crate) fn apply(
     match command {
         "person.add" => person_add(world, cx, input),
         "person.edit" => person_edit(world, cx, input),
+        "person.move" => person_move(world, cx, input),
+        "person.add_note" => person_add_note(world, cx, input),
+        "person.add_task" => person_add_task(world, cx, input),
+        "person.add_gift" => person_add_gift(world, cx, input),
+        "person.add_journal_entry" => person_add_journal_entry(world, cx, input),
+        "person.add_date" => person_add_date(world, cx, input),
+        "person.add_relationship" => person_add_relationship(world, input),
+        "person.save_contact_point" => person_save_contact_point(world, cx, input),
+        "person.remove_contact_point" => person_remove_contact_point(world, input),
+        "person.merge" => person_merge(world, cx, input),
         "person.log_interaction" => {
             let id = text(input, "id").unwrap_or_default();
             match world.rows.get_mut(&(Kind::Person, id.to_owned())) {
@@ -454,6 +467,8 @@ pub(crate) fn apply(
         "task.organize" => task_organize(world, cx, input),
         "event.propose" => event_propose(world, cx, input),
         "event.edit" => event_edit(world, cx, input),
+        "event.edit_occurrence" => event_edit_occurrence(world, cx, input),
+        "event.respond" => event_respond(world, input),
         "event.cancel" => {
             let id = text(input, "id").unwrap_or_default();
             match world.rows.get_mut(&(Kind::Event, id.to_owned())) {
@@ -468,19 +483,34 @@ pub(crate) fn apply(
         "note.create" => note_create(world, cx, input),
         "note.edit" => note_edit(world, cx, input),
         "note.move" => note_move(world, cx, input),
-        "document.create_text" => document_create(world, cx, input),
+        "note.restore_version" => restore_version(world, cx, input, Kind::Note),
+        "document.create_text" | "document.add" => document_create(world, cx, input),
+        "document.edit" => document_edit(world, cx, input),
+        "document.replace" => document_edit(world, cx, input),
         "document.move" => document_move(world, cx, input),
+        "document.restore_version" => restore_version(world, cx, input, Kind::Document),
         "container.create" => container_create(world, cx, input),
+        "container.style" => container_style(world, cx, input),
         "container.move" => container_move(world, cx, input),
         "entity.retitle" => retitle(world, cx, input),
         "entity.trash" => trash_entity(world, bin, cx, input),
         "entity.restore" => restore_entity(world, bin, cx, input),
         "entity.purge" => purge_entity(world, input),
+        "entity.empty_trash" => empty_trash(world, cx, input),
         "flag.set" | "flag.clear" => flag_entity(world, input, command == "flag.set"),
         "tag.add" | "tag.remove" => tag_entity(world, input),
+        "tag.color" => tag_color(input),
         "edge.add" | "edge.remove" => edge_entity(world, input, command == "edge.add"),
+        "follow.stop" => follow_stop(world, input),
         "locker.add_item" => locker_add(world, cx, input),
         "locker.edit_item" => locker_edit(world, cx, input),
+        "locker.duplicate_item" => locker_duplicate(world, cx, input),
+        "locker.set_field" => locker_set_field(world, cx, input),
+        "locker.remove_field" => locker_remove_field(world, input),
+        "locker.set_addresses" => locker_set_addresses(world, input),
+        "locker.set_passkey" => locker_set_passkey(world, cx, input),
+        "locker.clear_passkey" => locker_clear_passkey(world, input),
+        "locker.set_memo" => locker_set_memo(world, cx, input),
         "locker.mark_used" => Ok(ok(
             json!({"item_id": text(input, "item_id").unwrap_or_default()}),
         )),
@@ -490,11 +520,44 @@ pub(crate) fn apply(
         "measurement.clear" => measurement_clear(world, input),
         "account.add" => account_add(world, cx, input),
         "category.add" => category_add(world, cx, input),
+        "category.merge" => category_merge(world, input),
         "account.edit" => account_edit(world, cx, input),
+        "account.set_opening" => account_set_opening(world, cx, input),
+        "checkpoint.record" => checkpoint_record(world, input),
+        "budget.set" => budget_set(world, input),
+        "budget.set_carry" => budget_set_carry(world, input),
+        "txn.edit" => txn_edit(world, cx, input),
+        "txn.categorize" => txn_categorize(world, cx, input),
+        "rule.add" => rule_add(world, cx, input),
         "rule.edit" => rule_edit(world, cx, input),
+        "rule.delete" => rule_delete(world, input),
+        "rule.apply" => Ok(ok(json!({"matched": 0, "recategorised": 0, "renamed": 0}))),
         "txn.link_transfer" | "txn.unlink_transfer" => {
             transfer(world, input, command == "txn.link_transfer")
         }
+        "album.set_cover" => album_set_cover(world, cx, input),
+        "photo.add" => photo_add(world, cx, input),
+        "photo.edit" => photo_edit(world, cx, input),
+        "photo.set_place" => photo_set_place(world, cx, input),
+        "place.add" => place_add(world, cx, input),
+        "account.remember_layout"
+        | "document.export_zip"
+        | "event.export_ics"
+        | "health.export_csv"
+        | "locker.export"
+        | "note.export"
+        | "note.import"
+        | "person.export_vcf"
+        | "person.import_vcf"
+        | "photo.export_zip"
+        | "task.export_ics"
+        | "txn.export_csv"
+        | "follow.calendar"
+        | "follow.contacts"
+        | "follow.health"
+        | "follow.reminders"
+        | "follow.statement"
+        | "measurement.record" => Ok(ok(json!({"ok": true}))),
         other => Err(format!(
             "error: park has no patch for {other}; the write cannot be shown before it is made."
         )),
@@ -522,7 +585,13 @@ fn gone(world: &World, id: &str) -> String {
 fn is_container(kind: Kind) -> bool {
     matches!(
         kind,
-        Kind::Album | Kind::Notebook | Kind::Folder | Kind::List
+        Kind::Album
+            | Kind::Notebook
+            | Kind::Folder
+            | Kind::List
+            | Kind::Calendar
+            | Kind::PeopleList
+            | Kind::Section
     )
 }
 
@@ -542,6 +611,14 @@ fn members(world: &World, holder: &Key) -> Vec<Key> {
             .rows
             .iter()
             .filter(|(key, row)| key.0 == holder.0 && row.extra.get("parent") == Some(&holder.1))
+            .map(|(key, _)| key.clone())
+            .collect(),
+        Kind::List => world
+            .rows
+            .iter()
+            .filter(|(key, row)| {
+                key.0 == Kind::Section && row.extra.get("list_id") == Some(&holder.1)
+            })
             .map(|(key, _)| key.clone())
             .collect(),
         _ => Vec::new(),
@@ -601,6 +678,7 @@ fn trash_with(
     } else if let Some(row) = world.rows.get_mut(key) {
         trash(row, cx);
     }
+    sync_dependents_trash(world, key, Some(cx));
     out.push(key.1.clone());
     for kid in kids {
         if world.rows.get(&kid).is_some_and(|row| !row.trashed) {
@@ -646,6 +724,7 @@ fn restore_with(
     } else if let Some(row) = world.rows.get_mut(key) {
         untrash(row, cx);
     }
+    sync_dependents_trash(world, key, None);
     out.push(key.1.clone());
     // what went to the trash WITH the holder comes back with it; what was already there stays
     for kid in members(world, key) {
@@ -709,6 +788,7 @@ fn purge_entity(world: &mut World, input: &Value) -> Result<Ran, String> {
     match key_of(world, &id) {
         Some(key) if world.rows[&key].trashed => {
             world.rows.remove(&key);
+            purge_dependents(world, &key);
             unlink(world, |edge| !(edge.from == key || edge.to == key));
             Ok(ok(json!({"purged": [id]})))
         }
@@ -744,9 +824,96 @@ fn retitle(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
         } else {
             title
         };
+        if key.0 == Kind::JournalEntry {
+            row.fields.insert("mood", Val::Text(row.name.clone()));
+        }
         row.updated = cx.now.clone();
     }
     Ok(ok(json!({"id": id})))
+}
+
+/// Mirror parent trash/restore onto dependent non-entity rows (`ContactPoint`, `LockerField`,
+/// `LockerPasskey`) as `World::load` reads them from their parent entity.
+fn sync_dependents_trash(world: &mut World, parent: &Key, trashed: Option<&Cx>) {
+    let child_keys: Vec<Key> = match parent.0 {
+        Kind::Person => world
+            .rows
+            .iter()
+            .filter(|(k, r)| {
+                k.0 == Kind::ContactPoint && r.extra.get("person_id") == Some(&parent.1)
+            })
+            .map(|(k, _)| k.clone())
+            .collect(),
+        Kind::LockerItem => world
+            .rows
+            .iter()
+            .filter(|(k, r)| {
+                (k.0 == Kind::LockerField && r.extra.get("item_id") == Some(&parent.1))
+                    || (k.0 == Kind::LockerPasskey && k.1 == parent.1)
+            })
+            .map(|(k, _)| k.clone())
+            .collect(),
+        _ => Vec::new(),
+    };
+    for key in child_keys {
+        if let Some(row) = world.rows.get_mut(&key) {
+            row.trashed = trashed.is_some();
+            if let Some(cx) = trashed {
+                row.updated = cx.now.clone();
+            }
+        }
+    }
+}
+
+fn purge_dependents(world: &mut World, parent: &Key) {
+    match parent.0 {
+        Kind::Person => {
+            world.rows.retain(|k, r| {
+                !(k.0 == Kind::ContactPoint && r.extra.get("person_id") == Some(&parent.1))
+            });
+        }
+        Kind::LockerItem => {
+            world.rows.retain(|k, r| {
+                !((k.0 == Kind::LockerField && r.extra.get("item_id") == Some(&parent.1))
+                    || (k.0 == Kind::LockerPasskey && k.1 == parent.1))
+            });
+        }
+        _ => {}
+    }
+}
+
+fn empty_trash(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let kind_filter = text(input, "kind");
+    let due_only = flag_or(input, "due_only", false);
+    let keys: Vec<Key> = world
+        .rows
+        .iter()
+        .filter(|(_, row)| {
+            row.trashed
+                && (!due_only
+                    || row
+                        .extra
+                        .get("purge_at")
+                        .is_some_and(|at| at.as_str() <= cx.now.as_str()))
+                && kind_filter.is_none_or(|want| {
+                    crate::native::world::vault_kind_of(row.kind) == Some(want)
+                        || (want == "event" && matches!(row.kind, Kind::Event | Kind::ImportantDate))
+                        || (want == "task" && matches!(row.kind, Kind::Task | Kind::Gift))
+                        || (want == "note" && matches!(row.kind, Kind::Note | Kind::JournalEntry))
+                })
+        })
+        .map(|(k, _)| k.clone())
+        .collect();
+    let count = keys.len();
+    let remove_set: std::collections::BTreeSet<Key> = keys.iter().cloned().collect();
+    for key in &keys {
+        world.rows.remove(key);
+        purge_dependents(world, key);
+    }
+    unlink(world, |edge| {
+        !(remove_set.contains(&edge.from) || remove_set.contains(&edge.to))
+    });
+    Ok(ok(json!({"purged": count, "released": [], "more": false})))
 }
 
 fn flag_entity(world: &mut World, input: &Value, on: bool) -> Result<Ran, String> {
@@ -755,17 +922,23 @@ fn flag_entity(world: &mut World, input: &Value, on: bool) -> Result<Ran, String
     let Some(key) = key_of(world, id).filter(|key| !world.rows[key].trashed) else {
         return Ok(refused("entity_takes_a_flag", &gone(world, id)));
     };
-    if let Some(row) = world.rows.get_mut(&key)
-        && matches!(flag, "starred" | "pinned")
-    {
-        row.fields.insert(
-            if flag == "starred" {
-                "starred"
-            } else {
-                "pinned"
-            },
-            Val::Bool(on),
-        );
+    if let Some(row) = world.rows.get_mut(&key) {
+        match flag {
+            "starred" => {
+                row.fields.insert("starred", Val::Bool(on));
+            }
+            "pinned" => {
+                row.fields.insert("pinned", Val::Bool(on));
+            }
+            "archived" => {
+                if on {
+                    row.extra.insert("archived", "true".to_owned());
+                } else {
+                    row.extra.remove("archived");
+                }
+            }
+            _ => {}
+        }
     }
     Ok(ok(json!({"changed": true})))
 }
@@ -786,6 +959,23 @@ fn tag_entity(world: &mut World, input: &Value) -> Result<Ran, String> {
     Ok(ok(json!({"changed": true})))
 }
 
+fn tag_color(input: &Value) -> Result<Ran, String> {
+    let Some(label) = text(input, "label").filter(|label| !label.trim().is_empty()) else {
+        return Ok(refused(
+            "label_is_a_word",
+            "a label needs at least one character",
+        ));
+    };
+    Ok(ok(json!({"label": label, "color": input.get("color").cloned().unwrap_or(Value::Null)})))
+}
+
+fn follow_stop(world: &mut World, input: &Value) -> Result<Ran, String> {
+    if text(input, "system") == Some("health") {
+        world.health_store = None;
+    }
+    Ok(ok(json!({"stopped": true, "forgotten": 0})))
+}
+
 /// An edge the model reads: a photograph in an album (`contains`) or of a person (`depicts`), a line with a person (`with`), what a note, task, event or document is
 /// `about`, and who attends an event.
 fn edge_entity(world: &mut World, input: &Value, add: bool) -> Result<Ran, String> {
@@ -793,12 +983,24 @@ fn edge_entity(world: &mut World, input: &Value, add: bool) -> Result<Ran, Strin
         text(input, "from").unwrap_or_default(),
         text(input, "to").unwrap_or_default(),
     );
-    let via = match text(input, "rel") {
+    let rel = text(input, "rel");
+    let via = match rel {
         Some("contains") => Via::Entry,
         Some("about") => Via::About,
         Some("with") => Via::With,
         Some("depicts") => Via::Depicts,
         Some("attendee") => Via::Attendee,
+        Some("attached" | "links" | "related") => {
+            if key_of(world, from).is_none() || key_of(world, to).is_none() {
+                let predicate = if add {
+                    "edge_joins_what_it_may"
+                } else {
+                    "edge_ends_exist"
+                };
+                return Ok(refused(predicate, "there is nothing with that id"));
+            }
+            return Ok(ok(json!({})));
+        }
         other => return Err(format!("error: park has no patch for an edge of {other:?}")),
     };
     let (Some(from), Some(to)) = (key_of(world, from), key_of(world, to)) else {
@@ -898,6 +1100,228 @@ fn person_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String>
     }
     row.updated = cx.now.clone();
     Ok(ok(json!({"id": id})))
+}
+
+fn person_move(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default().to_owned();
+    if live(world, Kind::Person, &id).is_none() {
+        return Ok(refused("person_can_be_filed", &gone(world, &id)));
+    }
+    if let Some(list_id) = text(input, "list_id")
+        && live(world, Kind::PeopleList, list_id).is_none()
+    {
+        return Ok(refused("person_can_be_filed", "there is no list with that id"));
+    }
+    if let Some(row) = world.rows.get_mut(&(Kind::Person, id.clone())) {
+        row.updated = cx.now.clone();
+    }
+    Ok(ok(json!({"id": id, "list_id": input.get("list_id").cloned().unwrap_or(Value::Null)})))
+}
+
+fn headline(text: &str) -> String {
+    text.lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or_default()
+        .chars()
+        .take(60)
+        .collect()
+}
+
+fn person_add_note(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let person = text(input, "id").unwrap_or_default().to_owned();
+    if live(world, Kind::Person, &person).is_none() {
+        return Ok(refused("note_is_about_a_person", &gone(world, &person)));
+    }
+    let body = text(input, "text").unwrap_or_default();
+    if body.trim().is_empty() {
+        return Ok(refused("note_is_about_a_person", "there is nothing written"));
+    }
+    let id = cx.id("note_id");
+    let title = headline(body);
+    let mut row = new_row(Kind::Note, &id, &title, cx);
+    row.date = local_stamp(&world.zone, &cx.now);
+    put(&mut row, "body", nonempty(body));
+    row.fields.insert("pinned", Val::Bool(false));
+    row.fields.insert("starred", Val::Bool(false));
+    world.rows.insert(row.key(), row);
+    edge(world, (Kind::Note, id.clone()), (Kind::Person, person), Via::About);
+    Ok(ok(json!({"note_id": id})))
+}
+
+fn person_add_task(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let person = text(input, "id").unwrap_or_default().to_owned();
+    if live(world, Kind::Person, &person).is_none() {
+        return Ok(refused("task_is_about_a_person", &gone(world, &person)));
+    }
+    let title = text(input, "text").unwrap_or_default().trim().to_owned();
+    if title.is_empty() {
+        return Ok(refused("task_is_about_a_person", "there is nothing written"));
+    }
+    let id = cx.id("task_id");
+    let mut row = new_row(Kind::Task, &id, &title, cx);
+    row.fields.insert("status", Val::Enum("open"));
+    row.fields.insert("starred", Val::Bool(false));
+    world.rows.insert(row.key(), row);
+    edge(world, (Kind::Task, id.clone()), (Kind::Person, person), Via::About);
+    Ok(ok(json!({"task_id": id})))
+}
+
+fn person_add_gift(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let person = text(input, "id").unwrap_or_default().to_owned();
+    if live(world, Kind::Person, &person).is_none() {
+        return Ok(refused("gift_is_for_a_person", &gone(world, &person)));
+    }
+    let title = text(input, "text").unwrap_or_default().trim().to_owned();
+    if title.is_empty() {
+        return Ok(refused("gift_is_for_a_person", "there is nothing written"));
+    }
+    let id = cx.id("task_id");
+    let row = new_row(Kind::Gift, &id, &title, cx);
+    world.rows.insert(row.key(), row);
+    Ok(ok(json!({"task_id": id})))
+}
+
+fn person_add_journal_entry(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let mood = text(input, "mood").unwrap_or_default().trim().to_owned();
+    let body = text(input, "text").unwrap_or_default();
+    if mood.is_empty() || body.trim().is_empty() {
+        return Ok(refused("entry_is_dated", "an entry needs a mood and words"));
+    }
+    let id = cx.id("entry_id");
+    let mut row = new_row(Kind::JournalEntry, &id, &mood, cx);
+    row.date = text(input, "entry_date")
+        .and_then(Stamp::parse)
+        .or_else(|| local_stamp(&world.zone, &cx.now));
+    row.fields.insert("mood", Val::Text(mood));
+    put(&mut row, "body", nonempty(body));
+    world.rows.insert(row.key(), row);
+    Ok(ok(json!({"entry_id": id})))
+}
+
+fn person_add_date(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let person = text(input, "id").unwrap_or_default().to_owned();
+    let label = text(input, "label").unwrap_or_default().trim().to_owned();
+    let month_day = text(input, "month_day").unwrap_or_default().to_owned();
+    if label.is_empty() {
+        return Ok(refused("date_is_a_day", "a date needs a label"));
+    }
+    if live(world, Kind::Person, &person).is_none() {
+        return Ok(refused("date_is_a_day", &gone(world, &person)));
+    }
+    if centraid_vault::model::fold_label(&label) == "birthday" {
+        if let Some(row) = world.rows.get_mut(&(Kind::Person, person.clone())) {
+            row.extra.insert("birthday", month_day);
+            row.updated = cx.now.clone();
+        }
+        return Ok(ok(json!({"id": person})));
+    }
+    let id = cx.id("date_id");
+    let year: i64 = cx.now.get(0..4).and_then(|y| y.parse().ok()).unwrap_or(2000);
+    let starts = format!("{year}-{month_day}");
+    let mut row = new_row(Kind::ImportantDate, &id, &label, cx);
+    row.date = Stamp::parse(&starts);
+    row.extra.insert("dtstart", starts);
+    row.extra.insert("timing", "all-day".to_owned());
+    row.extra.insert("rrule", "FREQ=YEARLY".to_owned());
+    if flag_or(input, "reminder_on", false) {
+        row.fields.insert("reminders", Val::Num(0));
+    }
+    world.rows.insert(row.key(), row);
+    Ok(ok(json!({"date_id": id})))
+}
+
+fn person_add_relationship(world: &mut World, input: &Value) -> Result<Ran, String> {
+    let person = text(input, "id").unwrap_or_default();
+    if live(world, Kind::Person, person).is_none() {
+        return Ok(refused("relative_is_another_person", &gone(world, person)));
+    }
+    let related = text(input, "related_id").unwrap_or_default();
+    Ok(ok(json!({"related_id": related})))
+}
+
+fn person_save_contact_point(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let person_id = text(input, "id").unwrap_or_default().to_owned();
+    let Some(person_row) = live(world, Kind::Person, &person_id).cloned() else {
+        return Ok(refused("person_is_live", &gone(world, &person_id)));
+    };
+    let channel = text(input, "kind").unwrap_or("phone").to_owned();
+    let value = text(input, "value").unwrap_or_default().trim().to_owned();
+    let preferred = flag_or(input, "preferred", false);
+    let point_id = text(input, "point_id")
+        .map(str::to_owned)
+        .unwrap_or_else(|| cx.id("point_id"));
+    if preferred {
+        for (key, row) in world.rows.iter_mut() {
+            if key.0 == Kind::ContactPoint
+                && key.1 != point_id
+                && row.extra.get("person_id") == Some(&person_id)
+                && row.field("channel") == Some(&Val::Text(channel.clone()))
+            {
+                row.fields.insert("preferred", Val::Bool(false));
+            }
+        }
+    }
+    let mut row = new_row(Kind::ContactPoint, &point_id, &value, cx);
+    row.created = person_row.created;
+    row.updated = cx.now.clone();
+    row.fields.insert("person_id", Val::Text(person_id.clone()));
+    row.fields.insert("channel", Val::Text(channel));
+    row.fields.insert("value", Val::Text(value));
+    if let Some(label) = text(input, "label").filter(|s| !s.trim().is_empty()) {
+        row.fields.insert("label", Val::Text(label.to_owned()));
+    }
+    row.fields.insert("preferred", Val::Bool(preferred));
+    row.extra.insert("person_id", person_id);
+    world.rows.insert(row.key(), row);
+    Ok(ok(json!({"point_id": point_id})))
+}
+
+fn person_remove_contact_point(world: &mut World, input: &Value) -> Result<Ran, String> {
+    let point_id = text(input, "point_id").unwrap_or_default();
+    let Some(removed) = world.rows.remove(&(Kind::ContactPoint, point_id.to_owned())) else {
+        return Ok(refused(
+            "contact_point_exists",
+            "there is no contact point with that id",
+        ));
+    };
+    let person_id = removed.extra.get("person_id").cloned().unwrap_or_default();
+    Ok(ok(json!({"id": person_id})))
+}
+
+fn person_merge(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let from = text(input, "from").unwrap_or_default().to_owned();
+    let into = text(input, "into").unwrap_or_default().to_owned();
+    if from == into
+        || live(world, Kind::Person, &from).is_none()
+        || live(world, Kind::Person, &into).is_none()
+    {
+        return Ok(refused("both_are_people", "choose two distinct live people"));
+    }
+    let from_key = (Kind::Person, from.clone());
+    let into_key = (Kind::Person, into.clone());
+    world.rows.remove(&from_key);
+    for row in world.rows.values_mut() {
+        if row.kind == Kind::ContactPoint && row.extra.get("person_id") == Some(&from) {
+            row.extra.insert("person_id", into.clone());
+            row.fields.insert("person_id", Val::Text(into.clone()));
+        }
+    }
+    for e in &mut world.edges {
+        if e.from == from_key {
+            e.from = into_key.clone();
+        }
+        if e.to == from_key {
+            e.to = into_key.clone();
+        }
+    }
+    world.edges.retain(|e| e.from != e.to);
+    world.edges.sort();
+    world.edges.dedup();
+    if let Some(row) = world.rows.get_mut(&into_key) {
+        row.updated = cx.now.clone();
+    }
+    Ok(ok(json!({"from": from, "into": into})))
 }
 
 // ---------------------------------------------------------------------
@@ -1025,25 +1449,29 @@ fn task_status(world: &mut World, cx: &Cx, input: &Value, command: &str) -> Resu
         _ => ("open", "open"),
     };
     let stamp = cx.stamp();
-    let Some(row) = world
-        .rows
-        .get_mut(&(Kind::Task, id.to_owned()))
-        .filter(|row| !row.trashed)
-    else {
+    let key = if live(world, Kind::Task, id).is_some() {
+        (Kind::Task, id.to_owned())
+    } else if live(world, Kind::Gift, id).is_some() {
+        (Kind::Gift, id.to_owned())
+    } else {
         return Ok(refused("task_is_live", &gone(world, id)));
     };
-    if row.field("status") != Some(&Val::Enum(model)) {
-        row.fields.insert("status", Val::Enum(model));
-        // `done_at` exists iff the status says done
-        put(
-            row,
-            "completed",
-            (model == "completed")
-                .then_some(stamp)
-                .flatten()
-                .map(Val::Date),
-        );
-        row.updated = cx.now.clone();
+    if let Some(row) = world.rows.get_mut(&key) {
+        if key.0 == Kind::Task && row.field("status") != Some(&Val::Enum(model)) {
+            row.fields.insert("status", Val::Enum(model));
+            // `done_at` exists iff the status says done
+            put(
+                row,
+                "completed",
+                (model == "completed")
+                    .then_some(stamp)
+                    .flatten()
+                    .map(Val::Date),
+            );
+            row.updated = cx.now.clone();
+        } else if key.0 == Kind::Gift {
+            row.updated = cx.now.clone();
+        }
     }
     Ok(ok(json!({"id": id, "status": vault})))
 }
@@ -1189,13 +1617,31 @@ fn flag_or(input: &Value, key: &str, default: bool) -> bool {
 fn event_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
     let id = text(input, "id").unwrap_or_default();
     let predicate = "event_is_live_and_its_change_resolves";
-    let Some(row) = world
-        .rows
-        .get_mut(&(Kind::Event, id.to_owned()))
-        .filter(|row| !row.trashed)
-    else {
+    let key = if live(world, Kind::Event, id).is_some() {
+        (Kind::Event, id.to_owned())
+    } else if live(world, Kind::ImportantDate, id).is_some() {
+        (Kind::ImportantDate, id.to_owned())
+    } else {
         return Ok(refused(predicate, &gone(world, id)));
     };
+    let row = world
+        .rows
+        .get_mut(&key)
+        .ok_or_else(|| "row was just verified".to_owned())?;
+    if key.0 == Kind::ImportantDate {
+        if let Some(title) = text(input, "title") {
+            row.name = title.to_owned();
+        }
+        if let Some(reminders) = input.get("reminders").and_then(Value::as_array) {
+            if let Some(first) = reminders.first().and_then(Value::as_i64) {
+                row.fields.insert("reminders", Val::Num(first));
+            } else {
+                row.fields.remove("reminders");
+            }
+        }
+        row.updated = cx.now.clone();
+        return Ok(ok(json!({"id": id})));
+    }
     if let Some(title) = text(input, "title") {
         row.name = title.to_owned();
     }
@@ -1249,6 +1695,36 @@ fn event_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> 
     }
     row.updated = cx.now.clone();
     Ok(ok(json!({"id": id})))
+}
+
+fn event_edit_occurrence(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default();
+    let scope = text(input, "scope").unwrap_or("occurrence");
+    let Some(row) = world
+        .rows
+        .get_mut(&(Kind::Event, id.to_owned()))
+        .filter(|row| !row.trashed)
+    else {
+        return Ok(refused("event_is_live", &gone(world, id)));
+    };
+    if text(input, "action") == Some("cancel") {
+        row.fields.insert("status", Val::Enum("cancelled"));
+    }
+    if let Some(title) = text(input, "title") {
+        row.name = title.to_owned();
+    }
+    text_or_clear(row, input, "description", "description");
+    row.updated = cx.now.clone();
+    Ok(ok(json!({"id": id, "scope": scope})))
+}
+
+fn event_respond(world: &mut World, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default();
+    if live(world, Kind::Event, id).is_none() {
+        return Ok(refused("event_is_live", &gone(world, id)));
+    }
+    let state = text(input, "state").unwrap_or("accepted");
+    Ok(ok(json!({"id": id, "state": state})))
 }
 
 // ---------------------------------------------------------------------
@@ -1380,6 +1856,35 @@ fn document_create(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, Str
     Ok(ok(json!({"id": id})))
 }
 
+fn document_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default();
+    let Some(row) = world
+        .rows
+        .get_mut(&(Kind::Document, id.to_owned()))
+        .filter(|row| !row.trashed)
+    else {
+        return Ok(refused("document_is_live", &gone(world, id)));
+    };
+    if let Some(title) = text(input, "title").filter(|s| !s.trim().is_empty()) {
+        row.name = title.trim().to_owned();
+    }
+    row.updated = cx.now.clone();
+    Ok(ok(json!({"id": id})))
+}
+
+fn restore_version(world: &mut World, cx: &Cx, input: &Value, kind: Kind) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default();
+    let Some(row) = world
+        .rows
+        .get_mut(&(kind, id.to_owned()))
+        .filter(|row| !row.trashed)
+    else {
+        return Ok(refused("entity_is_live", &gone(world, id)));
+    };
+    row.updated = cx.now.clone();
+    Ok(ok(json!({"id": id, "restored": true})))
+}
+
 fn document_move(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
     let id = text(input, "id").unwrap_or_default().to_owned();
     let document = (Kind::Document, id.clone());
@@ -1420,6 +1925,9 @@ fn container_create(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, St
         Some("notebook") => Kind::Notebook,
         Some("folder") => Kind::Folder,
         Some("project") => Kind::List,
+        Some("calendar") => Kind::Calendar,
+        Some("list") => Kind::PeopleList,
+        Some("section") => Kind::Section,
         // an area is a container the model has no kind for: its lists carry its title
         Some("area") => {
             world.areas.push((id.clone(), title.to_owned()));
@@ -1433,15 +1941,64 @@ fn container_create(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, St
     };
     let parent = text(input, "parent").map(str::to_owned);
     let mut row = new_row(kind, &id, title, cx);
+    if matches!(kind, Kind::List | Kind::Calendar) {
+        if let Some(color) = text(input, "color").filter(|s| !s.is_empty()) {
+            row.fields.insert("color", Val::Text(color.to_owned()));
+        }
+        if let Some(icon) = text(input, "icon").filter(|s| !s.is_empty()) {
+            row.fields.insert("icon", Val::Text(icon.to_owned()));
+        }
+    }
+    if kind == Kind::Section {
+        let pos = input
+            .get("position")
+            .and_then(Value::as_f64)
+            .map(|p| p.round() as i64)
+            .unwrap_or_else(|| {
+                world
+                    .rows
+                    .values()
+                    .filter(|r| r.kind == Kind::Section && r.extra.get("list_id") == parent.as_ref())
+                    .filter_map(|r| match r.field("position") {
+                        Some(Val::Num(n)) => Some(*n),
+                        _ => None,
+                    })
+                    .max()
+                    .unwrap_or(0)
+                    + 1
+            });
+        row.fields.insert("position", Val::Num(pos));
+    }
     if let Some(parent) = parent {
         match kind {
             Kind::List => set_area(world, &mut row, Some(&parent)),
+            Kind::Section => {
+                if let Some(list) = world.rows.get(&(Kind::List, parent.clone())) {
+                    put(&mut row, "list", nonempty(&list.name));
+                }
+                row.extra.insert("list_id", parent);
+            }
             _ => {
                 row.extra.insert("parent", parent);
             }
         }
     }
     world.rows.insert(row.key(), row);
+    Ok(ok(json!({"id": id})))
+}
+
+fn container_style(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default();
+    let Some(key) = key_of(world, id)
+        .filter(|k| matches!(k.0, Kind::List | Kind::Calendar) && !world.rows[k].trashed)
+    else {
+        return Ok(refused("entity_is_live", &gone(world, id)));
+    };
+    if let Some(row) = world.rows.get_mut(&key) {
+        text_or_clear(row, input, "color", "color");
+        text_or_clear(row, input, "icon", "icon");
+        row.updated = cx.now.clone();
+    }
     Ok(ok(json!({"id": id})))
 }
 
@@ -1472,6 +2029,27 @@ fn container_move(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, Stri
         set_area(world, &mut row, parent.as_deref());
         row.updated = cx.now.clone();
         world.rows.insert(key, row);
+    } else if key.0 == Kind::Section {
+        let list_title = parent
+            .as_ref()
+            .and_then(|p| world.rows.get(&(Kind::List, p.clone())))
+            .map(|r| r.name.clone());
+        if let Some(row) = world.rows.get_mut(&key) {
+            match parent {
+                Some(parent) => {
+                    row.extra.insert("list_id", parent);
+                    put(row, "list", list_title.as_deref().and_then(nonempty));
+                }
+                None => {
+                    row.extra.remove("list_id");
+                    row.fields.remove("list");
+                }
+            }
+            if let Some(pos) = input.get("position").and_then(Value::as_f64) {
+                row.fields.insert("position", Val::Num(pos.round() as i64));
+            }
+            row.updated = cx.now.clone();
+        }
     } else if let Some(row) = world.rows.get_mut(&key) {
         match parent {
             Some(parent) => {
@@ -1642,17 +2220,60 @@ impl Session {
     }
 }
 
+/// Whether two rows match on every model-visible field except their id (used to match
+/// vault-minted `LockerField` template rows in `Writes::Shadow` where `real.output` carries only
+/// the item id and field count).
+fn same_row_body(a: &Row, b: &Row) -> bool {
+    a.kind == b.kind
+        && a.name == b.name
+        && a.date == b.date
+        && a.fields == b.fields
+        && a.trashed == b.trashed
+        && a.created == b.created
+        && a.extra == b.extra
+}
+
 /// Where two worlds part, field by field: what a patch got wrong. `updated` is left out (a
 /// trigger stamps it from the host clock).
 pub(crate) fn drift(patched: &World, real: &World) -> Vec<String> {
     let mut out = Vec::new();
+    let mut unmatched_real_fields: Vec<(&Key, &Row)> = real
+        .rows
+        .iter()
+        .filter(|(k, _)| k.0 == Kind::LockerField && !patched.rows.contains_key(*k))
+        .collect();
+    let mut paired_patched_fields: std::collections::BTreeSet<&Key> =
+        std::collections::BTreeSet::new();
+    let mut paired_real_fields: std::collections::BTreeSet<&Key> =
+        std::collections::BTreeSet::new();
+    for (pk, prow) in patched
+        .rows
+        .iter()
+        .filter(|(k, _)| k.0 == Kind::LockerField && !real.rows.contains_key(*k))
+    {
+        if let Some(pos) = unmatched_real_fields
+            .iter()
+            .position(|(_, r)| same_row_body(prow, r))
+        {
+            paired_patched_fields.insert(pk);
+            paired_real_fields.insert(unmatched_real_fields.swap_remove(pos).0);
+        }
+    }
     let keys: std::collections::BTreeSet<&Key> =
         patched.rows.keys().chain(real.rows.keys()).collect();
     for key in keys {
         let name = |row: &Row| format!("{} {} ({})", key.0.name(), row.name, key.1);
         match (patched.rows.get(key), real.rows.get(key)) {
-            (Some(row), None) => out.push(format!("{}: only the patch has it", name(row))),
-            (None, Some(row)) => out.push(format!("{}: only the vault has it", name(row))),
+            (Some(row), None) => {
+                if !paired_patched_fields.contains(key) {
+                    out.push(format!("{}: only the patch has it", name(row)));
+                }
+            }
+            (None, Some(row)) => {
+                if !paired_real_fields.contains(key) {
+                    out.push(format!("{}: only the vault has it", name(row)));
+                }
+            }
             (Some(a), Some(b)) => {
                 let mut parts = Vec::new();
                 if a.name != b.name {
@@ -1720,7 +2341,7 @@ fn locker_columns(row: &Row) -> BTreeMap<&'static str, String> {
         }
     }
     for (name, value) in &row.extra {
-        if !matches!(*name, "key_id" | "purge_at") {
+        if !matches!(*name, "key_id" | "purge_at" | "archived") {
             columns.insert(name, value.clone());
         }
     }
@@ -1747,7 +2368,7 @@ fn locker_store(row: &mut Row, item_type: &str, columns: &BTreeMap<&'static str,
             .insert("notes", Val::Text(crate::native::world::SEALED.to_owned()));
     }
     row.extra
-        .retain(|name, _| matches!(*name, "key_id" | "purge_at"));
+        .retain(|name, _| matches!(*name, "key_id" | "purge_at" | "archived"));
     for (name, value) in columns {
         let sealed = crate::native::meta::REVEAL_FIELDS
             .iter()
@@ -1774,6 +2395,85 @@ fn locker_model_type(item_type: &str) -> &'static str {
         .unwrap_or("login")
 }
 
+fn locker_template_fields(item_type: &str) -> &'static [(&'static str, &'static str, &'static str)] {
+    match item_type {
+        "ssh_key" => &[
+            ("Key", "Private key", "sealed"),
+            ("Key", "Key passphrase", "sealed"),
+            ("Key", "Public key", "text"),
+            ("Key", "Fingerprint", "text"),
+            ("Host", "Host", "text"),
+            ("Host", "User", "text"),
+        ],
+        "api_credential" => &[
+            ("Credential", "Key id", "text"),
+            ("Credential", "Secret", "sealed"),
+            ("Service", "Endpoint", "url"),
+            ("Service", "Environment", "text"),
+            ("Service", "Expires", "date"),
+        ],
+        "passport" => &[
+            ("Document", "Passport number", "sealed"),
+            ("Holder", "Full name", "text"),
+            ("Holder", "Nationality", "text"),
+            ("Holder", "Date of birth", "date"),
+            ("Document", "Issued", "date"),
+            ("Document", "Expires", "date"),
+            ("Document", "Place of issue", "text"),
+        ],
+        "bank_account" => &[
+            ("Account", "Account holder", "text"),
+            ("Account", "Account number", "sealed"),
+            ("Account", "Sort code or routing number", "sealed"),
+            ("Account", "IBAN", "sealed"),
+            ("Bank", "BIC or SWIFT", "text"),
+            ("Bank", "Bank", "text"),
+        ],
+        "driving_licence" => &[
+            ("Licence", "Licence number", "sealed"),
+            ("Holder", "Full name", "text"),
+            ("Holder", "Date of birth", "date"),
+            ("Licence", "Issued", "date"),
+            ("Licence", "Expires", "date"),
+            ("Licence", "Issuing authority", "text"),
+            ("Licence", "Classes", "text"),
+        ],
+        "software_licence" => &[
+            ("Licence", "Licence key", "sealed"),
+            ("Product", "Product", "text"),
+            ("Product", "Version", "text"),
+            ("Licence", "Registered to", "text"),
+            ("Purchase", "Purchased", "date"),
+            ("Licence", "Expires", "date"),
+            ("Purchase", "Order reference", "text"),
+        ],
+        "crypto_wallet" => &[
+            ("Recovery", "Recovery phrase", "sealed"),
+            ("Keys", "Private key", "sealed"),
+            ("Keys", "Wallet passphrase", "sealed"),
+            ("Wallet", "Public address", "text"),
+            ("Wallet", "Network", "text"),
+            ("Wallet", "Wallet software", "text"),
+        ],
+        "membership" => &[
+            ("Membership", "Member number", "text"),
+            ("Membership", "Organisation", "text"),
+            ("Membership", "Tier", "text"),
+            ("Membership", "Member since", "date"),
+            ("Membership", "Expires", "date"),
+            ("Access", "PIN", "sealed"),
+            ("Access", "Website", "url"),
+        ],
+        "document" => &[
+            ("Document", "Reference", "text"),
+            ("Document", "Issued by", "text"),
+            ("Document", "Issued", "date"),
+            ("Document", "Expires", "date"),
+        ],
+        _ => &[],
+    }
+}
+
 fn locker_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
     let id = text(input, "item_id").unwrap_or_default().to_owned();
     if world.rows.contains_key(&(Kind::LockerItem, id.clone())) {
@@ -1798,7 +2498,169 @@ fn locker_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> 
         row.extra.insert("key_id", key.to_owned());
     }
     world.rows.insert(row.key(), row);
-    Ok(ok(json!({"item_id": id, "template_fields": 0})))
+    let templates = locker_template_fields(item_type);
+    for (index, (section, label, field_kind)) in templates.iter().enumerate() {
+        let field_id = (cx.mint)();
+        let mut field_row = new_row(Kind::LockerField, &field_id, label, cx);
+        let mut fields = BTreeMap::new();
+        fields.insert("item_id", Val::Text(id.clone()));
+        if !section.is_empty() {
+            fields.insert("section", Val::Text((*section).to_owned()));
+        }
+        fields.insert("label", Val::Text((*label).to_owned()));
+        fields.insert("field_kind", Val::Text((*field_kind).to_owned()));
+        fields.insert("position", Val::Num(i64::try_from(index).unwrap_or(0)));
+        field_row.fields = fields;
+        field_row.extra.insert("item_id", id.clone());
+        world.rows.insert(field_row.key(), field_row);
+    }
+    Ok(ok(json!({"item_id": id, "template_fields": templates.len()})))
+}
+
+fn locker_duplicate(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let source_id = text(input, "item_id").unwrap_or_default();
+    let Some(source) = live(world, Kind::LockerItem, source_id).cloned() else {
+        return Ok(refused("item_live", "that item is not in your locker"));
+    };
+    let new_id = text(input, "new_item_id")
+        .map(str::to_owned)
+        .unwrap_or_else(|| cx.id("item_id"));
+    let title = format!("{} copy", source.name);
+    let item_type = match source.field("type") {
+        Some(Val::Enum(model)) => (*model).to_owned(),
+        _ => "login".to_owned(),
+    };
+    let mut row = new_row(Kind::LockerItem, &new_id, &title, cx);
+    row.fields.insert("starred", Val::Bool(false));
+    let mut columns = BTreeMap::new();
+    for (name, value) in locker_columns(&source) {
+        let sealed = crate::native::meta::REVEAL_FIELDS
+            .iter()
+            .any(|(_, col)| *col == name);
+        if !sealed {
+            columns.insert(name, value);
+        }
+    }
+    for column in centraid_vault::commands::locker::SEALED_ITEM_CELLS {
+        if let Some(value) = text(input, column)
+            .filter(|v| !v.is_empty() && *v != centraid_vault::commands::locker::SEALED_PLACEHOLDER)
+        {
+            columns.insert(column, value.to_owned());
+        }
+    }
+    locker_store(&mut row, &item_type, &columns);
+    if let Some(key) = text(input, "key_id") {
+        row.extra.insert("key_id", key.to_owned());
+    }
+    world.rows.insert(row.key(), row);
+    Ok(ok(json!({"item_id": new_id, "title": title, "fields": 0})))
+}
+
+fn locker_set_field(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let item_id = text(input, "item_id").unwrap_or_default().to_owned();
+    let Some(item_row) = live(world, Kind::LockerItem, &item_id).cloned() else {
+        return Ok(refused("item_live", "that item is not in your locker"));
+    };
+    let field_id = text(input, "field_id")
+        .map(str::to_owned)
+        .unwrap_or_else(|| cx.id("field_id"));
+    let label = text(input, "label").unwrap_or_default().to_owned();
+    let field_kind = text(input, "kind").unwrap_or("text").to_owned();
+    let mut row = new_row(Kind::LockerField, &field_id, &label, cx);
+    row.created = item_row.created;
+    row.fields.insert("item_id", Val::Text(item_id.clone()));
+    if let Some(section) = text(input, "section").filter(|s| !s.is_empty()) {
+        row.fields.insert("section", Val::Text(section.to_owned()));
+    }
+    row.fields.insert("label", Val::Text(label));
+    row.fields.insert("field_kind", Val::Text(field_kind.clone()));
+    if matches!(field_kind.as_str(), "sealed" | "otp") {
+        row.fields
+            .insert("value", Val::Text(crate::native::world::SEALED.to_owned()));
+    } else if let Some(val) = text(input, "value").filter(|s| !s.is_empty()) {
+        row.fields.insert("value", Val::Text(val.to_owned()));
+    }
+    let pos = int(input, "position").unwrap_or(0);
+    row.fields.insert("position", Val::Num(pos));
+    row.extra.insert("item_id", item_id.clone());
+    world.rows.insert(row.key(), row);
+    Ok(ok(json!({"field_id": field_id, "item_id": item_id})))
+}
+
+fn locker_remove_field(world: &mut World, input: &Value) -> Result<Ran, String> {
+    let item_id = text(input, "item_id").unwrap_or_default();
+    let field_id = text(input, "field_id").unwrap_or_default();
+    if live(world, Kind::LockerItem, item_id).is_none() {
+        return Ok(refused("item_live", "that item is not in your locker"));
+    }
+    let key = (Kind::LockerField, field_id.to_owned());
+    if world
+        .rows
+        .get(&key)
+        .is_none_or(|r| r.extra.get("item_id").map(String::as_str) != Some(item_id))
+    {
+        return Ok(refused(
+            "field_exists",
+            "there is no custom field with that id",
+        ));
+    }
+    world.rows.remove(&key);
+    Ok(ok(json!({"field_id": field_id, "item_id": item_id})))
+}
+
+fn locker_set_addresses(world: &mut World, input: &Value) -> Result<Ran, String> {
+    let item_id = text(input, "item_id").unwrap_or_default();
+    if live(world, Kind::LockerItem, item_id).is_none() {
+        return Ok(refused("item_live", "that item is not in your locker"));
+    }
+    let count = input
+        .get("addresses")
+        .and_then(Value::as_array)
+        .map_or(0, Vec::len);
+    Ok(ok(json!({"item_id": item_id, "count": count})))
+}
+
+fn locker_set_passkey(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let item_id = text(input, "item_id").unwrap_or_default().to_owned();
+    if live(world, Kind::LockerItem, &item_id).is_none() {
+        return Ok(refused("item_live", "that item is not in your locker"));
+    }
+    let rp_id = text(input, "rp_id").unwrap_or_default().to_owned();
+    let mut row = new_row(Kind::LockerPasskey, &item_id, &rp_id, cx);
+    row.fields.insert("rp_id", Val::Text(rp_id));
+    if let Some(handle) = text(input, "user_handle").filter(|s| !s.is_empty()) {
+        row.fields
+            .insert("user_handle", Val::Text(handle.to_owned()));
+    }
+    if let Some(dn) = text(input, "display_name").filter(|s| !s.is_empty()) {
+        row.fields.insert("display_name", Val::Text(dn.to_owned()));
+    }
+    world.rows.insert(row.key(), row);
+    Ok(ok(json!({"item_id": item_id})))
+}
+
+fn locker_clear_passkey(world: &mut World, input: &Value) -> Result<Ran, String> {
+    let item_id = text(input, "item_id").unwrap_or_default();
+    if live(world, Kind::LockerItem, item_id).is_none() {
+        return Ok(refused("item_live", "that item is not in your locker"));
+    }
+    world.rows.remove(&(Kind::LockerPasskey, item_id.to_owned()));
+    Ok(ok(json!({"item_id": item_id})))
+}
+
+fn locker_set_memo(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let item_id = text(input, "item_id").unwrap_or_default();
+    let Some(row) = world
+        .rows
+        .get_mut(&(Kind::LockerItem, item_id.to_owned()))
+        .filter(|row| !row.trashed)
+    else {
+        return Ok(refused("item_live", "that item is not in your locker"));
+    };
+    let note = text(input, "note").unwrap_or_default();
+    put(row, "notes", nonempty(note));
+    row.updated = cx.now.clone();
+    Ok(ok(json!({"item_id": item_id})))
 }
 
 /// A new account: its type, its currency (the vault's when it names none) and a zero opening.
@@ -1837,6 +2699,17 @@ fn workout_log(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String>
         .to_owned();
     let mut row = new_row(Kind::Workout, &id, &title, cx);
     row.date = text(input, "starts").and_then(|starts| local_stamp(&world.zone, starts));
+    if let Some(end_stamp) = text(input, "ends").and_then(|ends| local_stamp(&world.zone, ends)) {
+        if let Some(starts) = row.date
+            && end_stamp < starts
+        {
+            return Ok(refused(
+                "a_workout_starts_on_a_day_and_does_not_end_before",
+                "A workout cannot end before it starts.",
+            ));
+        }
+        row.fields.insert("ends", Val::Date(end_stamp));
+    }
     workout_figures(&mut row, input);
     world.rows.insert(row.key(), row);
     Ok(ok(json!({"id": id, "workout_id": id})))
@@ -1866,6 +2739,25 @@ fn workout_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String
     }
     if let Some(starts) = text(input, "starts") {
         row.date = local_stamp(&zone, starts);
+    }
+    if input.get("ends").is_some_and(Value::is_null) {
+        row.fields.remove("ends");
+    } else if let Some(end_stamp) = text(input, "ends").and_then(|ends| local_stamp(&zone, ends))
+    {
+        if row.date.is_some_and(|starts| end_stamp < starts) {
+            return Ok(refused(
+                "a_workout_the_member_logged_and_does_not_end_before",
+                "A workout cannot end before it starts.",
+            ));
+        }
+        row.fields.insert("ends", Val::Date(end_stamp));
+    } else if let (Some(starts), Some(Val::Date(end_stamp))) = (row.date, row.field("ends"))
+        && *end_stamp < starts
+    {
+        return Ok(refused(
+            "a_workout_the_member_logged_and_does_not_end_before",
+            "A workout cannot end before it starts.",
+        ));
     }
     workout_figures(row, input);
     row.updated = cx.now.clone();
@@ -1958,6 +2850,17 @@ fn account_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String>
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ");
+    let opening_minor = int(input, "opening_minor").unwrap_or(0);
+    let opening_on = text(input, "opening_on")
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned);
+    if opening_minor != 0 && opening_on.is_none() {
+        return Ok(refused(
+            "opening_sentence",
+            "An opening balance needs the day it was true.",
+        ));
+    }
     let mut row = new_row(Kind::Account, &id, &title, cx);
     if let Some(model) = Kind::Account
         .spec()
@@ -1969,10 +2872,12 @@ fn account_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String>
     let currency =
         text(input, "currency").map_or_else(|| world.currency.clone(), str::to_uppercase);
     row.fields.insert("currency", Val::Text(currency.clone()));
-    row.fields.insert(
-        "opening",
-        Val::Money(int(input, "opening_minor").unwrap_or(0), currency),
-    );
+    row.fields
+        .insert("opening", Val::Money(opening_minor, currency));
+    if let Some(day) = opening_on {
+        row.fields.insert("opening_on", Val::Text(day.clone()));
+        row.extra.insert("opening_on", day);
+    }
     row.fields.insert(
         "on_budget",
         Val::Bool(
@@ -2029,7 +2934,7 @@ fn account_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String
     };
     let old_name = row.name.clone();
     if let Some(title) = text(input, "title") {
-        row.name = title.trim().to_owned();
+        row.name = title.split_whitespace().collect::<Vec<_>>().join(" ");
     }
     let new_name = row.name.clone();
     if let Some(vault) = text(input, "type")
@@ -2059,27 +2964,358 @@ fn account_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String
     Ok(ok(json!({"id": id})))
 }
 
+fn stock_category_title(id: &str) -> Option<&'static str> {
+    match id {
+        "category:income" => Some("Income"),
+        "category:housing" => Some("Housing"),
+        "category:utilities" => Some("Utilities"),
+        "category:food" => Some("Food"),
+        "category:transport" => Some("Transport"),
+        "category:shopping" => Some("Shopping"),
+        "category:health" => Some("Health"),
+        "category:fun" => Some("Fun and travel"),
+        "category:fees" => Some("Fees and taxes"),
+        "category:income.pay" => Some("Pay"),
+        "category:income.other" => Some("Other income"),
+        "category:housing.rent" => Some("Rent or mortgage"),
+        "category:housing.home" => Some("Home and repairs"),
+        "category:utilities.bills" => Some("Power, gas and water"),
+        "category:utilities.phone" => Some("Phone and internet"),
+        "category:food.groceries" => Some("Groceries"),
+        "category:food.dining" => Some("Dining out"),
+        "category:transport.fuel" => Some("Fuel"),
+        "category:transport.transit" => Some("Transit and rideshare"),
+        "category:shopping.general" => Some("Clothes and household"),
+        "category:health.care" => Some("Health care"),
+        "category:fun.subscriptions" => Some("Subscriptions"),
+        "category:fun.entertainment" => Some("Entertainment and travel"),
+        _ => None,
+    }
+}
+
+fn category_title(world: &World, id: &str) -> Option<String> {
+    world
+        .rows
+        .get(&(Kind::Category, id.to_owned()))
+        .map(|row| row.name.clone())
+        .or_else(|| stock_category_title(id).map(str::to_owned))
+}
+
+fn account_set_opening(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default();
+    let world_currency = world.currency.clone();
+    let Some(row) = world
+        .rows
+        .get_mut(&(Kind::Account, id.to_owned()))
+        .filter(|row| !row.trashed)
+    else {
+        return Ok(refused("account_live", &gone_text(id)));
+    };
+    let opening_minor = int(input, "opening_minor").unwrap_or(0);
+    let opening_on = text(input, "opening_on")
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned);
+    if opening_minor != 0 && opening_on.is_none() {
+        return Ok(refused(
+            "opening_sentence",
+            "An opening balance needs the day it was true.",
+        ));
+    }
+    let currency = match row.field("currency") {
+        Some(Val::Text(c)) => c.clone(),
+        _ => match row.field("opening") {
+            Some(Val::Money(_, c)) => c.clone(),
+            _ => world_currency,
+        },
+    };
+    row.fields
+        .insert("opening", Val::Money(opening_minor, currency));
+    if let Some(day) = opening_on {
+        row.fields.insert("opening_on", Val::Text(day.clone()));
+        row.extra.insert("opening_on", day);
+    } else {
+        row.fields.remove("opening_on");
+        row.extra.remove("opening_on");
+    }
+    row.updated = cx.now.clone();
+    Ok(ok(json!({"id": id, "changed": true})))
+}
+
+fn category_merge(world: &mut World, input: &Value) -> Result<Ran, String> {
+    let from_id = text(input, "from_id").unwrap_or_default().to_owned();
+    let into_id = text(input, "into_id").unwrap_or_default().to_owned();
+    let Some(from_title) = category_title(world, &from_id) else {
+        return Ok(refused("category_exists", &gone_text(&from_id)));
+    };
+    let Some(into_title) = category_title(world, &into_id) else {
+        return Ok(refused("category_exists", &gone_text(&into_id)));
+    };
+    if from_id == into_id {
+        return Ok(refused("categories_distinct", "choose two different categories"));
+    }
+    for row in world.rows.values_mut() {
+        if matches!(row.kind, Kind::Transaction | Kind::Rule)
+            && row.fields.get("category") == Some(&Val::Text(from_title.clone()))
+        {
+            row.fields
+                .insert("category", Val::Text(into_title.clone()));
+        }
+    }
+    world.rows.remove(&(Kind::Category, from_id.clone()));
+    Ok(ok(json!({"from_id": from_id, "into_id": into_id})))
+}
+
+fn checkpoint_record(world: &mut World, input: &Value) -> Result<Ran, String> {
+    let account_id = text(input, "account_id").unwrap_or_default();
+    if live(world, Kind::Account, account_id).is_none() {
+        return Ok(refused("account_live", &gone_text(account_id)));
+    }
+    Ok(ok(json!({
+        "account_id": account_id,
+        "day": text(input, "day").unwrap_or_default()
+    })))
+}
+
+fn txn_categorize(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let category_id = text(input, "category_id").unwrap_or_default();
+    let Some(cat_title) = category_title(world, category_id) else {
+        return Ok(refused("category_exists", &gone_text(category_id)));
+    };
+    let ids: Vec<String> = input
+        .get("ids")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut changed = 0_usize;
+    for id in &ids {
+        if let Some(row) = world
+            .rows
+            .get_mut(&(Kind::Transaction, id.clone()))
+            .filter(|row| !row.trashed)
+        {
+            row.fields.insert("category", Val::Text(cat_title.clone()));
+            row.updated = cx.now.clone();
+            changed += 1;
+        }
+    }
+    Ok(ok(json!({"changed": changed})))
+}
+
+fn budget_set(world: &mut World, input: &Value) -> Result<Ran, String> {
+    let month = text(input, "month").unwrap_or_default().to_owned();
+    let category_id = text(input, "category_id").unwrap_or_default().to_owned();
+    let id = format!("{category_id}:{month}");
+    let key = (Kind::Budget, id.clone());
+    if input.get("amount_minor").is_some_and(Value::is_null) {
+        let removed = world.rows.remove(&key).is_some();
+        return Ok(ok(json!({"changed": removed})));
+    }
+    let amount_minor = int(input, "amount_minor").unwrap_or(0);
+    let currency = text(input, "currency")
+        .map(str::to_uppercase)
+        .unwrap_or_else(|| world.currency.clone());
+    let carry = input.get("carry").and_then(Value::as_bool);
+    let cat_title = category_title(world, &category_id).unwrap_or_default();
+    if let Some(row) = world.rows.get_mut(&key) {
+        row.fields
+            .insert("amount", Val::Money(amount_minor, currency.clone()));
+        row.fields.insert("currency", Val::Text(currency));
+        if let Some(carry) = carry {
+            row.fields.insert("carry", Val::Bool(carry));
+        }
+    } else {
+        let mut fields = BTreeMap::new();
+        fields.insert("amount", Val::Money(amount_minor, currency.clone()));
+        fields.insert("currency", Val::Text(currency));
+        fields.insert("carry", Val::Bool(carry.unwrap_or(false)));
+        world.rows.insert(
+            key,
+            Row {
+                kind: Kind::Budget,
+                name: format!("{cat_title} {month}"),
+                id,
+                date: None,
+                fields,
+                trashed: false,
+                created: String::new(),
+                updated: String::new(),
+                extra: BTreeMap::new(),
+            },
+        );
+    }
+    Ok(ok(json!({"changed": true})))
+}
+
+fn budget_set_carry(world: &mut World, input: &Value) -> Result<Ran, String> {
+    let month = text(input, "month").unwrap_or_default();
+    let category_id = text(input, "category_id").unwrap_or_default();
+    let carry = input.get("carry").and_then(Value::as_bool).unwrap_or(false);
+    let Some(row) = world
+        .rows
+        .get_mut(&(Kind::Budget, format!("{category_id}:{month}")))
+    else {
+        return Ok(refused("budget_exists", "Set an amount for that month first."));
+    };
+    row.fields.insert("carry", Val::Bool(carry));
+    Ok(ok(json!({"changed": true})))
+}
+
+fn txn_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default().to_owned();
+    if !world
+        .rows
+        .get(&(Kind::Transaction, id.clone()))
+        .is_some_and(|row| !row.trashed)
+    {
+        return Ok(refused("transaction_exists", &gone_text(&id)));
+    }
+    if text(input, "status") == Some("void") {
+        let _ = transfer(world, &json!({"id": id}), false);
+    }
+    let category_name = match input.get("category_id") {
+        Some(Value::Null) => Some(None),
+        Some(Value::String(cat)) => Some(category_title(world, cat)),
+        _ => None,
+    };
+    let world_currency = world.currency.clone();
+    let Some(row) = world.rows.get_mut(&(Kind::Transaction, id.clone())) else {
+        return Ok(refused("transaction_exists", &gone_text(&id)));
+    };
+    if let Some(title) = text(input, "title") {
+        row.name = title.split_whitespace().collect::<Vec<_>>().join(" ");
+    }
+    if let Some(posted_on) = text(input, "posted_on") {
+        row.date = Stamp::parse(posted_on);
+    }
+    if let Some(amount_minor) = int(input, "amount_minor") {
+        let currency = match row.field("amount") {
+            Some(Val::Money(_, c)) => c.clone(),
+            _ => row
+                .extra
+                .get("currency")
+                .cloned()
+                .unwrap_or(world_currency),
+        };
+        row.fields
+            .insert("amount", Val::Money(amount_minor, currency));
+    }
+    if let Some(cat) = category_name {
+        match cat {
+            Some(title) => {
+                row.fields.insert("category", Val::Text(title));
+            }
+            None => {
+                row.fields.remove("category");
+            }
+        }
+    }
+    if let Some(status) = text(input, "status") {
+        let model_status = if status == "void" { "void" } else { "posted" };
+        row.fields.insert("status", Val::Enum(model_status));
+    }
+    row.updated = cx.now.clone();
+    Ok(ok(json!({"id": id, "changed": true})))
+}
+
 /// A rule's text (upper-cased as the vault matches it), category and order.
+fn rule_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").map_or_else(|| cx.id("id"), str::to_owned);
+    let category_id = text(input, "category_id").unwrap_or_default();
+    let Some(cat_title) = category_title(world, category_id) else {
+        return Ok(refused("category_exists", &gone_text(category_id)));
+    };
+    let raw_text = text(input, "text").unwrap_or_default();
+    let normalised = raw_text
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_uppercase();
+    let display_name = text(input, "display_name")
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let row_name = if !normalised.is_empty() {
+        normalised.clone()
+    } else {
+        display_name.unwrap_or_default().to_owned()
+    };
+    let position = input
+        .get("position")
+        .and_then(Value::as_f64)
+        .map(|p| p.round() as i64)
+        .unwrap_or(1);
+    let mut row = new_row(Kind::Rule, &id, &row_name, cx);
+    row.date = cx.stamp();
+    row.fields.insert("category", Val::Text(cat_title));
+    row.fields.insert("position", Val::Num(position));
+    if let Some(dn) = display_name {
+        row.fields
+            .insert("display_name", Val::Text(dn.to_owned()));
+    }
+    if let Some(m) = text(input, "match").filter(|s| !s.is_empty()) {
+        row.fields.insert("match", Val::Text(m.to_owned()));
+    }
+    if !normalised.is_empty() {
+        row.fields.insert("text", Val::Text(normalised));
+    }
+    if let Some(min) = int(input, "min") {
+        row.fields.insert("min", Val::Num(min));
+    }
+    if let Some(max) = int(input, "max") {
+        row.fields.insert("max", Val::Num(max));
+    }
+    world.rows.insert(row.key(), row);
+    Ok(ok(json!({"id": id, "position": position})))
+}
+
 fn rule_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
     let id = text(input, "id").unwrap_or_default().to_owned();
-    let category = text(input, "category_id").and_then(|category| {
-        world
-            .rows
-            .get(&(Kind::Category, category.to_owned()))
-            .map(|row| row.name.clone())
-    });
+    let category = text(input, "category_id").and_then(|category| category_title(world, category));
     let Some(row) = world.rows.get_mut(&(Kind::Rule, id.clone())) else {
         return Ok(refused("rule_exists", &gone_text(&id)));
     };
     if let Some(matched) = text(input, "text") {
-        row.name = matched
+        let norm = matched
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ")
             .to_ascii_uppercase();
+        row.name = norm.clone();
+        put(row, "text", nonempty(&norm));
     }
+    if let Some(m) = text(input, "match").filter(|s| !s.is_empty()) {
+        row.fields.insert("match", Val::Text(m.to_owned()));
+    }
+    text_or_clear(row, input, "display_name", "display_name");
     if let Some(title) = category {
         row.fields.insert("category", Val::Text(title));
+    }
+    match input.get("min") {
+        Some(Value::Null) => {
+            row.fields.remove("min");
+        }
+        Some(value) => {
+            if let Some(v) = value.as_i64() {
+                row.fields.insert("min", Val::Num(v));
+            }
+        }
+        None => {}
+    }
+    match input.get("max") {
+        Some(Value::Null) => {
+            row.fields.remove("max");
+        }
+        Some(value) => {
+            if let Some(v) = value.as_i64() {
+                row.fields.insert("max", Val::Num(v));
+            }
+        }
+        None => {}
     }
     if let Some(position) = input
         .get("position")
@@ -2093,6 +3329,83 @@ fn rule_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
         row.fields.insert("position", Val::Num(position as i64));
     }
     row.updated = cx.now.clone();
+    Ok(ok(json!({"id": id})))
+}
+
+fn rule_delete(world: &mut World, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default();
+    if world.rows.remove(&(Kind::Rule, id.to_owned())).is_none() {
+        return Ok(refused("rule_exists", &gone_text(id)));
+    }
+    Ok(ok(json!({"deleted": 1})))
+}
+
+fn album_set_cover(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default();
+    let Some(row) = world
+        .rows
+        .get_mut(&(Kind::Album, id.to_owned()))
+        .filter(|row| !row.trashed)
+    else {
+        return Ok(refused("album_live", &gone(world, id)));
+    };
+    row.updated = cx.now.clone();
+    Ok(ok(json!({"id": id})))
+}
+
+fn photo_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").map_or_else(|| cx.id("id"), str::to_owned);
+    let title = text(input, "title").unwrap_or("photo");
+    let mut row = new_row(Kind::Photo, &id, title, cx);
+    row.date = text(input, "taken_at")
+        .and_then(Stamp::parse)
+        .or_else(|| cx.stamp());
+    row.fields.insert("starred", Val::Bool(false));
+    world.rows.insert(row.key(), row);
+    Ok(ok(json!({"id": id, "deduped": false})))
+}
+
+fn photo_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default();
+    let Some(row) = world
+        .rows
+        .get_mut(&(Kind::Photo, id.to_owned()))
+        .filter(|row| !row.trashed)
+    else {
+        return Ok(refused("photo_live", &gone(world, id)));
+    };
+    if let Some(taken) = text(input, "taken_at").and_then(Stamp::parse) {
+        row.date = Some(taken);
+    }
+    row.updated = cx.now.clone();
+    Ok(ok(json!({"id": id})))
+}
+
+fn photo_set_place(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").unwrap_or_default();
+    let Some(row) = world
+        .rows
+        .get_mut(&(Kind::Photo, id.to_owned()))
+        .filter(|row| !row.trashed)
+    else {
+        return Ok(refused("photo_live", &gone(world, id)));
+    };
+    row.updated = cx.now.clone();
+    Ok(ok(json!({"id": id})))
+}
+
+fn place_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
+    let id = text(input, "id").map_or_else(|| cx.id("id"), str::to_owned);
+    let title = text(input, "title").unwrap_or_default().trim().to_owned();
+    if title.is_empty() {
+        return Ok(refused("place_has_a_name", "a place needs a name"));
+    }
+    let mut row = new_row(Kind::Place, &id, &title, cx);
+    if let Some(address) = text(input, "address").filter(|s| !s.trim().is_empty()) {
+        row.fields
+            .insert("address", Val::Text(address.trim().to_owned()));
+    }
+    world.rows.insert(row.key(), row);
     Ok(ok(json!({"id": id})))
 }
 

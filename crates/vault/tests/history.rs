@@ -397,10 +397,23 @@ fn a_transaction_keeps_the_members_category_and_never_the_banks_words() {
     let fun = w.id("category.add", json!({ "title": "Zebra fun" }));
     let first = w.state(&id);
     w.ok(
-        "txn.categorize",
-        json!({ "ids": [id], "category_id": food }),
+        "txn.edit",
+        json!({
+            "id": id,
+            "posted_on": "2026-03-05",
+            "amount_minor": -1500,
+            "category_id": food,
+        }),
     );
-    w.ok("txn.categorize", json!({ "ids": [id], "category_id": fun }));
+    w.ok(
+        "txn.edit",
+        json!({
+            "id": id,
+            "posted_on": "2026-03-06",
+            "amount_minor": -1750,
+            "category_id": fun,
+        }),
+    );
     let versions = w.versions(&id);
     assert_eq!(versions.len(), 2);
     assert_eq!(
@@ -408,14 +421,30 @@ fn a_transaction_keeps_the_members_category_and_never_the_banks_words() {
         (json!(food), json!(fun))
     );
     assert_eq!(
+        World::change(&versions[0], "txn.posted_on"),
+        (json!("2026-03-05"), json!("2026-03-06"))
+    );
+    assert_eq!(
+        World::change(&versions[0], "txn.amount_minor"),
+        (json!(-1500), json!(-1750))
+    );
+    assert_eq!(
         World::change(&versions[1], "txn.category_id"),
         (Value::Null, json!(food))
     );
-    // The bank's amount, day and account are never in a version: they never change.
+    assert_eq!(
+        World::change(&versions[1], "txn.posted_on"),
+        (json!("2026-03-01"), json!("2026-03-05"))
+    );
+    assert_eq!(
+        World::change(&versions[1], "txn.amount_minor"),
+        (json!(-1250), json!(-1500))
+    );
+    // The line's account and currency are never in a version: they never change.
     for version in &versions {
         for change in &version.changes {
             assert!(
-                !["amount_minor", "posted_on", "account_id"]
+                !["account_id", "currency"]
                     .iter()
                     .any(|column| change.field.ends_with(column)),
                 "{}",
@@ -435,10 +464,28 @@ fn a_transaction_keeps_the_members_category_and_never_the_banks_words() {
         })
         .expect("states");
     assert!(
-        !stored.contains("amount_minor") && !stored.contains("posted_on"),
+        !stored.contains("account_id") && !stored.contains("currency"),
         "{stored}"
     );
     w.story(&id, &first);
+    w.ok(
+        "txn.edit",
+        json!({ "id": id, "posted_on": "2026-03-09", "amount_minor": -2000 }),
+    );
+    w.ok("history.undo", json!({ "id": id }));
+    let (posted_on, amount_minor): (String, i64) = w
+        .scratch
+        .vault
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT posted_on, amount_minor FROM txn WHERE id = ?1",
+                [&id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?)
+        })
+        .expect("restored txn");
+    assert_eq!(posted_on, "2026-03-06");
+    assert_eq!(amount_minor, -1750);
     w.purge_takes_history(&id);
 }
 

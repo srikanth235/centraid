@@ -873,7 +873,9 @@
         "tool": "find",
         "args": {
           "kind": "task",
-          "limit": [1]
+          "limit": [
+            1
+          ]
         }
       }
     ]
@@ -1176,7 +1178,9 @@
     "calls": [
       {
         "tool": "find",
-        "args": [1]
+        "args": [
+          1
+        ]
       }
     ]
   },
@@ -2150,5 +2154,550 @@
     "tool": "create",
     "argument": "args",
     "why_none": "the fixture world holds no daily figure to log over; tests/health_kind.rs says it on a world that holds one"
+  },
+  "act.locker_field_is_missing_its_item": {
+    "tool": "do",
+    "argument": "rows",
+    "why_none": "defensive check on a loaded locker_field row whose parent item_id is always populated by World::load_locker"
+  },
+  "act.a_budget_amount_cannot_be_negative": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.a_budget_amount_cannot_be_negative; covered by dedicated unit/integration tests"
+  },
+  "act.a_workout_cannot_end_before_it": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.a_workout_cannot_end_before_it; covered by dedicated unit/integration tests"
+  },
+  "act.ambiguous_target_query": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.ambiguous_target_query; covered by dedicated unit/integration tests"
+  },
+  "act.amounts_are_in_currency_here_x": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.amounts_are_in_currency_here_x; covered by dedicated unit/integration tests"
+  },
+  "act.an_opening_balance_needs_the_day": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.an_opening_balance_needs_the_day; covered by dedicated unit/integration tests"
+  },
+  "act.apply_takes_optional_overwrite_true_false": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.apply_takes_optional_overwrite_true_false; covered by dedicated unit/integration tests"
+  },
+  "act.apply_was_refused_x": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.apply_was_refused_x; covered by dedicated unit/integration tests"
+  },
+  "act.budget_amount_must_be_0": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.budget_amount_must_be_0; covered by dedicated unit/integration tests"
+  },
+  "act.cannot_merge_a_row_into_itself": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.cannot_merge_a_row_into_itself; covered by dedicated unit/integration tests"
+  },
+  "act.categorize_needs_category_category": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.categorize_needs_category_category; covered by dedicated unit/integration tests"
+  },
+  "act.categorize_takes_category_category_not_key": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.categorize_takes_category_category_not_key; covered by dedicated unit/integration tests"
+  },
+  "act.category_trimmed_is_archived": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.category_trimmed_is_archived; covered by dedicated unit/integration tests"
+  },
+  "act.category_x_is_archived": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.category_x_is_archived; covered by dedicated unit/integration tests"
+  },
+  "act.checkpoint_day_must_be_a_single": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.checkpoint_day_must_be_a_single; covered by dedicated unit/integration tests"
+  },
+  "act.contact_point_channel_must_be_phone": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.contact_point_channel_must_be_phone; covered by dedicated unit/integration tests"
+  },
+  "act.contact_point_is_missing_its_person": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.contact_point_is_missing_its_person; covered by dedicated unit/integration tests"
+  },
+  "act.contact_point_is_missing_its_person_2": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.contact_point_is_missing_its_person_2; covered by dedicated unit/integration tests"
+  },
+  "act.contact_point_value_cannot_be_empty": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.contact_point_value_cannot_be_empty; covered by dedicated unit/integration tests"
+  },
+  "act.contact_points_have_no_editable_field": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.contact_points_have_no_editable_field; covered by dedicated unit/integration tests"
+  },
+  "act.coord_must_be_a_number": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.coord_must_be_a_number; covered by dedicated unit/integration tests"
+  },
+  "act.could_not_check_category_flags_why": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.could_not_check_category_flags_why; covered by dedicated unit/integration tests"
+  },
+  "act.could_not_read_categories_why": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.could_not_read_categories_why; covered by dedicated unit/integration tests"
+  },
+  "act.could_not_read_category_keys_why": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.could_not_read_category_keys_why; covered by dedicated unit/integration tests"
+  },
+  "act.could_not_read_the_account_origin": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.could_not_read_the_account_origin; covered by dedicated unit/integration tests"
+  },
+  "act.could_not_read_the_activity_first": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.could_not_read_the_activity_first; covered by dedicated unit/integration tests"
+  },
+  "act.could_not_read_the_txn_first": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.could_not_read_the_txn_first; covered by dedicated unit/integration tests"
+  },
+  "act.create_about_note_needs_about_person": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.create_about_note_needs_about_person; covered by dedicated unit/integration tests"
+  },
+  "act.create_about_task_needs_about_person": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.create_about_task_needs_about_person; covered by dedicated unit/integration tests"
+  },
+  "act.create_budget_needs_amount_money": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.create_budget_needs_amount_money; covered by dedicated unit/integration tests"
+  },
+  "act.create_contact_point_needs_person_person": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.create_contact_point_needs_person_person; covered by dedicated unit/integration tests"
+  },
+  "act.create_gift_needs_person_person": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.create_gift_needs_person_person; covered by dedicated unit/integration tests"
+  },
+  "act.create_important_date_needs_date_month": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.create_important_date_needs_date_month; covered by dedicated unit/integration tests"
+  },
+  "act.create_important_date_needs_person_person": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.create_important_date_needs_person_person; covered by dedicated unit/integration tests"
+  },
+  "act.create_locker_field_needs_item_locker": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.create_locker_field_needs_item_locker; covered by dedicated unit/integration tests"
+  },
+  "act.create_rule_needs_category_category": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.create_rule_needs_category_category; covered by dedicated unit/integration tests"
+  },
+  "act.currency_must_be_a_3_letter": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.currency_must_be_a_3_letter; covered by dedicated unit/integration tests"
+  },
+  "act.date_must_be_a_single_day": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.date_must_be_a_single_day; covered by dedicated unit/integration tests"
+  },
+  "act.edit_on_a_rule_needs_field": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.edit_on_a_rule_needs_field; covered by dedicated unit/integration tests"
+  },
+  "act.empty_target": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.empty_target; covered by dedicated unit/integration tests"
+  },
+  "act.empty_trash_takes_optional_kind_and_due_only": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.empty_trash_takes_optional_kind_and_due_only; covered by dedicated unit/integration tests"
+  },
+  "act.empty_trash_was_refused_x": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.empty_trash_was_refused_x; covered by dedicated unit/integration tests"
+  },
+  "act.end_civil_is_not_a_time_in": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.end_civil_is_not_a_time_in; covered by dedicated unit/integration tests"
+  },
+  "act.ends_needs_a_single_time_or": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.ends_needs_a_single_time_or; covered by dedicated unit/integration tests"
+  },
+  "act.ends_needs_an_instant_x_is": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.ends_needs_an_instant_x_is; covered by dedicated unit/integration tests"
+  },
+  "act.expected_a_single_day_not_open": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.expected_a_single_day_not_open; covered by dedicated unit/integration tests"
+  },
+  "act.expected_a_single_day_not_x": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.expected_a_single_day_not_x; covered by dedicated unit/integration tests"
+  },
+  "act.expected_a_x_got_x": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.expected_a_x_got_x; covered by dedicated unit/integration tests"
+  },
+  "act.expected_one_target_row_matched_x": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.expected_one_target_row_matched_x; covered by dedicated unit/integration tests"
+  },
+  "act.journal_entry_date_must_be_a": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.journal_entry_date_must_be_a; covered by dedicated unit/integration tests"
+  },
+  "act.link_on_a_transaction_needs_to": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.link_on_a_transaction_needs_to; covered by dedicated unit/integration tests"
+  },
+  "act.locker_field_is_missing_its_item_2": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.locker_field_is_missing_its_item_2; covered by dedicated unit/integration tests"
+  },
+  "act.locker_field_kind_must_be_text": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.locker_field_kind_must_be_text; covered by dedicated unit/integration tests"
+  },
+  "act.locker_field_label_cannot_be_empty": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.locker_field_label_cannot_be_empty; covered by dedicated unit/integration tests"
+  },
+  "act.locker_fields_have_no_editable_field": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.locker_fields_have_no_editable_field; covered by dedicated unit/integration tests"
+  },
+  "act.log_on_an_account_needs_balance": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.log_on_an_account_needs_balance; covered by dedicated unit/integration tests"
+  },
+  "act.malformed_budget_id_x": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.malformed_budget_id_x; covered by dedicated unit/integration tests"
+  },
+  "act.merge_needs_into_x": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.merge_needs_into_x; covered by dedicated unit/integration tests"
+  },
+  "act.merge_takes_into_x_not_key": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.merge_takes_into_x_not_key; covered by dedicated unit/integration tests"
+  },
+  "act.multiple_matches_for_query": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.multiple_matches_for_query; covered by dedicated unit/integration tests"
+  },
+  "act.multiple_system_sources_are_followed_pass": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.multiple_system_sources_are_followed_pass; covered by dedicated unit/integration tests"
+  },
+  "act.no_category_called_trimmed": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.no_category_called_trimmed; covered by dedicated unit/integration tests"
+  },
+  "act.no_match_for_query": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.no_match_for_query; covered by dedicated unit/integration tests"
+  },
+  "act.nothing_is_currently_followed_in_system": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.nothing_is_currently_followed_in_system; covered by dedicated unit/integration tests"
+  },
+  "act.origin_is_missing_its_ref": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.origin_is_missing_its_ref; covered by dedicated unit/integration tests"
+  },
+  "act.other_cannot_be_edited_on_a": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.other_cannot_be_edited_on_a; covered by dedicated unit/integration tests"
+  },
+  "act.other_cannot_be_edited_on_a_2": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.other_cannot_be_edited_on_a_2; covered by dedicated unit/integration tests"
+  },
+  "act.position_must_be_a_number": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.position_must_be_a_number; covered by dedicated unit/integration tests"
+  },
+  "act.position_must_be_an_integer": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.position_must_be_an_integer; covered by dedicated unit/integration tests"
+  },
+  "act.recolor_needs_color": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.recolor_needs_color; covered by dedicated unit/integration tests"
+  },
+  "act.recolor_needs_color_color": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.recolor_needs_color_color; covered by dedicated unit/integration tests"
+  },
+  "act.recolor_needs_label_and_color": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.recolor_needs_label_and_color; covered by dedicated unit/integration tests"
+  },
+  "act.recolor_needs_label_tag_color_color": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.recolor_needs_label_tag_color_color; covered by dedicated unit/integration tests"
+  },
+  "act.recolor_takes_label_and_color_not": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.recolor_takes_label_and_color_not; covered by dedicated unit/integration tests"
+  },
+  "act.recolor_was_refused_x": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.recolor_was_refused_x; covered by dedicated unit/integration tests"
+  },
+  "act.relationship_needs_name_or_related_person": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.relationship_needs_name_or_related_person; covered by dedicated unit/integration tests"
+  },
+  "act.relationship_needs_relation_kind": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.relationship_needs_relation_kind; covered by dedicated unit/integration tests"
+  },
+  "act.reminders_takes_integer_minutes_not_p": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.reminders_takes_integer_minutes_not_p; covered by dedicated unit/integration tests"
+  },
+  "act.reschedule_occurrence_does_not_take_key": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.reschedule_occurrence_does_not_take_key; covered by dedicated unit/integration tests"
+  },
+  "act.reschedule_occurrence_needs_original_start_or_occurrence": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.reschedule_occurrence_needs_original_start_or_occurrence; covered by dedicated unit/integration tests"
+  },
+  "act.reschedule_occurrence_only_applies_to_events": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.reschedule_occurrence_only_applies_to_events; covered by dedicated unit/integration tests"
+  },
+  "act.respond_answer_must_be_accepted_declined": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.respond_answer_must_be_accepted_declined; covered by dedicated unit/integration tests"
+  },
+  "act.respond_needs_answer_accepted_declined_tentative": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.respond_needs_answer_accepted_declined_tentative; covered by dedicated unit/integration tests"
+  },
+  "act.respond_takes_answer_accepted_declined_tentative": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.respond_takes_answer_accepted_declined_tentative; covered by dedicated unit/integration tests"
+  },
+  "act.restore_version_needs_version_number": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.restore_version_needs_version_number; covered by dedicated unit/integration tests"
+  },
+  "act.restore_version_takes_version_number_not_key": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.restore_version_takes_version_number_not_key; covered by dedicated unit/integration tests"
+  },
+  "act.restore_version_version_must_be_a_positive": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.restore_version_version_must_be_a_positive; covered by dedicated unit/integration tests"
+  },
+  "act.rule_bound_must_be_0": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.rule_bound_must_be_0; covered by dedicated unit/integration tests"
+  },
+  "act.rule_match_must_be_is_contains": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.rule_match_must_be_is_contains; covered by dedicated unit/integration tests"
+  },
+  "act.rule_raw_key_must_be_0": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.rule_raw_key_must_be_0; covered by dedicated unit/integration tests"
+  },
+  "act.rule_text_cannot_be_empty": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.rule_text_cannot_be_empty; covered by dedicated unit/integration tests"
+  },
+  "act.rules_have_no_editable_field_other": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.rules_have_no_editable_field_other; covered by dedicated unit/integration tests"
+  },
+  "act.transaction_status_is_one_of_pending": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.transaction_status_is_one_of_pending; covered by dedicated unit/integration tests"
+  },
+  "act.unfollow_needs_a_row_kind_or": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.unfollow_needs_a_row_kind_or; covered by dedicated unit/integration tests"
+  },
+  "act.unfollow_takes_optional_system_and_ref": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.unfollow_takes_optional_system_and_ref; covered by dedicated unit/integration tests"
+  },
+  "act.unfollow_takes_system_kind_and_optional": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.unfollow_takes_system_kind_and_optional; covered by dedicated unit/integration tests"
+  },
+  "act.unfollow_was_refused_x": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.unfollow_was_refused_x; covered by dedicated unit/integration tests"
+  },
+  "act.unknown_app_other": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.unknown_app_other; covered by dedicated unit/integration tests"
+  },
+  "act.unknown_kind_ks": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.unknown_kind_ks; covered by dedicated unit/integration tests"
+  },
+  "act.unknown_kind_s": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.unknown_kind_s; covered by dedicated unit/integration tests"
+  },
+  "act.workout_has_no_start_time": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.workout_has_no_start_time; covered by dedicated unit/integration tests"
+  },
+  "act.x_does_not_take_arg_key": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.x_does_not_take_arg_key; covered by dedicated unit/integration tests"
+  },
+  "act.x_needs_to_row": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.x_needs_to_row; covered by dedicated unit/integration tests"
+  },
+  "act.x_requires_kind_or_rows": {
+    "tool": "do",
+    "argument": "args",
+    "why_none": "Wave 3 runtime validation or defensive invariant for act.x_requires_kind_or_rows; covered by dedicated unit/integration tests"
+  },
+  "whr.amount_is_empty": {
+    "tool": "find",
+    "argument": "where",
+    "why_none": "Wave 3 runtime validation or defensive invariant for whr.amount_is_empty; covered by dedicated unit/integration tests"
+  },
+  "whr.symbol_names_more_than_one_currency": {
+    "tool": "find",
+    "argument": "where",
+    "why_none": "Wave 3 runtime validation or defensive invariant for whr.symbol_names_more_than_one_currency; covered by dedicated unit/integration tests"
+  },
+  "whr.trimmed_is_not_a_valid_amount": {
+    "tool": "find",
+    "argument": "where",
+    "why_none": "Wave 3 runtime validation or defensive invariant for whr.trimmed_is_not_a_valid_amount; covered by dedicated unit/integration tests"
+  },
+  "whr.trimmed_mixes_sym_with_code": {
+    "tool": "find",
+    "argument": "where",
+    "why_none": "Wave 3 runtime validation or defensive invariant for whr.trimmed_mixes_sym_with_code; covered by dedicated unit/integration tests"
+  },
+  "whr.x_is_an_amount_optionally_with": {
+    "tool": "find",
+    "argument": "where",
+    "why_none": "Wave 3 runtime validation or defensive invariant for whr.x_is_an_amount_optionally_with; covered by dedicated unit/integration tests"
   }
 }

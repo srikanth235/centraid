@@ -220,18 +220,7 @@ fn the_names_chat_says_are_the_aliases_the_manifest_declares() {
 
 #[test]
 fn a_verb_is_live_when_an_action_backs_it() {
-    // the verbs no direct action of a writable kind serves are not verbs of the runtime
-    for dead in [
-        "import",
-        "purge",
-        "duplicate",
-        "merge",
-        "attach",
-        "detach",
-        "respond",
-    ] {
-        assert!(Verb::parse(dead).is_none(), "{dead} is live");
-    }
+    assert!(Verb::parse("not_a_verb").is_none(), "unknown verb is not live");
     for live in [
         "create",
         "edit",
@@ -241,6 +230,23 @@ fn a_verb_is_live_when_an_action_backs_it() {
         "archive",
         "unarchive",
         "undo",
+        "import",
+        "purge",
+        "duplicate",
+        "merge",
+        "attach",
+        "detach",
+        "respond",
+        "export",
+        "follow",
+        "unfollow",
+        "empty_trash",
+        "restore_version",
+        "recolor",
+        "apply",
+        "categorize",
+        "edit_media",
+        "configure",
     ] {
         assert!(Verb::parse(live).is_some(), "{live} is not live");
     }

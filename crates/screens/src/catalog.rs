@@ -664,7 +664,7 @@ pub mod act {
             pub title: String,
             pub color: Field<CreateCalendarColor>,
             pub icon: Field<String>,
-            pub list_id: Option<String>,
+            pub id: Option<String>,
             pub position: Field<f64>,
         }
         impl CreateCalendar {
@@ -676,7 +676,7 @@ pub mod act {
                 map.insert("title".to_owned(), text(self.title));
                 put_field(&mut map, "color", self.color, |it| text(it.wire()));
                 put_field(&mut map, "icon", self.icon, |it| text(it));
-                if let Some(it) = self.list_id { map.insert("id".to_owned(), text(it)); }
+                if let Some(it) = self.id { map.insert("id".to_owned(), text(it)); }
                 put_field(&mut map, "position", self.position, |it| real(it));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new(), autosave: false }
             }
@@ -3328,6 +3328,55 @@ pub mod act {
             }
         }
 
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum EditTransactionStatus {
+            #[default]
+            Pending,
+            Posted,
+            Void,
+        }
+        impl EditTransactionStatus {
+            fn wire(self) -> &'static str {
+                match self {
+                    Self::Pending => "pending",
+                    Self::Posted => "posted",
+                    Self::Void => "void",
+                }
+            }
+        }
+
+        /// Edit a transaction line through txn.edit: update its title, posted date, amount, category or status.
+        #[derive(Clone, Debug, Default)]
+        pub struct EditTransaction {
+            pub transaction_id: String,
+            pub amount_minor: Option<i64>,
+            pub category_id: Field<String>,
+            pub expected_rev: Option<i64>,
+            pub posted_on: Option<String>,
+            pub status: Option<EditTransactionStatus>,
+            pub title: Option<String>,
+        }
+        impl EditTransaction {
+            pub const NAME: &str = "edit-transaction";
+            pub fn request(self) -> wire::ActRequest {
+                #[allow(unused_mut)]
+                let mut map = std::collections::HashMap::<String, wire::Value>::new();
+                map.insert("id".to_owned(), text(self.transaction_id));
+                if let Some(it) = self.amount_minor { map.insert("amount_minor".to_owned(), whole(it)); }
+                put_field(&mut map, "category_id", self.category_id, |it| text(it));
+                if let Some(it) = self.expected_rev { map.insert("expected_rev".to_owned(), whole(it)); }
+                if let Some(it) = self.posted_on { map.insert("posted_on".to_owned(), text(it)); }
+                if let Some(it) = self.status { map.insert("status".to_owned(), text(it.wire())); }
+                if let Some(it) = self.title { map.insert("title".to_owned(), text(it)); }
+                wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new(), autosave: false }
+            }
+        }
+        impl From<EditTransaction> for wire::ActRequest {
+            fn from(value: EditTransaction) -> Self {
+                value.request()
+            }
+        }
+
         /// Accept two transactions in two accounts as the two halves of one transfer.
         #[derive(Clone, Debug, Default)]
         pub struct LinkTransfer {
@@ -4831,7 +4880,7 @@ pub mod act {
         /// Add a note about a person through person.add_note: a note with an about edge, found with them in search.
         #[derive(Clone, Debug, Default)]
         pub struct AddNote {
-            pub id: String,
+            pub note_id: String,
             pub text: String,
         }
         impl AddNote {
@@ -4839,7 +4888,7 @@ pub mod act {
             pub fn request(self) -> wire::ActRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("id".to_owned(), text(self.id));
+                map.insert("id".to_owned(), text(self.note_id));
                 map.insert("text".to_owned(), text(self.text));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new(), autosave: false }
             }
@@ -4853,7 +4902,7 @@ pub mod act {
         /// Add a follow-up task about a person through person.add_task.
         #[derive(Clone, Debug, Default)]
         pub struct AddTask {
-            pub id: String,
+            pub task_id: String,
             pub text: String,
         }
         impl AddTask {
@@ -4861,7 +4910,7 @@ pub mod act {
             pub fn request(self) -> wire::ActRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("id".to_owned(), text(self.id));
+                map.insert("id".to_owned(), text(self.task_id));
                 map.insert("text".to_owned(), text(self.text));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new(), autosave: false }
             }
@@ -5887,7 +5936,7 @@ pub mod act {
         /// Correct or clear a photograph's place through photo.set_place — points it at an existing place, or clears it back to unknown.
         #[derive(Clone, Debug, Default)]
         pub struct SetPlace {
-            pub id: String,
+            pub photo_id: String,
             pub place_id: Field<String>,
         }
         impl SetPlace {
@@ -5895,7 +5944,7 @@ pub mod act {
             pub fn request(self) -> wire::ActRequest {
                 #[allow(unused_mut)]
                 let mut map = std::collections::HashMap::<String, wire::Value>::new();
-                map.insert("id".to_owned(), text(self.id));
+                map.insert("id".to_owned(), text(self.photo_id));
                 put_field(&mut map, "place_id", self.place_id, |it| text(it));
                 wire::ActRequest { app: APP.to_owned(), action: Self::NAME.to_owned(), input: map, invoke_key: String::new(), autosave: false }
             }

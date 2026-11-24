@@ -70,6 +70,8 @@ pub struct Effect {
     pub diff: NetDiff,
     pub already: Vec<String>,
     pub revealed: Vec<String>,
+    /// Member actions offered by the runtime (`reveal`, `code`, `edit_secret`, `export`, `handoff`).
+    pub member_actions: Vec<Value>,
     pub steps: usize,
     pub ending: Ending,
     /// `Rows`: the row ids the answer names, in order.
@@ -231,6 +233,7 @@ pub fn turn_effect(steps: &[Value]) -> Effect {
     let mut diffs: Vec<&Value> = Vec::new();
     let mut already = Vec::new();
     let mut revealed = Vec::new();
+    let mut member_actions = Vec::new();
     let mut final_response: Option<&Value> = None;
     for step in steps {
         let eff = &step["effect"];
@@ -242,6 +245,9 @@ pub fn turn_effect(steps: &[Value]) -> Effect {
             if truthy(&eff["revealed"]) {
                 revealed.push(text_of(&eff["revealed"]));
             }
+            if let Some(actions) = eff["member_actions"].as_array() {
+                member_actions.extend(actions.iter().cloned());
+            }
         }
         if step["ends_turn"].as_bool().unwrap_or(false) {
             final_response = Some(step);
@@ -252,6 +258,7 @@ pub fn turn_effect(steps: &[Value]) -> Effect {
         diff: merge_diffs(&diffs),
         already,
         revealed,
+        member_actions,
         steps: steps.len(),
         ending: Ending::None,
         rows: Vec::new(),
@@ -393,5 +400,22 @@ mod tests {
                 ("c".to_owned(), 3)
             ]
         );
+    }
+
+    #[test]
+    fn turn_effect_captures_handoff_member_actions() {
+        let step = json!({
+            "ends_turn": true,
+            "effect": {
+                "tool": "do",
+                "member_actions": [
+                    {"action": "handoff", "item_id": "", "field": "notes/note/export-notes"}
+                ]
+            }
+        });
+        let effect = turn_effect(&[step]);
+        assert_eq!(effect.ending, Ending::Act);
+        assert_eq!(effect.member_actions.len(), 1);
+        assert_eq!(effect.member_actions[0]["action"], json!("handoff"));
     }
 }

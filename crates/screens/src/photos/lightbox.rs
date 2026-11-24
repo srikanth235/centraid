@@ -1508,7 +1508,7 @@ impl Screen for Lightbox {
                             "set-place",
                             &[&id, &place],
                             act::photos::SetPlace {
-                                id: id.clone(),
+                                photo_id: id.clone(),
                                 place_id: if place.is_empty() {
                                     Field::Keep
                                 } else {

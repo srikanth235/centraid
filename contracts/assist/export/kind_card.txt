@@ -1,18 +1,28 @@
-person: name, date (last contacted), role, nickname, met, cadence (days), starred (yes|no) · links: events, tasks, notes · verbs: create edit delete restore star unstar log
-event: name, date (start), status (confirmed|tentative|cancelled), duration (min), description · links: people · verbs: create edit reschedule cancel delete restore
-task: name, date (due), status (open|completed|cancelled), effort (min), priority (9 highest..1 lowest, 0 none), completed (date), description, starred (yes|no) · links: subtasks, people, list · verbs: create edit reschedule complete reopen cancel delete restore star unstar add_to remove_from tag untag
-note: name, date (created), body, pinned (yes|no), starred (yes|no) · links: notebook, people · verbs: create edit delete restore star unstar add_to remove_from tag untag
-document: name, date (created), starred (yes|no) · links: folder · verbs: create edit delete restore star unstar add_to remove_from tag untag
-photo: name, date (taken), starred (yes|no) · links: albums · verbs: edit delete restore star unstar add_to remove_from tag untag archive unarchive
+person: name, date (last contacted), role, nickname, met, cadence (days), starred (yes|no) · links: events, tasks, notes · verbs: create edit delete restore star unstar add_to remove_from log attach detach link unlink merge purge import empty_trash unfollow export follow
+event: name, date (start), status (confirmed|tentative|cancelled), duration (min), description · links: people · verbs: create edit reschedule cancel delete restore attach detach respond link unlink purge empty_trash unfollow export follow
+task: name, date (due), status (open|completed|cancelled), effort (min), priority (9 highest..1 lowest, 0 none), completed (date), description, starred (yes|no) · links: subtasks, people, list · verbs: create edit reschedule complete reopen cancel delete restore star unstar add_to remove_from tag untag attach detach link unlink purge empty_trash unfollow export follow
+note: name, date (created), body, pinned (yes|no), starred (yes|no) · links: notebook, people · verbs: create edit delete restore star unstar add_to remove_from tag untag attach detach link unlink purge import empty_trash restore_version export
+document: name, date (created), starred (yes|no) · links: folder · verbs: create edit delete restore star unstar add_to remove_from tag untag attach detach link unlink purge import empty_trash restore_version recolor export
+photo: name, date (taken), starred (yes|no) · links: albums · verbs: edit delete restore star unstar add_to remove_from tag untag attach detach link unlink purge import archive unarchive empty_trash export edit_media
 album: name · links: photos · verbs: create edit delete restore
-locker item: name, type (login|card|note|identity|wifi|password|ssh_key|api_credential|passport|bank_account|driving_licence|software_licence|crypto_wallet|membership|document), username, url, notes, starred (yes|no) · verbs: create edit delete restore star unstar reveal tag untag archive unarchive
+locker item: name, type (login|card|note|identity|wifi|password|ssh_key|api_credential|passport|bank_account|driving_licence|software_licence|crypto_wallet|membership|document), username, url, notes, starred (yes|no) · verbs: create edit delete restore star unstar reveal tag untag link unlink purge duplicate archive unarchive empty_trash export
 notebook: name · links: notes · verbs: create edit delete
 folder: name · links: documents · verbs: create edit delete
-list: name, area · links: tasks · verbs: create edit
-transaction: name, date (posted), amount (USD), account, category, transfer, status (posted|void) · verbs: edit delete restore unlink
-daily figure: name, date (day), metric (steps|active_energy_kcal|exercise_min|sleep_min|resting_hr_bpm|weight_kg), value · verbs: create edit delete
-workout: name, date (start), moving (s), distance (m), energy (kcal), heart_rate (bpm), climb (m) · verbs: create edit delete restore
-account: name, type (checking|savings|credit_card|cash), currency, opening (USD), opening_on, on_budget (yes|no) · verbs: create edit archive unarchive
-category: name, key, group · verbs: create archive unarchive
-budget: name, date (month), amount (USD), currency, carry (yes|no)
-rule: name, date (created), category, position · verbs: edit
+list: name, area, color, icon · links: tasks · verbs: create edit
+transaction: name, date (posted), amount (USD), account, category, transfer, status (posted|void) · verbs: edit delete restore attach detach categorize link unlink purge import empty_trash export
+daily figure: name, date (day), metric (steps|active_energy_kcal|exercise_min|sleep_min|resting_hr_bpm|weight_kg), value · verbs: create edit delete unfollow follow
+workout: name, date (start), moving (s), distance (m), energy (kcal), heart_rate (bpm), climb (m), ends (date) · verbs: create edit delete restore attach detach link unlink purge empty_trash export follow
+account: name, type (checking|savings|credit_card|cash), currency, opening (USD), opening_on, on_budget (yes|no) · verbs: create edit log archive unarchive configure
+category: name, key, group · verbs: create merge archive unarchive
+budget: name, date (month), amount (USD), currency, carry (yes|no) · verbs: edit
+rule: name, date (created), category, position, display_name, match, text, min, max · verbs: create edit delete apply
+calendar: name, color, icon · verbs: create edit delete restore
+locker field: name, item_id, section, label, field_kind, value, position · verbs: edit delete
+locker passkey: name, rp_id, user_handle, display_name · verbs: delete configure
+contact point: name, person_id, channel, value, label, preferred (yes|no) · verbs: edit delete
+important date: name, date (date), reminders · verbs: create edit
+gift: name, date (due), description · verbs: create
+people list: name · verbs: create edit delete restore
+journal entry: name, date (filed), mood, body · verbs: create
+place: name, address, locality, zone, lat, lon · verbs: create edit
+section: name, list, position · verbs: create

@@ -343,7 +343,7 @@ impl Person {
             }
             Form::Note(form) => (
                 act::people::AddNote {
-                    id,
+                    note_id: id,
                     text: form.text.trim().to_owned(),
                 }
                 .into(),

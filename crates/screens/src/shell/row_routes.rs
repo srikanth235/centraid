@@ -62,6 +62,48 @@ pub fn route(row: &RowRef, parent: &str, among: &[RowRef]) -> Option<wire::Route
     let title = row.title.as_str();
     // A ROW AN OLDER BUILD STORED UNDER `agenda` is read as the app of its kind (round 10).
     let app = centraid_vault::roster::legacy(row.app.as_str(), row.entity.as_str());
+    if let Some(handoff) = row.qualifier.strip_prefix("handoff:") {
+        let mut parts = handoff.splitn(3, '/');
+        let h_app = parts.next().unwrap_or("");
+        let _h_entity = parts.next().unwrap_or("");
+        let h_action = parts.next().unwrap_or("");
+        if h_app == "locker" {
+            return match h_action {
+                "export" => Some(locker::routes::export(parent)),
+                "import" => Some(locker::routes::import(parent)),
+                "set-passkey" => Some(if !id.is_empty() {
+                    locker::routes::edit(id)
+                } else {
+                    locker::routes::home(wire::LockerDestination::Items)
+                }),
+                _ if !id.is_empty() && row.entity == "locker_item" => {
+                    Some(locker::routes::item(id, parent))
+                }
+                _ => None,
+            };
+        }
+        if id.is_empty() {
+            return match (h_app, h_action) {
+                ("money", "import" | "import-csv") => Some(money::routes::import(parent)),
+                ("notes", "import" | "import-notes") => Some(notes::routes::import(parent)),
+                ("people", "import" | "import-contacts") => Some(people::routes::import(parent)),
+                ("reminders", "import" | "import-reminders") => {
+                    Some(crate::reminders::routes::home_importing())
+                }
+                ("health", "connect" | "follow-workouts" | "record-days") => {
+                    Some(health::routes::connect(parent))
+                }
+                _ => app_home(app),
+            };
+        }
+        if let Some(specific) = match (h_app, h_action) {
+            ("people", "edit") => Some(people::routes::editor(id)),
+            ("photos", "edit") => Some(photos::routes::editor(id)),
+            _ => None,
+        } {
+            return Some(specific);
+        }
+    }
     match (app, row.entity.as_str()) {
         ("reminders", "task") => Some(crate::reminders::routes::task(id)),
         ("reminders", "project") => Some(crate::reminders::routes::project(id, title)),
@@ -393,5 +435,72 @@ mod tests {
             };
             assert_eq!(item.parent, "Chat");
         }
+    }
+
+    #[test]
+    fn a_handoff_qualifier_routes_locker_and_app_sheets_and_rows() {
+        // Locker handoffs
+        let mut locker_export = RowRef::new("locker", "locker_item", "", "Export");
+        locker_export.qualifier = "handoff:locker/locker_item/export".to_owned();
+        assert_eq!(
+            screen(route(&locker_export, "Chat", &[])),
+            locker::EXPORT
+        );
+
+        let mut passkey_row = RowRef::new("locker", "locker_passkey", "i1", "Set passkey");
+        passkey_row.qualifier = "handoff:locker/locker_passkey/set-passkey".to_owned();
+        assert_eq!(screen(route(&passkey_row, "Chat", &[])), locker::EDITOR);
+
+        let mut passkey_home = RowRef::new("locker", "locker_passkey", "", "Set passkey");
+        passkey_home.qualifier = "handoff:locker/locker_passkey/set-passkey".to_owned();
+        assert_eq!(screen(route(&passkey_home, "Chat", &[])), locker::HOME);
+
+        // App-level sheets (empty id)
+        let mut money_export = RowRef::new("money", "transaction", "", "Export csv");
+        money_export.qualifier = "handoff:money/transaction/export-csv".to_owned();
+        assert_eq!(screen(route(&money_export, "Chat", &[])), money::HOME);
+
+        let mut money_import = RowRef::new("money", "transaction", "", "Import csv");
+        money_import.qualifier = "handoff:money/transaction/import-csv".to_owned();
+        assert_eq!(screen(route(&money_import, "Chat", &[])), money::IMPORT);
+
+        let mut notes_import = RowRef::new("notes", "note", "", "Import notes");
+        notes_import.qualifier = "handoff:notes/note/import-notes".to_owned();
+        assert_eq!(screen(route(&notes_import, "Chat", &[])), notes::IMPORT);
+
+        let mut people_import = RowRef::new("people", "person", "", "Import contacts");
+        people_import.qualifier = "handoff:people/person/import-contacts".to_owned();
+        assert_eq!(screen(route(&people_import, "Chat", &[])), people::IMPORT);
+
+        let mut health_follow = RowRef::new("health", "workout", "", "Follow workouts");
+        health_follow.qualifier = "handoff:health/workout/follow-workouts".to_owned();
+        assert_eq!(screen(route(&health_follow, "Chat", &[])), health::CONNECT);
+
+        let mut reminders_import = RowRef::new("reminders", "task", "", "Import reminders");
+        reminders_import.qualifier = "handoff:reminders/task/import-reminders".to_owned();
+        assert_eq!(
+            route(&reminders_import, "Chat", &[]),
+            Some(crate::reminders::routes::home_importing())
+        );
+
+        let mut cal_home = RowRef::new("calendar", "event", "", "Follow");
+        cal_home.qualifier = "handoff:calendar/event/follow".to_owned();
+        assert_eq!(
+            screen(route(&cal_home, "Chat", &[])),
+            crate::calendar::HOME
+        );
+
+        // Row-level handoffs (non-empty id)
+        let mut docs_replace = RowRef::new("docs", "document", "d1", "Lease");
+        docs_replace.qualifier = "handoff:docs/document/replace".to_owned();
+        assert_eq!(screen(route(&docs_replace, "Chat", &[])), docs::DOCUMENT);
+
+        let mut people_edit = RowRef::new("people", "person", "p1", "Sam");
+        people_edit.qualifier = "handoff:people/person/edit".to_owned();
+        assert_eq!(screen(route(&people_edit, "Chat", &[])), people::EDITOR);
+
+        let mut photos_edit = RowRef::new("photos", "photo", "ph1", "Sunset");
+        photos_edit.qualifier = "handoff:photos/photo/edit".to_owned();
+        assert_eq!(screen(route(&photos_edit, "Chat", &[])), photos::EDITOR);
     }
 }

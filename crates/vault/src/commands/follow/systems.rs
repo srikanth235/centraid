@@ -342,9 +342,10 @@ pub const SYSTEMS: &[SystemMap] = &[
         settle: workout::settle,
         named: nothing_to_settle,
     },
-    // A line of a statement: its title is the bank's words until the member
-    // renames it, its day and amount are the bank's and never edited, and the
-    // category is the member's to change.
+    // A line of a statement: its title, posted date, and amount are the bank's
+    // until the member edits them (via `txn.edit` or `entity.retitle`), and the
+    // category is the member's to change. `fixed` protects member-corrected
+    // titles, dates, and amounts on re-import.
     SystemMap {
         system: "statement",
         command: "follow.statement",

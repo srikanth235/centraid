@@ -164,6 +164,7 @@
       "kind": "document",
       "inverse": "trash",
       "sealed": [],
+      "handoff": true,
       "command": "document.add",
       "phrasings": [
         "upload this PDF to my drive",
@@ -297,7 +298,7 @@
     },
     {
       "name": "rename",
-      "verb": "edit",
+      "verb": "edit:name",
       "kind": "document",
       "inverse": "rename",
       "sealed": [],
@@ -512,7 +513,7 @@
     },
     {
       "name": "empty-trash",
-      "verb": "purge",
+      "verb": "empty_trash",
       "kind": "document",
       "inverse": null,
       "sealed": [],
@@ -746,7 +747,7 @@
     },
     {
       "name": "recolor-label",
-      "verb": "edit",
+      "verb": "recolor",
       "kind": "document",
       "inverse": "recolor-label",
       "sealed": [],
@@ -763,7 +764,8 @@
         "properties": {
           "label": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["label"]
           },
           "color": {
             "enum": [
@@ -775,7 +777,8 @@
               "graphite",
               "raspberry",
               "orchid"
-            ]
+            ],
+            "aliases": ["color"]
           }
         },
         "required": ["label", "color"],
@@ -818,11 +821,13 @@
             "minLength": 1
           },
           "body_text": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["text", "body_text"]
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           },
           "expected_rev": {
             "type": "integer",
@@ -853,6 +858,7 @@
       "kind": "document",
       "inverse": "undo-change",
       "sealed": [],
+      "handoff": true,
       "command": "document.replace",
       "phrasings": [
         "replace the lease with the new scan",
@@ -908,7 +914,7 @@
     },
     {
       "name": "restore-version",
-      "verb": "restore",
+      "verb": "restore_version",
       "kind": "document",
       "inverse": "undo-change",
       "sealed": [],
@@ -929,7 +935,8 @@
           },
           "seq": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 1,
+            "aliases": ["version", "seq"]
           }
         },
         "required": ["id", "seq"],
@@ -1108,15 +1115,18 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
-            "enum": ["about", "links"]
+            "enum": ["about", "links"],
+            "aliases": ["rel"]
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -1156,15 +1166,18 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
-            "enum": ["about", "links"]
+            "enum": ["about", "links"],
+            "aliases": ["rel"]
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["from", "to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -1204,7 +1217,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -1212,7 +1226,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -1252,7 +1267,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -1260,7 +1276,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["from", "to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -1283,8 +1300,9 @@
     },
     {
       "name": "export-zip",
-      "verb": "log",
+      "verb": "export",
       "bulk": true,
+      "handoff": true,
       "kind": "document",
       "inverse": null,
       "writes_nothing": true,

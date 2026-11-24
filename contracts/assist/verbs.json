@@ -157,6 +157,46 @@
       "name": "apply",
       "args": "",
       "done": "applied"
+    },
+    {
+      "name": "empty_trash",
+      "args": "",
+      "done": "emptied trash"
+    },
+    {
+      "name": "unfollow",
+      "args": "system: <text>, ref: <text>",
+      "done": "unfollowed"
+    },
+    {
+      "name": "restore_version",
+      "args": "version: <number>",
+      "done": "restored version"
+    },
+    {
+      "name": "recolor",
+      "args": "label: <text>, color: <text>",
+      "done": "recolored"
+    },
+    {
+      "name": "export",
+      "args": "",
+      "done": "exported"
+    },
+    {
+      "name": "follow",
+      "args": "",
+      "done": "followed"
+    },
+    {
+      "name": "edit_media",
+      "args": "",
+      "done": "edited"
+    },
+    {
+      "name": "configure",
+      "args": "",
+      "done": "configured"
     }
   ],
   "unbacked": []

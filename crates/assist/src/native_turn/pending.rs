@@ -38,20 +38,20 @@ pub struct CardStep {
 /// The sentence a verb opens its line with, and whether it says what moved.
 fn opening(verb: &str) -> (Say, bool) {
     match verb {
-        "create" => (Say::StepCreate, true),
+        "create" | "duplicate" => (Say::StepCreate, true),
         "reschedule" => (Say::StepReschedule, true),
         "complete" => (Say::StepComplete, false),
         "reopen" => (Say::StepReopen, false),
         "cancel" => (Say::StepCancel, false),
-        "delete" => (Say::StepDelete, false),
-        "restore" => (Say::StepRestore, false),
+        "delete" | "purge" | "empty_trash" => (Say::StepDelete, false),
+        "restore" | "restore_version" => (Say::StepRestore, false),
         "star" => (Say::StepStar, false),
         "unstar" => (Say::StepUnstar, false),
         "add_to" => (Say::StepAddTo, false),
         "remove_from" => (Say::StepRemoveFrom, false),
         "log" => (Say::StepLog, false),
         "undo" => (Say::StepUndo, false),
-        // `edit`, and `reveal` (which the phone never parks: the Locker is off)
+        // `edit`, and the rest of the verb vocabulary
         _ => (Say::StepEdit, true),
     }
 }

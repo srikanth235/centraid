@@ -434,7 +434,14 @@ impl Session {
         }
 
         // the tools of the regroup name rows: a selector on `answer`, `edit` or `do` is a step missing
-        if !lenient && let Some(key) = outside_the_tool(tool, args.keys().map(String::as_str)) {
+        if !lenient
+            && !(tool == "do"
+                && is_rowless_do_call(
+                    args.get("verb").and_then(Value::as_str),
+                    args.keys().map(String::as_str),
+                ))
+            && let Some(key) = outside_the_tool(tool, args.keys().map(String::as_str))
+        {
             return refuse(
                 key,
                 match tool {
@@ -900,6 +907,33 @@ pub(crate) fn default_tool(
         "ask" => "ask",
         _ => "decline",
     }
+}
+
+/// Whether a `do` call uses a rowless verb (`empty_trash`, `recolor`, `unfollow`, `apply`,
+/// `export`, `import`, `follow`, `configure`, `undo`) with `kind` instead of `rows`.
+pub(crate) fn is_rowless_do_call<'a>(
+    verb: Option<&str>,
+    keys: impl Iterator<Item = &'a str>,
+) -> bool {
+    let Some(v) = verb else {
+        return false;
+    };
+    let rowless_verb = matches!(
+        v,
+        "undo"
+            | "empty_trash"
+            | "recolor"
+            | "unfollow"
+            | "apply"
+            | "export"
+            | "import"
+            | "follow"
+            | "configure"
+    );
+    rowless_verb
+        && keys
+            .into_iter()
+            .all(|k| matches!(k, "verb" | "kind" | "args" | "more"))
 }
 
 /// The argument of a call that its tool takes in S2's shape only: `answer` takes rows or a

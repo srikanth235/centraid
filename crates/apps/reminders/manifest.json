@@ -197,7 +197,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -205,7 +206,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -245,7 +247,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -253,7 +256,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["from", "to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -729,7 +733,7 @@
     },
     {
       "name": "empty-trash",
-      "verb": "purge",
+      "verb": "empty_trash",
       "kind": "task",
       "inverse": null,
       "sealed": [],
@@ -947,14 +951,17 @@
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           },
           "parent": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["list", "parent"]
           },
           "position": {
-            "type": ["number", "null"]
+            "type": ["number", "null"],
+            "aliases": ["position"]
           }
         },
         "required": ["kind", "title", "parent"],
@@ -1230,7 +1237,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -1238,7 +1246,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -1278,7 +1287,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -1286,7 +1296,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["from", "to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -1309,8 +1320,9 @@
     },
     {
       "name": "export-ics",
-      "verb": "log",
+      "verb": "export",
       "bulk": true,
+      "handoff": true,
       "kind": "task",
       "inverse": null,
       "writes_nothing": true,
@@ -1356,11 +1368,12 @@
     },
     {
       "name": "follow-reminders",
-      "verb": "import",
+      "verb": "follow",
       "kind": "task",
       "inverse": "stop-following",
       "sealed": [],
       "bulk": true,
+      "handoff": true,
       "command": "follow.reminders",
       "phrasings": [
         "import my phone's reminders",
@@ -1463,7 +1476,7 @@
     },
     {
       "name": "stop-following",
-      "verb": "detach",
+      "verb": "unfollow",
       "kind": "task",
       "inverse": null,
       "sealed": [],
@@ -1486,7 +1499,8 @@
           },
           "ref": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["ref"]
           }
         }
       },
@@ -1950,6 +1964,16 @@
           "name": "area",
           "type": "text",
           "source": ["container", "parent_id"]
+        },
+        {
+          "name": "color",
+          "type": "text",
+          "source": ["container", "color"]
+        },
+        {
+          "name": "icon",
+          "type": "text",
+          "source": ["container", "icon"]
         }
       ],
       "links": [
@@ -1959,6 +1983,32 @@
           "via": "list_column"
         }
       ],
+      "trash": false,
+      "container": true
+    },
+    {
+      "id": "section",
+      "name": "section",
+      "plural": "sections",
+      "order": 27,
+      "live": "write",
+      "entity": "section",
+      "table": "container",
+      "pk": "id",
+      "nameSource": ["entity", "title"],
+      "fields": [
+        {
+          "name": "list",
+          "type": "text",
+          "source": ["container", "parent_id"]
+        },
+        {
+          "name": "position",
+          "type": "number",
+          "source": ["container", "position"]
+        }
+      ],
+      "links": [],
       "trash": false,
       "container": true
     }

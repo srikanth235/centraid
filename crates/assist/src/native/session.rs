@@ -442,6 +442,9 @@ pub struct Session {
     /// same write, sent after the person's yes, goes through
     /// (`Session::confirmed`).
     pub(crate) pending_bulk: Option<crate::native::act::PendingBulk>,
+    /// An irreversible write (`purge`, `empty_trash`, `merge`, `unfollow`,
+    /// `delete-rule`) the last turn ended asking confirmation for.
+    pub(crate) pending_confirm: Option<crate::native::act::PendingConfirm>,
     /// The cancelled event the last turn ended offering to plan anew (`plan a new one instead?`):
     /// the turn it was offered in and the row. A reschedule of that row in the turn after is the
     /// person's yes (`Session::plan_anew`, nt13 R6).
@@ -593,15 +596,43 @@ pub(crate) fn tool_params(tool: &str, lenient: bool) -> Vec<&'static str> {
     out
 }
 
+/// Whether `do` is calling a verb that may run without `rows` (using an optional `kind` parameter
+/// or `args` alone).
+pub(crate) fn is_rowless_do(args: &Map<String, Value>) -> bool {
+    let Some(raw) = arg_str(args, "verb") else {
+        return false;
+    };
+    let base = raw.split_once(':').map_or(raw.as_str(), |(v, _)| v);
+    let Some(verb) = meta::Verb::parse(base) else {
+        return false;
+    };
+    matches!(
+        verb,
+        meta::Verb::Undo
+            | meta::Verb::EmptyTrash
+            | meta::Verb::Recolor
+            | meta::Verb::Unfollow
+            | meta::Verb::Apply
+            | meta::Verb::Export
+            | meta::Verb::Import
+            | meta::Verb::Follow
+            | meta::Verb::Configure
+    )
+}
+
 /// The sentence a call earns for a parameter the tool does not take, when the parameter is one
 /// the tool took before the regroup: the way to say it now is a step earlier.
 fn strict_refusal(tool: &str, args: &Map<String, Value>) -> Option<String> {
     if !matches!(tool, "answer" | "edit" | "do") {
         return None;
     }
-    let selector = meta::SELECTOR_PARAMS
-        .iter()
-        .find(|param| args.get(**param).is_some_and(|value| !value.is_null()));
+    let allow_kind = tool == "do"
+        && is_rowless_do(args)
+        && !args.get("rows").is_some_and(|v| !v.is_null());
+    let selector = meta::SELECTOR_PARAMS.iter().find(|param| {
+        !(allow_kind && **param == "kind")
+            && args.get(**param).is_some_and(|value| !value.is_null())
+    });
     if tool == "answer" {
         if let Some(param) = ["op", "field"]
             .iter()
@@ -716,6 +747,7 @@ impl Session {
             compiled: None,
             renamed: false,
             pending_bulk: None,
+            pending_confirm: None,
             plan_offer: None,
             reveal_refused: Vec::new(),
             sealed_moves: std::collections::BTreeMap::new(),
@@ -2924,7 +2956,10 @@ impl Session {
         {
             return Outcome::error(error);
         }
-        let allowed = tool_params(tool, self.lenient());
+        let mut allowed = tool_params(tool, self.lenient());
+        if tool == "do" && is_rowless_do(args) && !allowed.contains(&"kind") {
+            allowed.push("kind");
+        }
         for key in args.keys() {
             if !allowed.contains(&key.as_str()) {
                 return Outcome::error(format!(

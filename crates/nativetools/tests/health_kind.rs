@@ -563,3 +563,126 @@ fn logging_a_figure_over_a_day_that_has_one_is_refused_and_leaves_it() {
     assert!(!wrote(&old), "{old}");
     assert_eq!(exact(&world, "2026-01-02", "steps"), Some(4000.0));
 }
+
+#[test]
+fn a_workout_can_be_logged_with_explicit_ends_edited_including_time_only_and_undone() {
+    use centraid_nativetools::park::Writes;
+    let world = seeded_with(&world_json());
+    let mut session = world.session_with(
+        common::TODAY,
+        centraid_nativetools::Flags {
+            writes: Writes::Shadow,
+            ..centraid_nativetools::Flags::default()
+        },
+    );
+    session.user("log a morning bike ride from 07:30 to 08:15");
+    let made = call(
+        &mut session,
+        "create",
+        json!({
+            "kind": "workout",
+            "args": "name: Morning Ride\ndate: 2026-09-27T07:30\nends: 2026-09-27T08:15"
+        }),
+    );
+    assert!(wrote(&made), "{made}");
+    session.user("");
+    let shown = text(&mut session, "find", json!({"kind": "workout", "name": "Morning Ride"}));
+    assert!(shown.contains("2026-09-27 08:15"), "{shown}");
+
+    let found = find(&mut session, json!({"kind": "workout", "name": "Morning Ride"}));
+    let handle = found["effect"]["result"].as_str().unwrap().to_owned();
+
+    // Edit ends using time-only against the workout's start date, via alias `end`.
+    session.user("change the end time to 08:30");
+    let edited = call(
+        &mut session,
+        "edit",
+        json!({"rows": handle, "args": "end: 08:30"}),
+    );
+    assert!(wrote(&edited), "{edited}");
+    assert!(
+        edited["effect"]["diff"].to_string().contains("2026-09-27T08:30"),
+        "{edited}"
+    );
+
+    // Undo immediately after the edit restores prior ends (08:15).
+    session.user("undo that");
+    let undone = call(&mut session, "do", json!({"verb": "undo"}));
+    assert!(wrote(&undone), "{undone}");
+    session.user("");
+    let restored = text(&mut session, "find", json!({"kind": "workout", "name": "Morning Ride"}));
+    assert!(restored.contains("2026-09-27 08:15"), "{restored}");
+
+    let drift = session.take_drift();
+    assert!(drift.is_empty(), "shadow drift:\n{}", drift.join("\n"));
+
+    // Explicit `ends` also respects member timezone vs UTC vault storage.
+    let mut ny = world.session_in(common::TODAY, "America/New_York");
+    ny.user("log evening run");
+    let ny_made = call(
+        &mut ny,
+        "create",
+        json!({
+            "kind": "workout",
+            "args": "name: Evening Run\ndate: 2026-09-26T18:00\nend_time: 18:45"
+        }),
+    );
+    assert!(wrote(&ny_made), "{ny_made}");
+    let mut utc = world.session();
+    utc.user("");
+    let utc_shown = text(&mut utc, "find", json!({"kind": "workout", "name": "Evening Run"}));
+    assert!(
+        utc_shown.contains("2026-09-26 22:00") && utc_shown.contains("2026-09-26 22:45"),
+        "expected UTC 22:00..22:45 in {utc_shown}"
+    );
+}
+
+#[test]
+fn a_workout_refuses_ends_earlier_than_starts() {
+    let world = seeded_with(&world_json());
+    let mut session = world.session();
+    session.user("log invalid workout");
+    let bad_create = call(
+        &mut session,
+        "create",
+        json!({
+            "kind": "workout",
+            "args": "name: Time Travel\ndate: 2026-09-27T07:30\nends: 06:30"
+        }),
+    );
+    assert!(!wrote(&bad_create), "{bad_create}");
+    let bad_text = bad_create["text"].as_str().unwrap_or_default();
+    assert!(
+        bad_text.starts_with("error:") && bad_text.contains("before it starts"),
+        "{bad_create}"
+    );
+
+    session.user("log valid workout");
+    let made = call(
+        &mut session,
+        "create",
+        json!({
+            "kind": "workout",
+            "args": "name: Tempo Run\ndate: 2026-09-27T07:30\nends: 08:10"
+        }),
+    );
+    assert!(wrote(&made), "{made}");
+    let found = find(&mut session, json!({"kind": "workout", "name": "Tempo Run"}));
+    let handle = found["effect"]["result"].as_str().unwrap().to_owned();
+
+    session.user("move end before start");
+    let bad_edit = call(
+        &mut session,
+        "edit",
+        json!({"rows": handle, "args": "ends: 06:45"}),
+    );
+    assert!(!wrote(&bad_edit), "{bad_edit}");
+    let edit_text = bad_edit["text"].as_str().unwrap_or_default();
+    assert!(
+        edit_text.starts_with("error:") && edit_text.contains("before it starts"),
+        "{bad_edit}"
+    );
+    session.user("");
+    let intact = text(&mut session, "find", json!({"kind": "workout", "name": "Tempo Run"}));
+    assert!(intact.contains("2026-09-27 08:10"), "{intact}");
+}

@@ -88,5 +88,5 @@ When a question survives all of these, it is a genuine product call: what the pr
 - [ ] Deleting goes through trash, with a restore path and a honest purge; backups are described as they are.
 - [ ] Copy is calm, concrete, sentence case, one noun per destination, no exception text, no host or transport word.
 - [ ] Every control and field has a consumer; nothing opens onto nothing.
-- [ ] Writes by the assistant or an import wait for the member's tap or a preview when ambiguous.
+- [ ] Writes by the assistant or an import wait for the member's tap or a preview when ambiguous. There are no restricted actions for Chat: pure vault actions run directly behind Chat's confirm card (with extra confirmation for `confirmation: "required"` actions), OS/binary/device-store actions hand off via `MemberAction::Handoff` cards, and `unbounded_destruction` declines only unbounded requests.
 - [ ] A genuine product call was put to the owner with options and a recommendation, not guessed.

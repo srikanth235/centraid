@@ -14,10 +14,11 @@
 //!   account's own id, so every account has exactly one origin from birth.
 //!   Closing is the `archived` flag and a rename is `entity.retitle`: nothing
 //!   here duplicates a shared verb.
-//! - **A line** is `follow.statement`'s: the vault adds a line once, a re-import
-//!   writes nothing, and a line is never edited (the schema refuses it). Money's
-//!   own verbs on a line are a category, a void and a transfer. **The amount is
-//!   signed: money out is negative.**
+//! - **A line** is `follow.statement`'s: the vault adds a line once, and a re-import
+//!   writes nothing over member-edited fields. A line's account and currency are fixed
+//!   (the schema refuses changing them), while its title, posted date, amount, category
+//!   and status may be corrected via `txn.edit`. Money's other verbs on a line are a
+//!   category, a void and a transfer. **The amount is signed: money out is negative.**
 //! - **A category** is a concept; a group is a category with no parent. Its id is
 //!   its key, so asking for a category that exists is the same ask.
 //! - **A plan** (`budget`) is a category's amount for a month, and a checkpoint is
@@ -547,6 +548,104 @@ fn categorize(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     }
 }
 
+fn pre_edit_txn(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let connection = ctx.connection();
+    let id = ctx.required_str("id")?;
+    let Some(found) = line(connection, id)? else {
+        return Ok(Some("That is not a transaction.".to_owned()));
+    };
+    if found.status == "void" {
+        return Ok(Some("A removed transaction cannot be edited.".to_owned()));
+    }
+    if let Some(title) = ctx.optional_str("title")
+        && squash(title).is_empty()
+    {
+        return Ok(Some("A transaction needs a name.".to_owned()));
+    }
+    if let Some(day) = ctx.optional_str("posted_on")
+        && !is_day(connection, day)?
+    {
+        return Ok(Some("That is not a real date.".to_owned()));
+    }
+    if let Some(category) = ctx.optional_str("category_id")
+        && let Some(sentence) = fileable(connection, category)?
+    {
+        return Ok(Some(sentence));
+    }
+    if let Some(status) = ctx.optional_str("status")
+        && !TXN_STATUSES.contains(&status)
+    {
+        return Ok(Some(
+            "A transaction status must be pending, posted, or void.".to_owned(),
+        ));
+    }
+    if let Some(amount_minor) = integer(ctx, "amount_minor")
+        && found.transfer_id.is_some()
+        && ((amount_minor < 0) != (found.amount_minor < 0) || amount_minor == 0)
+    {
+        return Ok(Some(
+            "Cannot change the direction of a linked transfer; unlink it first.".to_owned(),
+        ));
+    }
+    Ok(None)
+}
+
+#[derive(serde::Deserialize)]
+struct EditTxnInput {
+    id: String,
+    title: Option<String>,
+    posted_on: Option<String>,
+    amount_minor: Option<i64>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    category_id: Option<Option<String>>,
+    status: Option<String>,
+}
+
+fn edit_txn(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let input: EditTxnInput = ctx.parse_input()?;
+    let connection = ctx.connection();
+    let id = input.id.as_str();
+    let mut changed = false;
+    if let Some(title) = input.title.as_deref() {
+        let name = squash(title);
+        changed |= connection.execute(
+            "UPDATE entity SET title = ?2 WHERE id = ?1 AND title IS NOT ?2",
+            [id, &name],
+        )? > 0;
+    }
+    if let Some(posted_on) = input.posted_on.as_deref() {
+        changed |= connection.execute(
+            "UPDATE txn SET posted_on = ?2 WHERE id = ?1 AND posted_on IS NOT ?2",
+            [id, posted_on],
+        )? > 0;
+    }
+    if let Some(amount_minor) = input.amount_minor {
+        changed |= connection.execute(
+            "UPDATE txn SET amount_minor = ?2 WHERE id = ?1 AND amount_minor IS NOT ?2",
+            rusqlite::params![id, amount_minor],
+        )? > 0;
+    }
+    if let Some(category_id) = input.category_id {
+        changed |= connection.execute(
+            "UPDATE txn SET category_id = ?2 WHERE id = ?1 AND category_id IS NOT ?2",
+            rusqlite::params![id, category_id],
+        )? > 0;
+    }
+    if let Some(status) = input.status.as_deref() {
+        if status == "void" {
+            end_transfer(ctx, id)?;
+        }
+        changed |= connection.execute(
+            "UPDATE txn SET status = ?2 WHERE id = ?1 AND status IS NOT ?2",
+            [id, status],
+        )? > 0;
+    }
+    if changed {
+        ctx.touch(id)?;
+    }
+    with_rev(ctx, id, json!({ "id": id, "changed": changed }))
+}
+
 /// Let go of a line's transfer, and of the other half's.
 fn end_transfer(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<usize> {
     let removed = ctx
@@ -1024,6 +1123,14 @@ pub fn definitions() -> Vec<CommandDefinition> {
             check: pre_categorize,
         },
     ];
+    const EDIT_TXN: &[CommandCondition] = &[
+        STALE_GUARD[0],
+        STALE_GUARD[1],
+        CommandCondition {
+            predicate: "txn_edit_is_sound",
+            check: pre_edit_txn,
+        },
+    ];
     const LINE: &[CommandCondition] = &[CommandCondition {
         predicate: "transaction_exists",
         check: pre_line,
@@ -1199,6 +1306,27 @@ pub fn definitions() -> Vec<CommandDefinition> {
             Idempotency::Idempotent,
             CATEGORIZE,
             categorize,
+        ),
+        CommandDefinition::plain(
+            "txn.edit",
+            "txn",
+            r#"{
+              "type": "object",
+              "required": ["id"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "title": { "type": "string", "maxLength": 1000 },
+                "posted_on": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+                "amount_minor": { "type": "integer" },
+                "category_id": { "type": ["string", "null"], "minLength": 1 },
+                "status": { "enum": ["pending", "posted", "void"] },
+                "expected_rev": { "type": "integer", "minimum": 0 }
+              }
+            }"#,
+            Idempotency::Idempotent,
+            EDIT_TXN,
+            edit_txn,
         ),
         void_line,
         CommandDefinition::plain(

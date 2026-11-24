@@ -226,6 +226,12 @@
           "account": {
             "type": "string"
           },
+          "address": {
+            "type": "string"
+          },
+          "addresses": {
+            "type": "string"
+          },
           "amount": {
             "type": "string"
           },
@@ -247,13 +253,25 @@
           "category": {
             "type": "string"
           },
+          "channel": {
+            "type": "string"
+          },
           "climb": {
             "type": "string"
           },
           "code": {
             "type": "string"
           },
+          "color": {
+            "type": "string"
+          },
           "completed": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "cover": {
             "type": "string"
           },
           "currency": {
@@ -268,6 +286,9 @@
           "description": {
             "type": "string"
           },
+          "display_name": {
+            "type": "string"
+          },
           "distance": {
             "type": "string"
           },
@@ -277,10 +298,19 @@
           "effort": {
             "type": "string"
           },
-          "end": {
+          "ends": {
             "type": "string"
           },
           "energy": {
+            "type": "string"
+          },
+          "external_ref": {
+            "type": "string"
+          },
+          "field_id": {
+            "type": "string"
+          },
+          "field_kind": {
             "type": "string"
           },
           "folder": {
@@ -292,6 +322,12 @@
           "heart_rate": {
             "type": "string"
           },
+          "icon": {
+            "type": "string"
+          },
+          "item_id": {
+            "type": "string"
+          },
           "key": {
             "type": "string"
           },
@@ -299,13 +335,40 @@
             "description": "the kind of the new row",
             "type": "string"
           },
+          "label": {
+            "type": "string"
+          },
+          "lat": {
+            "type": "string"
+          },
           "list": {
+            "type": "string"
+          },
+          "locality": {
+            "type": "string"
+          },
+          "lon": {
+            "type": "string"
+          },
+          "match": {
+            "type": "string"
+          },
+          "max": {
             "type": "string"
           },
           "met": {
             "type": "string"
           },
           "metric": {
+            "type": "string"
+          },
+          "min": {
+            "type": "string"
+          },
+          "month": {
+            "type": "string"
+          },
+          "mood": {
             "type": "string"
           },
           "more": {
@@ -319,6 +382,9 @@
             "type": "string"
           },
           "nickname": {
+            "type": "string"
+          },
+          "note": {
             "type": "string"
           },
           "notebook": {
@@ -342,16 +408,40 @@
           "password": {
             "type": "string"
           },
+          "person": {
+            "type": "string"
+          },
+          "person_id": {
+            "type": "string"
+          },
           "pinned": {
+            "type": "string"
+          },
+          "place": {
             "type": "string"
           },
           "position": {
             "type": "string"
           },
+          "preferred": {
+            "type": "string"
+          },
           "priority": {
             "type": "string"
           },
+          "reminder_on": {
+            "type": "string"
+          },
+          "reminders": {
+            "type": "string"
+          },
           "role": {
+            "type": "string"
+          },
+          "rp_id": {
+            "type": "string"
+          },
+          "section": {
             "type": "string"
           },
           "starred": {
@@ -372,10 +462,16 @@
           "url": {
             "type": "string"
           },
+          "user_handle": {
+            "type": "string"
+          },
           "username": {
             "type": "string"
           },
           "value": {
+            "type": "string"
+          },
+          "zone": {
             "type": "string"
           }
         },
@@ -396,6 +492,12 @@
           "account": {
             "type": "string"
           },
+          "address": {
+            "type": "string"
+          },
+          "addresses": {
+            "type": "string"
+          },
           "amount": {
             "type": "string"
           },
@@ -417,13 +519,25 @@
           "category": {
             "type": "string"
           },
+          "channel": {
+            "type": "string"
+          },
           "climb": {
             "type": "string"
           },
           "code": {
             "type": "string"
           },
+          "color": {
+            "type": "string"
+          },
           "completed": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "cover": {
             "type": "string"
           },
           "currency": {
@@ -438,6 +552,9 @@
           "description": {
             "type": "string"
           },
+          "display_name": {
+            "type": "string"
+          },
           "distance": {
             "type": "string"
           },
@@ -447,10 +564,19 @@
           "effort": {
             "type": "string"
           },
-          "end": {
+          "ends": {
             "type": "string"
           },
           "energy": {
+            "type": "string"
+          },
+          "external_ref": {
+            "type": "string"
+          },
+          "field_id": {
+            "type": "string"
+          },
+          "field_kind": {
             "type": "string"
           },
           "folder": {
@@ -462,16 +588,49 @@
           "heart_rate": {
             "type": "string"
           },
+          "icon": {
+            "type": "string"
+          },
+          "item_id": {
+            "type": "string"
+          },
           "key": {
             "type": "string"
           },
+          "label": {
+            "type": "string"
+          },
+          "lat": {
+            "type": "string"
+          },
           "list": {
+            "type": "string"
+          },
+          "locality": {
+            "type": "string"
+          },
+          "lon": {
+            "type": "string"
+          },
+          "match": {
+            "type": "string"
+          },
+          "max": {
             "type": "string"
           },
           "met": {
             "type": "string"
           },
           "metric": {
+            "type": "string"
+          },
+          "min": {
+            "type": "string"
+          },
+          "month": {
+            "type": "string"
+          },
+          "mood": {
             "type": "string"
           },
           "more": {
@@ -485,6 +644,9 @@
             "type": "string"
           },
           "nickname": {
+            "type": "string"
+          },
+          "note": {
             "type": "string"
           },
           "notebook": {
@@ -508,13 +670,31 @@
           "password": {
             "type": "string"
           },
+          "person": {
+            "type": "string"
+          },
+          "person_id": {
+            "type": "string"
+          },
           "pinned": {
+            "type": "string"
+          },
+          "place": {
             "type": "string"
           },
           "position": {
             "type": "string"
           },
+          "preferred": {
+            "type": "string"
+          },
           "priority": {
+            "type": "string"
+          },
+          "reminder_on": {
+            "type": "string"
+          },
+          "reminders": {
             "type": "string"
           },
           "role": {
@@ -522,6 +702,12 @@
           },
           "rows": {
             "description": "#n, @n list",
+            "type": "string"
+          },
+          "rp_id": {
+            "type": "string"
+          },
+          "section": {
             "type": "string"
           },
           "starred": {
@@ -542,10 +728,16 @@
           "url": {
             "type": "string"
           },
+          "user_handle": {
+            "type": "string"
+          },
           "username": {
             "type": "string"
           },
           "value": {
+            "type": "string"
+          },
+          "zone": {
             "type": "string"
           }
         },
@@ -559,12 +751,16 @@
   },
   {
     "function": {
-      "description": "Run a verb on rows. Ends the turn unless more.",
+      "description": "Run a verb on rows (or kind for app-level verbs). Ends the turn unless more.",
       "name": "do",
       "parameters": {
         "properties": {
           "args": {
-            "description": "at most one argument: reschedule to · add_to to · remove_from from · tag, untag label · log kind · reveal field; the other verbs take none",
+            "description": "reschedule to · add_to/attach/link to · remove_from/detach/unlink from · respond answer · categorize category · merge into · restore_version version · recolor label, color · tag/untag label · log kind · reveal field",
+            "type": "string"
+          },
+          "kind": {
+            "description": "for app-level or rowless verbs (export, import, follow, unfollow, empty_trash, apply, configure)",
             "type": "string"
           },
           "more": {
@@ -592,16 +788,33 @@
               "undo",
               "tag",
               "untag",
+              "attach",
+              "detach",
+              "respond",
+              "categorize",
+              "link",
               "unlink",
+              "merge",
+              "purge",
+              "import",
+              "duplicate",
               "archive",
-              "unarchive"
+              "unarchive",
+              "apply",
+              "empty_trash",
+              "unfollow",
+              "restore_version",
+              "recolor",
+              "export",
+              "follow",
+              "edit_media",
+              "configure"
             ],
             "type": "string"
           }
         },
         "required": [
-          "verb",
-          "rows"
+          "verb"
         ],
         "type": "object"
       }

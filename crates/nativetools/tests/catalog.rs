@@ -62,8 +62,7 @@ fn every_live_verb_row_is_a_direct_action_or_an_unbacked_row() {
             let kind = serde_json::to_value(kind).unwrap();
             let kind = kind.as_str().unwrap();
             let by_action = all.iter().flat_map(|(_, m)| &m.actions).any(|action| {
-                action.surface() == ChatSurface::Direct
-                    && action.kind == kind
+                action.kind == kind
                     && action.command == *command
                     && (action.verb == spec.name || action.also.iter().any(|v| v == spec.name))
             });
@@ -88,6 +87,8 @@ fn every_live_verb_row_is_a_direct_action_or_an_unbacked_row() {
 
 #[test]
 fn a_declared_kind_has_no_variant_and_a_declared_verb_names_a_catalog_action() {
+    assert!(DECLARED_KINDS.is_empty(), "every kind is live");
+    assert!(DECLARED_VERBS.is_empty(), "every verb is live");
     let live: BTreeSet<&str> = KINDS.iter().map(|spec| spec.name).collect();
     for declared in DECLARED_KINDS {
         assert!(!live.contains(declared.name), "{} is live", declared.name);
@@ -195,7 +196,7 @@ fn the_census_lists_every_action_as_its_manifest_classifies_it() {
         }
     }
     let rows: Vec<Vec<&str>> = lines.map(|line| line.split(',').collect()).collect();
-    assert_eq!(rows.len(), 227);
+    assert_eq!(rows.len(), 228);
     assert_eq!(rows.len(), expected.len());
     for (row, want) in rows.iter().zip(&expected) {
         assert_eq!(row.len(), 7, "{row:?}");
@@ -213,7 +214,7 @@ fn the_census_lists_every_action_as_its_manifest_classifies_it() {
             want.1
         );
         assert!(row[5] == "no" || row[5].starts_with("yes: "), "{row:?}");
-        assert!(row[6] == "no" || row[6] == "yes", "{row:?}");
+        assert_eq!(row[6], "yes", "{row:?}");
         // a screen claim cites files that exist
         if let Some(files) = row[5].strip_prefix("yes: ") {
             for file in files.split("; ") {
@@ -237,7 +238,7 @@ fn the_census_lists_every_action_as_its_manifest_classifies_it() {
 #[test]
 fn the_exported_catalog_is_the_manifests() {
     let exported = catalog();
-    assert_eq!(exported["actions"].as_array().unwrap().len(), 227);
+    assert_eq!(exported["actions"].as_array().unwrap().len(), 228);
     // every query a manifest declares, however many that is: the core's `load` is held to the
     // same list both ways (`crates/core/src/load.rs`)
     let declared: usize = manifests().iter().map(|(_, m)| m.queries.len()).sum();

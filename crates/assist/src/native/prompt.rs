@@ -171,8 +171,12 @@ fn tools_with(full: bool) -> Vec<Value> {
     );
     verb_do.insert("rows".into(), rows.clone());
     verb_do.insert(
+        "kind".into(),
+        json!({"type": "string", "description": "for app-level or rowless verbs (export, import, follow, unfollow, empty_trash, apply, configure)"}),
+    );
+    verb_do.insert(
         "args".into(),
-        json!({"type": "string", "description": "at most one argument: reschedule to · add_to to · remove_from from · tag, untag label · log kind · reveal field; the other verbs take none"}),
+        json!({"type": "string", "description": "reschedule to · add_to/attach/link to · remove_from/detach/unlink from · respond answer · categorize category · merge into · restore_version version · recolor label, color · tag/untag label · log kind · reveal field"}),
     );
     verb_do.insert("more".into(), more);
     let mut answer = serde_json::Map::new();
@@ -221,9 +225,9 @@ fn tools_with(full: bool) -> Vec<Value> {
         ),
         tool(
             "do",
-            "Run a verb on rows. Ends the turn unless more.",
+            "Run a verb on rows (or kind for app-level verbs). Ends the turn unless more.",
             verb_do,
-            &["verb", "rows"],
+            &["verb"],
         ),
         tool(
             "answer",
@@ -336,8 +340,8 @@ const SIGNATURES: [(&str, &[&str], &str); 8] = [
     ),
     (
         "do",
-        &["verb", "rows", "args", "more"],
-        "run a verb on rows; args: at most one (reschedule to, add_to to, remove_from from, tag and untag label, log kind, reveal field); ends the turn unless more",
+        &["verb", "rows", "kind", "args", "more"],
+        "run a verb on rows (or kind for app-level/rowless verbs); ends the turn unless more",
     ),
     (
         "answer",
@@ -509,30 +513,42 @@ pub fn kind_card(currency: &str) -> Vec<String> {
     kind_card_for(ToolsMode::default(), currency)
 }
 
-/// The kind card as the model of `tools` learned it. S2's is frozen as it was trained (#1166):
-/// Health's two kinds were read-only then and list no verbs, whatever the runtime lets chat do to
-/// them now; a task's star (#1173) is neither a field nor a verb it learned; and a transaction goes
-/// to the trash (#1185) where S2 learned it could only be edited and unlinked. The runtime still
-/// takes such a call from S2; its prompt does not advertise one.
+/// The frozen kind card S2 was trained on (#1166): the 18 kinds, fields and verbs from before
+/// the regroup and Wave 3 coverage expansion. New kinds and new verbs appear in the other modes.
+const S2_KIND_CARD: [&str; 18] = [
+    "person: name, date (last contacted), role, nickname, met, cadence (days), starred (yes|no) · links: events, tasks, notes · verbs: create edit delete restore star unstar log",
+    "event: name, date (start), status (confirmed|tentative|cancelled), duration (min), description · links: people · verbs: create edit reschedule cancel delete restore",
+    "task: name, date (due), status (open|completed|cancelled), effort (min), priority (9 highest..1 lowest, 0 none), completed (date), description · links: subtasks, people, list · verbs: create edit reschedule complete reopen cancel delete restore add_to remove_from tag untag",
+    "note: name, date (created), body, pinned (yes|no), starred (yes|no) · links: notebook, people · verbs: create edit delete restore star unstar add_to remove_from tag untag",
+    "document: name, date (created), starred (yes|no) · links: folder · verbs: create edit delete restore star unstar add_to remove_from tag untag",
+    "photo: name, date (taken), starred (yes|no) · links: albums · verbs: edit delete restore star unstar add_to remove_from tag untag archive unarchive",
+    "album: name · links: photos · verbs: create edit delete restore",
+    "locker item: name, type (login|card|note|identity|wifi|password|ssh_key|api_credential|passport|bank_account|driving_licence|software_licence|crypto_wallet|membership|document), username, url, notes, starred (yes|no) · verbs: create edit delete restore star unstar reveal tag untag archive unarchive",
+    "notebook: name · links: notes · verbs: create edit delete",
+    "folder: name · links: documents · verbs: create edit delete",
+    "list: name, area · links: tasks · verbs: create edit",
+    "transaction: name, date (posted), amount ({currency}), account, category, transfer, status (posted|void) · verbs: edit unlink",
+    "daily figure: name, date (day), metric (steps|active_energy_kcal|exercise_min|sleep_min|resting_hr_bpm|weight_kg), value",
+    "workout: name, date (start), moving (s), distance (m), energy (kcal), heart_rate (bpm), climb (m)",
+    "account: name, type (checking|savings|credit_card|cash), currency, opening ({currency}), opening_on, on_budget (yes|no) · verbs: create edit archive unarchive",
+    "category: name, key, group · verbs: create archive unarchive",
+    "budget: name, date (month), amount ({currency}), currency, carry (yes|no)",
+    "rule: name, date (created), category, position · verbs: edit",
+];
+
+/// The kind card as the model of `tools` learned it. S2's is frozen as it was trained (#1166);
+/// every other mode renders all 28 live kinds and 38 live verbs dynamically.
 #[must_use]
 pub fn kind_card_for(tools: ToolsMode, currency: &str) -> Vec<String> {
+    if tools == ToolsMode::S2 {
+        return S2_KIND_CARD
+            .iter()
+            .map(|line| line.replace("{currency}", currency))
+            .collect();
+    }
     Kind::ALL
         .iter()
-        .map(|kind| {
-            let line = render::card_line(*kind, currency);
-            match (tools, kind) {
-                (ToolsMode::S2, Kind::Workout | Kind::DailyFigure) => {
-                    line.split(" · verbs: ").next().unwrap_or(&line).to_owned()
-                }
-                (ToolsMode::S2, Kind::Transaction) => {
-                    line.replace(" verbs: edit delete restore unlink", " verbs: edit unlink")
-                }
-                (ToolsMode::S2, Kind::Task) => line
-                    .replace(", starred (yes|no)", "")
-                    .replace(" restore star unstar ", " restore "),
-                _ => line,
-            }
-        })
+        .map(|kind| render::card_line(*kind, currency))
         .collect()
 }
 

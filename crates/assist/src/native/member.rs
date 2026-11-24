@@ -27,6 +27,8 @@ pub enum ActionKind {
     EditSecret,
     /// Export the vault's Locker.
     Export,
+    /// Hand off to an app sheet or editor for an operation outside the assistant's own writes.
+    Handoff,
 }
 
 impl ActionKind {
@@ -38,15 +40,22 @@ impl ActionKind {
             Self::Code => "code",
             Self::EditSecret => "edit_secret",
             Self::Export => "export",
+            Self::Handoff => "handoff",
         }
     }
 
     /// The action a word names.
     #[must_use]
     pub fn parse(word: &str) -> Option<Self> {
-        [Self::Reveal, Self::Code, Self::EditSecret, Self::Export]
-            .into_iter()
-            .find(|kind| kind.word() == word)
+        [
+            Self::Reveal,
+            Self::Code,
+            Self::EditSecret,
+            Self::Export,
+            Self::Handoff,
+        ]
+        .into_iter()
+        .find(|kind| kind.word() == word)
     }
 }
 
@@ -166,6 +175,7 @@ mod tests {
             ActionKind::Code,
             ActionKind::EditSecret,
             ActionKind::Export,
+            ActionKind::Handoff,
         ] {
             let action = MemberAction {
                 kind,
@@ -177,6 +187,22 @@ mod tests {
                 Some(action.clone())
             );
             assert_eq!(MemberAction::of_json(&action.to_json()), Some(action));
+        }
+        for (item_id, column) in [
+            ("d1", "docs/document/replace"),
+            ("", "money/transaction/export-csv"),
+        ] {
+            let handoff = MemberAction {
+                kind: ActionKind::Handoff,
+                item_id: item_id.to_owned(),
+                column: column.to_owned(),
+            };
+            assert_eq!(handoff.qualifier(), format!("handoff:{column}"));
+            assert_eq!(
+                MemberAction::from_card(item_id, &handoff.qualifier()),
+                Some(handoff.clone())
+            );
+            assert_eq!(MemberAction::of_json(&handoff.to_json()), Some(handoff));
         }
         assert_eq!(MemberAction::from_card("i1", ""), None);
         assert_eq!(MemberAction::from_card("i1", "2026-10-08"), None);

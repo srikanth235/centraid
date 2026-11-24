@@ -148,6 +148,10 @@ enum Command {
         /// Remove the adapter: the release ships the stock model alone.
         #[arg(long, conflicts_with = "adapter_url")]
         no_adapter: bool,
+        /// Refresh `tools_hash` and `prompt_hash` in `crates/assist/model.json` from the current
+        /// runtime without touching `url`, `sha256`, `bytes`, `special_tokens`, or `score`.
+        #[arg(long, conflicts_with_all = ["url", "adapter_url", "no_adapter"])]
+        refresh_hashes: bool,
     },
     /// Print the repository root every path-based rule will scan.
     ///
@@ -337,6 +341,7 @@ fn main() -> ExitCode {
             adapter_file,
             adapter_score,
             no_adapter,
+            refresh_hashes,
         } => match model_pin::run(
             &root,
             &model_pin::Pin {
@@ -359,6 +364,7 @@ fn main() -> ExitCode {
                     _ => None,
                 },
                 no_adapter,
+                refresh_hashes,
             },
         ) {
             Ok(()) => true,
