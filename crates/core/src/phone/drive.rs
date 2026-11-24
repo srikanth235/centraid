@@ -112,19 +112,12 @@ impl Conditions {
         held
     }
 
-    /// The rule as the engine reads it. A video the member left out is a video that never
-    /// crosses: the engine's own rule for a metered link with photos allowed, which says exactly
-    /// that, so that is what it is handed.
+    /// The rule as the engine reads it. Excluded videos are left out of the snapshot's originals
+    /// class rather than blocked here, so an unmetered pass stays [`Link::Unmetered`] (keeping
+    /// full read-back sampling) and confirms `oroot` once all included originals are held.
     #[must_use]
     pub const fn policy(&self) -> Policy {
         let photos_on_cellular = matches!(self.rule, wire::TransferRule::WifiAndCellularPhotos);
-        if self.exclude_videos && !self.metered {
-            return Policy {
-                link: Link::Metered,
-                photos_on_cellular: true,
-                asked: self.asked,
-            };
-        }
         Policy {
             link: if self.metered {
                 Link::Metered
@@ -208,7 +201,9 @@ fn snapshot_due(
         return Ok(true);
     };
     let dirty = gateways.iter().any(|gateway| gateway.directory_dirty);
-    if plane.snapshot_owed() || dirty {
+    let video_setting_changed =
+        state.exclude_videos().map_err(plane_error)? != request.exclude_videos;
+    if plane.snapshot_owed() || dirty || video_setting_changed {
         return Ok(true);
     }
     let reference = status::node_ref(state, &keyring.backup, &name);
@@ -391,6 +386,7 @@ pub(crate) fn run_cancellable(
                             restage_all: restage || new_gateway,
                             // Every range is read to be staged: a clean one is not otherwise read.
                             force_full: restage || new_gateway,
+                            exclude_videos: conditions.exclude_videos,
                             ..Options::at(phone_ms)
                         },
                     ))

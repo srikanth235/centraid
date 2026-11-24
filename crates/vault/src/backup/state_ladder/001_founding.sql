@@ -77,13 +77,14 @@ CREATE TABLE os_chunk (
 -- fingerprint of the main vault file after the last checkpoint so any checkpoint made behind the
 -- core's back (including a clean close) forces a full read on the next snapshot.
 CREATE TABLE device (
-  id         INTEGER PRIMARY KEY CHECK (id = 1),
-  newest     TEXT CHECK (newest IS NULL OR (length(newest) = 64 AND newest NOT GLOB '*[^0-9a-f]*')),
-  newest_ms  INTEGER,
-  since_full INTEGER NOT NULL DEFAULT 0 CHECK (since_full >= 0),
-  full_ms    INTEGER,
-  carry      BLOB NOT NULL DEFAULT x'' CHECK (length(carry) % 4 = 0),
-  disk_mark  BLOB CHECK (disk_mark IS NULL OR length(disk_mark) = 32),
+  id             INTEGER PRIMARY KEY CHECK (id = 1),
+  newest         TEXT CHECK (newest IS NULL OR (length(newest) = 64 AND newest NOT GLOB '*[^0-9a-f]*')),
+  newest_ms      INTEGER,
+  since_full     INTEGER NOT NULL DEFAULT 0 CHECK (since_full >= 0),
+  full_ms        INTEGER,
+  carry          BLOB NOT NULL DEFAULT x'' CHECK (length(carry) % 4 = 0),
+  disk_mark      BLOB CHECK (disk_mark IS NULL OR length(disk_mark) = 32),
+  exclude_videos INTEGER NOT NULL DEFAULT 0 CHECK (exclude_videos IN (0, 1)),
   CHECK ((newest IS NULL) = (newest_ms IS NULL))
 ) STRICT;
 

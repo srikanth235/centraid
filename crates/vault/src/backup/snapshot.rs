@@ -54,6 +54,8 @@ pub struct Options<'a> {
     /// Stage every range the root names, not only the ones that changed: for a gateway that is
     /// owed a range staging no longer holds.
     pub restage_all: bool,
+    /// Leave video originals out of the tree's originals class (thumbnails/posters are still kept).
+    pub exclude_videos: bool,
     pub bugs: super::engine::Bugs,
     /// Called once the pin has begun, before any range is read: a test commits here to prove
     /// what is written during a pin is carried to the next snapshot.
@@ -68,6 +70,7 @@ impl Options<'_> {
             now_ms,
             force_full: false,
             restage_all: false,
+            exclude_videos: false,
             bugs: super::engine::Bugs::none(),
             on_pin: None,
         }
@@ -109,22 +112,27 @@ fn entry_of(
     state: &DeviceState,
     file: &files::ContentFile,
     size: u64,
+    exclude_videos: bool,
 ) -> Result<Entry> {
-    let class = if file.is_original() {
-        Class::Originals
+    let (original, thumbnail) = if exclude_videos && file.is_original() && file.video {
+        (Vec::new(), Vec::new())
     } else {
-        Class::Thumbnails
-    };
-    let mut refs = content::refs_of(vault, keys, &file.h, size, class)?.unwrap_or_default();
-    // An original only the OS photo library holds is listed by the refs its stream was sealed
-    // into (§6.4); its chunks reach a gateway from staging as the shell streams them.
-    if refs.is_empty() && file.is_original() && size > 0 {
-        refs = state.os_chunks(&file.h)?;
-    }
-    let (original, thumbnail) = if file.is_original() {
-        (refs, Vec::new())
-    } else {
-        (Vec::new(), refs)
+        let class = if file.is_original() {
+            Class::Originals
+        } else {
+            Class::Thumbnails
+        };
+        let mut refs = content::refs_of(vault, keys, &file.h, size, class)?.unwrap_or_default();
+        // An original only the OS photo library holds is listed by the refs its stream was sealed
+        // into (§6.4); its chunks reach a gateway from staging as the shell streams them.
+        if refs.is_empty() && file.is_original() && size > 0 {
+            refs = state.os_chunks(&file.h)?;
+        }
+        if file.is_original() {
+            (refs, Vec::new())
+        } else {
+            (Vec::new(), refs)
+        }
     };
     Ok(Entry {
         h: file.h,
@@ -312,15 +320,17 @@ pub fn take(
     let mut entries_new = 0;
     for (h, size) in claims {
         let Some(file) = live.get(&h) else { continue };
-        if let Some(known) = prior_entries.get(&h)
+        let excluded = options.exclude_videos && file.is_original() && file.video;
+        if !excluded
+            && let Some(known) = prior_entries.get(&h)
             && known.has_bytes()
             && known.size == size
         {
             entries.push(known.clone());
             continue;
         }
-        let entry = entry_of(vault, keys, state, file, size)?;
-        if entry.has_bytes() {
+        let entry = entry_of(vault, keys, state, file, size, options.exclude_videos)?;
+        if !excluded && entry.has_bytes() {
             entries_new += 1;
         }
         entries.push(entry);
@@ -374,6 +384,7 @@ pub fn take(
                 },
                 carry,
             })?;
+            state.set_exclude_videos(options.exclude_videos)?;
             Ok(())
         })();
         if let Err(error) = step {

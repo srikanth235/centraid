@@ -1179,3 +1179,147 @@ fn staging_full_during_os_bundles_returns_parts_built_so_far_and_sets_no_room() 
         status(&phone).waiting
     );
 }
+
+#[test]
+fn exclude_videos_confirms_originals_without_stalling_and_toggling_back_uploads_the_video() {
+    let home = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    let gateway_id = pair(&phone, &home)
+        .destination
+        .expect("a destination")
+        .gateway_id;
+
+    let photo = bytes_of("a photograph", 40_000);
+    let photo_handle = stage(&phone, owned("image/heic", &photo), &photo);
+    add_asset(&phone, &photo_handle, "photo");
+    let photo_hash = hex::decode(&photo_handle.content_hash).expect("hex");
+
+    let film = bytes_of("a film", 50_000);
+    let film_handle = stage(&phone, owned("video/mp4", &film), &film);
+    add_asset(&phone, &film_handle, "video");
+    let film_hash = hex::decode(&film_handle.content_hash).expect("hex");
+
+    let poster = bytes_of("the film's poster", 3_000);
+    stage(&phone, thumb_of(&film_handle, &poster), &poster);
+
+    let vault = vault_id();
+    let photo_chunks = names_of(Class::Originals, &photo);
+    let film_chunks = names_of(Class::Originals, &film);
+    let poster_chunks = names_of(Class::Thumbnails, &poster);
+
+    let held_whole = |hash: &[u8]| {
+        let wire::response::Kind::HeldWhole(answer) = ask(
+            &phone,
+            wire::request::Kind::HeldWhole(wire::HeldWholeRequest {
+                content_hash: hash.to_vec(),
+                ..Default::default()
+            }),
+        ) else {
+            panic!("a held_whole answers");
+        };
+        answer
+    };
+
+    // DRAIN WITH EXCLUDE_VIDEOS ON UNMETERED WI-FI: the photo original and the video's poster
+    // cross, the video original stays home, and `oroot` still advances to `conf`.
+    let first = drain(
+        &phone,
+        wire::DrainRequest {
+            exclude_videos: true,
+            ..at_home()
+        },
+    );
+    assert_eq!(first.stopped, wire::DrainStop::Empty as i32, "{first:?}");
+
+    let held_after_first = home.held(&vault);
+    for name in photo_chunks.iter().chain(&poster_chunks) {
+        assert!(
+            held_after_first.contains(name),
+            "photo original and video poster should be backed up"
+        );
+    }
+    for name in &film_chunks {
+        assert!(
+            !held_after_first.contains(name),
+            "excluded video original must not be uploaded"
+        );
+    }
+
+    let state = centraid_core::phone::Plane::of(&dir.path().join("vault.db"))
+        .state()
+        .expect("opens");
+    let row = state
+        .gateway(&gateway_id)
+        .expect("reads")
+        .expect("gateway row");
+    assert!(row.conf.is_some(), "conf should be confirmed");
+    assert_eq!(
+        row.oroot.map(|(n, _)| n),
+        row.conf.map(|(n, _)| n),
+        "oroot must advance to conf when videos are excluded"
+    );
+    assert!(
+        state.exclude_videos().expect("reads"),
+        "device row records exclude_videos = true"
+    );
+    drop(state);
+
+    let backed = status(&phone);
+    for class in &backed.classes {
+        assert!(
+            class.backed_up && class.owed == 0,
+            "all classes should read backed up: {backed:?}"
+        );
+    }
+    assert_eq!(
+        held_whole(&photo_hash).gateway_ids,
+        vec![gateway_id.clone()],
+        "backed-up photo is held whole"
+    );
+    assert!(
+        !held_whole(&film_hash).held_whole,
+        "excluded video must NOT be reported as held whole (R4)"
+    );
+
+    // TOGGLE EXCLUDE_VIDEOS OFF: a fresh snapshot is taken immediately, the video original is
+    // uploaded, `oroot` advances again, and `held_whole` reports both photo and video as held.
+    let second = drain(&phone, at_home());
+    assert_eq!(second.stopped, wire::DrainStop::Empty as i32, "{second:?}");
+
+    let held_after_second = home.held(&vault);
+    for name in &film_chunks {
+        assert!(
+            held_after_second.contains(name),
+            "video original should be uploaded once exclude_videos is turned off"
+        );
+    }
+    let state = centraid_core::phone::Plane::of(&dir.path().join("vault.db"))
+        .state()
+        .expect("opens");
+    let row = state
+        .gateway(&gateway_id)
+        .expect("reads")
+        .expect("gateway row");
+    assert_eq!(
+        row.oroot.map(|(n, _)| n),
+        row.conf.map(|(n, _)| n),
+        "oroot advances to the new conf after re-including videos"
+    );
+    assert!(
+        !state.exclude_videos().expect("reads"),
+        "device row records exclude_videos = false"
+    );
+    drop(state);
+
+    assert_eq!(
+        held_whole(&photo_hash).gateway_ids,
+        vec![gateway_id.clone()]
+    );
+    assert_eq!(
+        held_whole(&film_hash).gateway_ids,
+        vec![gateway_id],
+        "video is now reported as held whole"
+    );
+}
+

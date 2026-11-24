@@ -801,6 +801,31 @@ impl DeviceState {
         Ok(())
     }
 
+    /// Whether the newest snapshot left video originals out of the originals class.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn exclude_videos(&self) -> Result<bool> {
+        let flag: i64 = self.connection.query_row(
+            "SELECT exclude_videos FROM device WHERE id = 1",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(flag != 0)
+    }
+
+    /// Record whether the newest snapshot left video originals out of the originals class.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn set_exclude_videos(&self, exclude: bool) -> Result<()> {
+        self.connection.execute(
+            "UPDATE device SET exclude_videos = ?1 WHERE id = 1",
+            params![i64::from(exclude)],
+        )?;
+        Ok(())
+    }
+
     // ── where bytes are ──
 
     /// Record where a hash's bytes are on this device. A library row needs an identifier, a store

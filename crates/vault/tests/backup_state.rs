@@ -177,6 +177,10 @@ fn every_constraint_the_code_states_is_in_the_database_too() {
         refused(c, "UPDATE device SET disk_mark = x'0102'", []),
         "disk_mark is 32 bytes"
     );
+    assert!(
+        refused(c, "UPDATE device SET exclude_videos = 2", []),
+        "exclude_videos is boolean"
+    );
     // undone
     assert!(
         c.execute(
@@ -358,6 +362,11 @@ fn the_device_row_and_staged_rows_and_undone_names_round_trip() {
     };
     state.set_device(&device).expect("writes");
     assert_eq!(state.device().expect("row"), device);
+    assert!(!state.exclude_videos().expect("default"));
+    state.set_exclude_videos(true).expect("sets");
+    assert!(state.exclude_videos().expect("true"));
+    state.set_exclude_videos(false).expect("clears");
+    assert!(!state.exclude_videos().expect("false"));
 
     state.stage(&name(3), "/tmp/a", 10).expect("stages");
     state.stage(&name(3), "/tmp/b", 11).expect("restages");
