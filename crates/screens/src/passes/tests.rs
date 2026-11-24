@@ -183,38 +183,29 @@ fn link(online: bool, metered: Option<bool>, charging: Option<bool>) -> wire::Li
 }
 
 #[test]
-fn every_held_vault_is_drained_not_only_the_one_in_front() {
-    // A BACKGROUND WINDOW BACKS UP THE DEVICE, not the screen the member
-    // happened to leave open.
+fn one_vault_is_driven_the_first_that_can_be_drained() {
+    // ONE VAULT PER PHONE IN V0 (#1209, R1): the conductor drives the first held vault that can
+    // be drained, with the whole budget.
     let mut sim = Sim::new(vec![held("a", true), held("b", true)]);
     let actions = sim.conductor.trigger(Reason::Scheduled, 60_000);
     sim.run(actions);
     let vaults: Vec<_> = sim.seen.iter().map(|(vault, _)| vault.as_str()).collect();
-    assert_eq!(vaults, ["a", "b"]);
-    let facts = sim.conductor.facts();
-    assert_eq!(facts.last.len(), 2);
+    assert_eq!(vaults, ["a"]);
+    assert_eq!(sim.deadlines(), [60_000], "the budget is not divided");
+    assert_eq!(sim.conductor.facts().last.len(), 1);
 }
 
 #[test]
-fn the_deadline_is_divided_so_a_second_vault_is_not_permanently_unbacked_up() {
-    let mut sim = Sim::new(vec![held("a", true), held("b", true), held("c", true)]);
-    let actions = sim.conductor.trigger(Reason::Scheduled, 90_000);
-    sim.run(actions);
-    assert_eq!(sim.deadlines(), [30_000, 30_000, 30_000]);
-}
-
-#[test]
-fn the_foregrounds_no_deadline_is_passed_through_not_divided() {
-    // A BUDGET OF NOTHING DIVIDED IS STILL NOTHING: `0` means "run until the
-    // spool is empty".
+fn the_foregrounds_no_deadline_is_passed_through() {
+    // `0` means "run until nothing the rule admits is left".
     let mut sim = Sim::new(vec![held("a", true), held("b", true)]);
     let actions = sim.conductor.trigger(Reason::BecameActive, 0);
     sim.run(actions);
-    assert_eq!(sim.deadlines(), [0, 0]);
+    assert_eq!(sim.deadlines(), [0]);
 }
 
 #[test]
-fn a_resting_holding_is_skipped_and_the_whole_budget_goes_to_the_one_that_can_use_it() {
+fn a_resting_holding_is_skipped_for_the_one_that_can_use_the_budget() {
     let mut sim = Sim::new(vec![held("a", true), held("resting", false)]);
     let actions = sim.conductor.trigger(Reason::Scheduled, 60_000);
     sim.run(actions);
@@ -247,7 +238,7 @@ fn a_device_holding_nothing_drainable_runs_nothing_and_a_window_that_had_nothing
 }
 
 #[test]
-fn a_granted_window_is_told_whether_every_spool_emptied() {
+fn a_granted_window_is_told_whether_every_gateway_was_fed() {
     let mut sim = Sim::new(vec![held("a", true)]);
     sim.answer = Box::new(|_| {
         Drained::Response(wire::DrainResponse {
@@ -687,6 +678,8 @@ fn every_stop_reason_is_read_as_the_core_said_it() {
         (wire::DrainStop::Unreachable, Stopped::Unreachable),
         (wire::DrainStop::Untrusted, Stopped::Untrusted),
         (wire::DrainStop::Refused, Stopped::Refused),
+        // "UPDATE YOUR GATEWAY" IS A REFUSAL THE MEMBER ACTS ON, not a wait.
+        (wire::DrainStop::TooOld, Stopped::Refused),
         // UNSPECIFIED IS READ AS UNREACHABLE, DELIBERATELY: the safe reading of
         // "I do not know why it stopped" leaves the claim behind.
         (wire::DrainStop::Unspecified, Stopped::Unreachable),
@@ -717,12 +710,12 @@ fn a_moved_vault_is_an_answer_dated_by_the_gateway_and_reported_for_the_shelf_to
         }),
         ..Default::default()
     }));
-    let mut sim = Sim::new(vec![held("a", true), held("b", true)]);
+    let mut sim = Sim::new(vec![held("a", true)]);
     sim.answer = Box::new(move |_| moved.clone());
     let actions = sim.conductor.trigger(Reason::Scheduled, 10_000);
     sim.run(actions);
     let facts = sim.conductor.facts();
-    assert_eq!(facts.moved.iter().cloned().collect::<Vec<_>>(), ["a", "b"]);
+    assert_eq!(facts.moved.iter().cloned().collect::<Vec<_>>(), ["a"]);
     let Some(Pass::Ran(answer)) = facts.last.get("a").cloned() else {
         panic!("ran");
     };
@@ -743,13 +736,13 @@ fn a_moved_vault_is_an_answer_dated_by_the_gateway_and_reported_for_the_shelf_to
 }
 
 #[test]
-fn a_run_reports_each_outcome_with_its_reason() {
+fn a_run_reports_its_outcome() {
     let mut sim = Sim::new(vec![held("a", true), held("b", true)]);
     let actions = sim.conductor.trigger(Reason::Scheduled, 60_000);
     sim.run(actions);
     let facts = sim.conductor.facts();
     let reasons: BTreeMap<_, _> = facts.last.keys().map(|k| (k.clone(), ())).collect();
-    assert_eq!(reasons.len(), 2);
+    assert_eq!(reasons.len(), 1, "one vault in v0");
 }
 
 #[test]
@@ -796,18 +789,28 @@ fn registration_is_worded_for_what_the_os_took() {
     );
 }
 
-// ---- the iOS mover ------------------------------------------------------------
+// ---- the OS's uploads ------------------------------------------------------------
 
-fn part(name: &str, vault: &str) -> wire::HandoffPart {
+fn bundle(name: &str, vault: &str) -> wire::HandoffPart {
     wire::HandoffPart {
         name: name.to_owned(),
-        path: format!("/spool/{name}"),
-        url: format!("https://192.168.1.20:7443/v1/v/{vault}/o/{name}"),
-        method: "PUT".to_owned(),
+        path: format!("/staging/{name}"),
+        url: format!("https://192.168.1.20:7443/v1/v/{vault}/bundle"),
+        method: "POST".to_owned(),
         size: 1_024,
         gateway_id: "gw-1".to_owned(),
         vault_id: vault.to_owned(),
-        ..Default::default()
+        headers: vec![
+            wire::Header {
+                name: "authorization".to_owned(),
+                value: "Bearer t".to_owned(),
+            },
+            wire::Header {
+                name: "content-length".to_owned(),
+                value: "1024".to_owned(),
+            },
+        ],
+        allows_cellular: true,
     }
 }
 
@@ -818,196 +821,111 @@ fn ios(vaults: Vec<Held>) -> Conductor {
     conductor
 }
 
-#[test]
-fn a_pass_ends_with_reconcile_then_handoff_then_enqueue_and_the_parts_go_over_whole() {
-    let conductor = ios(vec![held("v1", true)]);
-    let actions = conductor.uploads_drained();
-    assert_eq!(
-        actions,
-        [Action::Reconcile {
-            vault: "v1".to_owned()
-        }]
-    );
-    assert_eq!(
-        conductor.reconciled("v1", Some(true)),
-        [Action::UploadsPending]
-    );
-    assert_eq!(
-        conductor.pending(0),
-        [Action::Handoff {
-            vault: "v1".to_owned(),
-            max_bytes: BATCH_BYTES,
-            max_parts: BATCH_PARTS
-        }]
-    );
-    let batch = vec![part("a", "v1"), part("b", "v1")];
-    assert_eq!(
-        conductor.handed_off("v1", batch.clone()),
-        [Action::UploadsEnqueue(batch)]
-    );
-}
-
-#[test]
-fn an_unreachable_gateway_enqueues_nothing_and_asks_for_the_next_window() {
-    let conductor = ios(vec![held("v1", true)]);
-    let _ = conductor.uploads_drained();
-    assert_eq!(conductor.reconciled("v1", Some(false)), [Action::Schedule]);
-}
-
-#[test]
-fn no_core_or_an_arm_not_yet_available_is_nothing_to_do_and_no_reason_to_retry() {
-    let conductor = ios(vec![held("v1", true), held("gone", false)]);
-    let first = conductor.uploads_drained();
-    assert_eq!(
-        first,
-        [Action::Reconcile {
-            vault: "v1".to_owned()
-        }]
-    );
-    assert!(conductor.reconciled("v1", None).is_empty());
-    // A VAULT THAT IS NOT DRAINABLE hands nothing off.
-    assert!(
-        conductor
-            .upload_settled(&wire::UploadSettled {
-                vault_id: "gone".to_owned(),
-                ..Default::default()
-            })
-            .is_empty()
-    );
-}
-
-#[test]
-fn the_os_is_never_handed_more_than_the_cap_at_once() {
-    let conductor = ios(vec![held("v1", true)]);
-    let _ = conductor.uploads_drained();
-    let _ = conductor.reconciled("v1", Some(true));
-    assert_eq!(
-        conductor.pending(MAX_IN_FLIGHT - 2),
-        [Action::Handoff {
-            vault: "v1".to_owned(),
-            max_bytes: BATCH_BYTES,
-            max_parts: 2
-        }]
-    );
-    let _ = conductor.handed_off("v1", Vec::new());
-    // FULL HANDS ASK FOR NOTHING.
-    let _ = conductor.uploads_drained();
-    let _ = conductor.reconciled("v1", Some(true));
-    assert!(conductor.pending(MAX_IN_FLIGHT).is_empty());
-    // AND THE FLOW IS FREE FOR THE NEXT.
-    assert_eq!(
-        conductor.uploads_drained(),
-        [Action::Reconcile {
-            vault: "v1".to_owned()
-        }]
-    );
-}
-
-#[test]
-fn each_finished_task_settles_in_its_own_vaults_core_routed_by_the_vault_id() {
-    let conductor = ios(vec![held("v1", true), held("v2", true)]);
-    let actions = conductor.upload_settled(&wire::UploadSettled {
-        name: "a".to_owned(),
-        http_status: 201,
-        error: String::new(),
-        gateway_id: "gw-1".to_owned(),
-        vault_id: "v2".to_owned(),
-    });
-    assert_eq!(
-        actions,
-        [Action::Settle {
-            vault: "v2".to_owned(),
-            settled: wire::Settled {
-                name: "a".to_owned(),
-                http_status: 201,
-                error: String::new(),
-                gateway_id: "gw-1".to_owned(),
-                vault_id: "v2".to_owned(),
-            }
-        }]
-    );
-    // A VAULT THIS PHONE NO LONGER HOLDS settles nowhere.
-    assert!(
-        conductor
-            .upload_settled(&wire::UploadSettled {
-                vault_id: "v9".to_owned(),
-                ..Default::default()
-            })
-            .is_empty()
-    );
-}
-
-#[test]
-fn a_finished_task_that_names_its_vault_by_identity_settles_in_the_shelfs_id_for_it() {
-    // The OS reports the 64-hex identity a handed-off part carried; the shelf holds the vault under
-    // its own id, and the settle is routed by that one (#1202).
-    let conductor = ios(vec![held("shelf-1", true)]);
-    let report = wire::UploadSettled {
-        name: "a".to_owned(),
-        http_status: 201,
-        gateway_id: "gw-1".to_owned(),
-        vault_id: "ab".repeat(32),
+/// A pass that answers `bundles` for the OS.
+fn naming(bundles: Vec<wire::HandoffPart>) -> Drained {
+    Drained::Response(wire::DrainResponse {
+        stopped: wire::DrainStop::Empty as i32,
+        os_bundles: bundles,
         ..Default::default()
-    };
-    // Looked up by the identity alone, it is a vault nobody holds.
-    assert!(conductor.upload_settled(&report).is_empty());
-    let actions = conductor.upload_settled_in("shelf-1", &report);
-    assert!(matches!(&actions[..], [Action::Settle { vault, settled }]
-        if vault == "shelf-1" && settled.vault_id == "ab".repeat(32)));
+    })
 }
 
 #[test]
-fn a_drained_session_hands_every_open_vaults_next_batch_off_one_vault_at_a_time() {
-    let conductor = ios(vec![held("v1", true), held("v2", true)]);
-    let first = conductor.uploads_drained();
-    assert_eq!(
-        first,
-        [Action::Reconcile {
-            vault: "v1".to_owned()
-        }]
-    );
-    let _ = conductor.reconciled("v1", Some(true));
-    let _ = conductor.pending(0);
-    let next = conductor.handed_off("v1", vec![part("a", "v1")]);
-    assert_eq!(
-        next,
-        [
-            Action::UploadsEnqueue(vec![part("a", "v1")]),
-            Action::Reconcile {
-                vault: "v2".to_owned()
-            }
-        ]
-    );
-}
-
-#[test]
-fn every_vaults_pass_ends_with_its_handoff_on_ios_and_never_on_android() {
-    let mut sim = Sim::new(vec![held("a", true)]);
+fn a_pass_that_names_bundle_files_asks_the_os_how_many_it_holds_and_enqueues_them_only_if_none() {
+    let files = vec![bundle("a", "v1"), bundle("b", "v1")];
+    let mut sim = Sim::new(vec![held("v1", true)]);
     sim.conductor.set_uploads(true);
+    let named = files.clone();
+    sim.answer = Box::new(move |request| {
+        assert!(request.os_uploads, "the pass says the OS carries files");
+        naming(named.clone())
+    });
+    // The pass answers its files; the conductor asks the OS before it hands them over.
     let actions = sim.conductor.trigger(Reason::Scheduled, 20_000);
-    let mut all = Vec::new();
+    let mut asked = Vec::new();
     for action in actions {
         match action {
             Action::Drain { vault, request } => {
                 sim.seen.push((vault.clone(), request));
-                all.extend(sim.conductor.drained(&vault, &empty()));
+                asked.extend(sim.conductor.drained(&vault, &(sim.answer)(&request)));
             }
-            other => all.push(other),
+            other => asked.push(other),
         }
     }
-    assert!(all.contains(&Action::Reconcile {
-        vault: "a".to_owned()
-    }));
-    let mut android = Sim::new(vec![held("a", true)]);
-    let actions = android.conductor.trigger(Reason::Scheduled, 20_000);
-    android.run(actions);
+    assert!(asked.contains(&Action::UploadsPending), "{asked:?}");
+    assert!(
+        !asked
+            .iter()
+            .any(|action| matches!(action, Action::UploadsEnqueue(_))),
+        "nothing is enqueued before the OS says how many tasks it holds"
+    );
+    // THE OS HOLDS NONE: the files go over whole.
+    assert_eq!(
+        sim.conductor.pending(0),
+        [Action::UploadsEnqueue(files.clone())]
+    );
+    // A SLOW UPLOAD IS NOT ASKED FOR TWICE: the OS still holds tasks, so nothing is enqueued.
+    let again = sim.conductor.trigger(Reason::Scheduled, 20_000);
+    let mut more = Vec::new();
+    for action in again {
+        if let Action::Drain { vault, request } = action {
+            more.extend(sim.conductor.drained(&vault, &(sim.answer)(&request)));
+        }
+    }
+    assert!(more.contains(&Action::UploadsPending));
+    assert!(sim.conductor.pending(3).is_empty());
+    // And a count with nothing parked is nothing to do.
+    assert!(sim.conductor.pending(0).is_empty());
 }
 
 #[test]
-fn changing_the_rule_asks_for_the_windows_again_and_lets_go_of_the_uploads_ios_holds() {
-    // A HANDED-OFF TASK KEEPS ITS CELLULAR FLAG for up to a day, so the tasks
-    // enqueued under the old rule are cancelled; the core requeues their parts
-    // and the next pass hands them off under the new one.
+fn bundle_files_are_asked_for_only_where_the_os_carries_them() {
+    let mut android = Sim::new(vec![held("a", true)]);
+    let actions = android.conductor.trigger(Reason::Scheduled, 20_000);
+    android.run(actions);
+    assert!(
+        !android.requests()[0].os_uploads,
+        "nobody carries files here"
+    );
+}
+
+#[test]
+fn what_the_os_reports_only_wakes_one_pass_and_records_nothing() {
+    // A finished task, a failed one and the session's end are one wake: a pass re-reads each
+    // head and diffs (R7). There is no door to record a settle in, so none is asked.
+    let conductor = ios(vec![held("v1", true)]);
+    let first = conductor.upload_settled(&wire::UploadSettled {
+        name: "a".to_owned(),
+        http_status: 201,
+        gateway_id: "gw-1".to_owned(),
+        vault_id: "v1".to_owned(),
+        ..Default::default()
+    });
+    assert!(
+        first
+            .iter()
+            .any(|action| matches!(action, Action::Drain { request, .. } if !request.wants_snapshot && !request.asked)),
+        "a pass runs: {first:?}"
+    );
+    assert!(
+        conductor.uploads_drained().is_empty(),
+        "the burst is one pass"
+    );
+    assert!(
+        conductor
+            .upload_settled(&wire::UploadSettled::default())
+            .is_empty()
+    );
+    // Where no OS carries files, a report is nobody's.
+    let android = Conductor::default();
+    android.set_held(vec![held("v1", true)]);
+    assert!(android.uploads_drained().is_empty());
+}
+
+#[test]
+fn changing_the_rule_asks_for_the_windows_again_and_lets_go_of_the_uploads_the_os_holds() {
+    // A TASK KEEPS THE CELLULAR FLAG of the rule it was written under, so the tasks enqueued
+    // under the old rule are cancelled; the next pass writes its files under the new one.
     let conductor = ios(Vec::new());
     let actions = conductor.rule_changed();
     assert!(actions.contains(&Action::Schedule));
@@ -1037,11 +955,13 @@ fn the_pass_carries_the_rule_the_link_the_snapshot_the_videos_negation_and_the_a
             metered: Some(true),
             charging: Some(false),
         },
+        uploads: true,
     };
     let sent = conditions.request(25_000, Reason::BackUpNow);
     assert_eq!(sent.deadline_ms, 25_000);
     assert_eq!(sent.rule, wire::TransferRule::WifiAndCellularPhotos as i32);
     assert!(sent.metered && !sent.charging && sent.wants_snapshot);
+    assert!(sent.os_uploads, "the OS carries bundle files");
     // THE MEMBER'S TAP CROSSES AS ITS OWN BIT (#1080 A24).
     assert!(sent.asked);
     // THE WIRE CARRIES THE NEGATION: included is the zero value.
@@ -1049,6 +969,7 @@ fn the_pass_carries_the_rule_the_link_the_snapshot_the_videos_negation_and_the_a
     let whole = Conditions {
         rules: Rules::default(),
         link: Link::UNKNOWN,
+        uploads: false,
     }
     .request(0, Reason::EnteredBackground);
     assert!(whole.wants_snapshot, "leaving the screen times a snapshot");
@@ -1076,6 +997,7 @@ fn the_answer_keeps_the_gateways_clock_and_drops_a_hash_of_the_wrong_length() {
                     ..Default::default()
                 },
             ],
+            ..Default::default()
         })
     });
     let actions = sim.conductor.trigger(Reason::Scheduled, 20_000);
@@ -1090,41 +1012,6 @@ fn the_answer_keeps_the_gateways_clock_and_drops_a_hash_of_the_wrong_length() {
     assert_eq!(answer.waiting_bytes_parts, 3);
     assert_eq!(answer.need_bytes, vec![need(1)]);
     assert!(!answer.drained());
-}
-
-#[test]
-fn a_handoff_is_enqueued_whole_headers_and_all() {
-    let conductor = ios(vec![held("v1", true)]);
-    let _ = conductor.uploads_drained();
-    let _ = conductor.reconciled("v1", Some(true));
-    let _ = conductor.pending(0);
-    let whole = wire::HandoffPart {
-        headers: vec![
-            wire::Header {
-                name: "Authorization".to_owned(),
-                value: "Bearer t".to_owned(),
-            },
-            wire::Header {
-                name: "Content-Length".to_owned(),
-                value: "1024".to_owned(),
-            },
-        ],
-        allows_cellular: true,
-        ..part("a", "v1")
-    };
-    assert_eq!(
-        conductor.handed_off("v1", vec![whole.clone()]),
-        [Action::UploadsEnqueue(vec![whole])]
-    );
-}
-
-#[test]
-fn an_empty_handoff_enqueues_nothing() {
-    let conductor = ios(vec![held("v1", true)]);
-    let _ = conductor.uploads_drained();
-    let _ = conductor.reconciled("v1", Some(true));
-    let _ = conductor.pending(0);
-    assert!(conductor.handed_off("v1", Vec::new()).is_empty());
 }
 
 #[test]
@@ -1169,6 +1056,13 @@ fn every_reason_a_pass_is_named_for_has_a_trigger() {
             Box::new(|c| c.trigger(Reason::Restored, 0)),
         ),
         (Reason::Paired, Box::new(|c| c.trigger(Reason::Paired, 0))),
+        (
+            Reason::UploadsReported,
+            Box::new(|c| {
+                c.set_uploads(true);
+                c.uploads_reported()
+            }),
+        ),
     ];
     assert_eq!(entries.len(), Reason::ALL.len());
     for (reason, start) in entries {

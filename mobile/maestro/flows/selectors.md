@@ -9,7 +9,7 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `home-welcome` | Home | the welcome card, day zero only |
 | `kit-failure` (on Home) | Home | the failed-read sentence (no grid), the kit's shared failure view with no Retry |
 | `home-tile-<appId>` | Home | one springboard widget, keyed on the widget id (the app id, except Agenda's second, `reminders`) — every launchable app has one (Tasks has none: it folded into Agenda, whose tile also carries today's due tasks, #1128), an empty app drawing what to do (R-ONBOARD-11) |
-| `home-vault-switch` | Home | the vault lockup, which IS the switch |
+| `home-vault-name` | Home | the vault lockup's name: not a control, a phone holds one vault |
 | `home-search-open` | Home | the framed search key at the lockup's trailing edge — opens Home's search (R-CHROME-6) |
 | `home-settings-open` | Home | the framed settings key right of search: opens Settings, where the appearance is chosen (#1173; the appearance key retired into it) |
 | `home-tile-reminders` | Home | the Reminders tile: what is owed today (round 10 of #1173: Calendar and Reminders are two apps, `home-tile-calendar` is the day) |
@@ -160,16 +160,12 @@ One string per control, set with `Modifier.testTag` in Compose and `.accessibili
 | `backup-include-videos` | Backup | the include-videos switch |
 | `backup-rule-<stored>` | Backup | one transfer-rule choice, keyed on the stored word |
 | `backup-add-destination` | Backup | the add-a-gateway control, which opens pairing |
+| `backup-class-records`, `backup-class-previews`, `backup-class-originals` | Backup | the three rows of "In this backup", one per class (#1209); each draws its name, what it holds, what waits and its state |
 | `backup-card-pair-again` | Backup | "Pair again" on the top status card, drawn while any backup device no longer knows this phone; opens pairing for it (ruling 28; the device's own row keeps its "Pair it again") |
 | `backup-forget-<gatewayId>` | Backup | one gateway's Forget |
 | `backup-battery` | Backup | the battery-optimisation remedy — **Android only**; iOS has no such setting |
 | `home-band-chat` | Home | the band's Chat tab (the second place, after Home) |
 | `import-banner` | every route, at the foot above the band | an import's status line: progress and outcome (`import-sentence`), its one action (`import-action`, "Open People" after a made vault's imports) and its close key (`import-close`) |
-| `home-vault-sheet` | Home | the vault switcher sheet |
-| `vault-row-<vaultId>` | Home | one switcher row (and `vault-forget-<vaultId>`, its **Delete**) |
-| `vault-rename-<vaultId>` | Home | one switcher row's Rename (a swipe on iOS, also in the row's long-press menu; a button on Android), and `vault-rename-field` / `vault-rename-save` in its dialog |
-| `vault-found-button` | Home | the vault switcher's "Make a vault" (R-ONBOARD-11) |
-| `vault-restore-button` | Home | the vault switcher's "Restore my vaults" |
 | `first-launch` | First launch | the welcome screen (`first-launch-title`, `first-launch-claim-<n>`, and `first-launch-primary` / `first-launch-secondary` for its two doors) |
 | `chat` | Chat | the tab's root |
 | `chat-field` | Chat | the composer's text field (ready phase only) |

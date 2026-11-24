@@ -33,7 +33,7 @@ public object KitWords {
     public const val VAULT_DAMAGED_TITLE: String = "Vault damaged"
     public const val VAULT_DAMAGED_LINE: String = "This phone's vault is damaged. No new backup is made."
     public const val VAULT_DAMAGED_SAFE: String = "The backups already on your backup devices are untouched."
-    public const val VAULT_DAMAGED_RESTORE: String = "Restore my vaults"
+    public const val VAULT_DAMAGED_RESTORE: String = "Restore my vault"
 
     /** A pushed page's back control, spoken: "Back to People"; "Back" with no parent. */
     public fun backTo(parent: String): String =

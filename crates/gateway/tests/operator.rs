@@ -14,7 +14,7 @@ use centraid_gateway::client::Client;
 use centraid_gateway::rules::ids::{Digest, Name, VaultId};
 use centraid_gateway::rules::signing::sign_delete;
 use centraid_gateway::rules::wire::DeleteRequest;
-use centraid_gateway::server::harness::{Spawned, pair_secret, spawn};
+use centraid_gateway::server::harness::{Spawned, pair_secret, put, spawn};
 use centraid_gateway::server::operator::{self, Verb};
 
 struct Member {
@@ -46,15 +46,22 @@ impl Member {
     async fn stores_and_deletes(&mut self, gateway: &Spawned, label: &str) -> Name {
         let name = Name::from_bytes(blake3::derive_key("operator test name", label.as_bytes()));
         let bytes = blake3::hash(label.as_bytes()).as_bytes().repeat(4);
-        self.phone
-            .put(&self.vault, &name, &Digest::of(&bytes), bytes)
+        put(&self.phone, &self.vault, &name, &Digest::of(&bytes), bytes)
             .await
             .expect("stores");
         self.generation += 1;
         let request = DeleteRequest {
             names: vec![name],
             generation: self.generation,
-            signature: sign_delete(&self.key, &gateway.gateway_id, 1, self.generation, &[name]),
+            head_root: None,
+            signature: sign_delete(
+                &self.key,
+                &gateway.gateway_id,
+                1,
+                self.generation,
+                None,
+                &[name],
+            ),
         };
         self.phone
             .delete(&self.vault, &request)
@@ -110,11 +117,15 @@ async fn delete_vault_needs_a_frozen_vault_and_removes_everything() {
     let held = member.stores_and_deletes(&gateway, "held").await;
     let live = Name::from_bytes(blake3::derive_key("operator test name", b"live"));
     let bytes = b"live bytes".repeat(8);
-    member
-        .phone
-        .put(&member.vault, &live, &Digest::of(&bytes), bytes)
-        .await
-        .expect("stores");
+    put(
+        &member.phone,
+        &member.vault,
+        &live,
+        &Digest::of(&bytes),
+        bytes,
+    )
+    .await
+    .expect("stores");
     let shared = gateway.shared();
     let vault = operator::resolve(shared, &member.vault.hex()[..8]).expect("resolves");
 

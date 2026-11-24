@@ -100,9 +100,6 @@ pub(crate) struct Done {
     pub tables: BTreeSet<String>,
     pub timers: Vec<TimerOp>,
     pub jobs: Vec<(String, centraid_core::screens::OffThreadWork)>,
-    /// The vault the screen asked to bring to the front, see
-    /// [`Ctx::switch_vault`].
-    pub switch: Option<String>,
     /// Events for other open screens, by registered name (`Ctx::post`).
     pub posts: Vec<(String, wire::ScreenEvent)>,
     /// Every other open screen must draw again, see [`Ctx::redraw_all`].
@@ -396,18 +393,6 @@ impl<'a> Ctx<'a> {
     #[must_use]
     pub fn vaults(&self) -> Option<std::sync::Arc<dyn centraid_core::vaults::Vaults>> {
         self.core.vaults()
-    }
-
-    /// BRING THE VAULT `vault_id` TO THE FRONT, when this update is done.
-    ///
-    /// Every screen of a tab is told it is being left, so what the member typed
-    /// is written to the vault it was typed in; then the vault is brought to
-    /// the front and each tab's root is closed and opened again, so no screen
-    /// shows one vault's rows over another's. A vault nothing holds, or whose
-    /// file will not reopen, leaves the phone where it was. The shell sees an
-    /// ordinary update: instances closed, new views, a new navigation.
-    pub fn switch_vault(&self, vault_id: &str) {
-        self.done.borrow_mut().switch = Some(vault_id.to_owned());
     }
 
     /// One bounded assistant call (status, start, suggest, cancel, clear, confirm, dismiss,

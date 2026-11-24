@@ -33,7 +33,7 @@ use super::doors::{self, Done};
 use super::key::KeyCustody;
 use super::reading::{self, Destination, Standing};
 use super::rule::{self, TransferRule};
-use super::{apps, line, routes, states};
+use super::{classes, line, routes, states};
 use crate::custody::secrets::{self, SeedWrite, VaultSecrets};
 use crate::kit::read::{Note, Page, Reading};
 use crate::pairing::discovery::Rediscovery;
@@ -762,6 +762,12 @@ impl Backup {
             C::Unpaired
         } else if self.backing_up_now {
             C::Running
+        } else if !reading.damaged
+            && reading.restoring.as_ref().is_some_and(|r| {
+                r.previews_back < r.previews_total || r.originals_back < r.originals_total
+            })
+        {
+            C::CatchingUp
         } else if line::unreached(reading, now) {
             C::NotReached
         } else if line::warns(reading, now, self.backing_up_now) {
@@ -883,35 +889,15 @@ impl Backup {
         } else {
             wire::BackupInk::None
         };
-        let mut app_rows = self
-            .reading()
-            .map(|reading| apps::rows(locale, reading))
-            .unwrap_or_default();
-        // WHEN NO BACKUP DEVICE ANSWERS, what waits is its own list (the board's "Not backed
-        // up yet"), and "In this backup" is what the device already holds.
+        // "IN THIS BACKUP": one row per class (#1209). What waits is inside its row, so there is no
+        // second list of what is not backed up.
         let condition = self.condition();
-        let (waiting_apps, waiting_heading) = if condition == wire::BackupCondition::NotReached {
-            let (waiting, held): (Vec<_>, Vec<_>) =
-                app_rows.into_iter().partition(|row| row.waiting);
-            app_rows = held;
-            let heading = if waiting.is_empty() {
-                String::new()
-            } else {
-                words::backup_not_backed_up_heading(locale)
-            };
-            (waiting, heading)
+        let class_rows = if frozen {
+            Vec::new()
         } else {
-            // A DEVICE BEHIND, FULL OR OLDER names what it still owes, per app, by its own name.
-            let rows = self
-                .reading()
-                .map(|reading| apps::device_waiting(locale, reading))
-                .unwrap_or_default();
-            let heading = if rows.is_empty() {
-                String::new()
-            } else {
-                words::backup_not_backed_up_heading(locale)
-            };
-            (rows, heading)
+            self.reading()
+                .map(|reading| classes::rows(locale, reading, now))
+                .unwrap_or_default()
         };
         let (last_good, reason) = match (condition, self.reading()) {
             (wire::BackupCondition::NotReached, Some(reading)) => {
@@ -963,12 +949,12 @@ impl Backup {
         };
         wire::BackupHomeData {
             title: words::backup_title(locale),
-            apps_heading: if app_rows.is_empty() {
+            apps_heading: if class_rows.is_empty() {
                 String::new()
             } else {
-                words::backup_apps_heading(locale)
+                words::backup_classes_heading(locale)
             },
-            apps: app_rows,
+            apps: class_rows,
             line: Some(line::line(
                 locale,
                 self.reading(),
@@ -1042,8 +1028,9 @@ impl Backup {
                 .then(|| Self::unpaired(locale)),
             last_good,
             reason,
-            waiting_heading,
-            apps_waiting: waiting_apps,
+            // DEPRECATED (#1209): what waits is inside each class row now.
+            waiting_heading: String::new(),
+            apps_waiting: Vec::new(),
             travel_heading: words::backup_travel_heading(locale),
             over_label: words::backup_over(locale),
             over_value: self.rule.short(locale),

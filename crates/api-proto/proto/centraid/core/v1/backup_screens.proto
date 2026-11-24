@@ -141,12 +141,14 @@ message BackupDestinationRow {
   string undo_label = 9;
 }
 
-// ONE APP'S PART OF THE BACKUP (#1144), finished: "In this backup" draws one
-// per app, biggest first.
+// ONE CLASS'S PART OF THE BACKUP (#1209), finished: "In this backup" draws one per class, in
+// the order records, photo previews, photos and files. (It was one per app until #1209, which
+// is why it is still named for an app: the shapes are the same and the shells read the same
+// fields.)
 message BackupAppRow {
-  // The catalogue's id, for the app's mark: `photos`, `notes`.
+  // The class's key, for the row's selector id: `records`, `previews`, `originals`.
   string app_id = 1;
-  // "Notes".
+  // "Photo previews".
   string name = 2;
   // What it holds and its size: "312 notes · 38 MB", "1,203 of 1,240 photos
   // and videos · 4.0 of 4.4 GB".
@@ -158,6 +160,8 @@ message BackupAppRow {
   // Something of it is not backed up: `status` is drawn as a wait.
   bool waiting = 6;
   string accessibility_label = 7;
+  // The icon key of the class's mark in the kit catalogue: `FileText`, `Grid`, `Image`.
+  string icon_key = 8;
 }
 
 // One choice of the transfer rule, with the sentence a member reads.
@@ -260,7 +264,8 @@ message BackupHomeData {
   // NOT_REACHED: "Last good backup 5 days ago" and what to check, in the member's words.
   string last_good = 31;
   string reason = 32;
-  // NOT_REACHED: the apps that wait, under "Not backed up yet", out of `apps`.
+  // DEPRECATED (#1209): what waits is inside each class row of `apps`, so these two are always
+  // empty. Proto changes are additive only, so they stay.
   string waiting_heading = 33;
   repeated BackupAppRow apps_waiting = 34;
   // "What travels when" with its first row, "Back up over", worth the picked

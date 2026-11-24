@@ -3,10 +3,9 @@ import SwiftUI
 /// THE TWO FACTS TRUE ON EVERY ROUTE: which vault, and how it stands
 /// (#1020, wave A; v0 `screens/home/VaultHeader.tsx`).
 ///
-/// No greeting. **The mark IS the vault switch** — there is no chevron beside
-/// it, because a lockup that is not pressable and a control that is are two
-/// affordances for one act. The second line is mono and says where this vault
-/// stands IN PLACE, never as a banner: none of those states is an incident.
+/// No greeting. **The mark and the name are not controls**: a phone holds one vault (#1209, R1), so
+/// there is nothing to switch to. The second line is mono and says where this vault stands IN
+/// PLACE, never as a banner: none of those states is an incident.
 ///
 /// **It says the VAULT's state and never a gateway's name (#1025).** This drew
 /// `gateway_name`, a field no layer on any side ever wrote, so a device that
@@ -108,43 +107,28 @@ struct VaultHeader: View {
 
     @Environment(\.isLargestText) private var largestText
 
-    /// THE VAULT'S MARK: the switch's first half.
+    /// THE VAULT'S MARK: a plain mark, not a control.
     private var markKey: some View {
-        // TWO DOORS IN ONE LOCKUP: the mark and the name are the vault
-        // switch; the status under them is the Backup tab's.
-        Button {
-            store.sendHome(.vault(.init()))
-        } label: {
-            Text(vault.initial)
-                .centraidType("smallStrong")
-                .foregroundStyle(mark.ink)
-                .kitScaledSquare(30, relativeTo: .footnote)
-                // A static control rung, not `iconChipRadius` — that
-                // ratio is for app chips.
-                .background(mark.ground, in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
-    }
-    .buttonStyle(.plain)
-    .accessibilityHidden(true)
-
+        Text(vault.initial)
+            .centraidType("smallStrong")
+            .foregroundStyle(mark.ink)
+            .kitScaledSquare(30, relativeTo: .footnote)
+            // A static rung, not `iconChipRadius` — that ratio is for app chips.
+            .background(mark.ground, in: RoundedRectangle(cornerRadius: Theme.radius("md", scheme)))
+            .accessibilityHidden(true)
     }
 
     /// THE NAME AND THE LINES UNDER IT.
     private var lockupText: some View {
         VStack(alignment: .leading, spacing: 1) {
-            Button {
-                store.sendHome(.vault(.init()))
-            } label: {
-                Text(vault.name)
-                    .centraidType("smallStrong")
-                    .foregroundStyle(Theme.color("text", scheme))
-                    .lineLimit(largestText ? nil : 1)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
-                    .hitArea()
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(bar.switchLabel)
-            .accessibilityIdentifier("home-vault-switch")
+            Text(vault.name)
+                .centraidType("smallStrong")
+                .foregroundStyle(Theme.color("text", scheme))
+                .lineLimit(largestText ? nil : 1)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+                .accessibilityLabel(vault.accessibilityLabel.isEmpty ? vault.name : vault.accessibilityLabel)
+                .accessibilityIdentifier("home-vault-name")
 
             if !status.isEmpty {
                 statusLine

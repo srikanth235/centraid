@@ -167,9 +167,17 @@ final class ScreenStore: ObservableObject {
     /// Report a fact about the phone (the link, a granted window, an upload the OS finished);
     /// the pass scheduler in Rust decides what it means.
     func report(_ fact: Centraid_Core_V1_ShellFact.OneOf_Fact) {
+        Task { await reportAndWait(fact) }
+    }
+
+    /// Report a fact and wait until the core has answered it — used when the
+    /// caller must hold an OS wake (such as a background upload completion
+    /// handler) until Rust has received the fact.
+    @discardableResult
+    func reportAndWait(_ fact: Centraid_Core_V1_ShellFact.OneOf_Fact) async -> Bool {
         var shell = Centraid_Core_V1_ShellFact()
         shell.fact = fact
-        Task { await request(.shellFact(shell)) }
+        return await request(.shellFact(shell))
     }
 
     /// A notification button or tap stays alive until Rust marks this exact answer

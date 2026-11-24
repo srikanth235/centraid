@@ -226,6 +226,15 @@ struct PhotoHeldMark: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("photos.cell.download.\(cell.photoID)")
             .accessibilityLabel(cell.heldLabel)
+        } else if cell.held == .comingBack {
+            // A RESTORE IS BRINGING THE ORIGINAL BACK (#1209, R3): the same arrow, with nothing to press.
+            CentraidIconView(iconKey: "ArrowDown", tint: Theme.color("text", scheme), size: 14)
+                .padding(3)
+                .background(Theme.color("bg", scheme), in: RoundedRectangle(cornerRadius: Theme.radius("sm", scheme)))
+                .padding(4)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .accessibilityHidden(true)
+                .accessibilityIdentifier("photos.cell.coming-back.\(cell.photoID)")
         }
     }
 }

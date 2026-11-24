@@ -281,6 +281,20 @@ private fun BoxScope.HeldState(
                     CentraidIcon(iconKey = "Download", tint = centraidColor("text"), size = 14.dp)
                 }
             }
+
+        // A RESTORE IS BRINGING THE ORIGINAL BACK (#1209, R3): the same arrow, with nothing to press.
+        cell.held == WireTile.Held.HELD_COMING_BACK ->
+            Box(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(4.dp)
+                    .clip(RoundedCornerShape(RADIUS_SM.dp))
+                    .background(centraidColor("bg"))
+                    .padding(3.dp)
+                    .testTag("photos.cell.coming-back." + cell.photo_id),
+            ) {
+                CentraidIcon(iconKey = "ArrowDown", tint = centraidColor("text"), size = 14.dp)
+            }
     }
 }
 

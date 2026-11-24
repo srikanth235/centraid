@@ -269,7 +269,7 @@ fn one_tap_queues_one_real_core_door_and_a_failure_stops_progress_with_retry() {
     );
     assert_eq!(r.pick(KEY_DOWNLOAD).jobs.len(), 0);
     let (tag, work) = first.jobs.pop().expect("job");
-    // No paired gateway: the real keyed core door answers Unreachable, without platform effects.
+    // No backup tree lists this original yet: the real keyed core door answers NotInBackup, without platform effects.
     let bytes = work(&r.driver.handle);
     r.send(E::OffThreadDone(wire::OffThreadDone { tag, bytes }));
     assert!(r.download_enabled());
@@ -277,7 +277,7 @@ fn one_tap_queues_one_real_core_door_and_a_failure_stops_progress_with_retry() {
     assert!(status.refused);
     assert_eq!(
         status.sentence,
-        "Can't reach your backup device. Try again later."
+        "Your backup device doesn't hold this original."
     );
     assert_eq!(r.current().rev, rev);
     assert!(r.current().body.is_none());

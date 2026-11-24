@@ -1,12 +1,12 @@
-//! A BUNDLE COMMITS IN ONE TRANSACTION, AND A CRASH LEAVES ONLY FILES
-//! (#1191, B7, E14).
+//! A BUNDLE'S FRAMES COMMIT EACH ON ITS OWN, AND A CRASH LEAVES ONLY FILES
+//! (#1209, spec §4; #1191, B7, E14).
 //!
-//! The frames of a bundle are staged and renamed into place first; one
-//! `BEGIN IMMEDIATE` then inserts every row and commits. A crash between the
-//! renames and the commit leaves files with no row — the orphan sweep takes
-//! them once they are an hour old — and never a row whose bytes are missing.
-//! The crash is real: a child process is killed with SIGKILL between the
-//! renames and the commit.
+//! Each frame is staged, fsynced, renamed into place and then given its row,
+//! in its own transaction, as its last byte arrives. A crash between a
+//! frame's rename and its row leaves a file with no row — the orphan sweep
+//! takes it once it is an hour old — and never a row whose bytes are missing;
+//! the frames before it are committed and stay so. The crash is real: a child
+//! process is killed with SIGKILL between a rename and its row.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -39,10 +39,11 @@ fn frame(label: &str) -> Frame {
     Frame::of(name, blake3::hash(label.as_bytes()).as_bytes().repeat(16))
 }
 
-/// One `BEGIN IMMEDIATE` and one `COMMIT` for a bundle of five frames, counted
-/// by the adapter, not timed.
+/// One transaction per frame, counted by the adapter, not timed: five frames
+/// are five commits, and the same five again are five more (each is judged on
+/// its own, so a cut after frame k has committed frames 1..k and nothing else).
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_bundle_commits_in_one_transaction() {
+async fn a_bundle_commits_each_frame_in_its_own_transaction() {
     let dir = tempfile::tempdir().expect("a temp dir");
     let gateway = spawn(dir.path()).await.expect("spawned");
     let (vault, phone) = paired(&gateway).await;
@@ -58,14 +59,13 @@ async fn a_bundle_commits_in_one_transaction() {
         .collect();
     let before = begun();
     let answer = phone.bundle(&vault, &frames).await.expect("stores");
-    assert_eq!(answer.stored.len(), 5, "{answer:?}");
-    assert_eq!(begun() - before, 1, "five frames, one transaction");
+    assert_eq!(answer.stored(), 5, "{answer:?}");
+    assert_eq!(begun() - before, 5, "five frames, five transactions");
 
-    // The same bundle again is five "already held" answers in one more.
     let before = begun();
     let answer = phone.bundle(&vault, &frames).await.expect("answers");
-    assert_eq!(answer.already.len(), 5);
-    assert_eq!(begun() - before, 1);
+    assert_eq!(answer.there(), 5);
+    assert_eq!(begun() - before, 5);
     gateway.shutdown().await;
 }
 
@@ -80,10 +80,10 @@ fn bundle_of_three() -> Vec<Frame> {
 }
 
 /// **The child**: not a test of its own. Re-executed by
-/// `a_process_killed_between_the_renames_and_the_commit_leaves_only_files`
+/// `a_process_killed_between_a_rename_and_its_row_leaves_only_a_file`
 /// with a data directory and a marker path, it uploads a bundle of three
 /// frames and, the moment the second file has been renamed into place and
-/// before any row is written, writes the marker and stops for ever, inside
+/// before its row is written, writes the marker and stops for ever, inside
 /// the open transaction, until the parent kills it.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn child_stages_a_bundle_and_stalls() {
@@ -109,12 +109,13 @@ async fn child_stages_a_bundle_and_stalls() {
     unreachable!("the parent kills this process");
 }
 
-/// A PROCESS KILLED BETWEEN A BUNDLE'S RENAMES AND ITS COMMIT leaves files and
-/// no row. The parent opens the data directory the child left: the vault is
-/// there, no object has a row, two files are on disk; the orphan sweep takes
-/// them once the gateway's clock says they are old, and not before.
+/// A PROCESS KILLED BETWEEN A FRAME'S RENAME AND ITS ROW leaves that file and
+/// no row, and the frame before it committed. The parent opens the data
+/// directory the child left: the vault is there, the first frame has its row,
+/// two files are on disk; the orphan sweep takes the second once the gateway's
+/// clock says it is old, and not before.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_process_killed_between_the_renames_and_the_commit_leaves_only_files() {
+async fn a_process_killed_between_a_rename_and_its_row_leaves_only_a_file() {
     let dir = tempfile::tempdir().expect("a temp dir");
     let beside = tempfile::tempdir().expect("a temp dir");
     let marker = beside.path().join("renamed");
@@ -157,11 +158,15 @@ async fn a_process_killed_between_the_renames_and_the_commit_leaves_only_files()
         .shared()
         .rules(|rules| Ok(rules.state.vault_objects(&vault, None, 100)?))
         .expect("reads");
-    assert!(rows.is_empty(), "no row without a commit: {rows:?}");
+    assert_eq!(
+        rows.len(),
+        1,
+        "the first frame committed on its own; the second has no row: {rows:?}"
+    );
     assert_eq!(
         gateway.shared().store().files().expect("lists").len(),
         2,
-        "the two renamed files are on disk"
+        "both renamed files are on disk"
     );
     assert_eq!(
         gateway
@@ -178,15 +183,19 @@ async fn a_process_killed_between_the_renames_and_the_commit_leaves_only_files()
         "a file is not old enough to be an orphan yet"
     );
     gateway.advance_clock(TWO_HOURS_MS);
-    assert_eq!(orphans_once(gateway.shared()).expect("sweeps"), 2);
-    assert!(gateway.shared().store().files().expect("lists").is_empty());
+    assert_eq!(orphans_once(gateway.shared()).expect("sweeps"), 1);
+    assert_eq!(
+        gateway.shared().store().files().expect("lists").len(),
+        1,
+        "the committed frame's file stands"
+    );
     gateway.shutdown().await;
 }
 
 /// A SWEEP DURING AN OPEN BUNDLE REMOVES NOTHING (#1191, E14): the hook runs
-/// the orphan sweep after the second rename, while the commit is between its
-/// renames and its rows, with the clock two hours on so age alone would take
-/// the files. It removes none; once the bundle is in, every file has a row.
+/// the orphan sweep after the second rename, while that frame is between its
+/// rename and its row, with the clock two hours on so age alone would take
+/// the file. It removes none; once the bundle is in, every file has a row.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_sweep_during_an_open_bundle_removes_nothing() {
     let dir = tempfile::tempdir().expect("a temp dir");
@@ -212,7 +221,7 @@ async fn a_sweep_during_an_open_bundle_removes_nothing() {
         })));
     let frames = bundle_of_three();
     let answer = phone.bundle(&vault, &frames).await.expect("stores");
-    assert_eq!(answer.stored.len(), 3);
+    assert_eq!(answer.stored(), 3);
     assert_eq!(removed.load(Ordering::SeqCst), 0, "the sweep stood aside");
     assert_eq!(
         on_disk.load(Ordering::SeqCst),
@@ -233,14 +242,13 @@ async fn a_sweep_during_an_open_bundle_removes_nothing() {
     gateway.shutdown().await;
 }
 
-/// R3: THE DAMAGED NAME A BUNDLE REPLACES IS NOT LEFT INCONSISTENT BY A
-/// ROLLBACK. The bundle heals a damaged name with its own bytes and then
-/// faults on a second frame, so the transaction rolls back: the row still
-/// says damaged and still holds the digest the phone's bytes have, the file
-/// on disk is those bytes, the second frame has no file and no row, and the
-/// next bundle completes the work.
+/// R3, PER FRAME: THE FRAMES BEFORE A FAULT STAY COMMITTED. The bundle heals a
+/// damaged name with its own bytes (its own commit) and then faults on a
+/// second frame: the first is whole (row and file agree, no longer damaged),
+/// the second has no file and no row, and the next bundle finishes the work
+/// with `there` for the first and `stored` for the second.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_rolled_back_bundle_leaves_a_damaged_name_consistent() {
+async fn a_frame_that_faults_leaves_the_frames_before_it_committed() {
     let dir = tempfile::tempdir().expect("a temp dir");
     let gateway = spawn(dir.path()).await.expect("spawned");
     let (vault, phone) = paired(&gateway).await;
@@ -284,8 +292,8 @@ async fn a_rolled_back_bundle_leaves_a_damaged_name_consistent() {
         "the row and the file agree on the bytes"
     );
     assert!(
-        row.damaged_at_ms.is_some(),
-        "the rolled-back row is still marked damaged"
+        row.damaged_at_ms.is_none(),
+        "the first frame committed on its own, and healed the name"
     );
     assert!(
         gateway
@@ -306,7 +314,7 @@ async fn a_rolled_back_bundle_leaves_a_damaged_name_consistent() {
     );
     // The phone's next bundle finishes it.
     let answer = phone.bundle(&vault, &both).await.expect("stores");
-    assert_eq!(answer.stored.len() + answer.already.len(), 2, "{answer:?}");
+    assert_eq!((answer.there(), answer.stored()), (1, 1), "{answer:?}");
     assert!(
         phone
             .exists(&vault, &[healing.name, other.name])
@@ -319,12 +327,12 @@ async fn a_rolled_back_bundle_leaves_a_damaged_name_consistent() {
 
 /// R5: THE ORPHAN SWEEP'S LOOK AND ITS UNLINK ARE ONE STEP. An old file with
 /// no row is about to be removed; at that very point (inside the step, after
-/// the look at the index, before the unlink) a `PUT` of the same name is
+/// the look at the index, before the unlink) a frame of the same name is
 /// started on another thread. It cannot run until the step ends — the sweep
 /// holds the gateway's one lock across both — so its file is stored after the
 /// unlink, not under it: the name is live, with its bytes on disk.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_put_of_the_same_name_cannot_lose_its_file_to_the_orphan_sweep() {
+async fn a_frame_of_the_same_name_cannot_lose_its_file_to_the_orphan_sweep() {
     let dir = tempfile::tempdir().expect("a temp dir");
     let gateway = spawn(dir.path()).await.expect("spawned");
     let key = ed25519_dalek::SigningKey::from_bytes(&[31; 32]);
@@ -356,8 +364,8 @@ async fn a_put_of_the_same_name_cannot_lose_its_file_to_the_orphan_sweep() {
         cert_der: gateway.cert_der.clone(),
         token: paired.token,
     };
-    let putting: Arc<std::sync::Mutex<Option<std::thread::JoinHandle<()>>>> = Arc::default();
-    let (slot, frame_put) = (Arc::clone(&putting), racing.clone());
+    let sending: Arc<std::sync::Mutex<Option<std::thread::JoinHandle<()>>>> = Arc::default();
+    let (slot, frame_put) = (Arc::clone(&sending), racing.clone());
     gateway
         .shared()
         .store()
@@ -368,20 +376,20 @@ async fn a_put_of_the_same_name_cannot_lose_its_file_to_the_orphan_sweep() {
             let handle = std::thread::spawn(move || {
                 runtime.block_on(async {
                     centraid_gateway::client::Client::new(&destination)
-                        .put(&vault, &frame.name, &frame.digest, frame.bytes.clone())
+                        .bundle(&vault, std::slice::from_ref(&frame))
                         .await
-                        .expect("the PUT is admitted, after the step");
+                        .expect("the frame is admitted, after the step");
                 });
             });
             *slot.lock().expect("slot") = Some(handle);
         })));
     assert_eq!(orphans_once(gateway.shared()).expect("sweeps"), 1);
     gateway.shared().store().knobs().on_orphan_unlink(None);
-    let handle = putting
+    let handle = sending
         .lock()
         .expect("slot")
         .take()
-        .expect("the PUT started");
+        .expect("the frame was sent");
     tokio::task::spawn_blocking(move || handle.join().expect("joins"))
         .await
         .expect("joined");

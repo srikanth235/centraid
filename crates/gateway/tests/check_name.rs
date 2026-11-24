@@ -10,7 +10,7 @@ use centraid_gateway::rules::ids::{Digest, Name, Signature, VaultId};
 use centraid_gateway::rules::limits::MAX_CHECKS_PER_WINDOW;
 use centraid_gateway::rules::signing::{sign_check, sign_delete};
 use centraid_gateway::rules::wire::{CheckRequest, CheckState, DeleteRequest};
-use centraid_gateway::server::harness::{Spawned, pair_secret, spawn};
+use centraid_gateway::server::harness::{Spawned, pair_secret, put, spawn};
 use centraid_gateway::server::operator::{self, Verb};
 
 struct Member {
@@ -52,8 +52,7 @@ impl Member {
     async fn stores(&self, label: &str) -> Name {
         let name = name_of(label);
         let bytes = bytes_of(label);
-        self.phone
-            .put(&self.vault, &name, &Digest::of(&bytes), bytes)
+        put(&self.phone, &self.vault, &name, &Digest::of(&bytes), bytes)
             .await
             .expect("stores");
         name
@@ -81,7 +80,8 @@ impl Member {
         let request = DeleteRequest {
             names: vec![*name],
             generation: self.generation,
-            signature: sign_delete(&self.key, &self.gateway, 1, self.generation, &[*name]),
+            head_root: None,
+            signature: sign_delete(&self.key, &self.gateway, 1, self.generation, None, &[*name]),
         };
         self.phone
             .delete(&self.vault, &request)
@@ -111,11 +111,15 @@ async fn a_rotted_part_is_marked_damaged_freed_by_a_signed_delete_and_resealed()
     let answer = member.delete(&name).await;
     assert_eq!(answer.freed, vec![name], "a damaged name is freed at once");
     let resealed = bytes_of("resealed");
-    member
-        .phone
-        .put(&member.vault, &name, &Digest::of(&resealed), resealed)
-        .await
-        .expect("a re-sealed copy is a first write");
+    put(
+        &member.phone,
+        &member.vault,
+        &name,
+        &Digest::of(&resealed),
+        resealed,
+    )
+    .await
+    .expect("a re-sealed copy is a first write");
     assert_eq!(
         member.check(&name).await.expect("checks"),
         CheckState::Intact
@@ -160,7 +164,7 @@ async fn a_token_alone_a_replay_or_another_signature_is_refused() {
         ("an empty signature", Signature::from_bytes([0; 64])),
         (
             "a delete's signature",
-            sign_delete(&member.key, &member.gateway, 1, generation, &[name]),
+            sign_delete(&member.key, &member.gateway, 1, generation, None, &[name]),
         ),
         (
             "another key's signature",

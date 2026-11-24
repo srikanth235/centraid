@@ -243,6 +243,7 @@ impl Home {
                 body: words::delete_notebook_body(locale),
                 confirm_label: words::delete_notebook_verb(locale),
                 destructive: true,
+                warning: String::new(),
             }),
         }
     }

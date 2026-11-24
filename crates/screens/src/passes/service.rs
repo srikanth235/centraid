@@ -13,11 +13,9 @@
 //! ended. The shell performs only that service's platform effects.
 //!
 //! **A door that waits on a gateway is never called from `update`**: the runtime
-//! lock is held across `update`, and a pass takes minutes. A pass, a probe, a
-//! hand-off and a settle run off the lock (`Ctx::vault_async`, or the same on
+//! lock is held across `update`, and a pass takes minutes. A pass runs off the lock (`Ctx::vault_async`, or the same on
 //! another vault's core when `Holdings` has one) and come back as
-//! `OffThreadDone` events tagged `drain:<vault>`, `reconcile:<vault>`,
-//! `handoff:<vault>` and `settle`.
+//! `OffThreadDone` events tagged `drain:<vault>`.
 
 use std::collections::VecDeque;
 
@@ -103,14 +101,7 @@ struct Service {
     /// Windows whose backup ended and whose follows are not done: the OS is told when the
     /// follow coordinator says every store ran ([`crate::follow`]).
     following: Vec<(String, bool)>,
-    /// Settles the OS delivered before the shelf had opened their vault (a background relaunch):
-    /// held until it has, then routed, never dropped. Bounded; the outbox row would be sent again
-    /// at the next pass if the oldest were ever lost.
-    early_settles: Vec<wire::UploadSettled>,
 }
-
-/// The most settles held while the shelf opens its vaults.
-const EARLY_SETTLES: usize = 64;
 
 impl Service {
     fn new(secrets: VaultSecrets) -> Self {
@@ -124,7 +115,6 @@ impl Service {
             started: false,
             foreground: None,
             following: Vec::new(),
-            early_settles: Vec::new(),
         }
     }
 
@@ -195,33 +185,6 @@ impl Service {
                             needs: needs.iter().map(needed).collect(),
                         },
                     ),
-                ),
-                Action::Reconcile { vault } => self.call(
-                    ctx,
-                    format!("reconcile:{vault}"),
-                    &vault,
-                    VaultRequest::Reconcile(wire::ReconcileRequest {}),
-                ),
-                Action::Handoff {
-                    vault,
-                    max_bytes,
-                    max_parts,
-                } => self.call(
-                    ctx,
-                    format!("handoff:{vault}"),
-                    &vault,
-                    VaultRequest::Handoff(wire::HandoffRequest {
-                        max_bytes,
-                        max_parts,
-                    }),
-                ),
-                Action::Settle { vault, settled } => self.call(
-                    ctx,
-                    "settle".to_owned(),
-                    &vault,
-                    VaultRequest::Settle(wire::SettleRequest {
-                        settled: vec![settled],
-                    }),
                 ),
                 Action::UploadsPending => self.effect(
                     Kind::Count,
@@ -368,23 +331,6 @@ impl Service {
         }
     }
 
-    /// Route a settle to its vault's core, or hold it until the shelf has opened that vault: an OS
-    /// that relaunches the app for a finished background upload can deliver it first.
-    fn settle(&mut self, settled: wire::UploadSettled) -> Vec<Action> {
-        let shelf_id = self
-            .secrets
-            .shelf_id_of(&settled.vault_id)
-            .unwrap_or_else(|| settled.vault_id.clone());
-        if self.conductor.drains(&shelf_id) {
-            return self.conductor.upload_settled_in(&shelf_id, &settled);
-        }
-        if self.early_settles.len() >= EARLY_SETTLES {
-            self.early_settles.remove(0);
-        }
-        self.early_settles.push(settled);
-        Vec::new()
-    }
-
     fn fact(&mut self, fact: wire::ShellFact) -> Vec<Action> {
         use wire::shell_fact::Fact;
         match fact.fact {
@@ -412,19 +358,13 @@ impl Service {
                         })
                         .collect(),
                 );
-                // A VAULT THE SHELF HAS NOW OPENED may be the one an early settle was waiting for.
-                let waiting = std::mem::take(&mut self.early_settles);
-                let mut actions = Vec::new();
-                for settled in waiting {
-                    actions.extend(self.settle(settled));
-                }
-                actions
+                Vec::new()
             }
             Some(Fact::Asked(asked)) => wire::pass_asked::Ask::try_from(asked.ask)
                 .map_or_else(|_| Vec::new(), |ask| self.ask(ask)),
-            // THE OS NAMES THE VAULT BY ITS IDENTITY (the hex a handed-off part carries); the shelf
-            // holds it under its own id, and the settle goes to that vault's core (#1202).
-            Some(Fact::Settled(settled)) => self.settle(settled),
+            // WHAT THE OS REPORTS ONLY WAKES A PASS (#1209, R7): nothing is recorded as stored, and
+            // the pass re-reads each head and diffs.
+            Some(Fact::Settled(settled)) => self.conductor.upload_settled(&settled),
             Some(Fact::Drained(_)) => self.conductor.uploads_drained(),
         }
     }
@@ -460,7 +400,7 @@ impl Service {
             }
             Some(Outcome::Failed(_)) => {
                 match self.answered(&[Kind::Schedule, Kind::Noted, Kind::Count, Kind::Load]) {
-                    Some(Kind::Count) => self.conductor.pending(MAX_IN_FLIGHT_FULL),
+                    Some(Kind::Count) => self.conductor.pending(UNKNOWN_PENDING),
                     Some(Kind::Load) => {
                         self.loading = None;
                         self.replay(ctx, out);
@@ -487,25 +427,6 @@ impl Service {
         let (kind, vault) = done.tag.split_once(':').unwrap_or((done.tag.as_str(), ""));
         match kind {
             "drain" => self.conductor.drained(vault, &Drained::of(answer)),
-            "reconcile" => {
-                let reachable = match answer {
-                    Ok(wire::Response {
-                        kind: Some(wire::response::Kind::Reconcile(probe)),
-                    }) => Some(probe.reachable),
-                    _ => None,
-                };
-                self.conductor.reconciled(vault, reachable)
-            }
-            "handoff" => {
-                let parts = match answer {
-                    Ok(wire::Response {
-                        kind: Some(wire::response::Kind::Handoff(batch)),
-                    }) => batch.parts,
-                    _ => Vec::new(),
-                };
-                self.conductor.handed_off(vault, parts)
-            }
-            // A SETTLE IS RECORDED IN THE LEDGER AND ANSWERS NOTHING THE PASS NEEDS.
             _ => Vec::new(),
         }
     }
@@ -519,8 +440,8 @@ impl Service {
     }
 }
 
-/// An unanswered count is treated as the OS being full: nothing is handed off.
-const MAX_IN_FLIGHT_FULL: u32 = super::conductor::MAX_IN_FLIGHT;
+/// An unanswered count is treated as the OS being full: nothing is enqueued.
+const UNKNOWN_PENDING: u32 = super::conductor::UNKNOWN_PENDING;
 
 /// `Ctx::vault_async`'s answer, produced on another vault's core.
 fn vault_called(handle: &centraid_core::Handle, request: VaultRequest) -> Vec<u8> {
@@ -551,8 +472,8 @@ impl Screen for Service {
         let Some(kind) = event.kind else {
             return out;
         };
-        // THE PLATFORM DECIDES WHO CARRIES SEALED PARTS while the app is
-        // suspended: iOS's session; Android moves them inside the pass.
+        // THE PLATFORM CARRIES THE BUNDLE FILES while the app is suspended: iOS's
+        // background session only; Android writes none (WorkManager runs the pass itself inside its window).
         self.conductor.set_uploads(ctx.platform() == "ios");
         match kind {
             E::Appeared(_) => {

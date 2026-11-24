@@ -321,13 +321,6 @@ pub struct HandleState {
     check_progress: crate::phone::check::Progress,
     /// One check at a time.
     checking: AtomicBool,
-    /// THE FIRST RECONCILE OF THIS CORE'S LIFE HAS RUN (#1080 ruling 7: "on
-    /// every launch"). It asks the gateway about every name the ledger
-    /// confirms; every later one only about the queue. The first pass that
-    /// reaches a gateway runs it when no `reconcile` call has
-    /// ([`Handle::owes_full_reconcile`]), so the ledger is squared on every
-    /// shell, not only on the one whose upload loop calls the door.
-    reconciled: AtomicBool,
     /// THE STORE THIS CORE OPENED ITSELF.
     ///
     /// `Some` only after [`Handle::open_own_bytes`]; a store handed in through
@@ -438,7 +431,7 @@ impl Core {
             ids,
             expected_digest,
             seed,
-            spool_ceiling,
+            staging_ceiling,
             shelf: shelf_config,
             without_vault,
         } = config;
@@ -503,7 +496,7 @@ impl Core {
         };
         let registry = Arc::new(Registry::with_system_commands()?);
         let launched = std::time::SystemTime::now();
-        let plane = crate::phone::Plane::of(&path).with_ceiling(spool_ceiling);
+        let plane = crate::phone::Plane::of(&path).with_ceiling(staging_ceiling);
         // A CHECK'S SCRATCH A CRASH LEFT (and any copy of the vault an earlier build left in the clear) goes first.
         plane.sweep_scratch();
         let handle = Handle::new(|me| HandleState {
@@ -536,7 +529,6 @@ impl Core {
             ranges_sealed: AtomicU64::new(0),
             check_progress: crate::phone::check::Progress::default(),
             checking: AtomicBool::new(false),
-            reconciled: AtomicBool::new(false),
             owned_bytes: Mutex::new(None),
             locker: Arc::new(Mutex::new(None)),
             assist: crate::assist::Hub::new(),
@@ -1460,7 +1452,13 @@ impl HandleState {
     /// The ledger's or the spool's refusal, or a vault that will not read.
     pub(crate) fn backup_standing(&self) -> Result<wire::BackupStatusResponse> {
         self.with_vault_if_any(|vault| {
-            crate::phone::backup_status(&self.plane, vault, self.keys.as_ref())
+            let mut status = crate::phone::backup_status(&self.plane, vault, self.keys.as_ref())?;
+            // A RESTORE'S PROGRESS, while one is owed (R3): previews and originals back so far.
+            if let (Some(vault), Some(door)) = (vault, self.bytes()) {
+                status.restoring =
+                    crate::phone::restore_progress(&self.plane, vault, door.store())?;
+            }
+            Ok(status)
         })
     }
 
@@ -1679,12 +1677,7 @@ impl HandleState {
                 // touched and the vault let go (the sweep's F4): a takeover
                 // compares it with the head it would claim.
                 let own = self.with_vault_if_any(|vault| {
-                    vault
-                        .map(|vault| {
-                            centraid_vault::backup::snapshot::history(vault)
-                                .map_err(crate::phone::plane_error)
-                        })
-                        .transpose()
+                    vault.map(crate::phone::pair::History::of).transpose()
                 })?;
                 Ok(response(wire::response::Kind::PairPhone(
                     crate::phone::pair::pair(
@@ -1811,14 +1804,14 @@ impl HandleState {
             }
             // THE BACKUP PLANE'S DOORS BESIDE THE PASS (#1080). See
             // `phone.proto` and `crate::phone`.
-            K::Handoff(request) => {
-                let runtime = self.runtime_handle()?;
-                Ok(response(wire::response::Kind::Handoff(
-                    crate::phone::drain::handoff(&self.plane, self.keyring()?, request, &runtime)?,
-                )))
-            }
-            K::Settle(request) => Ok(response(wire::response::Kind::Settle(
-                crate::phone::drain::settle(&self.plane, self.keyring()?, request)?,
+            // DEPRECATED (#1209): the plane before the bundle. A core ignores them and answers
+            // with an empty answer; the OS's uploads are `DrainResponse.os_bundles`, and what the
+            // OS reports only wakes a pass.
+            K::Handoff(_) => Ok(response(wire::response::Kind::Handoff(
+                wire::HandoffResponse::default(),
+            ))),
+            K::Settle(_) => Ok(response(wire::response::Kind::Settle(
+                wire::SettleResponse::default(),
             ))),
             K::FetchOriginal(request) => {
                 let runtime = self.runtime_handle()?;
@@ -1835,16 +1828,12 @@ impl HandleState {
             K::Pins(_) => Ok(response(wire::response::Kind::Pins(crate::phone::pins(
                 &self.plane,
             )?))),
-            K::Reconcile(_) => {
-                let runtime = self.runtime_handle()?;
-                let full = self.owes_full_reconcile();
-                let answer =
-                    crate::phone::drain::reconcile(&self.plane, self.keyring()?, &runtime, full)?;
-                if full && answer.reachable {
-                    self.reconciled_fully();
-                }
-                Ok(response(wire::response::Kind::Reconcile(answer)))
-            }
+            K::Reconcile(_) => Ok(response(wire::response::Kind::Reconcile(
+                wire::ReconcileResponse::default(),
+            ))),
+            K::HeldWhole(request) => Ok(response(wire::response::Kind::HeldWhole(
+                crate::phone::held_whole(&self.plane, self.keyring()?, request)?,
+            ))),
             K::ForgetDestination(request) => {
                 let runtime = self.runtime_handle()?;
                 Ok(response(wire::response::Kind::ForgetDestination(
@@ -2379,17 +2368,6 @@ impl HandleState {
         })
     }
 
-    /// Whether this core has yet to ask a gateway about every name its ledger
-    /// confirms (#1080 ruling 7, "on every launch").
-    pub(crate) fn owes_full_reconcile(&self) -> bool {
-        !self.reconciled.load(Ordering::SeqCst)
-    }
-
-    /// This core asked a gateway about every name its ledger confirms.
-    pub(crate) fn reconciled_fully(&self) {
-        self.reconciled.store(true, Ordering::SeqCst);
-    }
-
     /// "Check my backup" (#1188, B6): each paired device's backup opened in a spare copy.
     /// One at a time; a second ask while one runs answers how far it has got.
     fn check_backup(
@@ -2540,7 +2518,7 @@ impl HandleState {
         let runtime = self.runtime_handle();
         let asked = request.asked.then(|| self.plane.ask());
         let answer = runtime.and_then(|runtime| {
-            crate::phone::drain::run_cancellable(
+            crate::phone::drive::run_cancellable(
                 self,
                 keyring,
                 request,
@@ -2755,9 +2733,7 @@ impl HandleState {
             match (&self.keys, paired) {
                 (Some(keys), true) => Some(crate::stage::SealInto {
                     keys: keys.backup.clone(),
-                    spool: plane.spool()?,
-                    budget: plane.budget(),
-                    free: plane.free_bytes(),
+                    area: plane.staging()?,
                     planned: if begin.os_ref.is_empty() {
                         None
                     } else {
@@ -2861,14 +2837,20 @@ impl HandleState {
                         edited,
                     })
                     .map_err(crate::phone::plane_error)?;
+                // THE ITEM'S CHUNKS WERE SEALED AS IT STREAMED (a pass asked for it): their refs are
+                // what the next snapshot lists, and the ones that fit are staged for a gateway.
                 if let Some(sealed) = sealed {
-                    crate::phone::drain::queue_sealed(
-                        &plane.spool()?,
-                        &ledger,
-                        &sealed,
-                        &media_type,
-                    )?;
+                    ledger
+                        .put_os_chunks(&h, &sealed.refs)
+                        .map_err(crate::phone::plane_error)?;
+                    for chunk in &sealed.staged {
+                        ledger
+                            .stage(&chunk.name, &chunk.path.to_string_lossy(), chunk.size)
+                            .map_err(crate::phone::plane_error)?;
+                    }
+                    plane.set_snapshot_owed(true);
                 }
+                let _ = &media_type;
                 let hash = h.to_hex();
                 let derivatives = self.with_vault(|vault| Ok(vault.derivatives_of(&hash)?))?;
                 Ok(wire::StageHandle {
@@ -3050,6 +3032,8 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             // A STATUS READ IS BOUNDED AND DIALS NOTHING: the ledger, a spool
             // measurement and one read of the vault's content rows.
             | K::BackupStatus(_)
+            // WHICH GATEWAYS HOLD ONE ORIGINAL WHOLE reads the device state and dials nothing.
+            | K::HeldWhole(_)
             // THE ORIGINALS ASK IS BOUNDED: one small file, and for a census
             // one listing of the store and one read of the library's rows. It
             // moves no byte and dials nothing.
@@ -4481,10 +4465,6 @@ mod tests {
 
         for (kind, code) in [
             (
-                wire::request::Kind::Handoff(wire::HandoffRequest::default()),
-                wire::ErrorCode::InvalidRequest,
-            ),
-            (
                 wire::request::Kind::Releasable(wire::ReleasableRequest { limit: 0 }),
                 wire::ErrorCode::InvalidRequest,
             ),
@@ -4528,12 +4508,10 @@ mod tests {
         let scratch = Scratch::founded();
         for kind in [
             wire::request::Kind::Drain(wire::DrainRequest::default()),
-            wire::request::Kind::Handoff(wire::HandoffRequest {
-                max_bytes: 1,
-                max_parts: 1,
+            wire::request::Kind::HeldWhole(wire::HeldWholeRequest {
+                content_hash: vec![7; 32],
+                ..Default::default()
             }),
-            wire::request::Kind::Reconcile(wire::ReconcileRequest {}),
-            wire::request::Kind::Settle(wire::SettleRequest::default()),
             wire::request::Kind::Releasable(wire::ReleasableRequest { limit: 1 }),
         ] {
             let refusal = ask(&scratch, kind.clone()).expect_err("refused");

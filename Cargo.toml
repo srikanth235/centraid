@@ -59,10 +59,7 @@ proptest = "1"
 # `commit_hook` (backup device state) and `authorizer` (read-only connections).
 # `backup` is enabled only in `centraid-vault`'s `[dev-dependencies]` for
 # `tests/page_source.rs`'s comparison against SQLite's online-backup API.
-rusqlite = { version = "0.41", features = [
-  "bundled",
-  "hooks",
-] }
+rusqlite = { version = "0.41", features = ["bundled", "hooks"] }
 serde = { version = "1", features = ["derive"] }
 # `float_roundtrip` is NOT optional here (#1020, D-1020-D1-18). serde_json's
 # default float parser is fast and approximate: it can land one ULP away, and
@@ -111,14 +108,15 @@ prost-build = "0.14"
 protox = "0.9"
 qrcode = { version = "0.14", default-features = false }
 
-# THE PHONE'S CLIENT TO ITS GATEWAY (#1080): HTTP/1.1 over TLS over TCP,
-# `hyper`'s connection API with `tokio-rustls` underneath and a verifier that
-# accepts one pinned certificate. `hyper-util` is only `TokioIo`, the adapter
+# THE PHONE'S CLIENT TO ITS GATEWAY (#1080): HTTP/2 (HTTP/1.1 by ALPN fallback)
+# over TLS over TCP, `hyper`'s connection API with `tokio-rustls` underneath
+# and a verifier that accepts one pinned certificate. `hyper-util` is only `TokioIo`, the adapter
 # between tokio's IO traits and hyper's; `http-body-util` is `Full` and
 # `collect`. No client stack and no connection pool.
 hyper = { version = "1", default-features = false, features = [
   "client",
   "http1",
+  "http2",
 ] }
 hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
 http-body-util = "0.1"
@@ -235,6 +233,7 @@ hpke = { version = "0.14", default-features = false, features = [
 # every refusal it renders is a `rules::code::Refusal`.
 axum = { version = "0.8", default-features = false, features = [
   "http1",
+  "http2",
   "json",
   "query",
   "tokio",

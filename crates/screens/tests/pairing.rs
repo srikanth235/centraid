@@ -694,7 +694,7 @@ fn record(driver: &Driver, gateway_id: &str, addrs: &[&str]) {
     let ledger = centraid_vault::backup::state::DeviceState::open_beside(driver.handle.path())
         .expect("the device state opens");
     ledger
-        .put_gateway(&centraid_vault::backup::state::Gateway::paired(
+        .add_gateway(&centraid_vault::backup::state::Gateway::paired(
             gateway_id.to_owned(),
             addrs.iter().map(|a| (*a).to_owned()).collect(),
             vec![1, 2, 3],

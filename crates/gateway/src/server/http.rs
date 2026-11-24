@@ -13,22 +13,23 @@
 //!
 //! # BYTES NEVER SIT IN MEMORY WHOLE
 //!
-//! An object `PUT` streams into a staged file while it is hashed; a bundle is
-//! cut into frames by [`crate::rules::bundle::Decoder`] as it arrives, each
-//! frame into its own staged file; a `GET` and a `fetch` stream from the files.
-//! The bytes are authorised before they are read, and admitted only after
-//! they are on disk and hashed.
+//! A bundle is cut into frames by [`crate::rules::bundle::Decoder`] as it
+//! arrives, each frame into its own staged file, hashed as it is written and
+//! committed on its own when its last byte is in; a `GET` and a `fetch` stream
+//! from the files. The bytes are authorised before they are read, and
+//! admitted only after they are on disk and hashed. There is no single-object
+//! upload route: a frame is the one way in (spec §4).
 //!
 //! # A ROW WHOSE BYTES ARE GONE IS NOT HELD
 //!
 //! The object index is `state.db` and the bytes are files, and the two can
 //! disagree behind the gateway's back: a file removed by hand from
 //! `objects/`, a disk that lost it. The scrub finds that within a quarter; a
-//! phone asking now is told now. `exists`, a `PUT` and a bundle frame look at
+//! phone asking now is told now. `exists` and a bundle frame look at
 //! the file of a name the index holds, and one with no file is marked as the
 //! scrub marks it (`Finding::Missing`, through
 //! [`crate::rules::engine::Gateway::record_scrub`]): `exists` answers it
-//! missing, so the phone sends it again, and the `PUT` that brings it stores
+//! missing, so the phone sends it again, and the frame that brings it stores
 //! it rather than answering "already held" over nothing. The file is the
 //! fact this module reads; whether the name is held is still the rules'.
 //!
@@ -38,7 +39,7 @@
 //! broken pipe, not the answer — and `MOVED` lost that way is a superseded
 //! phone that retries instead of freezing. So once a request's token is known,
 //! a refusal decided before its body was consumed (`MOVED`, `TOO_LARGE`,
-//! `DISK_FULL`, a malformed frame) first reads and discards what is left of
+//! `DISK_FULL`, a malformed body) first reads and discards what is left of
 //! the body, up to a bound. A stranger's body is never read: `UNAUTHORIZED`
 //! is answered at once.
 
@@ -50,7 +51,7 @@ use axum::extract::rejection::{PathRejection, QueryRejection};
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post, put};
+use axum::routing::{get, post};
 use futures::StreamExt as _;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -59,14 +60,14 @@ use tokio::io::{AsyncReadExt as _, AsyncSeekExt as _};
 use crate::rules::bundle::{Decoder, FrameHeader, HEADER_LEN, Step, header as frame_header};
 use crate::rules::code::{Code, Refusal, RefusalBody};
 use crate::rules::engine::{Access, Arrival, Finding, Gateway, PutOutcome};
-use crate::rules::ids::{Digest, Name, Token, VaultId};
+use crate::rules::ids::{Name, Token, VaultId};
 use crate::rules::limits::{
     LIST_LIMIT, MAX_BUNDLE_BYTES, MAX_JSON_BYTES, MAX_NAMES, MAX_OBJECT_BYTES,
 };
 use crate::rules::range::resolve;
 use crate::rules::state::{Fault, ObjectRecord, State as _, StoreFault};
 use crate::rules::wire::{
-    BundleAnswer, CODE_HEADER, CheckRequest, DIGEST_HEADER, DeleteRequest, Missing, NameRefusal,
+    BundleAnswer, CODE_HEADER, CheckRequest, DIGEST_HEADER, DeleteRequest, FrameResult, Missing,
     Names, PairRequest, Revoked, SetHead, UndoRequest,
 };
 use crate::server::state::SqliteState;
@@ -101,7 +102,7 @@ fn mark_if_gone(
     let Some(record) = gateway.state.object(vault, name)? else {
         return Ok(false);
     };
-    if !record.is_live() || store.path(vault, name).is_file() {
+    if record.damaged_at_ms.is_some() || store.path(vault, name).is_file() {
         return Ok(false);
     }
     gateway.record_scrub(vault, &record, Finding::Missing, now_ms)?;
@@ -117,10 +118,7 @@ pub fn router(shared: Handle) -> Router {
         .route("/v1/v/{vault}/head", get(get_head).put(put_head))
         .route("/v1/v/{vault}/snapshots", get(snapshots))
         .route("/v1/v/{vault}/exists", post(exists))
-        .route(
-            "/v1/v/{vault}/o/{name}",
-            put(put_object).get(get_object).head(head_object),
-        )
+        .route("/v1/v/{vault}/o/{name}", get(get_object).head(head_object))
         .route("/v1/v/{vault}/bundle", post(bundle))
         .route("/v1/v/{vault}/fetch", post(fetch))
         .route("/v1/v/{vault}/objects", get(objects))
@@ -398,97 +396,6 @@ async fn exists(
     )
 }
 
-/// `PUT o/{name}`: authorise, stage while hashing, then let the rules admit.
-async fn put_object(
-    State(shared): State<Handle>,
-    path: Result<Path<(String, String)>, PathRejection>,
-    headers: HeaderMap,
-    body: Body,
-) -> Response {
-    match receive_object(&shared, path, &headers, body).await {
-        Ok(PutOutcome::Stored(entry)) => json(StatusCode::CREATED, &entry),
-        Ok(PutOutcome::AlreadyStored(entry)) => json(StatusCode::OK, &entry),
-        Err(fault) => faulted(&fault, shared.now()),
-    }
-}
-
-async fn receive_object(
-    shared: &Handle,
-    path: Result<Path<(String, String)>, PathRejection>,
-    headers: &HeaderMap,
-    body: Body,
-) -> Result<PutOutcome, Fault> {
-    let (vault, name) = object_of(path)?;
-    let token = bearer(headers)?;
-    // A stranger is answered before a byte of the body is read.
-    blocking(shared, move |gateway| {
-        gateway.authorize(&vault, &token, Access::Read)
-    })
-    .await?;
-    let mut stream = body.into_data_stream();
-    let (file, declared) = match stage_object(shared, &vault, &token, headers, &mut stream).await {
-        Ok(staged) => staged,
-        Err(fault) => {
-            drain(&mut stream, DRAIN_OBJECT_BYTES).await;
-            return Err(fault);
-        }
-    };
-    let arrival = Arrival {
-        name,
-        declared,
-        digest: file.digest,
-        size: file.size,
-    };
-    let now = shared.now();
-    let worker = std::sync::Arc::clone(shared);
-    blocking(shared, move |gateway| {
-        let store = worker.store();
-        let _committing = worker.commit_guard();
-        mark_if_gone(gateway, store, &vault, &name, now)?;
-        gateway.put(&vault, &token, &arrival, now, || {
-            store.commit(file, &vault, &name)
-        })
-    })
-    .await
-}
-
-/// What a `PUT` must pass before the rules judge it — write authority, its
-/// headers, its size — and its bytes staged on disk.
-async fn stage_object(
-    shared: &Handle,
-    vault: &VaultId,
-    token: &Token,
-    headers: &HeaderMap,
-    stream: &mut BodyDataStream,
-) -> Result<(StagedFile, Digest), Fault> {
-    let (vault_id, bearer_token) = (*vault, *token);
-    blocking(shared, move |gateway| {
-        gateway.authorize(&vault_id, &bearer_token, Access::Write)
-    })
-    .await?;
-    let declared = headers
-        .get(DIGEST_HEADER)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| Digest::from_header(value).ok())
-        .ok_or(Refusal::BadRequest)?;
-    let length = content_length(headers).ok_or(Refusal::BadRequest)?;
-    if length > MAX_OBJECT_BYTES {
-        return Err(Refusal::TooLarge {
-            limit: MAX_OBJECT_BYTES,
-        }
-        .into());
-    }
-    let mut staged = shared.store().stage(length).await?;
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|_| Refusal::BadRequest)?;
-        staged.write(&chunk).await?;
-    }
-    Ok((staged.finish().await?, declared))
-}
-
-/// The most of an object's body read and discarded so its refusal is heard.
-const DRAIN_OBJECT_BYTES: u64 = 2 * MAX_OBJECT_BYTES;
-
 /// The most of a bundle's body read and discarded so its refusal is heard.
 const DRAIN_BUNDLE_BYTES: u64 = MAX_BUNDLE_BYTES;
 
@@ -645,10 +552,11 @@ fn file_stream(
 }
 
 /// `POST bundle`: authorise once, then each frame is staged, judged and
-/// admitted on its own as it arrives, and answered as its own `PUT` would be:
-/// `stored`, `already`, or in `refused` with its code. A body that is
-/// malformed or over the cap is refused whole, and the frames admitted before
-/// it stay admitted — each was verified on its own.
+/// **committed on its own as it arrives** (stage, fsync, rename, row), and
+/// answered: `stored`, `there`, `held`, `taken`, `full` or `too_large`
+/// (spec §4). A frame cut off mid-way is discarded; every finished frame
+/// stays committed. A body that is malformed or over the cap is refused
+/// whole, and the frames before it stay committed.
 async fn bundle(
     State(shared): State<Handle>,
     path: Result<Path<String>, PathRejection>,
@@ -687,39 +595,28 @@ async fn bundle(
     answer(&shared, StatusCode::OK, outcome)
 }
 
-/// Stage every frame of the body, then let the rules admit them **in one
-/// transaction**. A body that turns out malformed or over the cap stops the
-/// staging, the frames complete before it are still admitted — each was
-/// verified on its own — and the refusal is what is answered.
+/// The frame the decoder is inside: its header, and where its bytes go. No
+/// file means the frame is read past: over the object cap, or the disk
+/// refused it; its answer is already known.
+struct Current {
+    header: FrameHeader,
+    staged: Result<Staged, FrameResult>,
+}
+
+/// Cut the body into frames as it arrives, committing each frame the moment
+/// its last byte is in.
 async fn receive_bundle(
     shared: &Handle,
     vault: &VaultId,
     token: &Token,
     stream: &mut BodyDataStream,
 ) -> Result<BundleAnswer, Fault> {
-    let mut staging = Staging::default();
-    let read = stage_frames(shared, stream, &mut staging).await;
-    let answer = admit_frames(shared, vault, token, staging).await;
-    read?;
-    answer
-}
-
-/// The frames of one bundle, staged and not yet admitted.
-#[derive(Default)]
-struct Staging {
-    frames: Vec<(FrameHeader, Option<StagedFile>)>,
-    /// Frames over the object cap, read past and refused on their own.
-    oversize: Vec<NameRefusal>,
-}
-
-async fn stage_frames(
-    shared: &Shared,
-    stream: &mut BodyDataStream,
-    staging: &mut Staging,
-) -> Result<(), Fault> {
+    let mut answer = BundleAnswer::default();
     let mut decoder = Decoder::new();
-    let mut current: Option<(FrameHeader, Option<Staged>)> = None;
+    let mut current: Option<Current> = None;
     while let Some(chunk) = stream.next().await {
+        // A connection that dropped mid-frame ends here; `current`, the
+        // frame in flight, is dropped with its staged file.
         let chunk = chunk.map_err(|_| Refusal::BadRequest)?;
         let mut rest: &[u8] = &chunk;
         loop {
@@ -727,112 +624,131 @@ async fn stage_frames(
             rest = &rest[used..];
             match step {
                 None => break,
-                Some(step) => advance(shared, staging, &mut current, step).await?,
+                Some(step) => {
+                    advance(shared, vault, token, &mut answer, &mut current, step).await?;
+                }
             }
         }
     }
     while let (Some(step), _) = decoder.step(&[])? {
-        advance(shared, staging, &mut current, step).await?;
+        advance(shared, vault, token, &mut answer, &mut current, step).await?;
     }
     decoder.finish()?;
-    Ok(())
+    Ok(answer)
 }
 
 async fn advance(
-    shared: &Shared,
-    staging: &mut Staging,
-    current: &mut Option<(FrameHeader, Option<Staged>)>,
+    shared: &Handle,
+    vault: &VaultId,
+    token: &Token,
+    answer: &mut BundleAnswer,
+    current: &mut Option<Current>,
     step: Step<'_>,
 ) -> Result<(), Fault> {
     match step {
         Step::Header(header) => {
             // A frame over the object cap is read past, not staged, and
-            // refused on its own; the frames around it are unaffected.
+            // answered on its own; the frames around it are unaffected.
             let staged = if header.len > MAX_OBJECT_BYTES {
-                None
+                Err(FrameResult::TooLarge { name: header.name })
             } else {
-                Some(shared.store().stage(header.len).await?)
+                match shared.store().stage(header.len).await {
+                    Ok(staged) => Ok(staged),
+                    Err(error) => match Fault::from(error) {
+                        Fault::Refused(Refusal::DiskFull) => {
+                            Err(FrameResult::Full { name: header.name })
+                        }
+                        Fault::Refused(Refusal::TooLarge { .. }) => {
+                            Err(FrameResult::TooLarge { name: header.name })
+                        }
+                        other => return Err(other),
+                    },
+                }
             };
-            *current = Some((header, staged));
+            *current = Some(Current { header, staged });
         }
         Step::Body(bytes) => {
-            if let Some((_, Some(staged))) = current {
-                staged.write(bytes).await?;
+            if let Some(Current {
+                staged: Ok(staged), ..
+            }) = current
+                && let Err(error) = staged.write(bytes).await
+            {
+                return match Fault::from(error) {
+                    Fault::Refused(Refusal::DiskFull) => {
+                        // Read the rest of the frame past, and say so.
+                        let name = current.as_ref().map(|frame| frame.header.name);
+                        if let (Some(frame), Some(name)) = (current.as_mut(), name) {
+                            frame.staged = Err(FrameResult::Full { name });
+                        }
+                        Ok(())
+                    }
+                    other => Err(other),
+                };
             }
         }
         Step::End => {
-            let Some((header, staged)) = current.take() else {
+            let Some(frame) = current.take() else {
                 return Ok(());
             };
-            match staged {
-                None => staging
-                    .oversize
-                    .push(NameRefusal::code(header.name, Code::TooLarge)),
-                Some(staged) => staging.frames.push((header, Some(staged.finish().await?))),
-            }
+            let result = match frame.staged {
+                Err(result) => result,
+                Ok(staged) => match staged.finish().await {
+                    Ok(file) => admit_frame(shared, vault, token, frame.header, file).await?,
+                    Err(error) => match Fault::from(error) {
+                        Fault::Refused(Refusal::DiskFull) => FrameResult::Full {
+                            name: frame.header.name,
+                        },
+                        other => return Err(other),
+                    },
+                },
+            };
+            answer.results.push(result);
         }
     }
     Ok(())
 }
 
-/// Judge and admit every staged frame as one step. A frame whose name the
-/// index holds but whose file is gone is marked first, as `PUT` does.
-async fn admit_frames(
+/// Judge and commit one finished frame on its own. A name the index holds but
+/// whose file is gone is marked first, as the scrub marks it.
+async fn admit_frame(
     shared: &Handle,
     vault: &VaultId,
     token: &Token,
-    mut staging: Staging,
-) -> Result<BundleAnswer, Fault> {
-    let mut answer = BundleAnswer {
-        refused: std::mem::take(&mut staging.oversize),
-        ..BundleAnswer::default()
+    header: FrameHeader,
+    file: StagedFile,
+) -> Result<FrameResult, Fault> {
+    let arrival = Arrival {
+        name: header.name,
+        declared: header.digest,
+        digest: file.digest,
+        size: file.size,
     };
-    if staging.frames.is_empty() {
-        return Ok(answer);
-    }
     let now = shared.now();
-    let arrivals: Vec<Arrival> = staging
-        .frames
-        .iter()
-        .map(|(header, file)| {
-            let file = file.as_ref();
-            Arrival {
-                name: header.name,
-                declared: header.digest,
-                digest: file.map_or(header.digest, |file| file.digest),
-                size: file.map_or(0, |file| file.size),
-            }
-        })
-        .collect();
-    let mut files: Vec<Option<StagedFile>> = staging
-        .frames
-        .iter_mut()
-        .map(|(_, file)| file.take())
-        .collect();
     let (vault, token, worker) = (*vault, *token, std::sync::Arc::clone(shared));
-    let (named, outcomes) = blocking(shared, move |gateway| {
+    let outcome = blocking(shared, move |gateway| {
         let store = worker.store();
         let _committing = worker.commit_guard();
-        for arrival in &arrivals {
-            mark_if_gone(gateway, store, &vault, &arrival.name, now)?;
-        }
-        let outcomes = gateway.put_bundle(&vault, &token, &arrivals, now, |index| {
-            let file = files[index]
-                .take()
-                .ok_or_else(|| StoreFault::new("a bundle frame committed twice"))?;
-            store.commit(file, &vault, &arrivals[index].name)
-        })?;
-        Ok((arrivals, outcomes))
+        mark_if_gone(gateway, store, &vault, &arrival.name, now)?;
+        let mut file = Some(file);
+        let mut outcomes =
+            gateway.put_bundle(&vault, &token, std::slice::from_ref(&arrival), now, |_| {
+                let file = file
+                    .take()
+                    .ok_or_else(|| StoreFault::new("a bundle frame committed twice"))?;
+                store.commit(file, &vault, &arrival.name)
+            })?;
+        Ok(outcomes.pop())
     })
     .await?;
-    for (arrival, outcome) in named.iter().zip(outcomes) {
-        match outcome {
-            Ok(PutOutcome::Stored(_)) => answer.stored.push(arrival.name),
-            Ok(PutOutcome::AlreadyStored(_)) => answer.already.push(arrival.name),
-            Err(refusal) => answer.refused.push(NameRefusal::of(arrival.name, &refusal)),
-        }
-    }
-    Ok(answer)
+    #[cfg(feature = "test-harness")]
+    shared.store().knobs().frame_done();
+    Ok(match outcome {
+        Some(Ok(PutOutcome::Stored(_))) => FrameResult::Stored { name: header.name },
+        Some(Ok(PutOutcome::AlreadyStored(_))) => FrameResult::There { name: header.name },
+        Some(Ok(PutOutcome::Lifted(_))) => FrameResult::Held { name: header.name },
+        Some(Err(refusal)) => FrameResult::of_refusal(header.name, &refusal),
+        None => return Err(StoreFault::new("a frame with no outcome").into()),
+    })
 }
 
 /// `POST fetch`: the rules plan which objects, in which order; the answer
@@ -1058,8 +974,10 @@ async fn no_route(State(shared): State<Handle>) -> Response {
     refused(&Refusal::NotFound { name: None }, shared.now())
 }
 
+/// A method no route takes at a path that exists — an upload straight to an object, which
+/// is no longer a route — is no route: `NOT_FOUND`, as a path with none.
 async fn wrong_method(State(shared): State<Handle>) -> Response {
-    refused(&Refusal::BadRequest, shared.now())
+    refused(&Refusal::NotFound { name: None }, shared.now())
 }
 
 #[cfg(test)]

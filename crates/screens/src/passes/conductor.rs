@@ -2,12 +2,12 @@
 //! the shell is asked to do around it (#1080 "The phone core"; #1135).
 //!
 //! A pass is one `drain` through the core: it takes a snapshot if one is due,
-//! seals what waits into the spool under the member's rule, moves sealed parts
-//! to the reachable gateway until the deadline, and settles what the gateway
-//! acknowledged. Everything about WHEN is here, as a state machine with no I/O:
-//! each input (a trigger, a finished call, a timer) returns the [`Action`]s the
-//! pass service performs, and the service feeds the answers back. The Backup
-//! screen reads [`Facts`] from the same object.
+//! then runs the engine over every reachable gateway under the member's rule
+//! until the deadline, and answers what the gateways confirmed and which bundle
+//! files the OS is to upload (#1209). Everything about WHEN is here, as a state
+//! machine with no I/O: each input (a trigger, a finished call, a timer) returns
+//! the [`Action`]s the pass service performs, and the service feeds the answers
+//! back. The Backup screen reads [`Facts`] from the same object.
 //!
 //! ## Two rules it keeps that are not obvious
 //!
@@ -22,39 +22,38 @@
 //!   `BGTaskRequest` is one-shot, and a pass that only resubmitted on success
 //!   would stop for good the first time the gateway was off.
 //!
-//! ## Every held vault, and the deadline is divided
+//! ## One vault
 //!
-//! A window backs up the device, not the screen the member left open, and a
-//! window that spent its whole budget on the first vault would leave a second
-//! one never backed up on a phone that never gets a long window. A RESTING
-//! holding (no core) and a FROZEN one (moved to another phone) are skipped:
-//! waking one opens SQLite inside a background window, and the gateway refuses
-//! the other's writes. "No deadline" (`0`) is passed through, not divided.
+//! A phone holds one vault in v0 (#1209, R1). The conductor drives the first
+//! held vault that can be drained: a RESTING holding (no core) and a FROZEN one
+//! (moved to another phone) are skipped, because waking one opens SQLite inside
+//! a background window and the gateway refuses the other's writes. "No
+//! deadline" (`0`) is passed through.
 //!
 //! ## A pass may take more than one round
 //!
-//! When the spool is empty but the core names items whose bytes only the OS
-//! library holds ([`Answer::need_bytes`]), the shell streams them in
-//! ([`Action::Stream`]) and the pass runs again inside the same budget, and
-//! only while the ask changes or the last round moved parts, so a library that
-//! will not produce a photograph cannot spin. A window that keeps moving still
-//! ends at [`MAX_ROUNDS`].
+//! When the core names items whose bytes only the OS library holds
+//! ([`Answer::need_bytes`]), the shell streams them in ([`Action::Stream`]) and
+//! the pass runs again inside the same budget, and only while the ask changes or
+//! the last round moved objects, so a library that will not produce a photograph
+//! cannot spin. A window that keeps moving still ends at [`MAX_ROUNDS`].
 //!
-//! ## The iOS mover
+//! ## The OS's uploads
 //!
-//! The OS moves bytes while the app is suspended, through a background
-//! `URLSession` fed from the same spool (`phone.proto`'s `handoff`). After every
-//! vault's pass, and whenever the OS says its session drained, the order is the
-//! contract's: `reconcile` once (the gateway is PROBED, because a session whose
-//! tasks keep failing is throttled by iOS), then `handoff`, then enqueue. An
-//! unreachable gateway enqueues nothing and asks for the next window instead.
-//! The batch sizes are protocol constants: modest, because iOS throttles a
-//! session whose tasks fail ([`BATCH_PARTS`], [`BATCH_BYTES`], [`MAX_IN_FLIGHT`]).
-//!
-//! The OS can relaunch the app just to deliver finished tasks, before any vault
-//! is open; the shell holds those reports until the runtime exists and then
-//! sends them as facts (`UploadSettled`, `UploadsDrained`). That wait is the
-//! only part of the mover that has to be native; every decision is here.
+//! The OS moves bytes while the app is suspended: iOS through a background
+//! `URLSession` (Android writes no bundle files — WorkManager runs the pass
+//! itself inside its window). A pass asked with `os_uploads`
+//! answers the bundle files for the thumbnails and originals the gateways still
+//! lack ([`Answer::os_bundles`]); the conductor asks the OS how many tasks it
+//! holds ([`Action::UploadsPending`]) and enqueues the files only when it holds
+//! none, so a slow upload is not asked for twice. **What the OS reports is a wake
+//! and nothing else** ([`Conductor::uploads_reported`]): a finished, failed or
+//! lost task starts a pass, which re-reads each head and diffs, and only the
+//! engine confirms (R7). The OS can relaunch the app just to deliver finished
+//! tasks, before any vault is open; the shell holds those reports until the
+//! runtime exists and then sends them as facts (`UploadSettled`,
+//! `UploadsDrained`). That wait is the only part of the mover that has to be
+//! native; every decision is here.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -84,12 +83,9 @@ pub const BACKGROUND_GRACE_MS: u64 = 20_000;
 /// The window name the shell is told ended when the pass of a background entry
 /// ends, so it can release the grace it holds.
 pub const BACKGROUND_WINDOW: &str = "entered-background";
-/// Modest batches, because iOS throttles a session whose tasks fail and a batch
-/// is only as good as the probe before it: 16 parts, at most 512 MiB, and never
-/// more than 32 tasks in the OS's hands at once.
-pub const BATCH_PARTS: u32 = 16;
-pub const BATCH_BYTES: u64 = 512 * 1024 * 1024;
-pub const MAX_IN_FLIGHT: u32 = 32;
+/// What an unanswered count of the OS's unfinished tasks is read as: full, so nothing is enqueued
+/// on a guess.
+pub const UNKNOWN_PENDING: u32 = u32::MAX;
 /// The services a wake reaches (see [`Conductor::wake`]): the pass service takes
 /// what the screens asked, and the vault service tells Home the line moved.
 const WAKES: [&str; 2] = [super::service::NAME, crate::vault::service::NAME];
@@ -147,6 +143,8 @@ pub struct Answer {
     pub confirmed_parts: u32,
     pub waiting_bytes_parts: u32,
     pub need_bytes: Vec<wire::NeedBytes>,
+    /// The bundle files the OS is to upload (`DrainRequest.os_uploads`), at most four.
+    pub os_bundles: Vec<wire::HandoffPart>,
     /// When the gateway says the vault moved; set only with [`Stopped::Moved`].
     pub moved_at_ms: Option<i64>,
 }
@@ -196,7 +194,8 @@ impl Drained {
                     Ok(wire::DrainStop::Empty) => Stopped::Empty,
                     Ok(wire::DrainStop::Deadline) => Stopped::Deadline,
                     Ok(wire::DrainStop::Untrusted) => Stopped::Untrusted,
-                    Ok(wire::DrainStop::Refused) => Stopped::Refused,
+                    // "Update your gateway" is a refusal the member acts on, not a wait.
+                    Ok(wire::DrainStop::Refused | wire::DrainStop::TooOld) => Stopped::Refused,
                     // UNSPECIFIED IS READ AS UNREACHABLE, DELIBERATELY: the
                     // safe reading of "I do not know why it stopped" leaves
                     // the claim behind rather than ahead.
@@ -218,6 +217,7 @@ impl Drained {
                         .filter(|need| need.content_hash.len() == 32)
                         .cloned()
                         .collect(),
+                    os_bundles: response.os_bundles.clone(),
                     moved_at_ms: None,
                 })
             }
@@ -228,6 +228,7 @@ impl Drained {
                 confirmed_parts: 0,
                 waiting_bytes_parts: 0,
                 need_bytes: Vec::new(),
+                os_bundles: Vec::new(),
                 moved_at_ms: Some(*at_ms),
             }),
             Self::Unavailable => Pass::Unavailable,
@@ -336,27 +337,12 @@ pub enum Action {
         vault: String,
         needs: Vec<wire::NeedBytes>,
     },
-    /// Probe `vault`'s gateway, then [`Conductor::reconciled`].
-    Reconcile {
-        vault: String,
-    },
     /// Ask the OS how many tasks it holds, then [`Conductor::pending`].
     UploadsPending,
-    /// Ask `vault`'s core for the next batch, then [`Conductor::handed_off`].
-    Handoff {
-        vault: String,
-        max_bytes: u64,
-        max_parts: u32,
-    },
     /// Give these whole requests to the OS.
     UploadsEnqueue(Vec<wire::HandoffPart>),
     /// Let go of every task the OS holds.
     UploadsCancelAll,
-    /// Record what the OS reported for one finished task in `vault`'s ledger.
-    Settle {
-        vault: String,
-        settled: wire::Settled,
-    },
     /// Keep the standing windows scheduled under the rule now held.
     Schedule,
     /// One more window soon.
@@ -416,13 +402,6 @@ struct Run {
     outcomes: Vec<Outcome>,
 }
 
-#[derive(Debug)]
-enum Handoff {
-    Reconciling(String),
-    Counting(String),
-    Fetching(String),
-}
-
 struct Inner {
     clock: Arc<dyn Fn() -> u64 + Send + Sync>,
     debounce: Duration,
@@ -430,8 +409,11 @@ struct Inner {
     held: Option<Vec<Held>>,
     rules: Rules,
     link: Link,
-    /// iOS only: the OS carries sealed parts while the app is suspended.
+    /// The OS carries bundle files while the app is suspended.
     uploads: bool,
+    /// The bundle files the last pass answered, parked while the OS is asked how many tasks it
+    /// holds: enqueued only when it holds none.
+    parked: Option<Vec<wire::HandoffPart>>,
     next_run: u64,
     runs: BTreeMap<u64, Run>,
     busy: BTreeSet<String>,
@@ -445,8 +427,6 @@ struct Inner {
     walking: bool,
     streaming: Option<u64>,
     stream_queue: VecDeque<u64>,
-    handoff: Option<Handoff>,
-    handoff_queue: VecDeque<String>,
     inbox: VecDeque<wire::pass_asked::Ask>,
     /// The pass in flight on each vault and what it was asked.
     in_flight: BTreeMap<String, wire::DrainRequest>,
@@ -489,6 +469,7 @@ impl Conductor {
                 rules: Rules::default(),
                 link: Link::UNKNOWN,
                 uploads: false,
+                parked: None,
                 next_run: 1,
                 runs: BTreeMap::new(),
                 busy: BTreeSet::new(),
@@ -502,8 +483,6 @@ impl Conductor {
                 walking: false,
                 streaming: None,
                 stream_queue: VecDeque::new(),
-                handoff: None,
-                handoff_queue: VecDeque::new(),
                 inbox: VecDeque::new(),
                 in_flight: BTreeMap::new(),
                 issued: VecDeque::new(),
@@ -575,7 +554,7 @@ impl Conductor {
         self.lock().rules = rules;
     }
 
-    /// Whether the OS carries sealed parts while the app is suspended (iOS).
+    /// Whether the OS carries bundle files while the app is suspended.
     pub fn set_uploads(&self, on: bool) {
         self.lock().uploads = on;
     }
@@ -891,65 +870,48 @@ impl Conductor {
         out
     }
 
-    // ---- the iOS mover ----------------------------------------------------------
+    // ---- the OS's uploads -------------------------------------------------------
 
-    /// One upload the OS ran finished. A vault this phone no longer holds
-    /// settles nowhere: nothing is waiting on it, and `reconcile` squares any
-    /// ledger from the gateway.
+    /// One upload the OS ran finished, failed or was lost. **It only wakes a pass** (R7): nothing
+    /// here records anything as stored. The pass re-reads each gateway's head and diffs, and only
+    /// the engine confirms.
     #[must_use]
-    pub fn upload_settled(&self, settled: &wire::UploadSettled) -> Vec<Action> {
-        self.upload_settled_in(&settled.vault_id, settled)
+    pub fn upload_settled(&self, _settled: &wire::UploadSettled) -> Vec<Action> {
+        self.uploads_reported()
     }
 
-    /// Whether the shelf has opened the vault it holds as `shelf_id` and can drain it: where a
-    /// settle can be routed now.
-    #[must_use]
-    pub fn drains(&self, shelf_id: &str) -> bool {
-        self.lock().drainable().iter().any(|held| held == shelf_id)
-    }
-
-    /// [`Self::upload_settled`] for a report that names its vault by the vault's identity (the 64
-    /// hex a handed-off part carries, which the OS hands back), with `shelf_id` the id the shelf
-    /// holds that vault under: the two are not one string (#1202), and the settle is routed by the
-    /// shelf's.
-    #[must_use]
-    pub fn upload_settled_in(&self, shelf_id: &str, settled: &wire::UploadSettled) -> Vec<Action> {
-        let inner = self.lock();
-        if !inner.drainable().iter().any(|held| held == shelf_id) {
-            return Vec::new();
-        }
-        vec![Action::Settle {
-            vault: shelf_id.to_owned(),
-            settled: wire::Settled {
-                name: settled.name.clone(),
-                http_status: settled.http_status,
-                error: settled.error.clone(),
-                gateway_id: settled.gateway_id.clone(),
-                vault_id: settled.vault_id.clone(),
-            },
-        }]
-    }
-
-    /// The OS delivered every event for its session: hand the next batch off
-    /// before iOS suspends the app again.
+    /// The OS delivered every event for its session: a pass writes the next bundle files before
+    /// the OS suspends the app again.
     #[must_use]
     pub fn uploads_drained(&self) -> Vec<Action> {
-        let mut inner = self.lock();
-        let mut out = Vec::new();
-        for vault in inner.drainable() {
-            inner.queue_handoff(vault);
-        }
-        inner.pump_handoff(&mut out);
-        out
+        self.uploads_reported()
     }
 
-    /// The member changed the rule: every task the OS holds keeps the cellular
-    /// flag of the rule it was handed off under, so they are all let go; the
-    /// core requeues their parts and the next pass hands them off under the new
-    /// rule. The windows are asked for again under the new constraints.
+    /// Something the OS did with a background upload: start one pass for all of it. A burst of
+    /// reports (one per task, then the session's end) is one pass, inside the platform's grace.
+    #[must_use]
+    pub fn uploads_reported(&self) -> Vec<Action> {
+        {
+            let inner = self.lock();
+            if !inner.uploads
+                || inner
+                    .runs
+                    .values()
+                    .any(|run| run.reason == Reason::UploadsReported)
+            {
+                return Vec::new();
+            }
+        }
+        self.trigger(Reason::UploadsReported, BACKGROUND_GRACE_MS)
+    }
+
+    /// The member changed the rule: the OS's tasks were written under the rule of the pass that
+    /// made them, so they are all let go and the next pass writes its files under the new rule.
+    /// The windows are asked for again under the new constraints.
     #[must_use]
     pub fn rule_changed(&self) -> Vec<Action> {
-        let inner = self.lock();
+        let mut inner = self.lock();
+        inner.parked = None;
         let mut out = vec![Action::Schedule];
         if inner.uploads {
             out.push(Action::UploadsCancelAll);
@@ -958,66 +920,19 @@ impl Conductor {
         out
     }
 
-    /// `vault`'s probe answered: `None` is no core or an arm not yet available
-    /// (nothing to do, never a reason to enqueue what nobody vouched for).
-    #[must_use]
-    pub fn reconciled(&self, vault: &str, reachable: Option<bool>) -> Vec<Action> {
-        let mut inner = self.lock();
-        let mut out = Vec::new();
-        if !matches!(&inner.handoff, Some(Handoff::Reconciling(active)) if active == vault) {
-            return out;
-        }
-        match reachable {
-            None => inner.handoff = None,
-            Some(false) => {
-                inner.handoff = None;
-                out.push(Action::Schedule);
-            }
-            Some(true) => {
-                inner.handoff = Some(Handoff::Counting(vault.to_owned()));
-                out.push(Action::UploadsPending);
-            }
-        }
-        inner.pump_handoff(&mut out);
-        out
-    }
-
-    /// The OS holds `count` unfinished tasks.
+    /// The OS holds `count` unfinished tasks. The files the last pass named are enqueued only when
+    /// it holds none: a slow upload is not asked for twice.
     #[must_use]
     pub fn pending(&self, count: u32) -> Vec<Action> {
         let mut inner = self.lock();
-        let mut out = Vec::new();
-        let Some(Handoff::Counting(vault)) = inner.handoff.take() else {
-            return out;
+        let Some(parts) = inner.parked.take() else {
+            return Vec::new();
         };
-        let room = MAX_IN_FLIGHT.saturating_sub(count);
-        if room == 0 {
-            inner.pump_handoff(&mut out);
+        if count == 0 && !parts.is_empty() {
+            vec![Action::UploadsEnqueue(parts)]
         } else {
-            out.push(Action::Handoff {
-                vault: vault.clone(),
-                max_bytes: BATCH_BYTES,
-                max_parts: room.min(BATCH_PARTS),
-            });
-            inner.handoff = Some(Handoff::Fetching(vault));
+            Vec::new()
         }
-        out
-    }
-
-    /// The core answered the next batch (empty is nothing to hand off).
-    #[must_use]
-    pub fn handed_off(&self, vault: &str, parts: Vec<wire::HandoffPart>) -> Vec<Action> {
-        let mut inner = self.lock();
-        let mut out = Vec::new();
-        if !matches!(&inner.handoff, Some(Handoff::Fetching(active)) if active == vault) {
-            return out;
-        }
-        inner.handoff = None;
-        if !parts.is_empty() {
-            out.push(Action::UploadsEnqueue(parts));
-        }
-        inner.pump_handoff(&mut out);
-        out
     }
 }
 
@@ -1043,11 +958,14 @@ impl Inner {
         })
     }
 
+    /// The vault a pass drives: the first held one that can be drained. One vault per phone in v0
+    /// (#1209, R1), so this is at most one.
     fn drainable(&self) -> Vec<String> {
         self.held()
             .into_iter()
             .filter(|held| held.drainable)
             .map(|held| held.vault_id)
+            .take(1)
             .collect()
     }
 
@@ -1055,6 +973,7 @@ impl Inner {
         Conditions {
             rules: self.rules,
             link: self.link,
+            uploads: self.uploads,
         }
     }
 
@@ -1280,12 +1199,15 @@ impl Inner {
         }
         self.last.insert(cur.vault.clone(), pass);
         out.push(Action::Changed);
-        // EVERY iOS PASS ENDS WITH RECONCILE, THEN HANDOFF, THEN ENQUEUE: what
-        // the pass sealed but did not move goes to the OS to carry while the app
-        // is suspended. Android moves its parts in the pass.
-        if self.uploads && !self.moved.contains(&cur.vault) {
-            self.queue_handoff(cur.vault);
-            self.pump_handoff(out);
+        // A PASS THAT NAMED BUNDLE FILES for the OS to carry while the app is suspended: ask how
+        // many tasks the OS holds, and enqueue them only if it holds none.
+        if self.uploads
+            && !self.moved.contains(&cur.vault)
+            && let Some(Pass::Ran(answer)) = self.last.get(&cur.vault)
+            && !answer.os_bundles.is_empty()
+        {
+            self.parked = Some(answer.os_bundles.clone());
+            out.push(Action::UploadsPending);
         }
     }
 
@@ -1345,29 +1267,6 @@ impl Inner {
             vault: vault.to_owned(),
             request,
         });
-    }
-
-    fn queue_handoff(&mut self, vault: String) {
-        let active = matches!(
-            &self.handoff,
-            Some(Handoff::Reconciling(v) | Handoff::Counting(v) | Handoff::Fetching(v)) if *v == vault
-        );
-        if !active && !self.handoff_queue.contains(&vault) {
-            self.handoff_queue.push_back(vault);
-        }
-    }
-
-    /// One vault's hand-off at a time: the OS's count of unfinished tasks is not
-    /// attributed to a vault, so two flows at once would race it.
-    fn pump_handoff(&mut self, out: &mut Vec<Action>) {
-        if self.handoff.is_some() {
-            return;
-        }
-        let Some(vault) = self.handoff_queue.pop_front() else {
-            return;
-        };
-        self.handoff = Some(Handoff::Reconciling(vault.clone()));
-        out.push(Action::Reconcile { vault });
     }
 }
 

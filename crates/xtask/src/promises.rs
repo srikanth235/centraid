@@ -3072,17 +3072,17 @@ fn link_missing(root: &Path, app: &str) -> Vec<String> {
 /// **BACKUP** (#1188, Part B). Backup is the vault's, so no app has a row; each promise names the
 /// tests that prove it, and the rule fails when a named test is gone, renamed or `#[ignore]`d.
 /// `(promise, [(file, test)])`.
-pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 9] = [
+pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 13] = [
     (
         "every paired backup device receives every pass",
         &[
             (
-                "crates/core/tests/backup_replicas.rs",
-                "a_pass_feeds_every_paired_gateway",
+                "crates/core/tests/phone_backup.rs",
+                "a_pass_backs_up_a_vault_to_two_gateways_and_they_hold_only_ciphertext",
             ),
             (
-                "crates/core/tests/backup_holes.rs",
-                "a_device_away_past_the_wait_still_restores_the_whole_vault",
+                "crates/core/tests/restore_edges.rs",
+                "a_records_only_vault_and_a_cut_short_pass_restore_what_was_acknowledged",
             ),
         ],
     ),
@@ -3111,8 +3111,8 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 9] = [
                 "a_device_holding_an_older_backup_is_a_plain_warning",
             ),
             (
-                "crates/core/tests/backup_verify.rs",
-                "a_gateway_that_lies_about_exists_is_found_and_then_refilled",
+                "crates/core/tests/backup_check.rs",
+                "a_chunk_the_gateway_lost_is_a_missing_file_and_is_sent_again",
             ),
             (
                 "crates/screens/src/backup/tests.rs",
@@ -3143,29 +3143,17 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 9] = [
                 "crates/vault/tests/backup_snapshot.rs",
                 "the_quick_check_runs_before_the_head_is_signed",
             ),
-            (
-                "crates/core/tests/backup_scratch.rs",
-                "a_pass_writes_no_plaintext_copy_of_the_vault",
-            ),
-            (
-                "crates/core/tests/backup_scratch.rs",
-                "a_damaged_page_stops_a_backup_pass",
-            ),
-            (
-                "crates/core/tests/backup_scratch.rs",
-                "a_copy_a_crash_left_is_gone_at_the_next_open",
-            ),
         ],
     ),
     (
         "a phone with no room says so, and an unchanged vault is not walked again",
         &[
             (
-                "crates/core/tests/backup_scratch.rs",
-                "a_phone_with_no_room_says_so_and_catches_up_when_it_has_some",
+                "crates/core/tests/phone_backup.rs",
+                "a_phone_with_no_room_says_so",
             ),
             (
-                "crates/core/tests/backup_scratch.rs",
+                "crates/core/tests/phone_backup.rs",
                 "a_second_pass_with_no_write_walks_nothing",
             ),
         ],
@@ -3224,11 +3212,19 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 9] = [
         "a refusal names its reason, each with its own remedy, and stops only the gateway that gave it",
         &[
             (
-                "crates/core/tests/backup_replicas.rs",
+                "crates/core/tests/phone_backup.rs",
+                "a_gateway_older_than_this_build_is_told_to_be_updated",
+            ),
+            (
+                "crates/core/tests/phone_backup.rs",
+                "a_machine_that_is_not_the_pinned_gateway_is_untrusted_and_a_damaged_copy_is_damaged",
+            ),
+            (
+                "crates/core/tests/backup_status.rs",
                 "a_refusal_is_read_as_the_reason_the_gateway_gave",
             ),
             (
-                "crates/core/tests/backup_replicas.rs",
+                "crates/core/tests/backup_status.rs",
                 "a_full_gateway_is_named_while_the_other_is_fed",
             ),
             (
@@ -3271,6 +3267,82 @@ pub const BACKUP_PROMISES: [(&str, &[(&str, &str)]); 9] = [
             (
                 "crates/screens/tests/words_enter.rs",
                 "a_restore_that_cannot_prove_the_newest_asks_before_it_claims",
+            ),
+        ],
+    ),
+    (
+        "what is backed up is drawn per class, from the core's own counts and in the fixture's words: records, photo previews, photos and files, each with what waits and why; Home says the same in one line; there is no list per app",
+        &[
+            (
+                "crates/screens/tests/backup_page.rs",
+                "in_this_backup_draws_three_classes_from_each_reading",
+            ),
+            (
+                "crates/screens/tests/backup_page.rs",
+                "the_card_and_home_say_backed_up_and_what_waits_in_one_voice",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "in_this_backup_has_one_row_per_class_in_the_order_records_previews_originals",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "a_class_row_says_what_waits_and_never_more_than_was_acknowledged",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "with_two_devices_a_class_says_which_hold_it_and_which_it_waits_for",
+            ),
+        ],
+    ),
+    (
+        "a photo no backup device holds whole is warned of before it is deleted for good, on one photo, on a selection and on Empty trash, and the member can still delete",
+        &[
+            (
+                "crates/core/tests/phone_backup.rs",
+                "held_whole_names_the_gateways_that_hold_an_original_and_says_none_before_the_pass",
+            ),
+            (
+                "crates/screens/tests/photos_shelf.rs",
+                "the_trash_says_the_kits_words_and_empties_through_the_shared_verb",
+            ),
+            (
+                "crates/screens/src/photos/unbacked.rs",
+                "nothing_is_said_of_a_photograph_that_is_backed_up",
+            ),
+            (
+                "crates/screens/src/photos/unbacked.rs",
+                "one_photo_and_several_are_worded_for_their_count",
+            ),
+        ],
+    ),
+    (
+        "a restore tells the order the vault comes back in, opens the vault when its records are back, then says how many previews and originals are back, in counts and never a time",
+        &[
+            (
+                "crates/screens/tests/words_enter.rs",
+                "a_valid_phrase_opens_the_one_control_and_a_restore_answer_drops_every_word",
+            ),
+            (
+                "crates/screens/src/backup/tests.rs",
+                "a_restore_says_how_far_previews_then_originals_are_back_in_counts_only",
+            ),
+            (
+                "crates/core/tests/restore_edges.rs",
+                "after_a_restore_only_what_is_new_is_sent",
+            ),
+        ],
+    ),
+    (
+        "a phone holds one vault: there is no vault shelf, switch or picker, and Settings has no Vault section",
+        &[
+            (
+                "crates/screens/tests/shell_settings.rs",
+                "settings_has_no_vault_section_and_only_the_download_row_is_pressed",
+            ),
+            (
+                "crates/screens/tests/shell_home.rs",
+                "the_backup_lines_spoken_door_is_finished_by_rust",
             ),
         ],
     ),

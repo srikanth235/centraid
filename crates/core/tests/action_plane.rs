@@ -465,7 +465,7 @@ fn a_frozen_vault_refuses_every_write_and_names_the_check() {
     // ANOTHER PHONE TOOK THE VAULT: the ledger a pass heard it in remembers it.
     let ledger = DeviceState::open_beside(&sample.dir().join("vault.db")).expect("state");
     ledger
-        .put_gateway(&Gateway::paired(
+        .add_gateway(&Gateway::paired(
             "gateway-1".to_owned(),
             vec!["127.0.0.1:1".to_owned()],
             vec![1],
@@ -474,7 +474,14 @@ fn a_frozen_vault_refuses_every_write_and_names_the_check() {
             1,
         ))
         .expect("a gateway");
-    ledger.set_moved("gateway-1", 2, 1).expect("moved");
+    ledger
+        .set_reach(
+            "gateway-1",
+            centraid_vault::backup::state::Reach::Moved,
+            Some(2),
+            1,
+        )
+        .expect("moved");
 
     let refused = act_with(
         &sample,

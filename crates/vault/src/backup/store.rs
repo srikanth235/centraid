@@ -1,5 +1,5 @@
 //! The store the plane writes to and restores from: one destination, through
-//! one synchronous trait (#1080, gateway protocol 1).
+//! one synchronous trait (#1080, gateway protocol 1, revised in #1209).
 //!
 //! [`Store`] is the protocol's object and head routes as Rust calls, so the
 //! snapshot, retention, restore and drill code runs unchanged against the real
@@ -15,9 +15,7 @@
 //! cannot drift.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::File;
-use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::io::Write;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use centraid_gateway::rules::bundle::HEADER_LEN;
@@ -47,7 +45,7 @@ pub const NAMES_PER_CALL: usize = MAX_NAMES;
 /// The most entries one `list` page carries: the protocol's cap.
 pub const LIST_PAGE: usize = LIST_LIMIT;
 
-/// The most bytes one `put_many` sends or one `get_many` answers, every part's
+/// The most bytes one `bundle` sends or one `get_many` answers, every part's
 /// frame header included: the protocol's bundle cap.
 pub const BUNDLE_BYTES: u64 = MAX_BUNDLE_BYTES;
 
@@ -64,29 +62,60 @@ pub use centraid_gateway::rules::wire::HeldKind;
 /// Why a name a `put` wanted is not free.
 pub use centraid_gateway::rules::wire::NameState;
 
-/// One part a `put_many` sends: a spooled file, and what it must be.
+/// One object a bundle sends: its name, its digest and its bytes. Objects are rebuilt from their
+/// source, so nothing here is a file on disk.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Outgoing {
     pub name: Name,
-    /// BLAKE3 of the file's bytes, as queued.
+    /// BLAKE3 of `bytes`.
     pub digest: Digest,
-    /// The file's length, as queued.
-    pub len: u64,
-    /// The spool file, read as the request is sent and never held whole.
-    pub path: PathBuf,
+    pub bytes: Vec<u8>,
 }
 
 impl Outgoing {
-    /// What this part costs a bundle: its bytes and its frame header.
+    /// An outgoing object for sealed bytes, its digest computed.
+    #[must_use]
+    pub fn of(name: Name, bytes: Vec<u8>) -> Self {
+        Self {
+            name,
+            digest: Digest::of(&bytes),
+            bytes,
+        }
+    }
+
+    /// What this object costs a bundle: its bytes and its frame header.
     #[must_use]
     pub const fn bundle_bytes(&self) -> u64 {
-        self.len.saturating_add(FRAME_HEADER_BYTES)
+        (self.bytes.len() as u64).saturating_add(FRAME_HEADER_BYTES)
     }
 }
 
-/// The destination's answer to one part of a `put_many`: exactly what a
-/// `put` of that part alone would have answered.
-pub type PartAnswer = Result<Put, Refusal>;
+/// The destination's answer to one frame of a bundle (spec §4).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FrameAnswer {
+    /// New bytes, committed before the answer.
+    Stored,
+    /// The same digest, live: nothing moved.
+    There,
+    /// The same digest under a hold: the hold is lifted.
+    Held,
+    /// The name is not free under another digest. **Not an acknowledgement.**
+    Taken { digest: Digest, state: NameState },
+    /// The destination's disk is full.
+    Full,
+    /// The frame is over the largest object.
+    TooLarge,
+    /// Any other refusal of this one frame.
+    Refused(Refusal),
+}
+
+impl FrameAnswer {
+    /// Whether the destination now holds these bytes under this name.
+    #[must_use]
+    pub const fn acknowledged(&self) -> bool {
+        matches!(self, Self::Stored | Self::There | Self::Held)
+    }
+}
 
 /// One destination's object and head routes.
 pub trait Store {
@@ -100,44 +129,17 @@ pub trait Store {
     /// [`StoreError`] when the destination cannot be asked.
     fn exists(&self, names: &[Name]) -> Result<Vec<Name>, StoreError>;
 
-    /// Store one sealed part of `len` bytes whose BLAKE3 is `digest`.
-    ///
-    /// # Errors
-    /// [`Refusal::DigestMismatch`] when the bytes are not `digest`,
-    /// [`Refusal::NameTaken`] when another digest holds the name, and the
-    /// destination's other refusals.
-    fn put(
-        &self,
-        name: &Name,
-        digest: &Digest,
-        len: u64,
-        body: &mut dyn Read,
-    ) -> Result<Put, StoreError>;
-
-    /// Store several parts in one request: the protocol's `bundle`. Each is
-    /// answered as its own `put` would be, in the order sent. The parts'
+    /// Store several objects in one request: the protocol's `bundle`. Each is
+    /// answered on its own, in the order sent, and a connection that drops
+    /// leaves every finished frame committed. The objects'
     /// [`Outgoing::bundle_bytes`] sum to at most [`BUNDLE_BYTES`].
-    ///
-    /// The default sends each part as its own `put`.
     ///
     /// # Errors
     /// [`StoreError`] when the request as a whole was not answered: the
-    /// destination unreachable, the writer [`StoreError::Moved`], a spool
-    /// file that cannot be read, or the bundle refused whole
-    /// ([`Refusal::TooLarge`]). A refusal of one part is in its answer.
-    fn put_many(&self, parts: &[Outgoing]) -> Result<Vec<(Name, PartAnswer)>, StoreError> {
-        let mut answers = Vec::with_capacity(parts.len());
-        for part in parts {
-            let mut body = File::open(&part.path)?;
-            let answer = match self.put(&part.name, &part.digest, part.len, &mut body) {
-                Ok(put) => Ok(put),
-                Err(StoreError::Refused(refusal)) => Err(refusal),
-                Err(error) => return Err(error),
-            };
-            answers.push((part.name, answer));
-        }
-        Ok(answers)
-    }
+    /// destination unreachable, the writer [`StoreError::Moved`], or the
+    /// bundle refused whole ([`Refusal::TooLarge`]). A refusal of one frame
+    /// is in its answer.
+    fn bundle(&self, parts: &[Outgoing]) -> Result<Vec<(Name, FrameAnswer)>, StoreError>;
 
     /// Write one object's sealed bytes into `sink`, returning their length.
     /// A tombstoned object is served until its purge.
@@ -270,7 +272,7 @@ pub trait Store {
     /// # Errors
     /// [`StoreError`] when the destination cannot be asked; a per-name refusal
     /// is in [`Deleted::refused`].
-    fn delete(&self, names: &[Name]) -> Result<Deleted, StoreError>;
+    fn delete(&self, names: &[Name], head_root: Option<&Name>) -> Result<Deleted, StoreError>;
 
     /// Up to `limit` deletes still held, named after `after`, in name order:
     /// what the member may still undo (E6).
@@ -285,15 +287,6 @@ pub trait Store {
     /// # Errors
     /// [`StoreError`] when the destination cannot be asked.
     fn undo(&self, names: Option<&[Name]>) -> Result<u64, StoreError>;
-}
-
-/// What a `put` stored.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Put {
-    /// The bytes are new to the destination.
-    Stored,
-    /// The destination already held this name with this digest.
-    AlreadyStored,
 }
 
 /// A vault's head at one destination.
@@ -680,10 +673,14 @@ pub fn list_all(store: &dyn Store) -> Result<Vec<ObjectEntry>, StoreError> {
 ///
 /// # Errors
 /// The first [`StoreError`] a batch met.
-pub fn delete_all(store: &dyn Store, names: &[Name]) -> Result<Deleted, StoreError> {
+pub fn delete_all(
+    store: &dyn Store,
+    names: &[Name],
+    head_root: Option<&Name>,
+) -> Result<Deleted, StoreError> {
     let mut out = Deleted::default();
     for batch in names.chunks(NAMES_PER_CALL) {
-        let deleted = store.delete(batch)?;
+        let deleted = store.delete(batch, head_root)?;
         out.deleted.extend(deleted.deleted);
         out.freed.extend(deleted.freed);
         out.refused.extend(deleted.refused);
@@ -693,19 +690,42 @@ pub fn delete_all(store: &dyn Store, names: &[Name]) -> Result<Deleted, StoreErr
 
 // ─── MemoryStore (backed directly by centraid_gateway::rules::Gateway) ──────
 
-struct Shared {
-    gateway: Gateway<MemoryState>,
-    bytes: BTreeMap<WireName, Vec<u8>>,
+/// What this phone knows of one vault it writes to a gateway: the vault key it signs with, the
+/// writer epoch it holds and the signed counter it last used.
+struct VaultCtx {
     identity: SigningKey,
-    vault: VaultId,
-    head_name: Option<WireName>,
     writer_epoch: u64,
     generation: u64,
+}
+
+/// Calls and frames, counted: tests assert on counts, never on durations.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Counts {
+    /// Objects stored new through a bundle.
+    pub stored: u64,
+    /// Bundle requests answered.
+    pub bundles: u64,
+    /// Frames sent in them.
+    pub frames: u64,
+    /// `exists` calls.
+    pub exists: u64,
+    /// `fetch` calls.
+    pub fetches: u64,
+    /// Signed deletes accepted.
+    pub deletes: u64,
+    /// Head sets accepted.
+    pub heads: u64,
+}
+
+struct Shared {
+    gateway: Gateway<MemoryState>,
+    gateway_id: GatewayId,
+    nonce_key: [u8; 32],
+    bytes: BTreeMap<(VaultId, WireName), Vec<u8>>,
+    vaults: BTreeMap<VaultId, VaultCtx>,
     draws: u64,
     clock_ms: Option<u64>,
-    puts: u64,
-    bundles: u64,
-    fetches: u64,
+    counts: Counts,
 }
 
 impl Shared {
@@ -736,8 +756,46 @@ impl Shared {
             .nonce
     }
 
-    fn next_generation(&self) -> u64 {
-        self.generation.saturating_add(1)
+    /// Pair a fresh vault by secret and return its token.
+    fn pair_vault(&mut self, identity: &SigningKey, label: &str) -> (VaultId, Token) {
+        let vault = VaultId::from_bytes(identity.verifying_key().to_bytes());
+        let now_ms = self.now_ms();
+        let secret = Secret::from_bytes({
+            let mut bytes = [0_u8; 16];
+            bytes.copy_from_slice(&self.draw_bytes()[..16]);
+            bytes
+        });
+        self.gateway
+            .mint_secret(&secret, now_ms)
+            .expect("mints secret");
+        let nonce = self.draw_nonce(now_ms);
+        let gid = self.gateway_id;
+        let signature = sign_pair(identity, &gid, &secret, &nonce);
+        let token = Token::from_bytes(self.draw_bytes());
+        self.gateway
+            .pair(
+                &PairRequest {
+                    vault_id: vault,
+                    label: label.to_owned(),
+                    kind: PairKind::Secret,
+                    nonce,
+                    secret: Some(SecretBody { secret, signature }),
+                    claim: None,
+                    read: None,
+                },
+                &token,
+                now_ms,
+            )
+            .expect("pairs initial writer");
+        self.vaults.insert(
+            vault,
+            VaultCtx {
+                identity: identity.clone(),
+                writer_epoch: 1,
+                generation: 0,
+            },
+        );
+        (vault, token)
     }
 }
 
@@ -753,24 +811,26 @@ fn fault_error(fault: Fault, missing_name: Option<Name>) -> StoreError {
     }
 }
 
-/// A destination in memory backed directly by [`Gateway<MemoryState>`]: one
-/// vault, its objects, its head and its snapshots, shared by every handle
-/// cloned from it.
-///
-/// Each handle writes (and reads) under the token minted at its epoch.
-/// [`MemoryStore::claim`] executes a real signed takeover at the next epoch,
-/// revoking every older token so superseded handles receive
-/// [`StoreError::Moved`] — matching protocol v3 (E5).
+/// A gateway's data directory at one moment, to roll it back to.
+#[derive(Clone)]
+pub struct Checkpoint {
+    state: MemoryState,
+    bytes: BTreeMap<(VaultId, WireName), Vec<u8>>,
+}
+
+/// An in-memory destination: the real gateway rules over memory, under one
+/// vault's key and token. Cloning shares the gateway.
 #[derive(Clone)]
 pub struct MemoryStore {
     shared: Arc<Mutex<Shared>>,
     gateway_id: String,
+    vault: VaultId,
     token: Token,
     epoch: u64,
 }
 
 impl MemoryStore {
-    /// An empty destination, its first writer paired at epoch 1.
+    /// A gateway named `gateway_id`, with one vault paired at writer epoch 1.
     #[must_use]
     pub fn new(gateway_id: &str) -> Self {
         let mut gid_bytes = [0_u8; 16];
@@ -779,49 +839,37 @@ impl MemoryStore {
         let nonce_key = blake3::derive_key("centraid memory store nonce", gateway_id.as_bytes());
         let id_bytes = blake3::derive_key("centraid memory store identity", gateway_id.as_bytes());
         let identity = SigningKey::from_bytes(&id_bytes);
-        let vault = VaultId::from_bytes(identity.verifying_key().to_bytes());
-        let mut gateway = Gateway::new(MemoryState::default(), gid, nonce_key);
-
-        let secret = Secret::from_bytes([0x11; 16]);
-        gateway.mint_secret(&secret, 0).expect("mints secret");
-        let nonce = gateway.issue_nonce([0x22; 16], 0).expect("nonce").nonce;
-        let signature = sign_pair(&identity, &gid, &secret, &nonce);
-        let token = Token::from_bytes(blake3::derive_key(
-            "centraid memory store token",
-            &1_u64.to_be_bytes(),
-        ));
-        gateway
-            .pair(
-                &PairRequest {
-                    vault_id: vault,
-                    label: "memory".to_owned(),
-                    kind: PairKind::Secret,
-                    nonce,
-                    secret: Some(SecretBody { secret, signature }),
-                    claim: None,
-                    read: None,
-                },
-                &token,
-                0,
-            )
-            .expect("pairs initial writer");
-
+        let mut shared = Shared {
+            gateway: Gateway::new(MemoryState::default(), gid, nonce_key),
+            gateway_id: gid,
+            nonce_key,
+            bytes: BTreeMap::new(),
+            vaults: BTreeMap::new(),
+            draws: 1,
+            clock_ms: None,
+            counts: Counts::default(),
+        };
+        let (vault, token) = shared.pair_vault(&identity, "memory");
         Self {
-            shared: Arc::new(Mutex::new(Shared {
-                gateway,
-                bytes: BTreeMap::new(),
-                identity,
-                vault,
-                head_name: None,
-                writer_epoch: 1,
-                generation: 0,
-                draws: 1,
-                clock_ms: None,
-                puts: 0,
-                bundles: 0,
-                fetches: 0,
-            })),
+            shared: Arc::new(Mutex::new(shared)),
             gateway_id: gateway_id.to_owned(),
+            vault,
+            token,
+            epoch: 1,
+        }
+    }
+
+    /// Another vault on the same gateway, paired under a key seeded from `seed`: nothing of the
+    /// one is visible to the other (R1).
+    #[must_use]
+    pub fn with_vault(&self, seed: &str) -> Self {
+        let id_bytes = blake3::derive_key("centraid memory store vault", seed.as_bytes());
+        let identity = SigningKey::from_bytes(&id_bytes);
+        let (vault, token) = self.lock().pair_vault(&identity, seed);
+        Self {
+            shared: Arc::clone(&self.shared),
+            gateway_id: self.gateway_id.clone(),
+            vault,
             token,
             epoch: 1,
         }
@@ -833,34 +881,31 @@ impl MemoryStore {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    /// Take the vault over at the next writer epoch through the gateway's real
-    /// signed claim rule, revoking all older tokens.
+    /// A second phone takes the vault over: the next writer epoch, with a token of its own. The
+    /// phone it replaces is `MOVED` from then on.
+    ///
+    /// # Panics
+    /// If the gateway refuses its own claim, which is a bug in this double.
     #[must_use]
     pub fn claim(&self) -> Self {
         let mut shared = self.lock();
         let now_ms = shared.now_ms();
-        let head_seen = match shared.gateway.head(&shared.vault, &self.token) {
+        let head_seen = match shared.gateway.head(&self.vault, &self.token) {
             Ok(head) => Some(head.name),
-            Err(Fault::Refused(WireRefusal::NoHead { .. })) => None,
-            Err(_) => shared.head_name,
+            Err(_) => None,
         };
-        let next_epoch = shared.writer_epoch + 1;
+        let ctx = shared.vaults.get(&self.vault).expect("a paired vault");
+        let next_epoch = ctx.writer_epoch + 1;
+        let identity = ctx.identity.clone();
         let nonce = shared.draw_nonce(now_ms);
-        let gid = shared.gateway.id();
-        let signature = sign_claim(
-            &shared.identity,
-            &gid,
-            next_epoch,
-            head_seen.as_ref(),
-            &nonce,
-        );
+        let gid = shared.gateway_id;
+        let signature = sign_claim(&identity, &gid, next_epoch, head_seen.as_ref(), &nonce);
         let new_token = Token::from_bytes(shared.draw_bytes());
-        let vault = shared.vault;
         shared
             .gateway
             .pair(
                 &PairRequest {
-                    vault_id: vault,
+                    vault_id: self.vault,
                     label: format!("memory-{next_epoch}"),
                     kind: PairKind::Claim,
                     nonce,
@@ -876,73 +921,128 @@ impl MemoryStore {
                 now_ms,
             )
             .expect("claims next writer epoch");
-        shared.writer_epoch = next_epoch;
-        shared.generation = 0;
+        let ctx = shared.vaults.get_mut(&self.vault).expect("a paired vault");
+        ctx.writer_epoch = next_epoch;
+        ctx.generation = 0;
+        drop(shared);
         Self {
             shared: Arc::clone(&self.shared),
             gateway_id: self.gateway_id.clone(),
+            vault: self.vault,
             token: new_token,
             epoch: next_epoch,
         }
     }
 
-    /// The epoch this handle writes at.
+    /// The writer epoch this handle holds.
     #[must_use]
     pub const fn epoch(&self) -> u64 {
         self.epoch
     }
 
-    /// Fix the destination's clock, so `stored_at_ms` and the purge are
-    /// deterministic.
+    /// This handle's vault, as the gateway names it.
+    #[must_use]
+    pub const fn vault_id(&self) -> VaultId {
+        self.vault
+    }
+
+    /// Pin the gateway's clock.
     pub fn set_clock_ms(&self, now_ms: u64) {
         self.lock().clock_ms = Some(now_ms);
     }
 
-    /// How many `put` calls stored new bytes.
+    /// Calls and frames so far.
+    #[must_use]
+    pub fn counts(&self) -> Counts {
+        self.lock().counts
+    }
+
+    /// Objects stored new through a bundle so far.
     #[must_use]
     pub fn stored_puts(&self) -> u64 {
-        self.lock().puts
+        self.lock().counts.stored
     }
 
-    /// How many `put_many` requests were answered.
+    /// Bundle requests so far.
     #[must_use]
     pub fn bundles(&self) -> u64 {
-        self.lock().bundles
+        self.lock().counts.bundles
     }
 
-    /// How many `get_many` requests were answered.
+    /// `fetch` calls so far.
     #[must_use]
     pub fn fetches(&self) -> u64 {
-        self.lock().fetches
+        self.lock().counts.fetches
     }
 
-    /// Every held (live) object's name and sealed bytes — what a member's copy
-    /// of the destination's folder would hold.
+    /// Every object this vault has on the gateway, live or held, with its bytes.
     #[must_use]
     pub fn contents(&self) -> Vec<(Name, Vec<u8>)> {
         let shared = self.lock();
-        let mut out = Vec::new();
-        let mut after = None;
-        while let Ok(page) =
-            shared
-                .gateway
-                .objects(&shared.vault, &self.token, after.as_ref(), LIST_PAGE)
-        {
-            let full = page.len() == LIST_PAGE;
-            for entry in &page {
-                if let Some(bytes) = shared.bytes.get(&entry.name) {
-                    out.push((plane_name(&entry.name), bytes.clone()));
-                }
-            }
-            if !full {
-                break;
-            }
-            after = page.last().map(|entry| entry.name);
-        }
-        out
+        shared
+            .bytes
+            .iter()
+            .filter(|((vault, _), _)| *vault == self.vault)
+            .map(|((_, name), bytes)| (plane_name(name), bytes.clone()))
+            .collect()
     }
 
-    /// Drop the bytes of every tombstone past its grace.
+    /// Whether the gateway holds bytes for `name` in any state (held, damaged or live).
+    #[must_use]
+    pub fn has_bytes(&self, name: &Name) -> bool {
+        self.lock()
+            .bytes
+            .contains_key(&(self.vault, wire_name(name)))
+    }
+
+    /// Bit rot: flip one bit of a stored object's bytes. The gateway's record is untouched, as a
+    /// disk's would be.
+    pub fn flip_bit(&self, name: &Name) -> bool {
+        let mut shared = self.lock();
+        match shared
+            .bytes
+            .get_mut(&(self.vault, wire_name(name)))
+            .and_then(|bytes| bytes.last_mut())
+        {
+            Some(byte) => {
+                *byte ^= 1;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Disk loss: the object's file is gone, its row is not.
+    pub fn lose_bytes(&self, name: &Name) -> bool {
+        self.lock()
+            .bytes
+            .remove(&(self.vault, wire_name(name)))
+            .is_some()
+    }
+
+    /// The gateway's data directory now, to roll back to.
+    #[must_use]
+    pub fn checkpoint(&self) -> Checkpoint {
+        let shared = self.lock();
+        Checkpoint {
+            state: shared.gateway.state.clone(),
+            bytes: shared.bytes.clone(),
+        }
+    }
+
+    /// The gateway comes back from a backup of its data directory: everything it accepted since
+    /// `checkpoint` is forgotten. What the phone remembers is not.
+    pub fn roll_back(&self, checkpoint: &Checkpoint) {
+        let mut shared = self.lock();
+        let (gid, key) = (shared.gateway_id, shared.nonce_key);
+        shared.gateway = Gateway::new(checkpoint.state.clone(), gid, key);
+        shared.bytes = checkpoint.bytes.clone();
+    }
+
+    /// Run the purge sweep: every hold past its week loses its bytes and row.
+    ///
+    /// # Panics
+    /// If the in-memory state refuses, which it does not.
     pub fn purge(&self) -> usize {
         let mut shared = self.lock();
         let now_ms = shared.now_ms();
@@ -960,7 +1060,7 @@ impl MemoryStore {
                 let Shared { gateway, bytes, .. } = &mut *shared;
                 if gateway
                     .purge(&vault, &name, now_ms, || {
-                        bytes.remove(&name);
+                        bytes.remove(&(vault, name));
                         Ok(())
                     })
                     .expect("purges")
@@ -974,6 +1074,13 @@ impl MemoryStore {
             }
         }
     }
+
+    fn next_generation(shared: &Shared, vault: &VaultId) -> u64 {
+        shared
+            .vaults
+            .get(vault)
+            .map_or(1, |ctx| ctx.generation.saturating_add(1))
+    }
 }
 
 impl Store for MemoryStore {
@@ -982,56 +1089,17 @@ impl Store for MemoryStore {
     }
 
     fn exists(&self, names: &[Name]) -> Result<Vec<Name>, StoreError> {
-        let shared = self.lock();
+        let mut shared = self.lock();
+        shared.counts.exists += 1;
         let asked: Vec<WireName> = names.iter().map(wire_name).collect();
         let missing = shared
             .gateway
-            .exists(&shared.vault, &self.token, &asked)
+            .exists(&self.vault, &self.token, &asked)
             .map_err(|fault| fault_error(fault, None))?;
         Ok(missing.iter().map(plane_name).collect())
     }
 
-    fn put(
-        &self,
-        name: &Name,
-        digest: &Digest,
-        len: u64,
-        body: &mut dyn Read,
-    ) -> Result<Put, StoreError> {
-        let mut data = Vec::new();
-        body.read_to_end(&mut data)?;
-        if data.len() as u64 != len {
-            return Err(StoreError::Refused(Refusal::DigestMismatch));
-        }
-        let wname = wire_name(name);
-        let arrival = Arrival {
-            name: wname,
-            declared: wire_digest(digest),
-            digest: WireDigest::of(&data),
-            size: len,
-        };
-        let mut shared = self.lock();
-        let now_ms = shared.now_ms();
-        let vault = shared.vault;
-        let Shared { gateway, bytes, .. } = &mut *shared;
-        let outcome = gateway
-            .put(&vault, &self.token, &arrival, now_ms, || {
-                bytes.insert(wname, data);
-                Ok(())
-            })
-            .map_err(|fault| fault_error(fault, Some(*name)))?;
-        match outcome {
-            PutOutcome::Stored(_) => {
-                shared.puts += 1;
-                Ok(Put::Stored)
-            }
-            PutOutcome::AlreadyStored(_) => Ok(Put::AlreadyStored),
-        }
-    }
-
-    /// A bundle as the gateway answers one: refused whole for a superseded
-    /// writer or past [`BUNDLE_BYTES`], otherwise each part as its `put`.
-    fn put_many(&self, parts: &[Outgoing]) -> Result<Vec<(Name, PartAnswer)>, StoreError> {
+    fn bundle(&self, parts: &[Outgoing]) -> Result<Vec<(Name, FrameAnswer)>, StoreError> {
         let total = parts
             .iter()
             .map(Outgoing::bundle_bytes)
@@ -1039,56 +1107,43 @@ impl Store for MemoryStore {
         if total > BUNDLE_BYTES {
             return Err(StoreError::Refused(Refusal::TooLarge));
         }
-        let mut staged: Vec<(Arrival, Vec<u8>)> = Vec::with_capacity(parts.len());
-        for part in parts {
-            let mut data = Vec::new();
-            File::open(&part.path)?.read_to_end(&mut data)?;
-            let declared = wire_digest(&part.digest);
-            // If file length disagrees with `part.len`, force a digest mismatch
-            // so the gateway rules judge it uniformly as `DigestMismatch`.
-            let digest = if data.len() as u64 == part.len {
-                WireDigest::of(&data)
-            } else {
-                let mut bogus = *declared.as_bytes();
-                bogus[0] ^= 0xff;
-                WireDigest::from_bytes(bogus)
-            };
-            staged.push((
-                Arrival {
-                    name: wire_name(&part.name),
-                    declared,
-                    digest,
-                    size: data.len() as u64,
-                },
-                data,
-            ));
-        }
-        let arrivals: Vec<Arrival> = staged.iter().map(|(arrival, _)| *arrival).collect();
+        let arrivals: Vec<Arrival> = parts
+            .iter()
+            .map(|part| Arrival {
+                name: wire_name(&part.name),
+                declared: wire_digest(&part.digest),
+                digest: WireDigest::of(&part.bytes),
+                size: part.bytes.len() as u64,
+            })
+            .collect();
         let mut shared = self.lock();
         let now_ms = shared.now_ms();
-        let vault = shared.vault;
+        let vault = self.vault;
         let Shared { gateway, bytes, .. } = &mut *shared;
         let outcomes = gateway
             .put_bundle(&vault, &self.token, &arrivals, now_ms, |index| {
-                let (arrival, data) = &mut staged[index];
-                bytes.insert(arrival.name, std::mem::take(data));
+                bytes.insert((vault, arrivals[index].name), parts[index].bytes.clone());
                 Ok(())
             })
             .map_err(|fault| fault_error(fault, None))?;
-        shared.bundles += 1;
+        shared.counts.bundles += 1;
+        shared.counts.frames += parts.len() as u64;
         let mut out = Vec::with_capacity(parts.len());
         for (part, outcome) in parts.iter().zip(outcomes) {
             let answer = match outcome {
                 Ok(PutOutcome::Stored(_)) => {
-                    shared.puts += 1;
-                    Ok(Put::Stored)
+                    shared.counts.stored += 1;
+                    FrameAnswer::Stored
                 }
-                Ok(PutOutcome::AlreadyStored(_)) => Ok(Put::AlreadyStored),
-                Err(WireRefusal::NameTaken { digest, state }) => Err(Refusal::NameTaken {
-                    held: plane_digest(&digest),
+                Ok(PutOutcome::AlreadyStored(_)) => FrameAnswer::There,
+                Ok(PutOutcome::Lifted(_)) => FrameAnswer::Held,
+                Err(WireRefusal::NameTaken { digest, state }) => FrameAnswer::Taken {
+                    digest: plane_digest(&digest),
                     state,
-                }),
-                Err(refusal) => Err(Refusal::from_wire_code(refusal.code())),
+                },
+                Err(WireRefusal::DiskFull) => FrameAnswer::Full,
+                Err(WireRefusal::TooLarge { .. }) => FrameAnswer::TooLarge,
+                Err(refusal) => FrameAnswer::Refused(Refusal::from_wire_code(refusal.code())),
             };
             out.push((part.name, answer));
         }
@@ -1100,9 +1155,12 @@ impl Store for MemoryStore {
         let wname = wire_name(name);
         shared
             .gateway
-            .object(&shared.vault, &self.token, &wname)
+            .object(&self.vault, &self.token, &wname)
             .map_err(|fault| fault_error(fault, Some(*name)))?;
-        let held = shared.bytes.get(&wname).ok_or(StoreError::Missing(*name))?;
+        let held = shared
+            .bytes
+            .get(&(self.vault, wname))
+            .ok_or(StoreError::Missing(*name))?;
         sink.write_all(held)?;
         Ok(held.len() as u64)
     }
@@ -1110,28 +1168,28 @@ impl Store for MemoryStore {
     fn check_name(&self, name: &Name) -> Result<NameCheck, StoreError> {
         let mut shared = self.lock();
         let now_ms = shared.now_ms();
-        let generation = shared.next_generation();
+        let generation = Self::next_generation(&shared, &self.vault);
         let wname = wire_name(name);
-        let gid = shared.gateway.id();
+        let gid = shared.gateway_id;
+        let identity = shared.vaults[&self.vault].identity.clone();
         let request = CheckRequest {
             name: wname,
             generation,
-            signature: sign_check(&shared.identity, &gid, self.epoch, generation, &wname),
+            signature: sign_check(&identity, &gid, self.epoch, generation, &wname),
         };
-        let vault = shared.vault;
+        let vault = self.vault;
         let Shared { gateway, bytes, .. } = &mut *shared;
         let checked = gateway
             .check(&vault, &self.token, &request, now_ms, |name| {
-                Ok(bytes.get(name).map(|data| WireDigest::of(data)))
+                Ok(bytes.get(&(vault, *name)).map(|data| WireDigest::of(data)))
             })
             .map_err(|fault| fault_error(fault, Some(*name)))?;
-        shared.generation = generation;
+        if let Some(ctx) = shared.vaults.get_mut(&vault) {
+            ctx.generation = generation;
+        }
         Ok(check_of_state(checked.state))
     }
 
-    /// A fetch as the gateway answers one: refused past [`NAMES_PER_CALL`]
-    /// names or [`BUNDLE_BYTES`], otherwise every served object asked for, in
-    /// order, each once.
     fn get_many(
         &self,
         names: &[Name],
@@ -1142,14 +1200,14 @@ impl Store for MemoryStore {
             let mut shared = self.lock();
             let plan = shared
                 .gateway
-                .fetch(&shared.vault, &self.token, &asked)
+                .fetch(&self.vault, &self.token, &asked)
                 .map_err(|fault| fault_error(fault, None))?;
-            shared.fetches += 1;
+            shared.counts.fetches += 1;
             plan.iter()
                 .filter_map(|record| {
                     shared
                         .bytes
-                        .get(&record.name)
+                        .get(&(self.vault, record.name))
                         .map(|data| (plane_name(&record.name), data.clone()))
                 })
                 .collect()
@@ -1162,7 +1220,7 @@ impl Store for MemoryStore {
 
     fn head(&self) -> Result<Option<Head>, StoreError> {
         let shared = self.lock();
-        match shared.gateway.head(&shared.vault, &self.token) {
+        match shared.gateway.head(&self.vault, &self.token) {
             Ok(view) => Ok(Some(head_of_view(&view))),
             Err(Fault::Refused(WireRefusal::NoHead { .. })) => Ok(None),
             Err(fault) => Err(fault_error(fault, None)),
@@ -1170,7 +1228,10 @@ impl Store for MemoryStore {
     }
 
     fn generation(&self) -> u64 {
-        self.lock().generation
+        self.lock()
+            .vaults
+            .get(&self.vault)
+            .map_or(0, |ctx| ctx.generation)
     }
 
     fn set_head(
@@ -1182,10 +1243,11 @@ impl Store for MemoryStore {
     ) -> Result<Head, StoreError> {
         let mut shared = self.lock();
         let now_ms = shared.now_ms();
-        let generation = shared.next_generation();
+        let generation = Self::next_generation(&shared, &self.vault);
         let wname = wire_name(name);
         let wprev = prev.map(wire_name);
-        let gid = shared.gateway.id();
+        let gid = shared.gateway_id;
+        let identity = shared.vaults[&self.vault].identity.clone();
         let fields = HeadFields {
             epoch: self.epoch,
             generation,
@@ -1200,15 +1262,16 @@ impl Store for MemoryStore {
             taken_at_ms: signed(taken_at_ms),
             generation,
             writes,
-            signature: sign_head(&shared.identity, &gid, &fields),
+            signature: sign_head(&identity, &gid, &fields),
         };
-        let vault = shared.vault;
         let view = shared
             .gateway
-            .set_head(&vault, &self.token, &request, now_ms)
+            .set_head(&self.vault, &self.token, &request, now_ms)
             .map_err(|fault| fault_error(fault, Some(*name)))?;
-        shared.generation = view.generation;
-        shared.head_name = Some(view.name);
+        if let Some(ctx) = shared.vaults.get_mut(&self.vault) {
+            ctx.generation = view.generation;
+        }
+        shared.counts.heads += 1;
         Ok(head_of_view(&view))
     }
 
@@ -1219,7 +1282,7 @@ impl Store for MemoryStore {
         loop {
             let page = shared
                 .gateway
-                .snapshots(&shared.vault, &self.token, after.as_ref(), LIST_PAGE)
+                .snapshots(&self.vault, &self.token, after.as_ref(), LIST_PAGE)
                 .map_err(|fault| fault_error(fault, None))?;
             let full = page.len() == LIST_PAGE;
             entries.extend(page.iter().map(snapshot_of_view));
@@ -1237,31 +1300,44 @@ impl Store for MemoryStore {
         let after = after.map(wire_name);
         let entries = shared
             .gateway
-            .objects(&shared.vault, &self.token, after.as_ref(), limit)
+            .objects(&self.vault, &self.token, after.as_ref(), limit)
             .map_err(|fault| fault_error(fault, None))?;
         Ok(entries.iter().map(object_of_view).collect())
     }
 
-    fn delete(&self, names: &[Name]) -> Result<Deleted, StoreError> {
+    fn delete(&self, names: &[Name], head_root: Option<&Name>) -> Result<Deleted, StoreError> {
         let mut shared = self.lock();
         let now_ms = shared.now_ms();
-        let generation = shared.next_generation();
+        let generation = Self::next_generation(&shared, &self.vault);
         let asked: Vec<WireName> = names.iter().map(wire_name).collect();
-        let gid = shared.gateway.id();
+        let bound = head_root.map(wire_name);
+        let gid = shared.gateway_id;
+        let identity = shared.vaults[&self.vault].identity.clone();
         let request = DeleteRequest {
             names: asked.clone(),
             generation,
-            signature: sign_delete(&shared.identity, &gid, self.epoch, generation, &asked),
+            head_root: bound,
+            signature: sign_delete(
+                &identity,
+                &gid,
+                self.epoch,
+                generation,
+                bound.as_ref(),
+                &asked,
+            ),
         };
-        let vault = shared.vault;
+        let vault = self.vault;
         let Shared { gateway, bytes, .. } = &mut *shared;
         let answer = gateway
             .delete(&vault, &self.token, &request, now_ms, |name| {
-                bytes.remove(name);
+                bytes.remove(&(vault, *name));
                 Ok(())
             })
             .map_err(|fault| fault_error(fault, None))?;
-        shared.generation = generation;
+        if let Some(ctx) = shared.vaults.get_mut(&vault) {
+            ctx.generation = generation;
+        }
+        shared.counts.deletes += 1;
         Ok(Deleted {
             deleted: answer.deleted.iter().map(plane_name).collect(),
             freed: answer.freed.iter().map(plane_name).collect(),
@@ -1283,336 +1359,29 @@ impl Store for MemoryStore {
         let after = after.map(wire_name);
         let entries = shared
             .gateway
-            .held(&shared.vault, &self.token, after.as_ref(), limit)
+            .held(&self.vault, &self.token, after.as_ref(), limit)
             .map_err(|fault| fault_error(fault, None))?;
         Ok(entries.iter().map(held_of_view).collect())
     }
 
     fn undo(&self, names: Option<&[Name]>) -> Result<u64, StoreError> {
         let mut shared = self.lock();
-        let generation = shared.next_generation();
+        let generation = Self::next_generation(&shared, &self.vault);
         let asked: Option<Vec<WireName>> = names.map(|names| names.iter().map(wire_name).collect());
-        let gid = shared.gateway.id();
+        let gid = shared.gateway_id;
+        let identity = shared.vaults[&self.vault].identity.clone();
         let request = UndoRequest {
             names: asked.clone(),
             generation,
-            signature: sign_undo(
-                &shared.identity,
-                &gid,
-                self.epoch,
-                generation,
-                asked.as_deref(),
-            ),
+            signature: sign_undo(&identity, &gid, self.epoch, generation, asked.as_deref()),
         };
-        let vault = shared.vault;
         let undone = shared
             .gateway
-            .undo(&vault, &self.token, &request)
+            .undo(&self.vault, &self.token, &request)
             .map_err(|fault| fault_error(fault, None))?;
-        shared.generation = generation;
+        if let Some(ctx) = shared.vaults.get_mut(&self.vault) {
+            ctx.generation = generation;
+        }
         Ok(undone.undone)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::backup::naming::PlaintextHash;
-
-    fn name_of(label: &str) -> Name {
-        Name::from_bytes(*PlaintextHash::of(label.as_bytes()).as_bytes())
-    }
-
-    fn put(store: &MemoryStore, name: &Name, bytes: &[u8]) -> Result<Put, StoreError> {
-        store.put(
-            name,
-            &Digest::of(bytes),
-            bytes.len() as u64,
-            &mut &bytes[..],
-        )
-    }
-
-    #[test]
-    fn a_put_is_verified_stored_once_and_read_back() {
-        let store = MemoryStore::new("gw");
-        let name = name_of("a");
-        assert_eq!(store.exists(&[name]).expect("asks"), vec![name]);
-        assert_eq!(put(&store, &name, b"sealed").expect("stores"), Put::Stored);
-        assert_eq!(
-            put(&store, &name, b"sealed").expect("again"),
-            Put::AlreadyStored
-        );
-        assert!(matches!(
-            put(&store, &name, b"other bytes"),
-            Err(StoreError::Refused(Refusal::NameTaken {
-                state: NameState::Live,
-                ..
-            }))
-        ));
-        assert!(matches!(
-            store.put(&name_of("b"), &Digest::of(b"x"), 1, &mut &b"y"[..]),
-            Err(StoreError::Refused(Refusal::DigestMismatch))
-        ));
-        assert!(store.exists(&[name]).expect("asks").is_empty());
-        let mut back = Vec::new();
-        assert_eq!(store.get(&name, &mut back).expect("reads"), 6);
-        assert_eq!(back, b"sealed");
-        assert!(matches!(
-            store.get(&name_of("b"), &mut Vec::new()),
-            Err(StoreError::Missing(_))
-        ));
-        assert_eq!(store.stored_puts(), 1);
-    }
-
-    #[test]
-    fn the_head_moves_only_from_where_the_writer_left_it() {
-        let store = MemoryStore::new("gw");
-        let (first, second) = (name_of("m1"), name_of("m2"));
-        assert!(matches!(
-            store.set_head(&first, None, 10, 0),
-            Err(StoreError::Missing(_))
-        ));
-        put(&store, &first, b"one").expect("stores");
-        put(&store, &second, b"two").expect("stores");
-        let head = store.set_head(&first, None, 10, 0).expect("the first head");
-        assert_eq!(head.name, first);
-        assert_eq!(store.head().expect("reads"), Some(head));
-        match store.set_head(&second, None, 20, 0) {
-            Err(StoreError::HeadConflict { current }) => assert_eq!(current, Some(head)),
-            other => panic!("expected a conflict, got {other:?}"),
-        }
-        store.set_head(&second, Some(&first), 20, 0).expect("moves");
-        let registered: Vec<Name> = store
-            .snapshots()
-            .expect("lists")
-            .iter()
-            .map(|entry| entry.name)
-            .collect();
-        assert_eq!(registered, vec![first, second]);
-    }
-
-    #[test]
-    fn delete_holds_spares_the_head_and_keeps_a_held_snapshot_listed() {
-        let store = MemoryStore::new("gw");
-        store.set_clock_ms(1_000);
-        let (first, second, range) = (name_of("m1"), name_of("m2"), name_of("r"));
-        for (name, bytes) in [(&first, b"one"), (&second, b"two"), (&range, b"rng")] {
-            put(&store, name, bytes).expect("stores");
-        }
-        store.set_head(&first, None, 1, 0).expect("heads");
-        store.set_head(&second, Some(&first), 2, 0).expect("moves");
-        let deleted = store.delete(&[first, second, range]).expect("deletes");
-        assert_eq!(deleted.deleted, vec![first, range]);
-        assert_eq!(deleted.refused, vec![(second, Refusal::HeadInUse)]);
-        assert_eq!(
-            store.exists(&[first, second, range]).expect("asks"),
-            vec![first, range]
-        );
-        // A held manifest's snapshot stays listed, with its dates (E6).
-        let listed = store.snapshots().expect("lists");
-        assert_eq!(listed.len(), 2);
-        assert_eq!(
-            listed
-                .iter()
-                .map(|entry| (entry.name, entry.held_at_ms))
-                .collect::<Vec<_>>(),
-            vec![(first, Some(1_000)), (second, None)]
-        );
-        assert_eq!(store.list(None, 10).expect("lists").len(), 1);
-
-        // Within the grace a re-upload resurrects; past it the bytes go.
-        assert_eq!(put(&store, &range, b"rng").expect("stores"), Put::Stored);
-        store.delete(&[range]).expect("deletes");
-        assert_eq!(store.purge(), 0, "inside the grace");
-        store.set_clock_ms(1_000 + TOMBSTONE_GRACE_MS);
-        assert_eq!(store.purge(), 2, "past it");
-        assert_eq!(
-            store.snapshots().expect("lists").len(),
-            1,
-            "a purged manifest's snapshot goes with it"
-        );
-    }
-
-    #[test]
-    fn a_claim_fences_the_older_writer_and_revokes_its_token() {
-        let old = MemoryStore::new("gw");
-        let name = name_of("a");
-        put(&old, &name, b"bytes").expect("stores");
-        let new = old.claim();
-        assert_eq!(new.epoch(), 2);
-        assert!(matches!(
-            put(&old, &name_of("b"), b"more"),
-            Err(StoreError::Moved { epoch: 2 })
-        ));
-        assert!(matches!(old.delete(&[name]), Err(StoreError::Moved { .. })));
-        assert!(matches!(
-            old.set_head(&name, None, 1, 0),
-            Err(StoreError::Moved { .. })
-        ));
-        // Protocol v3 (E5): a takeover revokes all older tokens, so reads with
-        // the superseded token hear MOVED too.
-        assert!(matches!(
-            old.exists(&[name]),
-            Err(StoreError::Moved { epoch: 2 })
-        ));
-        assert!(matches!(old.head(), Err(StoreError::Moved { epoch: 2 })));
-        new.set_head(&name, None, 1, 0)
-            .expect("the new writer writes");
-        assert_eq!(new.head().expect("reads").map(|head| head.epoch), Some(2));
-    }
-
-    #[test]
-    fn the_helpers_page_and_batch_past_the_protocols_caps() {
-        let store = MemoryStore::new("gw");
-        let names: Vec<Name> = (0..2_500)
-            .map(|index| name_of(&index.to_string()))
-            .collect();
-        assert_eq!(missing(&store, &names).expect("asks").len(), 2_500);
-        for name in &names[..1_200] {
-            put(&store, name, name.as_bytes()).expect("stores");
-        }
-        assert_eq!(missing(&store, &names).expect("asks").len(), 1_300);
-        let listed = list_all(&store).expect("lists");
-        assert_eq!(listed.len(), 1_200);
-        assert!(listed.windows(2).all(|pair| pair[0].name < pair[1].name));
-        let deleted = delete_all(&store, &names[..1_200]).expect("deletes");
-        assert_eq!(deleted.deleted.len(), 1_200);
-        assert!(list_all(&store).expect("lists").is_empty());
-    }
-
-    #[test]
-    fn a_refusal_code_round_trips_and_an_unknown_one_is_kept() {
-        for code in Refusal::NAMED {
-            let refusal = Refusal::from_code(code);
-            assert!(!matches!(refusal, Refusal::Other(_)), "{code} is named");
-            assert_eq!(refusal.code(), code);
-        }
-        assert_eq!(
-            Refusal::from_code("SOMETHING_NEW"),
-            Refusal::Other("SOMETHING_NEW".to_owned())
-        );
-        assert_eq!(Refusal::from_code("SOMETHING_NEW").code(), "SOMETHING_NEW");
-    }
-
-    /// **A16.** A tombstone is missing to `exists` and the listing and is
-    /// still served by `get` and `get_many` until the purge takes its bytes,
-    /// so a restore that began from a snapshot retention drops keeps reading.
-    #[test]
-    fn a_tombstone_is_served_until_its_purge_and_missing_to_exists() {
-        let store = MemoryStore::new("gw");
-        store.set_clock_ms(1_000);
-        let name = name_of("range");
-        put(&store, &name, b"sealed range").expect("stores");
-        store.delete(&[name]).expect("tombstones");
-        assert_eq!(store.exists(&[name]).expect("asks"), vec![name]);
-        assert!(store.list(None, 10).expect("lists").is_empty());
-        assert!(store.contents().is_empty());
-        let mut back = Vec::new();
-        assert_eq!(store.get(&name, &mut back).expect("still served"), 12);
-        assert_eq!(back, b"sealed range");
-        let mut fetched = Vec::new();
-        store
-            .get_many(&[name], &mut |name, bytes| {
-                fetched.push((*name, bytes.to_vec()));
-                Ok(())
-            })
-            .expect("fetches");
-        assert_eq!(fetched, vec![(name, b"sealed range".to_vec())]);
-        assert!(
-            matches!(
-                store.set_head(&name, None, 1, 0),
-                Err(StoreError::Missing(_))
-            ),
-            "a head never names a tombstone"
-        );
-
-        store.set_clock_ms(1_000 + TOMBSTONE_GRACE_MS);
-        assert_eq!(store.purge(), 1);
-        assert!(matches!(
-            store.get(&name, &mut Vec::new()),
-            Err(StoreError::Missing(_))
-        ));
-    }
-
-    fn outgoing(dir: &std::path::Path, label: &str, bytes: &[u8]) -> Outgoing {
-        let name = name_of(label);
-        let path = dir.join(name.to_hex());
-        std::fs::write(&path, bytes).expect("spools");
-        Outgoing {
-            name,
-            digest: Digest::of(bytes),
-            len: bytes.len() as u64,
-            path,
-        }
-    }
-
-    /// **A15.** A bundle is answered part by part exactly as each part's
-    /// `put` would be, and a fetch hands back what is held, in the order
-    /// asked, each name once.
-    #[test]
-    fn a_bundle_and_a_fetch_answer_each_part_as_one_call_would() {
-        let dir = tempfile::tempdir().expect("a directory");
-        let store = MemoryStore::new("gw");
-        let held = outgoing(dir.path(), "held", b"held already");
-        put(&store, &held.name, b"held already").expect("stores");
-        let taken = outgoing(dir.path(), "taken", b"sealed again");
-        put(&store, &taken.name, b"an earlier sealing").expect("stores");
-        let fresh = outgoing(dir.path(), "fresh", b"new bytes");
-        let mut torn = outgoing(dir.path(), "torn", b"queued bytes");
-        torn.digest = Digest::of(b"other bytes");
-
-        let answers = store
-            .put_many(&[held.clone(), taken.clone(), fresh.clone(), torn.clone()])
-            .expect("a bundle");
-        assert_eq!(
-            answers,
-            vec![
-                (held.name, Ok(Put::AlreadyStored)),
-                (
-                    taken.name,
-                    Err(Refusal::NameTaken {
-                        held: Digest::of(b"an earlier sealing"),
-                        state: NameState::Live,
-                    })
-                ),
-                (fresh.name, Ok(Put::Stored)),
-                (torn.name, Err(Refusal::DigestMismatch)),
-            ]
-        );
-        assert_eq!(store.bundles(), 1);
-
-        let absent = name_of("absent");
-        let mut order = Vec::new();
-        let handed = store
-            .get_many(
-                &[fresh.name, absent, held.name, fresh.name],
-                &mut |name, bytes| {
-                    order.push((*name, bytes.len()));
-                    Ok(())
-                },
-            )
-            .expect("a fetch");
-        assert_eq!(handed, 2);
-        assert_eq!(order, vec![(fresh.name, 9), (held.name, 12)]);
-        assert_eq!(store.fetches(), 1);
-
-        let too_many: Vec<Name> = (0..=NAMES_PER_CALL)
-            .map(|index| name_of(&index.to_string()))
-            .collect();
-        assert!(matches!(
-            store.get_many(&too_many, &mut |_, _| Ok(())),
-            Err(StoreError::Refused(Refusal::TooMany))
-        ));
-        let mut oversized = fresh.clone();
-        oversized.len = BUNDLE_BYTES;
-        assert!(matches!(
-            store.put_many(&[oversized]),
-            Err(StoreError::Refused(Refusal::TooLarge))
-        ));
-        let _successor = store.claim();
-        assert!(matches!(
-            store.put_many(&[fresh]),
-            Err(StoreError::Moved { epoch: 2 })
-        ));
     }
 }

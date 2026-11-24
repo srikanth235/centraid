@@ -36,6 +36,14 @@ struct ConfirmSheet: View {
             outlines: [SheetOutline(label: cancelLabel, link: true, ink: true, identifier: "kit-confirm-cancel", action: onDismiss)],
             titleIdentifier: "kit-confirm"
         ) {
+            // R4 (#1209): one amber line above the body, for a photograph no backup device holds
+            // whole. The member can still delete; nothing else about the confirm changes.
+            if !confirm.warning.isEmpty {
+                Text(confirm.warning)
+                    .kitType(.row)
+                    .foregroundStyle(StateColor.amber.text)
+                    .accessibilityIdentifier("kit-confirm-warning")
+            }
             if !confirm.body.isEmpty {
                 Text(confirm.body)
                     .kitType(.row)

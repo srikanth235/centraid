@@ -32,7 +32,7 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
    core via core-ffi
  ┌───────────────────────── the vault, and its only writer ─────────────────────┐
  │  vault: vault.db, the one writable connection, typed commands,            │
- │         custody, and the backup plane — snapshot, ranges, ledger, spool      │
+ │         custody, and the backup plane — snapshot, tree, state, staging        │
  │  apps: photos · notes · docs · people · locker · calendar · reminders · money │
  │        · health                                                              │
  │  blobs: the content store       identity: 24 words → every key               │

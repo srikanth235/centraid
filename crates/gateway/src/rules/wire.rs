@@ -214,11 +214,17 @@ pub struct HeldEntry {
 }
 
 /// `POST /v1/v/{vault}/delete`: the names, and the vault key's signature
-/// over them and the generation (E6).
+/// over them, the generation and the head the delete was computed against
+/// (E6, spec §4).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeleteRequest {
     pub names: Vec<Name>,
     pub generation: u64,
+    /// The root name of the head this delete was computed under, or none for
+    /// a vault with no head. The gateway accepts the delete only while that
+    /// is its current head, so a rolled-back gateway refuses it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head_root: Option<Name>,
     pub signature: Signature,
 }
 
@@ -278,7 +284,7 @@ pub struct Missing {
     pub missing: Vec<Name>,
 }
 
-/// One stored object as `PUT` and `GET objects` describe it.
+/// One stored object as a bundle answer and `GET objects` describe it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ObjectEntry {
     pub name: Name,
@@ -330,7 +336,7 @@ impl NameRefusal {
     }
 }
 
-/// Why a name a `PUT` wanted is not free.
+/// Why a name a frame wanted is not free.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NameState {
@@ -343,43 +349,125 @@ pub enum NameState {
     Damaged,
 }
 
-/// What `POST bundle` answers: each frame exactly as a `PUT` of that frame
-/// alone would have been answered. `stored` is a `PUT`'s `201`, `already` its
-/// `200`, and `refused` carries every other answer's code, `NAME_TAKEN`
-/// included.
+/// How one bundle frame was answered (spec §4). Every frame has exactly one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "result", rename_all = "snake_case")]
+pub enum FrameResult {
+    /// New bytes, committed (stage, fsync, rename) before this answer.
+    Stored { name: Name },
+    /// The same digest, live: nothing moved.
+    There { name: Name },
+    /// The same digest under a hold: the hold is lifted.
+    Held { name: Name },
+    /// The name is not free under another digest. **Not an acknowledgement.**
+    Taken {
+        name: Name,
+        digest: Digest,
+        state: NameState,
+    },
+    /// The gateway's disk is full; the frame was not stored.
+    Full { name: Name },
+    /// The frame is over `MAX_OBJECT_BYTES`; it was read past and not stored.
+    TooLarge { name: Name },
+    /// Any other refusal of this one frame (`DIGEST_MISMATCH`: the bytes are
+    /// not the digest the frame named).
+    Refused { name: Name, code: Code },
+}
+
+impl FrameResult {
+    /// The frame's name.
+    #[must_use]
+    pub const fn name(&self) -> Name {
+        match self {
+            Self::Stored { name }
+            | Self::There { name }
+            | Self::Held { name }
+            | Self::Taken { name, .. }
+            | Self::Full { name }
+            | Self::TooLarge { name }
+            | Self::Refused { name, .. } => *name,
+        }
+    }
+
+    /// One frame's refusal, as the answer says it.
+    #[must_use]
+    pub const fn of_refusal(name: Name, refusal: &Refusal) -> Self {
+        match refusal {
+            Refusal::NameTaken { digest, state } => Self::Taken {
+                name,
+                digest: *digest,
+                state: *state,
+            },
+            Refusal::DiskFull => Self::Full { name },
+            Refusal::TooLarge { .. } => Self::TooLarge { name },
+            other => Self::Refused {
+                name,
+                code: other.code(),
+            },
+        }
+    }
+}
+
+/// What `POST bundle` answers: one result per frame, in the order the frames
+/// arrived. A body cut inside frame `k` answers nothing (the connection is
+/// gone) but leaves frames before `k` committed and `k` absent.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BundleAnswer {
-    /// New bytes, now held.
-    pub stored: Vec<Name>,
-    /// Held already with the frame's digest: nothing moved.
-    pub already: Vec<Name>,
-    pub refused: Vec<NameRefusal>,
+    pub results: Vec<FrameResult>,
 }
 
 impl BundleAnswer {
-    /// Every name the gateway now holds this frame's bytes under: `stored`
-    /// and `already`. A `NAME_TAKEN` is not here (see [`Self::taken`]).
+    /// Every name the gateway now holds these frames' bytes under: `stored`,
+    /// `there` and `held`. A `taken` is not here (see [`Self::taken`]).
     #[must_use]
     pub fn acknowledged(&self) -> Vec<Name> {
-        self.stored.iter().chain(&self.already).copied().collect()
+        self.results
+            .iter()
+            .filter(|result| {
+                matches!(
+                    result,
+                    FrameResult::Stored { .. }
+                        | FrameResult::There { .. }
+                        | FrameResult::Held { .. }
+                )
+            })
+            .map(FrameResult::name)
+            .collect()
     }
 
-    /// Every frame refused `NAME_TAKEN`: `(name, recorded digest, state)`.
+    /// How many frames got this kind of answer, by a predicate.
+    #[must_use]
+    pub fn count(&self, kind: impl Fn(&FrameResult) -> bool) -> usize {
+        self.results.iter().filter(|result| kind(result)).count()
+    }
+
+    /// Frames stored new.
+    #[must_use]
+    pub fn stored(&self) -> usize {
+        self.count(|result| matches!(result, FrameResult::Stored { .. }))
+    }
+
+    /// Frames already there, live.
+    #[must_use]
+    pub fn there(&self) -> usize {
+        self.count(|result| matches!(result, FrameResult::There { .. }))
+    }
+
+    /// Every frame answered `taken`: `(name, recorded digest, state)`.
     /// **Not acknowledgements.** A phone compares the digest with the one it
-    /// sent: equal is the same bytes, held; another digest on a live name is
-    /// a name it must not count as stored, and on a damaged name it is the
-    /// cue for a signed delete.
+    /// sent: another digest on a live name is a name it must not count as
+    /// stored, and on a damaged name it is the cue for a signed delete.
     #[must_use]
     pub fn taken(&self) -> Vec<(Name, Digest, NameState)> {
-        self.refused
+        self.results
             .iter()
-            .filter(|refusal| refusal.code == Code::NameTaken)
-            .filter_map(|refusal| {
-                Some((
-                    refusal.name,
-                    refusal.digest?,
-                    refusal.state.unwrap_or(NameState::Live),
-                ))
+            .filter_map(|result| match result {
+                FrameResult::Taken {
+                    name,
+                    digest,
+                    state,
+                } => Some((*name, *digest, *state)),
+                _ => None,
             })
             .collect()
     }

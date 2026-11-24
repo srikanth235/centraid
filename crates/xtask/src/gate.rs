@@ -483,7 +483,7 @@ fn line(name: &str, elapsed: Duration, outcome: &Outcome) -> String {
 ///   seals its 64 KiB ranges and every content file, and uploads them;
 /// - takes 50 more commits and a second snapshot, and proves only the changed
 ///   ranges were sealed;
-/// - **destroys the vault, its ledger and its spool**;
+/// - **destroys the vault, its device state and its staging**;
 /// - restores from the store, and proves `integrity_check`, the manifest's
 ///   census and `db_hash`, the ladder, a full row dump equal to the lost
 ///   vault's, and that every content hash's names are confirmed.
@@ -538,7 +538,7 @@ fn run_restore_drill(ctx: &Ctx) -> Result<Outcome> {
         return Ok(outcome);
     }
     Ok(Outcome::Ok(
-        "back a vault up, lose it with its ledger and spool, and restore it \
+        "back a vault up, lose it with its device state and staging, and restore it \
          row for row; then lose the PHONE, restore from 24 words across the \
          real gateway, and freeze the old one"
             .to_owned(),

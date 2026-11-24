@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 
 use crate::rules::bundle::Frame;
 use crate::rules::code::Refusal;
-use crate::rules::conformance::{Failure, PutAnswer, ScrubCounts, Target};
+use crate::rules::conformance::{Failure, ScrubCounts, Target};
 use crate::rules::engine::{Arrival, Finding, Gateway, Operated, PutOutcome, examine};
 use crate::rules::ids::{Digest, GatewayId, Name, Secret, SecretHash, Token, TokenHash, VaultId};
 use crate::rules::range::{ByteRange, resolve};
@@ -19,7 +19,7 @@ use crate::rules::state::{
     State, StoreFault, TokenRecord, VaultRecord,
 };
 use crate::rules::wire::{
-    BundleAnswer, DeleteAnswer, DeleteRequest, HeadView, HeldEntry, Info, NameRefusal, NonceAnswer,
+    BundleAnswer, DeleteAnswer, DeleteRequest, FrameResult, HeadView, HeldEntry, Info, NonceAnswer,
     ObjectEntry, PairRequest, Paired, SetHead, SnapshotView, UndoRequest, Undone,
 };
 
@@ -586,47 +586,12 @@ impl MemoryTarget {
             &self.draws.to_be_bytes(),
         )
     }
-
-    /// One object through the same rule as `PUT`, the bytes landing in the
-    /// map only when the rules say "store".
-    fn put_one(
-        &mut self,
-        token: &Token,
-        vault: &VaultId,
-        name: &Name,
-        declared: &Digest,
-        bytes: &[u8],
-    ) -> Result<PutOutcome, Fault> {
-        let arrival = Arrival {
-            name: *name,
-            declared: *declared,
-            digest: Digest::of(bytes),
-            size: bytes.len() as u64,
-        };
-        let Self {
-            gateway,
-            bytes: held,
-            now_ms,
-            ..
-        } = self;
-        gateway.put(vault, token, &arrival, *now_ms, || {
-            held.insert((*vault, *name), bytes.to_vec());
-            Ok(())
-        })
-    }
 }
 
 fn failure(fault: Fault) -> Failure {
     match fault {
         Fault::Refused(refusal) => Failure::Refused(refusal),
         Fault::Store(store) => Failure::Broken(store.to_string()),
-    }
-}
-
-fn answer(outcome: PutOutcome) -> PutAnswer {
-    match outcome {
-        PutOutcome::Stored(entry) => PutAnswer::Stored(entry),
-        PutOutcome::AlreadyStored(entry) => PutAnswer::AlreadyStored(entry),
     }
 }
 
@@ -783,19 +748,6 @@ impl Target for MemoryTarget {
         self.gateway.exists(vault, token, names).map_err(failure)
     }
 
-    async fn put(
-        &mut self,
-        token: &Token,
-        vault: &VaultId,
-        name: &Name,
-        digest: &Digest,
-        bytes: &[u8],
-    ) -> Result<PutAnswer, Failure> {
-        self.put_one(token, vault, name, digest, bytes)
-            .map(answer)
-            .map_err(failure)
-    }
-
     async fn get(
         &mut self,
         token: &Token,
@@ -850,20 +802,26 @@ impl Target for MemoryTarget {
             now_ms,
             ..
         } = self;
-        let outcomes = gateway
-            .put_bundle(vault, token, &arrivals, *now_ms, |index| {
-                let frame = &frames[index];
-                bytes.insert((*vault, frame.name), frame.bytes.clone());
-                Ok(())
-            })
-            .map_err(failure)?;
+        // Each frame is judged and committed on its own, as the gateway does
+        // when the frames arrive one by one.
         let mut answer = BundleAnswer::default();
-        for (frame, outcome) in frames.iter().zip(outcomes) {
-            match outcome {
-                Ok(PutOutcome::Stored(_)) => answer.stored.push(frame.name),
-                Ok(PutOutcome::AlreadyStored(_)) => answer.already.push(frame.name),
-                Err(refusal) => answer.refused.push(NameRefusal::of(frame.name, &refusal)),
-            }
+        for (index, arrival) in arrivals.iter().enumerate() {
+            let outcome = gateway
+                .put_bundle(vault, token, std::slice::from_ref(arrival), *now_ms, |_| {
+                    let frame = &frames[index];
+                    bytes.insert((*vault, frame.name), frame.bytes.clone());
+                    Ok(())
+                })
+                .map_err(failure)?
+                .pop()
+                .ok_or_else(|| Failure::Broken("a frame with no outcome".to_owned()))?;
+            let name = arrival.name;
+            answer.results.push(match outcome {
+                Ok(PutOutcome::Stored(_)) => FrameResult::Stored { name },
+                Ok(PutOutcome::AlreadyStored(_)) => FrameResult::There { name },
+                Ok(PutOutcome::Lifted(_)) => FrameResult::Held { name },
+                Err(refusal) => FrameResult::of_refusal(name, &refusal),
+            });
         }
         Ok(answer)
     }

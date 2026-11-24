@@ -1,12 +1,10 @@
-//! The vault's side of `centraid-sealed/2`'s naming (#1080 ruling 4).
+//! The vault's side of `centraid-sealed/3`'s naming (#1080 ruling 4, #1209).
 //!
-//! **The database plus the words is the whole index.** A part's name derives
-//! from the vault's backup key and the plaintext hash of the file it belongs
-//! to, its key from the backup key and the salt in its own header, and the
-//! vault already stores that hash for every content item and every
-//! derivative. So the names a vault's content implies are computed, never
-//! recorded: [`content_names`] is the list a phone asks `exists` about and the
-//! list garbage collection keeps.
+//! **The database plus the words is the whole index.** An object's name is a
+//! keyed hash of its own plaintext, so the names a vault's content implies
+//! are computed from the bytes, never recorded. What the vault itself holds
+//! is its claims on content: each `blob` row, which [`content_hashes`] and
+//! [`claims_after`] read.
 //!
 //! ## THE ROOT KEY ARRIVES AS BYTES
 //!
@@ -15,11 +13,7 @@
 //! crate does not depend on `crates/identity`, and a restore holds the key
 //! before it holds a vault to ask.
 
-use std::collections::BTreeSet;
-
-pub use centraid_media::sealed::{
-    BackupKeys, Digest, Name, PART_BYTES, PlaintextHash, name, names_of, part_count,
-};
+pub use centraid_media::sealed::{BackupKeys, Digest, Name, PlaintextHash};
 
 use super::{Result, invariant};
 use crate::file::Vault;
@@ -107,18 +101,6 @@ pub fn claims_after(vault: &Vault, after: i64, limit: usize) -> Result<Vec<Claim
 /// that runs and not a copy of it.
 pub const CLAIMS_AFTER: &str =
     "SELECT seq, hash, size FROM blob WHERE seq > ?1 ORDER BY seq LIMIT ?2";
-
-/// Every name the vault's content implies: [`names_of`] for each of
-/// [`content_hashes`].
-///
-/// # Errors
-/// Whatever [`content_hashes`] refuses.
-pub fn content_names(keys: &BackupKeys, vault: &Vault) -> Result<BTreeSet<Name>> {
-    Ok(content_hashes(vault)?
-        .iter()
-        .flat_map(|(h, len)| names_of(keys, h, *len))
-        .collect())
-}
 
 #[cfg(test)]
 mod tests {
@@ -212,7 +194,7 @@ mod tests {
         );
     }
 
-    /// The names come from the blob rows, hashed the one way
+    /// The claims come from the blob rows, hashed the one way
     /// (`blob::content_digest`), not from anything this plane recorded.
     #[test]
     fn a_blobs_bytes_imply_its_names_and_nothing_records_them() {
@@ -233,9 +215,19 @@ mod tests {
             vec![(h, body.len() as u64)]
         );
         let keys = keys_from_root(&[9; 32]);
+        let sealed = centraid_media::sealed::seal(
+            &keys,
+            centraid_media::sealed::Class::Originals,
+            body.as_bytes(),
+        )
+        .expect("seals");
         assert_eq!(
-            content_names(&keys, &vault).expect("names"),
-            BTreeSet::from([name(&keys, &h, 0)])
+            sealed.name,
+            centraid_media::sealed::name_of(
+                &keys,
+                centraid_media::sealed::Class::Originals,
+                body.as_bytes()
+            )
         );
     }
 }

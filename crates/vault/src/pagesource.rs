@@ -1,5 +1,5 @@
 //! The vault's pages, read without a plaintext copy of the vault on disk
-//! (#1191 B11, `contracts/backup/spike-page-read.md`).
+//! (#1191 B11; the pages are read on a pinned reader through `sqlite_dbpage`, see `.claude/skills/backup/phone.md`).
 //!
 //! A snapshot used to copy the vault with SQLite's online-backup API into a
 //! scratch file and read that. This reads the pages themselves through
@@ -10,7 +10,7 @@
 //!
 //! ## THE PIN COVERS READING, HASHING AND SEALING, AND NEVER NETWORK I/O
 //!
-//! [`PinnedPages`] holds no store, no socket and no spool. The caller reads a
+//! [`PinnedPages`] holds no store, no socket and no staging area. The caller reads a
 //! range, hashes it, compares its name with the previous head's, seals it if it
 //! changed, and drops the pin before it talks to a gateway. While the pin is open
 //! the WAL cannot be checkpointed past its mark, so the `-wal` file grows by the
@@ -33,7 +33,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use crate::backup::naming::{BackupKeys, Name, PlaintextHash, name};
+use centraid_media::sealed::PlaintextHash;
 
 use rusqlite::{Connection, OpenFlags};
 
@@ -106,6 +106,8 @@ impl PinnedPages {
             path,
             OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
+        // R5: no connection to the vault file checkpoints on its own. (This one cannot write.)
+        connection.pragma_update(None, "wal_autocheckpoint", 0)?;
         let journal: String = connection.query_row("PRAGMA journal_mode", [], |row| row.get(0))?;
         if !journal.eq_ignore_ascii_case("wal") {
             return Err(PinError::NotWal);
@@ -280,7 +282,7 @@ impl PinnedPages {
     /// # Errors
     /// SQLite's refusal.
     pub fn census(&self) -> Result<BTreeMap<String, i64>> {
-        crate::backup::snapshot::census_of(&self.connection)
+        Ok(census_of(&self.connection)?)
     }
 
     /// Every blob the vault claims at the pin, by hash: the content a snapshot's rows name.
@@ -354,109 +356,39 @@ impl PinnedPages {
 #[doc(hidden)]
 pub fn fold_wal(path: &Path) -> Result<()> {
     let connection = Connection::open(path)?;
+    connection.pragma_update(None, "wal_autocheckpoint", 0)?;
     connection.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
         row.get::<_, i64>(0)
     })?;
     Ok(())
 }
 
-// ─── one pass under one pin ─────────────────────────────────────────────────
-
-/// One range of the vault as the pass named it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RangeRead {
-    /// The range's index: its offset is `i * 64 KiB`.
-    pub i: u32,
-    /// 64 KiB, or the short last range.
-    pub len: u64,
-    /// BLAKE3 of the range's bytes.
-    pub h: PlaintextHash,
-    /// `name(h, 0)`: the name the range is stored under.
-    pub name: Name,
-    /// Whether the previous head had a different name (or none) at this index. A changed
-    /// range is the only kind handed to the sealer.
-    pub changed: bool,
-}
-
-/// What one pass learned about the vault at its moment.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Walked {
-    pub page_size: u64,
-    /// The vault's length at the pin.
-    pub db_len: u64,
-    /// BLAKE3 over every page in order.
-    pub db_hash: PlaintextHash,
-    pub user_version: i64,
-    /// `vault.writes` at the pin.
-    pub writes: u64,
-    /// `vault.written_at` as milliseconds on the vault's clock; `None` for a vault nothing has
-    /// been written to.
-    pub written_at_ms: Option<u64>,
-    /// Rows per table.
-    pub census: BTreeMap<String, i64>,
-    /// Every range, in order: the manifest's ranges.
-    pub ranges: Vec<RangeRead>,
-    /// Every blob the vault claims at the pin, by hash.
-    pub blobs: Vec<(PlaintextHash, u64)>,
-}
-
-/// **The whole read of a snapshot, under one pin.** Walks the vault's ranges in order; names each
-/// as the mover does (`name(keys, BLAKE3(range), 0)`); compares the name with
-/// `previous(i)`, the previous head's manifest entry at that index; and calls `seal` with the
-/// range's bytes **only for a range that changed**, so an unchanged vault costs a hash per range
-/// and a first snapshot seals everything, one range in memory at a time. Then it counts the
-/// census, reads `user_version` and the write counter, and runs `quick_check`, all on the same
-/// pin, and ends the pin before it returns.
-///
-/// `seal` runs under the pin, so it may read, hash and write the spool but must not talk to a
-/// gateway: nothing it is given can reach one, and a caller asserts [`live_pins`] is zero before
-/// any gateway call. An error from `seal` ends the pass and the pin.
+/// Rows per table: the census a root records and a restore checks. Every ordinary table, counted
+/// on the connection it is given.
 ///
 /// # Errors
-/// What [`PinnedPages::begin`] refuses, a range that does not read, `seal`'s own error, a damaged
-/// vault (`VaultError::Damaged`: no head may be signed over it), or SQLite's refusal. In every
-/// case the pin is released first.
-pub fn walk(
-    path: &Path,
-    keys: &BackupKeys,
-    previous: &dyn Fn(u32) -> Option<Name>,
-    seal: &mut dyn FnMut(&RangeRead, &[u8]) -> Result<()>,
-) -> Result<Walked> {
-    let mut pinned = PinnedPages::begin(path)?;
-    let mut ranges = Vec::new();
-    let db_hash = pinned.hash_with(&mut |index, bytes| {
-        let i = u32::try_from(index).map_err(|_| invariant("too many ranges"))?;
-        let h = PlaintextHash::of(bytes);
-        let named = name(keys, &h, 0);
-        let read = RangeRead {
-            i,
-            len: bytes.len() as u64,
-            h,
-            name: named,
-            changed: previous(i) != Some(named),
-        };
-        if read.changed {
-            seal(&read, bytes)?;
+/// SQLite's refusal.
+pub fn census_of(connection: &Connection) -> rusqlite::Result<BTreeMap<String, i64>> {
+    let tables: Vec<String> = {
+        let mut statement = connection.prepare(
+            "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'
+              ORDER BY name",
+        )?;
+        statement
+            .query_map([], |row| row.get(0))?
+            .collect::<rusqlite::Result<_>>()?
+    };
+    let mut census = BTreeMap::new();
+    for table in tables {
+        let quoted = table.replace('"', "\"\"");
+        // A virtual table whose module is absent cannot be counted; it is absent from both ends.
+        if let Ok(rows) =
+            connection.query_row(&format!("SELECT count(*) FROM \"{quoted}\""), [], |row| {
+                row.get::<_, i64>(0)
+            })
+        {
+            census.insert(table, rows);
         }
-        ranges.push(read);
-        Ok(())
-    })?;
-    let census = pinned.census()?;
-    let blobs = pinned.blobs()?;
-    let user_version = pinned.user_version()?;
-    let (writes, written_at_ms) = pinned.history()?;
-    pinned.quick_check()?;
-    let (page_size, db_len) = (pinned.page_size(), pinned.len());
-    pinned.end()?;
-    Ok(Walked {
-        page_size,
-        db_len,
-        db_hash: PlaintextHash::from_bytes(db_hash),
-        user_version,
-        writes,
-        written_at_ms,
-        census,
-        ranges,
-        blobs,
-    })
+    }
+    Ok(census)
 }

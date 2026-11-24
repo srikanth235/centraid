@@ -2,8 +2,9 @@
 //!
 //! A disk that reads full, an upload refused as too large, an `exists` that
 //! lies, a count of the questions asked, the order objects were committed in,
-//! and a hook that runs (or stops the process) the moment a file has been
-//! renamed into place and before its row is written. None of it may be in the
+//! a hook that runs (or stops the process) the moment a file has been
+//! renamed into place and before its row is written, and one that runs when
+//! a bundle frame is done. None of it may be in the
 //! gateway a member runs, so this whole module is behind the `test-harness`
 //! cargo feature, as [`crate::server::harness`] is, and the few places the
 //! store and the routes consult it are each behind the same attribute.
@@ -21,6 +22,10 @@ pub type RenameHook = Arc<dyn Fn(usize) + Send + Sync>;
 /// Called with the size of each upload the moment it has been staged.
 pub type StagedHook = Arc<dyn Fn(u64) + Send + Sync>;
 
+/// Called with how many bundle frames this gateway has committed (row and
+/// file) in this process, the moment each one's transaction has ended.
+pub type CommittedHook = Arc<dyn Fn(usize) + Send + Sync>;
+
 /// The knobs of one gateway.
 #[derive(Default)]
 pub struct Knobs {
@@ -36,6 +41,8 @@ pub struct Knobs {
     after_rename: Mutex<Option<RenameHook>>,
     before_unlink: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
     on_staged: Mutex<Option<StagedHook>>,
+    on_committed: Mutex<Option<CommittedHook>>,
+    committed: AtomicU64,
 }
 
 impl core::fmt::Debug for Knobs {
@@ -98,6 +105,25 @@ impl Knobs {
     pub fn on_staged(&self, hook: Option<StagedHook>) {
         if let Ok(mut held) = self.on_staged.lock() {
             *held = hook;
+        }
+    }
+
+    /// Run `hook` with the running count of bundle frames committed (stage,
+    /// fsync, rename and row) the moment each one is: a test waits on this to
+    /// know a frame is whole before it cuts the connection after it; `None`
+    /// takes it away.
+    pub fn on_committed(&self, hook: Option<CommittedHook>) {
+        if let Ok(mut held) = self.on_committed.lock() {
+            *held = hook;
+        }
+    }
+
+    /// A bundle frame was judged and, if it was stored, committed.
+    pub(crate) fn frame_done(&self) {
+        let nth = usize::try_from(self.committed.fetch_add(1, Ordering::SeqCst) + 1).unwrap_or(0);
+        let hook = self.on_committed.lock().ok().and_then(|held| held.clone());
+        if let Some(hook) = hook {
+            hook(nth);
         }
     }
 

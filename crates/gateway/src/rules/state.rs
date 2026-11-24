@@ -184,21 +184,21 @@ pub struct ObjectRecord {
     pub stored_at_ms: i64,
     pub hold: Option<Hold>,
     /// When a scrub last found the bytes corrupt or gone. Cleared when a scrub
-    /// finds them whole or a `PUT` replaces them.
+    /// finds them whole or a bundle frame replaces them.
     pub damaged_at_ms: Option<i64>,
 }
 
 impl ObjectRecord {
     /// **LIVE**: not held for deletion and not damaged. What `exists` and
     /// write-once answer about: a name that is held or damaged is one the
-    /// phone must send again, and a `PUT` of it is taken only with the digest
+    /// phone must send again, and a frame of it is taken only with the digest
     /// recorded (decision 28); a signed delete frees a damaged one (30).
     #[must_use]
     pub const fn is_live(&self) -> bool {
         self.hold.is_none() && self.damaged_at_ms.is_none()
     }
 
-    /// What `PUT` and `GET objects` say about it.
+    /// What a bundle frame and `GET objects` say about it.
     #[must_use]
     pub const fn entry(&self) -> ObjectEntry {
         ObjectEntry {

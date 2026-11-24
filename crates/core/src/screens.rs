@@ -42,6 +42,9 @@ pub enum VaultRequest {
     Pins(wire::PinsRequest),
     FetchOriginal(wire::FetchOriginalRequest),
     Releasable(wire::ReleasableRequest),
+    /// Which gateways hold one original whole, read from the device state (#1209, R4): the
+    /// delete warning asks it. Nothing is dialled, so it is a quick door.
+    HeldWhole(wire::HeldWholeRequest),
     Released(wire::ReleasedRequest),
     LibraryAssets(wire::LibraryAssetsRequest),
     Export(wire::VaultExportRequest),
@@ -68,6 +71,7 @@ impl VaultRequest {
             Self::Pins(r) => K::Pins(r),
             Self::FetchOriginal(r) => K::FetchOriginal(r),
             Self::Releasable(r) => K::Releasable(r),
+            Self::HeldWhole(r) => K::HeldWhole(r),
             Self::Released(r) => K::Released(r),
             Self::LibraryAssets(r) => K::LibraryAssets(r),
             Self::Export(r) => K::VaultExport(r),

@@ -114,6 +114,9 @@ message Request {
     // `released` are the two halves of freeing space: which originals a
     // gateway holds so the library's copy may go, and which the member
     // deleted. See `phone.proto`.
+    // DEPRECATED (#1209): `handoff`, `settle` and `reconcile` belong to the plane before
+    // the bundle. A core answers them with an empty answer and does nothing; the OS bundle
+    // files come back with `drain` (`DrainResponse.os_bundles`).
     HandoffRequest handoff = 23;
     SettleRequest settle = 24;
     FetchOriginalRequest fetch_original = 25;
@@ -151,6 +154,8 @@ message Request {
     // WHOLE-VAULT EXPORT: resumable because each library original is supplied
     // by the shell between core-owned ZIP writes. See `phone.proto`.
     VaultExportRequest vault_export = 48;
+    // WHICH GATEWAYS HOLD ONE ORIGINAL WHOLE (#1209, R4): the delete warning's read.
+    HeldWholeRequest held_whole = 49;
   }
 }
 
@@ -200,6 +205,7 @@ message Response {
     GatewayTokensResponse gateway_tokens = 46;
     UndoHeldResponse undo_held = 47;
     VaultExportResponse vault_export = 48;
+    HeldWholeResponse held_whole = 49;
   }
 }
 

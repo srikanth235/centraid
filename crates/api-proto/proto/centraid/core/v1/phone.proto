@@ -149,6 +149,12 @@ message DrainRequest {
   // shell that sent `wants_snapshot` for both meant two things by one bit,
   // and MANUAL means the member's own tap.
   bool asked = 7;
+  // THE SHELL RUNS UPLOADS THE OS CONTINUES WHILE THE APP IS SUSPENDED (#1209, §6.5): iOS's
+  // background `URLSession` (Android writes no bundle files — WorkManager runs the pass itself
+  // inside its window). The core then writes up to four bundle files of at most 32 MiB each for
+  // the thumbnails and originals a gateway lacks and answers them in `DrainResponse.os_bundles`.
+  // What the OS reports of them only wakes a pass.
+  bool os_uploads = 8;
 }
 
 // Why the pass stopped. Every arm is a fact about the spool or the gateway, and
@@ -178,6 +184,9 @@ enum DrainStop {
   // again. Not `UNREACHABLE`: the member can act on this one (free room on
   // the machine), and a status that waited for time would never say so.
   DRAIN_STOP_REFUSED = 5;
+  // Every gateway that answered runs a protocol older than this build needs
+  // (#1209): the member updates the gateway.
+  DRAIN_STOP_TOO_OLD = 6;
 }
 
 message DrainResponse {
@@ -203,6 +212,77 @@ message DrainResponse {
   // The shell streams each through the stage door with
   // `STAGE_SOURCE_OS_LIBRARY`.
   repeated NeedBytes need_bytes = 7;
+  // THE BUNDLE FILES FOR THE OS TO UPLOAD (#1209, §6.5), at most four, each at most 32 MiB,
+  // for the gateways the pass reached. Empty unless `DrainRequest.os_uploads`. Each is a whole
+  // `POST bundle` request (`HandoffPart`, `method` POST); a finished, failed or lost task only
+  // wakes a pass, and nothing the OS reports is recorded as stored.
+  repeated HandoffPart os_bundles = 8;
+  // WHAT IS BACKED UP, PER CLASS (#1209, §6.6), least advanced gateway first: records,
+  // thumbnails, originals.
+  repeated ClassStatus classes = 9;
+}
+
+// The three classes of what a gateway is owed (#1209, `contracts/backup/spec.md` §2): the
+// records (the vault's own pages and tree), then thumbnails, then originals.
+enum BackupClass {
+  BACKUP_CLASS_UNSPECIFIED = 0;
+  BACKUP_CLASS_RECORDS = 1;
+  BACKUP_CLASS_THUMBNAILS = 2;
+  BACKUP_CLASS_ORIGINALS = 3;
+}
+
+// ONE CLASS'S STANDING (#1209, §6.6). `backed_up` is true when every paired gateway holds the
+// class whole: records at the head the newest snapshot names, thumbnails and originals when the
+// gateway's confirmed root equals it. `owed` counts the objects the least advanced gateway is
+// still owed in the class, from the trees alone.
+message ClassStatus {
+  BackupClass class = 1;
+  bool backed_up = 2;
+  uint64 owed = 3;
+  // HOW MANY FILES THE CLASS COVERS AND HOW MANY ARE HELD (#1209, wave 4b): the photos and files
+  // behind "1,162 of 1,282 backed up", counted from the vault's content rows, a video the member
+  // left out not among them. `held` is the files this gateway holds whole (the originals tree or
+  // the thumbnail tree lists them); on the aggregate it is the least any fed gateway holds. Zero
+  // for records, which are one tree and not counted in files.
+  uint64 total = 4;
+  uint64 held = 5;
+  // WHY THE FILES OF THIS CLASS THAT ARE NOT BACKED UP WAIT, one row per reason with a count: the
+  // class's share of `BackupStatusResponse.waiting`. Set on the aggregate rows only (those of
+  // `BackupStatusResponse.classes`); empty for records and on a gateway's own rows.
+  repeated Waiting waiting = 6;
+}
+
+// HOW FAR A RESTORE HAS BROUGHT THE PHOTOS BACK (#1209, R3), counted from the vault's own content
+// rows against what the content store holds on this phone. Previews and originals are files, not
+// chunks; an original the member freed from this phone on purpose, or one the OS library holds, is
+// counted as back, because a restore does not owe it.
+message RestoreProgress {
+  uint64 previews_total = 1;
+  uint64 previews_back = 2;
+  uint64 originals_total = 3;
+  uint64 originals_back = 4;
+}
+
+// WHICH GATEWAYS HOLD ONE ORIGINAL WHOLE (#1209, R4). The delete warning asks before a photo
+// is deleted that no gateway holds whole. Read from the device state; nothing is dialled.
+message HeldWholeRequest {
+  // 32 raw bytes: the BLAKE3 of the whole plaintext.
+  bytes content_hash = 1;
+  // MANY AT ONCE (#1209, wave 4b): a selection or an emptied trash asks about every photo in one
+  // read, so the cost is one pass over each gateway's tree and not one per photo. Each is 32 raw
+  // bytes; `content_hash` is read as well when it is set. `not_held` names the ones no gateway
+  // holds whole.
+  repeated bytes content_hashes = 2;
+}
+
+message HeldWholeResponse {
+  // Every gateway whose confirmed original tree lists every chunk of it.
+  repeated string gateway_ids = 1;
+  // Whether any does: the warning shows when this is false.
+  bool held_whole = 2;
+  // OF `HeldWholeRequest.content_hashes`, the ones no gateway holds whole, in the order asked and
+  // without repeats. The delete warning counts these.
+  repeated bytes not_held = 3;
 }
 
 // ONE ITEM WHOSE BYTES ONLY THE SHELL CAN READ (#1080), and everything the
@@ -522,7 +602,9 @@ message BackupStatusResponse {
   // row is in the snapshot a gateway's head names: bytes no snapshot names
   // would restore as nothing (#1080, the edge sweep).
   uint64 content_confirmed = 8;
-  // Sealed bytes in the spool right now, waiting to move.
+  // Bytes in the staging area right now (#1209, §6.4): sealed ranges between the pin and their
+  // confirmation, originals only the OS library holds, and OS bundle files. (Named for the
+  // spool of the plane before the bundle; the number is kept.)
   uint64 spool_bytes = 9;
   // WHAT WAITS, AND WHY: one row per reason, with a count. Empty is nothing
   // waiting.
@@ -530,6 +612,8 @@ message BackupStatusResponse {
   // A GATEWAY ANSWERED `VAULT_MOVED`: another phone holds this vault's writer
   // epoch, and this one is read-only for it (#1029 F1). Nothing is wiped.
   bool frozen = 11;
+  // DEPRECATED (#1209): the Backup screen draws per class (`classes`), so this is never filled.
+  // The field stays: proto changes are additive only.
   // WHAT EACH APP'S BACKUP HOLDS (#1144), one row per app in the product's
   // order. Empty on a core holding no vault, or no keys to name its files by.
   repeated AppHolding apps = 12;
@@ -556,6 +640,11 @@ message BackupStatusResponse {
   // own person aside. Home's backup line waits about a day after it before it asks to pair.
   // Absent: nothing of the member's yet.
   optional int64 first_item_ms = 18;
+  // WHAT IS BACKED UP, PER CLASS (#1209, §6.6): records, thumbnails, originals.
+  repeated ClassStatus classes = 19;
+  // WHAT A RESTORE STILL HAS TO BRING BACK (#1209, R3), present only from a restore until every
+  // preview and original it owes is on this phone: the vault is open and the screens say so.
+  optional RestoreProgress restoring = 20;
 }
 
 // ONE APP'S PART OF THE BACKUP (#1144). Counts come from the app's own
@@ -701,6 +790,7 @@ message Destination {
   // When this phone paired with it, on this phone's clock (#1188, NB2): the age a device that
   // never confirmed anything is counted from.
   int64 paired_at_ms = 15;
+  // DEPRECATED (#1209): what a device owes is `classes`, and the screens read no per-app rows.
   // WHAT IT STILL OWES, BY APP (#1188, NB1): the originals this gateway has not acknowledged whole,
   // per app, for the Backup screen's "waiting for <device>" rows. Set only by `backup_status`.
   repeated DeviceWaiting waiting_apps = 16;
@@ -723,6 +813,9 @@ message Destination {
   uint32 sample_of = 23;
   // A KEPT SNAPSHOT'S MANIFEST CANNOT BE READ at this gateway (E9): collection is stopped there.
   bool manifest_unreadable = 24;
+  // THIS GATEWAY'S STANDING PER CLASS (#1209, §6.6): records at `conf`, thumbnails and
+  // originals whole when their confirmed roots equal it, and how many objects each is owed.
+  repeated ClassStatus classes = 25;
 }
 
 // How a gateway last answered this phone (`Destination.reach_state`).
@@ -746,6 +839,8 @@ enum DestinationReach {
   DESTINATION_REACH_GATEWAY_OLD = 8;
   // A read-back found damage here and the snapshot is being sent again.
   DESTINATION_REACH_REPAIRING = 9;
+  // The gateway is busy and said when to ask again (#1209).
+  DESTINATION_REACH_BUSY = 10;
 }
 
 // UNDO THE DELETES A GATEWAY IS HOLDING (#1191, E6): lift every hold on this vault at that
@@ -823,6 +918,12 @@ message ForgetDestinationResponse {
 
 // ---------------------------------------------------------------- handoff --
 
+// DEPRECATED (#1209): `HandoffRequest`, `HandoffResponse`, `SettleRequest`, `Settled`,
+// `SettleResponse`, `ReconcileRequest` and `ReconcileResponse` belong to the plane before the
+// bundle. A core ignores them and answers each with an empty answer. The OS's uploads are the
+// bundle files `DrainResponse.os_bundles` names, and what the OS reports only wakes a pass.
+// `HandoffPart` stays: it is the shape of one such upload (a `POST bundle`).
+//
 // HAND SEALED PARTS TO THE OPERATING SYSTEM TO UPLOAD (#1080 rulings 2, 7).
 //
 // The only transfer iOS continues while an app is suspended is a file upload
@@ -873,11 +974,10 @@ message HandoffPart {
   string vault_id = 8;
   // WHETHER THE OPERATING SYSTEM MAY MOVE THIS PART OVER A METERED LINK
   // (#1080, the root's ruling A10), so the member's rule holds for uploads
-  // that run while the app is suspended: thumbnails and previews always, a
-  // video's original never, a photograph's original under
-  // `TRANSFER_RULE_WIFI_AND_CELLULAR_PHOTOS`, and everything else — the
-  // vault's own snapshot among it — exactly when the rule lets photographs
-  // cross cellular. The rule is the one the last `drain` carried.
+  // that run while the app is suspended: true under
+  // `TRANSFER_RULE_WIFI_AND_CELLULAR_PHOTOS`, and false for any bundle
+  // containing video frames (a video's original never crosses cellular). The
+  // rule is the one the last `drain` carried.
   bool allows_cellular = 9;
 }
 

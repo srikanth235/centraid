@@ -8,15 +8,14 @@
 //! # FORMAT DECISION — THE FRAMING
 //!
 //! ```text
-//! frame  = name (64 ascii, lowercase hex) ‖ digest (64 ascii, lowercase hex)
-//!          ‖ u64be(len) ‖ len bytes
+//! frame  = name (32 raw bytes) ‖ digest (32 raw bytes) ‖ u32be(len) ‖ object (len bytes)
 //! bundle = frame*        nothing between frames, nothing after the last
 //! ```
 //!
-//! A 136-byte header per frame, the digest being BLAKE3 of the frame's bytes.
-//! The whole body is at most [`MAX_BUNDLE_BYTES`]. ASCII hex rather than raw
-//! bytes for the two identifiers so a body is greppable in a capture, at a
-//! cost of 64 bytes a frame.
+//! A 68-byte header per frame (spec §4), the digest being BLAKE3 of the
+//! frame's bytes. The whole body is at most [`MAX_BUNDLE_BYTES`]. A frame is
+//! one sealed object, so `u32` holds any length it may have; a frame over
+//! `MAX_OBJECT_BYTES` is read past and answered `too_large`.
 //!
 //! # WHY AN INCREMENTAL DECODER
 //!
@@ -31,7 +30,7 @@ use crate::rules::ids::{Digest, Name};
 use crate::rules::limits::MAX_BUNDLE_BYTES;
 
 /// The bytes before each frame's body.
-pub const HEADER_LEN: usize = 64 + 64 + 8;
+pub const HEADER_LEN: usize = 32 + 32 + 4;
 
 /// One frame's header.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,31 +71,34 @@ impl Frame {
     }
 }
 
-/// The header for one frame.
+/// The header for one frame of `len` bytes. A length past `u32::MAX` is
+/// clamped to it: such a frame is over every cap and is refused at its header.
 #[must_use]
 pub fn header(name: &Name, digest: &Digest, len: u64) -> [u8; HEADER_LEN] {
     let mut out = [0_u8; HEADER_LEN];
-    out[..64].copy_from_slice(name.hex().as_bytes());
-    out[64..128].copy_from_slice(digest.hex().as_bytes());
-    out[128..].copy_from_slice(&len.to_be_bytes());
+    out[..32].copy_from_slice(name.as_bytes());
+    out[32..64].copy_from_slice(digest.as_bytes());
+    out[64..].copy_from_slice(&u32::try_from(len).unwrap_or(u32::MAX).to_be_bytes());
     out
 }
 
-/// Read one header.
+/// Read one header. Every 68 bytes are a header, so none is malformed; the
+/// frame's length is checked against the caps by the decoder.
 ///
 /// # Errors
 ///
-/// `BAD_REQUEST` when either identifier is not 64 lowercase hex characters.
+/// None today; `Result` keeps the decoder's call shape.
 pub fn parse_header(bytes: &[u8; HEADER_LEN]) -> Result<FrameHeader, Refusal> {
-    let text = |range: core::ops::Range<usize>| {
-        core::str::from_utf8(&bytes[range]).map_err(|_| Refusal::BadRequest)
-    };
-    let mut len = [0_u8; 8];
-    len.copy_from_slice(&bytes[128..]);
+    let mut name = [0_u8; 32];
+    name.copy_from_slice(&bytes[..32]);
+    let mut digest = [0_u8; 32];
+    digest.copy_from_slice(&bytes[32..64]);
+    let mut len = [0_u8; 4];
+    len.copy_from_slice(&bytes[64..]);
     Ok(FrameHeader {
-        name: text(0..64)?.parse().map_err(|_| Refusal::BadRequest)?,
-        digest: text(64..128)?.parse().map_err(|_| Refusal::BadRequest)?,
-        len: u64::from_be_bytes(len),
+        name: Name::from_bytes(name),
+        digest: Digest::from_bytes(digest),
+        len: u64::from(u32::from_be_bytes(len)),
     })
 }
 
@@ -318,19 +320,29 @@ mod tests {
         assert_eq!(ends, 3);
     }
 
-    /// A truncated body, a malformed name and an uppercase digest are each
-    /// refused, never half-read.
+    /// A truncated body is refused, never half-read.
     #[test]
-    fn a_malformed_or_truncated_bundle_is_refused() {
+    fn a_truncated_bundle_is_refused() {
         let body = encode(&frames());
         assert_eq!(decode(&body[..body.len() - 1]), Err(Refusal::BadRequest));
         assert_eq!(decode(&body[..HEADER_LEN - 1]), Err(Refusal::BadRequest));
-        let mut bad_name = body.clone();
-        bad_name[0] = b'z';
-        assert_eq!(decode(&bad_name), Err(Refusal::BadRequest));
-        let mut upper = body;
-        upper[64] = b'A';
-        assert_eq!(decode(&upper), Err(Refusal::BadRequest));
+    }
+
+    /// The header is `name ‖ digest ‖ u32be(len)`, raw.
+    #[test]
+    fn the_header_is_raw_name_digest_and_a_u32_length() {
+        let name = Name::from_bytes([9; 32]);
+        let digest = Digest::of(b"x");
+        let head = header(&name, &digest, 0x0102_0304);
+        assert_eq!(HEADER_LEN, 68);
+        assert_eq!(&head[..32], name.as_bytes());
+        assert_eq!(&head[32..64], digest.as_bytes());
+        assert_eq!(&head[64..], &[1, 2, 3, 4]);
+        let parsed = parse_header(&head).expect("parses");
+        assert_eq!(
+            (parsed.name, parsed.digest, parsed.len),
+            (name, digest, 0x0102_0304)
+        );
     }
 
     /// A frame that declares more than the bundle can hold is refused at its
@@ -339,6 +351,7 @@ mod tests {
     fn a_frame_longer_than_the_bundle_cap_is_refused_at_its_header() {
         let name = Name::from_bytes([4; 32]);
         let head = header(&name, &Digest::of(b""), MAX_BUNDLE_BYTES);
+        assert!(MAX_BUNDLE_BYTES < u64::from(u32::MAX));
         let mut decoder = Decoder::new();
         assert_eq!(
             decoder.step(&head),

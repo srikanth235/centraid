@@ -224,16 +224,12 @@ fn the_rows_say_where_things_stand_and_open_the_pages_that_own_them() {
     answer(&mut d, i, keychain_get, stored(""));
     let data = data(&d, i);
     let keys: Vec<&str> = data.sections.iter().map(|s| s.key.as_str()).collect();
-    assert_eq!(keys, ["vault", "backup", "recovery-key"]);
+    assert_eq!(keys, ["backup", "recovery-key"]);
     let row = |section: usize| data.sections[section].rows[0].clone();
-    // One vault in the fixture: no route, a sentence that counts.
-    assert_eq!(row(0).title, "Vaults");
-    assert_eq!(row(0).meta, "This phone has one vault.");
-    assert!(row(0).route.is_none());
     // Backup and the recovery key open the pages that own them.
-    assert_eq!(row(1).route.as_ref().unwrap().screen, "backup.home");
+    assert_eq!(row(0).route.as_ref().unwrap().screen, "backup.home");
     // Reconnect phone data opens the page that lists what another phone followed (#1185).
-    let reconnect = data.sections[1]
+    let reconnect = data.sections[0]
         .rows
         .iter()
         .find(|row| row.id == "reconnect")
@@ -244,15 +240,15 @@ fn the_rows_say_where_things_stand_and_open_the_pages_that_own_them() {
         &reconnect.route.as_ref().unwrap().args,
         Some(wire::route::Args::Reconnect(args)) if args.parent == "Settings"
     ));
-    assert_eq!(row(2).title, "Show recovery key");
-    assert_eq!(row(2).route.as_ref().unwrap().screen, "words.show");
+    assert_eq!(row(1).title, "Show recovery key");
+    assert_eq!(row(1).route.as_ref().unwrap().screen, "words.show");
     // Until the platform says, the key's sentence is the cautious one.
     assert_eq!(
-        row(2).meta,
+        row(1).meta,
         "Can't tell whether your recovery key is saved elsewhere. Save a copy."
     );
     assert!(
-        row(2)
+        row(1)
             .accessibility_label
             .starts_with("Show recovery key, ")
     );
@@ -261,72 +257,31 @@ fn the_rows_say_where_things_stand_and_open_the_pages_that_own_them() {
     assert_eq!(data.about_title, "About");
 }
 
-fn home_state(d: &Driver, i: u64) -> wire::HomeState {
-    match &d.view(i).kind {
-        Some(wire::view_state::Kind::Home(state)) => (**state).clone(),
-        other => panic!("not Home: {other:?}"),
-    }
-}
-
 #[test]
-fn the_vault_row_opens_homes_switcher_and_steps_aside() {
-    let (mut d, home, i) = started();
+fn settings_has_no_vault_section_and_only_the_download_row_is_pressed() {
+    let (mut d, _home, i) = started();
     answer(&mut d, i, keychain_get, stored(""));
-    let vaults = data(&d, i).sections[0].rows[0].clone();
-    // It has no page to push, but it is pressed, and says so (the board's chevron).
-    assert!(vaults.route.is_none() && vaults.pressable);
+    // A PHONE HOLDS ONE VAULT (#1209, R1): there is no section for it, no row that lists vaults and
+    // none that makes another.
+    assert!(
+        data(&d, i)
+            .sections
+            .iter()
+            .all(|section| section.key != "vault"),
+        "no Vault section"
+    );
     assert!(
         data(&d, i)
             .sections
             .iter()
             .flat_map(|s| &s.rows)
             .all(|row| {
-                row.pressable == matches!(row.id.as_str(), "vaults" | "download-settings")
+                !matches!(row.id.as_str(), "vaults" | "make-vault")
+                    && row.pressable == (row.id == "download-settings")
             }),
-        "only the vault and download rows are pressed rather than pushed"
+        "only the download row is pressed rather than pushed"
     );
-    // Home holds a roster to list: the lockup's own sheet needs one.
-    let personal = wire::ShellVault {
-        vault_id: "v1".into(),
-        name: "Personal".into(),
-        state: wire::HomeVaultState::Online as i32,
-        ..Default::default()
-    };
-    d.send(
-        home,
-        E::Home(wire::HomeEvent {
-            kind: Some(wire::home_event::Kind::VaultsTold(
-                wire::home_event::VaultsTold {
-                    vault: Some(personal.clone()),
-                    vaults: vec![personal],
-                    none: false,
-                },
-            )),
-        }),
-    );
-    assert!(home_state(&d, home).sheet.is_none());
-    assert!(!state(&d, i).finished);
-
-    d.send(
-        i,
-        E::Settings(wire::SettingsEvent {
-            kind: Some(wire::settings_event::Kind::RowPressed(
-                wire::settings_event::RowPressed {
-                    id: "vaults".into(),
-                },
-            )),
-        }),
-    );
-    // Home draws the switcher the lockup opens, and this page hands over.
-    assert!(
-        home_state(&d, home).sheet.is_some(),
-        "Home's switcher is open"
-    );
-    assert!(state(&d, i).finished);
-
     // A row that is not pressed does nothing here.
-    let (mut d, home, i) = started();
-    answer(&mut d, i, keychain_get, stored(""));
     d.send(
         i,
         E::Settings(wire::SettingsEvent {
@@ -338,7 +293,6 @@ fn the_vault_row_opens_homes_switcher_and_steps_aside() {
         }),
     );
     assert!(!state(&d, i).finished);
-    assert!(home_state(&d, home).sheet.is_none());
 }
 
 #[test]
@@ -347,27 +301,26 @@ fn each_row_names_its_tile_as_the_board_draws_it() {
     answer(&mut d, i, keychain_get, stored(""));
     let data = data(&d, i);
     let row = |section: usize| data.sections[section].rows[0].clone();
-    // The vault row wears the vault's round initial, never a glyph tile.
-    assert_eq!(row(0).tile, "initial");
-    assert_eq!(row(0).initial.chars().count(), 1);
     // Backup wears the page's own colour; the recovery key the state-amber fill.
-    assert_eq!(row(1).tile, "");
-    assert_eq!(row(2).tile, "amber");
+    assert_eq!(row(0).tile, "");
+    assert_eq!(row(1).tile, "amber");
 }
 
 #[test]
-fn the_board_rows_make_a_vault_and_name_the_download_rule() {
+fn the_board_rows_name_the_download_rule_and_offer_no_second_vault() {
     let (mut d, _home, i) = started();
     answer(&mut d, i, keychain_get, stored(""));
     let data = data(&d, i);
-    // Make a vault opens the page that makes one, under the vault row.
-    let make = &data.sections[0].rows[1];
-    assert_eq!(make.title, "Make a vault");
-    assert_eq!(make.tile, "add");
-    assert_eq!(make.route.as_ref().unwrap().screen, "words.make");
+    // A phone holds one vault: no row makes another (#1209, R1).
+    assert!(
+        data.sections
+            .iter()
+            .flat_map(|section| &section.rows)
+            .all(|row| row.title != "Make a vault")
+    );
     // Download settings shows the one rule (the default until the store is read) and opens its
     // own sheet, not the Backup page.
-    let download = &data.sections[1].rows[1];
+    let download = &data.sections[0].rows[1];
     assert_eq!(download.title, "Download settings");
     assert_eq!(download.value, "Wi-Fi only");
     assert_eq!(download.tile, "neutral");
@@ -446,7 +399,7 @@ fn a_platform_sync_capability_does_not_claim_an_unknown_key_is_saved() {
             restores_after_setup: false,
         }),
     );
-    let key = data(&d, i).sections[2].rows[0].meta.clone();
+    let key = data(&d, i).sections[1].rows[0].meta.clone();
     assert_eq!(
         key,
         "Can't tell whether your recovery key is saved elsewhere. Save a copy."

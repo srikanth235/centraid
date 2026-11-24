@@ -1,27 +1,43 @@
 //! THE PHONE'S CLIENT (#1080).
 //!
-//! HTTP/1.1 over TLS over TCP to one gateway, trusting exactly one
-//! certificate ([`tls`]). Every route of protocol 1 is a method here; the
-//! bodies and refusals are [`crate::rules`]' own types, so the client reads
-//! back exactly what the server rendered.
+//! HTTP/2 over TLS over TCP to one gateway, with HTTP/1.1 when the gateway's
+//! ALPN answers only that, trusting exactly one certificate ([`tls`]). Every
+//! route of protocol 1 is a method here; the bodies and refusals are
+//! [`crate::rules`]' own types, so the client reads back exactly what the
+//! server rendered.
 //!
-//! # ADDRESSES ARE TRIED IN ORDER
+//! # EVERY ADDRESS IS DIALLED, THE FIRST VERIFIED HANDSHAKE WINS
 //!
 //! A [`Destination`] carries the addresses the pairing QR or the last
-//! Bonjour browse listed. The client tries them in order, starting with the
-//! one that answered last; a connect failure on every one is
-//! [`ClientError::Unreachable`] — a phone away from home, not a refusal. An
-//! address that answers with the wrong certificate is
-//! [`ClientError::Untrusted`], which outranks "unreachable": it is a
-//! different machine where the gateway should be.
+//! Bonjour browse listed. The client dials the preferred one (the one that
+//! won last) first and each of the others after [`Limits::stagger`] (250 ms),
+//! or at once when everything dialled before it has failed, so three dead
+//! addresses ahead of a live one cost one dial attempt and no wait. The first
+//! handshake that verifies the pinned certificate wins and becomes the
+//! preferred address; the rest are dropped, and so are their sockets. No
+//! address answering is [`ClientError::Unreachable`] — a phone away from home,
+//! not a refusal. An address that answers with the wrong certificate is
+//! [`ClientError::Untrusted`], which outranks "unreachable" when nothing else
+//! answered: it is a different machine where the gateway should be.
 //!
-//! # ONE CONNECTION, KEPT
+//! # ONE CONNECTION, KEPT, AND RETRIES BY COUNT
 //!
 //! Requests on one client share one connection, re-dialled when the gateway
-//! closed it. A request is sent again on a fresh connection only when hyper
-//! hands it back unsent; a request that may have reached the gateway is
-//! never repeated here — `PUT`s, deletes and the head's compare-and-set are
-//! idempotent by the rules, and the caller decides about the rest.
+//! closed it. A call that may have reached the gateway is repeated only when
+//! it is **idempotent** (`info`, a `head` read, `snapshots`, `held`, `exists`,
+//! `bundle`, `fetch`, `GET` and `HEAD` of an object, `objects`), at most
+//! [`MAX_RETRIES`] times, and only after the connection dropped under it: a
+//! gateway that merely went silent is not asked again. A `BUSY` answer is
+//! honoured: the call waits the `retry_after_ms` it was told (up to
+//! [`Limits::busy_cap`]) and asks again, as one of those retries. The head's
+//! compare-and-set, a delete, an undo, a check and a revoke are never
+//! repeated here: the caller reads the head and decides.
+//!
+//! # A TYPED REACH
+//!
+//! [`Reach`] says what a call found, in the words the Backup screen uses:
+//! `ok`, `unreachable`, `untrusted`, `too_old`, `pair_again`, `moved`,
+//! `frozen`, `busy` ([`ClientError::reach`], [`Client::reach`]).
 //!
 //! # NO WAIT IS UNBOUNDED
 //!
@@ -30,12 +46,11 @@
 //! [`HEADER_TIMEOUT`] without progress to answer its headers (a body frame handed to the socket is
 //! progress) and a body read [`IDLE_TIMEOUT`] between chunks, both [`Limits`]. A call also looks at
 //! its [`Stop`] every [`Limits::poll`] while it waits, so a Cancel ends a transfer in flight.
-//! A call that gives up drops the connection; the next one dials fresh, and a request that may
-//! have reached the gateway is not repeated here.
+//! A call that gives up drops the connection; the next one dials fresh.
 //!
 //! # BUNDLES AND FETCHES STREAM
 //!
-//! [`Client::bundle_parts`] sends parts from memory or straight from spool
+//! [`Client::bundle_parts`] sends parts from memory or straight from staged
 //! files, and [`Client::fetch_each`] hands the answer over one frame at a
 //! time, so a body of [`MAX_BUNDLE_BYTES`] never sits in memory at either end
 //! (#1080, the root's ruling A14). `tests/store_client.rs` holds a process
@@ -44,29 +59,30 @@
 //! # WHAT THIS CLIENT NEVER SAYS
 //!
 //! That something is backed up. It returns what the gateway acknowledged —
-//! a [`Put`], whose every variant is one, and
 //! [`BundleAnswer::acknowledged`] — and nothing more; "backed up" is a word
 //! the phone may use only over an acknowledgement it recorded.
 
 pub mod tls;
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use bytes::Bytes;
+use futures::stream::FuturesUnordered;
 use futures::{StreamExt as _, TryStreamExt as _};
 use http_body_util::combinators::UnsyncBoxBody;
 use http_body_util::{BodyExt as _, Full, StreamBody};
 use hyper::body::{Frame as BodyFrame, Incoming};
 use hyper::header::{self, HeaderValue};
 use hyper::{Method, Request, Response, StatusCode};
-use hyper_util::rt::TokioIo;
+use hyper_util::rt::{TokioExecutor, TokioIo};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use tokio::io::AsyncReadExt as _;
 use tokio_rustls::TlsConnector;
+use tokio_rustls::client::TlsStream;
 use tokio_rustls::rustls::ClientConfig;
 use tokio_rustls::rustls::pki_types::ServerName;
 
@@ -79,9 +95,19 @@ use crate::rules::range::ByteRange;
 use crate::rules::signing::{HeadFields, verify_claim, verify_head};
 use crate::rules::wire::{
     BundleAnswer, CODE_HEADER, DIGEST_HEADER, DeleteAnswer, DeleteRequest, HeadView, HeldEntry,
-    Info, Missing, NameState, Names, NonceAnswer, ObjectEntry, PairRequest, Paired, Revoked,
-    SetHead, SnapshotView, UndoRequest, Undone,
+    Info, Missing, Names, NonceAnswer, ObjectEntry, PairRequest, Paired, Revoked, SetHead,
+    SnapshotView, UndoRequest, Undone,
 };
+
+/// How many times an idempotent call is repeated after its connection dropped
+/// or the gateway said `BUSY`: three, counted, never timed.
+pub const MAX_RETRIES: usize = 3;
+
+/// How long the next address waits behind the ones dialled before it.
+pub const DIAL_STAGGER: Duration = Duration::from_millis(250);
+
+/// The longest a `BUSY`'s `retry_after_ms` is waited in one go.
+pub const BUSY_CAP: Duration = Duration::from_secs(120);
 
 /// How long one address gets to accept a TCP connection.
 pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -201,40 +227,46 @@ pub struct HeadState {
     pub head: Option<HeadView>,
 }
 
-/// What the gateway answered a `PUT` with. `Stored` and `AlreadyStored` are
-/// acknowledgements: the gateway holds these bytes under this name, durably.
-/// `NameTaken` is one only when the digest it holds is the one sent
-/// ([`Put::acknowledged`], decision 30). Anything else is a [`ClientError`].
+/// What a call found out about the gateway, in the words the Backup screen
+/// uses. Anything the gateway answered that is not one of these is `Ok`: it
+/// was reached, trusted, current and willing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Put {
-    /// `201`: new bytes, now held.
-    Stored(ObjectEntry),
-    /// `200`: held already with this digest; nothing moved.
-    AlreadyStored(ObjectEntry),
-    /// `409 NAME_TAKEN`: the name is not free. **An acknowledgement only if
-    /// `held == mine`** ([`Put::acknowledged`]); otherwise the gateway
-    /// holds other bytes under this name and the phone must not count this
-    /// one as stored (#1191, decision 30). A damaged name is freed by a
-    /// signed delete and then written again; a held or live one waits.
-    NameTaken {
-        /// The digest the gateway holds.
-        held: Digest,
-        /// The digest this `PUT` sent.
-        mine: Digest,
-        /// Why the name is not free.
-        state: NameState,
-    },
+pub enum Reach {
+    /// Reached, trusted, current: the call went through or was refused for its
+    /// own reason.
+    Ok,
+    /// No address answered, or the connection kept dropping.
+    Unreachable,
+    /// An address answered with a certificate that is not the pinned one, or
+    /// a head the vault key did not sign.
+    Untrusted,
+    /// The gateway speaks an older protocol than this phone requires.
+    TooOld,
+    /// The gateway does not know this token: pair again.
+    PairAgain,
+    /// A newer phone took the vault over: this phone is superseded.
+    Moved,
+    /// The operator froze the vault.
+    Frozen,
+    /// The gateway is busy and said when to ask again.
+    Busy,
 }
 
-impl Put {
-    /// Whether the gateway now holds *these* bytes under the name: stored,
-    /// already stored, or a `NAME_TAKEN` whose recorded digest is the one
-    /// this `PUT` sent. Any other `NAME_TAKEN` is **not** an acknowledgement.
+impl ClientError {
+    /// This error as a [`Reach`].
     #[must_use]
-    pub fn acknowledged(&self) -> bool {
+    pub fn reach(&self) -> Reach {
         match self {
-            Self::Stored(_) | Self::AlreadyStored(_) => true,
-            Self::NameTaken { held, mine, .. } => held == mine,
+            Self::Unreachable(_) | Self::GatewayFault | Self::Protocol(_) | Self::Io(_) => {
+                Reach::Unreachable
+            }
+            Self::Untrusted | Self::Unverified(_) => Reach::Untrusted,
+            Self::GatewayTooOld { .. } => Reach::TooOld,
+            Self::NoToken | Self::Refused(Refusal::Unauthorized) => Reach::PairAgain,
+            Self::Refused(Refusal::Moved { .. }) => Reach::Moved,
+            Self::Refused(Refusal::Frozen { .. }) => Reach::Frozen,
+            Self::Refused(Refusal::Busy { .. }) => Reach::Busy,
+            Self::Refused(_) | Self::Damaged(_) => Reach::Ok,
         }
     }
 }
@@ -258,19 +290,19 @@ pub struct Part {
     pub source: Source,
 }
 
-/// A `PUT` prepared for someone else to perform: the iPhone's background
-/// `URLSession`, which uploads a spool file while the app is suspended. The
-/// shell adds the file as the body and pins the destination's certificate in
-/// its own trust challenge.
+/// A bundle `POST` prepared for someone else to perform: the iPhone's
+/// background `URLSession` and Android's WorkManager upload a staged bundle
+/// file while the app is suspended. The shell adds the file as the body and
+/// pins the destination's certificate in its own trust challenge.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Handoff {
-    /// `https://<preferred address>/v1/v/<vault>/o/<name>`.
+    /// `https://<preferred address>/v1/v/<vault>/bundle`.
     pub url: String,
-    /// `PUT`.
+    /// `POST`.
     pub method: String,
-    /// `authorization`, `content-digest`, `content-length` and
-    /// `content-type`, lowercase. The `authorization` value is the bearer
-    /// token: the shell holds it as a credential.
+    /// `authorization`, `content-length` and `content-type`, lowercase. The
+    /// `authorization` value is the bearer token: the shell holds it as a
+    /// credential.
     pub headers: Vec<(String, String)>,
 }
 
@@ -286,6 +318,11 @@ pub struct Limits {
     pub idle: Duration,
     /// How often a waiting call looks at its stop.
     pub poll: Duration,
+    /// How long each address waits behind the ones dialled before it
+    /// ([`DIAL_STAGGER`]).
+    pub stagger: Duration,
+    /// The most of a `BUSY`'s `retry_after_ms` one wait takes ([`BUSY_CAP`]).
+    pub busy_cap: Duration,
 }
 
 impl Default for Limits {
@@ -294,12 +331,50 @@ impl Default for Limits {
             header: HEADER_TIMEOUT,
             idle: IDLE_TIMEOUT,
             poll: STOP_POLL,
+            stagger: DIAL_STAGGER,
+            busy_cap: BUSY_CAP,
         }
     }
 }
 
 type Body = UnsyncBoxBody<Bytes, std::io::Error>;
-type Sender = hyper::client::conn::http1::SendRequest<Body>;
+
+/// The connection's request sender: HTTP/2 when ALPN agreed `h2`, HTTP/1.1
+/// otherwise.
+enum Sender {
+    One(hyper::client::conn::http1::SendRequest<Body>),
+    Two(hyper::client::conn::http2::SendRequest<Body>),
+}
+
+impl Sender {
+    fn is_closed(&self) -> bool {
+        match self {
+            Self::One(sender) => sender.is_closed(),
+            Self::Two(sender) => sender.is_closed(),
+        }
+    }
+
+    async fn ready(&mut self) -> Result<(), hyper::Error> {
+        match self {
+            Self::One(sender) => sender.ready().await,
+            Self::Two(sender) => sender.ready().await,
+        }
+    }
+
+    async fn try_send(
+        &mut self,
+        request: Request<Body>,
+    ) -> Result<Response<Incoming>, hyper::client::conn::TrySendError<Request<Body>>> {
+        match self {
+            Self::One(sender) => sender.try_send_request(request).await,
+            Self::Two(sender) => sender.try_send_request(request).await,
+        }
+    }
+
+    const fn is_h2(&self) -> bool {
+        matches!(self, Self::Two(_))
+    }
+}
 
 /// The client for one gateway. See the module header.
 pub struct Client {
@@ -312,6 +387,16 @@ pub struct Client {
     live: Arc<tokio::sync::Mutex<Option<(Sender, String)>>>,
     /// TCP connections this client and its [siblings](Self::sibling) have opened.
     dials: Arc<AtomicUsize>,
+    /// Addresses dialled, whether or not they answered.
+    attempts: Arc<AtomicUsize>,
+    /// Idempotent calls repeated.
+    retries: Arc<AtomicUsize>,
+    /// Connections that dropped under a request that may have reached the gateway.
+    dropped: Arc<AtomicUsize>,
+    /// What each `BUSY` told this client to wait, in milliseconds.
+    busy_waits: Arc<Mutex<Vec<u64>>>,
+    /// `h2` or `http/1.1`: what the last connection negotiated.
+    negotiated: Arc<Mutex<Option<&'static str>>>,
     limits: Mutex<Limits>,
     stop: Mutex<Option<Stop>>,
     /// Counts the body frames handed to the socket, so an upload that is moving is not a stall.
@@ -339,6 +424,11 @@ impl Client {
             seen: Arc::new(Mutex::new(None)),
             live: Arc::new(tokio::sync::Mutex::new(None)),
             dials: Arc::new(AtomicUsize::new(0)),
+            attempts: Arc::new(AtomicUsize::new(0)),
+            retries: Arc::new(AtomicUsize::new(0)),
+            dropped: Arc::new(AtomicUsize::new(0)),
+            busy_waits: Arc::new(Mutex::new(Vec::new())),
+            negotiated: Arc::new(Mutex::new(None)),
             limits: Mutex::new(Limits::default()),
             stop: Mutex::new(None),
             progress: Arc::new(std::sync::atomic::AtomicU64::new(0)),
@@ -359,6 +449,11 @@ impl Client {
             seen: Arc::clone(&self.seen),
             live: Arc::clone(&self.live),
             dials: Arc::clone(&self.dials),
+            attempts: Arc::clone(&self.attempts),
+            retries: Arc::clone(&self.retries),
+            dropped: Arc::clone(&self.dropped),
+            busy_waits: Arc::clone(&self.busy_waits),
+            negotiated: Arc::clone(&self.negotiated),
             limits: Mutex::new(self.limits()),
             stop: Mutex::new(self.stop.lock().ok().and_then(|held| held.clone())),
             progress: Arc::clone(&self.progress),
@@ -369,6 +464,48 @@ impl Client {
     #[must_use]
     pub fn dials(&self) -> usize {
         self.dials.load(Ordering::Relaxed)
+    }
+
+    /// Forget the kept connection, so the next call dials every address again
+    /// (the preferred one first): what a phone does when its network changed.
+    pub async fn drop_connection(&self) {
+        *self.live.lock().await = None;
+    }
+
+    /// How many addresses this client, and every sibling, has dialled: one per
+    /// address per connection attempt, answered or not.
+    #[must_use]
+    pub fn dial_attempts(&self) -> usize {
+        self.attempts.load(Ordering::Relaxed)
+    }
+
+    /// How many times an idempotent call was repeated, `BUSY` waits included.
+    #[must_use]
+    pub fn retries(&self) -> usize {
+        self.retries.load(Ordering::Relaxed)
+    }
+
+    /// What each `BUSY` answer told this client to wait, in order, in
+    /// milliseconds.
+    #[must_use]
+    pub fn busy_waits(&self) -> Vec<u64> {
+        self.busy_waits
+            .lock()
+            .map(|waits| waits.clone())
+            .unwrap_or_default()
+    }
+
+    /// The index in [`Destination::addrs`] that won the last dial and is
+    /// dialled first next time.
+    #[must_use]
+    pub fn preferred_index(&self) -> usize {
+        self.preferred.load(Ordering::Relaxed)
+    }
+
+    /// `h2` or `http/1.1`: the protocol the last connection negotiated.
+    #[must_use]
+    pub fn negotiated(&self) -> Option<&'static str> {
+        self.negotiated.lock().ok().and_then(|held| *held)
     }
 
     /// Replace the header and idle limits. The product keeps the defaults; a test with a
@@ -522,8 +659,9 @@ impl Client {
     ///
     /// [`ClientError`], [`ClientError::GatewayTooOld`] included.
     pub async fn info(&self) -> Result<Info, ClientError> {
-        let answer: Result<Info, ClientError> =
-            self.call(Method::GET, "/v1/info", None::<&()>, false).await;
+        let answer: Result<Info, ClientError> = self
+            .call_idem(Method::GET, "/v1/info", None::<&()>, false)
+            .await;
         handshake(answer)
     }
 
@@ -546,7 +684,7 @@ impl Client {
     ///
     /// [`ClientError`].
     pub async fn head(&self, vault: &VaultId) -> Result<HeadView, ClientError> {
-        self.call(Method::GET, &route(vault, "head"), None::<&()>, true)
+        self.call_idem(Method::GET, &route(vault, "head"), None::<&()>, true)
             .await
     }
 
@@ -631,7 +769,7 @@ impl Client {
         limit: usize,
     ) -> Result<Vec<SnapshotView>, ClientError> {
         let path = page_path(&route(vault, "snapshots"), after, limit);
-        self.call(Method::GET, &path, None::<&()>, true).await
+        self.call_idem(Method::GET, &path, None::<&()>, true).await
     }
 
     /// Every snapshot, paged by name and then sorted by `taken_at_ms`.
@@ -666,7 +804,7 @@ impl Client {
         limit: usize,
     ) -> Result<Vec<HeldEntry>, ClientError> {
         let path = page_path(&route(vault, "held"), after, limit);
-        self.call(Method::GET, &path, None::<&()>, true).await
+        self.call_idem(Method::GET, &path, None::<&()>, true).await
     }
 
     /// `POST /v1/nonce`: a nonce for one pair request. No token, no vault.
@@ -686,7 +824,7 @@ impl Client {
     /// [`ClientError`].
     pub async fn exists(&self, vault: &VaultId, names: &[Name]) -> Result<Vec<Name>, ClientError> {
         let missing: Missing = self
-            .call(
+            .call_idem(
                 Method::POST,
                 &route(vault, "exists"),
                 Some(&Names {
@@ -698,82 +836,6 @@ impl Client {
         Ok(missing.missing)
     }
 
-    /// `PUT o/{name}` from memory.
-    ///
-    /// # Errors
-    ///
-    /// [`ClientError`].
-    pub async fn put(
-        &self,
-        vault: &VaultId,
-        name: &Name,
-        digest: &Digest,
-        bytes: impl Into<Bytes>,
-    ) -> Result<Put, ClientError> {
-        let bytes = bytes.into();
-        let length = bytes.len() as u64;
-        let body = Full::new(bytes)
-            .map_err(|never| match never {})
-            .boxed_unsync();
-        self.put_body(vault, name, digest, length, body).await
-    }
-
-    /// `PUT o/{name}` streamed from a spool file, never held whole.
-    ///
-    /// # Errors
-    ///
-    /// [`ClientError`], [`ClientError::Io`] for the file.
-    pub async fn put_file(
-        &self,
-        vault: &VaultId,
-        name: &Name,
-        digest: &Digest,
-        path: &Path,
-    ) -> Result<Put, ClientError> {
-        let length = tokio::fs::metadata(path).await?.len();
-        let chunks = self
-            .counting(file_chunks(path.to_path_buf(), length))
-            .map_ok(BodyFrame::data);
-        let body = StreamBody::new(chunks).boxed_unsync();
-        self.put_body(vault, name, digest, length, body).await
-    }
-
-    async fn put_body(
-        &self,
-        vault: &VaultId,
-        name: &Name,
-        digest: &Digest,
-        length: u64,
-        body: Body,
-    ) -> Result<Put, ClientError> {
-        let mut request = self.request(Method::PUT, &object_route(vault, name), body, true)?;
-        let headers = request.headers_mut();
-        headers.insert(header::CONTENT_LENGTH, HeaderValue::from(length));
-        headers.insert(
-            header::CONTENT_TYPE,
-            HeaderValue::from_static("application/octet-stream"),
-        );
-        headers.insert(DIGEST_HEADER, header_value(&digest.header())?);
-        let response = self.send(request).await?;
-        let status = response.status();
-        match self.read_answer::<ObjectEntry>(response).await {
-            Ok(entry) if status == StatusCode::CREATED => Ok(Put::Stored(entry)),
-            Ok(entry) if status == StatusCode::OK => Ok(Put::AlreadyStored(entry)),
-            Ok(_) => Err(ClientError::Protocol(format!(
-                "a PUT answered {status}, which is neither 201 nor 200"
-            ))),
-            Err(ClientError::Refused(Refusal::NameTaken {
-                digest: held,
-                state,
-            })) => Ok(Put::NameTaken {
-                held,
-                mine: *digest,
-                state,
-            }),
-            Err(error) => Err(error),
-        }
-    }
-
     /// `GET o/{name}`, whole or one range. A whole object is checked against
     /// the digest the gateway sends with it.
     ///
@@ -782,6 +844,15 @@ impl Client {
     /// [`ClientError`]; [`ClientError::Damaged`] when the bytes do not hash
     /// to their digest.
     pub async fn get(
+        &self,
+        vault: &VaultId,
+        name: &Name,
+        range: Option<ByteRange>,
+    ) -> Result<Vec<u8>, ClientError> {
+        self.retrying(|| self.get_once(vault, name, range)).await
+    }
+
+    async fn get_once(
         &self,
         vault: &VaultId,
         name: &Name,
@@ -825,6 +896,10 @@ impl Client {
     ///
     /// [`ClientError`].
     pub async fn stat(&self, vault: &VaultId, name: &Name) -> Result<ObjectStat, ClientError> {
+        self.retrying(|| self.stat_once(vault, name)).await
+    }
+
+    async fn stat_once(&self, vault: &VaultId, name: &Name) -> Result<ObjectStat, ClientError> {
         let request = self.request(Method::HEAD, &object_route(vault, name), empty(), true)?;
         let response = self.send(request).await?;
         let status = response.status();
@@ -879,9 +954,9 @@ impl Client {
         self.bundle_parts(vault, parts).await
     }
 
-    /// `POST bundle`: many parts in one body, each answered as its own `PUT`
-    /// would be ([`BundleAnswer`]; [`BundleAnswer::acknowledged`] is what a
-    /// phone may record).
+    /// `POST bundle`: many parts in one body, each committed on its own and
+    /// answered on its own ([`BundleAnswer`]; [`BundleAnswer::acknowledged`] is
+    /// what a phone may record).
     ///
     /// **The body streams.** Each part's header is written as its turn
     /// comes, and a [`Source::File`] is read 256 KiB at a time as the body
@@ -898,6 +973,17 @@ impl Client {
     /// the bundle was measured: the request fails rather than send a short
     /// frame.
     pub async fn bundle_parts(
+        &self,
+        vault: &VaultId,
+        parts: Vec<Part>,
+    ) -> Result<BundleAnswer, ClientError> {
+        // Idempotent: a frame is write-once by name and digest, so the whole
+        // body is sent again when the connection dropped under it.
+        self.retrying(|| self.bundle_once(vault, parts.clone()))
+            .await
+    }
+
+    async fn bundle_once(
         &self,
         vault: &VaultId,
         parts: Vec<Part>,
@@ -973,6 +1059,30 @@ impl Client {
         names: &[Name],
         mut each: impl FnMut(Frame) -> std::io::Result<()>,
     ) -> Result<usize, ClientError> {
+        // Repeated after a drop only while nothing has been handed to `each`:
+        // a frame is never delivered twice.
+        let mut tried = 0;
+        loop {
+            let before = self.dropped.load(Ordering::Relaxed);
+            let mut delivered = 0;
+            let outcome = Box::pin(self.fetch_once(vault, names, &mut |frame| {
+                delivered += 1;
+                each(frame)
+            }))
+            .await;
+            match outcome {
+                Err(error) if delivered == 0 && self.again(&error, &mut tried, before).await? => {}
+                other => return other,
+            }
+        }
+    }
+
+    async fn fetch_once(
+        &self,
+        vault: &VaultId,
+        names: &[Name],
+        each: &mut impl FnMut(Frame) -> std::io::Result<()>,
+    ) -> Result<usize, ClientError> {
         let body = json_body(&Names {
             names: names.to_vec(),
         })?;
@@ -994,11 +1104,11 @@ impl Client {
                 let (step, used) = decoder.step(rest).map_err(not_a_bundle)?;
                 rest = &rest[used..];
                 let Some(step) = step else { break };
-                count += usize::from(take(step, &mut current, &mut each)?);
+                count += usize::from(take(step, &mut current, each)?);
             }
         }
         while let (Some(step), _) = decoder.step(&[]).map_err(not_a_bundle)? {
-            count += usize::from(take(step, &mut current, &mut each)?);
+            count += usize::from(take(step, &mut current, each)?);
         }
         decoder.finish().map_err(not_a_bundle)?;
         Ok(count)
@@ -1016,7 +1126,7 @@ impl Client {
         limit: usize,
     ) -> Result<Vec<ObjectEntry>, ClientError> {
         let path = page_path(&route(vault, "objects"), after, limit);
-        self.call(Method::GET, &path, None::<&()>, true).await
+        self.call_idem(Method::GET, &path, None::<&()>, true).await
     }
 
     /// `POST delete`: the vault key's signed request to hold `names` for a
@@ -1074,31 +1184,24 @@ impl Client {
             .await
     }
 
-    /// A `PUT` for the platform to perform: no network here, only the URL and
-    /// headers the shell's background upload needs, built for the address
-    /// that answered last.
+    /// A bundle `POST` for the platform to perform: no network here, only the
+    /// URL and headers the shell's background upload needs, built for the
+    /// address that answered last. `size` is the staged bundle file's length.
     ///
     /// # Errors
     ///
     /// [`ClientError::NoToken`] without a token, [`ClientError::Unreachable`]
     /// with no address.
-    pub fn presign_put(
-        &self,
-        vault: &VaultId,
-        name: &Name,
-        digest: &Digest,
-        size: u64,
-    ) -> Result<Handoff, ClientError> {
+    pub fn presign_bundle(&self, vault: &VaultId, size: u64) -> Result<Handoff, ClientError> {
         let token = self.token().ok_or(ClientError::NoToken)?;
         let addr = self
             .preferred_addr()
             .ok_or_else(|| ClientError::Unreachable("no address".to_owned()))?;
         Ok(Handoff {
-            url: format!("https://{addr}{}", object_route(vault, name)),
-            method: "PUT".to_owned(),
+            url: format!("https://{addr}{}", route(vault, "bundle")),
+            method: "POST".to_owned(),
             headers: vec![
                 ("authorization".to_owned(), format!("Bearer {token}")),
-                (DIGEST_HEADER.to_owned(), digest.header()),
                 ("content-length".to_owned(), size.to_string()),
                 (
                     "content-type".to_owned(),
@@ -1106,6 +1209,24 @@ impl Client {
                 ),
             ],
         })
+    }
+
+    /// What the gateway is, to this phone, right now: [`Self::info`] first
+    /// (reached, trusted, current), then — with a token and a `vault` — the
+    /// head read, which tells a token the gateway forgot (`pair_again`), a
+    /// superseded phone (`moved`) and a frozen vault apart. A vault with no
+    /// head yet is `ok`.
+    pub async fn reach(&self, vault: Option<&VaultId>) -> Reach {
+        if let Err(error) = self.info().await {
+            return error.reach();
+        }
+        let Some(vault) = vault else {
+            return Reach::Ok;
+        };
+        match self.head(vault).await {
+            Ok(_) | Err(ClientError::Refused(Refusal::NoHead { .. })) => Reach::Ok,
+            Err(error) => error.reach(),
+        }
     }
 
     // ─── the plumbing ────────────────────────────────────────────────────────
@@ -1117,7 +1238,10 @@ impl Client {
     ) -> Result<Option<Bytes>, ClientError> {
         self.guarded(self.limits().idle, "reading the answer", body.try_next())
             .await?
-            .map_err(|error| ClientError::Unreachable(error.to_string()))
+            .map_err(|error| {
+                self.dropped.fetch_add(1, Ordering::Relaxed);
+                ClientError::Unreachable(error.to_string())
+            })
     }
 
     /// A response body, refusing one longer than `cap`.
@@ -1168,6 +1292,90 @@ impl Client {
         self.read_answer(response).await
     }
 
+    /// [`Self::call`] for a route that is idempotent: see [`Self::retrying`].
+    async fn call_idem<T: DeserializeOwned, B: Serialize>(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&B>,
+        authorized: bool,
+    ) -> Result<T, ClientError> {
+        self.retrying(|| self.call(method.clone(), path, body, authorized))
+            .await
+    }
+
+    /// Run an idempotent call, repeating it at most [`MAX_RETRIES`] times: when
+    /// the connection dropped under it, or when the gateway said `BUSY` (after
+    /// waiting what it asked). Any other outcome is the answer.
+    async fn retrying<T, Fut>(&self, mut attempt: impl FnMut() -> Fut) -> Result<T, ClientError>
+    where
+        Fut: std::future::Future<Output = Result<T, ClientError>>,
+    {
+        let mut tried = 0;
+        loop {
+            let before = self.dropped.load(Ordering::Relaxed);
+            // Boxed, so a call's state lives on the heap and not in every
+            // future that awaits it (a suite drives hundreds of calls from one
+            // thread's small stack).
+            match Box::pin(attempt()).await {
+                Err(error) if self.again(&error, &mut tried, before).await? => {}
+                other => return other,
+            }
+        }
+    }
+
+    /// After a failed attempt of an idempotent call: wait if the gateway said
+    /// `BUSY`, and say whether to try again. Counted: `tried` never passes
+    /// [`MAX_RETRIES`].
+    async fn again(
+        &self,
+        error: &ClientError,
+        tried: &mut usize,
+        dropped_before: usize,
+    ) -> Result<bool, ClientError> {
+        if *tried >= MAX_RETRIES {
+            return Ok(false);
+        }
+        match error {
+            ClientError::Refused(Refusal::Busy { retry_after_ms }) => {
+                *tried += 1;
+                self.retries.fetch_add(1, Ordering::Relaxed);
+                self.pause(*retry_after_ms).await?;
+                Ok(true)
+            }
+            ClientError::Unreachable(_)
+                if self.dropped.load(Ordering::Relaxed) != dropped_before =>
+            {
+                *tried += 1;
+                self.retries.fetch_add(1, Ordering::Relaxed);
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    /// Wait `ms` as a `BUSY` asked (at most [`Limits::busy_cap`]), looking at
+    /// the stop while waiting.
+    async fn pause(&self, ms: u64) -> Result<(), ClientError> {
+        if let Ok(mut waits) = self.busy_waits.lock() {
+            waits.push(ms);
+        }
+        let limits = self.limits();
+        let mut left = Duration::from_millis(ms).min(limits.busy_cap);
+        while !left.is_zero() {
+            if self.stopped() {
+                return Err(ClientError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Interrupted,
+                    "stopped by the caller",
+                )));
+            }
+            let step = left.min(limits.poll);
+            tokio::time::sleep(step).await;
+            left -= step;
+        }
+        Ok(())
+    }
+
     fn request(
         &self,
         method: Method,
@@ -1194,8 +1402,11 @@ impl Client {
     /// watches the stop (the module header's "no timeout once connected" is gone).
     async fn send(&self, mut request: Request<Body>) -> Result<Response<Incoming>, ClientError> {
         let limits = self.limits();
-        let dial = (CONNECT_TIMEOUT + HANDSHAKE_TIMEOUT * 2)
-            .saturating_mul(u32::try_from(self.addrs.len().max(1)).unwrap_or(u32::MAX));
+        let dial = (CONNECT_TIMEOUT + HANDSHAKE_TIMEOUT * 2).saturating_add(
+            limits
+                .stagger
+                .saturating_mul(u32::try_from(self.addrs.len()).unwrap_or(u32::MAX)),
+        );
         let mut live = self.live.lock().await;
         for attempt in 0..2 {
             if live.as_ref().is_none_or(|(sender, _)| sender.is_closed()) {
@@ -1204,9 +1415,7 @@ impl Client {
             let Some((sender, host)) = live.as_mut() else {
                 continue;
             };
-            request
-                .headers_mut()
-                .insert(header::HOST, header_value(host)?);
+            addressed(&mut request, sender.is_h2(), host)?;
             let ready = self
                 .guarded(limits.header, "waiting for the connection", sender.ready())
                 .await;
@@ -1227,7 +1436,7 @@ impl Client {
                 .guarded(
                     limits.header,
                     "waiting for the answer",
-                    sender.try_send_request(request),
+                    sender.try_send(request),
                 )
                 .await;
             let sent = match sent {
@@ -1243,7 +1452,15 @@ impl Client {
                     *live = None;
                     match failed.take_message() {
                         Some(unsent) if attempt == 0 => request = unsent,
-                        _ => return Err(ClientError::Unreachable(failed.error().to_string())),
+                        Some(_) => {
+                            return Err(ClientError::Unreachable(failed.error().to_string()));
+                        }
+                        None => {
+                            // It may have reached the gateway: an idempotent call
+                            // may be repeated, and only because of this.
+                            self.dropped.fetch_add(1, Ordering::Relaxed);
+                            return Err(ClientError::Unreachable(failed.error().to_string()));
+                        }
                     }
                 }
             }
@@ -1253,74 +1470,80 @@ impl Client {
         ))
     }
 
-    /// Dial the addresses in order, from the one that answered last.
+    /// Dial every address, the preferred one first and each other after
+    /// [`Limits::stagger`] (at once when everything dialled before it has
+    /// failed); the first verified handshake wins and becomes the preferred
+    /// address. The rest are dropped, sockets and all.
     async fn connect(&self) -> Result<(Sender, String), ClientError> {
         if self.addrs.is_empty() {
             return Err(ClientError::Unreachable("no address".to_owned()));
         }
-        let start = self.preferred.load(Ordering::Relaxed);
+        let count = self.addrs.len();
+        let start = self.preferred.load(Ordering::Relaxed) % count;
+        let stagger = self.limits().stagger;
+        let mut queue = (0..count).map(|offset| (start + offset) % count);
+        let mut running = FuturesUnordered::new();
+        let mut timer = Box::pin(tokio::time::sleep(stagger));
         let mut untrusted = false;
         let mut last = String::new();
-        for offset in 0..self.addrs.len() {
-            let index = (start + offset) % self.addrs.len();
-            let addr = &self.addrs[index];
-            let socket = match tokio::time::timeout(
-                CONNECT_TIMEOUT,
-                tokio::net::TcpStream::connect(addr.as_str()),
-            )
-            .await
-            {
-                Ok(Ok(socket)) => socket,
-                Ok(Err(error)) => {
-                    last = format!("{addr}: {error}");
-                    continue;
-                }
-                Err(_) => {
-                    last = format!("{addr}: timed out");
-                    continue;
-                }
-            };
-            self.dials.fetch_add(1, Ordering::Relaxed);
-            let _ = socket.set_nodelay(true);
-            // A peer that vanishes under a silent connection is found by the kernel as well.
-            let keepalive = socket2::TcpKeepalive::new()
-                .with_time(KEEPALIVE)
-                .with_interval(KEEPALIVE);
-            let _ = socket2::SockRef::from(&socket).set_tcp_keepalive(&keepalive);
-            let connector = TlsConnector::from(Arc::clone(&self.config));
-            // The name is not the trust — the verifier compares bytes — but a
-            // handshake needs one, and the certificate carries `localhost`.
-            let server_name = ServerName::try_from("localhost")
-                .map_err(|error| ClientError::Protocol(error.to_string()))?;
-            let stream = match tokio::time::timeout(
-                HANDSHAKE_TIMEOUT,
-                connector.connect(server_name, socket),
-            )
-            .await
-            {
-                Ok(Ok(stream)) => stream,
-                Ok(Err(error)) => {
-                    untrusted |= is_untrusted(&error);
-                    last = format!("{addr}: {error}");
-                    continue;
-                }
-                Err(_) => {
-                    last = format!("{addr}: the handshake timed out");
-                    continue;
-                }
-            };
-            if let Some(der) = stream
-                .get_ref()
-                .1
-                .peer_certificates()
-                .and_then(<[_]>::first)
-                && let Ok(mut seen) = self.seen.lock()
-            {
-                *seen = Some(der.to_vec());
+        let won = loop {
+            if running.is_empty() {
+                let Some(index) = queue.next() else {
+                    break None;
+                };
+                running.push(self.dial(index));
+                timer.as_mut().reset(tokio::time::Instant::now() + stagger);
             }
+            let more = queue.len() > 0;
+            tokio::select! {
+                Some((index, result)) = running.next() => match result {
+                    Ok(dialled) => break Some((index, dialled)),
+                    Err(Dial::Untrusted(why)) => {
+                        untrusted = true;
+                        last = why;
+                    }
+                    Err(Dial::Failed(why)) => last = why,
+                },
+                () = &mut timer, if more => {
+                    if let Some(index) = queue.next() {
+                        running.push(self.dial(index));
+                    }
+                    timer
+                        .as_mut()
+                        .reset(tokio::time::Instant::now() + stagger);
+                }
+            }
+        };
+        drop(running);
+        let Some((index, stream)) = won else {
+            return if untrusted {
+                Err(ClientError::Untrusted)
+            } else {
+                Err(ClientError::Unreachable(last))
+            };
+        };
+        let addr = self.addrs[index].clone();
+        if let Some(der) = stream
+            .get_ref()
+            .1
+            .peer_certificates()
+            .and_then(<[_]>::first)
+            && let Ok(mut seen) = self.seen.lock()
+        {
+            *seen = Some(der.to_vec());
+        }
+        let h2 = stream.get_ref().1.alpn_protocol() == Some(&b"h2"[..]);
+        let negotiated = if h2 { "h2" } else { "http/1.1" };
+        if let Ok(mut held) = self.negotiated.lock() {
+            *held = Some(negotiated);
+        }
+        let io = TokioIo::new(stream);
+        let sender = if h2 {
             let (sender, connection) = tokio::time::timeout(
                 HANDSHAKE_TIMEOUT,
-                hyper::client::conn::http1::handshake(TokioIo::new(stream)),
+                hyper::client::conn::http2::Builder::new(TokioExecutor::new())
+                    .adaptive_window(true)
+                    .handshake(io),
             )
             .await
             .map_err(|_| ClientError::Unreachable(format!("{addr}: the HTTP handshake timed out")))?
@@ -1330,15 +1553,99 @@ impl Client {
             tokio::spawn(async move {
                 let _ = connection.await;
             });
-            self.preferred.store(index, Ordering::Relaxed);
-            return Ok((sender, addr.clone()));
-        }
-        if untrusted {
-            Err(ClientError::Untrusted)
+            Sender::Two(sender)
         } else {
-            Err(ClientError::Unreachable(last))
+            let (sender, connection) =
+                tokio::time::timeout(HANDSHAKE_TIMEOUT, hyper::client::conn::http1::handshake(io))
+                    .await
+                    .map_err(|_| {
+                        ClientError::Unreachable(format!("{addr}: the HTTP handshake timed out"))
+                    })?
+                    .map_err(|error| ClientError::Unreachable(format!("{addr}: {error}")))?;
+            tokio::spawn(async move {
+                let _ = connection.await;
+            });
+            Sender::One(sender)
+        };
+        self.preferred.store(index, Ordering::Relaxed);
+        Ok((sender, addr))
+    }
+
+    /// One address: TCP, then the pinned TLS handshake. Counted when it
+    /// starts, so a test sees how many addresses a connection tried.
+    fn dial(
+        &self,
+        index: usize,
+    ) -> impl std::future::Future<Output = (usize, Result<TlsStream<tokio::net::TcpStream>, Dial>)>
+    {
+        let addr = self.addrs[index].clone();
+        let config = Arc::clone(&self.config);
+        let dials = Arc::clone(&self.dials);
+        let attempts = Arc::clone(&self.attempts);
+        async move {
+            attempts.fetch_add(1, Ordering::Relaxed);
+            (index, dial_address(&addr, config, &dials).await)
         }
     }
+}
+
+/// Why one address did not win.
+enum Dial {
+    /// The handshake failed because the certificate was not the pinned one.
+    Untrusted(String),
+    /// Nothing answered, or the handshake failed for any other reason.
+    Failed(String),
+}
+
+async fn dial_address(
+    addr: &str,
+    config: Arc<ClientConfig>,
+    dials: &AtomicUsize,
+) -> Result<TlsStream<tokio::net::TcpStream>, Dial> {
+    let socket =
+        match tokio::time::timeout(CONNECT_TIMEOUT, tokio::net::TcpStream::connect(addr)).await {
+            Ok(Ok(socket)) => socket,
+            Ok(Err(error)) => return Err(Dial::Failed(format!("{addr}: {error}"))),
+            Err(_) => return Err(Dial::Failed(format!("{addr}: timed out"))),
+        };
+    dials.fetch_add(1, Ordering::Relaxed);
+    let _ = socket.set_nodelay(true);
+    // A peer that vanishes under a silent connection is found by the kernel as well.
+    let keepalive = socket2::TcpKeepalive::new()
+        .with_time(KEEPALIVE)
+        .with_interval(KEEPALIVE);
+    let _ = socket2::SockRef::from(&socket).set_tcp_keepalive(&keepalive);
+    let connector = TlsConnector::from(config);
+    // The name is not the trust — the verifier compares bytes — but a
+    // handshake needs one, and the certificate carries `localhost`.
+    let server_name = ServerName::try_from("localhost")
+        .map_err(|error| Dial::Failed(format!("{addr}: {error}")))?;
+    match tokio::time::timeout(HANDSHAKE_TIMEOUT, connector.connect(server_name, socket)).await {
+        Ok(Ok(stream)) => Ok(stream),
+        Ok(Err(error)) if is_untrusted(&error) => Err(Dial::Untrusted(format!("{addr}: {error}"))),
+        Ok(Err(error)) => Err(Dial::Failed(format!("{addr}: {error}"))),
+        Err(_) => Err(Dial::Failed(format!("{addr}: the handshake timed out"))),
+    }
+}
+
+/// Address the request to the gateway: HTTP/2 wants the scheme and authority
+/// in the URI; HTTP/1.1 wants them in `Host`.
+fn addressed(request: &mut Request<Body>, h2: bool, host: &str) -> Result<(), ClientError> {
+    if h2 {
+        let path = request
+            .uri()
+            .path_and_query()
+            .map_or("/", hyper::http::uri::PathAndQuery::as_str);
+        *request.uri_mut() = format!("https://{host}{path}").parse().map_err(
+            |error: hyper::http::uri::InvalidUri| ClientError::Protocol(error.to_string()),
+        )?;
+        request.headers_mut().remove(header::HOST);
+    } else {
+        request
+            .headers_mut()
+            .insert(header::HOST, header_value(host)?);
+    }
+    Ok(())
 }
 
 /// What the handshake decides from the `/v1/info` answer: any protocol below

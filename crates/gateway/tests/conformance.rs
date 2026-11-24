@@ -234,7 +234,7 @@ fn the_suite_catches_a_target_that_lies() {
         .map(|case| case.name)
         .collect();
     for expected in [
-        "objects/put-is-write-once-by-name-and-digest",
+        "objects/a-frame-is-write-once-by-name-and-digest",
         "objects/a-digest-that-is-not-the-bytes-stores-nothing",
     ] {
         assert!(

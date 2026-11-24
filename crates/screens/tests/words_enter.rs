@@ -377,6 +377,31 @@ fn a_valid_phrase_opens_the_one_control_and_a_restore_answer_drops_every_word() 
         state.progress,
         "Looking for your backup device and checking what it holds. This can take a minute."
     );
+    // R3 (#1209): the member is told the order the vault comes back in. The vault opens when the
+    // records are back; the previews and then the originals follow, and nothing is promised in
+    // minutes.
+    assert_eq!(state.title, "Restoring your vault");
+    assert_eq!(
+        state.body,
+        "Your vault opens when your records are back. Photos follow."
+    );
+    let rows: Vec<(&str, &str, &str)> = state
+        .restore_rows
+        .iter()
+        .map(|row| (row.name.as_str(), row.detail.as_str(), row.state.as_str()))
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            ("Records", "", "Restoring"),
+            ("Photo previews", "Small versions, for browsing.", "Next"),
+            (
+                "Photos and files",
+                "Newest first, in the background.",
+                "Then"
+            ),
+        ]
+    );
 
     deliver(
         &mut phone,
@@ -576,7 +601,7 @@ fn re_keying_done_says_the_words_are_back_and_nothing_to_key_offers_the_restore_
     assert!(state.cells.is_empty());
     assert_eq!(
         state.body,
-        "Locker and backups open again for the vaults made with this key."
+        "Locker and backups open again for the vault made with this key."
     );
     assert_eq!(phone.keeper.log(), vec!["rekey seed=true".to_owned()]);
 
@@ -589,7 +614,7 @@ fn re_keying_done_says_the_words_are_back_and_nothing_to_key_offers_the_restore_
             .notice
             .starts_with("No vault on this phone uses this key.")
     );
-    assert_eq!(state.primary_label, "Restore vaults");
+    assert_eq!(state.primary_label, "Restore my vault");
     // THE OFFERED RESTORE DRAWS THE CODE'S FIELD AND WAITS FOR IT (#1080 A23).
     assert!(state.endpoint_label.starts_with("Paste the pairing code"));
     assert!(!state.primary_enabled);
@@ -641,7 +666,7 @@ fn a_re_key_explains_itself_in_its_doors_words_pairings_lockers_and_a_restores_o
     primary(&mut done);
     assert_eq!(
         done.enter().body,
-        "The vaults made with this key can pair with your backup device now."
+        "The vault made with this key can pair with your backup device now."
     );
     assert_eq!(done.enter().origin, wire::WordsEnterOrigin::Pairing as i32);
 }
@@ -662,7 +687,7 @@ fn a_restore_opened_while_the_keychain_holds_a_seed_opens_without_the_grid() {
     let phone = held_phone(routes::restore());
     let state = phone.enter();
     assert!(state.cells.is_empty() && !state.secure);
-    assert_eq!(state.title, "Restore your vaults");
+    assert_eq!(state.title, "Restore your vault");
     assert!(state.endpoint_label.starts_with("Paste the pairing code"));
     // NO CODE, NO RESTORE (#1080 A23).
     assert!(!state.primary_enabled);
@@ -745,7 +770,7 @@ fn a_held_restore_lists_the_vaults_on_their_own_words_it_will_also_bring_back() 
     let state = phone.enter();
     assert_eq!(
         state.held_keys_label,
-        "These vaults have their own recovery key and come back too:"
+        "This vault has its own recovery key and comes back too:"
     );
     assert_eq!(state.held_keys, vec!["A vault with its own recovery key"]);
 }

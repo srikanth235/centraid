@@ -50,7 +50,7 @@ name: onboarding
       id: "home-grid"
     timeout: 30000
 - assertVisible:
-    id: "home-vault-switch"
+    id: "home-vault-name"
 # THE LOCKUP'S SECOND LINE IS EMPTY ON DAY ZERO AND DAY ONE (ruling 2026-11-17, R-ONBOARD-11): the
 # backup's one seat says nothing until about a day after the first item. The day-zero state below is
 # the welcome card, and no status line.

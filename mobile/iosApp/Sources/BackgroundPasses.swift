@@ -9,14 +9,14 @@ import UIKit
 /// Bytes move while the app is suspended through the background `URLSession`
 /// in `BackgroundUploads.swift` (#1080 ruling 2). These windows are the other
 /// half: the work that needs this process — taking a snapshot, hashing and
-/// sealing into the spool, settling what the OS reported, asking the core for
-/// the next `handoff` batch.
+/// sealing into staging, re-reading the gateway's head after a wake from the OS, and
+/// writing the next bundle files the OS uploads.
 ///
 /// | Identifier | Request | What it runs |
 /// |---|---|---|
-/// | `dev.centraid.upload-pass` | `BGProcessingTaskRequest`, network and external power | the night shift (`centraid-night-shift`): the full pass, snapshot when due, prepare, settle, then hand the next batch to the OS |
+/// | `dev.centraid.upload-pass` | `BGProcessingTaskRequest`, network and external power | the night shift (`centraid-night-shift`): the full pass, snapshot when due, prepare, then hand the bundle files to the OS |
 /// | `dev.centraid.nudge-pass` | `BGProcessingTaskRequest`, network, no earliest date, no power | the one-off nudge after a capture or an import (`centraid-nudge`): the same full pass, as soon as iOS allows |
-/// | `dev.centraid.sync-pass` | `BGAppRefreshTaskRequest`, seconds | the periodic window (`centraid-sync-pass`): a short pass whose deadline leaves it time to settle and hand off, not to prepare much |
+/// | `dev.centraid.sync-pass` | `BGAppRefreshTaskRequest`, seconds | the periodic window (`centraid-sync-pass`): a short pass whose deadline leaves it time to hand off, not to prepare much |
 ///
 /// **One identifier per window** (#1188, B7). iOS keeps one pending request per identifier, so
 /// two windows sharing one replaced each other: the nudge, asked for with no charger, replaced

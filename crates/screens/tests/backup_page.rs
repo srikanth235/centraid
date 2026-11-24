@@ -6,6 +6,7 @@
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_api_proto::core_v1::backup_line::Tone;
+use centraid_screens::backup::classes;
 use centraid_screens::backup::line;
 use centraid_screens::backup::reading::{Destination, Reading};
 use centraid_screens::backup::states;
@@ -47,6 +48,54 @@ fn reach(name: &str) -> wire::DestinationReach {
     }
 }
 
+fn class_of(name: &str) -> wire::BackupClass {
+    match name {
+        "records" => wire::BackupClass::Records,
+        "thumbnails" => wire::BackupClass::Thumbnails,
+        "originals" => wire::BackupClass::Originals,
+        other => panic!("the fixture names a class this test does not know: {other}"),
+    }
+}
+
+fn reason_of(name: &str) -> wire::WaitReason {
+    match name {
+        "wifi" => wire::WaitReason::Wifi,
+        "gateway" => wire::WaitReason::Gateway,
+        "no_room" => wire::WaitReason::NoRoom,
+        other => panic!("the fixture names a reason this test does not know: {other}"),
+    }
+}
+
+/// The core's per-class rows, as the fixture spells them.
+fn wire_classes(value: &Value) -> Vec<wire::ClassStatus> {
+    value
+        .as_array()
+        .map(|rows| {
+            rows.iter()
+                .map(|row| wire::ClassStatus {
+                    class: class_of(&text(row, "class")) as i32,
+                    backed_up: flag(row, "backed_up"),
+                    owed: number(row, "total") - number(row, "held"),
+                    total: number(row, "total"),
+                    held: number(row, "held"),
+                    waiting: row["waiting"]
+                        .as_array()
+                        .map(|waiting| {
+                            waiting
+                                .iter()
+                                .map(|one| wire::Waiting {
+                                    reason: reason_of(&text(one, "reason")) as i32,
+                                    count: number(one, "count"),
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// A device as the core's status says it (the fixture uses the wire's field names), read the way
 /// the screens read it: through `Reading::from_wire`, so the mapping is under test too.
 fn wire_device(value: &Value) -> wire::Destination {
@@ -56,6 +105,7 @@ fn wire_device(value: &Value) -> wire::Destination {
         label: text(value, "label"),
         last_ack_ms: time(value, "last_ack_ms").unwrap_or(0),
         reach_state: reach(&text(value, "reach_state")) as i32,
+        classes: wire_classes(&value["classes"]),
         manifest_unreadable: flag(value, "manifest_unreadable"),
         held_count: count("held_count"),
         held_purge_at_ms: time(value, "held_purge_at_ms").unwrap_or(0),
@@ -83,6 +133,22 @@ fn reading(value: &Value) -> Reading {
         acked_at_ms: time(value, "last_ack_ms"),
         content_total: number(value, "content_total"),
         content_confirmed: number(value, "content_confirmed"),
+        total_bytes: number(value, "total_bytes"),
+        confirmed_bytes: number(value, "confirmed_bytes"),
+        left_out_items: number(value, "left_out_items"),
+        left_out_bytes: number(value, "left_out_bytes"),
+        classes: wire_classes(&value["classes"]),
+        waiting: value["waiting"]
+            .as_array()
+            .map(|rows| {
+                rows.iter()
+                    .map(|one| wire::Waiting {
+                        reason: reason_of(&text(one, "reason")) as i32,
+                        count: number(one, "count"),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
         ..wire::BackupStatusResponse::default()
     };
     Reading {
@@ -158,6 +224,58 @@ fn a_device_that_is_not_simply_behind_is_named_with_its_reason() {
             );
             assert_eq!(built.tone, tone(&text(case, "tone")), "{name}: the tone");
         }
+    }
+}
+
+/// **"In this backup", per class** (#1209): each reading the fixture describes draws the three
+/// rows the boards show, word for word.
+#[test]
+fn in_this_backup_draws_three_classes_from_each_reading() {
+    let fixture = fixture();
+    let now = fixture["now_ms"].as_i64().unwrap();
+    let cases = cases(&fixture, "classes");
+    assert!(cases.len() >= 6, "the fixture lost its class cases");
+    for case in cases {
+        let name = text(case, "name");
+        let read = reading(&case["reading"]);
+        let drawn = classes::rows(EN, &read, now);
+        let expected = case["rows"].as_array().unwrap();
+        assert_eq!(drawn.len(), expected.len(), "{name}: how many rows");
+        for (row, want) in drawn.iter().zip(expected) {
+            let which = text(want, "name");
+            assert_eq!(row.name, which, "{name}: the row");
+            assert_eq!(row.detail, text(want, "detail"), "{name}/{which}: detail");
+            assert_eq!(row.note, text(want, "note"), "{name}/{which}: what waits");
+            assert_eq!(row.status, text(want, "status"), "{name}/{which}: state");
+            assert_eq!(row.waiting, flag(want, "waiting"), "{name}/{which}: amber");
+        }
+    }
+}
+
+/// **Photos waiting** (#1209): the card says records are backed up and names what waits, and
+/// Home says the same in one line, with the short "min ago".
+#[test]
+fn the_card_and_home_say_backed_up_and_what_waits_in_one_voice() {
+    let fixture = fixture();
+    let now = fixture["now_ms"].as_i64().unwrap();
+    for case in cases(&fixture, "photos_waiting") {
+        let name = text(case, "name");
+        let read = reading(&case["reading"]);
+        let built = line::line(EN, Some(&read), false, false, now);
+        assert_eq!(built.sentence, text(case, "sentence"), "{name}: the card");
+        assert_eq!(built.status, text(case, "status"), "{name}: Home's line");
+        let waiting: Vec<&str> = built
+            .waiting
+            .iter()
+            .map(|row| row.sentence.as_str())
+            .collect();
+        let want: Vec<String> = case["waiting"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(text_of)
+            .collect();
+        assert_eq!(waiting, want, "{name}: what waits");
     }
 }
 
@@ -266,7 +384,7 @@ fn no_sentence_says_what_the_member_is_never_told() {
         every.push(text(case, "standing"));
         every.extend(case["notes"].as_array().unwrap().iter().map(text_of));
     }
-    for key in ["lines", "rate", "restore_ask"] {
+    for key in ["lines", "rate", "restore_ask", "photos_waiting"] {
         for case in cases(&fixture, key) {
             for field in ["sentence", "status", "reason"] {
                 if let Some(said) = case[field].as_str() {

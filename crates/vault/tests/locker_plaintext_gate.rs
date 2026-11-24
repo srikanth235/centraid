@@ -552,66 +552,52 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
             .expect("the readers answer");
     }
 
-    // ---- 4. THE BACKUP SNAPSHOT, SEALED AND OPENED (#1080) ---------------
+    // ---- 4. THE BACKUP SNAPSHOT, SEALED AND OPENED (#1080, #1209) --------
     //
     // A backup is the file read page for page, cut into 64 KiB ranges, each
-    // sealed as a `centraid-sealed/2` part, plus one sealed manifest. The scan
-    // reads every sealed part — which would pass vacuously if the sealing were
-    // ever removed — AND every opened one: a range that leaked a Locker secret
-    // into the plaintext it seals is a leak the moment its key is lost.
+    // sealed as a `centraid-sealed/3` object, plus the tree's nodes. The scan
+    // reads every sealed object — which would pass vacuously if the sealing
+    // were ever removed — AND every opened one: a range that leaked a Locker
+    // secret into the plaintext it seals is a leak the moment its key is lost.
     {
-        use centraid_vault::backup::naming::keys_from_root;
-        use centraid_vault::backup::snapshot::{self, APP};
-        use centraid_vault::backup::spool::{SPOOL_CEILING_BYTES, Spool};
+        use centraid_media::sealed::{self, BackupKeys, Class, Digest};
+        use centraid_vault::backup::directory::Directory;
+        use centraid_vault::backup::snapshot::{self, Options};
+        use centraid_vault::backup::staging::Staging;
         use centraid_vault::backup::state::DeviceState;
-        use centraid_vault::backup::store::{MemoryStore, Store as _};
 
         let vault = &sealed_vault.scratch.vault;
-        let keys = keys_from_root(&[0x5a; 32]);
+        let keys = BackupKeys::from_root(&[0x5a; 32]);
         let state = DeviceState::open_beside(vault.path()).expect("a device state");
-        let spool = Spool::open(Spool::dir_for(vault.path())).expect("a spool");
-        let taken = snapshot::take(
-            vault,
-            &keys,
-            &spool,
-            SPOOL_CEILING_BYTES,
-            &"5a".repeat(32),
-            APP,
+        let staging = Staging::open(
+            sealed_vault.scratch.join("vault.staging"),
+            512 * 1024 * 1024,
         )
-        .expect("a snapshot is taken");
-        let laptop = MemoryStore::new("laptop");
-        let plan = snapshot::plan(&taken, &laptop).expect("plans");
-        state
-            .put_gateway(&centraid_vault::backup::state::Gateway::paired(
-                laptop.gateway_id().to_owned(),
-                Vec::new(),
-                Vec::new(),
-                "The laptop".to_owned(),
-                1,
-                1,
-            ))
-            .expect("pairs");
-        let spooled = snapshot::spool(
-            &taken,
-            &[(laptop.gateway_id().to_owned(), plan)],
-            &spool,
-            &state,
-            &keys,
-            SPOOL_CEILING_BYTES,
-            1,
-        )
-        .expect("spools");
-        assert!(
-            spooled.spooled.len() > 1,
-            "the ranges and the manifest are sealed"
-        );
-        for name in &spooled.spooled {
-            let sealed = std::fs::read(spool.path(name)).expect("the part reads");
-            carries_no_secret("a sealed snapshot part", &sealed);
-            let plain =
-                centraid_media::sealed::open_whole(&keys, name, &sealed).expect("the part opens");
-            carries_no_secret("an opened snapshot part", &plain);
+        .expect("a staging area");
+        let directory = Directory::new(Vec::new()).expect("a directory");
+        let taken = snapshot::take(vault, &keys, &state, &staging, &directory, Options::at(1))
+            .expect("a snapshot is taken");
+        let staged = state.staged_all().expect("the staged ranges");
+        assert!(staged.len() > 1, "the ranges are sealed and staged");
+        for row in &staged {
+            let object = std::fs::read(&row.path).expect("the object reads");
+            carries_no_secret("a sealed snapshot range", &object);
+            let plain = sealed::open_checked(
+                &keys,
+                &row.name,
+                Class::Records,
+                Some(&Digest::of(&object)),
+                None,
+                &object,
+            )
+            .expect("the range opens");
+            carries_no_secret("an opened snapshot range", &plain);
         }
+        let root = state
+            .get_node(&taken.root.name)
+            .expect("the root is cached")
+            .expect("the root's plaintext");
+        carries_no_secret("the tree's root", &root);
     }
 
     // ---- 5. THE VAULT FILE ITSELF ----------------------------------------

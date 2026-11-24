@@ -1,57 +1,51 @@
-//! The snapshot plane: the vault backed up as page-identical snapshots, from
-//! first principles ([#1080](https://github.com/srikanth235/centraid/issues/1080)).
-//!
-//! A snapshot walks the live vault's pages through `sqlite_dbpage` on a pinned
-//! read-only connection (writing no plaintext copy to disk), cuts them into
-//! 64 KiB ranges, seals each changed range in `centraid-sealed/2`
-//! ([`centraid_media::sealed`]) named from its own BLAKE3, plus one manifest
-//! naming the ranges. An unchanged range has an unchanged name, so a snapshot
-//! uploads only the ranges that changed since one the gateway already holds,
-//! and the gateway is asked rather than an index kept: there is no custody
-//! table, no placement row and no packs index anywhere (#1080 rulings 4, 5).
+//! The backup library: the vault as a tree of small sealed objects, and the
+//! engine that moves them to gateways
+//! ([#1209](https://github.com/srikanth235/centraid/issues/1209),
+//! `contracts/backup/spec.md`).
 //!
 //! | Module | What it owns |
 //! |---|---|
-//! | [`naming`] | the keys from the root key, and the names the vault's content implies |
+//! | [`naming`] | the keys from the root key, and the vault's claims on content |
 //! | [`files`] | every file the vault knows by hash, with what a pass decides by |
-//! | [`holdings`] | what the vault holds by kind, for the Backup screen's per-app rows |
-//! | [`snapshot`] | the `sqlite_dbpage` walk, its ranges and manifest; plan, spool, settle |
-//! | [`store`] | the [`store::Store`] trait one destination answers, and [`store::MemoryStore`] |
-//! | [`state`] | `<stem>.state.db`: the paired gateways, each one's outbox, where bytes are on the device |
-//! | [`spool`] | `<stem>.spool/`: sealed parts waiting to move, under a byte budget |
-//! | [`mover`] | the `PUT`s, the confirmations they earn, and the reconcile against `exists` |
-//! | [`verify`] | the read-back: a keyed random sample of what a gateway holds, read and opened |
-//! | [`retention`] | which snapshots to keep, and which names are garbage |
-//! | [`restore`] | the file rebuilt from a destination, and every check that it is the snapshot's |
-//! | [`drill`] | back up, lose everything, restore, and prove it is the vault that was lost |
+//! | [`tree`] | manifest v5: the root, range leaves and the blobs radix tree (§3) |
+//! | [`directory`] | the sealed gateway directory (E8) |
+//! | [`wal`] | which pages the WAL says changed since the last snapshot |
+//! | [`snapshot`] | one pinned read of the vault into a tree: dirty ranges, a periodic full read (§5) |
+//! | [`state`] | `<stem>.state.db`: the paired gateways, what each confirmed, the node cache |
+//! | [`staging`] | `<stem>.staging/`: sealed ranges and OS-only originals under a byte budget (§6.4) |
+//! | [`store`] | the [`store::Store`] trait one gateway answers, and [`store::MemoryStore`] |
+//! | [`engine`] | a pass per gateway: head, records, thumbnails, originals, read-back (§6.2, §6.3) |
+//! | [`retention`] | which snapshots to keep and which names are garbage (7 daily, 4 weekly, 6 monthly) |
+//! | [`restore`] | the vault rebuilt from a gateway in the order R3, the check and the drill (§7) |
 //!
 //! ## WHAT IS DEVICE-LOCAL AND DERIVED
 //!
-//! The device state and the spool live beside the vault file and are never inside
-//! it: a snapshot of the vault therefore never carries the state of its own
-//! upload. Both are rebuilt from the gateway's answers — `exists` for what is
-//! held, `snapshots` for what is registered — so losing them costs a
-//! re-upload, never a backup. The shells exclude both from OS backup.
+//! The device state and the staging area live beside the vault file and are
+//! never inside it. Both are rebuilt from the gateways' answers, so losing
+//! them costs a re-pair and a re-ask, never a backup.
 //!
 //! ## WHAT THIS PLANE DOES NOT DO
 //!
-//! It speaks to one destination through [`store::Store`] and never to a
-//! socket; the gateway client and the phone's drain and media pipeline are
-//! built over it (`crates/core/src/phone`).
+//! It speaks to a gateway through [`store::Store`] and never to a socket; the
+//! gateway client and the phone's driver are built over it
+//! (`crates/core/src/phone`).
 
+pub mod content;
 pub mod directory;
 pub mod drill;
+pub mod engine;
 pub mod files;
-pub mod holdings;
-pub mod mover;
 pub mod naming;
 pub mod restore;
 pub mod retention;
 pub mod snapshot;
-pub mod spool;
+pub mod staging;
 pub mod state;
 pub mod store;
-pub mod verify;
+pub mod tree;
+pub mod wal;
+
+use centraid_media::sealed::Name;
 
 use crate::error::VaultError;
 
@@ -62,12 +56,18 @@ pub enum PlaneError {
     /// disk classified as [`VaultError::DiskFull`].
     #[error(transparent)]
     Vault(#[from] VaultError),
-    /// A part that did not seal or did not open.
+    /// An object that did not seal or did not open.
     #[error(transparent)]
     Sealed(#[from] centraid_media::sealed::SealedError),
     /// The destination refused, or could not be reached.
     #[error(transparent)]
     Store(#[from] store::StoreError),
+    /// A tree node a walk needed and the cache did not hold.
+    #[error("the tree node {0} is not held")]
+    NodeMissing(Name),
+    /// The staging area is full (§6.4).
+    #[error("the staging area is full")]
+    StagingFull,
     /// A rule of the plane itself was broken.
     #[error("{context}")]
     Invariant { context: String },

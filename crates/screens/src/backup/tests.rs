@@ -353,7 +353,7 @@ fn records_acknowledged_with_items_waiting_say_records_and_say_how_many() {
         },
         false,
     );
-    assert_eq!(line.sentence, "Records backed up 2 minutes ago.");
+    assert_eq!(line.sentence, "Backed up 2 minutes ago.");
     assert_eq!(line.detail, "1,203 of 1,240 photos and files");
     assert_eq!(
         line.waiting
@@ -370,11 +370,11 @@ fn records_acknowledged_with_items_waiting_say_records_and_say_how_many() {
             .iter()
             .map(|row| row.sentence.as_str())
             .collect::<Vec<_>>(),
-        vec!["30 waiting for Wi-Fi", "7 waiting in iCloud"]
+        vec!["30 photos waiting for Wi-Fi", "7 photos waiting in iCloud"]
     );
     assert_eq!(
         line.accessibility_label,
-        "Records backed up 2 minutes ago. 1,203 of 1,240 photos and files. 30 waiting for Wi-Fi. 7 waiting in iCloud"
+        "Backed up 2 minutes ago. 1,203 of 1,240 photos and files. 30 photos waiting for Wi-Fi. 7 photos waiting in iCloud"
     );
 }
 
@@ -1349,7 +1349,7 @@ fn a_key_in_the_keychain_is_one_quiet_sentence_the_show_control_and_the_way_off_
     assert_eq!(data.key_heading, words::backup_key_heading(EN));
     assert_eq!(
         data.key_line,
-        "Saved in iCloud Keychain. Sign in to iCloud on a new iPhone to restore your vaults."
+        "Saved in iCloud Keychain. Sign in to iCloud on a new iPhone to restore your vault."
     );
     assert!(!data.key_warning);
     assert_eq!(data.key_show_label, words::backup_key_show(EN));
@@ -1764,164 +1764,144 @@ fn the_screens_two_hand_offs_are_routes_the_shell_pushes() {
     assert_eq!(routes::show_key().screen, "words.show");
 }
 
-// ---- every app's data, in bytes (#1144) ----------------------------------
+// ---- the backup, per class and in bytes (#1144, #1209) ---------------------
 
 const GB: u64 = 1_000_000_000;
 const MB: u64 = 1_000_000;
 
-fn holding(app: &str, items: u64, bytes: u64) -> wire::AppHolding {
-    wire::AppHolding {
-        app_id: app.to_owned(),
-        items,
-        items_confirmed: items,
-        bytes,
-        bytes_confirmed: bytes,
-        ..Default::default()
+fn class(
+    which: wire::BackupClass,
+    backed_up: bool,
+    total: u64,
+    held: u64,
+    waiting_for: &[(wire::WaitReason, u64)],
+) -> wire::ClassStatus {
+    wire::ClassStatus {
+        class: which as i32,
+        backed_up,
+        owed: total - held,
+        total,
+        held,
+        waiting: waiting(waiting_for),
     }
 }
 
-/// The design's backed-up phone: eight apps, 5.0 GB, all of it acknowledged.
-fn eight_apps() -> Vec<wire::AppHolding> {
+/// The design's backed-up phone: 1,240 previews and 1,282 originals, all held.
+fn all_held() -> Vec<wire::ClassStatus> {
+    use wire::BackupClass as C;
     vec![
-        holding("calendar", 640, 6 * MB),
-        holding("docs", 58, 412 * MB),
-        wire::AppHolding {
-            workouts: 96,
-            ..holding("health", 731, 3 * MB)
-        },
-        holding("locker", 86, 96 * MB),
-        holding("money", 3_412, 21 * MB),
-        holding("notes", 312, 38 * MB),
-        holding("people", 418, 14 * MB),
-        holding("photos", 1_240, 4_410 * MB),
+        class(C::Records, true, 0, 0, &[]),
+        class(C::Thumbnails, true, 1_240, 1_240, &[]),
+        class(C::Originals, true, 1_282, 1_282, &[]),
     ]
 }
 
-fn with_apps(apps: Vec<wire::AppHolding>) -> wire::BackupStatusResponse {
-    let total_bytes = apps.iter().map(|app| app.bytes).sum();
-    let confirmed_bytes = apps.iter().map(|app| app.bytes_confirmed).sum();
+/// One device holding `classes`, which is then also what every device holds: 5.0 GB, all of it
+/// acknowledged.
+fn with_classes(classes: Vec<wire::ClassStatus>) -> wire::BackupStatusResponse {
     wire::BackupStatusResponse {
         destinations: vec![wire::Destination {
             held_bytes: 5_100 * MB,
+            classes: classes.clone(),
             ..home_laptop()
         }],
-        apps,
-        total_bytes,
-        confirmed_bytes,
+        classes,
+        total_bytes: 5 * GB,
+        confirmed_bytes: 5 * GB,
         ..status(Vec::new())
     }
 }
 
 #[test]
-fn a_new_record_after_the_acknowledged_snapshot_never_reads_all_backed_up() {
-    // A newly committed Note changes the records, not the already-confirmed file inventory.
-    let mut apps = eight_apps();
-    apps[5].items += 1;
-    apps[5].edits_waiting = 1;
-    let waiting = with_apps(apps);
+fn records_not_yet_held_never_read_all_backed_up() {
+    use wire::BackupClass as C;
+    // A snapshot was taken and no device holds it yet: the acknowledgement is older than the vault.
+    let mut classes = all_held();
+    classes[0].backed_up = false;
+    let waiting = with_classes(classes);
     assert_eq!(waiting.content_total, waiting.content_confirmed);
-    assert_eq!(waiting.total_bytes, waiting.confirmed_bytes);
     let mut page = Page::open(waiting.clone());
     let data = page.data();
     let line = data.line.expect("the same backup line used by Home");
-    assert_eq!(
-        line.sentence,
-        "1 change not backed up. Last backup 2 minutes ago."
+    assert_eq!(line.sentence, "Records backed up 2 minutes ago.");
+    assert!(
+        !line
+            .accessibility_label
+            .contains("All 5.0 GB is backed up. ")
     );
-    assert_eq!(line.detail, "1 edit waiting");
-    assert_eq!(line.status, line.sentence);
-    assert!(!line.accessibility_label.contains("All 5.0 GB"));
+    assert_eq!(line.status, "Records backed up 2 min ago");
     assert_eq!(line.tone, Tone::Attention as i32);
     assert_eq!(
-        data.apps
-            .iter()
-            .find(|app| app.app_id == "notes")
-            .expect("Notes")
-            .status,
-        "1 edit waiting"
+        (data.apps[0].status.as_str(), data.apps[0].waiting),
+        ("Waiting", true)
     );
 
-    let mut several = waiting.clone();
-    several.apps[0].edits_waiting = 2;
-    let line = line::line(EN, Some(&reading(&several)), false, false, NOW);
-    assert_eq!(
-        line.sentence,
-        "3 changes not backed up. Last backup 2 minutes ago."
-    );
-    assert_eq!(line.detail, "3 edits waiting");
-
-    // Only an actual later acknowledgement clears the already-wired record backlog.
+    // Only a later acknowledgement of the records clears it.
     let mut acknowledged = waiting;
-    acknowledged.apps[5].edits_waiting = 0;
+    acknowledged.classes[0].backed_up = true;
+    acknowledged.destinations[0].classes[0].backed_up = true;
     acknowledged.acked_at_ms = Some(NOW);
     acknowledged.last_snapshot_ms = Some(NOW);
     page.set_status(acknowledged);
     page.send(E::DataChanged(Default::default()));
     let line = page.data().line.expect("the refreshed backup line");
     assert_eq!(line.sentence, "Backed up just now.");
-    assert_eq!(line.detail, "All 5.0 GB from 8 apps is backed up.");
+    assert_eq!(line.detail, "All 5.0 GB is backed up.");
+    let _ = C::Records;
 }
 
 #[test]
-fn the_line_totals_every_app_in_bytes() {
-    let backed = Page::open(with_apps(eight_apps())).data();
+fn the_line_totals_the_backup_in_bytes() {
+    let backed = Page::open(with_classes(all_held())).data();
     let line = backed.line.expect("a line");
-    assert_eq!(line.detail, "All 5.0 GB from 8 apps is backed up.");
-    assert!(line.accessibility_label.contains("All 5.0 GB from 8 apps"));
+    assert_eq!(line.detail, "All 5.0 GB is backed up.");
+    assert!(line.accessibility_label.contains("All 5.0 GB is backed up"));
 
     // CATCHING UP says how far, in one unit.
-    let mut apps = eight_apps();
-    apps[7].bytes_confirmed = 4_010 * MB;
-    apps[7].items_confirmed = 1_203;
-    apps[7].waiting = 37;
-    let catching = Page::open(with_apps(apps)).data();
+    let catching = Page::open(wire::BackupStatusResponse {
+        confirmed_bytes: 4_600 * MB,
+        ..with_classes(all_held())
+    })
+    .data();
     assert_eq!(
         catching.line.expect("a line").detail,
-        "4.6 of 5.0 GB from 8 apps is backed up."
+        "4.6 of 5.0 GB is backed up."
     );
 
     // VIDEOS LEFT OUT are said apart, never read as missing.
-    let mut apps = eight_apps();
-    apps[7] = wire::AppHolding {
-        left_out_items: 37,
-        left_out_bytes: 8_400 * MB,
-        ..holding("photos", 1_203, 4_000 * MB)
-    };
     let left = Page::open(wire::BackupStatusResponse {
+        total_bytes: 4_500 * MB,
+        confirmed_bytes: 4_500 * MB,
         left_out_items: 37,
         left_out_bytes: 8_400 * MB,
-        ..with_apps(apps)
+        ..with_classes(all_held())
     })
     .data();
     assert_eq!(
         left.line.expect("a line").detail,
-        "All 4.5 GB from 8 apps is backed up. 8.4 GB of videos is left out."
+        "All 4.5 GB is backed up. 8.4 GB of videos is left out."
     );
 
     // NOTHING ACKNOWLEDGED YET says so, with what there is.
-    let mut apps = eight_apps();
-    for app in &mut apps {
-        app.bytes_confirmed = 0;
-    }
     let none = Page::open(wire::BackupStatusResponse {
-        destinations: Vec::new(),
-        ..with_apps(apps)
+        confirmed_bytes: 0,
+        ..with_classes(all_held())
     })
     .data();
     assert_eq!(
         none.line.expect("a line").detail,
-        "5.0 GB from 8 apps, none of it backed up yet."
+        "5.0 GB, none of it backed up yet."
     );
 
-    // A READING WITH NO PER-APP ROWS keeps the counts.
+    // A READING THAT KNOWS NO BYTES keeps the counts, and names no class.
     let bare = Page::open(both()).data();
     assert_eq!(bare.line.expect("a line").detail, "All 10 photos and files");
     assert!(bare.apps.is_empty() && bare.apps_heading.is_empty());
 }
 
 #[test]
-fn in_this_backup_lists_every_app_biggest_first_with_what_it_holds() {
-    let data = Page::open(with_apps(eight_apps())).data();
+fn in_this_backup_has_one_row_per_class_in_the_order_records_previews_originals() {
+    let data = Page::open(with_classes(all_held())).data();
     assert_eq!(data.apps_heading, "In this backup");
     let drawn: Vec<(&str, &str, &str)> = data
         .apps
@@ -1931,14 +1911,24 @@ fn in_this_backup_lists_every_app_biggest_first_with_what_it_holds() {
     assert_eq!(
         drawn,
         [
-            ("Photos", "1,240 photos and videos · 4.4 GB", "Backed up"),
-            ("Docs", "58 documents · 412 MB", "Backed up"),
-            ("Locker", "86 items · 96.0 MB", "Backed up"),
-            ("Notes", "312 notes · 38.0 MB", "Backed up"),
-            ("Money", "3,412 transactions · 21.0 MB", "Backed up"),
-            ("People", "418 people · 14.0 MB", "Backed up"),
-            ("Calendar", "640 events · 6.0 MB", "Backed up"),
-            ("Health", "731 days, 96 workouts · 3.0 MB", "Backed up"),
+            ("Records", "Last backup 2 minutes ago", "Backed up"),
+            ("Photo previews", "1,240 photos", "Backed up"),
+            (
+                "Photos and files",
+                "1,282 photos and files \u{b7} 5.0 GB",
+                "Backed up"
+            ),
+        ]
+    );
+    assert_eq!(
+        data.apps
+            .iter()
+            .map(|row| (row.app_id.as_str(), row.icon_key.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            ("records", "FileText"),
+            ("previews", "Grid"),
+            ("originals", "Image")
         ]
     );
     assert!(
@@ -1947,126 +1937,171 @@ fn in_this_backup_lists_every_app_biggest_first_with_what_it_holds() {
             .all(|row| !row.waiting && row.note.is_empty())
     );
     assert_eq!(
-        data.apps[3].accessibility_label,
-        "Notes. 312 notes · 38.0 MB. Backed up"
+        data.apps[1].accessibility_label,
+        "Photo previews. 1,240 photos. Backed up"
     );
-    assert_eq!(data.apps[0].app_id, "photos");
+    // NO SECOND LIST of what is not backed up, and none of it per app.
+    assert!(data.apps_waiting.is_empty() && data.waiting_heading.is_empty());
     // EACH BACKUP DEVICE SAYS WHAT IT HOLDS.
     assert_eq!(
         data.destinations[0].held,
         "Up to date \u{b7} Holds 5.1 GB \u{b7} can't open it"
     );
-    assert!(
-        data.destinations[0]
-            .accessibility_label
-            .contains("Holds 5.1 GB \u{b7} can't open it")
-    );
 }
 
 #[test]
-fn a_row_says_what_waits_and_never_more_than_was_acknowledged() {
-    let mut apps = eight_apps();
-    apps[7] = wire::AppHolding {
-        items_confirmed: 1_203,
-        bytes_confirmed: 4_000 * MB,
-        waiting: 37,
-        ..holding("photos", 1_240, 4_400 * MB)
-    };
-    apps[1] = wire::AppHolding {
-        items_confirmed: 56,
-        bytes_confirmed: 400 * MB,
-        waiting: 2,
-        ..holding("docs", 58, 412 * MB)
-    };
-    apps[5].edits_waiting = 3;
-    apps[0].edits_waiting = 1;
-    let data = Page::open(with_apps(apps)).data();
-    let row = |id: &str| {
-        data.apps
-            .iter()
-            .find(|row| row.app_id == id)
-            .expect("a row")
-            .clone()
-    };
-    let photos = row("photos");
+fn a_class_row_says_what_waits_and_never_more_than_was_acknowledged() {
+    use wire::BackupClass as C;
+    use wire::WaitReason as W;
+    let data = Page::open(with_classes(vec![
+        class(C::Records, true, 0, 0, &[]),
+        class(C::Thumbnails, true, 1_240, 1_240, &[]),
+        class(C::Originals, false, 1_282, 1_162, &[(W::Wifi, 120)]),
+    ]))
+    .data();
+    let originals = &data.apps[2];
+    assert_eq!(originals.detail, "1,162 of 1,282 backed up");
+    assert_eq!(originals.note, "120 waiting for Wi-Fi");
     assert_eq!(
-        photos.detail,
-        "1,203 of 1,240 photos and videos · 4.0 of 4.4 GB"
+        (originals.status.as_str(), originals.waiting),
+        ("Waiting", true)
     );
     assert_eq!(
-        (photos.status.as_str(), photos.waiting),
-        ("37 waiting", true)
+        originals.accessibility_label,
+        "Photos and files. 1,162 of 1,282 backed up. 120 waiting for Wi-Fi. Waiting"
     );
-    assert_eq!(row("docs").detail, "56 of 58 documents · 400 of 412 MB");
-    let notes = row("notes");
-    assert_eq!(
-        (notes.status.as_str(), notes.waiting),
-        ("3 edits waiting", true)
-    );
-    assert_eq!(row("calendar").status, "1 edit waiting");
-    assert_eq!(row("money").status, "Backed up");
+    assert_eq!(data.apps[1].status, "Backed up");
 
-    // NEVER ACKNOWLEDGED: no row says "Backed up".
-    let never = Page::open(wire::BackupStatusResponse {
-        acked_at_ms: None,
-        ..with_apps(eight_apps())
+    // PREVIEWS COUNT THEIR OWN: "1,056 of 1,240 photos", waiting for the device, or for room.
+    let previews = Page::open(with_classes(vec![
+        class(C::Records, true, 0, 0, &[]),
+        class(C::Thumbnails, false, 1_240, 1_056, &[(W::Gateway, 184)]),
+        class(C::Originals, false, 1_282, 1_070, &[(W::NoRoom, 212)]),
+    ]))
+    .data();
+    assert_eq!(previews.apps[1].detail, "1,056 of 1,240 photos");
+    assert_eq!(previews.apps[1].note, "184 waiting for your backup device");
+    assert_eq!(previews.apps[2].note, "212 waiting for space on this phone");
+}
+
+#[test]
+fn with_two_devices_a_class_says_which_hold_it_and_which_it_waits_for() {
+    use wire::BackupClass as C;
+    let full = all_held();
+    let mut behind = all_held();
+    behind[1] = class(C::Thumbnails, false, 1_240, 1_056, &[]);
+    behind[2] = class(C::Originals, false, 1_282, 1_000, &[]);
+    behind[0].backed_up = true;
+    let mut aggregate = behind.clone();
+    aggregate[1].waiting = waiting(&[(wire::WaitReason::Gateway, 184)]);
+    let data = Page::open(wire::BackupStatusResponse {
+        destinations: vec![
+            wire::Destination {
+                classes: full,
+                ..home_laptop()
+            },
+            wire::Destination {
+                classes: behind,
+                ..gateway("gw-2", "Office NAS", None, NOW - 2 * DAY, NOW - 2 * DAY)
+            },
+        ],
+        classes: aggregate,
+        total_bytes: 5 * GB,
+        confirmed_bytes: 5 * GB,
+        ..status(Vec::new())
     })
     .data();
-    assert!(
-        never
-            .apps
-            .iter()
-            .all(|row| row.status == "Not backed up" && row.waiting)
+    assert_eq!(data.apps[0].status, "Backed up");
+    let previews = &data.apps[1];
+    assert_eq!(previews.detail, "All 1,240 on Home laptop");
+    assert_eq!(previews.note, "184 waiting for Office NAS");
+    assert_eq!(
+        (previews.status.as_str(), previews.waiting),
+        ("1 of 2 devices", true)
     );
+    assert_eq!(data.apps[2].note, "282 waiting for Office NAS");
 }
 
 #[test]
-fn videos_left_out_are_the_photos_rows_note() {
-    let mut apps = eight_apps();
-    apps[7] = wire::AppHolding {
+fn videos_left_out_are_the_originals_rows_note() {
+    let data = Page::open(wire::BackupStatusResponse {
         left_out_items: 37,
         left_out_bytes: 8_400 * MB,
-        ..holding("photos", 1_240, 4 * GB)
-    };
-    let data = Page::open(with_apps(apps)).data();
-    let photos = &data.apps[0];
-    assert_eq!(photos.detail, "1,240 photos and videos · 4.0 GB");
-    assert_eq!(photos.note, "37 videos, 8.4 GB, left out");
-    assert_eq!(photos.status, "Backed up");
+        ..with_classes(all_held())
+    })
+    .data();
+    let originals = &data.apps[2];
+    assert_eq!(originals.note, "37 videos, 8.4 GB, left out");
+    assert_eq!(originals.status, "Backed up");
     assert_eq!(
-        photos.accessibility_label,
-        "Photos. 1,240 photos and videos · 4.0 GB. 37 videos, 8.4 GB, left out. Backed up"
+        originals.accessibility_label,
+        "Photos and files. 1,282 photos and files \u{b7} 5.0 GB. 37 videos, 8.4 GB, left out. Backed up"
     );
+    // WITHOUT BYTES ATTRIBUTED, only the count is said.
+    let counted = Page::open(wire::BackupStatusResponse {
+        left_out_items: 1,
+        left_out_bytes: 0,
+        ..with_classes(all_held())
+    })
+    .data();
+    assert_eq!(counted.apps[2].note, "1 video left out");
+    assert!(!counted.apps[2].accessibility_label.contains("0 B"));
 }
 
 #[test]
-fn visible_excluded_references_without_attributed_bytes_say_only_the_count() {
-    let mut apps = eight_apps();
-    apps[7] = wire::AppHolding {
-        left_out_items: 1,
-        left_out_bytes: 0,
-        ..holding("photos", 3, 81_000)
+fn no_class_rows_before_a_device_is_paired_or_after_the_vault_moved() {
+    let unpaired = Page::open(wire::BackupStatusResponse {
+        destinations: Vec::new(),
+        ..with_classes(all_held())
+    })
+    .data();
+    assert!(unpaired.apps.is_empty() && unpaired.apps_heading.is_empty());
+    let moved = Page::open(wire::BackupStatusResponse {
+        frozen: true,
+        ..with_classes(all_held())
+    })
+    .data();
+    assert!(moved.apps.is_empty());
+}
+
+// ---- a restore brings the photos back (#1209, R3) ----------------------------
+
+#[test]
+fn a_restore_says_how_far_previews_then_originals_are_back_in_counts_only() {
+    let restoring = |previews: (u64, u64), originals: (u64, u64)| {
+        let status = wire::BackupStatusResponse {
+            restoring: Some(wire::RestoreProgress {
+                previews_back: previews.0,
+                previews_total: previews.1,
+                originals_back: originals.0,
+                originals_total: originals.1,
+            }),
+            ..with_classes(all_held())
+        };
+        line::line(EN, Some(&reading(&status)), false, false, NOW)
     };
-    apps[1] = wire::AppHolding {
-        left_out_items: 2,
-        left_out_bytes: 100_000,
-        ..holding("docs", 2, 2_100_000)
-    };
-    let data = Page::open(with_apps(apps)).data();
-    let photos = data
-        .apps
-        .iter()
-        .find(|row| row.app_id == "photos")
-        .expect("Photos row");
-    let docs = data
-        .apps
-        .iter()
-        .find(|row| row.app_id == "docs")
-        .expect("Docs row");
-    assert_eq!(photos.detail, "3 photos and videos · 81 KB");
-    assert_eq!(photos.note, "1 video left out");
-    assert!(!photos.accessibility_label.contains("0 B"));
-    assert_eq!(docs.note, "2 videos, 100 KB, left out");
+    // THE VAULT IS OPEN, and Home says the previews first.
+    let previews = restoring((312, 1_240), (0, 1_282));
+    assert_eq!(previews.status, "Restoring previews. 312 of 1,240 back.");
+    assert_eq!(previews.sentence, previews.status);
+    assert_eq!(previews.tone, Tone::Quiet as i32);
+    // THEN THE ORIGINALS, once every preview is here.
+    let originals = restoring((1_240, 1_240), (410, 1_282));
+    assert_eq!(originals.status, "Restoring photos. 410 of 1,282 back.");
+    // BOTH BACK: the line is the backup's own again, and no restore is said.
+    let done = restoring((1_240, 1_240), (1_282, 1_282));
+    assert_eq!(done.sentence, "Backed up 2 minutes ago.");
+    // NO TIME IS ESTIMATED.
+    assert!(!previews.sentence.contains("minute") && !originals.sentence.contains("left"));
+    // A VAULT THAT IS NOT RESTORING says nothing of it.
+    let calm = line::line(
+        EN,
+        Some(&reading(&with_classes(all_held()))),
+        false,
+        false,
+        NOW,
+    );
+    assert!(!calm.sentence.contains("Restoring"));
 }
 
 // ---- THE SETTINGS-STYLE PAGE (#1173) ----
@@ -2137,17 +2172,25 @@ fn the_page_names_where_the_backup_stands_in_one_condition() {
 
 #[test]
 fn a_backup_device_that_has_not_answered_says_when_it_last_did_and_what_to_check() {
-    let mut unreached = with_apps(eight_apps());
-    unreached.destinations = vec![gateway(
-        "gw-1",
-        "Srikanth's Mac mini",
-        Some("192.168.1.20:7443"),
-        NOW - 5 * DAY,
-        NOW - 5 * DAY,
-    )];
+    use wire::BackupClass as C;
+    use wire::WaitReason as W;
+    let classes = vec![
+        class(C::Records, true, 0, 0, &[]),
+        class(C::Thumbnails, false, 1_240, 1_056, &[(W::Gateway, 184)]),
+        class(C::Originals, false, 1_282, 1_070, &[(W::Gateway, 212)]),
+    ];
+    let mut unreached = with_classes(classes.clone());
+    unreached.destinations = vec![wire::Destination {
+        classes,
+        ..gateway(
+            "gw-1",
+            "Srikanth's Mac mini",
+            Some("192.168.1.20:7443"),
+            NOW - 5 * DAY,
+            NOW - 5 * DAY,
+        )
+    }];
     unreached.acked_at_ms = Some(NOW - 5 * DAY);
-    unreached.apps[7].waiting = 184;
-    unreached.apps[1].waiting = 28;
     let data = Page::open(unreached).data();
     assert_eq!(data.condition(), wire::BackupCondition::NotReached);
     assert_eq!(data.last_good, "Last good backup 5 days ago");
@@ -2155,15 +2198,13 @@ fn a_backup_device_that_has_not_answered_says_when_it_last_did_and_what_to_check
         data.reason,
         "Srikanth's Mac mini hasn't answered. Check it's awake and on the same network as this phone."
     );
-    // What waits is its own list, and "In this backup" is what the device holds.
-    assert_eq!(data.waiting_heading, "Not backed up yet");
-    let waiting: Vec<&str> = data.apps_waiting.iter().map(|r| r.name.as_str()).collect();
-    assert_eq!(waiting, ["Photos", "Docs"]);
-    assert!(data.apps_waiting.iter().all(|row| row.waiting));
-    assert_eq!(data.apps.len(), 6);
-    assert!(data.apps.iter().all(|row| !row.waiting));
+    // WHAT WAITS IS IN ITS ROW; there is no second list.
+    assert_eq!(data.apps.len(), 3);
+    assert_eq!(data.apps[1].note, "184 waiting for your backup device");
+    assert_eq!(data.apps[2].note, "212 waiting for your backup device");
+    assert!(data.apps_waiting.is_empty() && data.waiting_heading.is_empty());
     // A healthy page carries none of it.
-    let calm = Page::open(with_apps(eight_apps())).data();
+    let calm = Page::open(with_classes(all_held())).data();
     assert_eq!(
         (
             calm.last_good.as_str(),
@@ -2199,7 +2240,7 @@ fn what_travels_when_has_one_row_worth_the_rules_short_word_and_the_sentences_be
 #[test]
 fn recovery_has_a_summary_and_a_restore_row_and_a_moved_vault_has_no_restore() {
     let data = Page::open(both()).data();
-    assert_eq!(data.restore_label, "Restore my vaults");
+    assert_eq!(data.restore_label, "Restore my vault");
     assert_eq!(data.key_summary, "Saved in iCloud Keychain");
     let moved = Page::open(wire::BackupStatusResponse {
         frozen: true,
@@ -2382,7 +2423,7 @@ mod one_device_behind {
     fn every_device_current_says_backed_up() {
         let data = Page::open(office(|_| {})).data();
         let line = data.line.expect("a line");
-        assert_eq!(line.status, "Backed up 2 minutes ago");
+        assert_eq!(line.status, "Backed up 2 min ago");
         assert!(data.reason.is_empty());
     }
 
@@ -2423,15 +2464,17 @@ mod one_device_behind {
 
     #[test]
     fn a_silent_device_is_named_with_the_day_it_last_answered() {
-        let data = Page::open(office(|d| {
+        let mut silent = office(|d| {
             d.behind_files = 184;
             d.reach = wire::WaitReason::Gateway as i32;
-            d.waiting_apps = vec![wire::DeviceWaiting {
-                app_id: "photos".to_owned(),
-                files: 184,
-            }];
-        }))
-        .data();
+        });
+        let mut behind = all_held();
+        behind[1] = class(wire::BackupClass::Thumbnails, false, 1_240, 1_056, &[]);
+        silent.destinations[0].classes = all_held();
+        silent.destinations[1].classes = behind.clone();
+        behind[1].waiting = waiting(&[(wire::WaitReason::Gateway, 184)]);
+        silent.classes = behind;
+        let data = Page::open(silent).data();
         let line = data.line.expect("a line");
         assert_eq!(line.status, "Office NAS is behind");
         assert_eq!(line.sentence, "Office NAS is behind");
@@ -2448,9 +2491,9 @@ mod one_device_behind {
         );
         let row = &data.destinations[1];
         assert!(row.held.starts_with("184 files behind"), "{}", row.held);
-        assert_eq!(data.apps_waiting.len(), 1, "{:?}", data.apps_waiting);
-        assert_eq!(data.apps_waiting[0].status, "184 waiting for Office NAS");
-        assert_eq!(data.waiting_heading, "Not backed up yet");
+        assert!(data.apps_waiting.is_empty() && data.waiting_heading.is_empty());
+        assert_eq!(data.apps[1].note, "184 waiting for Office NAS");
+        assert_eq!(data.apps[1].status, "1 of 2 devices");
         assert!(
             data.destinations[0].held.starts_with("Up to date"),
             "{}",
@@ -2978,9 +3021,9 @@ mod what_a_member_reads {
         assert_eq!(warned.tone(), Tone::Attention);
         assert_eq!(
             warned.sentence,
-            "3 not backed up. The oldest was added 3 days ago."
+            "3 photos not backed up. The oldest was added 3 days ago."
         );
-        assert_eq!(warned.waiting[0].sentence, "3 waiting for Wi-Fi");
+        assert_eq!(warned.waiting[0].sentence, "3 photos waiting for Wi-Fi");
         // Nothing waiting is never a backlog, whatever the age says.
         waiting_long.content_confirmed = 10;
         assert!(!line::backlog_old(&waiting_long, NOW, false));
@@ -3020,11 +3063,7 @@ mod what_a_member_reads {
         ahead.oldest_waiting_ms = Some(NOW + 10 * MINUTE);
         let line = line::line(EN, Some(&ahead), false, false, NOW);
         assert_eq!(line.tone(), Tone::Attention);
-        assert!(
-            line.sentence.starts_with("Records backed up"),
-            "{}",
-            line.sentence
-        );
+        assert_eq!(line.sentence, "Backed up 2 minutes ago.");
         ahead.oldest_waiting_ms = Some(NOW + MINUTE);
         assert_eq!(
             line::line(EN, Some(&ahead), false, false, NOW).tone(),
@@ -3079,15 +3118,18 @@ mod what_a_member_reads {
             r.waiting = waiting(&[(wire::WaitReason::Wifi, 3)]);
         }));
         let at_rest = line::line(EN, Some(&behind), false, false, NOW);
-        assert_eq!(at_rest.status, "Records backed up 2 minutes ago, 3 waiting");
+        assert_eq!(
+            at_rest.status,
+            "Backed up 2 min ago. 3 photos waiting for Wi-Fi."
+        );
         assert!(!at_rest.status.contains("Backing up"));
         let running = line::line(EN, Some(&behind), false, true, NOW);
-        assert_eq!(running.status, "Backing up, last 2 minutes ago");
+        assert_eq!(running.status, "Backing up, last 2 min ago");
         // Whole is "Backed up" in either case.
         let whole = reading(&steady());
         assert_eq!(
             line::line(EN, Some(&whole), false, true, NOW).status,
-            "Backed up 2 minutes ago"
+            "Backed up 2 min ago"
         );
     }
 
@@ -3280,5 +3322,104 @@ mod what_a_member_reads {
             );
             assert!(effects.is_empty());
         }
+    }
+
+    #[test]
+    fn records_row_shows_last_backup_even_when_no_device_holds_newest_records() {
+        let status = one(|r| {
+            r.acked_at_ms = Some(NOW - 10 * MINUTE);
+            r.destinations[0].records_behind = true;
+            r.classes = vec![
+                wire::ClassStatus {
+                    class: wire::BackupClass::Records as i32,
+                    total: 1,
+                    held: 0,
+                    backed_up: false,
+                    ..Default::default()
+                },
+                wire::ClassStatus {
+                    class: wire::BackupClass::Thumbnails as i32,
+                    total: 10,
+                    held: 10,
+                    backed_up: true,
+                    ..Default::default()
+                },
+                wire::ClassStatus {
+                    class: wire::BackupClass::Originals as i32,
+                    total: 10,
+                    held: 10,
+                    backed_up: true,
+                    ..Default::default()
+                },
+            ];
+            r.destinations[0].classes = r.classes.clone();
+        });
+        let rows = crate::backup::classes::rows(EN, &reading(&status), NOW);
+        let records = rows
+            .iter()
+            .find(|r| r.app_id == "records")
+            .expect("records row");
+        assert_eq!(records.detail, "Last backup 10 minutes ago");
+        assert_eq!(records.status, "Waiting");
+    }
+
+    #[test]
+    fn line_and_status_do_not_claim_backed_up_when_records_are_not_held() {
+        let r = reading(&one(|r| {
+            r.content_confirmed = 7;
+            r.waiting = waiting(&[(wire::WaitReason::Wifi, 3)]);
+            r.classes = vec![wire::ClassStatus {
+                class: wire::BackupClass::Records as i32,
+                total: 1,
+                held: 0,
+                backed_up: false,
+                ..Default::default()
+            }];
+        }));
+        assert!(!r.records_held());
+        let built = line::line(EN, Some(&r), false, false, NOW);
+        assert_eq!(built.sentence, "Records backed up 2 minutes ago.");
+        assert_eq!(built.status, "Records backed up 2 min ago");
+    }
+
+    #[test]
+    fn waiting_sentences_ending_in_period_never_produce_double_periods() {
+        let r = reading(&one(|r| {
+            r.content_confirmed = 7;
+            r.waiting = waiting(&[(wire::WaitReason::Ask, 3)]);
+        }));
+        let built = line::line(EN, Some(&r), false, false, NOW);
+        assert!(
+            !built.status.contains(".."),
+            "no double period in status: {}",
+            built.status
+        );
+        assert!(
+            !built.accessibility_label.contains(".."),
+            "no double period in accessibility_label: {}",
+            built.accessibility_label
+        );
+        assert_eq!(
+            built.status,
+            "Backed up 2 min ago. 3 waiting. Tap Back up now."
+        );
+    }
+
+    #[test]
+    fn restoring_sets_backup_condition_to_catching_up() {
+        let restoring = one(|r| {
+            r.restoring = Some(wire::RestoreProgress {
+                previews_back: 10,
+                previews_total: 10,
+                originals_back: 3,
+                originals_total: 10,
+            });
+        });
+        let data = Page::open(restoring).data();
+        assert_eq!(data.condition(), C::CatchingUp);
+        assert_eq!(
+            data.line.as_ref().map(|l| l.sentence.as_str()),
+            Some("Restoring photos. 3 of 10 back.")
+        );
     }
 }

@@ -105,6 +105,10 @@ message PhotoTile {
     // Nothing of this photograph has reached this device, not even a
     // thumbnail.
     HELD_ABSENT = 5;
+    // A RESTORE IS BRINGING THE ORIGINAL BACK (#1209, R3): the preview is here and the original
+    // follows, newest first, in the background. Drawn with the down arrow, which is not a
+    // button here: there is nothing for the member to decide.
+    HELD_COMING_BACK = 6;
   }
 
   enum Kind {

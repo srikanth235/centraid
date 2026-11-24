@@ -178,6 +178,10 @@ message Confirm {
   string body = 2;
   string confirm_label = 3;
   bool destructive = 4;
+  // ONE AMBER LINE ABOVE THE BODY, or empty (#1209, R4): what the member should know before the
+  // thing is done, and may still do. Photos says a photograph no backup device holds whole
+  // cannot be brought back.
+  string warning = 5;
 }
 
 // A row's status as a finished label and a tone. `seam` is "not yet", `net`

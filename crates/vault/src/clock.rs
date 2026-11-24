@@ -80,6 +80,23 @@ pub fn is_credible(connection: &rusqlite::Connection, now_ms: i64) -> crate::err
     Ok((now_ms - written_ms).abs() <= CLOCK_BOUND_DAYS * 86_400_000)
 }
 
+/// What the `vault` row says of the commits so far: how many writes it has run and the instant of
+/// the last one (ISO text, the vault's clock). A file with no vault row has run nothing.
+///
+/// # Errors
+/// A database error.
+pub fn writes_and_written_at(
+    connection: &rusqlite::Connection,
+) -> crate::error::Result<(i64, Option<String>)> {
+    use rusqlite::OptionalExtension as _;
+    Ok(connection
+        .query_row("SELECT writes, written_at FROM vault", [], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
+        .optional()?
+        .unwrap_or((0, None)))
+}
+
 /// The host clock.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SystemClock;

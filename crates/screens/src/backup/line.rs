@@ -91,7 +91,7 @@ pub fn warns(reading: &Reading, now_ms: i64, running: bool) -> bool {
     let from_the_future = acked - now_ms > CLOCK_TOLERANCE_MS;
     // A MACHINE THAT IS NOT THE GATEWAY answered at its address (#1080): the member is owed a
     // look, however recent the ack.
-    reading.edits_waiting() > 0
+    !reading.records_held()
         || now_ms - acked > STALE_MS
         || from_the_future
         || unreached(reading, now_ms)
@@ -147,6 +147,21 @@ pub fn line(
             ..Default::default()
         });
     }
+    // A RESTORE IS BRINGING THE PHOTOS BACK (#1209, R3): the vault is open, and the line says how
+    // far, previews first, then the originals. Counts only, never a time.
+    if let Some(sentence) = reading
+        .restoring
+        .as_ref()
+        .and_then(|r| restore_sentence(locale, r))
+    {
+        return finish(wire::BackupLine {
+            confirmed: reading.content_confirmed,
+            status: sentence.clone(),
+            sentence,
+            tone: Tone::Quiet as i32,
+            ..Default::default()
+        });
+    }
     let waiting = waiting_rows(locale, reading);
     if reading.destinations.is_empty() {
         return finish(wire::BackupLine {
@@ -187,20 +202,11 @@ pub fn line(
             ..Default::default()
         });
     };
-    let edits = reading.edits_waiting();
-    let whole = reading.unconfirmed() == 0 && edits == 0;
+    let whole = reading.unconfirmed() == 0 && reading.records_held();
     let when = ago(locale, acked, now_ms);
     let count = grouped(reading.unconfirmed());
     let stood = backlog_old(reading, now_ms, running);
-    let changes = || {
-        fill(
-            &words::backup_line_changes(locale, edits),
-            &[("count", &grouped(edits)), ("when", &when)],
-        )
-    };
-    let sentence = if edits > 0 {
-        changes()
-    } else if whole {
+    let sentence = if whole {
         fill(&words::backup_line_done(locale), &[("when", &when)])
     } else if let Some(oldest) = reading
         .oldest_waiting_ms
@@ -208,24 +214,47 @@ pub fn line(
         .map(|at| ago(locale, at, now_ms))
     {
         fill(
-            &words::backup_line_backlog(locale),
+            &words::backup_line_backlog(locale, reading.unconfirmed()),
             &[("count", &count), ("when", &oldest)],
         )
-    } else {
+    } else if running || reading.unconfirmed() == 0 || !reading.records_held() {
         fill(&words::backup_line_records(locale), &[("when", &when)])
-    };
-    // A pass is busy only while it runs; later edits must never look fully acknowledged.
-    let status = if edits > 0 {
-        changes()
     } else {
-        let template = if whole {
-            words::backup_status_done(locale)
-        } else if running {
-            words::backup_status_catching_up(locale)
-        } else {
-            words::backup_status_waiting(locale)
-        };
-        fill(&template, &[("when", &when), ("count", &count)])
+        // RECORDS ARE BACKED UP and photos wait: said as it is, the waiting rows under it say
+        // what and why.
+        fill(&words::backup_line_done(locale), &[("when", &when)])
+    };
+    // A pass is busy only while it runs; a vault whose records or photos wait never reads whole.
+    let status = if whole {
+        fill(
+            &words::backup_status_done(locale),
+            &[("when", &short_ago(locale, acked, now_ms))],
+        )
+    } else if running {
+        fill(
+            &words::backup_status_catching_up(locale),
+            &[("when", &short_ago(locale, acked, now_ms))],
+        )
+    } else if waiting.is_empty() || !reading.records_held() {
+        // NOTHING NAMED WAITS or the records are not held yet: only the records are claimed.
+        fill(
+            &words::backup_status_records(locale),
+            &[("when", &short_ago(locale, acked, now_ms))],
+        )
+    } else {
+        // "Backed up 2 min ago. 120 photos waiting for Wi-Fi."
+        let reasons = waiting
+            .iter()
+            .map(|row| row.sentence.trim_end_matches('.'))
+            .collect::<Vec<_>>()
+            .join(". ");
+        fill(
+            &words::backup_status_waiting(locale),
+            &[
+                ("when", &short_ago(locale, acked, now_ms)),
+                ("waiting", &reasons),
+            ],
+        )
     };
     let built = wire::BackupLine {
         confirmed: reading.content_confirmed,
@@ -241,6 +270,31 @@ pub fn line(
         ..Default::default()
     };
     finish(name_the_one_behind(locale, reading, built))
+}
+
+/// "Restoring previews. 312 of 1,240 back." while previews are missing, then "Restoring photos. 410
+/// of 1,282 back."; `None` when both are back.
+#[must_use]
+pub fn restore_sentence(locale: Locale, restoring: &wire::RestoreProgress) -> Option<String> {
+    let (template, back, total) = if restoring.previews_back < restoring.previews_total {
+        (
+            words::backup_restoring_previews(locale),
+            restoring.previews_back,
+            restoring.previews_total,
+        )
+    } else if restoring.originals_back < restoring.originals_total {
+        (
+            words::backup_restoring_originals(locale),
+            restoring.originals_back,
+            restoring.originals_total,
+        )
+    } else {
+        return None;
+    };
+    Some(fill(
+        &template,
+        &[("back", &grouped(back)), ("total", &grouped(total))],
+    ))
 }
 
 /// The name the member gave a backup device, or the plain word for one with none.
@@ -375,52 +429,27 @@ fn since(locale: Locale, zone: &str, at_ms: i64, now_ms: i64) -> String {
     }
 }
 
-/// THE LINE'S SECOND CLAUSE, IN BYTES (#1144): "All 5.0 GB from 8 apps is
-/// backed up.", "4.6 of 5.0 GB from 8 apps is backed up.", and when the
-/// member left videos out, what that left out: "8.4 GB of videos is left out."
-/// Newer record edits take precedence: the shared byte pool cannot say how
-/// many current bytes the previous snapshot covered, so name the edits waiting.
-/// A reading with no per-app rows (a core that could not name its files) says
-/// the counts instead ([`counts`]).
+/// THE LINE'S SECOND CLAUSE, IN BYTES (#1144): "All 5.0 GB is backed up.",
+/// "4.6 of 5.0 GB is backed up.", and when the member left videos out, what that
+/// left out: "8.4 GB of videos is left out." A reading that knows no bytes (a core
+/// that could not name its files) says the counts instead ([`counts`]).
 #[must_use]
 pub fn detail(locale: Locale, reading: &Reading) -> String {
-    if reading.apps.is_empty() {
+    if reading.total_bytes == 0 {
         return counts(locale, reading);
     }
-    let count = u64::try_from(reading.apps.len()).unwrap_or(u64::MAX);
-    let apps = fill(
-        &words::backup_apps(locale, count),
-        &[("count", &grouped(count))],
-    );
     let total = bytes(reading.total_bytes);
-    // The shared vault-file byte pool has no per-edit precision. Name the known
-    // record backlog instead of claiming all current records were acknowledged.
-    let edits = reading.edits_waiting();
-    let backed = if edits > 0 {
-        fill(
-            &words::backup_app_edits(locale, edits),
-            &[("count", &grouped(edits))],
-        )
-    } else if reading.confirmed_bytes == 0 {
-        fill(
-            &words::backup_bytes_none(locale),
-            &[("total", &total), ("apps", &apps)],
-        )
+    let backed = if reading.confirmed_bytes == 0 {
+        fill(&words::backup_bytes_none(locale), &[("total", &total)])
     } else if reading.confirmed_bytes >= reading.total_bytes {
-        fill(
-            &words::backup_bytes_all(locale),
-            &[("total", &total), ("apps", &apps)],
-        )
+        fill(&words::backup_bytes_all(locale), &[("total", &total)])
     } else {
         fill(
             &words::backup_bytes_some(locale),
-            &[
-                (
-                    "part",
-                    &of_bytes(locale, reading.confirmed_bytes, reading.total_bytes),
-                ),
-                ("apps", &apps),
-            ],
+            &[(
+                "part",
+                &of_bytes(locale, reading.confirmed_bytes, reading.total_bytes),
+            )],
         )
     };
     if reading.left_out_bytes == 0 {
@@ -497,7 +526,7 @@ pub fn waiting_rows(locale: Locale, reading: &Reading) -> Vec<wire::BackupWaitin
                 reason: row_reason(*reason) as i32,
                 count,
                 sentence: fill(
-                    &waiting_words(locale, *reason),
+                    &waiting_words(locale, *reason, count),
                     &[("count", &grouped(count))],
                 ),
             })
@@ -505,9 +534,31 @@ pub fn waiting_rows(locale: Locale, reading: &Reading) -> Vec<wire::BackupWaitin
         .collect()
 }
 
-fn waiting_words(locale: Locale, reason: wire::WaitReason) -> String {
+fn waiting_words(locale: Locale, reason: wire::WaitReason, count: u64) -> String {
     use wire::WaitReason as R;
     match reason {
+        R::Wifi | R::Unspecified => words::backup_photos_wifi(locale, count),
+        R::Charger => words::backup_photos_charger(locale, count),
+        R::Gateway => words::backup_photos_gateway(locale, count),
+        R::Icloud => words::backup_photos_icloud(locale, count),
+        R::Bytes => words::backup_photos_bytes(locale, count),
+        R::Window => words::backup_photos_window(locale, count),
+        R::Ask => words::backup_wait_ask(locale),
+        R::Untrusted => words::backup_wait_untrusted(locale),
+        R::Refused => words::backup_wait_refused(locale),
+        R::TooLarge => words::backup_wait_too_large(locale),
+        R::RefusedOther => words::backup_wait_refused_other(locale),
+        R::PairAgain => words::backup_wait_pair_again(locale),
+        R::NoRoom => words::backup_wait_no_room(locale),
+    }
+}
+
+/// A class row's line for a reason, by the wire's number: "184 waiting for your backup device".
+/// A number this build does not know reads as the Wi-Fi wait, like the card's.
+#[must_use]
+pub fn row_words(locale: Locale, reason: i32) -> String {
+    use wire::WaitReason as R;
+    match R::try_from(reason).unwrap_or(R::Unspecified) {
         R::Wifi | R::Unspecified => words::backup_wait_wifi(locale),
         R::Charger => words::backup_wait_charger(locale),
         R::Gateway => words::backup_wait_gateway(locale),
@@ -520,8 +571,17 @@ fn waiting_words(locale: Locale, reason: wire::WaitReason) -> String {
         R::TooLarge => words::backup_wait_too_large(locale),
         R::RefusedOther => words::backup_wait_refused_other(locale),
         R::PairAgain => words::backup_wait_pair_again(locale),
-        R::NoRoom => words::backup_wait_no_room(locale),
+        R::NoRoom => words::backup_class_wait_no_room(locale),
     }
+}
+
+/// Where a reason stands in the order the line lists them.
+#[must_use]
+pub fn reason_rank(reason: i32) -> usize {
+    REASONS
+        .iter()
+        .position(|known| *known as i32 == reason)
+        .unwrap_or(REASONS.len())
 }
 
 /// The row's reason carries the core's own number, so a shell reading either
@@ -552,9 +612,13 @@ fn row_reason(reason: wire::WaitReason) -> wire::backup_waiting_row::Reason {
 fn finish(mut line: wire::BackupLine) -> wire::BackupLine {
     let mut parts = vec![
         line.sentence.trim_end_matches('.').to_owned(),
-        line.detail.clone(),
+        line.detail.trim_end_matches('.').to_owned(),
     ];
-    parts.extend(line.waiting.iter().map(|row| row.sentence.clone()));
+    parts.extend(
+        line.waiting
+            .iter()
+            .map(|row| row.sentence.trim_end_matches('.').to_owned()),
+    );
     line.accessibility_label = parts
         .into_iter()
         .filter(|part| !part.is_empty())
@@ -580,9 +644,22 @@ pub fn backlog_stood(reading: Option<&Reading>, frozen: bool, now_ms: i64) -> bo
     let Some(acked) = reading.last_ack_ms else {
         return false;
     };
-    let behind =
-        reading.unconfirmed() > 0 || reading.edits_waiting() > 0 || reading.pending_bytes > 0;
+    let behind = reading.unconfirmed() > 0 || !reading.records_held() || reading.pending_bytes > 0;
     behind && now_ms - acked >= BACKLOG_STOOD_MS
+}
+
+/// The same, for Home's one line: "2 min ago" where the page says "2 minutes ago".
+#[must_use]
+pub fn short_ago(locale: Locale, then_ms: i64, now_ms: i64) -> String {
+    let minutes = (now_ms - then_ms).max(0) / MINUTE_MS;
+    if (2..60).contains(&minutes) {
+        fill(
+            &words::backup_ago_short_minutes(locale),
+            &[("n", &minutes.to_string())],
+        )
+    } else {
+        ago(locale, then_ms, now_ms)
+    }
 }
 
 /// HOW LONG AGO, BY ELAPSED TIME ONLY. A day here is 24 hours (there is no

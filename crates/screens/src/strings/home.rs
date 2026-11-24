@@ -39,7 +39,7 @@ catalog! {
     plain home_search_scope_label = ("All apps", "All apps");
     plain home_photos_absent = ("These photos aren't on this phone yet.", "These photos aren't on this phone yet.");
     plain open_app = ("Open {name}", "Open {name}");
-    plain restore_first_action = ("Restore my vaults", "Restore my vaults");
+    plain restore_first_action = ("Restore my vault", "Restore my vault");
     plain search_kind_chat = ("Chat", "Chat");
     plain search_kind_document = ("Document", "Document");
     plain search_kind_event = ("Event", "Event");
@@ -53,26 +53,7 @@ catalog! {
     plain health_search_placeholder = ("Search Health", "Search Health");
     plain search_kind_task = ("Task", "Task");
     plain vault_denied_title = ("No vault access yet.", "No vault access yet.");
-    plain vault_switch_spoken = ("Switch vault", "Switch vault");
-    plain vaults_current = ("Currently open", "Currently open");
-    plain vaults_forget = ("Delete", "Delete");
-    plain vaults_forget_body = (
-        "This deletes the vault from this phone. A backup device keeps its copy and your recovery key restores it; without one, it's gone.",
-        "This deletes the vault from this phone. A backup device keeps its copy and your recovery key restores it; without one, it's gone."
-    );
-    plain vaults_forget_this = ("this vault", "this vault");
-    plain vaults_forget_title = ("Delete {name}?", "Delete {name}?");
-    plain vaults_keep = ("Keep", "Keep");
-    plain vaults_make = ("Make a vault", "Make a vault");
-    plain vaults_make_spoken = ("Make a vault on this phone", "Make a vault on this phone");
-    plain vaults_one = ("This phone has one vault.", "This phone has one vault.");
-    plain vaults_rename = ("Rename", "Rename");
-    plain vaults_rename_failed = ("Couldn't save the name. Try again.", "Couldn't save the name. Try again.");
-    plain vaults_rename_field = ("Vault name", "Vault name");
-    plain vaults_rename_save = ("Save", "Save");
-    plain vaults_rename_title = ("Rename vault", "Rename vault");
-    plain vaults_title = ("Vaults", "Vaults");
-    plain vaults_unnamed = ("Unnamed vault", "Unnamed vault");
+    plain vault_unnamed = ("Unnamed vault", "Unnamed vault");
 
     // ---- the apps' names ----
     plain app_calendar = ("Calendar", "Calendar");

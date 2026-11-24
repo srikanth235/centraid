@@ -1,506 +1,824 @@
-//! The snapshot plane end to end against `MemoryStore`: a round trip, a
-//! snapshot taken while another thread commits, and every refusal a restore
-//! owes (#1080).
+//! One snapshot (spec §5, #1209, L3): dirty ranges, the periodic full read, the checkpoint after
+//! the pin, a damaged vault refused. Counts of ranges read, never durations.
 
-mod common;
+mod backup_support;
 
-use std::collections::BTreeMap;
-use std::io::{Read, Write};
-use std::sync::{Arc, Mutex, mpsc};
-use std::time::{Duration, Instant};
+use backup_support::{Rig, T0};
+use centraid_media::sealed::{self, Class};
+use centraid_vault::backup::snapshot::{FULL_EVERY, Options};
+use centraid_vault::backup::{tree, wal};
+use centraid_vault::pagesource::live_pins;
 
-use centraid_media::sealed;
-use centraid_vault::Vault;
-use centraid_vault::backup::mover::{Stop, move_queue};
-use centraid_vault::backup::naming::{BackupKeys, Digest, Name, PlaintextHash, keys_from_root};
-use centraid_vault::backup::restore::{RestoreError, fetch_and_assemble, restore_head};
-use centraid_vault::backup::snapshot::{self, APP, Manifest, Settled, Snapshot};
-use centraid_vault::backup::spool::{SPOOL_CEILING_BYTES, Spool};
-use centraid_vault::backup::state::{DeviceState, Gateway};
-use centraid_vault::backup::store::{
-    Deleted, Head, MemoryStore, ObjectEntry, Put, SnapshotEntry, Store, StoreError,
-    TOMBSTONE_GRACE_MS,
-};
-use centraid_vault::clock::SystemClock;
-
-const VAULT_ID: &str = "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a";
-
-fn keys() -> BackupKeys {
-    keys_from_root(&[0x42; 32])
-}
-
-fn pair(state: &DeviceState, store: &MemoryStore) {
-    state
-        .put_gateway(&Gateway::paired(
-            store.gateway_id().to_owned(),
-            vec!["192.168.1.20:7443".to_owned()],
-            vec![0x30],
-            "The laptop".to_owned(),
-            store.epoch(),
-            1,
-        ))
-        .expect("pairs");
-}
-
-/// Take, plan, spool, move and settle one snapshot; return it.
-fn back_up(vault: &Vault, store: &MemoryStore) -> Snapshot {
-    let keys = keys();
-    let state = DeviceState::open_beside(vault.path()).expect("a device state");
-    pair(&state, store);
-    let spool = Spool::open(Spool::dir_for(vault.path())).expect("a spool");
-    let snapshot =
-        snapshot::take(vault, &keys, &spool, SPOOL_CEILING_BYTES, VAULT_ID, APP).expect("takes");
-    let plan = snapshot::plan(&snapshot, store).expect("plans");
-    snapshot::spool(
-        &snapshot,
-        &[(store.gateway_id().to_owned(), plan)],
-        &spool,
-        &state,
-        &keys,
-        SPOOL_CEILING_BYTES,
-        1,
-    )
-    .expect("spools");
-    let moved = move_queue(
-        &state,
-        &spool,
-        store,
-        Instant::now() + Duration::from_secs(120),
-        &SystemClock,
-    )
-    .expect("moves");
-    assert_eq!(moved.stopped, Stop::Empty);
-    match snapshot::settle(&state, store, &SystemClock).expect("settles") {
-        Settled::HeadSet(head) => assert_eq!(head.name, snapshot.manifest_name),
-        other => panic!("the head did not move: {other:?}"),
-    }
-    snapshot
-}
-
-/// Every row of every table a member has rows in, as text, sorted.
-fn dump(vault: &Vault, census: &BTreeMap<String, i64>) -> BTreeMap<String, Vec<String>> {
-    vault
-        .read(|connection| {
-            let mut out = BTreeMap::new();
-            for table in census.keys() {
-                let mut statement = connection.prepare(&format!("SELECT * FROM \"{table}\""))?;
-                let columns = statement.column_count();
-                let mut rows: Vec<String> = statement
-                    .query_map([], |row| {
-                        let values: Vec<rusqlite::types::Value> = (0..columns)
-                            .map(|index| row.get(index))
-                            .collect::<rusqlite::Result<_>>()?;
-                        Ok(format!("{values:?}"))
-                    })?
-                    .collect::<rusqlite::Result<_>>()?;
-                rows.sort();
-                out.insert(table.clone(), rows);
-            }
-            Ok(out)
-        })
-        .expect("dumps")
+fn root_of(rig: &Rig, taken: &centraid_vault::backup::snapshot::Taken) -> tree::Root {
+    tree::root_of(&rig.state, &taken.root).expect("a root")
 }
 
 #[test]
-fn a_founded_vault_round_trips_through_a_snapshot_and_a_restore() {
-    let scratch = common::Scratch::founded("backup-round-trip").expect("a vault");
-    for index in 0..25 {
-        common::insert_note(&scratch.vault, &format!("note {index}")).expect("writes");
-    }
-    let store = MemoryStore::new("laptop");
-    let snapshot = back_up(&scratch.vault, &store);
-    let before = dump(&scratch.vault, &snapshot.manifest.census);
-
-    let restored_path = scratch.join("restored.db");
-    let restored = restore_head(&store, &keys(), &restored_path).expect("restores");
-    assert_eq!(restored.manifest, snapshot.manifest);
-    let names: Vec<&str> = restored.checks.iter().map(|check| check.name).collect();
+fn the_first_snapshot_reads_every_range_and_hashes_the_whole_vault() {
+    let rig = Rig::new("first");
+    rig.grow(40, "first");
+    let taken = rig.snapshot(T0);
+    let root = root_of(&rig, &taken);
+    assert!(taken.full);
+    assert!(root.range_count() > 4, "the vault is several ranges");
+    assert_eq!(taken.ranges_read, root.range_count());
+    assert_eq!(taken.ranges_new as u64, root.range_count());
+    assert!(root.db_hash.is_some(), "a full read sets db_hash");
+    assert_eq!(live_pins(), 0);
+    // Every new range is staged, and staging holds exactly those objects.
     assert_eq!(
-        names,
-        [
-            "manifest",
-            "ranges",
-            "db_hash",
-            "integrity_check",
-            "header",
-            "schema",
-            "census"
-        ]
+        rig.staging.names().expect("names").len() as u64,
+        root.range_count()
     );
-    let reopened = Vault::open(&restored_path).expect("opens through the ladder");
-    assert_eq!(dump(&reopened, &snapshot.manifest.census), before);
-
-    // The store holds ciphertext only: no plaintext range and no plaintext
-    // hash of one is readable in any object.
-    let mut pinned =
-        centraid_vault::pagesource::PinnedPages::begin(scratch.vault.path()).expect("a pin");
-    let copy = pinned.range(0).expect("the first range").to_vec();
-    pinned.end().expect("ends");
-    for (_, sealed) in store.contents() {
-        for range in &snapshot.ranges {
-            assert!(
-                !sealed
-                    .windows(32)
-                    .any(|window| window == range.h.as_bytes())
-            );
-        }
-        assert!(!sealed.windows(64).any(|window| window == &copy[4096..4160]));
-    }
-}
-
-/// **The online backup under a writer trying to commit (R-1080-B6).** A
-/// vault shared across threads is behind a `Mutex`, so `commit` and the walk
-/// take turns. Each round the writer is released at the moment the walk holds
-/// the vault, so every walk runs while a commit is being attempted; each
-/// commit writes two parties, so a snapshot that caught half a transaction would
-/// hold an even count beside the owner — and every snapshot holds exactly the
-/// commits made before it.
-#[test]
-fn a_snapshot_taken_while_another_thread_commits_is_exactly_a_committed_state() {
-    const ROUNDS: usize = 8;
-    const PER_ROUND: usize = 15;
-    let dir = tempfile::tempdir().expect("a directory");
-    let vault = Vault::create(dir.path().join("vault.db")).expect("a vault");
-    vault.found("Household", "Ada").expect("founds");
-    let shared = Arc::new(Mutex::new(vault));
-    let (go, released) = mpsc::channel::<()>();
-    let (burst_done, bursts) = mpsc::channel::<()>();
-    let writer = {
-        let shared = Arc::clone(&shared);
-        std::thread::spawn(move || {
-            for round in 0..ROUNDS {
-                released.recv().expect("released");
-                for index in 0..PER_ROUND {
-                    let vault = shared.lock().expect("the vault");
-                    let now = vault.clock().now_text();
-                    let (first, second) = (vault.ids().next(), vault.ids().next());
-                    vault
-                        .commit(|tx| {
-                            for (id, side) in [(&first, "left"), (&second, "right")] {
-                                common::add_person(
-                                    tx,
-                                    id,
-                                    &format!("{side} {round}.{index}"),
-                                    &now,
-                                )?;
-                            }
-                            Ok(())
-                        })
-                        .expect("commits");
-                }
-                burst_done.send(()).expect("reports");
-            }
-        })
-    };
-
-    let keys = keys();
-    for round in 0..ROUNDS {
-        let described = {
-            let vault = shared.lock().expect("the vault");
-            go.send(()).expect("releases the writer");
-            // The writer is now blocked on the lock, mid-attempt, for the
-            // whole walk.
-            std::thread::sleep(Duration::from_millis(5));
-            let spool = Spool::open(dir.path().join(format!("s{round}"))).expect("a spool");
-            snapshot::take(&vault, &keys, &spool, u64::MAX, VAULT_ID, APP).expect("takes")
-        };
-        let parties = described.manifest.census["person"];
-        assert_eq!(
-            parties,
-            i64::try_from(1 + 2 * PER_ROUND * round).expect("fits"),
-            "snapshot {round} is not exactly the commits made before it"
-        );
-        bursts.recv().expect("the writer's burst");
-    }
-    writer.join().expect("the writer finishes");
-}
-
-/// A store that answers one name with another's bytes: what a gateway that
-/// mixed objects up would serve.
-struct Swapped<'a> {
-    inner: &'a MemoryStore,
-    asked: Name,
-    served: Name,
-}
-
-impl Store for Swapped<'_> {
-    fn gateway_id(&self) -> &str {
-        self.inner.gateway_id()
-    }
-    fn exists(&self, names: &[Name]) -> Result<Vec<Name>, StoreError> {
-        self.inner.exists(names)
-    }
-    fn put(
-        &self,
-        name: &Name,
-        digest: &Digest,
-        len: u64,
-        body: &mut dyn Read,
-    ) -> Result<Put, StoreError> {
-        self.inner.put(name, digest, len, body)
-    }
-    fn get(&self, name: &Name, sink: &mut dyn Write) -> Result<u64, StoreError> {
-        let name = if *name == self.asked {
-            &self.served
-        } else {
-            name
-        };
-        self.inner.get(name, sink)
-    }
-    fn head(&self) -> Result<Option<Head>, StoreError> {
-        self.inner.head()
-    }
-    fn set_head(
-        &self,
-        name: &Name,
-        prev: Option<&Name>,
-        taken_at_ms: u64,
-        writes: u64,
-    ) -> Result<Head, StoreError> {
-        self.inner.set_head(name, prev, taken_at_ms, writes)
-    }
-    fn snapshots(&self) -> Result<Vec<SnapshotEntry>, StoreError> {
-        self.inner.snapshots()
-    }
-    fn list(&self, after: Option<&Name>, limit: usize) -> Result<Vec<ObjectEntry>, StoreError> {
-        self.inner.list(after, limit)
-    }
-    fn delete(&self, names: &[Name]) -> Result<Deleted, StoreError> {
-        self.inner.delete(names)
-    }
-    fn held(
-        &self,
-        after: Option<&Name>,
-        limit: usize,
-    ) -> Result<Vec<centraid_vault::backup::store::HeldEntry>, StoreError> {
-        self.inner.held(after, limit)
-    }
-    fn undo(&self, names: Option<&[Name]>) -> Result<u64, StoreError> {
-        self.inner.undo(names)
-    }
-}
-
-/// Upload a manifest edited by `edit`, sealed with the vault's own keys, and
-/// make it the head — the strongest forgery: only the census or the hash can
-/// catch it.
-fn forge(store: &MemoryStore, snapshot: &Snapshot, edit: impl FnOnce(&mut Manifest)) -> Name {
-    let mut manifest = snapshot.manifest.clone();
-    edit(&mut manifest);
-    let parts = manifest.to_parts(&keys()).expect("serialises");
-    for leaf in &parts.leaves {
-        if store.exists(&[leaf.name]).expect("asks").is_empty() {
-            continue;
-        }
-        let bytes = sealed::seal_part(&keys(), 0, &leaf.json, true).expect("seals");
-        store
-            .put(
-                &leaf.name,
-                &Digest::of(&bytes),
-                bytes.len() as u64,
-                &mut bytes.as_slice(),
-            )
-            .expect("stores the leaf");
-    }
-    let json = parts.root_json;
-    let name = sealed::name(&keys(), &PlaintextHash::of(&json), 0);
-    let bytes = sealed::seal_part(&keys(), 0, &json, true).expect("seals");
-    store
-        .put(
-            &name,
-            &Digest::of(&bytes),
-            bytes.len() as u64,
-            &mut bytes.as_slice(),
-        )
-        .expect("stores");
-    store
-        .set_head(
-            &name,
-            Some(&snapshot.manifest_name),
-            manifest.taken_at_ms,
-            manifest.writes,
-        )
-        .expect("moves the head");
-    name
+    assert_eq!(
+        rig.state.staged_all().expect("rows").len() as u64,
+        root.range_count()
+    );
 }
 
 #[test]
-fn a_restore_refuses_every_file_that_is_not_the_snapshots_and_leaves_nothing() {
-    let scratch = common::Scratch::founded("backup-refusals").expect("a vault");
-    common::insert_note(&scratch.vault, "a note").expect("writes");
-    let store = MemoryStore::new("laptop");
-    let snapshot = back_up(&scratch.vault, &store);
-    let keys = keys();
-    let out = scratch.join("restored.db");
+fn a_one_page_edit_reads_one_range_on_a_normal_snapshot() {
+    let rig = Rig::new("onepage");
+    rig.grow(40, "onepage");
+    let first = rig.snapshot(T0);
+    let before = root_of(&rig, &first);
 
-    // A range served under another's name: the manifest, here.
-    let swapped = Swapped {
-        inner: &store,
-        asked: snapshot.ranges[0].name,
-        served: snapshot.manifest_name,
-    };
-    assert!(matches!(
-        fetch_and_assemble(&swapped, &keys, &snapshot.manifest_name, &out),
-        Err(RestoreError::Range { i: 0, .. })
-    ));
-    // A head that names a range instead of a manifest.
-    assert!(matches!(
-        fetch_and_assemble(&store, &keys, &snapshot.ranges[0].name, &out),
-        Err(RestoreError::Manifest(_))
-    ));
-    // Keys of another vault open nothing.
-    assert!(matches!(
-        fetch_and_assemble(
-            &store,
-            &keys_from_root(&[1; 32]),
-            &snapshot.manifest_name,
-            &out
-        ),
-        Err(RestoreError::Manifest(_))
-    ));
+    // One page: a single column of the single `vault` row, by a second connection.
+    let raw = rig.raw();
+    raw.execute("UPDATE vault SET writes = writes + 1", [])
+        .expect("one row changes");
+    drop(raw);
 
-    // **Red first for the census and the hash**: a manifest the vault's own
-    // keys sealed, saying one more party, or another file.
-    let counted = forge(&store, &snapshot, |manifest| {
-        *manifest.census.get_mut("person").expect("a census row") += 1;
-    });
-    match restore_head(&store, &keys, &out) {
-        Err(RestoreError::Census {
-            table,
-            expected,
-            found,
-        }) => {
-            assert_eq!(table, "person");
-            assert_eq!(expected, found.map(|rows| rows + 1));
-        }
-        other => panic!("the census did not refuse: {other:?}"),
-    }
-    store
-        .set_head(
-            &snapshot.manifest_name,
-            Some(&counted),
-            snapshot.manifest.taken_at_ms,
-            snapshot.manifest.writes,
-        )
-        .expect("moves back");
-    forge(&store, &snapshot, |manifest| {
-        manifest.db_hash = PlaintextHash::of(b"another file");
-    });
-    assert!(matches!(
-        restore_head(&store, &keys, &out),
-        Err(RestoreError::DbHash)
-    ));
+    let taken = rig.snapshot(T0 + 1_000);
+    assert!(!taken.full, "the second snapshot is a normal one");
+    assert_eq!(taken.ranges_read, 1, "one page is one range read");
+    assert_eq!(taken.ranges_new, 1, "and one new range object");
+    let after = root_of(&rig, &taken);
     assert!(
-        !out.exists(),
-        "a refused restore leaves nothing at its path"
+        after.db_hash.is_none(),
+        "a normal snapshot carries no db_hash"
     );
-    assert!(!scratch.join("restored.db.partial").exists());
-
-    // A tombstoned range is still served until its purge (A16): a restore
-    // that began before retention dropped it reads on. Once purged it is
-    // missing, and named; and a restore never writes over a file.
-    let fresh = MemoryStore::new("other");
-    let fresh_snap = back_up(&scratch.vault, &fresh);
-    let base_ms = fresh_snap.manifest.taken_at_ms;
-    fresh.set_clock_ms(base_ms);
-    fresh
-        .delete(&[fresh_snap.ranges[0].name])
-        .expect("tombstones");
-    let served = restore_head(&fresh, &keys, &out).expect("a tombstone is still served");
-    std::fs::remove_file(&served.path).expect("clears the way");
-    fresh.set_clock_ms(base_ms + TOMBSTONE_GRACE_MS);
-    assert_eq!(fresh.purge(), 1, "the tombstone's bytes go");
-    assert!(matches!(
-        restore_head(&fresh, &keys, &out),
-        Err(RestoreError::Range { i: 0, .. })
-    ));
-    std::fs::write(&out, b"somebody's file").expect("plants");
-    assert!(matches!(
-        restore_head(&store, &keys, &out),
-        Err(RestoreError::Exists(_))
-    ));
+    assert_eq!(after.range_count(), before.range_count());
+    let (old, new) = (
+        tree::ranges_of(&rig.state, &before).expect("ranges"),
+        tree::ranges_of(&rig.state, &after).expect("ranges"),
+    );
+    assert_eq!(
+        old.iter()
+            .zip(&new)
+            .filter(|(a, b)| a.name != b.name)
+            .count(),
+        1
+    );
 }
 
-/// A restore refuses a file of the model before #1135 and a file whose schema is not this
-/// version's, with a sentence, and leaves nothing at its path (#1146, D3; R-FP-10).
 #[test]
-fn a_restore_refuses_a_file_of_an_earlier_model_or_another_schema_and_leaves_nothing() {
-    let keys = keys();
-    for (what, sql, sentence) in [
-        (
-            "an earlier application id",
-            "PRAGMA application_id = 1128615473", // 0x4345_4e31, `CEN1`
-            "made by an earlier version of Centraid that this one cannot open",
-        ),
-        (
-            "another schema",
-            "CREATE TABLE intruder (x TEXT)",
-            "does not match this version of Centraid",
-        ),
-    ] {
-        let scratch = common::Scratch::founded("backup-identity").expect("a vault");
-        scratch
-            .vault
-            .commit(|tx| {
-                tx.connection().execute_batch(sql)?;
-                Ok(())
-            })
-            .unwrap_or_else(|error| panic!("{what}: {error}"));
-        let store = MemoryStore::new("laptop");
-        let _ = back_up(&scratch.vault, &store);
-        let out = scratch.join("restored.db");
-        let said = restore_head(&store, &keys, &out)
-            .expect_err(what)
-            .to_string();
-        assert!(said.contains(sentence), "{what}: {said}");
-        assert!(!out.exists(), "{what}: a refused restore leaves nothing");
-        assert!(!scratch.join("restored.db.partial").exists(), "{what}");
-    }
+fn nothing_changed_reads_no_range_and_makes_the_same_root_but_for_its_time() {
+    let rig = Rig::new("quiet");
+    rig.grow(20, "quiet");
+    rig.snapshot(T0);
+    let taken = rig.snapshot(T0 + 1);
+    assert_eq!(taken.ranges_read, 0);
+    assert_eq!(taken.ranges_new, 0);
 }
 
-/// **The quick check runs before the head is signed (V21, #1191 B11).** A vault with a
-/// damaged page is refused by the snapshot itself, before a manifest exists, so nothing is
-/// sealed into a head and the gateway's head stays where it was.
 #[test]
-fn the_quick_check_runs_before_the_head_is_signed() {
-    let scratch = common::Scratch::founded("backup-damaged").expect("a vault");
-    for index in 0..40 {
-        common::insert_note(&scratch.vault, &format!("note {index}")).expect("writes");
-    }
-    let store = MemoryStore::new("laptop");
-    let good = back_up(&scratch.vault, &store);
-    let head = store.head().expect("reads").expect("a head");
-    assert_eq!(head.name, good.manifest_name);
+fn a_checkpoint_made_behind_the_core_is_caught_immediately_by_the_next_snapshot() {
+    let rig = Rig::new("behind");
+    rig.grow(40, "behind");
+    let first = rig.snapshot(T0);
+    assert!(first.full);
 
-    // Fold the WAL into the file, then damage a table leaf in it: a cell count no page holds.
-    let path = scratch.vault.path().to_path_buf();
-    rusqlite::Connection::open(&path)
-        .expect("opens")
-        .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
-            row.get::<_, i64>(0)
-        })
-        .expect("checkpoints");
+    // A page changes, and something other than the core folds the WAL into the file.
+    let raw = rig.raw();
+    raw.execute("UPDATE vault SET writes = writes + 1", [])
+        .expect("an edit");
+    raw.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+        row.get::<_, i64>(0)
+    })
+    .expect("a checkpoint nobody asked the core about");
+    drop(raw);
+    assert!(
+        wal::frame_pages(rig.vault().path())
+            .expect("frames")
+            .is_empty(),
+        "the WAL no longer says what changed"
+    );
+
+    // The very next snapshot sees the main file's disk_mark changed and forces a full read.
+    let caught = rig.snapshot(T0 + 1_000);
+    assert!(caught.full, "an outside checkpoint forces a full read");
+    assert_eq!(
+        caught.ranges_new, 1,
+        "exactly the range the dirty set missed"
+    );
+    let healed = root_of(&rig, &caught);
+    assert!(healed.db_hash.is_some());
+}
+
+#[test]
+fn the_periodic_full_read_runs_every_full_every_snapshots() {
+    let rig = Rig::new("cadence");
+    rig.grow(20, "cadence");
+    let first = rig.snapshot(T0);
+    assert!(first.full);
+    for step in 1..FULL_EVERY {
+        let taken = rig.snapshot(T0 + step * 1_000);
+        assert!(!taken.full, "step {step} is incremental");
+        assert!(root_of(&rig, &taken).db_hash.is_none());
+    }
+    let periodic = rig.snapshot(T0 + FULL_EVERY * 1_000);
+    assert!(periodic.full, "step {FULL_EVERY} is a periodic full read");
+    assert!(root_of(&rig, &periodic).db_hash.is_some());
+}
+
+#[test]
+fn a_full_read_is_at_least_daily() {
+    let rig = Rig::new("daily");
+    rig.grow(20, "daily");
+    rig.snapshot(T0);
+    let next_day = rig.snapshot(T0 + 25 * 60 * 60 * 1000);
+    assert!(
+        next_day.full,
+        "a day later is a full read whatever the count says"
+    );
+    let same_day = rig.snapshot(T0 + 26 * 60 * 60 * 1000);
+    assert!(!same_day.full);
+}
+
+#[test]
+fn the_checkpoint_comes_after_the_pin_and_pages_written_during_it_are_carried() {
+    let rig = Rig::new("carry");
+    rig.grow(40, "carry");
+    rig.snapshot(T0);
+    assert!(
+        wal::frame_pages(rig.vault().path())
+            .expect("frames")
+            .is_empty(),
+        "the core checkpointed after the pin ended"
+    );
+    let raw = rig.raw();
+    // A page is written while the next snapshot's pin is open: the pin does not see it, and the
+    // checkpoint that follows folds it away.
+    let during = || {
+        raw.execute("UPDATE vault SET writes = writes + 1", [])
+            .expect("a commit during the pin");
+    };
+    let mut options = Options::at(T0 + 1_000);
+    options.on_pin = Some(&during);
+    let pinned = rig.snapshot_with(options);
+    assert_eq!(
+        pinned.ranges_read, 0,
+        "the pin read the vault before the commit"
+    );
+    let carry = rig.state.device().expect("device").carry;
+    assert!(
+        !carry.is_empty(),
+        "the page written during the pin is carried"
+    );
+    // The next snapshot reads it although the WAL no longer lists it.
+    let next = rig.snapshot(T0 + 2_000);
+    assert_eq!(next.ranges_read, 1);
+    assert_eq!(next.ranges_new, 1);
+    assert!(rig.state.device().expect("device").carry.is_empty());
+}
+
+#[test]
+fn a_damaged_vault_is_refused_before_any_root_exists() {
+    let rig = Rig::new("damaged");
+    rig.grow(20, "damaged");
+    // Fold the WAL so the damage is not shadowed, then damage a leaf page.
+    let raw = rig.raw();
+    raw.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+        row.get::<_, i64>(0)
+    })
+    .expect("checkpoints");
+    drop(raw);
+    let path = rig.vault().path().to_owned();
     let mut bytes = std::fs::read(&path).expect("reads");
     let leaf = (1..bytes.len() / 4096)
         .find(|page| bytes[page * 4096] == 0x0d)
-        .expect("a table leaf");
+        .expect("a leaf page");
     bytes[leaf * 4096 + 3] = 0xff;
     bytes[leaf * 4096 + 4] = 0xff;
     std::fs::write(&path, &bytes).expect("damages");
 
-    let spool = Spool::open(scratch.join("damaged.spool")).expect("a spool");
-    let refused = snapshot::take(
-        &scratch.vault,
-        &keys(),
-        &spool,
-        SPOOL_CEILING_BYTES,
-        VAULT_ID,
-        APP,
+    let refused = centraid_vault::backup::snapshot::take(
+        rig.vault(),
+        &rig.keys,
+        &rig.state,
+        &rig.staging,
+        &rig.directory,
+        Options::at(T0),
     );
-    assert!(refused.is_err(), "a damaged vault is not snapshotted");
-    assert_eq!(centraid_vault::pagesource::live_pins(), 0, "the pin ended");
+    assert!(refused.is_err(), "a damaged vault signs nothing");
+    assert_eq!(live_pins(), 0, "the pin is released");
+    assert!(
+        rig.state.device().expect("device").newest.is_none(),
+        "no root exists"
+    );
     assert_eq!(
-        store.head().expect("reads").expect("a head").name,
-        good.manifest_name,
-        "the head did not move"
+        rig.state.node_count().expect("nodes"),
+        0,
+        "and no node was kept"
     );
+}
+
+#[test]
+fn photos_become_entries_once_and_their_chunks_are_read_once() {
+    let rig = Rig::new("photos");
+    let original = rig.add_original(&b"an original photograph ".repeat(300));
+    let thumbnail = rig.add_thumbnail(&original, b"a thumbnail", "2026-01-02T03:04:05.000Z");
+    let first = rig.snapshot(T0);
+    assert_eq!(first.entries_new, 2);
+    let root = root_of(&rig, &first);
+    let entries = tree::entries_of(&rig.state, &root.blobs).expect("entries");
+    assert_eq!(entries.len(), 2);
+    let photo = entries
+        .iter()
+        .find(|entry| entry.h == original)
+        .expect("the original");
+    assert_eq!(photo.original.len(), 1);
+    assert!(photo.thumbnail.is_empty());
+    assert!(photo.original.iter().all(|r| r.class == Class::Originals));
+    let thumb = entries
+        .iter()
+        .find(|entry| entry.h == thumbnail)
+        .expect("the thumbnail");
+    assert!(thumb.original.is_empty());
+    assert_eq!(thumb.thumbnail.len(), 1);
+    assert!(thumb.taken_at_ms > 0);
+    // The ref is the sealed object of the bytes.
+    let expected = sealed::seal(
+        &rig.keys,
+        Class::Originals,
+        &b"an original photograph ".repeat(300),
+    )
+    .expect("seals")
+    .reference();
+    assert_eq!(photo.original[0], expected);
+
+    let second = rig.snapshot(T0 + 1_000);
+    assert_eq!(
+        second.entries_new, 0,
+        "known blobs are not read or sealed again"
+    );
+}
+
+#[test]
+fn a_snapshot_taken_while_another_thread_commits_is_exactly_a_committed_state() {
+    use centraid_vault::Vault;
+    use centraid_vault::backup::drill::dump;
+    use centraid_vault::backup::engine::{Env, GatewayPass, Policy, Scheduler};
+    use centraid_vault::backup::restore::Restore;
+    use centraid_vault::backup::store::MemoryStore;
+    use std::sync::mpsc;
+
+    let rig = Rig::new("thread");
+    rig.grow(30, "thread");
+    let store = MemoryStore::new("desk");
+    store.set_clock_ms(T0 * 2);
+    rig.pair(&store);
+    rig.snapshot(T0);
+
+    // Another thread holds the vault open on a connection of its own and commits notes the moment
+    // a pin begins, then reports; the snapshot's pin must not see any of it.
+    let path = rig.vault().path().to_owned();
+    let (go, wait) = mpsc::channel::<u32>();
+    let (done, finished) = mpsc::channel::<()>();
+    let committer = std::thread::spawn(move || {
+        let vault = Vault::open(&path).expect("a second handle opens the vault");
+        while let Ok(count) = wait.recv() {
+            for n in 0..count {
+                backup_support::common::insert_note(&vault, &format!("from the thread {n}"))
+                    .expect("commits");
+            }
+            done.send(()).expect("reports");
+        }
+    });
+
+    for round in 1..=3_u64 {
+        let committed = dump(rig.vault()).expect("the committed state at the pin");
+        let during = || {
+            go.send(5).expect("asks the thread to commit");
+            finished.recv().expect("the thread committed");
+        };
+        let mut options = Options::at(T0 + round * 1_000);
+        options.on_pin = Some(&during);
+        let taken = rig.snapshot_with(options);
+        let env = Env::new(
+            rig.vault(),
+            &rig.keys,
+            &rig.state,
+            &rig.staging,
+            Policy::WIFI,
+            T0 + round,
+        );
+        Scheduler::new(vec![GatewayPass::new(&env, &store).expect("a pass")], 8)
+            .run(10_000)
+            .expect("runs");
+
+        let dir = tempfile::tempdir().expect("a directory");
+        let restore = Restore::open(
+            &rig.keys,
+            &[&store as &dyn centraid_vault::backup::store::Store],
+            &taken.root.name,
+        )
+        .expect("opens");
+        let out = dir.path().join("restored.db");
+        restore.records(&out).expect("every restore check holds");
+        let restored = Vault::open(&out).expect("opens");
+        assert_eq!(
+            dump(&restored).expect("dumps"),
+            committed,
+            "round {round}: exactly the state at the pin, none of the commits that landed during it"
+        );
+    }
+    drop(go);
+    committer.join().expect("the thread ends");
+
+    // What the thread committed is in the next snapshot: carried although the WAL was folded.
+    let after = dump(rig.vault()).expect("dumps");
+    let last = rig.snapshot(T0 + 10_000);
+    let env = Env::new(
+        rig.vault(),
+        &rig.keys,
+        &rig.state,
+        &rig.staging,
+        Policy::WIFI,
+        T0 + 10_000,
+    );
+    Scheduler::new(vec![GatewayPass::new(&env, &store).expect("a pass")], 8)
+        .run(10_000)
+        .expect("runs");
+    let dir = tempfile::tempdir().expect("a directory");
+    let restore = Restore::open(
+        &rig.keys,
+        &[&store as &dyn centraid_vault::backup::store::Store],
+        &last.root.name,
+    )
+    .expect("opens");
+    restore
+        .records(&dir.path().join("final.db"))
+        .expect("restores");
+    assert_eq!(
+        dump(&Vault::open(dir.path().join("final.db")).expect("opens")).expect("dumps"),
+        after
+    );
+}
+
+#[test]
+fn the_quick_check_runs_before_the_head_is_signed() {
+    use centraid_vault::backup::engine::GatewayPass;
+    use centraid_vault::backup::store::{MemoryStore, Store as _};
+
+    let rig = Rig::new("quick");
+    rig.grow(20, "quick");
+    let store = MemoryStore::new("desk");
+    store.set_clock_ms(T0 * 2);
+    rig.pair(&store);
+    let raw = rig.raw();
+    raw.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+        row.get::<_, i64>(0)
+    })
+    .expect("folds");
+    drop(raw);
+    let path = rig.vault().path().to_owned();
+    let mut bytes = std::fs::read(&path).expect("reads");
+    let leaf = (1..bytes.len() / 4096)
+        .find(|page| bytes[page * 4096] == 0x0d)
+        .expect("a leaf page");
+    bytes[leaf * 4096 + 3] = 0xff;
+    bytes[leaf * 4096 + 4] = 0xff;
+    std::fs::write(&path, &bytes).expect("damages");
+
+    let refused = centraid_vault::backup::snapshot::take(
+        rig.vault(),
+        &rig.keys,
+        &rig.state,
+        &rig.staging,
+        &rig.directory,
+        Options::at(T0),
+    );
+    assert!(
+        refused.is_err(),
+        "quick_check refuses the pass on the pin it read"
+    );
+    // No root exists, so no pass can start and no head is ever signed over the damage.
+    let env = rig.env(T0);
+    assert!(GatewayPass::new(&env, &store).is_err());
+    assert!(store.head().expect("head").is_none());
+    assert_eq!(store.counts().heads, 0);
+}
+
+fn upload_and_restore(
+    vault: &centraid_vault::Vault,
+    keys: &sealed::BackupKeys,
+    state: &centraid_vault::backup::state::DeviceState,
+    staging: &centraid_vault::backup::staging::Staging,
+    store: &centraid_vault::backup::store::MemoryStore,
+    root: &sealed::Name,
+    now_ms: u64,
+) -> std::collections::BTreeMap<String, Vec<String>> {
+    use centraid_vault::Vault;
+    use centraid_vault::backup::drill::dump;
+    use centraid_vault::backup::engine::{Env, GatewayPass, Policy, Scheduler};
+    use centraid_vault::backup::restore::Restore;
+    use centraid_vault::backup::store::Store;
+
+    let env = Env::new(vault, keys, state, staging, Policy::WIFI, now_ms);
+    Scheduler::new(vec![GatewayPass::new(&env, store).expect("a pass")], 8)
+        .run(10_000)
+        .expect("runs");
+    let dir = tempfile::tempdir().expect("a directory");
+    let out = dir.path().join("restored.db");
+    let restore = Restore::open(keys, &[store as &dyn Store], root).expect("opens");
+    restore.records(&out).expect("restores");
+    dump(&Vault::open(&out).expect("opens restored")).expect("dumps restored")
+}
+
+#[test]
+fn a_clean_close_after_a_write_forces_a_full_read_and_restores_all_rows() {
+    use centraid_vault::Vault;
+    use centraid_vault::backup::directory::Directory;
+    use centraid_vault::backup::drill::dump;
+    use centraid_vault::backup::snapshot;
+    use centraid_vault::backup::staging::Staging;
+    use centraid_vault::backup::state::{DeviceState, Gateway};
+    use centraid_vault::backup::store::{MemoryStore, Store as _};
+
+    let dir = tempfile::tempdir().expect("a directory");
+    let vault_path = dir.path().join("vault.db");
+    let vault = Vault::create(&vault_path).expect("creates vault");
+    vault.found("The Household", "Ada").expect("founds");
+    for round in 0..40 {
+        backup_support::common::insert_note(&vault, &format!("seed {round} {}", "x".repeat(900)))
+            .expect("inserts");
+    }
+
+    let keys = sealed::BackupKeys::from_root(&[0x42; 32]);
+    let state = DeviceState::open_beside(&vault_path).expect("state");
+    let staging = Staging::open(dir.path().join("vault.staging"), 512 * 1024 * 1024).expect("s");
+    let directory = Directory::new(Vec::new()).expect("directory");
+    let store = MemoryStore::new("desk");
+    store.set_clock_ms(T0 * 2);
+    state
+        .add_gateway(&Gateway::paired(
+            store.gateway_id().to_owned(),
+            vec!["192.168.1.20:7443".to_owned()],
+            vec![0x30],
+            "desk".to_owned(),
+            store.epoch(),
+            T0,
+        ))
+        .expect("pairs");
+
+    // First snapshot (full), uploaded so the gateway holds the baseline ranges.
+    let first = snapshot::take(&vault, &keys, &state, &staging, &directory, Options::at(T0))
+        .expect("first snapshot");
+    assert!(first.full);
+    let _ = upload_and_restore(
+        &vault,
+        &keys,
+        &state,
+        &staging,
+        &store,
+        &first.root.name,
+        T0,
+    );
+
+    // A normal write without closing stays incremental.
+    backup_support::common::insert_note(&vault, "normal incremental write").expect("commits");
+    let incremental = snapshot::take(
+        &vault,
+        &keys,
+        &state,
+        &staging,
+        &directory,
+        Options::at(T0 + 1_000),
+    )
+    .expect("incremental snapshot");
+    assert!(
+        !incremental.full,
+        "normal write without close stays incremental"
+    );
+    let _ = upload_and_restore(
+        &vault,
+        &keys,
+        &state,
+        &staging,
+        &store,
+        &incremental.root.name,
+        T0 + 1_000,
+    );
+
+    // Write a small row (without necessarily growing page_count) and cleanly close the last
+    // connection, which checkpoints the WAL into vault.db and removes -wal.
+    backup_support::common::insert_note(&vault, "written before clean close").expect("commits");
+    vault.close().expect("clean close");
+    assert!(
+        wal::frame_pages(&vault_path).expect("frames").is_empty(),
+        "clean close folded and removed the WAL"
+    );
+
+    // Reopen and snapshot: WAL and carry are both empty, yet the main file changed on disk, so
+    // snapshot::take must force a full read and the restored vault must equal the live one.
+    let reopened = Vault::open(&vault_path).expect("reopens");
+    let live = dump(&reopened).expect("dumps live");
+    let after_close = snapshot::take(
+        &reopened,
+        &keys,
+        &state,
+        &staging,
+        &directory,
+        Options::at(T0 + 2_000),
+    )
+    .expect("snapshot after clean close");
+    assert!(
+        after_close.full,
+        "a clean close after a write must force a full read"
+    );
+    let restored = upload_and_restore(
+        &reopened,
+        &keys,
+        &state,
+        &staging,
+        &store,
+        &after_close.root.name,
+        T0 + 2_000,
+    );
+    assert_eq!(
+        restored, live,
+        "restored rows equal live rows after clean close"
+    );
+}
+
+#[test]
+fn a_clean_close_then_new_write_forces_a_full_read_and_restores_both_writes() {
+    use centraid_vault::Vault;
+    use centraid_vault::backup::directory::Directory;
+    use centraid_vault::backup::drill::dump;
+    use centraid_vault::backup::snapshot;
+    use centraid_vault::backup::staging::Staging;
+    use centraid_vault::backup::state::{DeviceState, Gateway};
+    use centraid_vault::backup::store::{MemoryStore, Store as _};
+
+    let dir = tempfile::tempdir().expect("a directory");
+    let vault_path = dir.path().join("vault.db");
+    let vault = Vault::create(&vault_path).expect("creates vault");
+    vault.found("The Household", "Ada").expect("founds");
+    for round in 0..40 {
+        backup_support::common::insert_note(&vault, &format!("seed {round} {}", "x".repeat(900)))
+            .expect("inserts");
+    }
+
+    let keys = sealed::BackupKeys::from_root(&[0x43; 32]);
+    let state = DeviceState::open_beside(&vault_path).expect("state");
+    let staging = Staging::open(dir.path().join("vault.staging"), 512 * 1024 * 1024).expect("s");
+    let directory = Directory::new(Vec::new()).expect("directory");
+    let store = MemoryStore::new("desk");
+    store.set_clock_ms(T0 * 2);
+    state
+        .add_gateway(&Gateway::paired(
+            store.gateway_id().to_owned(),
+            vec!["192.168.1.20:7443".to_owned()],
+            vec![0x30],
+            "desk".to_owned(),
+            store.epoch(),
+            T0,
+        ))
+        .expect("pairs");
+
+    let first = snapshot::take(&vault, &keys, &state, &staging, &directory, Options::at(T0))
+        .expect("first snapshot");
+    assert!(first.full);
+    let _ = upload_and_restore(
+        &vault,
+        &keys,
+        &state,
+        &staging,
+        &store,
+        &first.root.name,
+        T0,
+    );
+
+    // Write 1 before clean close (folded into vault.db on close).
+    backup_support::common::insert_note(&vault, "before clean close").expect("commits 1");
+    vault.close().expect("clean close");
+
+    // Reopen and do Write 2 so the WAL is NON-empty, yet Write 1 is only in vault.db.
+    let reopened = Vault::open(&vault_path).expect("reopens");
+    backup_support::common::insert_note(&reopened, "after reopen").expect("commits 2");
+    assert!(
+        !wal::frame_pages(&vault_path).expect("frames").is_empty(),
+        "WAL is non-empty from the post-reopen write"
+    );
+
+    let live = dump(&reopened).expect("dumps live");
+    let after = snapshot::take(
+        &reopened,
+        &keys,
+        &state,
+        &staging,
+        &directory,
+        Options::at(T0 + 2_000),
+    )
+    .expect("snapshot after reopen + write");
+    assert!(
+        after.full,
+        "a clean close before a post-reopen write must still force a full read"
+    );
+    let restored = upload_and_restore(
+        &reopened,
+        &keys,
+        &state,
+        &staging,
+        &store,
+        &after.root.name,
+        T0 + 2_000,
+    );
+    assert_eq!(
+        restored, live,
+        "restored rows include both the pre-close write and the post-reopen write"
+    );
+}
+
+/// A founded, seeded vault with a first (full) snapshot uploaded, for the tests that close and
+/// reopen it.
+struct Closing {
+    _dir: tempfile::TempDir,
+    path: std::path::PathBuf,
+    keys: sealed::BackupKeys,
+    state: centraid_vault::backup::state::DeviceState,
+    staging: centraid_vault::backup::staging::Staging,
+    directory: centraid_vault::backup::directory::Directory,
+    store: centraid_vault::backup::store::MemoryStore,
+}
+
+impl Closing {
+    fn new() -> (Self, centraid_vault::Vault) {
+        use centraid_vault::Vault;
+        use centraid_vault::backup::directory::Directory;
+        use centraid_vault::backup::staging::Staging;
+        use centraid_vault::backup::state::{DeviceState, Gateway};
+        use centraid_vault::backup::store::{MemoryStore, Store as _};
+
+        let dir = tempfile::tempdir().expect("a directory");
+        let path = dir.path().join("vault.db");
+        let vault = Vault::create(&path).expect("creates vault");
+        vault.found("The Household", "Ada").expect("founds");
+        for round in 0..40 {
+            backup_support::common::insert_note(
+                &vault,
+                &format!("seed {round} {}", "x".repeat(900)),
+            )
+            .expect("inserts");
+        }
+        let state = DeviceState::open_beside(&path).expect("state");
+        let staging =
+            Staging::open(dir.path().join("vault.staging"), 512 * 1024 * 1024).expect("s");
+        let store = MemoryStore::new("desk");
+        store.set_clock_ms(T0 * 2);
+        state
+            .add_gateway(&Gateway::paired(
+                store.gateway_id().to_owned(),
+                vec!["192.168.1.20:7443".to_owned()],
+                vec![0x30],
+                "desk".to_owned(),
+                store.epoch(),
+                T0,
+            ))
+            .expect("pairs");
+        let rig = Self {
+            _dir: dir,
+            path,
+            keys: sealed::BackupKeys::from_root(&[0x44; 32]),
+            state,
+            staging,
+            directory: Directory::new(Vec::new()).expect("directory"),
+            store,
+        };
+        let first = rig.take(&vault, T0);
+        assert!(first.full);
+        (rig, vault)
+    }
+
+    fn take(
+        &self,
+        vault: &centraid_vault::Vault,
+        now_ms: u64,
+    ) -> centraid_vault::backup::snapshot::Taken {
+        centraid_vault::backup::snapshot::take(
+            vault,
+            &self.keys,
+            &self.state,
+            &self.staging,
+            &self.directory,
+            Options::at(now_ms),
+        )
+        .expect("a snapshot")
+    }
+
+    /// Close, reopen and snapshot once, so the vault's close-time statistics exist.
+    fn cycle(&self, vault: centraid_vault::Vault, now_ms: u64) -> centraid_vault::Vault {
+        vault.close().expect("clean close");
+        let reopened = centraid_vault::Vault::open(&self.path).expect("reopens");
+        let _ = self.take(&reopened, now_ms);
+        reopened
+    }
+
+    /// Upload `taken`, restore it, check the copy, and compare it with the live vault.
+    fn restores_to_live(
+        &self,
+        vault: &centraid_vault::Vault,
+        taken: &centraid_vault::backup::snapshot::Taken,
+        now_ms: u64,
+    ) {
+        use centraid_vault::backup::drill::dump;
+        use centraid_vault::backup::restore::Restore;
+        use centraid_vault::backup::store::Store;
+        let live = dump(vault).expect("dumps live");
+        let restored = upload_and_restore(
+            vault,
+            &self.keys,
+            &self.state,
+            &self.staging,
+            &self.store,
+            &taken.root.name,
+            now_ms,
+        );
+        assert_eq!(restored, live, "restored rows equal live rows");
+        let dir = tempfile::tempdir().expect("a directory");
+        let out = dir.path().join("restored.db");
+        Restore::open(&self.keys, &[&self.store as &dyn Store], &taken.root.name)
+            .expect("opens")
+            .records(&out)
+            .expect("restores");
+        let check = rusqlite::Connection::open(&out).expect("opens restored file");
+        let verdict: String = check
+            .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+            .expect("integrity_check");
+        assert_eq!(verdict, "ok", "the restored file is whole");
+    }
+}
+
+#[test]
+fn a_search_only_write_then_clean_close_forces_a_full_read_and_restores_a_whole_file() {
+    use centraid_vault::Vault;
+    let (rig, vault) = Closing::new();
+    // One close first, so `sqlite_stat1` exists and page 1 no longer changes on the next close.
+    let vault = rig.cycle(vault, T0 + 500);
+    // Notes leave several search segments; a snapshot makes the file's mark current.
+    for round in 0..30 {
+        backup_support::common::insert_note(&vault, &format!("more {round} words to index"))
+            .expect("inserts");
+    }
+    let _ = rig.take(&vault, T0 + 600);
+    vault.compact_search().expect("compacts");
+    let _ = rig.take(&vault, T0 + 600);
+    // Commits that touch only the search index leave `vault.writes` alone, and (the file already
+    // holding the pages) change neither its length nor page 1.
+    vault
+        .commit(|tx| {
+            tx.connection().execute(
+                "INSERT INTO search_owed (id, after) VALUES ('nothing', '')",
+                [],
+            )?;
+            Ok(())
+        })
+        .expect("owes");
+    vault.reindex_owed().expect("reindexes");
+    vault.close().expect("clean close");
+
+    let reopened = Vault::open(&rig.path).expect("reopens");
+    let taken = rig.take(&reopened, T0 + 1_000);
+    assert!(
+        taken.full,
+        "a close folds search pages the WAL no longer names"
+    );
+    rig.restores_to_live(&reopened, &taken, T0 + 1_000);
+}
+
+#[test]
+fn a_clean_close_with_no_member_write_forces_a_full_read() {
+    use centraid_vault::Vault;
+    let (rig, vault) = Closing::new();
+    let vault = rig.cycle(vault, T0 + 500);
+    // Only the close-time PRAGMA optimize writes anything.
+    vault.close().expect("clean close");
+
+    let reopened = Vault::open(&rig.path).expect("reopens");
+    let taken = rig.take(&reopened, T0 + 1_000);
+    assert!(taken.full, "a reopen is never trusted to be unchanged");
+    rig.restores_to_live(&reopened, &taken, T0 + 1_000);
+}
+
+#[test]
+fn a_steady_vault_that_is_not_closed_reads_no_range_snapshot_after_snapshot() {
+    let (rig, vault) = Closing::new();
+    for step in 1..=2 {
+        let taken = rig.take(&vault, T0 + step);
+        assert_eq!(taken.ranges_read, 0, "snapshot {step} read nothing");
+        assert!(!taken.full);
+    }
 }

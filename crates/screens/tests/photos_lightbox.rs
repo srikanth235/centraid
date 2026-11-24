@@ -891,7 +891,7 @@ fn a_tap_paints_the_original_fetching_before_the_bytes_move_and_a_failure_stops_
     assert!(status.refused);
     assert_eq!(
         status.sentence,
-        "Can't reach your backup device. Try again later."
+        "Your backup device doesn't hold this original."
     );
 }
 

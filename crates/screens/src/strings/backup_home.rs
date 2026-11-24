@@ -24,7 +24,7 @@ catalog! {
     // Store hands the key back during the new-phone setup and at no other time.
     plain key_place_ios = ("iCloud Keychain", "iCloud Keychain");
     plain key_place_android = ("Google", "Google");
-    plain key_saved_ios = ("Saved in iCloud Keychain. Sign in to iCloud on a new iPhone to restore your vaults.", "Saved in iCloud Keychain. Sign in to iCloud on a new iPhone to restore your vaults.");
+    plain key_saved_ios = ("Saved in iCloud Keychain. Sign in to iCloud on a new iPhone to restore your vault.", "Saved in iCloud Keychain. Sign in to iCloud on a new iPhone to restore your vault.");
     plain key_saved_ios_off = ("iCloud Keychain is off, so your recovery key is only on this iPhone. Save a copy.", "iCloud Keychain is off, so your recovery key is only on this iPhone. Save a copy.");
     plain key_saved_android = ("Backed up with Google. It returns when you restore this phone's backup while setting up a new one. If you skip that step, you'll need your recovery key.", "Backed up with Google. It returns when you restore this phone's backup while setting up a new one. If you skip that step, you'll need your recovery key.");
     plain key_saved_unknown = ("Can't tell whether your recovery key is saved elsewhere. Save a copy.", "Can't tell whether your recovery key is saved elsewhere. Save a copy.");
@@ -89,7 +89,7 @@ catalog! {
     plain unpaired_step_one = ("On a computer you own, run “centraid-gateway pair”.", "On a computer you own, run “centraid-gateway pair”.");
     plain unpaired_step_two = ("Scan the QR code it shows.", "Scan the QR code it shows.");
     plain unpaired_foot = ("The recovery key comes after the first backup.", "The recovery key comes after the first backup.");
-    plain device_too_old_reason = ("{name} runs an older version. Update it, then pair again.", "{name} runs an older version. Update it, then pair again.");
+    plain device_too_old_reason = ("{name} runs an older version than this phone. Update it, then back up again.", "{name} runs an older version than this phone. Update it, then back up again.");
     plain device_moved_reason = ("Not you? Ask whoever runs your backup device to pause it.", "Not you? Ask whoever runs your backup device to pause it.");
 
     // THE ONE-TIME PROMPT after the first confirmed backup (#1188, NB5): "recovery key", never

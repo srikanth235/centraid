@@ -350,5 +350,6 @@ pub fn stop_confirm(locale: Locale, app: &str, store: &str, kept: &str) -> wire:
         ),
         confirm_label: shared::follow_stop_confirm(locale),
         destructive: true,
+        warning: String::new(),
     }
 }

@@ -23,10 +23,6 @@ catalog! {
     plain settings_units_metric = ("Metric", "Metric");
     plain settings_units_imperial = ("Imperial", "Imperial");
     plain settings_units_note = ("Distances, weights and temperatures. Phone's setting follows your region.", "Distances, weights and temperatures. Phone's setting follows your region.");
-    plain settings_vault = ("Vault", "Vault");
-    plain settings_vaults_row = ("Vaults", "Vaults");
-    counted settings_vaults_held = ("This phone has one vault.", "This phone has {n} vaults.");
-    plain settings_make_vault = ("Make a vault", "Make a vault");
     plain settings_download_settings = ("Download settings", "Download settings");
     plain settings_reconnect = ("Reconnect phone data", "Reconnect phone data");
     plain settings_export = ("Export everything", "Export everything");

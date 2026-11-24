@@ -194,9 +194,9 @@ fn a_seed_that_arrived_from_elsewhere_is_sent_to_restore_first_and_the_restore_o
     phone.serve();
     let state = phone.make();
     assert_eq!(state.phase, Phase::RestoreFirst as i32);
-    assert_eq!(state.restore_label, "Restore my vaults");
+    assert_eq!(state.restore_label, "Restore my vault");
     assert_eq!(state.primary_label, "");
-    assert_eq!(state.title, "Restore your vaults first");
+    assert_eq!(state.title, "Restore your vault first");
     phone.send_make(K::Restore(wire::WordsRestoreTapped {}));
     assert!(phone.make().finished);
     let opened = phone.pending();

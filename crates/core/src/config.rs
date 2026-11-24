@@ -74,15 +74,15 @@ pub struct CoreConfig {
     /// beside the vault it protects, in a place no shell asked for and no
     /// backup excludes.
     pub seed: Option<(centraid_identity::Seed, u32)>,
-    /// THE MOST THE SPOOL MAY EVER HOLD (#1080). `None` is
-    /// `centraid_vault::backup::spool::SPOOL_CEILING_BYTES`, 2 GiB; a tenth of
+    /// THE MOST THE STAGING AREA MAY EVER HOLD (#1209, §6.4). `None` is
+    /// `centraid_vault::backup::staging::BUDGET_CEILING`, 512 MiB; a tenth of
     /// the free space still bounds it below either way.
     ///
     /// Injectable for the reason the clock is: a drill that proves a library
-    /// item many times the spool backs up a window at a time (R-1080-C39)
-    /// needs a spool of one part, not gigabytes of test data. A shell passes
-    /// nothing, and the C ABI cannot set it.
-    pub spool_ceiling: Option<u64>,
+    /// item larger than staging backs up a window at a time needs a staging
+    /// area of one chunk, not gigabytes of test data. A shell passes nothing,
+    /// and the C ABI cannot set it.
+    pub staging_ceiling: Option<u64>,
     /// THIS CORE IS THE DOOR TO A DIRECTORY OF VAULTS, not to one (#1135, lane
     /// H2). The core opened here holds no vault; the shelf the screen runtime
     /// builds opens every vault under [`ShelfConfig::dir`] and the shell's calls
@@ -137,7 +137,7 @@ impl CoreConfig {
             ids: None,
             expected_digest: None,
             seed: None,
-            spool_ceiling: None,
+            staging_ceiling: None,
             shelf: None,
             without_vault: false,
         }
@@ -204,11 +204,11 @@ impl CoreConfig {
         self
     }
 
-    /// Hold the spool under `bytes`, whatever the free space. For a drill;
-    /// see [`CoreConfig::spool_ceiling`].
+    /// Hold the staging area under `bytes`, whatever the free space. For a drill;
+    /// see [`CoreConfig::staging_ceiling`].
     #[must_use]
-    pub fn with_spool_ceiling(mut self, bytes: u64) -> Self {
-        self.spool_ceiling = Some(bytes);
+    pub fn with_staging_ceiling(mut self, bytes: u64) -> Self {
+        self.staging_ceiling = Some(bytes);
         self
     }
 }

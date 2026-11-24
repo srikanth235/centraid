@@ -129,7 +129,7 @@ final class AccessibilityAuditTests: XCTestCase {
                 // Waits are bounded: one retap, then a failure that names the screen.
                 var up = true
                 if let proof = root.addProof, !app.el(proof).waitForExistence(timeout: 10) {
-                    if app.el(add).exists && app.el(add).isHittable { app.el(add).tap() }
+                    if app.hittable(app.el(add)) { app.el(add).tap() }
                     up = app.el(proof).waitForExistence(timeout: 20)
                     if !up { XCTFail("\(mode) / \(root.name): Add did not open its screen (\(proof) is not there)") }
                 }
@@ -370,10 +370,10 @@ final class AccessibilityAuditTests: XCTestCase {
         // hierarchy at all, above the fold or below it. Home keeps its scroll position
         // between visits, so go to the top, then down a screen at a time.
         func scrollTo() {
-            if key.exists && key.isHittable { return }
+            if app.hittable(key) { return }
             for _ in 0..<4 { app.swipeDown() }
             var swipes = 0
-            while !(key.exists && key.isHittable) && swipes < 8 {
+            while !app.hittable(key) && swipes < 8 {
                 app.swipeUp()
                 swipes += 1
             }
@@ -424,7 +424,7 @@ final class AccessibilityAuditTests: XCTestCase {
             let end = Date().addingTimeInterval(6)
             while homeShowing(app) && Date() < end { Thread.sleep(forTimeInterval: 0.3) }
             if !(homeShowing(app)) { return }
-            if key.exists && key.isHittable { press() }
+            if app.hittable(key) { press() }
         }
     }
 
@@ -434,7 +434,7 @@ final class AccessibilityAuditTests: XCTestCase {
     /// key is small, always on Home's glass, and not hittable under any page or sheet that covers Home.
     @MainActor private func homeShowing(_ app: XCUIApplication) -> Bool {
         let key = app.el("home-band-backup")
-        return key.exists && key.isHittable
+        return app.hittable(key)
     }
 
     /// Back to Home by the way a member goes: the home capsule of an app's band,
@@ -447,7 +447,7 @@ final class AccessibilityAuditTests: XCTestCase {
             let capsule = app.descendants(matching: .any)
                 .matching(NSPredicate(format: "identifier ENDSWITH '-band-home'"))
                 .firstMatch
-            if capsule.exists && capsule.isHittable { capsule.tap(); continue }
+            if app.hittable(capsule) { capsule.tap(); continue }
             if !dismissSheet(app) && app.navigationBars.buttons.firstMatch.exists {
                 app.navigationBars.buttons.firstMatch.tap()
             }
@@ -462,10 +462,10 @@ final class AccessibilityAuditTests: XCTestCase {
     /// Ends the sheet that is up: its own close key, else a drag down from its top.
     @MainActor @discardableResult private func dismissSheet(_ app: XCUIApplication) -> Bool {
         let pushed = app.el("kit-pushed-back")
-        if pushed.exists && pushed.isHittable { pushed.tap(); return true }
+        if app.hittable(pushed) { pushed.tap(); return true }
         for label in ["Close", "Done", "Cancel", "Back"] {
             let key = app.buttons[label].firstMatch
-            if key.exists && key.isHittable { key.tap(); return true }
+            if app.hittable(key) { key.tap(); return true }
         }
         let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12))
         top.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
@@ -484,7 +484,7 @@ final class AccessibilityAuditTests: XCTestCase {
     /// The hittable buttons on screen, for a log line when a screen will not close.
     @MainActor private func outline(_ app: XCUIApplication) -> String {
         app.buttons.allElementsBoundByIndex.prefix(30)
-            .filter { $0.isHittable }
+            .filter { app.hittable($0) }
             .map { "\($0.identifier)=\($0.label)" }
             .joined(separator: " ; ")
     }
@@ -933,4 +933,20 @@ final class AccessibilityAuditTests: XCTestCase {
 extension XCUIApplication {
     /// The element with this accessibility identifier, whatever its type.
     func el(_ id: String) -> XCUIElement { descendants(matching: .any)[id].firstMatch }
+
+    /// Whether the element is on screen and can take a tap, asked only once its frame is settled.
+    /// `isHittable` THROWS (failing the test) with "Activation point invalid and no suggested hit
+    /// points" while the element is mid NavigationStack push/pop under a cover, its frame empty,
+    /// non-finite or not yet inside the window (#1209). A frame is plain data and never throws, so
+    /// it is checked first and `isHittable` is asked only of an element whose frame is the window's.
+    func hittable(_ element: XCUIElement) -> Bool {
+        guard element.exists else { return false }
+        let frame = element.frame
+        let window = windows.firstMatch.frame
+        guard !frame.isEmpty, !frame.isNull, !frame.isInfinite,
+              frame.origin.x.isFinite, frame.origin.y.isFinite,
+              !window.isEmpty, window.contains(CGPoint(x: frame.midX, y: frame.midY))
+        else { return false }
+        return element.isHittable
+    }
 }

@@ -1005,6 +1005,7 @@ impl Detail {
                 body: words::release_body(locale),
                 confirm_label: words::release(locale),
                 destructive: false,
+                warning: String::new(),
             }),
             _ => None,
         }

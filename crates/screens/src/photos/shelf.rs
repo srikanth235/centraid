@@ -103,6 +103,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         selection: Selection::new(offer, Drain::Settled, Wording::Chosen),
         choice: album.map_or_else(AlbumChoice::new, AlbumChoice::excluding),
         prompt: Prompt::Unspecified,
+        unbacked: 0,
         notice: String::new(),
         keep: album.map(|_| Keep::default()),
         dismissed: false,
@@ -110,6 +111,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         gate: OwnerGate::default(),
         sending: None,
         rename_rev: None,
+        restoring: false,
     }))
 }
 
@@ -144,11 +146,16 @@ struct Shelf {
     selection: Selection,
     choice: AlbumChoice,
     prompt: Prompt,
+    /// How many of the photographs the trash shows no backup device holds whole, read when
+    /// Empty trash was opened (#1209, R4).
+    unbacked: u32,
     notice: String,
     keep: Option<Keep>,
     dismissed: bool,
     /// A hand-off is with the platform; a second is not started over it.
     copying: Option<Mode>,
+    /// Whether a restore still owes originals (#1209, R3).
+    restoring: bool,
 }
 
 fn view_of(kind: wire::PhotosShelfKind) -> load::photos::ShelfView {
@@ -248,6 +255,8 @@ impl Shelf {
         if self.is_album() && self.head.is_none() {
             self.dismissed = true;
         }
+        self.restoring =
+            crate::kit::restoring::originals_owed(crate::kit::restoring::owed(ctx).as_ref());
         self.load_keep(ctx);
     }
 
@@ -336,7 +345,15 @@ impl Shelf {
     fn selection_event(&mut self, event: &wire::PhotosSelectionEvent, ctx: &Ctx) {
         self.notice.clear();
         let ordered = self.ordered();
-        match self.selection.update(event, &ordered, ctx) {
+        let cells = &self.cells;
+        let content_of = |id: &str| {
+            cells
+                .iter()
+                .find(|cell| cell.photo_id == id)
+                .map(|cell| cell.content_id.clone())
+                .unwrap_or_default()
+        };
+        match self.selection.update(event, &ordered, &content_of, ctx) {
             Outcome::Moved => {}
             Outcome::OpenAlbumChoice => {
                 let opened = wire::PhotosAlbumChoiceEvent {
@@ -369,7 +386,7 @@ impl Shelf {
     }
 
     /// Open a sheet. Each is offered only where it means something.
-    fn open_prompt(&mut self, prompt: Prompt) {
+    fn open_prompt(&mut self, prompt: Prompt, ctx: &Ctx) {
         let allowed = match prompt {
             Prompt::Unspecified => false,
             Prompt::EmptyTrash => self.is_trash() && !self.cells.is_empty(),
@@ -377,6 +394,15 @@ impl Shelf {
             Prompt::SendLocation => !self.selection.picked().is_empty(),
         };
         if allowed {
+            if prompt == Prompt::EmptyTrash {
+                let contents: Vec<String> = self
+                    .cells
+                    .iter()
+                    .map(|cell| cell.content_id.clone())
+                    .filter(|content| !content.is_empty())
+                    .collect();
+                self.unbacked = super::unbacked::count(ctx, &contents);
+            }
             self.prompt = prompt;
             self.notice.clear();
         }
@@ -604,7 +630,10 @@ impl Shelf {
             Some(E::Selection(selection)) => self.selection_event(&selection, ctx),
             Some(E::AlbumChoice(choice)) => self.album_choice_event(&choice, ctx),
             Some(E::PromptOpened(opened)) => {
-                self.open_prompt(Prompt::try_from(opened.prompt).unwrap_or(Prompt::Unspecified));
+                self.open_prompt(
+                    Prompt::try_from(opened.prompt).unwrap_or(Prompt::Unspecified),
+                    ctx,
+                );
                 if self.prompt == Prompt::RenameAlbum {
                     self.rename_rev = stale::read_rev(ctx, &self.id);
                 }
@@ -711,8 +740,15 @@ impl Shelf {
             .map(|(at, cell)| {
                 let low = at.saturating_sub(NEIGHBOURS);
                 let high = (at + NEIGHBOURS + 1).min(ids.len());
+                let mut tile = cells::tile(cell, Link::default(), locale);
+                if self.restoring
+                    && tile.held == wire::photo_tile::Held::ThumbnailOnly as i32
+                    && !tile.content_id.is_empty()
+                {
+                    tile.held = wire::photo_tile::Held::ComingBack as i32;
+                }
                 wire::PhotosShelfCell {
-                    tile: Some(cells::tile(cell, Link::default(), locale)),
+                    tile: Some(tile),
                     open: Some(routes::lightbox(&cell.photo_id, &ids[low..high], album_id)),
                 }
             })
@@ -761,12 +797,15 @@ impl Shelf {
                 body: kit_words::trash_empty_body(locale),
                 confirm_label: kit_words::trash_empty_action(locale),
                 destructive: true,
+                // R4: photographs in the trash that no backup device holds whole.
+                warning: super::unbacked::warning(locale, self.cells.len(), self.unbacked),
             }),
             Prompt::DeleteAlbum => Some(wire::Confirm {
                 title: words::photos_delete_album_title(locale),
                 body: words::photos_delete_album_body(locale),
                 confirm_label: words::photos_delete_album(locale),
                 destructive: true,
+                warning: String::new(),
             }),
             _ => None,
         }
@@ -935,5 +974,59 @@ impl Screen for Shelf {
             kind: Some(wire::view_state::Kind::PhotosShelf(Box::new(state))),
             ..wire::ViewState::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod restore_tests {
+    use super::*;
+
+    #[test]
+    fn shelf_emits_coming_back_for_thumbnail_only_tiles_during_restore() {
+        let mut shelf = Shelf {
+            kind: wire::PhotosShelfKind::Favorites,
+            id: String::new(),
+            route_title: String::new(),
+            page: Page::Ready {
+                data: (),
+                note: None,
+            },
+            more_failed: false,
+            cells: vec![wire::PhotosCell {
+                photo_id: "p1".to_owned(),
+                content_id: "c1".to_owned(),
+                thumbnail_path: Some("/tmp/t1.jpg".to_owned()),
+                original_held: false,
+                ..Default::default()
+            }],
+            next: None,
+            head: None,
+            place: None,
+            selection: Selection::new(Offer::Favorites, Drain::Settled, Wording::Chosen),
+            choice: AlbumChoice::new(),
+            prompt: Prompt::Unspecified,
+            unbacked: 0,
+            notice: String::new(),
+            keep: None,
+            dismissed: false,
+            copying: None,
+            gate: OwnerGate::default(),
+            sending: None,
+            rename_rev: None,
+            restoring: false,
+        };
+
+        let before = shelf.data(Locale::default());
+        assert_eq!(
+            before.cells[0].tile.as_ref().unwrap().held,
+            wire::photo_tile::Held::ThumbnailOnly as i32
+        );
+
+        shelf.restoring = true;
+        let during = shelf.data(Locale::default());
+        assert_eq!(
+            during.cells[0].tile.as_ref().unwrap().held,
+            wire::photo_tile::Held::ComingBack as i32
+        );
     }
 }

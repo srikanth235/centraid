@@ -49,6 +49,7 @@ pub mod picker;
 pub mod places;
 pub mod selection;
 pub mod shelf;
+pub mod unbacked;
 
 pub const HOME: &str = "photos.home";
 pub const SHELF: &str = "photos.shelf";

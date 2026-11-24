@@ -87,13 +87,13 @@ use centraid_api_proto::core_v1 as wire;
 use centraid_gateway::client::Client;
 use centraid_gateway::rules::ids::Name as WireName;
 use centraid_gateway::rules::payload::PairPayload;
+use centraid_media::sealed::Name;
 use centraid_vault::Vault;
 use centraid_vault::backup::PlaneError;
-use centraid_vault::backup::files::{ContentFile, content_files};
-use centraid_vault::backup::naming::Name;
-use centraid_vault::backup::restore::{RestoreError, Restored, fetch_and_assemble};
-use centraid_vault::backup::state::Gateway;
+use centraid_vault::backup::restore::{Restore, RestoreError};
+use centraid_vault::backup::state::{Device, Gateway};
 use centraid_vault::backup::store::StoreError;
+use centraid_vault::backup::tree::{self, Root};
 
 use super::link::GatewayStore;
 use super::pair::{self, ClaimAnswer};
@@ -542,9 +542,12 @@ enum Checked {
 fn held_is_newer(held: &Path, restored: &Path) -> bool {
     let writes = |file: &Path| -> Option<u64> {
         let vault = Vault::open(file).ok()?;
-        let history = centraid_vault::backup::snapshot::history(&vault).ok();
+        let writes = vault
+            .read(centraid_vault::clock::writes_and_written_at)
+            .ok()
+            .and_then(|(writes, _)| u64::try_from(writes).ok());
         let _ = vault.close();
-        history.map(|history| history.writes)
+        writes
     };
     matches!((writes(held), writes(restored)), (Some(held), Some(head)) if held > head)
 }
@@ -671,6 +674,16 @@ impl Staged {
             let _ = std::fs::remove_dir_all(dir);
         }
     }
+}
+
+/// One backup laid down: the root the head names, its sealed ref, and every tree node under it
+/// (plaintext), so the restored vault's device state continues from this tree and a first pass
+/// owes only what changed since.
+struct Restored {
+    /// The root (`manifest` in the words of the plane before the tree).
+    manifest: Root,
+    manifest_name: Name,
+    nodes: Vec<(Name, Vec<u8>)>,
 }
 
 /// What a rebuild that would not finish is to the shell: a gateway that
@@ -829,11 +842,10 @@ impl Scan<'_> {
         staged: &Staged,
     ) -> Option<centraid_vault::backup::directory::Directory> {
         use centraid_vault::backup::store::Store as _;
-        let named = staged.restored.manifest.directory?;
+        let named = staged.restored.manifest.directory;
         let mut bytes = Vec::new();
-        staged.store.get(&named, &mut bytes).ok()?;
-        let plain =
-            centraid_media::sealed::open_whole(&staged.keyring.backup, &named, &bytes).ok()?;
+        staged.store.get(&named.name, &mut bytes).ok()?;
+        let plain = centraid_media::sealed::open(&staged.keyring.backup, &named, &bytes).ok()?;
         centraid_vault::backup::directory::Directory::from_json(&plain).ok()
     }
 
@@ -1179,13 +1191,12 @@ impl Scan<'_> {
                         paired.epoch,
                         now,
                     );
-                    row.seen_ms = Some(now);
-                    // THE HEAD IT HOLDS IS WHERE THE NEXT HEAD CONTINUES FROM; the pass sends
-                    // what that gateway lacks of the newest snapshot.
-                    row.head = Some(Name::from_bytes(*other.head.as_bytes()));
-                    row.head_ms = Some(u64::try_from(other.taken_at_ms).unwrap_or(0));
-                    row.writes = other.writes;
-                    if ledger.put_gateway(&row).is_err() {
+                    // NO `conf` HERE: this phone checked another gateway's tree, so the first pass
+                    // there is a recovery pass, which asks the gateway what it holds and sends the
+                    // rest.
+                    let _ = (other.taken_at_ms, other.writes);
+                    row.reach_ms = Some(now);
+                    if ledger.add_gateway(&row).is_err() {
                         report(&name, "was claimed but not kept");
                     }
                 }
@@ -1252,32 +1263,25 @@ impl Scan<'_> {
         // the writer now, so the head is moved to the backup it restored, and the first pass
         // continues from a head that opens.
         if let Some((older, taken)) = &staged.older {
-            use centraid_vault::backup::store::Store as _;
             staged.store.client().set_token(paired.token);
-            staged
-                .store
-                .set_head(
-                    &Name::from_bytes(*older.as_bytes()),
-                    Some(&Name::from_bytes(*staged.head.as_bytes())),
-                    u64::try_from(*taken).unwrap_or(0),
-                    staged.restored.manifest.writes,
-                )
-                .map_err(|error| CoreError::Unavailable {
-                    reason: format!(
-                        "the backup device did not take the older backup as its head: {error}"
-                    ),
-                })?;
+            move_head_to_older(
+                &staged.store,
+                &Name::from_bytes(*older.as_bytes()),
+                &Name::from_bytes(*staged.head.as_bytes()),
+                u64::try_from(*taken).unwrap_or(0),
+                staged.restored.manifest.writes,
+            )?;
         }
         let plane = Plane::of(kept);
+        // THE SAME PHONE: a copy this one held is an older copy of this vault, and its device
+        // state (what it confirmed, its cached trees, its staging) is not the truth of the vault
+        // restored over it. It is derived, so it starts over: this gateway's row below is the
+        // only thing it knows.
+        reset_device_files(&plane);
         let ledger = plane.state()?;
-        // THE SAME PHONE: a copy this one held is an older copy of this vault. What it owed is
-        // not what the vault restored over it owes, so the outbox is emptied, and this gateway's
-        // row starts over below (its moved mark, if it ever had one, is not the truth of the
-        // vault restored over it).
-        ledger.reset_for_restore(&[]).map_err(plane_error)?;
         let now = now_ms();
-        // THE HEAD THIS PHONE NOW CONTINUES, as a snapshot it set: the first pass's
-        // compare-and-set names it, and settle sees nothing owed.
+        // THE HEAD THIS PHONE NOW CONTINUES, as a tree it checked: the first pass's compare-and-set
+        // names it, and the engine finds nothing owed beyond what changed since.
         let manifest = &staged.restored.manifest;
         let name = staged.restored.manifest_name;
         let mut row = Gateway::paired(
@@ -1288,74 +1292,52 @@ impl Scan<'_> {
             paired.epoch,
             now,
         );
-        row.seen_ms = Some(now);
-        row.ack_ms = Some(u64::try_from(staged.head_set_ms).unwrap_or(0));
-        row.head = Some(name);
-        row.head_ms = Some(manifest.taken_at_ms);
-        row.writes = manifest.writes;
-        row.snapshot = Some(name);
-        row.snapshot_ms = Some(manifest.taken_at_ms);
-        row.snapshot_writes = manifest.writes;
-        ledger.put_gateway(&row).map_err(plane_error)?;
+        row.reach_ms = Some(now);
+        ledger.add_gateway(&row).map_err(plane_error)?;
+        for (node, plaintext) in &staged.restored.nodes {
+            ledger.put_node(node, plaintext).map_err(plane_error)?;
+        }
+        ledger
+            .confirm_records(
+                &gateway_id,
+                &name,
+                u64::try_from(staged.head_set_ms).unwrap_or(0),
+            )
+            .map_err(plane_error)?;
+        ledger
+            .set_device(&Device {
+                newest: Some((name, manifest.taken_at_ms)),
+                since_full: 0,
+                full_ms: None,
+                carry: Vec::new(),
+            })
+            .map_err(plane_error)?;
+        // THE ORIGINALS ARE OWED (R3): the marker says this restore left them to come back, a pass
+        // at a time, newest first.
+        let _ = std::fs::write(plane.originals_marker(), b"");
 
-        // THE FILE FIRST: it takes the name `vault.db`, so a failure fetching the grid below can
-        // never lose the vault itself.
+        let derivatives_total = tree::entries_of(&ledger, &manifest.blobs)
+            .map(|entries| {
+                entries
+                    .iter()
+                    .filter(|entry| !entry.thumbnail.is_empty())
+                    .count()
+            })
+            .map_or(0, |n| u32::try_from(n).unwrap_or(u32::MAX));
+        // THE FILE FIRST: it takes the name `vault.db`, so the vault opens immediately once the
+        // records are in (R3). Thumbnails and then originals follow in background passes.
         std::fs::rename(&staged.file, kept).map_err(|error| CoreError::Invariant {
             context: format!("keeping the restored vault as {}: {error}", kept.display()),
         })?;
-        // THE GRID, WHOLE: every derivative, in fetch bundles. A gateway that
-        // stops answering here does not undo a claim that landed; what did
-        // not come back is fetched on demand like any original, and the answer
-        // says how many landed of how many.
-        let (landed, total) = self.bring_derivatives(staged, kept);
         Ok(wire::RestoredVault {
             vault_id: staged.keyring.vault_hex(),
             index: staged.index,
             path: kept.to_string_lossy().into_owned(),
-            rows: manifest.census.values().sum(),
+            rows: i64::try_from(manifest.census.values().sum::<u64>()).unwrap_or(i64::MAX),
             safety_number: pair::safety_number(&staged.keyring, &staged.pin),
-            derivatives_landed: landed,
-            derivatives_total: total,
+            derivatives_landed: 0,
+            derivatives_total,
         })
-    }
-
-    /// Fetch every derivative the kept vault names; `(landed, of)`. A failure is logged and
-    /// leaves the rest to on-demand fetches.
-    fn bring_derivatives(&self, staged: &Staged, kept: &Path) -> (u32, u32) {
-        let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
-        let files: Result<Vec<ContentFile>> = (|| {
-            let vault = Vault::open(kept)?;
-            let files = content_files(&vault).map_err(plane_error);
-            vault.close()?;
-            files
-        })();
-        let files = match files {
-            Ok(files) => files,
-            Err(error) => {
-                tracing::warn!(%error, "a restore could not list the derivatives to bring back");
-                return (0, 0);
-            }
-        };
-        let derivatives: Vec<&ContentFile> =
-            files.iter().filter(|file| file.variant.is_some()).collect();
-        let total = count(derivatives.len());
-        let bytes = match centraid_blobs::ByteStore::open(kept.with_extension("bytes")) {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                tracing::warn!(%error, "a restore could not open the content store");
-                return (0, total);
-            }
-        };
-        match super::fetch::fetch_all(&staged.store, &staged.keyring.backup, &derivatives, &bytes) {
-            Ok(landed) => {
-                tracing::info!(landed, of = total, "a restore brought the derivatives back");
-                (count(landed), total)
-            }
-            Err(error) => {
-                tracing::warn!(%error, "a restore's derivatives did not all come back");
-                (0, total)
-            }
-        }
     }
 }
 
@@ -1372,7 +1354,28 @@ fn lay_down(
 ) -> Result<Restored> {
     discard(file);
     let name = Name::from_bytes(*head.as_bytes());
-    let outcome = fetch_and_assemble(store, &keyring.backup, &name, file)
+    let stores: [&dyn centraid_vault::backup::store::Store; 1] = [store];
+    let outcome = Restore::open(&keyring.backup, &stores, &name)
+        .map_err(RestoreError::from)
+        .and_then(|restore| {
+            // R3, PHASE 1: the pages are written, `db_hash` is verified when the root has one, the
+            // schema and the census are checked. After this the vault opens.
+            restore.records(file)?;
+            let names = tree::nodes_of(&restore, &restore.root_ref).map_err(RestoreError::from)?;
+            let mut nodes = Vec::with_capacity(names.len());
+            for node in names {
+                if let Some(plaintext) =
+                    tree::NodeSource::plaintext(&restore, &node).map_err(RestoreError::from)?
+                {
+                    nodes.push((node, plaintext));
+                }
+            }
+            Ok(Restored {
+                manifest: restore.root.clone(),
+                manifest_name: restore.root_ref.name,
+                nodes,
+            })
+        })
         .map_err(|error| restore_error(error, index))
         .and_then(|restored| {
             // THE LADDER, ONCE, HERE: a snapshot an older build took is
@@ -1388,6 +1391,18 @@ fn lay_down(
         discard(file);
     }
     outcome
+}
+
+/// A restored vault's device state and staging start over: they are derived from the vault the
+/// restore laid down, never from the copy it replaces.
+fn reset_device_files(plane: &Plane) {
+    let path = plane.state_path();
+    for suffix in ["", "-wal", "-shm"] {
+        let mut file = path.clone().into_os_string();
+        file.push(suffix);
+        let _ = std::fs::remove_file(file);
+    }
+    let _ = std::fs::remove_dir_all(plane.staging_dir());
 }
 
 #[cfg(test)]
@@ -1598,6 +1613,7 @@ mod error_tests {
 
         let early = restore_error(
             RestoreError::SchemaMismatch {
+                rung: 1,
                 found: "old".to_owned(),
                 expected: "now".to_owned(),
             },
@@ -1666,5 +1682,135 @@ mod held_tests {
             !held_is_newer(&held, &restored),
             "a damaged held copy answers not newer"
         );
+    }
+
+    #[test]
+    fn move_head_to_older_treats_head_already_equal_to_older_as_success() {
+        use centraid_vault::backup::store::{
+            Deleted, FrameAnswer, Head, HeldEntry, ObjectEntry, Outgoing, SnapshotEntry, Store,
+            StoreError,
+        };
+
+        struct ConflictStore {
+            current: Option<Head>,
+        }
+
+        impl Store for ConflictStore {
+            fn gateway_id(&self) -> &str {
+                "gw"
+            }
+            fn head(&self) -> std::result::Result<Option<Head>, StoreError> {
+                Ok(self.current)
+            }
+            fn set_head(
+                &self,
+                _name: &Name,
+                _prev: Option<&Name>,
+                _taken_at_ms: u64,
+                _writes: u64,
+            ) -> std::result::Result<Head, StoreError> {
+                Err(StoreError::HeadConflict {
+                    current: self.current,
+                })
+            }
+            fn snapshots(&self) -> std::result::Result<Vec<SnapshotEntry>, StoreError> {
+                Ok(Vec::new())
+            }
+            fn exists(&self, _names: &[Name]) -> std::result::Result<Vec<Name>, StoreError> {
+                Ok(Vec::new())
+            }
+            fn bundle(
+                &self,
+                _parts: &[Outgoing],
+            ) -> std::result::Result<Vec<(Name, FrameAnswer)>, StoreError> {
+                Ok(Vec::new())
+            }
+            fn get(
+                &self,
+                name: &Name,
+                _sink: &mut dyn std::io::Write,
+            ) -> std::result::Result<u64, StoreError> {
+                Err(StoreError::Missing(*name))
+            }
+            fn list(
+                &self,
+                _after: Option<&Name>,
+                _limit: usize,
+            ) -> std::result::Result<Vec<ObjectEntry>, StoreError> {
+                Ok(Vec::new())
+            }
+            fn held(
+                &self,
+                _after: Option<&Name>,
+                _limit: usize,
+            ) -> std::result::Result<Vec<HeldEntry>, StoreError> {
+                Ok(Vec::new())
+            }
+            fn delete(
+                &self,
+                _names: &[Name],
+                _head_root: Option<&Name>,
+            ) -> std::result::Result<Deleted, StoreError> {
+                Ok(Deleted {
+                    deleted: Vec::new(),
+                    freed: Vec::new(),
+                    refused: Vec::new(),
+                })
+            }
+            fn undo(&self, _names: Option<&[Name]>) -> std::result::Result<u64, StoreError> {
+                Ok(0)
+            }
+        }
+
+        let older = Name::from_bytes([1; 32]);
+        let prev = Name::from_bytes([2; 32]);
+        let other = Name::from_bytes([3; 32]);
+        let head_of = |name| Head {
+            name,
+            prev: None,
+            taken_at_ms: 100,
+            epoch: 2,
+            generation: 1,
+            writes: 5,
+            set_at_ms: 100,
+        };
+
+        let already = ConflictStore {
+            current: Some(head_of(older)),
+        };
+        assert!(
+            move_head_to_older(&already, &older, &prev, 100, 5).is_ok(),
+            "head already equal to older succeeds on retry"
+        );
+
+        let moved_elsewhere = ConflictStore {
+            current: Some(head_of(other)),
+        };
+        assert!(
+            move_head_to_older(&moved_elsewhere, &older, &prev, 100, 5).is_err(),
+            "head equal to a different snapshot still fails"
+        );
+    }
+}
+
+/// Move a gateway's head from `prev` to `older` during restore adoption. If a prior attempt
+/// already landed `older` as the gateway's head, the resulting `HeadConflict` is treated as
+/// success so retrying adoption is idempotent.
+fn move_head_to_older(
+    store: &dyn centraid_vault::backup::store::Store,
+    older: &Name,
+    prev: &Name,
+    taken_at_ms: u64,
+    writes: u64,
+) -> Result<()> {
+    use centraid_vault::backup::store::StoreError;
+    match store.set_head(older, Some(prev), taken_at_ms, writes) {
+        Ok(_) => Ok(()),
+        Err(StoreError::HeadConflict {
+            current: Some(head),
+        }) if head.name == *older => Ok(()),
+        Err(error) => Err(CoreError::Unavailable {
+            reason: format!("the backup device did not take the older backup as its head: {error}"),
+        }),
     }
 }
