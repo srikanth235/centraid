@@ -776,6 +776,7 @@ impl Screen for Editor {
                         body: words::discard_body(locale),
                         confirm_label: words::discard(locale),
                         destructive: true,
+                        warning: String::new(),
                     }),
                     chrome: Some(wire::LockerEditorChrome {
                         title: if self.adding {

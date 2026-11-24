@@ -184,6 +184,7 @@ impl Collections {
                 body: words::photos_delete_album_body(locale),
                 confirm_label: words::photos_delete_album(locale),
                 destructive: true,
+                warning: String::new(),
             }),
             new_album_placeholder: words::photos_album_name(locale),
             create_label: words::photos_create(locale),

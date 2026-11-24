@@ -559,6 +559,7 @@ impl Screen for EventPage {
                 body: words::confirm_cancel_body(locale),
                 confirm_label: words::cancel_event(locale),
                 destructive: true,
+                warning: String::new(),
             }),
             cancel_scopes: if series_sheet {
                 scopes(locale, self.scope)

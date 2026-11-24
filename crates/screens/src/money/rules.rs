@@ -776,12 +776,14 @@ impl Screen for Rules {
                         body: words::apply_body(locale),
                         confirm_label: words::apply_confirm(locale),
                         destructive: false,
+                        warning: String::new(),
                     },
                     Pending::Delete => wire::Confirm {
                         title: words::rule_delete_title(locale),
                         body: words::rule_delete_body(locale),
                         confirm_label: words::rule_delete_confirm(locale),
                         destructive: true,
+                        warning: String::new(),
                     },
                 }),
                 chrome: Some(fold::chrome(

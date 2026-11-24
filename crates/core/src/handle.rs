@@ -4504,6 +4504,7 @@ mod tests {
             wire::request::Kind::Drain(wire::DrainRequest::default()),
             wire::request::Kind::HeldWhole(wire::HeldWholeRequest {
                 content_hash: vec![7; 32],
+                ..Default::default()
             }),
             wire::request::Kind::Releasable(wire::ReleasableRequest { limit: 1 }),
         ] {

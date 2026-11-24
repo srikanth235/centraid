@@ -256,6 +256,11 @@ message ClassStatus {
 message HeldWholeRequest {
   // 32 raw bytes: the BLAKE3 of the whole plaintext.
   bytes content_hash = 1;
+  // MANY AT ONCE (#1209, wave 4b): a selection or an emptied trash asks about every photo in one
+  // read, so the cost is one pass over each gateway's tree and not one per photo. Each is 32 raw
+  // bytes; `content_hash` is read as well when it is set. `not_held` names the ones no gateway
+  // holds whole.
+  repeated bytes content_hashes = 2;
 }
 
 message HeldWholeResponse {
@@ -263,6 +268,9 @@ message HeldWholeResponse {
   repeated string gateway_ids = 1;
   // Whether any does: the warning shows when this is false.
   bool held_whole = 2;
+  // OF `HeldWholeRequest.content_hashes`, the ones no gateway holds whole, in the order asked and
+  // without repeats. The delete warning counts these.
+  repeated bytes not_held = 3;
 }
 
 // ONE ITEM WHOSE BYTES ONLY THE SHELL CAN READ (#1080), and everything the

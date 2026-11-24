@@ -303,12 +303,14 @@ impl Trash {
                 ),
                 confirm_label: shared::trash_purge(locale),
                 destructive: true,
+                warning: String::new(),
             }),
             Asking::Empty => Some(wire::Confirm {
                 title: shared::trash_empty_title(locale),
                 body: shared::trash_empty_body(locale),
                 confirm_label: shared::trash_empty_action(locale),
                 destructive: true,
+                warning: String::new(),
             }),
         }
     }

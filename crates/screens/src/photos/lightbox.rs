@@ -96,6 +96,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         albums: AlbumChoice::for_one_photo(),
         places: Vec::new(),
         confirm: false,
+        unbacked: 0,
         fetching: false,
         dismissed: false,
         pending: VecDeque::new(),
@@ -188,6 +189,9 @@ struct Lightbox {
     albums: AlbumChoice,
     places: Vec<wire::PhotosPlaceCard>,
     confirm: bool,
+    /// Whether no backup device holds this photograph whole, read when Delete forever was
+    /// tapped (#1209, R4).
+    unbacked: u32,
     fetching: bool,
     dismissed: bool,
     pending: VecDeque<Pending>,
@@ -669,7 +673,14 @@ impl Lightbox {
                     Some(words::photos_receipt_restored(ctx.locale())),
                 );
             }
-            V::DeleteForever => self.confirm = true,
+            V::DeleteForever => {
+                let content = self
+                    .detail()
+                    .map(|detail| detail.cell.content_id.clone())
+                    .filter(|content| !content.is_empty());
+                self.unbacked = content.map_or(0, |content| super::unbacked::count(ctx, &[content]));
+                self.confirm = true;
+            }
             // (i) TOGGLES THE DETAILS: they open under the photograph and the same key closes them.
             V::Info => {
                 self.sheet = if self.sheet == Sheet::Info {
@@ -1651,6 +1662,7 @@ impl Screen for Lightbox {
                 body: words::photos_delete_forever_body(locale),
                 confirm_label: shared::trash_purge(locale),
                 destructive: true,
+                warning: super::unbacked::warning(locale, 1, self.unbacked),
             }),
             dismissed: self.dismissed,
             film: window

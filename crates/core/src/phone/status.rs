@@ -114,6 +114,30 @@ pub(crate) fn holders(
     Ok(out)
 }
 
+/// R4 for many at once: of `hashes`, the ones no gateway holds whole, in the order given and
+/// without repeats. Each gateway's originals tree is listed once, whatever the count.
+///
+/// # Errors
+/// The device state's refusal.
+pub(crate) fn unheld(
+    state: &DeviceState,
+    keys: &sealed::BackupKeys,
+    hashes: &[PlaintextHash],
+) -> Result<Vec<PlaintextHash>> {
+    let mut listed = Vec::new();
+    for gateway in state.gateways().map_err(plane_error)? {
+        if gateway.moved_epoch.is_none() {
+            listed.push(listed_hashes(state, keys, gateway.oroot, Class::Originals));
+        }
+    }
+    let mut seen = BTreeSet::new();
+    Ok(hashes
+        .iter()
+        .filter(|h| seen.insert(**h) && !listed.iter().any(|set| set.contains(*h)))
+        .copied()
+        .collect())
+}
+
 /// One paired gateway as a file is judged against it.
 struct Replica {
     gateway: Gateway,

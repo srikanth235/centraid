@@ -272,7 +272,15 @@ impl Home {
             }
             H::Selection(event) => {
                 let ordered = self.ordered();
-                let outcome = self.selection.update(&event, &ordered, ctx);
+                let cells = &self.library.cells;
+                let content_of = |id: &str| {
+                    cells
+                        .iter()
+                        .find(|cell| cell.photo_id == id)
+                        .map(|cell| cell.content_id.clone())
+                        .unwrap_or_default()
+                };
+                let outcome = self.selection.update(&event, &ordered, &content_of, ctx);
                 self.after_selection(outcome, ctx);
             }
             H::AlbumChoice(event) => {

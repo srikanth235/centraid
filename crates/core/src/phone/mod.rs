@@ -963,11 +963,34 @@ pub fn held_whole(
     keyring: &Keyring,
     request: &wire::HeldWholeRequest,
 ) -> Result<wire::HeldWholeResponse> {
-    let h = hash_of(&request.content_hash)?;
-    let gateway_ids = status::holders(&plane.state()?, &keyring.backup, &h)?;
+    let state = plane.state()?;
+    let (gateway_ids, held_whole) = if request.content_hash.is_empty()
+        && !request.content_hashes.is_empty()
+    {
+        (Vec::new(), false)
+    } else {
+        let h = hash_of(&request.content_hash)?;
+        let gateway_ids = status::holders(&state, &keyring.backup, &h)?;
+        let held = !gateway_ids.is_empty();
+        (gateway_ids, held)
+    };
+    let many = request
+        .content_hashes
+        .iter()
+        .map(|raw| hash_of(raw))
+        .collect::<Result<Vec<_>>>()?;
+    let not_held = if many.is_empty() {
+        Vec::new()
+    } else {
+        status::unheld(&state, &keyring.backup, &many)?
+            .into_iter()
+            .map(|h| h.as_bytes().to_vec())
+            .collect()
+    };
     Ok(wire::HeldWholeResponse {
-        held_whole: !gateway_ids.is_empty(),
+        held_whole,
         gateway_ids,
+        not_held,
     })
 }
 

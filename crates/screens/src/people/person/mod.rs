@@ -576,6 +576,7 @@ impl Person {
                     body: words::confirm_remove_channel_body(locale),
                     confirm_label: words::remove(locale),
                     destructive: true,
+                    warning: String::new(),
                 })
             }
             Asking::Merge { name, .. } => Some(wire::Confirm {
@@ -586,6 +587,7 @@ impl Person {
                 body: words::confirm_merge_body(locale),
                 confirm_label: words::merge(locale),
                 destructive: true,
+                warning: String::new(),
             }),
         }
     }

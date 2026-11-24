@@ -515,6 +515,7 @@ fn held_whole_names_the_gateways_that_hold_an_original_and_says_none_before_the_
             &phone,
             wire::request::Kind::HeldWhole(wire::HeldWholeRequest {
                 content_hash: hash.to_vec(),
+                ..Default::default()
             }),
         ) else {
             panic!("a held_whole answers");
@@ -543,11 +544,24 @@ fn held_whole_names_the_gateways_that_hold_an_original_and_says_none_before_the_
         !held_whole(&[7; 32]).held_whole,
         "a hash nothing names is held nowhere"
     );
+    // MANY AT ONCE: of three hashes with one repeated, only the one nothing holds comes back,
+    // once, in the order asked.
+    let wire::response::Kind::HeldWhole(many) = ask(
+        &phone,
+        wire::request::Kind::HeldWhole(wire::HeldWholeRequest {
+            content_hash: Vec::new(),
+            content_hashes: vec![vec![7; 32], hash.clone(), vec![7; 32], vec![8; 32]],
+        }),
+    ) else {
+        panic!("a held_whole answers");
+    };
+    assert_eq!(many.not_held, vec![vec![7; 32], vec![8; 32]]);
     assert!(
         try_ask(
             &phone,
             wire::request::Kind::HeldWhole(wire::HeldWholeRequest {
                 content_hash: vec![1, 2, 3],
+                ..Default::default()
             })
         )
         .is_err(),

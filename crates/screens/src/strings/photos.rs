@@ -75,6 +75,8 @@ catalog! {
     plain photos_delete_album = ("Delete album", "Delete album");
     plain photos_delete_album_body = ("Photos stay in the library.", "Photos stay in the library.");
     plain photos_delete_album_title = ("Delete this album?", "Delete this album?");
+    plain photos_unbacked_one = ("This photo isn\u{2019}t backed up yet. No backup device can bring it back.", "This photo isn\u{2019}t backed up yet. No backup device can bring it back.");
+    counted photos_unbacked_some = ("{count} of these photos isn\u{2019}t backed up yet. No backup device can bring it back.", "{count} of these photos aren\u{2019}t backed up yet. No backup device can bring them back.");
     plain photos_delete_forever_body = ("Captions, tags and album entries go too. This cannot be undone.", "Captions, tags and album entries go too. This cannot be undone.");
     plain photos_delete_forever_many = ("Delete {count} photos forever?", "Delete {count} photos forever?");
     plain photos_delete_forever_one = ("Delete this photo forever?", "Delete this photo forever?");

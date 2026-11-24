@@ -299,6 +299,7 @@ impl Categories {
             ),
             confirm_label: words::merge_confirm(locale),
             destructive: true,
+            warning: String::new(),
         })
     }
 }

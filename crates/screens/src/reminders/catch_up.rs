@@ -194,6 +194,7 @@ impl CatchUp {
             body: words::complete_all_body(locale),
             confirm_label: words::complete_all(locale),
             destructive: false,
+            warning: String::new(),
         })
     }
 

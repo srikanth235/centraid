@@ -210,6 +210,9 @@ pub struct Selection {
     selecting: bool,
     picked: Vec<String>,
     confirming: Option<Verb>,
+    /// How many of the photographs a Delete forever would take no backup device holds whole, read
+    /// when the confirm was raised (#1209, R4).
+    unbacked: u32,
     refusal: Option<String>,
     /// The status line and what its Undo reverses (the kit's one door): what the last write said,
     /// until the next attempt.
@@ -226,6 +229,7 @@ impl Selection {
             selecting: false,
             picked: Vec::new(),
             confirming: None,
+            unbacked: 0,
             refusal: None,
             door: Undo::default(),
         }
@@ -398,6 +402,7 @@ impl Selection {
         &mut self,
         event: &wire::PhotosSelectionEvent,
         ordered: &[String],
+        content_of: &dyn Fn(&str) -> String,
         ctx: &Ctx,
     ) -> Outcome {
         if !matches!(
@@ -417,6 +422,7 @@ impl Selection {
             Some(E::Action(tapped)) => {
                 return self.tapped(
                     Verb::try_from(tapped.kind).unwrap_or(Verb::Unspecified),
+                    content_of,
                     ctx,
                 );
             }
@@ -438,7 +444,7 @@ impl Selection {
         Outcome::Moved
     }
 
-    fn tapped(&mut self, verb: Verb, ctx: &Ctx) -> Outcome {
+    fn tapped(&mut self, verb: Verb, content_of: &dyn Fn(&str) -> String, ctx: &Ctx) -> Outcome {
         // The archive's way out is `unarchive`, however the screen spelt it.
         let verb = if verb == Verb::Restore && self.offer.is_archive() {
             Verb::Unarchive
@@ -454,6 +460,14 @@ impl Selection {
             // Destroying asks first, in full sentences; Move to trash asks nothing and says
             // what it did with Undo, as everywhere else (#1185).
             Verb::DeleteForever => {
+                // R4: ask the core once, here, what no backup device holds whole.
+                let contents: Vec<String> = self
+                    .picked
+                    .iter()
+                    .map(|id| content_of(id))
+                    .filter(|content| !content.is_empty())
+                    .collect();
+                self.unbacked = super::unbacked::count(ctx, &contents);
                 self.confirming = Some(verb);
                 Outcome::Moved
             }
@@ -587,7 +601,7 @@ impl Selection {
             title,
             actions,
             cancel_label: words::photos_cancel(locale),
-            confirm: self.confirming.map(|_| confirm(locale, count)),
+            confirm: self.confirming.map(|_| confirm(locale, count, self.unbacked)),
         }
     }
 }
@@ -665,8 +679,9 @@ pub fn label(locale: Locale, verb: Verb) -> String {
 
 /// The confirm over Delete forever, with the whole cost stated: not only the
 /// photograph but its captions, tags and album entries.
-fn confirm(locale: Locale, count: u32) -> wire::Confirm {
+fn confirm(locale: Locale, count: u32, unbacked: u32) -> wire::Confirm {
     wire::Confirm {
+        warning: super::unbacked::warning(locale, count as usize, unbacked),
         title: words::delete_forever_question(locale, u64::from(count)),
         body: words::photos_delete_forever_body(locale),
         confirm_label: shared::trash_purge(locale),

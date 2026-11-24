@@ -103,6 +103,7 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         selection: Selection::new(offer, Drain::Settled, Wording::Chosen),
         choice: album.map_or_else(AlbumChoice::new, AlbumChoice::excluding),
         prompt: Prompt::Unspecified,
+        unbacked: 0,
         notice: String::new(),
         keep: album.map(|_| Keep::default()),
         dismissed: false,
@@ -144,6 +145,9 @@ struct Shelf {
     selection: Selection,
     choice: AlbumChoice,
     prompt: Prompt,
+    /// How many of the photographs the trash shows no backup device holds whole, read when
+    /// Empty trash was opened (#1209, R4).
+    unbacked: u32,
     notice: String,
     keep: Option<Keep>,
     dismissed: bool,
@@ -336,7 +340,15 @@ impl Shelf {
     fn selection_event(&mut self, event: &wire::PhotosSelectionEvent, ctx: &Ctx) {
         self.notice.clear();
         let ordered = self.ordered();
-        match self.selection.update(event, &ordered, ctx) {
+        let cells = &self.cells;
+        let content_of = |id: &str| {
+            cells
+                .iter()
+                .find(|cell| cell.photo_id == id)
+                .map(|cell| cell.content_id.clone())
+                .unwrap_or_default()
+        };
+        match self.selection.update(event, &ordered, &content_of, ctx) {
             Outcome::Moved => {}
             Outcome::OpenAlbumChoice => {
                 let opened = wire::PhotosAlbumChoiceEvent {
@@ -369,7 +381,7 @@ impl Shelf {
     }
 
     /// Open a sheet. Each is offered only where it means something.
-    fn open_prompt(&mut self, prompt: Prompt) {
+    fn open_prompt(&mut self, prompt: Prompt, ctx: &Ctx) {
         let allowed = match prompt {
             Prompt::Unspecified => false,
             Prompt::EmptyTrash => self.is_trash() && !self.cells.is_empty(),
@@ -377,6 +389,15 @@ impl Shelf {
             Prompt::SendLocation => !self.selection.picked().is_empty(),
         };
         if allowed {
+            if prompt == Prompt::EmptyTrash {
+                let contents: Vec<String> = self
+                    .cells
+                    .iter()
+                    .map(|cell| cell.content_id.clone())
+                    .filter(|content| !content.is_empty())
+                    .collect();
+                self.unbacked = super::unbacked::count(ctx, &contents);
+            }
             self.prompt = prompt;
             self.notice.clear();
         }
@@ -604,7 +625,10 @@ impl Shelf {
             Some(E::Selection(selection)) => self.selection_event(&selection, ctx),
             Some(E::AlbumChoice(choice)) => self.album_choice_event(&choice, ctx),
             Some(E::PromptOpened(opened)) => {
-                self.open_prompt(Prompt::try_from(opened.prompt).unwrap_or(Prompt::Unspecified));
+                self.open_prompt(
+                    Prompt::try_from(opened.prompt).unwrap_or(Prompt::Unspecified),
+                    ctx,
+                );
                 if self.prompt == Prompt::RenameAlbum {
                     self.rename_rev = stale::read_rev(ctx, &self.id);
                 }
@@ -761,12 +785,15 @@ impl Shelf {
                 body: kit_words::trash_empty_body(locale),
                 confirm_label: kit_words::trash_empty_action(locale),
                 destructive: true,
+                // R4: photographs in the trash that no backup device holds whole.
+                warning: super::unbacked::warning(locale, self.cells.len(), self.unbacked),
             }),
             Prompt::DeleteAlbum => Some(wire::Confirm {
                 title: words::photos_delete_album_title(locale),
                 body: words::photos_delete_album_body(locale),
                 confirm_label: words::photos_delete_album(locale),
                 destructive: true,
+                warning: String::new(),
             }),
             _ => None,
         }
