@@ -15,10 +15,9 @@ use centraid_datagen::Catalog;
 use centraid_datagen::mix::{self, Shares};
 use centraid_datagen::render::{Tokenizer, byte_level_tokenizer, byte_level_tokenizer_json};
 use centraid_datagen::rollout::{Renderer, read_worlds};
-use centraid_datagen::run::{self, Config as RunConfig};
 use centraid_datagen::source::DatagenSource;
-use centraid_datagen::version::{self, Provenance, RenderConfig};
-use serde_json::{Value, json};
+use centraid_datagen::version::{self, BuildConfig};
+use serde_json::Value;
 
 fn catalog() -> &'static Catalog {
     static CATALOG: OnceLock<Catalog> = OnceLock::new();
@@ -29,30 +28,29 @@ fn catalog() -> &'static Catalog {
 fn version_dir() -> &'static tempfile::TempDir {
     static DIR: OnceLock<tempfile::TempDir> = OnceLock::new();
     DIR.get_or_init(|| {
-        let config = RunConfig {
-            seed: 1,
-            counts: [3, 1, 1],
-            per_world: [0; 3],
-            cell_limit: Some(40),
-            mistakes: Vec::new(),
-        };
-        let scratch = tempfile::tempdir().expect("tempdir");
-        let generated = run::generate(&config, catalog(), scratch.path()).expect("run");
-        let input = tempfile::tempdir().expect("tempdir");
-        run::write(input.path(), &config, catalog(), &generated).expect("write");
-        let tokenizer = input.path().join("tokenizer.json");
+        let cache_dir = tempfile::tempdir().expect("cache tempdir");
+        let tok_dir = tempfile::tempdir().expect("tok tempdir");
+        let tokenizer = tok_dir.path().join("tokenizer.json");
         std::fs::write(&tokenizer, byte_level_tokenizer_json()).expect("tokenizer");
         let out = tempfile::tempdir().expect("tempdir");
-        version::render_and_mix(
-            input.path(),
-            out.path(),
-            &RenderConfig {
-                tokenizer,
-                decision_weight: 2.0,
-                concurrency: 2,
-            },
-            &mix::Config {
-                targets: [60, 15, 15],
+        version::build_evolvable(&BuildConfig {
+            version: "test".to_owned(),
+            seed: 1,
+            typo_seed: 1,
+            cache_dir: cache_dir.path().to_path_buf(),
+            out_dir: out.path().to_path_buf(),
+            tokenizer,
+            train_target: 40,
+            val_target: 10,
+            test_target: 10,
+            train_floor: 0,
+            offline: true,
+            rehearsal: true,
+            enforce_floors: false,
+            decision_weight: 2.0,
+            concurrency: 8,
+            mix_cfg: mix::Config {
+                targets: [40, 10, 10],
                 shares: Shares::default(),
                 seed: 1,
                 live: Vec::new(),
@@ -61,25 +59,29 @@ fn version_dir() -> &'static tempfile::TempDir {
                 reserved: Vec::new(),
                 reserve: 0,
             },
-            &Provenance {
-                version: "test".to_owned(),
-                runtime_commit: "unknown".to_owned(),
-                tokenizer_path: "tokenizer.json".to_owned(),
-                seeds: json!({"master": 1, "mix": 1}),
-            },
-        )
-        .expect("render and mix");
+        })
+        .expect("build_evolvable");
         out
     })
 }
 
 fn records_of(dir: &Path, split: &str) -> Vec<Value> {
-    let file =
-        std::fs::File::open(centraid_datagen::version::split_path(dir, split)).expect("file");
-    let text = String::from_utf8(zstd::stream::decode_all(file).expect("zstd")).expect("utf8");
-    text.lines()
-        .map(|line| serde_json::from_str(line).expect("a record"))
-        .collect()
+    let mut paths = version::split_paths(dir, split);
+    if paths.is_empty() {
+        let single = version::split_path(dir, split);
+        if single.is_file() {
+            paths.push(single);
+        }
+    }
+    let mut out = Vec::new();
+    for path in paths {
+        let file = std::fs::File::open(path).expect("file");
+        let text = String::from_utf8(zstd::stream::decode_all(file).expect("zstd")).expect("utf8");
+        for line in text.lines().filter(|l| !l.trim().is_empty()) {
+            out.push(serde_json::from_str(line).expect("a record"));
+        }
+    }
+    out
 }
 
 /// The messages of an assistant side as the model would have written them, read back out of a rendered text: one per

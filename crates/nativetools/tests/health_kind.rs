@@ -586,10 +586,17 @@ fn a_workout_can_be_logged_with_explicit_ends_edited_including_time_only_and_und
     );
     assert!(wrote(&made), "{made}");
     session.user("");
-    let shown = text(&mut session, "find", json!({"kind": "workout", "name": "Morning Ride"}));
+    let shown = text(
+        &mut session,
+        "find",
+        json!({"kind": "workout", "name": "Morning Ride"}),
+    );
     assert!(shown.contains("2026-09-27 08:15"), "{shown}");
 
-    let found = find(&mut session, json!({"kind": "workout", "name": "Morning Ride"}));
+    let found = find(
+        &mut session,
+        json!({"kind": "workout", "name": "Morning Ride"}),
+    );
     let handle = found["effect"]["result"].as_str().unwrap().to_owned();
 
     // Edit ends using time-only against the workout's start date, via alias `end`.
@@ -601,7 +608,9 @@ fn a_workout_can_be_logged_with_explicit_ends_edited_including_time_only_and_und
     );
     assert!(wrote(&edited), "{edited}");
     assert!(
-        edited["effect"]["diff"].to_string().contains("2026-09-27T08:30"),
+        edited["effect"]["diff"]
+            .to_string()
+            .contains("2026-09-27T08:30"),
         "{edited}"
     );
 
@@ -610,7 +619,11 @@ fn a_workout_can_be_logged_with_explicit_ends_edited_including_time_only_and_und
     let undone = call(&mut session, "do", json!({"verb": "undo"}));
     assert!(wrote(&undone), "{undone}");
     session.user("");
-    let restored = text(&mut session, "find", json!({"kind": "workout", "name": "Morning Ride"}));
+    let restored = text(
+        &mut session,
+        "find",
+        json!({"kind": "workout", "name": "Morning Ride"}),
+    );
     assert!(restored.contains("2026-09-27 08:15"), "{restored}");
 
     let drift = session.take_drift();
@@ -630,7 +643,11 @@ fn a_workout_can_be_logged_with_explicit_ends_edited_including_time_only_and_und
     assert!(wrote(&ny_made), "{ny_made}");
     let mut utc = world.session();
     utc.user("");
-    let utc_shown = text(&mut utc, "find", json!({"kind": "workout", "name": "Evening Run"}));
+    let utc_shown = text(
+        &mut utc,
+        "find",
+        json!({"kind": "workout", "name": "Evening Run"}),
+    );
     assert!(
         utc_shown.contains("2026-09-26 22:00") && utc_shown.contains("2026-09-26 22:45"),
         "expected UTC 22:00..22:45 in {utc_shown}"
@@ -667,7 +684,10 @@ fn a_workout_refuses_ends_earlier_than_starts() {
         }),
     );
     assert!(wrote(&made), "{made}");
-    let found = find(&mut session, json!({"kind": "workout", "name": "Tempo Run"}));
+    let found = find(
+        &mut session,
+        json!({"kind": "workout", "name": "Tempo Run"}),
+    );
     let handle = found["effect"]["result"].as_str().unwrap().to_owned();
 
     session.user("move end before start");
@@ -683,6 +703,10 @@ fn a_workout_refuses_ends_earlier_than_starts() {
         "{bad_edit}"
     );
     session.user("");
-    let intact = text(&mut session, "find", json!({"kind": "workout", "name": "Tempo Run"}));
+    let intact = text(
+        &mut session,
+        "find",
+        json!({"kind": "workout", "name": "Tempo Run"}),
+    );
     assert!(intact.contains("2026-09-27 08:10"), "{intact}");
 }

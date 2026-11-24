@@ -42,31 +42,30 @@ fn measures(scratch: &common::Scratch, id: &str) -> (Option<i64>, Option<i64>) {
 fn whole_measures_take_integer_valued_floats_on_log_and_edit() {
     let scratch = common::Scratch::founded("workout-whole").expect("a vault");
     let registry = Registry::with_system_commands().expect("a registry");
-    for (moving, heart) in [(json!(1800), json!(142))] {
-        let id = run(
-            &scratch,
-            &registry,
-            "workout.log",
-            json!({ "type": "run", "starts": "2026-03-04", "moving_s": moving, "heart_bpm": heart }),
-        )["workout_id"]
-            .as_str()
-            .expect("an id")
-            .to_owned();
-        assert_eq!(measures(&scratch, &id), (Some(1800), Some(142)));
-        run(
-            &scratch,
-            &registry,
-            "workout.edit",
-            json!({ "id": id, "moving_s": 1900, "heart_bpm": 150 }),
-        );
-        assert_eq!(measures(&scratch, &id), (Some(1900), Some(150)));
-        // absent keeps, null clears
-        run(
-            &scratch,
-            &registry,
-            "workout.edit",
-            json!({ "id": id, "heart_bpm": null }),
-        );
-        assert_eq!(measures(&scratch, &id), (Some(1900), None));
-    }
+    let (moving, heart) = (json!(1800), json!(142));
+    let id = run(
+        &scratch,
+        &registry,
+        "workout.log",
+        json!({ "type": "run", "starts": "2026-03-04", "moving_s": moving, "heart_bpm": heart }),
+    )["workout_id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    assert_eq!(measures(&scratch, &id), (Some(1800), Some(142)));
+    run(
+        &scratch,
+        &registry,
+        "workout.edit",
+        json!({ "id": id, "moving_s": 1900, "heart_bpm": 150 }),
+    );
+    assert_eq!(measures(&scratch, &id), (Some(1900), Some(150)));
+    // absent keeps, null clears
+    run(
+        &scratch,
+        &registry,
+        "workout.edit",
+        json!({ "id": id, "heart_bpm": null }),
+    );
+    assert_eq!(measures(&scratch, &id), (Some(1900), None));
 }

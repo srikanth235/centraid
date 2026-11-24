@@ -351,8 +351,17 @@ fn txn_edit_updates_fields_preserves_on_reimport_and_enforces_guards() {
     let world = World::new();
     let current = world.account("Everyday");
     let savings = world.account("Savings");
-    world.import(&current, &[GROCER, ("csv:xfer-out", "2026-03-05", -50_000, "TO SAVINGS")]);
-    world.import(&savings, &[("csv:xfer-in", "2026-03-05", 50_000, "FROM EVERYDAY")]);
+    world.import(
+        &current,
+        &[
+            GROCER,
+            ("csv:xfer-out", "2026-03-05", -50_000, "TO SAVINGS"),
+        ],
+    );
+    world.import(
+        &savings,
+        &[("csv:xfer-in", "2026-03-05", 50_000, "FROM EVERYDAY")],
+    );
     let grocer = world.line(GROCER.0);
     let xfer_out = world.line("csv:xfer-out");
     let xfer_in = world.line("csv:xfer-in");
@@ -400,7 +409,12 @@ fn txn_edit_updates_fields_preserves_on_reimport_and_enforces_guards() {
     );
     assert_eq!(cleared["changed"], true);
     assert_eq!(
-        world.text("SELECT COALESCE(category_id, 'NULL') || ' ' || status FROM txn WHERE id = ?1", &[&grocer]).as_deref(),
+        world
+            .text(
+                "SELECT COALESCE(category_id, 'NULL') || ' ' || status FROM txn WHERE id = ?1",
+                &[&grocer]
+            )
+            .as_deref(),
         Some("NULL posted")
     );
 
@@ -413,7 +427,10 @@ fn txn_edit_updates_fields_preserves_on_reimport_and_enforces_guards() {
             "expected_rev": rev,
         }),
     );
-    assert!(stale.contains("conflicts") || stale.contains("changed"), "{stale}");
+    assert!(
+        stale.contains("conflicts") || stale.contains("changed"),
+        "{stale}"
+    );
 
     // Re-importing via follow.statement preserves member-edited posted_on and amount_minor.
     world.ok(
@@ -432,18 +449,36 @@ fn txn_edit_updates_fields_preserves_on_reimport_and_enforces_guards() {
     );
     assert_eq!(
         world
-            .text("SELECT posted_on || ' ' || amount_minor FROM txn WHERE id = ?1", &[&grocer])
+            .text(
+                "SELECT posted_on || ' ' || amount_minor FROM txn WHERE id = ?1",
+                &[&grocer]
+            )
             .as_deref(),
         Some("2026-03-08 -4999")
     );
 
     // Linked transfer: cannot flip sign or set to 0, but same-sign edit works.
-    world.ok("txn.link_transfer", json!({ "id": xfer_out, "other_id": xfer_in }));
-    let flip = world.refused("txn.edit", json!({ "id": xfer_out, "amount_minor": 50_000 }));
-    assert_eq!(flip, "Cannot change the direction of a linked transfer; unlink it first.");
+    world.ok(
+        "txn.link_transfer",
+        json!({ "id": xfer_out, "other_id": xfer_in }),
+    );
+    let flip = world.refused(
+        "txn.edit",
+        json!({ "id": xfer_out, "amount_minor": 50_000 }),
+    );
+    assert_eq!(
+        flip,
+        "Cannot change the direction of a linked transfer; unlink it first."
+    );
     let zero = world.refused("txn.edit", json!({ "id": xfer_out, "amount_minor": 0 }));
-    assert_eq!(zero, "Cannot change the direction of a linked transfer; unlink it first.");
-    world.ok("txn.edit", json!({ "id": xfer_out, "amount_minor": -51_000 }));
+    assert_eq!(
+        zero,
+        "Cannot change the direction of a linked transfer; unlink it first."
+    );
+    world.ok(
+        "txn.edit",
+        json!({ "id": xfer_out, "amount_minor": -51_000 }),
+    );
 
     // Voiding via txn.edit ends the linked transfer and blocks further edits.
     world.ok("txn.edit", json!({ "id": xfer_out, "status": "void" }));

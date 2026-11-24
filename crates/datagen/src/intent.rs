@@ -52,6 +52,7 @@ impl Reference {
 pub enum Outcome {
     Done,
     /// A well-formed request that finds nothing.
+    #[serde(alias = "nothing_found")]
     Empty,
     Ask,
     Decline,
@@ -72,7 +73,7 @@ impl Outcome {
     pub const fn word(self) -> &'static str {
         match self {
             Self::Done => "done",
-            Self::Empty => "empty",
+            Self::Empty => "nothing_found",
             Self::Ask => "ask",
             Self::Decline => "decline",
             Self::Repair => "repair",
@@ -263,6 +264,14 @@ pub struct Selector {
     pub limit: Option<usize>,
     /// The earlier turn whose result this narrows (`within=@k`).
     pub within: Option<usize>,
+    #[serde(default)]
+    pub text: Option<String>,
+    #[serde(default)]
+    pub open_row: bool,
+    #[serde(default)]
+    pub trashed: bool,
+    #[serde(default)]
+    pub exclude: bool,
 }
 
 impl Selector {
@@ -278,6 +287,10 @@ impl Selector {
             order: None,
             limit: None,
             within: None,
+            text: None,
+            open_row: false,
+            trashed: false,
+            exclude: false,
         }
     }
 }
@@ -349,10 +362,14 @@ pub enum VerbArg {
     None,
     /// `reschedule`: a date expression.
     When(String),
-    /// `add_to`, `remove_from`: a container, found by name first.
+    /// `add_to`, `remove_from`, `attach`, `detach`, `link`, `merge`: a row or container.
     Container(Link),
-    /// `log`: one of the fixed choices.
+    /// `log`, `reveal`, `respond`: one of the fixed choices.
     Choice(String),
+    /// `tag`, `untag`, `categorize`: a label or category text.
+    Label(String),
+    /// Multi-arg `do` verbs (`recolor`, `unfollow`, `restore_version`).
+    MultiArgs(Vec<(String, String)>),
 }
 
 // As for `Target`: a handful per scenario.
@@ -404,6 +421,18 @@ pub struct TurnIntent {
     pub dep: Option<(usize, Dep)>,
     /// The apps this turn reads or changes, sorted.
     pub apps: Vec<String>,
+    #[serde(default)]
+    pub field: Option<String>,
+    #[serde(default)]
+    pub fields: Vec<String>,
+    #[serde(default)]
+    pub currency: Option<String>,
+    #[serde(default)]
+    pub slice: String,
+    #[serde(default)]
+    pub meaning_key: String,
+    #[serde(default)]
+    pub chained: bool,
 }
 
 /// A session's intents, before any words.
@@ -416,4 +445,6 @@ pub struct Scenario {
     /// `pair:<id>` on the two scenarios of a minimal pair.
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub intent_key: String,
 }

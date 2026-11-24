@@ -5,7 +5,7 @@
 //! to their gold, no world is in two splits, the manifest names the version, and a rebuild is byte-identical.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::OnceLock;
 
 use centraid_assist::native::identity::MODEL;
@@ -15,36 +15,13 @@ use centraid_assist_eval::source::EvalSource;
 use centraid_datagen::Catalog;
 use centraid_datagen::mix::{self, Shares};
 use centraid_datagen::render::{Tokenizer, byte_level_tokenizer, byte_level_tokenizer_json};
-use centraid_datagen::run::{self, Config as RunConfig};
 use centraid_datagen::source::DatagenSource;
-use centraid_datagen::version::{self, Provenance, RenderConfig};
-use serde_json::{Value, json};
+use centraid_datagen::version::{self, BuildConfig};
+use serde_json::Value;
 
 fn catalog() -> &'static Catalog {
     static CATALOG: OnceLock<Catalog> = OnceLock::new();
     CATALOG.get_or_init(|| Catalog::build().expect("catalog"))
-}
-
-/// A small intents run (the stage before messages; its users are placeholders, which the runtime reads as an empty message),
-/// and the tokenizer file.
-fn input() -> &'static (tempfile::TempDir, PathBuf) {
-    static DIR: OnceLock<(tempfile::TempDir, PathBuf)> = OnceLock::new();
-    DIR.get_or_init(|| {
-        let config = RunConfig {
-            seed: 1,
-            counts: [3, 1, 1],
-            per_world: [0; 3],
-            cell_limit: Some(40),
-            mistakes: Vec::new(),
-        };
-        let scratch = tempfile::tempdir().expect("tempdir");
-        let generated = run::generate(&config, catalog(), scratch.path()).expect("run");
-        let dir = tempfile::tempdir().expect("tempdir");
-        run::write(dir.path(), &config, catalog(), &generated).expect("write");
-        let tokenizer = dir.path().join("tokenizer.json");
-        std::fs::write(&tokenizer, byte_level_tokenizer_json()).expect("tokenizer");
-        (dir, tokenizer)
-    })
 }
 
 fn mix_config() -> mix::Config {
@@ -61,24 +38,29 @@ fn mix_config() -> mix::Config {
 }
 
 fn build(out: &Path) -> Value {
-    let (dir, tokenizer) = input();
-    version::render_and_mix(
-        dir.path(),
-        out,
-        &RenderConfig {
-            tokenizer: tokenizer.clone(),
-            decision_weight: 2.0,
-            concurrency: 2,
-        },
-        &mix_config(),
-        &Provenance {
-            version: "test".to_owned(),
-            runtime_commit: "unknown".to_owned(),
-            tokenizer_path: "tokenizer.json".to_owned(),
-            seeds: json!({"master": 1, "mix": 1}),
-        },
-    )
-    .expect("render and mix");
+    let cache_dir = tempfile::tempdir().expect("cache tempdir");
+    let tok_dir = tempfile::tempdir().expect("tok tempdir");
+    let tokenizer = tok_dir.path().join("tokenizer.json");
+    std::fs::write(&tokenizer, byte_level_tokenizer_json()).expect("tokenizer");
+    version::build_evolvable(&BuildConfig {
+        version: "test".to_owned(),
+        seed: 1,
+        typo_seed: 1,
+        cache_dir: cache_dir.path().to_path_buf(),
+        out_dir: out.to_path_buf(),
+        tokenizer,
+        train_target: 60,
+        val_target: 15,
+        test_target: 15,
+        train_floor: 0,
+        offline: true,
+        rehearsal: true,
+        enforce_floors: false,
+        decision_weight: 2.0,
+        concurrency: 8,
+        mix_cfg: mix_config(),
+    })
+    .expect("build_evolvable");
     serde_json::from_str(&std::fs::read_to_string(out.join("manifest.json")).expect("manifest"))
         .expect("json")
 }
@@ -94,12 +76,22 @@ fn version_dir() -> &'static (tempfile::TempDir, Value) {
 }
 
 fn records(dir: &Path, split: &str) -> Vec<Value> {
-    let file =
-        std::fs::File::open(centraid_datagen::version::split_path(dir, split)).expect("file");
-    let text = String::from_utf8(zstd::stream::decode_all(file).expect("zstd")).expect("utf8");
-    text.lines()
-        .map(|line| serde_json::from_str(line).expect("a record"))
-        .collect()
+    let mut paths = version::split_paths(dir, split);
+    if paths.is_empty() {
+        let single = version::split_path(dir, split);
+        if single.is_file() {
+            paths.push(single);
+        }
+    }
+    let mut out = Vec::new();
+    for path in paths {
+        let file = std::fs::File::open(path).expect("file");
+        let text = String::from_utf8(zstd::stream::decode_all(file).expect("zstd")).expect("utf8");
+        for line in text.lines().filter(|l| !l.trim().is_empty()) {
+            out.push(serde_json::from_str(line).expect("a record"));
+        }
+    }
+    out
 }
 
 #[test]
@@ -405,42 +397,62 @@ fn a_version_is_its_publishable_tree() {
         "manifest.json",
         "build/render.txt",
         "build/render-dropped.jsonl",
-        "build/llm-cache.jsonl.zst",
+        "build/phrasing-cache-train.jsonl.zst",
+        "build/phrasing-cache-heldout.jsonl.zst",
     ] {
         assert!(dir.path().join(path).is_file(), "{path}");
     }
     for split in ["train", "val", "test", "noise"] {
+        let shard = format!("data/{split}/shard-0000.jsonl.zst");
         assert!(
-            manifest["files"][format!("data/{split}.jsonl.zst")].is_object(),
+            manifest["files"][&shard].is_object() || manifest["shards"][split].is_array(),
             "{split}"
         );
     }
     assert!(dir.path().join("worlds").is_dir());
-    assert_eq!(manifest["llm_cache"]["packed"], "build/llm-cache.jsonl.zst");
     assert_eq!(
-        manifest["llm_cache"]["packed_entries"],
-        manifest["llm_cache"]["entries"]
+        manifest["phrasing_cache"]["train"],
+        "build/phrasing-cache-train.jsonl.zst"
+    );
+    assert_eq!(
+        manifest["phrasing_cache"]["heldout"],
+        "build/phrasing-cache-heldout.jsonl.zst"
     );
 }
 
-fn ids_of(dir: &std::path::Path, rel: &str) -> std::collections::BTreeSet<String> {
-    let bytes = std::fs::read(dir.join(rel)).expect("file");
-    let text = String::from_utf8(zstd::decode_all(&bytes[..]).expect("zstd")).expect("utf8");
-    text.lines()
-        .map(|l| {
+fn ids_of(dir: &std::path::Path, prefix: &str) -> std::collections::BTreeSet<String> {
+    let shard_dir = dir.join("data").join(prefix);
+    let mut files = Vec::new();
+    if shard_dir.is_dir() {
+        for entry in std::fs::read_dir(&shard_dir).expect("read_dir") {
+            let p = entry.expect("entry").path();
+            if p.is_file() {
+                files.push(p);
+            }
+        }
+        files.sort();
+    } else {
+        files.push(dir.join(format!("data/{prefix}.jsonl.zst")));
+    }
+    let mut out = std::collections::BTreeSet::new();
+    for file in files {
+        let bytes = std::fs::read(file).expect("file");
+        let text = String::from_utf8(zstd::decode_all(&bytes[..]).expect("zstd")).expect("utf8");
+        for l in text.lines().filter(|l| !l.trim().is_empty()) {
             let v: Value = serde_json::from_str(l).expect("json");
-            v["id"].as_str().expect("id").to_owned()
-        })
-        .collect()
+            out.insert(v["id"].as_str().expect("id").to_owned());
+        }
+    }
+    out
 }
 
 #[test]
 fn nested_train_subsets_are_files_of_their_own_inside_each_other_and_inside_train() {
     let (dir, manifest) = version_dir();
-    let train = ids_of(dir.path(), "data/train.jsonl.zst");
+    let train = ids_of(dir.path(), "train");
     let (small, large) = (
-        ids_of(dir.path(), "data/train-20.jsonl.zst"),
-        ids_of(dir.path(), "data/train-40.jsonl.zst"),
+        ids_of(dir.path(), "subsets/train-20"),
+        ids_of(dir.path(), "subsets/train-40"),
     );
     assert!(!small.is_empty() && small.len() <= 20, "{}", small.len());
     assert!(large.len() <= 40 && large.len() >= small.len());
@@ -451,7 +463,7 @@ fn nested_train_subsets_are_files_of_their_own_inside_each_other_and_inside_trai
     assert!(large.is_subset(&train), "a subset is inside train");
     for name in ["train-20", "train-40"] {
         assert_eq!(manifest["subsets"][name]["within"], "train");
-        assert!(manifest["files"][format!("data/{name}.jsonl.zst")].is_object());
+        assert!(manifest["files"][format!("data/subsets/{name}/shard-0000.jsonl.zst")].is_object());
     }
 }
 
@@ -484,9 +496,7 @@ fn the_records_carry_the_tools_block_the_model_record_names() {
     );
     let (dir, manifest) = version_dir();
     assert_eq!(manifest["tools_block"]["mode"], named.name());
-    let bytes = std::fs::read(dir.path().join("data/train.jsonl.zst")).expect("train");
-    let text = String::from_utf8(zstd::decode_all(&bytes[..]).expect("zstd")).expect("utf8");
-    let first: Value = serde_json::from_str(text.lines().next().expect("a record")).expect("json");
+    let first = records(dir.path(), "train").remove(0);
     let rendered = first["render"]["text"].as_str().expect("text");
     let names = tool_names(named);
     for name in &names {

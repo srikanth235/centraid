@@ -842,9 +842,9 @@ pub const NEW_TRANSACTIONS: &[&str] = &[
 /// The first and last name pools of a created or renamed person in a split.
 #[must_use]
 pub fn new_people(
-    split: crate::settings::Split,
+    split: crate::world::Split,
 ) -> (&'static [&'static str], &'static [&'static str]) {
-    use crate::settings::Split;
+    use crate::world::Split;
     match split {
         Split::Train => (NEW_FIRST_TRAIN, NEW_LAST_TRAIN),
         Split::Val => (NEW_FIRST_VAL, NEW_LAST_VAL),

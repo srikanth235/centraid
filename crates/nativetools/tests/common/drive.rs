@@ -271,10 +271,7 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
             } else {
                 "kind: coffee"
             };
-            measure(
-                session,
-                json!({"verb": "log", "rows": row, "args": args}),
-            )
+            measure(session, json!({"verb": "log", "rows": row, "args": args}))
         }
         "reveal" => {
             let row = number(session, name, "wifi");

@@ -177,6 +177,12 @@ mod tests {
             outcome,
             dep: None::<(usize, Dep)>,
             apps: Vec::new(),
+            field: None,
+            fields: Vec::new(),
+            currency: None,
+            slice: "single".to_owned(),
+            meaning_key: String::new(),
+            chained: false,
         }
     }
 

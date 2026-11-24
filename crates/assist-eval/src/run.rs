@@ -161,6 +161,14 @@ pub struct TurnResult {
     /// The grid cell of the turn ([`crate::args::cell_of`]): the reference call's tool, kind and verb or op.
     #[serde(default)]
     pub cell: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outcome: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub currency: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slice: Option<String>,
     pub run: bool,
 }
 
@@ -245,6 +253,41 @@ fn apps_of(turn: &Turn, kinds: &BTreeMap<String, String>) -> Vec<String> {
     }
     found.sort_unstable();
     found
+}
+
+fn turn_apps(turn: &Turn, kinds: &BTreeMap<String, String>) -> Vec<String> {
+    let mut apps = Vec::new();
+    for app in turn.app.iter().chain(&turn.apps) {
+        let app = app.trim();
+        if !app.is_empty() && !apps.iter().any(|a| a == app) {
+            apps.push(app.to_owned());
+        }
+    }
+    if apps.is_empty() {
+        return apps_of(turn, kinds);
+    }
+    apps.sort_unstable();
+    apps
+}
+
+fn turn_fields(turn: &Turn) -> Vec<String> {
+    let mut fields = Vec::new();
+    for field in turn.field.iter().chain(&turn.fields) {
+        let field = field.trim();
+        if !field.is_empty() && !fields.iter().any(|f| f == field) {
+            fields.push(field.to_owned());
+        }
+    }
+    fields.sort_unstable();
+    fields
+}
+
+fn non_empty(value: &Option<String>) -> Option<String> {
+    value
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
 }
 
 impl<'a> Runner<'a> {
@@ -334,7 +377,7 @@ impl<'a> Runner<'a> {
         let mut error = None;
         for turn in &session.turns {
             let constraints = turn_constraints(turn);
-            let apps = apps_of(turn, &kinds);
+            let apps = turn_apps(turn, &kinds);
             if error.is_some() {
                 turns.push(not_run(turn, constraints, apps));
                 continue;
@@ -460,6 +503,10 @@ impl<'a> Runner<'a> {
                 calls,
                 said,
                 cell: cell_of(turn),
+                outcome: non_empty(&turn.outcome),
+                fields: turn_fields(turn),
+                currency: non_empty(&turn.currency),
+                slice: non_empty(&turn.slice),
                 run: true,
             });
         }
@@ -521,6 +568,10 @@ fn not_run(turn: &Turn, constraints: usize, apps: Vec<String>) -> TurnResult {
         calls: Vec::new(),
         said: Vec::new(),
         cell: cell_of(turn),
+        outcome: non_empty(&turn.outcome),
+        fields: turn_fields(turn),
+        currency: non_empty(&turn.currency),
+        slice: non_empty(&turn.slice),
         run: false,
     }
 }

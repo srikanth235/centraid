@@ -17,6 +17,7 @@ CPU-testable with a tiny random model through `base_loader`; the CUDA path is no
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import random
@@ -179,16 +180,38 @@ def run(job, work, *, stop=lambda: False, base_loader=None, device=None, log=pri
 
         got = hf.fetch_version(job.hf, work / "data", with_val=job.with_val, subset=job.subset, fetch=hf_fetch or hf.https_fetch)
         paths, source = got["paths"], got["source"]
-        wanted = {"train": (job.hf + "#" + hf.train_path(job.subset), job.train_sha256), "val": (job.hf + "#" + hf.FILES["val"], job.val_sha256)}
+        wanted = {}
+        for key in paths:
+            files = source["files"][key]
+            want = job.train_sha256 if key == "train" else job.val_sha256
+            if isinstance(files, list):
+                wanted[key] = ([job.hf + "#" + f for f in files], want)
+            else:
+                wanted[key] = (job.hf + "#" + files, want)
     else:
         wanted = {"train": (job.train, job.train_sha256), "val": (job.val, job.val_sha256)}
         for key, (uri, _) in wanted.items():
             if uri:
-                suffix = Path(uri).suffix if Path(uri).suffix in (".zst", ".gz") else ""
-                paths[key] = storage.get_file(uri, work / "data" / ("%s.jsonl%s" % (key, suffix)))
+                if "://" not in uri and Path(uri).is_dir():
+                    shards = sorted(
+                        p for p in Path(uri).iterdir()
+                        if p.is_file() and (p.name.endswith(".jsonl.zst") or p.name.endswith(".jsonl.gz") or p.name.endswith(".jsonl"))
+                    )
+                    if not shards:
+                        raise config.ConfigError("data.%s directory %s contains no JSONL shard files" % (key, uri))
+                    paths[key] = shards
+                else:
+                    suffix = Path(uri).suffix if Path(uri).suffix in (".zst", ".gz") else ""
+                    paths[key] = storage.get_file(uri, work / "data" / ("%s.jsonl%s" % (key, suffix)))
     for key, local in paths.items():
         uri, want = wanted[key]
-        entries[key] = record.data_entry(uri, local)
+        if isinstance(local, list):
+            uris = uri if isinstance(uri, list) else [str(p) for p in local]
+            shard_entries = [record.data_entry(u, p) for u, p in zip(uris, local)]
+            digest = hashlib.sha256("".join(e["sha256"] for e in shard_entries).encode()).hexdigest()
+            entries[key] = {"shards": shard_entries, "bytes": sum(e["bytes"] for e in shard_entries), "sha256": digest}
+        else:
+            entries[key] = record.data_entry(uri, local)
         if want and entries[key]["sha256"] != want:
             raise config.ConfigError("data.%s is %s, the job file pins %s" % (key, entries[key]["sha256"], want))
     train, stats = dg.load(paths["train"], job.schedule.max_len)

@@ -442,3 +442,41 @@ fn the_report_counts_over_refusals_unreadable_calls_endings_and_tokens() {
         "{text}"
     );
 }
+
+#[test]
+fn the_report_slices_by_app_outcome_field_currency_and_slice() {
+    let mut decline_turn = declines();
+    decline_turn["app"] = json!("people");
+    decline_turn["outcome"] = json!("decline");
+    decline_turn["field"] = json!("name");
+    decline_turn["currency"] = json!("INR");
+    decline_turn["slice"] = json!("impossible");
+
+    let mut read_turn = who_is_neha();
+    read_turn["apps"] = json!(["people"]);
+    read_turn["outcome"] = json!("done");
+    read_turn["fields"] = json!(["name", "phone"]);
+    read_turn["currency"] = json!("USD");
+    read_turn["slice"] = json!("single");
+
+    let source = source(vec![session("S1", vec![decline_turn, read_turn])]);
+    let results = run(&source, &DeclineStepper);
+    let report = report::build("stub", "smoke", &results, &[], results.len());
+
+    assert_eq!(report.by_app["people"].slice.turns, 2);
+    assert_eq!(report.by_outcome["decline"].turn_pass.k, 1);
+    assert_eq!(report.by_outcome["decline"].turns, 1);
+    assert_eq!(report.by_outcome["done"].turn_pass.k, 0);
+    assert_eq!(report.by_outcome["done"].turns, 1);
+    assert_eq!(report.by_field["name"].turns, 2);
+    assert_eq!(report.by_field["phone"].turns, 1);
+    assert_eq!(report.by_currency["INR"].turn_pass.k, 1);
+    assert_eq!(report.by_currency["USD"].turn_pass.k, 0);
+    assert_eq!(report.by_slice["impossible"].turn_pass.k, 1);
+    assert_eq!(report.by_slice["single"].turn_pass.k, 0);
+
+    let text = report::text(&report);
+    for heading in ["By outcome", "By field", "By currency", "By slice"] {
+        assert!(text.contains(heading), "{heading} missing in:\n{text}");
+    }
+}

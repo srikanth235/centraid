@@ -33,8 +33,8 @@ use serde_json::{Value, json};
 
 use crate::bpe::Bpe;
 use crate::catalog::Catalog;
-use crate::grid::cell_of;
 use crate::intent::{Intent, Scenario, Span, TurnIntent};
+use crate::intents::cell_of;
 use crate::labels;
 use crate::plan::WorldRun;
 use crate::trace::{self, RefCall, Setting, show_rows};
@@ -43,6 +43,42 @@ use crate::world::World;
 /// The weight of a deciding token (the op, the filters, the dates, the row and value handles, the numbers), against 1.0
 /// for any other token of an assistant message.
 pub const DECISION_WEIGHT: f32 = 2.0;
+
+/// Run `f` across `items` on up to `concurrency` scoped threads, preserving item order.
+pub fn parallel<T: Sync, R: Send, F: Fn(&T) -> R + Sync>(
+    items: &[T],
+    concurrency: usize,
+    f: F,
+) -> Vec<Option<R>> {
+    if items.is_empty() {
+        return Vec::new();
+    }
+    let workers = concurrency.max(1).min(items.len());
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let results: Vec<std::sync::Mutex<Option<R>>> = (0..items.len())
+        .map(|_| std::sync::Mutex::new(None))
+        .collect();
+    std::thread::scope(|scope| {
+        for _ in 0..workers {
+            scope.spawn(|| {
+                loop {
+                    let idx = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    if idx >= items.len() {
+                        break;
+                    }
+                    let res = f(&items[idx]);
+                    if let Ok(mut slot) = results[idx].lock() {
+                        *slot = Some(res);
+                    }
+                }
+            });
+        }
+    });
+    results
+        .into_iter()
+        .map(|m| m.into_inner().ok().flatten())
+        .collect()
+}
 
 // ---------------------------------------------------------------------------------------------
 // the tokenizer
@@ -878,9 +914,48 @@ fn finish(
         tags.push(json!("truncated"));
         out["tags"] = Value::Array(tags);
     }
+    let outcomes: Vec<String> = scenario
+        .turns
+        .iter()
+        .take(kept)
+        .map(|t| t.outcome.word().to_owned())
+        .collect();
+    let fields: Vec<String> = scenario
+        .turns
+        .iter()
+        .take(kept)
+        .flat_map(|t| t.fields.iter().cloned())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let currencies: Vec<String> = scenario
+        .turns
+        .iter()
+        .take(kept)
+        .filter_map(|t| t.currency.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let slices: Vec<String> = scenario
+        .turns
+        .iter()
+        .take(kept)
+        .map(|t| t.slice.clone())
+        .filter(|s| !s.is_empty())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
     out["meta"] = json!({
         "app": features.app,
         "apps": features.apps,
+        "outcome": outcomes.first().cloned().unwrap_or_else(|| "done".to_owned()),
+        "outcomes": outcomes,
+        "field": scenario.turns.first().and_then(|t| t.field.clone()),
+        "fields": fields,
+        "currency": scenario.turns.iter().take(kept).find_map(|t| t.currency.clone()),
+        "currencies": currencies,
+        "slice": slices.first().cloned().unwrap_or_else(|| "single".to_owned()),
+        "slices": slices,
         "cells": features.cells,
         "span": scenario.span.word(),
     });

@@ -90,7 +90,12 @@ fn handoff_action(action: &'static ActionSpec, item_id: &str) -> MemberAction {
     MemberAction {
         kind: ActionKind::Handoff,
         item_id: item_id.to_owned(),
-        column: format!("{}/{}/{}", action.app, action.kind.spec().entity, action.action),
+        column: format!(
+            "{}/{}/{}",
+            action.app,
+            action.kind.spec().entity,
+            action.action
+        ),
     }
 }
 
@@ -447,6 +452,8 @@ pub(crate) fn do_verbs() -> Vec<&'static str> {
         .collect()
 }
 
+type TxnSnapshot = (String, i64, Option<String>, String);
+
 impl Session {
     /// A write: `create`, `edit` or `do` (#1166). The verb is the tool's own for `create` and
     /// `edit`, the `verb` argument for `do`.
@@ -523,7 +530,9 @@ impl Session {
             extra.insert("label".to_owned(), json!(lbl.trim()));
             extra.insert("color".to_owned(), json!(col.trim()));
         }
-        if tool == "do" && extra.len() > 1 && !allow_multi_arg_do(verb, qualifier.as_deref(), &extra)
+        if tool == "do"
+            && extra.len() > 1
+            && !allow_multi_arg_do(verb, qualifier.as_deref(), &extra)
         {
             return Err(format!(
                 "error: do takes at most one argument; {} got {}: {}.",
@@ -1623,10 +1632,7 @@ impl Session {
             let has_command = meta::lookup(verb, effective_kind, qualifier).is_some()
                 || verb.command(effective_kind).is_some()
                 || (verb == Verb::Edit
-                    && matches!(
-                        key.0,
-                        Kind::Rule | Kind::LockerField | Kind::ContactPoint
-                    ));
+                    && matches!(key.0, Kind::Rule | Kind::LockerField | Kind::ContactPoint));
             if !has_command {
                 let kinds: Vec<&str> = verb.kinds().iter().map(|kind| kind.name()).collect();
                 let mut refusal = format!(
@@ -1749,7 +1755,9 @@ impl Session {
             plans.push((key.clone(), plan));
         }
         if targets.iter().any(|key| is_confirm_required(verb, key.0))
-            && plans.iter().any(|(_, plan)| matches!(plan, Plan::Run { .. }))
+            && plans
+                .iter()
+                .any(|(_, plan)| matches!(plan, Plan::Run { .. }))
             && !self.confirmed_action(verb, None, targets, args)
         {
             return Ok(self.confirm_ask(verb, None, targets, args));
@@ -2216,18 +2224,11 @@ impl Session {
             let name = self.named(&(kind, id.clone()));
             return Ok(Plan::Offer {
                 actions: vec![handoff_action(handoff, item_id)],
-                note: format!(
-                    "offered to the member: {} {name}",
-                    verb.spec().name
-                ),
+                note: format!("offered to the member: {} {name}", verb.spec().name),
             });
         }
         // Edit on sidecar kinds (Rule, LockerField, ContactPoint) may not have a single manifest `Verb::Edit` lookup without qualifier.
-        if verb == Verb::Edit
-            && matches!(
-                kind,
-                Kind::Rule | Kind::LockerField | Kind::ContactPoint
-            )
+        if verb == Verb::Edit && matches!(kind, Kind::Rule | Kind::LockerField | Kind::ContactPoint)
         {
             return self.plan_edit_qualified(qualifier, row, args);
         }
@@ -2367,9 +2368,9 @@ impl Session {
                                     act: Call::bare("locker.remove_field"),
                                     input: json!({ "item_id": item_id, "field_id": id }),
                                 }],
-                                not_undoable: inverse
-                                    .is_empty()
-                                    .then(|| "a removed sealed locker field cannot be restored".to_owned()),
+                                not_undoable: inverse.is_empty().then(|| {
+                                    "a removed sealed locker field cannot be restored".to_owned()
+                                }),
                                 inverse,
                                 note: None,
                             });
@@ -2381,7 +2382,9 @@ impl Session {
                                     input: json!({ "item_id": id }),
                                 }],
                                 inverse: Vec::new(),
-                                not_undoable: Some("a cleared passkey cannot be restored".to_owned()),
+                                not_undoable: Some(
+                                    "a cleared passkey cannot be restored".to_owned(),
+                                ),
                                 note: None,
                             });
                         }
@@ -2390,12 +2393,11 @@ impl Session {
                                 .extra
                                 .get("person_id")
                                 .cloned()
-                                .or_else(|| row.field("person_id").and_then(val_str).map(str::to_owned))
+                                .or_else(|| {
+                                    row.field("person_id").and_then(val_str).map(str::to_owned)
+                                })
                                 .ok_or("error: contact point is missing its person id")?;
-                            let channel = row
-                                .field("channel")
-                                .and_then(val_str)
-                                .unwrap_or("phone");
+                            let channel = row.field("channel").and_then(val_str).unwrap_or("phone");
                             let inverse = vec![Step {
                                 act: Call::bare("person.save_contact_point"),
                                 input: json!({
@@ -3265,7 +3267,14 @@ impl Session {
                     && kinds.contains(k)
                     && (row.name.eq_ignore_ascii_case(&query)
                         || id.eq_ignore_ascii_case(&query)
-                        || row.name.to_lowercase().replace('&', "").split_whitespace().collect::<Vec<_>>().join(" ") == q_norm)
+                        || row
+                            .name
+                            .to_lowercase()
+                            .replace('&', "")
+                            .split_whitespace()
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                            == q_norm)
             })
             .map(|(k, _)| k.clone())
             .collect();
@@ -3354,10 +3363,7 @@ impl Session {
 
     fn plan_respond(&mut self, row: &Row, args: &Map<String, Value>) -> Result<Plan, String> {
         for key in args.keys() {
-            if !matches!(
-                key.as_str(),
-                "answer" | "state" | "person" | "who" | "row"
-            ) {
+            if !matches!(key.as_str(), "answer" | "state" | "person" | "who" | "row") {
                 return Err(format!(
                     "error: respond takes answer (accepted | declined | tentative); not \"{key}\"."
                 ));
@@ -3429,16 +3435,17 @@ impl Session {
             .or_else(|| args.get("to"))
             .ok_or("error: categorize needs category: <category>.")?;
         let text = text_of(val);
-        let category_id: Option<String> =
-            if val.is_null() || matches!(text.to_lowercase().as_str(), "null" | "none" | "uncategorized") {
-                None
-            } else {
-                Some(self.resolve_one_target(val, Some(Kind::Category))?.1)
-            };
-        let prev_cat_id: Option<String> = row
-            .field("category")
-            .and_then(val_str)
-            .and_then(|title| {
+        let category_id: Option<String> = if val.is_null()
+            || matches!(
+                text.to_lowercase().as_str(),
+                "null" | "none" | "uncategorized"
+            ) {
+            None
+        } else {
+            Some(self.resolve_one_target(val, Some(Kind::Category))?.1)
+        };
+        let prev_cat_id: Option<String> =
+            row.field("category").and_then(val_str).and_then(|title| {
                 self.world
                     .rows
                     .iter()
@@ -3474,7 +3481,16 @@ impl Session {
         for key in args.keys() {
             if !matches!(
                 key.as_str(),
-                "to" | "with" | "row" | "target" | "rel" | "relation" | "kind" | "name" | "pet" | "related" | "label"
+                "to" | "with"
+                    | "row"
+                    | "target"
+                    | "rel"
+                    | "relation"
+                    | "kind"
+                    | "name"
+                    | "pet"
+                    | "related"
+                    | "label"
             ) {
                 return Err(format!(
                     "error: {} does not take arg \"{key}\".",
@@ -3561,9 +3577,7 @@ impl Session {
             .or_else(|| args.get("with"))
             .or_else(|| args.get("row"))
             .or_else(|| args.get("target"))
-            .ok_or_else(|| {
-                format!("error: {} needs to: <row>.", verb.spec().name)
-            })?;
+            .ok_or_else(|| format!("error: {} needs to: <row>.", verb.spec().name))?;
         let other = self.resolve_one_target(target_val, None)?;
         let default_rel = if verb == Verb::Attach {
             "attached"
@@ -3731,10 +3745,7 @@ impl Session {
                 "category.merge",
                 json!({ "from_id": row.id, "into_id": into.1 }),
             ),
-            Kind::Person => (
-                "person.merge",
-                json!({ "from": row.id, "into": into.1 }),
-            ),
+            Kind::Person => ("person.merge", json!({ "from": row.id, "into": into.1 })),
             other => return Err(not_applicable(Verb::Merge, other)),
         };
         Ok(Plan::Run {
@@ -3772,7 +3783,9 @@ impl Session {
                 input: json!({ "system": system, "ref": reference }),
             }],
             inverse: Vec::new(),
-            not_undoable: Some("unfollowing stops sync; re-follow from the app to resume".to_owned()),
+            not_undoable: Some(
+                "unfollowing stops sync; re-follow from the app to resume".to_owned(),
+            ),
             note: None,
         })
     }
@@ -3821,7 +3834,14 @@ impl Session {
         for key in args.keys() {
             if !matches!(
                 key.as_str(),
-                "to" | "occurrence" | "original_start" | "scope" | "action" | "name" | "description" | "url" | "place"
+                "to" | "occurrence"
+                    | "original_start"
+                    | "scope"
+                    | "action"
+                    | "name"
+                    | "description"
+                    | "url"
+                    | "place"
             ) {
                 return Err(format!(
                     "error: reschedule:occurrence does not take \"{key}\"."
@@ -3940,7 +3960,11 @@ impl Session {
         }
         self.settle()?;
         let diff = self.diff_since(&before);
-        let purged = ran.output.get("purged").and_then(Value::as_u64).unwrap_or(0);
+        let purged = ran
+            .output
+            .get("purged")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
         self.record(
             Vec::new(),
             vec!["emptying the trash permanently purges rows".to_owned()],
@@ -4017,14 +4041,22 @@ impl Session {
             .map(text_of)
             .filter(|s| !s.is_empty())
             .or_else(|| {
-                kind_str.as_deref().and_then(|s| match s.to_lowercase().as_str() {
-                    "contacts" | "person" => Some("contacts".to_owned()),
-                    "calendar" | "event" => Some("calendar".to_owned()),
-                    "phone_reminders" | "reminders" | "task" | "list" => Some("phone_reminders".to_owned()),
-                    "health" | "workout" | "daily_figure" | "daily figure" => Some("health".to_owned()),
-                    "files" | "docs" | "document" | "folder" => Some("files".to_owned()),
-                    _ => parsed_kind.and_then(Self::follow_system_of).map(str::to_owned),
-                })
+                kind_str
+                    .as_deref()
+                    .and_then(|s| match s.to_lowercase().as_str() {
+                        "contacts" | "person" => Some("contacts".to_owned()),
+                        "calendar" | "event" => Some("calendar".to_owned()),
+                        "phone_reminders" | "reminders" | "task" | "list" => {
+                            Some("phone_reminders".to_owned())
+                        }
+                        "health" | "workout" | "daily_figure" | "daily figure" => {
+                            Some("health".to_owned())
+                        }
+                        "files" | "docs" | "document" | "folder" => Some("files".to_owned()),
+                        _ => parsed_kind
+                            .and_then(Self::follow_system_of)
+                            .map(str::to_owned),
+                    })
             })
             .ok_or("error: unfollow needs a row, kind or system.")?;
         let reference = match extra.get("ref").map(text_of).filter(|s| !s.is_empty()) {
@@ -4084,7 +4116,11 @@ impl Session {
             Vec::new(),
             vec!["applying rules updates matching transactions directly".to_owned()],
         );
-        let matched = ran.output.get("matched").and_then(Value::as_u64).unwrap_or(0);
+        let matched = ran
+            .output
+            .get("matched")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
         let recategorised = ran
             .output
             .get("recategorised")
@@ -4374,7 +4410,7 @@ impl Session {
     }
 
     /// Exact `(posted_on, amount_minor, category_id, status)` of a `txn` row from the vault.
-    fn txn_snapshot(&self, id: &str) -> Result<Option<(String, i64, Option<String>, String)>, String> {
+    fn txn_snapshot(&self, id: &str) -> Result<Option<TxnSnapshot>, String> {
         let rows = self
             .door
             .table_where(
@@ -4688,12 +4724,13 @@ impl Session {
                             raw.trim()
                         ));
                     }
-                    let old_status = snap.as_ref().map(|t| t.3.clone()).unwrap_or_else(|| {
-                        match row.field("status") {
-                            Some(Val::Enum(s)) => (*s).to_owned(),
-                            _ => "posted".to_owned(),
-                        }
-                    });
+                    let old_status =
+                        snap.as_ref().map(|t| t.3.clone()).unwrap_or_else(|| {
+                            match row.field("status") {
+                                Some(Val::Enum(s)) => (*s).to_owned(),
+                                _ => "posted".to_owned(),
+                            }
+                        });
                     *changed |= new_status != old_status;
                     forward
                         .entry(command)
@@ -4906,7 +4943,9 @@ impl Session {
                 }
                 "display_name" | "name" => {
                     let d = text_of(value);
-                    let new_v = if d.trim().is_empty() || matches!(d.to_lowercase().as_str(), "null" | "none") {
+                    let new_v = if d.trim().is_empty()
+                        || matches!(d.to_lowercase().as_str(), "null" | "none")
+                    {
                         Value::Null
                     } else {
                         json!(d)
@@ -4920,7 +4959,9 @@ impl Session {
                     backward["display_name"] = old_v;
                 }
                 "min" | "max" => {
-                    let new_v = if value.is_null() || matches!(text_of(value).to_lowercase().as_str(), "null" | "none" | "") {
+                    let new_v = if value.is_null()
+                        || matches!(text_of(value).to_lowercase().as_str(), "null" | "none" | "")
+                    {
                         Value::Null
                     } else {
                         let n = parse_money_in_currency(&text_of(value), &self.world.currency)?;
@@ -4943,7 +4984,9 @@ impl Session {
                         self.world
                             .rows
                             .iter()
-                            .find(|((k, _), r)| *k == Kind::Category && !r.trashed && r.name == title)
+                            .find(|((k, _), r)| {
+                                *k == Kind::Category && !r.trashed && r.name == title
+                            })
                             .map(|((_, id), _)| id.clone())
                     });
                     changed |= old_cat.as_deref() != Some(cat_id.as_str());
@@ -4953,7 +4996,9 @@ impl Session {
                     }
                 }
                 "account" | "account_id" => {
-                    let new_v = if value.is_null() || matches!(text_of(value).to_lowercase().as_str(), "null" | "none" | "") {
+                    let new_v = if value.is_null()
+                        || matches!(text_of(value).to_lowercase().as_str(), "null" | "none" | "")
+                    {
                         Value::Null
                     } else {
                         json!(self.resolve_one_target(value, Some(Kind::Account))?.1)
@@ -4994,7 +5039,11 @@ impl Session {
         })
     }
 
-    fn plan_edit_locker_field(&mut self, row: &Row, args: &Map<String, Value>) -> Result<Plan, String> {
+    fn plan_edit_locker_field(
+        &mut self,
+        row: &Row,
+        args: &Map<String, Value>,
+    ) -> Result<Plan, String> {
         let item_id = row
             .extra
             .get("item_id")
@@ -5025,7 +5074,10 @@ impl Session {
                 "field_kind" | "kind" | "type" => {
                     let k = text_of(value).to_lowercase();
                     if !matches!(k.as_str(), "text" | "sealed" | "url" | "date" | "otp") {
-                        return Err("error: locker field kind must be text, sealed, url, date or otp.".to_owned());
+                        return Err(
+                            "error: locker field kind must be text, sealed, url, date or otp."
+                                .to_owned(),
+                        );
                     }
                     changed |= k != field_kind;
                     field_kind = k;
@@ -5044,7 +5096,9 @@ impl Session {
                     pos = Some(p);
                 }
                 other => {
-                    return Err(format!("error: locker fields have no editable field \"{other}\"."));
+                    return Err(format!(
+                        "error: locker fields have no editable field \"{other}\"."
+                    ));
                 }
             }
         }
@@ -5097,7 +5151,11 @@ impl Session {
         })
     }
 
-    fn plan_edit_contact_point(&mut self, row: &Row, args: &Map<String, Value>) -> Result<Plan, String> {
+    fn plan_edit_contact_point(
+        &mut self,
+        row: &Row,
+        args: &Map<String, Value>,
+    ) -> Result<Plan, String> {
         let person_id = row
             .extra
             .get("person_id")
@@ -5133,7 +5191,10 @@ impl Session {
                 }
                 "label" => {
                     let s = text_of(v);
-                    let next = if v.is_null() || s.trim().is_empty() || matches!(s.to_lowercase().as_str(), "null" | "none") {
+                    let next = if v.is_null()
+                        || s.trim().is_empty()
+                        || matches!(s.to_lowercase().as_str(), "null" | "none")
+                    {
                         None
                     } else {
                         Some(s)
@@ -5143,12 +5204,15 @@ impl Session {
                 }
                 "preferred" => {
                     let given = text_of(v);
-                    let b = whr::parse_bool(&given).ok_or_else(|| whr::bool_error("preferred", &given))?;
+                    let b = whr::parse_bool(&given)
+                        .ok_or_else(|| whr::bool_error("preferred", &given))?;
                     changed |= b != preferred;
                     preferred = b;
                 }
                 other => {
-                    return Err(format!("error: contact points have no editable field \"{other}\"."));
+                    return Err(format!(
+                        "error: contact points have no editable field \"{other}\"."
+                    ));
                 }
             }
         }
@@ -5302,8 +5366,7 @@ impl Session {
                         .date
                         .ok_or_else(|| "error: workout has no start time.".to_owned())?;
                     let start_civil = start_stamp.at();
-                    let end_civil =
-                        self.resolve_workout_end(value, start_stamp.date, row.date)?;
+                    let end_civil = self.resolve_workout_end(value, start_stamp.date, row.date)?;
                     if end_civil < start_civil {
                         return Err(
                             "error: a workout cannot end before it starts (ends is earlier than starts)."
@@ -5333,406 +5396,410 @@ impl Session {
                     }
                     continue;
                 }
-            if field == "name" {
-                let name = text_of(value);
-                if name.trim().is_empty() {
-                    return Err("error: name cannot be empty.".to_owned());
+                if field == "name" {
+                    let name = text_of(value);
+                    if name.trim().is_empty() {
+                        return Err("error: name cannot be empty.".to_owned());
+                    }
+                    let action = meta::edit_action(kind, "name")
+                        .ok_or_else(|| not_applicable(Verb::Edit, kind))?;
+                    let (command, param) = (
+                        action.command,
+                        action.property_named("name").unwrap_or("title"),
+                    );
+                    note_call(&mut calls, action);
+                    changed |= name != row.name;
+                    forward
+                        .entry(command)
+                        .or_default()
+                        .insert(param.to_owned(), json!(name));
+                    backward
+                        .entry(command)
+                        .or_default()
+                        .insert(param.to_owned(), json!(row.name));
+                    continue;
                 }
-                let action = meta::edit_action(kind, "name")
-                    .ok_or_else(|| not_applicable(Verb::Edit, kind))?;
-                let (command, param) = (
-                    action.command,
-                    action.property_named("name").unwrap_or("title"),
-                );
-                note_call(&mut calls, action);
-                changed |= name != row.name;
-                forward
-                    .entry(command)
-                    .or_default()
-                    .insert(param.to_owned(), json!(name));
-                backward
-                    .entry(command)
-                    .or_default()
-                    .insert(param.to_owned(), json!(row.name));
-                continue;
-            }
-            if field == "date" {
-                return Err(
-                    "error: a date changes with reschedule (to: <date expression>), not edit."
-                        .to_owned(),
-                );
-            }
-            // A SECRET OF A LOCKER ITEM (#1135): typed in chat, it is an ordinary edit whose value
-            // the door seals when the card is confirmed; with no value it is the member's to type
-            // in Locker (`edit_secret`).
-            if kind == Kind::LockerItem
-                && meta::REVEAL_FIELDS
-                    .iter()
-                    .any(|(name, column)| *name == field && *column != "content")
-            {
-                let item_type = match row.field("type") {
-                    Some(Val::Enum(item_type)) => *item_type,
-                    _ => "login",
-                };
-                let Some(column) = meta::locker_secret_column(item_type, field) else {
-                    return Err(format!(
-                        "error: a {item_type} item has no place for {field}; nothing was stored."
-                    ));
-                };
-                let typed = text_of(value);
-                if typed.trim().is_empty() {
-                    offers.push(MemberAction {
-                        kind: ActionKind::EditSecret,
-                        item_id: row.id.clone(),
-                        column: column.to_owned(),
-                    });
-                } else {
-                    typed_secrets.push((column, typed));
-                    changed = true;
+                if field == "date" {
+                    return Err(
+                        "error: a date changes with reschedule (to: <date expression>), not edit."
+                            .to_owned(),
+                    );
                 }
-                continue;
-            }
-            if kind == Kind::Document && field == "content" {
-                let handoff = meta::lookup(Verb::Edit, Kind::Document, Some("content"))
-                    .ok_or_else(|| not_applicable(Verb::Edit, kind))?;
-                offers.push(handoff_action(handoff, &row.id));
-                continue;
-            }
-            if kind == Kind::Document && matches!(field, "text" | "body_text" | "body") {
-                let action = Verb::Edit
-                    .action(Kind::Document)
-                    .ok_or_else(|| not_applicable(Verb::Edit, Kind::Document))?;
-                note_call(&mut calls, action);
-                let text = text_of(value);
-                let old_text = row.field("text").and_then(val_str).unwrap_or("");
-                changed |= old_text != text;
-                forward
-                    .entry(action.command)
-                    .or_default()
-                    .insert("body_text".to_owned(), json!(text));
-                backward
-                    .entry(action.command)
-                    .or_default()
-                    .insert("body_text".to_owned(), json!(old_text));
-                continue;
-            }
-            if matches!(kind, Kind::List | Kind::Calendar) && matches!(field, "color" | "icon") {
-                let action = meta::lookup(Verb::Edit, kind, Some("color"))
-                    .ok_or_else(|| not_applicable(Verb::Edit, kind))?;
-                note_call(&mut calls, action);
-                let s = text_of(value);
-                let next_json = if value.is_null()
-                    || s.trim().is_empty()
-                    || matches!(s.to_lowercase().as_str(), "null" | "none")
+                // A SECRET OF A LOCKER ITEM (#1135): typed in chat, it is an ordinary edit whose value
+                // the door seals when the card is confirmed; with no value it is the member's to type
+                // in Locker (`edit_secret`).
+                if kind == Kind::LockerItem
+                    && meta::REVEAL_FIELDS
+                        .iter()
+                        .any(|(name, column)| *name == field && *column != "content")
                 {
-                    Value::Null
-                } else {
-                    json!(s.trim())
-                };
-                let old_json = row
-                    .field(field)
-                    .and_then(val_str)
-                    .map_or(Value::Null, |v| json!(v));
-                changed |= old_json != next_json;
-                forward
-                    .entry(action.command)
-                    .or_default()
-                    .insert(field.to_owned(), next_json);
-                backward
-                    .entry(action.command)
-                    .or_default()
-                    .insert(field.to_owned(), old_json);
-                continue;
-            }
-            if kind == Kind::Album && field == "cover" {
-                let s = text_of(value);
-                let photo_id = if value.is_null()
-                    || s.trim().is_empty()
-                    || matches!(s.to_lowercase().as_str(), "null" | "none")
-                {
-                    Value::Null
-                } else {
-                    json!(self.resolve_one_target(value, Some(Kind::Photo))?.1)
-                };
-                apart.push(Step {
-                    act: Call::bare("album.set_cover"),
-                    input: json!({ "id": row.id, "photo_id": photo_id }),
-                });
-                not_undoable.get_or_insert_with(|| {
-                    "an album cover change stays until set again".to_owned()
-                });
-                changed = true;
-                continue;
-            }
-            if kind == Kind::Photo && field == "place" {
-                let s = text_of(value);
-                let place_id = if value.is_null()
-                    || s.trim().is_empty()
-                    || matches!(s.to_lowercase().as_str(), "null" | "none")
-                {
-                    Value::Null
-                } else {
-                    json!(self.resolve_one_target(value, Some(Kind::Place))?.1)
-                };
-                apart.push(Step {
-                    act: Call::bare("photo.set_place"),
-                    input: json!({ "id": row.id, "place_id": place_id }),
-                });
-                not_undoable.get_or_insert_with(|| {
-                    "a photo place change stays until set again".to_owned()
-                });
-                changed = true;
-                continue;
-            }
-            if kind == Kind::LockerItem && matches!(field, "addresses" | "urls") {
-                let addrs: Vec<Value> = if let Some(arr) = value.as_array() {
-                    arr.iter()
-                        .map(|v| {
-                            if v.is_object() {
-                                v.clone()
-                            } else {
-                                json!({ "url": text_of(v) })
-                            }
-                        })
-                        .collect()
-                } else {
-                    text_of(value)
-                        .split([',', '\n'])
-                        .map(str::trim)
-                        .filter(|s| !s.is_empty())
-                        .map(|u| json!({ "url": u }))
-                        .collect()
-                };
-                apart.push(Step {
-                    act: Call::bare("locker.set_addresses"),
-                    input: json!({ "item_id": row.id, "addresses": addrs }),
-                });
-                not_undoable.get_or_insert_with(|| {
-                    "locker addresses stay until set again".to_owned()
-                });
-                changed = true;
-                continue;
-            }
-            if kind == Kind::LockerItem && field == "note" {
-                let note_text = text_of(value);
-                apart.push(Step {
-                    act: Call::bare("locker.set_memo"),
-                    input: json!({ "item_id": row.id, "note": note_text }),
-                });
-                not_undoable.get_or_insert_with(|| {
-                    "locker note stays until set again".to_owned()
-                });
-                changed = true;
-                continue;
-            }
-            if kind == Kind::ImportantDate && field == "reminders" {
-                let mins: Vec<i64> = if let Some(arr) = value.as_array() {
-                    arr.iter().filter_map(Value::as_i64).collect()
-                } else {
-                    let s = text_of(value);
-                    if value.is_null()
-                        || s.trim().is_empty()
-                        || matches!(s.to_lowercase().as_str(), "null" | "none" | "off")
-                    {
-                        Vec::new()
+                    let item_type = match row.field("type") {
+                        Some(Val::Enum(item_type)) => *item_type,
+                        _ => "login",
+                    };
+                    let Some(column) = meta::locker_secret_column(item_type, field) else {
+                        return Err(format!(
+                            "error: a {item_type} item has no place for {field}; nothing was stored."
+                        ));
+                    };
+                    let typed = text_of(value);
+                    if typed.trim().is_empty() {
+                        offers.push(MemberAction {
+                            kind: ActionKind::EditSecret,
+                            item_id: row.id.clone(),
+                            column: column.to_owned(),
+                        });
                     } else {
-                        s.split(',')
+                        typed_secrets.push((column, typed));
+                        changed = true;
+                    }
+                    continue;
+                }
+                if kind == Kind::Document && field == "content" {
+                    let handoff = meta::lookup(Verb::Edit, Kind::Document, Some("content"))
+                        .ok_or_else(|| not_applicable(Verb::Edit, kind))?;
+                    offers.push(handoff_action(handoff, &row.id));
+                    continue;
+                }
+                if kind == Kind::Document && matches!(field, "text" | "body_text" | "body") {
+                    let action = Verb::Edit
+                        .action(Kind::Document)
+                        .ok_or_else(|| not_applicable(Verb::Edit, Kind::Document))?;
+                    note_call(&mut calls, action);
+                    let text = text_of(value);
+                    let old_text = row.field("text").and_then(val_str).unwrap_or("");
+                    changed |= old_text != text;
+                    forward
+                        .entry(action.command)
+                        .or_default()
+                        .insert("body_text".to_owned(), json!(text));
+                    backward
+                        .entry(action.command)
+                        .or_default()
+                        .insert("body_text".to_owned(), json!(old_text));
+                    continue;
+                }
+                if matches!(kind, Kind::List | Kind::Calendar) && matches!(field, "color" | "icon")
+                {
+                    let action = meta::lookup(Verb::Edit, kind, Some("color"))
+                        .ok_or_else(|| not_applicable(Verb::Edit, kind))?;
+                    note_call(&mut calls, action);
+                    let s = text_of(value);
+                    let next_json = if value.is_null()
+                        || s.trim().is_empty()
+                        || matches!(s.to_lowercase().as_str(), "null" | "none")
+                    {
+                        Value::Null
+                    } else {
+                        json!(s.trim())
+                    };
+                    let old_json = row
+                        .field(field)
+                        .and_then(val_str)
+                        .map_or(Value::Null, |v| json!(v));
+                    changed |= old_json != next_json;
+                    forward
+                        .entry(action.command)
+                        .or_default()
+                        .insert(field.to_owned(), next_json);
+                    backward
+                        .entry(action.command)
+                        .or_default()
+                        .insert(field.to_owned(), old_json);
+                    continue;
+                }
+                if kind == Kind::Album && field == "cover" {
+                    let s = text_of(value);
+                    let photo_id = if value.is_null()
+                        || s.trim().is_empty()
+                        || matches!(s.to_lowercase().as_str(), "null" | "none")
+                    {
+                        Value::Null
+                    } else {
+                        json!(self.resolve_one_target(value, Some(Kind::Photo))?.1)
+                    };
+                    apart.push(Step {
+                        act: Call::bare("album.set_cover"),
+                        input: json!({ "id": row.id, "photo_id": photo_id }),
+                    });
+                    not_undoable.get_or_insert_with(|| {
+                        "an album cover change stays until set again".to_owned()
+                    });
+                    changed = true;
+                    continue;
+                }
+                if kind == Kind::Photo && field == "place" {
+                    let s = text_of(value);
+                    let place_id = if value.is_null()
+                        || s.trim().is_empty()
+                        || matches!(s.to_lowercase().as_str(), "null" | "none")
+                    {
+                        Value::Null
+                    } else {
+                        json!(self.resolve_one_target(value, Some(Kind::Place))?.1)
+                    };
+                    apart.push(Step {
+                        act: Call::bare("photo.set_place"),
+                        input: json!({ "id": row.id, "place_id": place_id }),
+                    });
+                    not_undoable.get_or_insert_with(|| {
+                        "a photo place change stays until set again".to_owned()
+                    });
+                    changed = true;
+                    continue;
+                }
+                if kind == Kind::LockerItem && matches!(field, "addresses" | "urls") {
+                    let addrs: Vec<Value> = if let Some(arr) = value.as_array() {
+                        arr.iter()
+                            .map(|v| {
+                                if v.is_object() {
+                                    v.clone()
+                                } else {
+                                    json!({ "url": text_of(v) })
+                                }
+                            })
+                            .collect()
+                    } else {
+                        text_of(value)
+                            .split([',', '\n'])
                             .map(str::trim)
-                            .filter(|p| !p.is_empty())
-                            .map(|p| {
-                                p.parse::<i64>().map_err(|_| {
+                            .filter(|s| !s.is_empty())
+                            .map(|u| json!({ "url": u }))
+                            .collect()
+                    };
+                    apart.push(Step {
+                        act: Call::bare("locker.set_addresses"),
+                        input: json!({ "item_id": row.id, "addresses": addrs }),
+                    });
+                    not_undoable
+                        .get_or_insert_with(|| "locker addresses stay until set again".to_owned());
+                    changed = true;
+                    continue;
+                }
+                if kind == Kind::LockerItem && field == "note" {
+                    let note_text = text_of(value);
+                    apart.push(Step {
+                        act: Call::bare("locker.set_memo"),
+                        input: json!({ "item_id": row.id, "note": note_text }),
+                    });
+                    not_undoable
+                        .get_or_insert_with(|| "locker note stays until set again".to_owned());
+                    changed = true;
+                    continue;
+                }
+                if kind == Kind::ImportantDate && field == "reminders" {
+                    let mins: Vec<i64> =
+                        if let Some(arr) = value.as_array() {
+                            arr.iter().filter_map(Value::as_i64).collect()
+                        } else {
+                            let s = text_of(value);
+                            if value.is_null()
+                                || s.trim().is_empty()
+                                || matches!(s.to_lowercase().as_str(), "null" | "none" | "off")
+                            {
+                                Vec::new()
+                            } else {
+                                s.split(',')
+                                    .map(str::trim)
+                                    .filter(|p| !p.is_empty())
+                                    .map(|p| {
+                                        p.parse::<i64>().map_err(|_| {
                                     format!("error: reminders takes integer minutes, not \"{p}\".")
                                 })
-                            })
-                            .collect::<Result<Vec<_>, _>>()?
+                                    })
+                                    .collect::<Result<Vec<_>, _>>()?
+                            }
+                        };
+                    let old_mins: Vec<i64> = match row.field("reminders") {
+                        Some(Val::Num(n)) => vec![*n],
+                        _ => Vec::new(),
+                    };
+                    apart.push(Step {
+                        act: Call::bare("event.edit"),
+                        input: json!({ "id": row.id, "reminders": mins }),
+                    });
+                    apart_back.push(Step {
+                        act: Call::bare("event.edit"),
+                        input: json!({ "id": row.id, "reminders": old_mins }),
+                    });
+                    changed = true;
+                    continue;
+                }
+                let Some(spec_field) = spec.field(field) else {
+                    return Err(format!(
+                        "error: {} have no field \"{field}\". {} editable fields: {}.{}",
+                        kind.plural(),
+                        kind.name(),
+                        editable(kind),
+                        whr::field_fix(kind, field, whr::FieldUse::Edit)
+                    ));
+                };
+                let special = matches!(
+                    (kind, field),
+                    (Kind::Task, "status") | (Kind::Note, "pinned") | (Kind::List, "area")
+                );
+                // the action that edits this field: the one that names it (`edit:cadence`), else the one
+                // whose input takes it. A task's status, a note's pin and a list's area are commands
+                // of their own, planned below.
+                let action = meta::edit_action(kind, field);
+                if action.is_none() && !special {
+                    let hint = match (kind, field) {
+                        (_, "starred") => "use star or unstar".to_owned(),
+                        (Kind::Event, "status") => "use cancel".to_owned(),
+                        (Kind::Task, "completed") => "use complete or reopen".to_owned(),
+                        _ => format!("{} editable fields: {}", kind.name(), editable(kind)),
+                    };
+                    return Err(format!("error: {field} cannot be edited; {hint}."));
+                }
+                let command = action.map_or("", |action| action.command);
+                if let Some(action) = action {
+                    note_call(&mut calls, action);
+                }
+                let old = row.field(field).cloned();
+                let (new_json, new_val) = match spec_field.ty {
+                    FieldType::Text => {
+                        let text = text_of(value);
+                        (
+                            json!(text),
+                            (!text.is_empty()).then(|| Val::Text(text.clone())),
+                        )
+                    }
+                    FieldType::Number => {
+                        let number = whr::number_arg(spec_field, &text_of(value))?;
+                        (json!(number), Some(Val::Num(number)))
+                    }
+                    FieldType::Bool => {
+                        let given = text_of(value);
+                        let on = whr::parse_bool(&given)
+                            .ok_or_else(|| whr::bool_error(field, &given))?;
+                        (json!(on), Some(Val::Bool(on)))
+                    }
+                    FieldType::Enum => {
+                        let model = whr::enum_value(kind, field, &text_of(value))?;
+                        let vault = spec_field.vault_value(model).unwrap_or(model);
+                        (json!(vault), Some(Val::Enum(model)))
+                    }
+                    FieldType::Money | FieldType::Date => {
+                        return Err(format!("error: {field} cannot be edited."));
                     }
                 };
-                let old_mins: Vec<i64> = match row.field("reminders") {
-                    Some(Val::Num(n)) => vec![*n],
-                    _ => Vec::new(),
-                };
-                apart.push(Step {
-                    act: Call::bare("event.edit"),
-                    input: json!({ "id": row.id, "reminders": mins }),
-                });
-                apart_back.push(Step {
-                    act: Call::bare("event.edit"),
-                    input: json!({ "id": row.id, "reminders": old_mins }),
-                });
-                changed = true;
-                continue;
-            }
-            let Some(spec_field) = spec.field(field) else {
-                return Err(format!(
-                    "error: {} have no field \"{field}\". {} editable fields: {}.{}",
-                    kind.plural(),
-                    kind.name(),
-                    editable(kind),
-                    whr::field_fix(kind, field, whr::FieldUse::Edit)
-                ));
-            };
-            let special = matches!(
-                (kind, field),
-                (Kind::Task, "status") | (Kind::Note, "pinned") | (Kind::List, "area")
-            );
-            // the action that edits this field: the one that names it (`edit:cadence`), else the one
-            // whose input takes it. A task's status, a note's pin and a list's area are commands
-            // of their own, planned below.
-            let action = meta::edit_action(kind, field);
-            if action.is_none() && !special {
-                let hint = match (kind, field) {
-                    (_, "starred") => "use star or unstar".to_owned(),
-                    (Kind::Event, "status") => "use cancel".to_owned(),
-                    (Kind::Task, "completed") => "use complete or reopen".to_owned(),
-                    _ => format!("{} editable fields: {}", kind.name(), editable(kind)),
-                };
-                return Err(format!("error: {field} cannot be edited; {hint}."));
-            }
-            let command = action.map_or("", |action| action.command);
-            if let Some(action) = action {
-                note_call(&mut calls, action);
-            }
-            let old = row.field(field).cloned();
-            let (new_json, new_val) = match spec_field.ty {
-                FieldType::Text => {
-                    let text = text_of(value);
-                    (
-                        json!(text),
-                        (!text.is_empty()).then(|| Val::Text(text.clone())),
-                    )
-                }
-                FieldType::Number => {
-                    let number = whr::number_arg(spec_field, &text_of(value))?;
-                    (json!(number), Some(Val::Num(number)))
-                }
-                FieldType::Bool => {
-                    let given = text_of(value);
-                    let on =
-                        whr::parse_bool(&given).ok_or_else(|| whr::bool_error(field, &given))?;
-                    (json!(on), Some(Val::Bool(on)))
-                }
-                FieldType::Enum => {
-                    let model = whr::enum_value(kind, field, &text_of(value))?;
-                    let vault = spec_field.vault_value(model).unwrap_or(model);
-                    (json!(vault), Some(Val::Enum(model)))
-                }
-                FieldType::Money | FieldType::Date => {
-                    return Err(format!("error: {field} cannot be edited."));
-                }
-            };
-            let normalised_old = match &old {
-                Some(Val::Bool(false)) if spec_field.ty == FieldType::Bool => {
-                    Some(Val::Bool(false))
-                }
-                other => other.clone(),
-            };
-            if new_val != normalised_old {
-                changed = true;
-            }
-            // a task's status is three commands, one for each word it can be put in
-            if (kind, field) == (Kind::Task, "status") {
-                let old_vault = match &old {
-                    Some(Val::Enum(model)) => spec_field.vault_value(model).unwrap_or("open"),
-                    _ => "open",
-                };
-                let new_vault = new_json.as_str().unwrap_or("open");
-                let to_status = |vault: &str| -> Result<Step, String> {
-                    let action = meta::task_status_verb(vault)
-                        .and_then(|verb| verb.action(Kind::Task))
-                        .or_else(|| Verb::Reopen.action(Kind::Task))
-                        .ok_or_else(|| not_applicable(Verb::Edit, Kind::Task))?;
-                    Ok(Step::of(action, json!({ action.id_param: row.id })))
-                };
-                apart.push(to_status(new_vault)?);
-                apart_back.push(to_status(old_vault)?);
-                continue;
-            }
-            // a note is pinned by a flag, which is set and cleared by two commands
-            if (kind, field) == (Kind::Note, "pinned") {
-                let flag = |on: bool| -> Result<Step, String> {
-                    let verb = if on { Verb::Star } else { Verb::Unstar };
-                    let action = verb
-                        .action(Kind::Note)
-                        .ok_or_else(|| not_applicable(Verb::Star, Kind::Note))?;
-                    Ok(Step::of(
-                        action,
-                        json!({ action.id_param: row.id, "flag": "pinned" }),
-                    ))
-                };
-                apart.push(flag(new_val == Some(Val::Bool(true)))?);
-                apart_back.push(flag(old == Some(Val::Bool(true)))?);
-                continue;
-            }
-            // a list sits in an area, which is a container of its own: found by its title, or made
-            if (kind, field) == (Kind::List, "area") {
-                let area = text_of(value);
-                let (steps, back) = self.plan_area(row, area.trim());
-                apart.extend(steps);
-                apart_back.extend(back);
-                continue;
-            }
-            if kind == Kind::Event && field == "duration" {
-                let (start, end) = event_span(row);
-                let minutes = new_json.as_i64().unwrap_or(60).max(1);
-                let new_end = jiff::Span::new()
-                    .try_minutes(minutes)
-                    .and_then(|span| start.checked_add(span))
-                    .map_err(|_| "error: that duration is out of range.".to_owned())?;
-                let times = event_times(row, start, new_end);
-                let back = event_times(row, start, end);
-                for (map, times) in [(&mut forward, times), (&mut backward, back)] {
-                    if let Some(ends) = times.get("ends") {
-                        map.entry(command)
-                            .or_default()
-                            .insert("ends".to_owned(), ends.clone());
+                let normalised_old = match &old {
+                    Some(Val::Bool(false)) if spec_field.ty == FieldType::Bool => {
+                        Some(Val::Bool(false))
                     }
+                    other => other.clone(),
+                };
+                if new_val != normalised_old {
+                    changed = true;
                 }
-                continue;
-            }
-            // the property each model field is edited under is the one the action's input says it
-            // as (`cadence` is `cadence_days`, `effort` is `effort_min`); `null` clears a column
-            // that can be
-            let param = action
-                .and_then(|action| action.property_named(field))
-                .unwrap_or(field);
-            let (new_json, old_json) = match (kind, field) {
-                // a cadence of none is no column value
-                (Kind::Person, "cadence") => (
-                    if new_json == json!(0) {
-                        Value::Null
-                    } else {
-                        new_json
-                    },
-                    old.as_ref().map_or(Value::Null, Val::json),
-                ),
-                (Kind::Task, "effort") => (new_json, old.as_ref().map_or(Value::Null, Val::json)),
-                (Kind::Task, "priority") => (new_json, old.as_ref().map_or(json!(0), Val::json)),
-                // a body is never null: no words is an empty body
-                (Kind::Note, "body") => (new_json, old.as_ref().map_or(json!(""), Val::json)),
-                (Kind::Person, "role" | "nickname" | "met")
-                | (Kind::Task | Kind::Event, "description") => (
-                    if new_json == json!("") {
-                        Value::Null
-                    } else {
-                        new_json
-                    },
-                    old.as_ref().map_or(Value::Null, Val::json),
-                ),
-                // a Health figure goes back as the vault held it, not as the world shows it
-                (Kind::DailyFigure, "value") => (new_json, json!(self.figure_value(row)?)),
-                (Kind::Workout, "moving" | "distance" | "energy" | "heart_rate" | "climb") => {
-                    (new_json, self.workout_figure(row, param)?)
+                // a task's status is three commands, one for each word it can be put in
+                if (kind, field) == (Kind::Task, "status") {
+                    let old_vault = match &old {
+                        Some(Val::Enum(model)) => spec_field.vault_value(model).unwrap_or("open"),
+                        _ => "open",
+                    };
+                    let new_vault = new_json.as_str().unwrap_or("open");
+                    let to_status = |vault: &str| -> Result<Step, String> {
+                        let action = meta::task_status_verb(vault)
+                            .and_then(|verb| verb.action(Kind::Task))
+                            .or_else(|| Verb::Reopen.action(Kind::Task))
+                            .ok_or_else(|| not_applicable(Verb::Edit, Kind::Task))?;
+                        Ok(Step::of(action, json!({ action.id_param: row.id })))
+                    };
+                    apart.push(to_status(new_vault)?);
+                    apart_back.push(to_status(old_vault)?);
+                    continue;
                 }
-                _ => (new_json, old.as_ref().map_or(json!(""), Val::json)),
-            };
-            forward
-                .entry(command)
-                .or_default()
-                .insert(param.to_owned(), new_json);
-            backward
-                .entry(command)
-                .or_default()
-                .insert(param.to_owned(), old_json);
+                // a note is pinned by a flag, which is set and cleared by two commands
+                if (kind, field) == (Kind::Note, "pinned") {
+                    let flag = |on: bool| -> Result<Step, String> {
+                        let verb = if on { Verb::Star } else { Verb::Unstar };
+                        let action = verb
+                            .action(Kind::Note)
+                            .ok_or_else(|| not_applicable(Verb::Star, Kind::Note))?;
+                        Ok(Step::of(
+                            action,
+                            json!({ action.id_param: row.id, "flag": "pinned" }),
+                        ))
+                    };
+                    apart.push(flag(new_val == Some(Val::Bool(true)))?);
+                    apart_back.push(flag(old == Some(Val::Bool(true)))?);
+                    continue;
+                }
+                // a list sits in an area, which is a container of its own: found by its title, or made
+                if (kind, field) == (Kind::List, "area") {
+                    let area = text_of(value);
+                    let (steps, back) = self.plan_area(row, area.trim());
+                    apart.extend(steps);
+                    apart_back.extend(back);
+                    continue;
+                }
+                if kind == Kind::Event && field == "duration" {
+                    let (start, end) = event_span(row);
+                    let minutes = new_json.as_i64().unwrap_or(60).max(1);
+                    let new_end = jiff::Span::new()
+                        .try_minutes(minutes)
+                        .and_then(|span| start.checked_add(span))
+                        .map_err(|_| "error: that duration is out of range.".to_owned())?;
+                    let times = event_times(row, start, new_end);
+                    let back = event_times(row, start, end);
+                    for (map, times) in [(&mut forward, times), (&mut backward, back)] {
+                        if let Some(ends) = times.get("ends") {
+                            map.entry(command)
+                                .or_default()
+                                .insert("ends".to_owned(), ends.clone());
+                        }
+                    }
+                    continue;
+                }
+                // the property each model field is edited under is the one the action's input says it
+                // as (`cadence` is `cadence_days`, `effort` is `effort_min`); `null` clears a column
+                // that can be
+                let param = action
+                    .and_then(|action| action.property_named(field))
+                    .unwrap_or(field);
+                let (new_json, old_json) = match (kind, field) {
+                    // a cadence of none is no column value
+                    (Kind::Person, "cadence") => (
+                        if new_json == json!(0) {
+                            Value::Null
+                        } else {
+                            new_json
+                        },
+                        old.as_ref().map_or(Value::Null, Val::json),
+                    ),
+                    (Kind::Task, "effort") => {
+                        (new_json, old.as_ref().map_or(Value::Null, Val::json))
+                    }
+                    (Kind::Task, "priority") => {
+                        (new_json, old.as_ref().map_or(json!(0), Val::json))
+                    }
+                    // a body is never null: no words is an empty body
+                    (Kind::Note, "body") => (new_json, old.as_ref().map_or(json!(""), Val::json)),
+                    (Kind::Person, "role" | "nickname" | "met")
+                    | (Kind::Task | Kind::Event, "description") => (
+                        if new_json == json!("") {
+                            Value::Null
+                        } else {
+                            new_json
+                        },
+                        old.as_ref().map_or(Value::Null, Val::json),
+                    ),
+                    // a Health figure goes back as the vault held it, not as the world shows it
+                    (Kind::DailyFigure, "value") => (new_json, json!(self.figure_value(row)?)),
+                    (Kind::Workout, "moving" | "distance" | "energy" | "heart_rate" | "climb") => {
+                        (new_json, self.workout_figure(row, param)?)
+                    }
+                    _ => (new_json, old.as_ref().map_or(json!(""), Val::json)),
+                };
+                forward
+                    .entry(command)
+                    .or_default()
+                    .insert(param.to_owned(), new_json);
+                backward
+                    .entry(command)
+                    .or_default()
+                    .insert(param.to_owned(), old_json);
             }
         }
         if !offers.is_empty() {
@@ -5990,17 +6057,22 @@ impl Session {
         // THE ONE LOOKUP: the action that creates this kind, and the names its input says things as.
         // Sidecar/upsert kinds (`locker_field`, `contact_point`, `budget`) dispatch via explicit commands below.
         if action_opt.is_none()
-            && !matches!(
-                kind,
-                Kind::LockerField | Kind::ContactPoint | Kind::Budget
-            )
+            && !matches!(kind, Kind::LockerField | Kind::ContactPoint | Kind::Budget)
         {
             return Err(not_applicable(Verb::Create, kind));
         }
         let action = action_opt.unwrap_or(&meta::ACTIONS[0]);
         let mut allowed: Vec<&str> = meta::create_args(kind).to_vec();
         let extra_allowed: &[&str] = match kind {
-            Kind::Task => &["from_note", "note", "exact", "about", "person", "for", "text"],
+            Kind::Task => &[
+                "from_note",
+                "note",
+                "exact",
+                "about",
+                "person",
+                "for",
+                "text",
+            ],
             Kind::Note => &["about", "person", "for", "text"],
             Kind::List | Kind::Calendar => &["color", "icon"],
             Kind::Section => &["list", "project", "parent", "position"],
@@ -6020,9 +6092,39 @@ impl Session {
                 "account_id",
                 "position",
             ],
-            Kind::Budget => &["category", "category_id", "month", "amount", "budget", "currency", "carry"],
-            Kind::LockerField => &["item", "row", "locker_item", "label", "kind", "field_kind", "type", "value", "section", "position"],
-            Kind::ContactPoint => &["person", "about", "for", "row", "channel", "kind", "type", "value", "label", "preferred"],
+            Kind::Budget => &[
+                "category",
+                "category_id",
+                "month",
+                "amount",
+                "budget",
+                "currency",
+                "carry",
+            ],
+            Kind::LockerField => &[
+                "item",
+                "row",
+                "locker_item",
+                "label",
+                "kind",
+                "field_kind",
+                "type",
+                "value",
+                "section",
+                "position",
+            ],
+            Kind::ContactPoint => &[
+                "person",
+                "about",
+                "for",
+                "row",
+                "channel",
+                "kind",
+                "type",
+                "value",
+                "label",
+                "preferred",
+            ],
             _ => &[],
         };
         for extra in extra_allowed {
@@ -6286,10 +6388,7 @@ impl Session {
             }
             Kind::PeopleList => {
                 step_call = Call::bare("container.create");
-                (
-                    json!({"id": mint(), "kind": "list", "title": name}),
-                    "id",
-                )
+                (json!({"id": mint(), "kind": "list", "title": name}), "id")
             }
             Kind::Section => {
                 step_call = Call::bare("container.create");
@@ -6333,10 +6432,14 @@ impl Session {
                     .ok_or("error: create important date needs person: <person>.")?;
                 let person = self.resolve_one_target(p_val, Some(Kind::Person))?;
                 let month_day = if let Some(resolved) = date {
-                    let pt = resolved.point().ok_or("error: date must be a single day.")?;
+                    let pt = resolved
+                        .point()
+                        .ok_or("error: date must be a single day.")?;
                     format!("{:02}-{:02}", pt.date.month(), pt.date.day())
                 } else {
-                    return Err("error: create important date needs date: <month and day>.".to_owned());
+                    return Err(
+                        "error: create important date needs date: <month and day>.".to_owned()
+                    );
                 };
                 let label = text("label").unwrap_or_else(|| name.clone());
                 let mut input = json!({"id": person.1, "label": label, "month_day": month_day});
@@ -6424,10 +6527,17 @@ impl Session {
                 step_call = Call::bare("budget.set");
                 let cat_id = match args.get("category").or_else(|| args.get("category_id")) {
                     Some(v) => self.resolve_one_target(v, Some(Kind::Category))?.1,
-                    None => self.resolve_one_target(&json!(name), Some(Kind::Category))?.1,
+                    None => {
+                        self.resolve_one_target(&json!(name), Some(Kind::Category))?
+                            .1
+                    }
                 };
                 let month = text("month").unwrap_or_else(|| {
-                    format!("{:04}-{:02}", self.now.date().year(), self.now.date().month())
+                    format!(
+                        "{:04}-{:02}",
+                        self.now.date().year(),
+                        self.now.date().month()
+                    )
                 });
                 let currency = text("currency").unwrap_or_else(|| self.world.currency.clone());
                 let amt_val = args
@@ -6704,12 +6814,10 @@ impl Session {
                 let end_civil = if let Some(ends_val) = args.get("ends") {
                     let anchor = Some(Stamp {
                         date: start_civil.date(),
-                        time: Some(jiff::civil::Time::new(
-                            start_civil.hour(),
-                            start_civil.minute(),
-                            0,
-                            0,
-                        ).unwrap_or(start_civil.time())),
+                        time: Some(
+                            jiff::civil::Time::new(start_civil.hour(), start_civil.minute(), 0, 0)
+                                .unwrap_or(start_civil.time()),
+                        ),
                     });
                     Some(self.resolve_workout_end(ends_val, start_civil.date(), anchor)?)
                 } else {
@@ -6724,8 +6832,7 @@ impl Session {
                     );
                 }
                 let starts = spell(start_civil)?;
-                let mut input =
-                    json!({"id": self.door.mint_id(), "title": name, "starts": starts});
+                let mut input = json!({"id": self.door.mint_id(), "title": name, "starts": starts});
                 if let Some(end) = end_civil {
                     input["ends"] = json!(spell(end)?);
                 }
@@ -7066,7 +7173,9 @@ impl Session {
         let phrase = verb_phrase(verb);
         let question = match verb {
             Verb::Purge => format!("this would permanently purge {what}; purge?"),
-            Verb::EmptyTrash => format!("this would permanently empty the trash for {what}; empty the trash?"),
+            Verb::EmptyTrash => {
+                format!("this would permanently empty the trash for {what}; empty the trash?")
+            }
             Verb::Merge => format!("this would permanently merge {what}; merge?"),
             Verb::Unfollow => format!("this would stop following {what}; unfollow?"),
             _ => format!("this would permanently {phrase} {what}; {phrase}?"),
@@ -7452,7 +7561,9 @@ fn editable(kind: Kind) -> String {
         }
     }
     match kind {
-        Kind::Rule => return "match, text, category, display_name, min, max, account, position".to_owned(),
+        Kind::Rule => {
+            return "match, text, category, display_name, min, max, account, position".to_owned();
+        }
         Kind::LockerField => return "label, kind, value, position".to_owned(),
         Kind::ContactPoint => return "channel, value, label, preferred".to_owned(),
         _ => {}

@@ -66,7 +66,7 @@ pub fn verdict(pin: &Value, hashes: &Value) -> (Vec<String>, Vec<String>) {
     };
     // (key, what, runtime value, pinned value) for each hash that moved.
     let mut moved: Vec<(&str, &str, &str, &str)> = Vec::new();
-    for (key, what, runtime) in [
+    let mut checks = vec![
         (
             "tools_hash",
             "the tool catalogue (the tools the model is shown)",
@@ -82,7 +82,15 @@ pub fn verdict(pin: &Value, hashes: &Value) -> (Vec<String>, Vec<String>) {
             "the data catalogue (the kinds, verbs and fields the generator covers)",
             hashes.get("catalog_hash"),
         ),
-    ] {
+    ];
+    if text("declarations_hash").is_some() {
+        checks.push((
+            "declarations_hash",
+            "the generator declarations (all manifest actions, live kinds, fields and arguments)",
+            hashes.get("declarations_hash"),
+        ));
+    }
+    for (key, what, runtime) in checks {
         let pinned = text(key).unwrap_or("");
         let runtime = runtime.and_then(Value::as_str).unwrap_or("");
         if pinned != runtime {
@@ -136,13 +144,18 @@ pub fn verdict(pin: &Value, hashes: &Value) -> (Vec<String>, Vec<String>) {
                 ));
             } else {
                 let now_hash = |k: &str| match k {
-                    "catalog_hash" => hashes.get(k),
+                    "catalog_hash" | "declarations_hash" => hashes.get(k),
                     _ => now.get(k),
                 }
                 .and_then(Value::as_str)
                 .unwrap_or("");
+                let extra_decl = if text("declarations_hash").is_some() {
+                    format!(", \"declarations_hash\": \"{}\"", now_hash("declarations_hash"))
+                } else {
+                    String::new()
+                };
                 findings.push(format!(
-                    "data {version} is marked stale ({level}), but the contract moved again since it was marked: {}. A stale mark covers only the contract it was made at ({PIN} `stale.at`). Run `datagen drift --in <version dir>`, then update `stale` in {PIN} with the level it reports, `since`, and `\"at\": {{\"tools_hash\": \"{}\", \"prompt_hash\": \"{}\", \"catalog_hash\": \"{}\"}}`. Do not edit the pin's own `tools_hash`, `prompt_hash` or `catalog_hash`: they say what the data was built for.",
+                    "data {version} is marked stale ({level}), but the contract moved again since it was marked: {}. A stale mark covers only the contract it was made at ({PIN} `stale.at`). Run `datagen drift --in <version dir>`, then update `stale` in {PIN} with the level it reports, `since`, and `\"at\": {{\"tools_hash\": \"{}\", \"prompt_hash\": \"{}\", \"catalog_hash\": \"{}\"{extra_decl}}}`. Do not edit the pin's own `tools_hash`, `prompt_hash` or `catalog_hash`: they say what the data was built for.",
                     differs.join("; "),
                     now_hash("tools_hash"),
                     now_hash("prompt_hash"),
@@ -222,6 +235,13 @@ fn runtime_contract(root: &Path) -> anyhow::Result<Value> {
         .and_then(|l| l.split_whitespace().next())
         .context("`datagen catalog` printed no catalogue hash")?;
     hashes["catalog_hash"] = Value::String(hash.to_owned());
+    if let Some(decl_hash) = stderr
+        .lines()
+        .find_map(|l| l.strip_prefix("declarations "))
+        .and_then(|l| l.split_whitespace().next())
+    {
+        hashes["declarations_hash"] = Value::String(decl_hash.to_owned());
+    }
     Ok(hashes)
 }
 
@@ -368,5 +388,24 @@ mod tests {
         assert!(
             verdict(&other, &runtime("aaa", "bbb")).0[0].contains("not one the runtime serves")
         );
+    }
+
+    #[test]
+    fn declarations_hash_is_checked_when_pinned_and_optional_for_legacy_pins() {
+        let mut p = pin(&Value::Null);
+        p["declarations_hash"] = json!("ddd");
+        let mut rt = runtime("aaa", "bbb");
+        rt["declarations_hash"] = json!("ddd");
+        assert!(verdict(&p, &rt).0.is_empty());
+
+        rt["declarations_hash"] = json!("eee");
+        let (findings, _) = verdict(&p, &rt);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].contains("declarations_hash is eee in the runtime, ddd in the pin"));
+
+        let stale = json!({"since": "x", "level": "coverage", "at": {"declarations_hash": "eee"}});
+        p["stale"] = stale;
+        let (findings, details) = verdict(&p, &rt);
+        assert!(findings.is_empty() && details.len() == 1, "{findings:?}");
     }
 }

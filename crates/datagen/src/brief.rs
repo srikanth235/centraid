@@ -312,6 +312,12 @@ impl Briefer<'_> {
                         format!(" {} the {} \"{}\"", prep(verb), link.kind, link.name)
                     }
                     VerbArg::Choice(c) => format!(" as a {c}"),
+                    VerbArg::Label(l) => format!(" with label \"{l}\""),
+                    VerbArg::MultiArgs(pairs) => {
+                        let s: Vec<String> =
+                            pairs.iter().map(|(k, v)| format!("{k} {v}")).collect();
+                        format!(" ({})", s.join(", "))
+                    }
                 };
                 format!("{} {what}{extra}.", verb_phrase(verb))
             }

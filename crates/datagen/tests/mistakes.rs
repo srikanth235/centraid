@@ -4,9 +4,10 @@
 
 use std::collections::BTreeMap;
 
+use centraid_datagen::fixture_world::{self, FixtureRequest};
 use centraid_datagen::mistakes::{self, FAMILIES};
 use centraid_datagen::plan::{WorldRun, call_xml};
-use centraid_datagen::{Catalog, World, plan};
+use centraid_datagen::{Catalog, Split};
 use serde_json::{Map, Value};
 
 fn first_line(response: &Value) -> String {
@@ -34,12 +35,16 @@ fn refused(response: &Value) -> bool {
 #[test]
 fn every_family_is_refused_by_the_runtime_on_every_kind_it_applies_to() {
     let catalog = Catalog::build().expect("catalog");
-    let world = World::generate(plan(1)[0]);
     let scratch = tempfile::tempdir().expect("scratch");
-    let mut run = WorldRun::seed(&world, &catalog, scratch.path()).expect("seeds");
     let mut seen: BTreeMap<&str, usize> = BTreeMap::new();
     let mut bad: Vec<String> = Vec::new();
-    for kind in &catalog.kinds {
+    for (idx, kind) in catalog.kinds.iter().enumerate() {
+        let (world, _) = fixture_world::build(&FixtureRequest::simple(
+            Split::Train,
+            1 + idx as u64,
+            &kind.name,
+        ));
+        let mut run = WorldRun::seed(&world, &catalog, scratch.path()).expect("seeds");
         let mut live = run.open().expect("opens");
         live.session.user("show them");
         // a row of the kind the runtime has shown, so a write's rows argument is a real handle

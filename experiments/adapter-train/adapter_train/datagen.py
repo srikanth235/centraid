@@ -39,8 +39,20 @@ class RecordError(ValueError):
 
 
 def read_jsonl(path):
-    """Yield the objects of a JSONL file, `.zst` (zstandard), `.gz` or plain, one per non-empty line."""
+    """Yield the objects of a JSONL file (`.zst`, `.gz`, or plain), a directory of sorted shard files, or a sequence of shard paths."""
+    if isinstance(path, (list, tuple)):
+        for shard in path:
+            yield from read_jsonl(shard)
+        return
     path = Path(path)
+    if path.is_dir():
+        shards = sorted(
+            p for p in path.iterdir()
+            if p.is_file() and (p.name.endswith(".jsonl.zst") or p.name.endswith(".jsonl.gz") or p.name.endswith(".jsonl"))
+        )
+        for shard in shards:
+            yield from read_jsonl(shard)
+        return
     if path.suffix == ".zst":
         import zstandard
 

@@ -220,7 +220,10 @@ fn the_names_chat_says_are_the_aliases_the_manifest_declares() {
 
 #[test]
 fn a_verb_is_live_when_an_action_backs_it() {
-    assert!(Verb::parse("not_a_verb").is_none(), "unknown verb is not live");
+    assert!(
+        Verb::parse("not_a_verb").is_none(),
+        "unknown verb is not live"
+    );
     for live in [
         "create",
         "edit",

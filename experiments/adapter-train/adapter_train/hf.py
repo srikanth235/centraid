@@ -32,9 +32,51 @@ MANIFEST = "manifest.json"
 SUBSET = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")
 FORBIDDEN_SUBSETS = {"test", "noise", "val", "train"}  # the test split is never named; val is a flag; plain train is the default
 FILES = {"train": "data/train.jsonl.zst", "val": "data/val.jsonl.zst"}  # the test split is not here, on purpose
+FORBIDDEN_PATH_PARTS = {"test", "noise", "heldout"}
 TOKEN_ENV = "HF_TOKEN"
 SECRET_ENV = "HF_TOKEN_SECRET_ID"  # AWS: the id (name or ARN) of a Secrets Manager secret holding the token; the request carries this, never the token
 MAX_MANIFEST_KEPT = 1 << 16  # a manifest bigger than this is hashed, not copied into the run record
+
+
+def _safe_rel_path(path: str, split: str) -> str:
+    if not isinstance(path, str) or not path.strip() or path.startswith(("/", "\\")):
+        raise ConfigError("manifest shard path for %s must be a non-empty relative path, got %r" % (split, path))
+    raw_parts = [p for p in re.split(r"[/\\]+", path.strip()) if p]
+    parts = [p.lower() for p in raw_parts]
+    if not parts or any(p in (".", "..") for p in parts):
+        raise ConfigError("refusing held-out or unsafe path %r in manifest for %s" % (path, split))
+    if any(p in FORBIDDEN_PATH_PARTS or p.split(".", 1)[0] in FORBIDDEN_PATH_PARTS for p in parts):
+        raise ConfigError("refusing held-out or unsafe path %r in manifest for %s" % (path, split))
+    return "/".join(raw_parts)
+
+
+def _extract_shard_paths(entries, split: str) -> list[str]:
+    if not isinstance(entries, list) or not entries:
+        raise ConfigError("manifest shards for %s must be a non-empty list" % split)
+    out = []
+    for item in entries:
+        rel = item.get("path") if isinstance(item, dict) else item
+        out.append(_safe_rel_path(rel, split))
+    return out
+
+
+def split_paths(manifest: dict, split: str, *, subset: str | None = None) -> list[str]:
+    """Ordered repo paths for `split` (`train` or `val` only), supporting sharded manifests and single-file fallback."""
+    if split not in FILES:
+        raise ConfigError("refusing to request split %r (only train and val are allowed)" % (split,))
+    if split == "train" and subset is not None:
+        fallback = train_path(subset)
+        entry = (manifest.get("subsets") or {}).get(subset) if isinstance(manifest, dict) else None
+        if isinstance(entry, dict):
+            if "shards" in entry:
+                return _extract_shard_paths(entry["shards"], f"subset {subset}")
+            if isinstance(entry.get("path"), str):
+                return [_safe_rel_path(entry["path"], f"subset {subset}")]
+        return [fallback]
+    shards = manifest.get("shards") if isinstance(manifest, dict) else None
+    if isinstance(shards, dict) and split in shards:
+        return _extract_shard_paths(shards[split], split)
+    return [FILES[split]]
 
 
 def parse(ref: str) -> tuple[str, str]:
@@ -115,10 +157,12 @@ def local_fetch(root):
 
 
 def fetch_version(ref: str, dest, *, with_val: bool = True, subset: str | None = None, fetch=https_fetch) -> dict:
-    """Fetch the manifest and the train (and val) file of the version `ref` names into `dest`.
+    """Fetch the manifest and the train (and val) file(s) of the version `ref` names into `dest`.
 
-    Returns `{"paths": {"train": Path, "val": Path}, "source": {...}}`; `source` is what the run record keeps: the repo, the revision, the
-    manifest's own sha256 and the manifest itself (its hashes are the version's), and the path each file was read from."""
+    Supports both sharded manifests (`manifest["shards"][split]`) and single-file fallback (`data/<split>.jsonl.zst`).
+    Returns `{"paths": {"train": Path | list[Path], "val": ...}, "source": {...}}`; `source` is what the run record keeps:
+    the repo, the revision, the manifest's own sha256 and the manifest itself (its hashes are the version's), and the path(s)
+    each split was read from."""
     repo, revision = parse(ref)
     dest = Path(dest)
     manifest_path = dest / MANIFEST
@@ -128,11 +172,23 @@ def fetch_version(ref: str, dest, *, with_val: bool = True, subset: str | None =
         manifest = json.loads(raw)
     except json.JSONDecodeError as e:
         raise ConfigError("%s@%s: manifest.json is not JSON: %s" % (repo, revision, e)) from e
-    remote = {"train": train_path(subset), "val": FILES["val"]}
+    if subset is not None:
+        train_path(subset)
     paths = {}
+    remote = {}
     for key in ("train", "val") if with_val else ("train",):
-        paths[key] = dest / remote[key]
-        fetch(repo, revision, remote[key], paths[key])
+        rel_paths = split_paths(manifest, key, subset=subset if key == "train" else None)
+        local_paths = []
+        for rel in rel_paths:
+            local = dest / rel
+            fetch(repo, revision, rel, local)
+            local_paths.append(local)
+        if len(local_paths) == 1:
+            paths[key] = local_paths[0]
+            remote[key] = rel_paths[0]
+        else:
+            paths[key] = local_paths
+            remote[key] = rel_paths
     source = {"repo": repo, "revision": revision, "manifest_sha256": hashlib.sha256(raw).hexdigest(),
-              "manifest": manifest if len(raw) <= MAX_MANIFEST_KEPT else None, "files": {k: remote[k] for k in paths}}
+              "manifest": manifest if len(raw) <= MAX_MANIFEST_KEPT else None, "files": remote}
     return {"paths": paths, "source": source}

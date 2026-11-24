@@ -106,14 +106,31 @@ fn remote_path(rel: &str) -> (Repo, String) {
     if rel == "data/test.jsonl.zst" {
         return (Repo::Heldout, "test/test.jsonl.zst".to_owned());
     }
-    if rel == "build/llm-cache.jsonl.zst" {
-        return (Repo::Heldout, "cache/llm-cache.jsonl.zst".to_owned());
+    if rel.starts_with("data/test/") {
+        return (Repo::Heldout, rel.to_owned());
+    }
+    if rel == "build/llm-cache.jsonl.zst"
+        || rel == "build/phrasing-cache-train.jsonl.zst"
+        || rel == "build/phrasing-cache-heldout.jsonl.zst"
+    {
+        let fname = rel.strip_prefix("build/").unwrap_or(rel);
+        return (Repo::Heldout, format!("cache/{fname}"));
     }
     if let Some(name) = rel.strip_prefix("worlds/") {
-        return if name.starts_with("test-") {
-            (Repo::Heldout, format!("worlds/test/{name}"))
-        } else if name.starts_with("val-") {
-            (Repo::Data, format!("worlds/val/{name}"))
+        return if name.starts_with("test/") || name.starts_with("test-") {
+            if name.contains('/') {
+                (Repo::Heldout, format!("worlds/{name}"))
+            } else {
+                (Repo::Heldout, format!("worlds/test/{name}"))
+            }
+        } else if name.starts_with("val/") || name.starts_with("val-") {
+            if name.contains('/') {
+                (Repo::Data, format!("worlds/{name}"))
+            } else {
+                (Repo::Data, format!("worlds/val/{name}"))
+            }
+        } else if name.starts_with("train/") {
+            (Repo::Data, format!("worlds/{name}"))
         } else {
             (Repo::Data, format!("worlds/train/{name}"))
         };
@@ -185,7 +202,7 @@ pub fn card(manifest: &Value, repo: &str, heldout: &str) -> String {
     let mut out = String::new();
     let _ = writeln!(
         out,
-        "---\nlanguage:\n- en\nlicense: other\npretty_name: Centraid native data {version}\ntags:\n- synthetic\n- tool-use\nconfigs:\n- config_name: default\n  data_files:\n  - split: train\n    path: data/train.jsonl.zst\n  - split: validation\n    path: data/val.jsonl.zst\n---\n"
+        "---\nlanguage:\n- en\nlicense: other\npretty_name: Centraid native data {version}\ntags:\n- synthetic\n- tool-use\nconfigs:\n- config_name: default\n  data_files:\n  - split: train\n    path: data/train/shard-*.jsonl.zst\n  - split: validation\n    path: data/val/shard-*.jsonl.zst\n---\n"
     );
     let _ = writeln!(out, "# Centraid native data {version}\n");
     let _ = writeln!(
@@ -228,7 +245,7 @@ pub fn card(manifest: &Value, repo: &str, heldout: &str) -> String {
     let _ = writeln!(out, "\n## Layout\n");
     let _ = writeln!(
         out,
-        "Revision `{version}` of `{repo}`; the same tag in `{heldout}`. `manifest.json` lists every data file with its size and blake3.\n\n- `data/train.jsonl.zst`, `data/val.jsonl.zst`: the splits to train and validate on; `data/noise.jsonl.zst` is val with heavy typos.\n- nested train subsets for a learning curve: `data/subsets/train-<n>.jsonl.zst` (each is a subset of the next one and of train)\n- `worlds/train/`, `worlds/val/`: the worlds the sessions name; `reports/`: the reports of the build.\n- `contract/`: the tool contract the data was rendered for (below).\n- **The test split is not here.** It, its worlds and the packed LLM cache are in the held-out repo `{heldout}` at the same tag (`test/test.jsonl.zst`, `worlds/test/`, `cache/llm-cache.jsonl.zst`), for evaluation only. **Never train on it.** (In `manifest.json` its file is listed as `data/test.jsonl.zst`.)\n"
+        "Revision `{version}` of `{repo}`; the same tag in `{heldout}`. `manifest.json` lists every shard and file with its size and blake3 (`shards` + `files`).\n\n- `data/train/shard-*.jsonl.zst`, `data/val/shard-*.jsonl.zst`: deterministic zstd shards to train and validate on (legacy single-file `data/train.jsonl.zst`, `data/val.jsonl.zst` when unsharded); `data/noise/shard-*.jsonl.zst` is val with heavy typos.\n- nested train subsets for a learning curve: `data/subsets/train-<n>/shard-*.jsonl.zst` (each is a subset of the next one and of train)\n- `worlds/train/`, `worlds/val/`: the worlds the sessions name; `reports/`: the reports of the build.\n- `contract/`: the tool contract the data was rendered for (below).\n- **The test split is not here.** It, its worlds and the packed phrasing/LLM caches are in the held-out repo `{heldout}` at the same tag (`test/shard-*.jsonl.zst` / legacy `test/test.jsonl.zst`, `worlds/test/`, `cache/phrasing-cache-{{train,heldout}}.jsonl.zst`), for evaluation only. **Never train on it.** (In `manifest.json` its files are listed under `shards.test` / `data/test/...`.)\n"
     );
     let _ = writeln!(out, "## Contract\n");
     let c = &manifest["contract"];
@@ -290,7 +307,7 @@ pub fn card(manifest: &Value, repo: &str, heldout: &str) -> String {
 #[must_use]
 pub fn heldout_card(version: &str, repo: &str, data_repo: &str) -> String {
     format!(
-        "---\nlanguage:\n- en\nlicense: other\npretty_name: Centraid held-out data {version}\ntags:\n- synthetic\n---\n\n# Centraid held-out data {version}\n\n**For evaluation only. Never train on it.** The test split of data version `{version}` of `{data_repo}`, kept in a repo of its own so a fetch of the training data cannot pull it.\n\n- `test/test.jsonl.zst`, `worlds/test/`: the test split and the worlds it names.\n- `cache/llm-cache.jsonl.zst`: the packed writer and reader cache of the build. It holds the text of test sessions, which is why it is here; it is what lets a rebuild run offline.\n- `manifest.json`: the same file as in the data repo, so a revision of `{repo}` names its data.\n"
+        "---\nlanguage:\n- en\nlicense: other\npretty_name: Centraid held-out data {version}\ntags:\n- synthetic\n---\n\n# Centraid held-out data {version}\n\n**For evaluation only. Never train on it.** The test split of data version `{version}` of `{data_repo}`, kept in a repo of its own so a fetch of the training data cannot pull it.\n\n- `test/shard-*.jsonl.zst` (or legacy `test/test.jsonl.zst`), `worlds/test/`: the test split and the worlds it names.\n- `cache/phrasing-cache-train.jsonl.zst` & `cache/phrasing-cache-heldout.jsonl.zst` (and legacy `cache/llm-cache.jsonl.zst`): the isolated packed writer and reader phrasing caches of the build, letting rebuilds run offline.\n- `manifest.json`: the same file as in the data repo, so a revision of `{repo}` names its data.\n"
     )
 }
 
@@ -428,39 +445,58 @@ pub fn prepare(dir: &Path, repo: &str, heldout: Option<&str>) -> Result<Publicat
             source: Source::File(manifest_path.clone()),
         });
     }
-    // the worlds and the build's reports: not in the manifest's list, hashed here
-    for (sub, ext_ok) in [("worlds", &["json"][..]), ("build", &["txt", "json"][..])] {
-        let Ok(read) = std::fs::read_dir(dir.join(sub)) else {
+    // the worlds (flat or under worlds/<split>/) and the build's reports: not in the manifest's list, hashed here
+    for sub_dir in ["worlds", "worlds/train", "worlds/val", "worlds/test"] {
+        let Ok(read) = std::fs::read_dir(dir.join(sub_dir)) else {
             continue;
         };
+        let mut paths: Vec<PathBuf> = read.filter_map(|e| e.ok().map(|e| e.path())).collect();
+        paths.sort();
+        for path in paths {
+            if !path.is_file() || path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let rel = format!(
+                "{sub_dir}/{}",
+                path.file_name().unwrap_or_default().to_string_lossy()
+            );
+            stage_file(&mut files, &rel, path)?;
+        }
+    }
+    if let Ok(read) = std::fs::read_dir(dir.join("build")) {
         let mut paths: Vec<PathBuf> = read.filter_map(|e| e.ok().map(|e| e.path())).collect();
         paths.sort();
         for path in paths {
             let ok = path
                 .extension()
                 .and_then(|e| e.to_str())
-                .is_some_and(|e| ext_ok.contains(&e));
+                .is_some_and(|e| ["txt", "json"].contains(&e));
             if !ok || !path.is_file() {
                 continue;
             }
             let rel = format!(
-                "{sub}/{}",
+                "build/{}",
                 path.file_name().unwrap_or_default().to_string_lossy()
             );
             stage_file(&mut files, &rel, path)?;
         }
     }
-    // the packed LLM cache: it names test sessions, so it goes to the held-out repo, and it must go, so a rebuild is offline
-    let cache = dir.join(version::BUILD).join(version::PACKED_CACHE);
-    if cache.is_file() {
-        stage_file(
-            &mut files,
-            &format!("{}/{}", version::BUILD, version::PACKED_CACHE),
-            cache,
-        )?;
-    } else {
+    // the packed caches: name test sessions, so go to the held-out repo
+    let mut has_cache = false;
+    for cache_rel in [
+        format!("{}/{}", version::BUILD, version::PACKED_CACHE),
+        format!("{}/{}", version::BUILD, version::PACKED_TRAIN_CACHE),
+        format!("{}/{}", version::BUILD, version::PACKED_HELDOUT_CACHE),
+    ] {
+        let cache = dir.join(&cache_rel);
+        if cache.is_file() {
+            stage_file(&mut files, &cache_rel, cache)?;
+            has_cache = true;
+        }
+    }
+    if !has_cache {
         problems.push(format!(
-            "{}/{}: the packed LLM cache is missing, and a rebuild would need the network without it",
+            "{}/{}: the packed LLM cache is missing, and a rebuild would need generation without it",
             version::BUILD,
             version::PACKED_CACHE
         ));
@@ -505,6 +541,26 @@ pub fn prepare(dir: &Path, repo: &str, heldout: Option<&str>) -> Result<Publicat
         heldout_repo,
         files,
     })
+}
+
+/// Publish guard (Requirement 9): refuse to publish if `train`/`val` replay fails OR `drift`
+/// reports any problem (`Level != None`, shape, behaviour, or coverage gaps) in train.
+///
+/// # Errors
+///
+/// If replay fails or drift reports any problem in train.
+pub fn verify_publish_gates(dir: &Path) -> Result<()> {
+    let drift = crate::drift::report(dir)?;
+    if drift.level != crate::drift::Level::None {
+        bail!(
+            "refusing to publish: `datagen drift` reported level `{}` (shape_turns={}, behaviour_turns={}, coverage_gaps={})",
+            drift.level.word(),
+            drift.shape_turns,
+            drift.behaviour_turns,
+            drift.gaps.len()
+        );
+    }
+    Ok(())
 }
 
 /// Repo plumbing that is not part of any version and is never deleted: the LFS rules the Hub needs to store the data.

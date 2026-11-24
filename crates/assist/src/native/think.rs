@@ -1341,9 +1341,10 @@ fn compile_slots(
         .iter()
         .find(|(name, _)| name == "verb")
         .map(|(_, val)| val.as_str());
+    let rowless_do =
+        tool == "do" && is_rowless_do_call(think_verb, args.iter().map(|(name, _)| name.as_str()));
     if !lenient
-        && !(tool == "do"
-            && is_rowless_do_call(think_verb, args.iter().map(|(name, _)| name.as_str())))
+        && !rowless_do
         && let Some(key) = outside_the_tool(&tool, args.iter().map(|(name, _)| name.as_str()))
     {
         return refuse(format!(

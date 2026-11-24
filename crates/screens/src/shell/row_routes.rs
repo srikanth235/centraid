@@ -442,10 +442,7 @@ mod tests {
         // Locker handoffs
         let mut locker_export = RowRef::new("locker", "locker_item", "", "Export");
         locker_export.qualifier = "handoff:locker/locker_item/export".to_owned();
-        assert_eq!(
-            screen(route(&locker_export, "Chat", &[])),
-            locker::EXPORT
-        );
+        assert_eq!(screen(route(&locker_export, "Chat", &[])), locker::EXPORT);
 
         let mut passkey_row = RowRef::new("locker", "locker_passkey", "i1", "Set passkey");
         passkey_row.qualifier = "handoff:locker/locker_passkey/set-passkey".to_owned();
@@ -485,10 +482,7 @@ mod tests {
 
         let mut cal_home = RowRef::new("calendar", "event", "", "Follow");
         cal_home.qualifier = "handoff:calendar/event/follow".to_owned();
-        assert_eq!(
-            screen(route(&cal_home, "Chat", &[])),
-            crate::calendar::HOME
-        );
+        assert_eq!(screen(route(&cal_home, "Chat", &[])), crate::calendar::HOME);
 
         // Row-level handoffs (non-empty id)
         let mut docs_replace = RowRef::new("docs", "document", "d1", "Lease");

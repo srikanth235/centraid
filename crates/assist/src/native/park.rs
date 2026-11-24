@@ -897,7 +897,8 @@ fn empty_trash(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String>
                         .is_some_and(|at| at.as_str() <= cx.now.as_str()))
                 && kind_filter.is_none_or(|want| {
                     crate::native::world::vault_kind_of(row.kind) == Some(want)
-                        || (want == "event" && matches!(row.kind, Kind::Event | Kind::ImportantDate))
+                        || (want == "event"
+                            && matches!(row.kind, Kind::Event | Kind::ImportantDate))
                         || (want == "task" && matches!(row.kind, Kind::Task | Kind::Gift))
                         || (want == "note" && matches!(row.kind, Kind::Note | Kind::JournalEntry))
                 })
@@ -966,7 +967,9 @@ fn tag_color(input: &Value) -> Result<Ran, String> {
             "a label needs at least one character",
         ));
     };
-    Ok(ok(json!({"label": label, "color": input.get("color").cloned().unwrap_or(Value::Null)})))
+    Ok(ok(
+        json!({"label": label, "color": input.get("color").cloned().unwrap_or(Value::Null)}),
+    ))
 }
 
 fn follow_stop(world: &mut World, input: &Value) -> Result<Ran, String> {
@@ -1110,12 +1113,17 @@ fn person_move(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String>
     if let Some(list_id) = text(input, "list_id")
         && live(world, Kind::PeopleList, list_id).is_none()
     {
-        return Ok(refused("person_can_be_filed", "there is no list with that id"));
+        return Ok(refused(
+            "person_can_be_filed",
+            "there is no list with that id",
+        ));
     }
     if let Some(row) = world.rows.get_mut(&(Kind::Person, id.clone())) {
         row.updated = cx.now.clone();
     }
-    Ok(ok(json!({"id": id, "list_id": input.get("list_id").cloned().unwrap_or(Value::Null)})))
+    Ok(ok(
+        json!({"id": id, "list_id": input.get("list_id").cloned().unwrap_or(Value::Null)}),
+    ))
 }
 
 fn headline(text: &str) -> String {
@@ -1135,7 +1143,10 @@ fn person_add_note(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, Str
     }
     let body = text(input, "text").unwrap_or_default();
     if body.trim().is_empty() {
-        return Ok(refused("note_is_about_a_person", "there is nothing written"));
+        return Ok(refused(
+            "note_is_about_a_person",
+            "there is nothing written",
+        ));
     }
     let id = cx.id("note_id");
     let title = headline(body);
@@ -1145,7 +1156,12 @@ fn person_add_note(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, Str
     row.fields.insert("pinned", Val::Bool(false));
     row.fields.insert("starred", Val::Bool(false));
     world.rows.insert(row.key(), row);
-    edge(world, (Kind::Note, id.clone()), (Kind::Person, person), Via::About);
+    edge(
+        world,
+        (Kind::Note, id.clone()),
+        (Kind::Person, person),
+        Via::About,
+    );
     Ok(ok(json!({"note_id": id})))
 }
 
@@ -1156,14 +1172,22 @@ fn person_add_task(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, Str
     }
     let title = text(input, "text").unwrap_or_default().trim().to_owned();
     if title.is_empty() {
-        return Ok(refused("task_is_about_a_person", "there is nothing written"));
+        return Ok(refused(
+            "task_is_about_a_person",
+            "there is nothing written",
+        ));
     }
     let id = cx.id("task_id");
     let mut row = new_row(Kind::Task, &id, &title, cx);
     row.fields.insert("status", Val::Enum("open"));
     row.fields.insert("starred", Val::Bool(false));
     world.rows.insert(row.key(), row);
-    edge(world, (Kind::Task, id.clone()), (Kind::Person, person), Via::About);
+    edge(
+        world,
+        (Kind::Task, id.clone()),
+        (Kind::Person, person),
+        Via::About,
+    );
     Ok(ok(json!({"task_id": id})))
 }
 
@@ -1217,7 +1241,11 @@ fn person_add_date(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, Str
         return Ok(ok(json!({"id": person})));
     }
     let id = cx.id("date_id");
-    let year: i64 = cx.now.get(0..4).and_then(|y| y.parse().ok()).unwrap_or(2000);
+    let year: i64 = cx
+        .now
+        .get(0..4)
+        .and_then(|y| y.parse().ok())
+        .unwrap_or(2000);
     let starts = format!("{year}-{month_day}");
     let mut row = new_row(Kind::ImportantDate, &id, &label, cx);
     row.date = Stamp::parse(&starts);
@@ -1279,7 +1307,10 @@ fn person_save_contact_point(world: &mut World, cx: &Cx, input: &Value) -> Resul
 
 fn person_remove_contact_point(world: &mut World, input: &Value) -> Result<Ran, String> {
     let point_id = text(input, "point_id").unwrap_or_default();
-    let Some(removed) = world.rows.remove(&(Kind::ContactPoint, point_id.to_owned())) else {
+    let Some(removed) = world
+        .rows
+        .remove(&(Kind::ContactPoint, point_id.to_owned()))
+    else {
         return Ok(refused(
             "contact_point_exists",
             "there is no contact point with that id",
@@ -1296,7 +1327,10 @@ fn person_merge(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String
         || live(world, Kind::Person, &from).is_none()
         || live(world, Kind::Person, &into).is_none()
     {
-        return Ok(refused("both_are_people", "choose two distinct live people"));
+        return Ok(refused(
+            "both_are_people",
+            "choose two distinct live people",
+        ));
     }
     let from_key = (Kind::Person, from.clone());
     let into_key = (Kind::Person, into.clone());
@@ -1958,7 +1992,9 @@ fn container_create(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, St
                 world
                     .rows
                     .values()
-                    .filter(|r| r.kind == Kind::Section && r.extra.get("list_id") == parent.as_ref())
+                    .filter(|r| {
+                        r.kind == Kind::Section && r.extra.get("list_id") == parent.as_ref()
+                    })
                     .filter_map(|r| match r.field("position") {
                         Some(Val::Num(n)) => Some(*n),
                         _ => None,
@@ -2395,7 +2431,9 @@ fn locker_model_type(item_type: &str) -> &'static str {
         .unwrap_or("login")
 }
 
-fn locker_template_fields(item_type: &str) -> &'static [(&'static str, &'static str, &'static str)] {
+fn locker_template_fields(
+    item_type: &str,
+) -> &'static [(&'static str, &'static str, &'static str)] {
     match item_type {
         "ssh_key" => &[
             ("Key", "Private key", "sealed"),
@@ -2514,7 +2552,9 @@ fn locker_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> 
         field_row.extra.insert("item_id", id.clone());
         world.rows.insert(field_row.key(), field_row);
     }
-    Ok(ok(json!({"item_id": id, "template_fields": templates.len()})))
+    Ok(ok(
+        json!({"item_id": id, "template_fields": templates.len()}),
+    ))
 }
 
 fn locker_duplicate(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
@@ -2573,7 +2613,8 @@ fn locker_set_field(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, St
         row.fields.insert("section", Val::Text(section.to_owned()));
     }
     row.fields.insert("label", Val::Text(label));
-    row.fields.insert("field_kind", Val::Text(field_kind.clone()));
+    row.fields
+        .insert("field_kind", Val::Text(field_kind.clone()));
     if matches!(field_kind.as_str(), "sealed" | "otp") {
         row.fields
             .insert("value", Val::Text(crate::native::world::SEALED.to_owned()));
@@ -2644,7 +2685,9 @@ fn locker_clear_passkey(world: &mut World, input: &Value) -> Result<Ran, String>
     if live(world, Kind::LockerItem, item_id).is_none() {
         return Ok(refused("item_live", "that item is not in your locker"));
     }
-    world.rows.remove(&(Kind::LockerPasskey, item_id.to_owned()));
+    world
+        .rows
+        .remove(&(Kind::LockerPasskey, item_id.to_owned()));
     Ok(ok(json!({"item_id": item_id})))
 }
 
@@ -2742,8 +2785,7 @@ fn workout_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String
     }
     if input.get("ends").is_some_and(Value::is_null) {
         row.fields.remove("ends");
-    } else if let Some(end_stamp) = text(input, "ends").and_then(|ends| local_stamp(&zone, ends))
-    {
+    } else if let Some(end_stamp) = text(input, "ends").and_then(|ends| local_stamp(&zone, ends)) {
         if row.date.is_some_and(|starts| end_stamp < starts) {
             return Ok(refused(
                 "a_workout_the_member_logged_and_does_not_end_before",
@@ -3052,14 +3094,16 @@ fn category_merge(world: &mut World, input: &Value) -> Result<Ran, String> {
         return Ok(refused("category_exists", &gone_text(&into_id)));
     };
     if from_id == into_id {
-        return Ok(refused("categories_distinct", "choose two different categories"));
+        return Ok(refused(
+            "categories_distinct",
+            "choose two different categories",
+        ));
     }
     for row in world.rows.values_mut() {
         if matches!(row.kind, Kind::Transaction | Kind::Rule)
             && row.fields.get("category") == Some(&Val::Text(from_title.clone()))
         {
-            row.fields
-                .insert("category", Val::Text(into_title.clone()));
+            row.fields.insert("category", Val::Text(into_title.clone()));
         }
     }
     world.rows.remove(&(Kind::Category, from_id.clone()));
@@ -3160,7 +3204,10 @@ fn budget_set_carry(world: &mut World, input: &Value) -> Result<Ran, String> {
         .rows
         .get_mut(&(Kind::Budget, format!("{category_id}:{month}")))
     else {
-        return Ok(refused("budget_exists", "Set an amount for that month first."));
+        return Ok(refused(
+            "budget_exists",
+            "Set an amount for that month first.",
+        ));
     };
     row.fields.insert("carry", Val::Bool(carry));
     Ok(ok(json!({"changed": true})))
@@ -3168,10 +3215,10 @@ fn budget_set_carry(world: &mut World, input: &Value) -> Result<Ran, String> {
 
 fn txn_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
     let id = text(input, "id").unwrap_or_default().to_owned();
-    if !world
+    if world
         .rows
         .get(&(Kind::Transaction, id.clone()))
-        .is_some_and(|row| !row.trashed)
+        .is_none_or(|row| row.trashed)
     {
         return Ok(refused("transaction_exists", &gone_text(&id)));
     }
@@ -3196,11 +3243,7 @@ fn txn_edit(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
     if let Some(amount_minor) = int(input, "amount_minor") {
         let currency = match row.field("amount") {
             Some(Val::Money(_, c)) => c.clone(),
-            _ => row
-                .extra
-                .get("currency")
-                .cloned()
-                .unwrap_or(world_currency),
+            _ => row.extra.get("currency").cloned().unwrap_or(world_currency),
         };
         row.fields
             .insert("amount", Val::Money(amount_minor, currency));
@@ -3254,8 +3297,7 @@ fn rule_add(world: &mut World, cx: &Cx, input: &Value) -> Result<Ran, String> {
     row.fields.insert("category", Val::Text(cat_title));
     row.fields.insert("position", Val::Num(position));
     if let Some(dn) = display_name {
-        row.fields
-            .insert("display_name", Val::Text(dn.to_owned()));
+        row.fields.insert("display_name", Val::Text(dn.to_owned()));
     }
     if let Some(m) = text(input, "match").filter(|s| !s.is_empty()) {
         row.fields.insert("match", Val::Text(m.to_owned()));

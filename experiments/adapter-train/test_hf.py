@@ -218,5 +218,78 @@ class ConfigHfTest(unittest.TestCase):
             config.parse(job(data={"hf": REF, "with_val": False}, train={"eval_every": 5}))
 
 
+class ShardedManifestTest(unittest.TestCase):
+    def test_sharded_manifest_fetches_only_train_and_val_shards_in_order(self):
+        tmp = Path(tempfile.mkdtemp(prefix="hf-shard-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        repo = tmp / "repo"
+        for rel, body in (
+            ("data/train/shard-0000.jsonl.zst", b"t0\n"),
+            ("data/train/shard-0001.jsonl.zst", b"t1\n"),
+            ("data/val/shard-0000.jsonl.zst", b"v0\n"),
+            ("data/val/shard-0001.jsonl.zst", b"v1\n"),
+            ("data/test/shard-0000.jsonl.zst", b"test\n"),
+            ("data/noise/shard-0000.jsonl.zst", b"noise\n"),
+        ):
+            p = repo / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(body)
+        manifest = {
+            "schema_version": 2,
+            "version": "v0.4",
+            "shards": {
+                "train": [
+                    {"path": "data/train/shard-0000.jsonl.zst", "sessions": 1},
+                    {"path": "data/train/shard-0001.jsonl.zst", "sessions": 1},
+                ],
+                "val": [
+                    {"path": "data/val/shard-0000.jsonl.zst", "sessions": 1},
+                    {"path": "data/val/shard-0001.jsonl.zst", "sessions": 1},
+                ],
+                "test": [{"path": "data/test/shard-0000.jsonl.zst", "sessions": 1}],
+                "noise": [{"path": "data/noise/shard-0000.jsonl.zst", "sessions": 1}],
+            },
+        }
+        (repo / "manifest.json").write_text(json.dumps(manifest))
+        asked = []
+        inner = hf.local_fetch(repo)
+
+        def fetch(r, rev, path, dest):
+            asked.append(path)
+            inner(r, rev, path, dest)
+
+        got = hf.fetch_version(REF, tmp / "dest", fetch=fetch)
+        self.assertEqual(
+            asked,
+            [
+                "manifest.json",
+                "data/train/shard-0000.jsonl.zst",
+                "data/train/shard-0001.jsonl.zst",
+                "data/val/shard-0000.jsonl.zst",
+                "data/val/shard-0001.jsonl.zst",
+            ],
+        )
+        self.assertNotIn("test", " ".join(asked))
+        self.assertNotIn("noise", " ".join(asked))
+        self.assertEqual([p.read_bytes() for p in got["paths"]["train"]], [b"t0\n", b"t1\n"])
+        self.assertEqual(got["source"]["files"]["val"], ["data/val/shard-0000.jsonl.zst", "data/val/shard-0001.jsonl.zst"])
+
+    def test_sharded_manifest_refuses_heldout_or_test_paths(self):
+        for bad in (
+            "data/test/shard-0000.jsonl.zst",
+            "data/noise/shard-0000.jsonl.zst",
+            "data/test.jsonl.zst",
+            "data/noise.jsonl.zst",
+            "data/heldout.jsonl.zst",
+            "data\\test\\shard-0000.jsonl.zst",
+            "heldout/s.jsonl.zst",
+            "../x.jsonl.zst",
+        ):
+            with self.assertRaises(config.ConfigError, msg=bad):
+                hf.split_paths({"shards": {"train": [{"path": bad}]}}, "train")
+        with self.assertRaises(config.ConfigError):
+            hf.split_paths({"shards": {"test": [{"path": "data/test/shard-0000.jsonl.zst"}]}}, "test")
+
+
 if __name__ == "__main__":
     unittest.main()

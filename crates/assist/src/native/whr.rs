@@ -886,9 +886,7 @@ fn valid_comma_grouping(whole: &str) -> bool {
     let intl = (1..=3).contains(&groups[0].len()) && groups[1..].iter().all(|g| g.len() == 3);
     let indian = groups.len() >= 3
         && (1..=2).contains(&groups[0].len())
-        && groups[1..groups.len() - 1]
-            .iter()
-            .all(|g| g.len() == 2)
+        && groups[1..groups.len() - 1].iter().all(|g| g.len() == 2)
         && groups.last().is_some_and(|g| g.len() == 3);
     intl || indian
 }
@@ -1499,10 +1497,7 @@ mod tests {
             parse_money_value("-₹500"),
             Ok((-500.0, Some("INR".to_owned())))
         );
-        assert_eq!(
-            parse_money_value("-$50"),
-            Ok((-50.0, Some("$".to_owned())))
-        );
+        assert_eq!(parse_money_value("-$50"), Ok((-50.0, Some("$".to_owned()))));
         assert_eq!(
             parse_money_value("AED 320"),
             Ok((320.0, Some("AED".to_owned())))

@@ -39,7 +39,11 @@ fn handoff_actions_emit_handoff_cards_without_writing_the_vault() {
     let before = common::journal(&world);
     let mut session = world.session();
     session.user("export my notes");
-    let response = call(&mut session, "act", json!({"verb": "export", "kind": "note"}));
+    let response = call(
+        &mut session,
+        "act",
+        json!({"verb": "export", "kind": "note"}),
+    );
     assert_eq!(response["ends_turn"], json!(true), "{response}");
     let actions = response["effect"]["member_actions"]
         .as_array()
@@ -88,9 +92,16 @@ fn newly_closed_direct_actions_run_through_the_runtime() {
 
     // duplicate (locker_item)
     let bank = number(&mut session, "locker item", "Bank");
-    let dup = settled(&mut session, "act", json!({"verb": "duplicate", "rows": bank}));
+    let dup = settled(
+        &mut session,
+        "act",
+        json!({"verb": "duplicate", "rows": bank}),
+    );
     assert!(
-        !dup["text"].as_str().unwrap_or_default().starts_with("error:"),
+        !dup["text"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("error:"),
         "duplicate failed: {dup}"
     );
 
@@ -98,7 +109,10 @@ fn newly_closed_direct_actions_run_through_the_runtime() {
     let rule = number(&mut session, "rule", "BLUE BOTTLE");
     let applied = settled(&mut session, "act", json!({"verb": "apply", "rows": rule}));
     assert!(
-        !applied["text"].as_str().unwrap_or_default().starts_with("error:"),
+        !applied["text"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("error:"),
         "apply failed: {applied}"
     );
 
@@ -109,7 +123,8 @@ fn newly_closed_direct_actions_run_through_the_runtime() {
     // empty_trash (task) — confirmation: required (2-turn confirm_ask -> yes)
     let reed = number(&mut session, "task", "reed");
     let _ = settled(&mut session, "act", json!({"verb": "delete", "rows": reed}));
-    let _emptied = confirm_destructive(&mut session, json!({"verb": "empty_trash", "kind": "task"}));
+    let _emptied =
+        confirm_destructive(&mut session, json!({"verb": "empty_trash", "kind": "task"}));
 
     // categorize (transaction)
     let tx = number(&mut session, "transaction", "To savings");
@@ -119,7 +134,10 @@ fn newly_closed_direct_actions_run_through_the_runtime() {
         json!({"verb": "categorize", "rows": tx, "args": "category: Pets fund"}),
     );
     assert!(
-        !cat["text"].as_str().unwrap_or_default().starts_with("error:"),
+        !cat["text"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("error:"),
         "categorize failed: {cat}"
     );
 
@@ -131,7 +149,10 @@ fn newly_closed_direct_actions_run_through_the_runtime() {
         json!({"verb": "respond", "rows": tabla, "args": "answer: accepted"}),
     );
     assert!(
-        !rsvp["text"].as_str().unwrap_or_default().starts_with("error:"),
+        !rsvp["text"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("error:"),
         "respond failed: {rsvp}"
     );
 
@@ -170,7 +191,10 @@ fn newly_closed_direct_actions_run_through_the_runtime() {
         json!({"verb": "recolor", "rows": w2, "args": "label: urgent\ncolor: blue"}),
     );
     assert!(
-        !recolored["text"].as_str().unwrap_or_default().starts_with("error:"),
+        !recolored["text"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("error:"),
         "recolor failed: {recolored}"
     );
 
@@ -182,7 +206,10 @@ fn newly_closed_direct_actions_run_through_the_runtime() {
         json!({"verb": "edit:color", "rows": home, "args": "color: blue"}),
     );
     assert!(
-        !styled["text"].as_str().unwrap_or_default().starts_with("error:"),
+        !styled["text"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("error:"),
         "style-container failed: {styled}"
     );
 }

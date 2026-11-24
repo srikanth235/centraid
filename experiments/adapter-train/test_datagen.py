@@ -80,6 +80,18 @@ class DatagenLoadTest(unittest.TestCase):
         self.assertEqual([r["id"] for r in datagen.read_jsonl(plain)], ["a"])
         self.assertEqual([r["id"] for r in datagen.read_jsonl(gz)], ["b"])
 
+    def test_shard_lists_and_directories_read_in_sorted_order(self):
+        shard_dir = Path(self.tmp) / "train"
+        shard_dir.mkdir()
+        (shard_dir / "shard-0001.jsonl").write_text(json.dumps(record("s1", 20)) + "\n")
+        (shard_dir / "shard-0000.jsonl").write_text(json.dumps(record("s0", 20)) + "\n")
+        got_dir, stats_dir = datagen.load(shard_dir, max_len=100)
+        self.assertEqual([g["id"] for g in got_dir], ["s0", "s1"])
+        self.assertEqual(stats_dir["kept"], 2)
+        got_list, stats_list = datagen.load([shard_dir / "shard-0001.jsonl", shard_dir / "shard-0000.jsonl"], max_len=100)
+        self.assertEqual([g["id"] for g in got_list], ["s1", "s0"])
+        self.assertEqual(stats_list["kept"], 2)
+
     def test_contract_violations_stop_the_run(self):
         bad_len = record("x", 20)
         bad_len["render"]["weights"].pop()

@@ -10,8 +10,8 @@ Held-out gold, GPU scoring runs and tokens are in [safety.md](./safety.md). Read
 
 ## The set
 
-- A set is one split of one data version ([data.md](./data.md)), read through `EvalSource`. `DatagenSource::open_version` reads a version. `JsonlSource` reads plain JSONL, so decompress a `.zst` first.
-- Score on `val`. A set name that carries its split (`val.jsonl`, `train.jsonl`) marks its sessions; a set that names none cannot be told apart.
+- A set is one split of one data version ([data.md](./data.md)), read through `EvalSource`. `ManifestSource::open` (and `source::open_set`) reads a version directory or `manifest.json` (`data/<split>/shard-XXXX.jsonl.zst`, falling back to `data/<split>.jsonl.zst` and resolving `worlds/<split>/` or `worlds/`). `JsonlSource` reads plain JSONL, `.jsonl.zst`, or a directory of sorted shards.
+- Score on `val`. A set name that carries its split (`val.jsonl`, `train.jsonl`, or `data/val/shard-*.jsonl.zst`) marks its sessions; a set that names none cannot be told apart.
 - Precondition: before any model loads, the reference calls of the very sessions to be scored replay through the same runner and judge, and every turn must pass ([`replay.rs`](../../../crates/assist-eval/src/replay.rs)). No flag skips it. A set the runtime cannot solve scores nothing. A set written before a contract change fails here ([contract.md](./contract.md)). `assist-eval replay` runs the check alone.
 
 ## One script, greedy
@@ -29,7 +29,7 @@ Held-out gold, GPU scoring runs and tokens are in [safety.md](./safety.md). Read
 - A difference needs the paired comparison. `assist-eval compare A.json B.json` pairs by session id and prints won, lost and `z = (won - lost) / sqrt(won + lost)`. `|z| < 2` is noise, and the output says so.
 - `compare` refuses reports that scored different sessions, a different tools block or a different grammar, and a report that does not say its tools or grammar. The base and the adapter may differ.
 - Arguments the runtime never showed are `unscorable` and left out of the rate, not counted as misses.
-- Slices (`by_app`, `by_constraints` with 0, 1, 2, 3 and 4+, `by_tag`) are for finding where a model fails. A claim over a slice needs the same pairing.
+- Slices (`by_app`, `by_outcome`, `by_field`, `by_currency`, `by_slice`, `by_constraints` with 0, 1, 2, 3 and 4+, `by_tag`) are for finding where a model fails. A claim over a slice needs the same pairing.
 - The score typed into `model-pin` is typed, not computed ([model.md](./model.md)). Take it from a run of this tool.
 - The baseline is the stock base, no adapter, on `val`, decoded as the phone decodes. An adapter is scored the same way and compared against it.
 

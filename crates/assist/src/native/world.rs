@@ -584,7 +584,11 @@ impl World {
     }
 
     /// Which of `ids` carry an `about` edge pointing at a `person` entity.
-    fn about_person_ids(&self, door: &dyn Door, ids: &[String]) -> Result<BTreeSet<String>, String> {
+    fn about_person_ids(
+        &self,
+        door: &dyn Door,
+        ids: &[String],
+    ) -> Result<BTreeSet<String>, String> {
         if ids.is_empty() {
             return Ok(BTreeSet::new());
         }
@@ -650,7 +654,8 @@ impl World {
                 &format!("entity_id IN ({marks})"),
                 chunk,
             )? {
-                if let (Some(eid), Some(offset)) = (text(&rem, "entity_id"), int(&rem, "offset_min"))
+                if let (Some(eid), Some(offset)) =
+                    (text(&rem, "entity_id"), int(&rem, "offset_min"))
                 {
                     reminder_by_event.entry(eid).or_insert(offset);
                 }
@@ -889,16 +894,17 @@ impl World {
             "kind = ? AND key = ?",
             &["tag".to_owned(), "gift".to_owned()],
         )?;
-        let gift_ids: BTreeSet<String> = if let Some(tag_id) = gift_tags.first().and_then(|row| text(row, "id")) {
-            let tagged_gifts: Vec<String> = edges_from(door, "tagged", &task_ids)?
-                .into_iter()
-                .filter(|(_, to)| to == &tag_id)
-                .map(|(from, _)| from)
-                .collect();
-            self.about_person_ids(door, &tagged_gifts)?
-        } else {
-            BTreeSet::new()
-        };
+        let gift_ids: BTreeSet<String> =
+            if let Some(tag_id) = gift_tags.first().and_then(|row| text(row, "id")) {
+                let tagged_gifts: Vec<String> = edges_from(door, "tagged", &task_ids)?
+                    .into_iter()
+                    .filter(|(_, to)| to == &tag_id)
+                    .map(|(from, _)| from)
+                    .collect();
+                self.about_person_ids(door, &tagged_gifts)?
+            } else {
+                BTreeSet::new()
+            };
         let spec = Kind::Task.spec();
         for task in &tasks {
             let id = text(task, "id").unwrap_or_default();
@@ -1006,10 +1012,10 @@ impl World {
             });
         }
         for note in &notes {
-            if let (Some(id), Some(notebook)) = (text(note, "id"), text(note, "notebook_id")) {
-                if !journal_ids.contains(&id) {
-                    self.edge((Kind::Notebook, notebook), (Kind::Note, id), Via::Entry);
-                }
+            if let (Some(id), Some(notebook)) = (text(note, "id"), text(note, "notebook_id"))
+                && !journal_ids.contains(&id)
+            {
+                self.edge((Kind::Notebook, notebook), (Kind::Note, id), Via::Entry);
             }
         }
         Ok(())
@@ -1124,10 +1130,16 @@ impl World {
             put(&mut fields, "address", nonempty(text(place, "address")));
             put(&mut fields, "locality", nonempty(text(place, "locality")));
             put(&mut fields, "zone", nonempty(text(place, "zone")));
-            if place.get("lat").is_some_and(|cell| !matches!(cell, Cell::Null)) {
+            if place
+                .get("lat")
+                .is_some_and(|cell| !matches!(cell, Cell::Null))
+            {
                 fields.insert("lat", Val::Num(rounded(place, "lat")));
             }
-            if place.get("lon").is_some_and(|cell| !matches!(cell, Cell::Null)) {
+            if place
+                .get("lon")
+                .is_some_and(|cell| !matches!(cell, Cell::Null))
+            {
                 fields.insert("lon", Val::Num(rounded(place, "lon")));
             }
             self.insert(Row::of(Kind::Place, &id, entity, fields));
@@ -1655,8 +1667,8 @@ impl World {
                     .iter()
                     .find(|activity| text(activity, "id").as_deref() == Some(id.as_str()))
                 {
-                    row.date = text(activity, "starts")
-                        .and_then(|starts| local_stamp(&zone, &starts));
+                    row.date =
+                        text(activity, "starts").and_then(|starts| local_stamp(&zone, &starts));
                     if let Some(end_stamp) = text(activity, "ends")
                         .filter(|ends| !ends.is_empty())
                         .and_then(|ends| local_stamp(&zone, &ends))
@@ -1779,8 +1791,16 @@ impl World {
             };
             let mut fields = BTreeMap::new();
             fields.insert("rp_id", Val::Text(rp_id.clone()));
-            put(&mut fields, "user_handle", nonempty(text(pk, "user_handle")));
-            put(&mut fields, "display_name", nonempty(text(pk, "display_name")));
+            put(
+                &mut fields,
+                "user_handle",
+                nonempty(text(pk, "user_handle")),
+            );
+            put(
+                &mut fields,
+                "display_name",
+                nonempty(text(pk, "display_name")),
+            );
             self.insert(Row {
                 kind: Kind::LockerPasskey,
                 id: item_id,

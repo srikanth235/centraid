@@ -22,7 +22,7 @@ use centraid_assist_eval::rollout::records::{self, Cutting, Needs, Weighing};
 use centraid_assist_eval::rollout::report::{self, RolloutReport};
 use centraid_assist_eval::rollout::{Rollout, Sampling, read_rollouts, run_rollouts};
 use centraid_assist_eval::run::{DeclineStepper, Runner, Stepper};
-use centraid_assist_eval::source::{EvalSource, JsonlSource};
+use centraid_assist_eval::source::{EvalSource, open_set};
 use centraid_assist_eval::tally::{WithoutInProgress, WithoutTally};
 
 #[derive(Default)]
@@ -30,6 +30,7 @@ struct Flags {
     model: Option<PathBuf>,
     stub: bool,
     set: Option<PathBuf>,
+    split: Option<String>,
     worlds: Vec<PathBuf>,
     out: Option<PathBuf>,
     rollouts: Vec<PathBuf>,
@@ -74,6 +75,7 @@ fn flags(argv: &[String]) -> Result<Flags> {
             "--model" => out.model = Some(value("--model")?.into()),
             "--stub" => out.stub = true,
             "--set" => out.set = Some(value("--set")?.into()),
+            "--split" => out.split = Some(value("--split")?),
             "--worlds" => out.worlds.push(value("--worlds")?.into()),
             "--out" => out.out = Some(value("--out")?.into()),
             "--rollouts" => out.rollouts.push(value("--rollouts")?.into()),
@@ -138,9 +140,11 @@ fn with_ext(prefix: &Path, ext: &str) -> PathBuf {
 fn source(f: &Flags) -> Result<impl EvalSource> {
     let (set, worlds) = centraid_assist_eval::source::require_set(f.set.clone(), f.worlds.clone())
         .map_err(anyhow::Error::msg)?;
-    Ok(WithoutInProgress::new(WithoutTally::new(JsonlSource::new(
-        set, worlds,
-    ))))
+    Ok(WithoutInProgress::new(WithoutTally::new(open_set(
+        &set,
+        &worlds,
+        f.split.as_deref(),
+    )?)))
 }
 
 fn write_report(prefix: Option<&PathBuf>, report: &RolloutReport) -> Result<()> {

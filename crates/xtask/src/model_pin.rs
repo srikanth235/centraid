@@ -47,8 +47,8 @@ pub fn run(root: &Path, pin: &Pin<'_>) -> Result<()> {
     }
     let path = root.join(RECORD);
     if pin.refresh_hashes {
-        let text = std::fs::read_to_string(&path)
-            .with_context(|| format!("read {}", path.display()))?;
+        let text =
+            std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
         let mut record: Value =
             serde_json::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
         let mode = record

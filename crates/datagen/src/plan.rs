@@ -25,10 +25,10 @@ use serde_json::{Map, Value, json};
 
 use crate::catalog::Catalog;
 use crate::facts::Facts;
-use crate::grid::{Cell, cell_of};
 use crate::intent::{
     Change, Intent, Measure, Outcome, Scenario, Selector, Target, TurnIntent, VerbArg,
 };
+use crate::intents::{Cell, cell_of};
 use crate::world::World;
 
 /// The person a `decline not_found` turn asks about: nobody in any world has this name.
@@ -462,6 +462,12 @@ impl<'a> WorldRun<'a> {
         if let Some(limit) = sel.limit {
             args.push(("limit", limit.to_string()));
         }
+        if sel.trashed {
+            args.push(("trashed", "true".to_owned()));
+        }
+        if let Some(text) = &sel.text {
+            args.push(("text", text.clone()));
+        }
         args.extend(extra);
         let at = steps.len();
         steps.push(step(tool, args));
@@ -633,14 +639,40 @@ impl<'a> WorldRun<'a> {
                 match arg {
                     VerbArg::None => {}
                     VerbArg::When(json) => args.push(("args", format!("to: {json}"))),
-                    VerbArg::Choice(choice) => args.push(("args", format!("kind: {choice}"))),
+                    VerbArg::Choice(choice) => {
+                        let key = if verb == "reveal" {
+                            "field"
+                        } else if verb == "respond" {
+                            "answer"
+                        } else {
+                            "kind"
+                        };
+                        args.push(("args", format!("{key}: {choice}")));
+                    }
+                    VerbArg::Label(label) => {
+                        let key = if verb == "categorize" {
+                            "category"
+                        } else {
+                            "label"
+                        };
+                        args.push(("args", format!("{key}: {label}")));
+                    }
+                    VerbArg::MultiArgs(pairs) => {
+                        let lines: Vec<String> =
+                            pairs.iter().map(|(k, v)| format!("{k}: {v}")).collect();
+                        args.push(("args", lines.join("\n")));
+                    }
                     VerbArg::Container(link) => {
                         let at = steps.len();
                         steps.push(step(
                             "find",
                             vec![("kind", link.kind.clone()), ("name", link.name.clone())],
                         ));
-                        let field = if verb == "remove_from" { "from" } else { "to" };
+                        let field = match verb.as_str() {
+                            "remove_from" | "detach" => "from",
+                            "merge" => "into",
+                            _ => "to",
+                        };
                         args.push(("args", format!("{field}: §s{at}")));
                     }
                 }
@@ -1092,18 +1124,34 @@ impl<'a> WorldRun<'a> {
         };
         let gold = gold_of(&effect, &|id| self.key_of(id, created), turn)
             .map_err(|d| (Drop::Ending, d))?;
-        let turn_json = json!({
+        let mut turn_json = json!({
             "user": placeholder,
             "gold": [gold],
             "ref": calls,
             "tags": tags_with_mistakes(turn, &plan.steps),
+            "outcome": turn.outcome.word(),
+            "apps": turn.apps,
         });
+        if let Some(app) = turn.apps.first() {
+            turn_json["app"] = json!(app);
+        }
+        if let Some(field) = &turn.field {
+            turn_json["field"] = json!(field);
+        }
+        if !turn.fields.is_empty() {
+            turn_json["fields"] = json!(turn.fields);
+        }
+        if let Some(currency) = &turn.currency {
+            turn_json["currency"] = json!(currency);
+        }
+        if !turn.slice.is_empty() {
+            turn_json["slice"] = json!(turn.slice);
+        }
         let constraints = {
             let t: centraid_assist_eval::gold::Turn =
                 serde_json::from_value(turn_json.clone()).map_err(|e| err(e.to_string()))?;
             centraid_assist_eval::args::turn_constraints(&t)
         };
-        let mut turn_json = turn_json;
         turn_json["constraints"] = json!(constraints);
         Ok((turn_json, leftover, constraints, heard))
     }

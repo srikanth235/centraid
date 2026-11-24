@@ -48,6 +48,8 @@ pub struct Contract {
     pub prompt_hash: String,
     pub catalog_hash: String,
     pub tokenizer_blake3: String,
+    pub declarations_hash: Option<String>,
+    pub runtime_hash: Option<String>,
 }
 
 impl Contract {
@@ -61,7 +63,28 @@ impl Contract {
             prompt_hash,
             catalog_hash: catalog_hash.to_owned(),
             tokenizer_blake3: tokenizer_blake3.to_owned(),
+            declarations_hash: None,
+            runtime_hash: None,
         }
+    }
+
+    /// Current contract including `declarations_hash` and `runtime_hash`.
+    #[must_use]
+    pub fn current_v2(
+        mode: ToolsMode,
+        catalog_hash: &str,
+        declarations_hash: &str,
+        tokenizer_blake3: &str,
+        runtime_commit: &str,
+    ) -> Self {
+        let mut c = Self::current(mode, catalog_hash, tokenizer_blake3);
+        let rt_hash =
+            blake3::hash(format!("{}:{}:{runtime_commit}", c.tools_hash, c.prompt_hash).as_bytes())
+                .to_hex()
+                .to_string();
+        c.declarations_hash = Some(declarations_hash.to_owned());
+        c.runtime_hash = Some(rt_hash);
+        c
     }
 
     /// The manifest's `contract` block; none when it is absent or lacks a field.
@@ -75,19 +98,28 @@ impl Contract {
             prompt_hash: text("prompt_hash")?.to_owned(),
             catalog_hash: text("catalog_hash")?.to_owned(),
             tokenizer_blake3: text("tokenizer_blake3")?.to_owned(),
+            declarations_hash: text("declarations_hash").map(str::to_owned),
+            runtime_hash: text("runtime_hash").map(str::to_owned),
         })
     }
 
     /// The block as the manifest and `contract/hashes.json` hold it.
     #[must_use]
     pub fn to_json(&self) -> Value {
-        json!({
+        let mut obj = json!({
             "tools_mode": self.tools_mode,
             "tools_hash": self.tools_hash,
             "prompt_hash": self.prompt_hash,
             "catalog_hash": self.catalog_hash,
             "tokenizer_blake3": self.tokenizer_blake3,
-        })
+        });
+        if let Some(dh) = &self.declarations_hash {
+            obj["declarations_hash"] = json!(dh);
+        }
+        if let Some(rh) = &self.runtime_hash {
+            obj["runtime_hash"] = json!(rh);
+        }
+        obj
     }
 }
 
@@ -166,24 +198,31 @@ pub fn prove(dir: &Path, mode: ToolsMode) -> Result<Vec<SplitProof>> {
     let needle = tools_block(&tools_for(mode));
     let mut proofs = Vec::new();
     for split in PROVED_ON {
-        let path = crate::version::split_path(dir, split);
-        let file = std::fs::File::open(&path)
-            .with_context(|| format!("reading {} to prove the contract", path.display()))?;
-        let reader = BufReader::new(zstd::stream::read::Decoder::new(file)?);
+        let paths = crate::version::split_paths(dir, split);
+        let paths = if paths.is_empty() {
+            vec![crate::version::split_path(dir, split)]
+        } else {
+            paths
+        };
         let (mut records, mut with_block) = (0, 0);
-        for line in reader.lines() {
-            let line = line?;
-            if line.trim().is_empty() {
-                continue;
-            }
-            let record: Value = serde_json::from_str(&line)
-                .with_context(|| format!("a line of {} is not JSON", path.display()))?;
-            records += 1;
-            if record["render"]["text"]
-                .as_str()
-                .is_some_and(|text| text.contains(&needle))
-            {
-                with_block += 1;
+        for path in paths {
+            let file = std::fs::File::open(&path)
+                .with_context(|| format!("reading {} to prove the contract", path.display()))?;
+            let reader = BufReader::new(zstd::stream::read::Decoder::new(file)?);
+            for line in reader.lines() {
+                let line = line?;
+                if line.trim().is_empty() {
+                    continue;
+                }
+                let record: Value = serde_json::from_str(&line)
+                    .with_context(|| format!("a line of {} is not JSON", path.display()))?;
+                records += 1;
+                if record["render"]["text"]
+                    .as_str()
+                    .is_some_and(|text| text.contains(&needle))
+                {
+                    with_block += 1;
+                }
             }
         }
         proofs.push(SplitProof {

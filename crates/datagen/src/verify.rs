@@ -22,9 +22,27 @@ use crate::catalog::Catalog;
 use crate::intent::{
     Intent, Lit, Measure, Reference, Scenario, Selector, Target, TurnIntent, Val, VerbArg,
 };
-use crate::llm::{Cache, json_of};
 use crate::plan::{Heard, WorldRun};
 use crate::world::World;
+
+/// Extract the first JSON object from a model answer string.
+///
+/// # Errors
+///
+/// If the text holds no valid JSON object.
+pub fn json_of(answer: &str) -> Result<Value> {
+    let trimmed = answer.trim();
+    if let Ok(v) = serde_json::from_str::<Value>(trimmed) {
+        return Ok(v);
+    }
+    let start = trimmed
+        .find('{')
+        .ok_or_else(|| anyhow::anyhow!("no JSON object in answer"))?;
+    let end = trimmed
+        .rfind('}')
+        .ok_or_else(|| anyhow::anyhow!("unclosed JSON object"))?;
+    Ok(serde_json::from_str(&trimmed[start..=end])?)
+}
 
 /// Why a turn failed a check.
 pub type Why = (&'static str, String);
@@ -564,25 +582,6 @@ pub fn agree(catalog: &Catalog, want: &Expected, got: &Read, index: usize) -> Re
         None => Ok(()),
         Some(s) => Err((s.name, s.detail)),
     }
-}
-
-/// One read-back call over a batch. `Err` is the cache's or the model's failure; a session the
-/// answer does not cover is `None` and is retried by the caller.
-///
-/// # Errors
-///
-/// A cache miss when offline, or the model's failure.
-pub fn read_back(
-    cache: &Cache<'_>,
-    catalog: &Catalog,
-    batch: &[(String, Date, Vec<String>)],
-    attempt: usize,
-) -> Result<Vec<Option<Vec<Read>>>> {
-    let prompt = reader_prompt(catalog, batch, attempt);
-    let answer = cache.complete(&prompt)?;
-    let sizes: Vec<usize> = batch.iter().map(|(_, _, m)| m.len()).collect();
-    // An answer that cannot be read covers no session: each is asked again, as one it skipped.
-    Ok(parse_reads(&answer, &sizes).unwrap_or_else(|_| vec![None; sizes.len()]))
 }
 
 // ------------------------------------------------------------------ (a) what the block says

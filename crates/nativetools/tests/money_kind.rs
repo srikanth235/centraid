@@ -171,7 +171,10 @@ fn chat_can_only_trash_a_transaction_and_write_nothing_else() {
             || said.contains("applies to"),
         "{out}"
     );
-    assert!(session.pending().is_none(), "create transaction parked a write");
+    assert!(
+        session.pending().is_none(),
+        "create transaction parked a write"
+    );
 
     let trashed = call(&mut session, "act", json!({"verb": "delete", "rows": "#1"}));
     assert!(
@@ -312,7 +315,11 @@ fn multi_currency_accounts_create_edit_opening_and_reject_conflicts() {
         ),
     ] {
         session.user("open account");
-        let made = call(&mut session, "create", json!({"kind": "account", "args": args}));
+        let made = call(
+            &mut session,
+            "create",
+            json!({"kind": "account", "args": args}),
+        );
         assert!(wrote(&made), "{args}: {made}");
         let created_name = args
             .lines()
@@ -321,7 +328,11 @@ fn multi_currency_accounts_create_edit_opening_and_reject_conflicts() {
             .trim_start_matches("name: ")
             .trim();
         session.user("");
-        let shown = text(&mut session, "find", json!({"kind": "account", "name": created_name}));
+        let shown = text(
+            &mut session,
+            "find",
+            json!({"kind": "account", "name": created_name}),
+        );
         assert!(shown.contains(needle), "expected {needle} in {shown}");
     }
 
@@ -356,7 +367,10 @@ fn multi_currency_accounts_create_edit_opening_and_reject_conflicts() {
     );
 
     // Edit HDFC Savings opening balance in INR, refuse EUR, and verify undo.
-    let found = find(&mut session, json!({"kind": "account", "name": "HDFC Savings"}));
+    let found = find(
+        &mut session,
+        json!({"kind": "account", "name": "HDFC Savings"}),
+    );
     let handle = found["effect"]["result"].as_str().unwrap().to_owned();
     session.user("set opening in euros");
     let bad_edit = call(
@@ -366,7 +380,10 @@ fn multi_currency_accounts_create_edit_opening_and_reject_conflicts() {
     );
     assert!(!wrote(&bad_edit), "{bad_edit}");
     assert!(
-        bad_edit["text"].as_str().unwrap_or_default().contains("INR"),
+        bad_edit["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("INR"),
         "{bad_edit}"
     );
     session.user("set opening to 2 lakh");
@@ -384,7 +401,11 @@ fn multi_currency_accounts_create_edit_opening_and_reject_conflicts() {
     let undone = call(&mut session, "do", json!({"verb": "undo"}));
     assert!(wrote(&undone), "{undone}");
     session.user("");
-    let restored = text(&mut session, "find", json!({"kind": "account", "name": "HDFC Savings"}));
+    let restored = text(
+        &mut session,
+        "find",
+        json!({"kind": "account", "name": "HDFC Savings"}),
+    );
     assert!(restored.contains("150000.00 INR"), "{restored}");
     let drift = session.take_drift();
     assert!(drift.is_empty(), "shadow drift:\n{}", drift.join("\n"));
@@ -400,7 +421,10 @@ fn chat_edits_transaction_fields_in_account_currency_and_undoes() {
             ..Flags::default()
         },
     );
-    let found = find(&mut session, json!({"kind": "transaction", "name": "Le Bistro"}));
+    let found = find(
+        &mut session,
+        json!({"kind": "transaction", "name": "Le Bistro"}),
+    );
     let handle = found["effect"]["result"].as_str().unwrap().to_owned();
 
     // Conflicting currency symbol is refused before hitting vault.
@@ -412,7 +436,10 @@ fn chat_edits_transaction_fields_in_account_currency_and_undoes() {
     );
     assert!(!wrote(&conflict), "{conflict}");
     assert!(
-        conflict["text"].as_str().unwrap_or_default().contains("EUR"),
+        conflict["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("EUR"),
         "{conflict}"
     );
 
@@ -479,7 +506,10 @@ fn chat_edits_budget_in_plans_own_currency_and_carries() {
     let found = find(&mut session, json!({"kind": "budget"}));
     let handle = found["effect"]["result"].as_str().unwrap().to_owned();
     assert!(
-        found["text"].as_str().unwrap_or_default().contains("300.00 EUR"),
+        found["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("300.00 EUR"),
         "{found}"
     );
 
@@ -491,7 +521,10 @@ fn chat_edits_budget_in_plans_own_currency_and_carries() {
     );
     assert!(!wrote(&conflict), "{conflict}");
     assert!(
-        conflict["text"].as_str().unwrap_or_default().contains("EUR"),
+        conflict["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("EUR"),
         "{conflict}"
     );
 

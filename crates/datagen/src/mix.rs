@@ -40,7 +40,7 @@ use serde::Serialize;
 use crate::render::Features;
 use crate::rng::Rng;
 
-pub const OUTCOMES: [&str; 5] = ["done", "empty", "ask", "decline", "repair"];
+pub const OUTCOMES: [&str; 5] = ["done", "nothing_found", "ask", "decline", "repair"];
 pub const ACTIONS: [&str; 3] = ["read", "write", "recall"];
 pub const REFERENCES: [&str; 4] = ["name", "filters", "pronoun", "nickname"];
 

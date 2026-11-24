@@ -42,7 +42,15 @@ pub fn read_worlds<'a>(
         if worlds.contains_key(id) {
             continue;
         }
-        let file = dir.join(WORLDS).join(format!("{id}.json"));
+        let file = [
+            dir.join(WORLDS).join(format!("{id}.json")),
+            dir.join(WORLDS).join("train").join(format!("{id}.json")),
+            dir.join(WORLDS).join("val").join(format!("{id}.json")),
+            dir.join(WORLDS).join("test").join(format!("{id}.json")),
+        ]
+        .into_iter()
+        .find(|p| p.is_file())
+        .unwrap_or_else(|| dir.join(WORLDS).join(format!("{id}.json")));
         let text = std::fs::read_to_string(&file).with_context(|| file.display().to_string())?;
         let doc: Value = serde_json::from_str(&text).with_context(|| file.display().to_string())?;
         worlds.insert(

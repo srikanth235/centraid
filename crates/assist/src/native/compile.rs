@@ -434,12 +434,13 @@ impl Session {
         }
 
         // the tools of the regroup name rows: a selector on `answer`, `edit` or `do` is a step missing
+        let rowless_do = tool == "do"
+            && is_rowless_do_call(
+                args.get("verb").and_then(Value::as_str),
+                args.keys().map(String::as_str),
+            );
         if !lenient
-            && !(tool == "do"
-                && is_rowless_do_call(
-                    args.get("verb").and_then(Value::as_str),
-                    args.keys().map(String::as_str),
-                ))
+            && !rowless_do
             && let Some(key) = outside_the_tool(tool, args.keys().map(String::as_str))
         {
             return refuse(

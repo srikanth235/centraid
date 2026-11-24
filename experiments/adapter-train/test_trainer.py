@@ -216,6 +216,39 @@ class RunTest(Base):
         job = config.parse({**self.job().raw, "data": {"train": str(self.tmp / "train.jsonl.zst")}, "train": {**self.job().raw["train"], "steps": 2}})
         self.assertTrue(self.go(job, "wz")["done"])
 
+    def test_a_sharded_data_version_trains_without_fetching_test(self):
+        import zstandard
+
+        repo = self.tmp / "sharded-repo"
+        (repo / "data" / "train").mkdir(parents=True)
+        (repo / "data" / "val").mkdir(parents=True)
+        (repo / "data" / "test").mkdir(parents=True)
+        train_lines = (self.tmp / "train.jsonl").read_bytes().splitlines(keepends=True)
+        val_lines = (self.tmp / "val.jsonl").read_bytes().splitlines(keepends=True)
+        mid = len(train_lines) // 2
+        (repo / "data" / "train" / "shard-0000.jsonl.zst").write_bytes(zstandard.ZstdCompressor().compress(b"".join(train_lines[:mid])))
+        (repo / "data" / "train" / "shard-0001.jsonl.zst").write_bytes(zstandard.ZstdCompressor().compress(b"".join(train_lines[mid:])))
+        (repo / "data" / "val" / "shard-0000.jsonl.zst").write_bytes(zstandard.ZstdCompressor().compress(b"".join(val_lines)))
+        (repo / "data" / "test" / "shard-0000.jsonl.zst").write_bytes(zstandard.ZstdCompressor().compress(b"".join(val_lines)))
+        (repo / "manifest.json").write_text(json.dumps({
+            "schema_version": 2,
+            "version": "v0.4",
+            "shards": {
+                "train": [{"path": "data/train/shard-0000.jsonl.zst"}, {"path": "data/train/shard-0001.jsonl.zst"}],
+                "val": [{"path": "data/val/shard-0000.jsonl.zst"}],
+                "test": [{"path": "data/test/shard-0000.jsonl.zst"}],
+            },
+        }))
+        asked = []
+        inner = hf.local_fetch(repo)
+        job = config.parse({**self.job().raw, "data": {"hf": "hf://datasets/srikanth235/centraid-assist-data@v0.4"},
+                            "train": {**self.job().raw["train"], "steps": 2}})
+        res = self.go(job, "ws", hf_fetch=lambda r, v, p, d: (asked.append(p), inner(r, v, p, d))[1])
+        self.assertTrue(res["done"])
+        self.assertFalse(any("test" in p for p in asked), asked)
+        rec = json.loads((Path(job.outputs) / "run.json").read_text())
+        self.assertEqual(len(rec["data"]["train"]["shards"]), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

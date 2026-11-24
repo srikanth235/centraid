@@ -626,9 +626,8 @@ fn strict_refusal(tool: &str, args: &Map<String, Value>) -> Option<String> {
     if !matches!(tool, "answer" | "edit" | "do") {
         return None;
     }
-    let allow_kind = tool == "do"
-        && is_rowless_do(args)
-        && !args.get("rows").is_some_and(|v| !v.is_null());
+    let allow_kind =
+        tool == "do" && is_rowless_do(args) && args.get("rows").is_none_or(Value::is_null);
     let selector = meta::SELECTOR_PARAMS.iter().find(|param| {
         !(allow_kind && **param == "kind")
             && args.get(**param).is_some_and(|value| !value.is_null())

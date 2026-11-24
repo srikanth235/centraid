@@ -608,6 +608,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "thiserror",
+ "zstd",
 ]
 
 [[package]]

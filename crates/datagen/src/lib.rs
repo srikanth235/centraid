@@ -1,26 +1,17 @@
-//! `centraid-datagen` — the chat model's training-data pipeline (#1166), in Rust.
+//! `centraid-datagen` — the chat model's single evolvable training-data pipeline (#1188), in Rust.
 //!
-//! Built so far (M1, M2): [`catalog`] (stage 0, the only schema), [`world`] and [`generate`]
-//! (stage 1, worlds as a pure function of a seed) and [`ambiguity`] (how confusable a world's
-//! names are). Later stages (intents, planner, messages, render, mix) add modules beside these
-//! and read the catalog; none of them reads a schema from anywhere else.
-//!
-//! M2 adds [`grid`] (the coverage grid), [`intent`] (typed intents and scenarios), [`facts`] (what
-//! a world holds), [`sample`] (stage 2, the intent sampler), [`plan`] (stage 3, reference calls
-//! run through the runtime, gold as its effect), [`run`] (both stages over many worlds, with the
-//! coverage report) and [`source`] (the sessions as an `assist-eval` source).
-//!
-//! M3 adds [`brief`] (a typed turn in plain English), [`llm`] (Haiku behind a trait, with a
-//! prompt-hash cache), [`typos`] (the seeded typo pass), [`verify`] (runtime grounding and the
-//! read-back pass) and [`messages`] (stages 4 and 5 end to end).
-//!
-//! M4 adds [`bpe`] (the chat model's byte-level BPE, read from its `tokenizer.json`), [`trace`] (the v4 think of a reference call, round-tripped through the runtime's compiler),
-//! [`render`] (a session as the phone renders it, tokenized, with the loss weight of every token), [`mix`]
-//! (the sessions of a data version, chosen to the grid's shares) and [`version`] (the files and the manifest of
-//! a data version, and the record contract M6 reads).
-//!
-//! M7 adds [`rollout`]: the RFT records `assist-eval` cuts from a model's rollouts, rendered by the M4
-//! renderer (`datagen rollout-records`).
+//! Four-part evolvable architecture:
+//! 1. [`declarations`] (+ [`catalog`]): schema derived from `centraid_assist::native::{meta, prompt}`,
+//!    with `{type, value_maker, live, wording_hint, meaning_key}` and incremental `ChangeClassifier`.
+//! 2. [`fixture_world`] (+ [`world`], [`pools`], [`text`], [`rng`], [`ambiguity`]): minimal deterministic
+//!    fixture worlds per intent (referenced rows + look-alike distractors, multi-currency with ~40% INR,
+//!    presence-only Locker items).
+//! 3. [`intents`], [`deficit`], [`phrasing_cache`]: cross-product intent planner, isolated `<cache>/train/`
+//!    and `<cache>/heldout/` meaning-keyed phrasing caches, deficit work orders, and Hydrogen swarm
+//!    writer/reader batch export/import (`WRITER_PREFIX`, 8-10 variants/prompt).
+//! 4. [`oracle`], [`render`], [`mix`], [`version`], [`drift`], [`publish`]: current-runtime oracle
+//!    replay, ambiguity resolver, selective reader gating, currency message check, deterministic zstd
+//!    sharding, contract verification, and split-repo publishing.
 
 #![forbid(unsafe_code)]
 
@@ -29,27 +20,24 @@ pub mod bpe;
 pub mod brief;
 pub mod catalog;
 pub mod contract;
+pub mod declarations;
+pub mod deficit;
 pub mod drift;
 pub mod facts;
-mod generate;
-pub mod grid;
+pub mod fixture_world;
 pub mod intent;
+pub mod intents;
 pub mod labels;
-pub mod llm;
-pub mod messages;
 pub mod mistakes;
 pub mod mix;
-pub mod persona;
+pub mod oracle;
+pub mod phrasing_cache;
 pub mod plan;
 pub mod pools;
 pub mod publish;
-pub mod rehearsal;
 pub mod render;
 pub mod rng;
 pub mod rollout;
-pub mod run;
-pub mod sample;
-pub mod settings;
 pub mod source;
 pub mod style;
 pub mod text;
@@ -60,5 +48,5 @@ pub mod version;
 pub mod world;
 
 pub use catalog::Catalog;
-pub use settings::{Settings, Split};
-pub use world::{World, WorldSpec, plan};
+pub use declarations::Declarations;
+pub use world::{Split, World, WorldSpec};

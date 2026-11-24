@@ -1521,7 +1521,8 @@ mod tests {
         for name in SHELL_UNDOS {
             let entry =
                 action("add", "").replace("\"inverse\": null", &format!("\"inverse\": \"{name}\""));
-            let parsed = parse_manifest(&minimal(&format!(r#", "actions": [{entry}]{THING}"#))).unwrap();
+            let parsed =
+                parse_manifest(&minimal(&format!(r#", "actions": [{entry}]{THING}"#))).unwrap();
             assert_eq!(parsed.actions[0].inverse.as_deref(), Some(name));
             assert_eq!(parsed.actions[0].surface(), ChatSurface::Direct);
         }
@@ -1614,8 +1615,10 @@ mod tests {
         assert!(parse_manifest(&orphan).is_err());
         // cross-app shortcut kinds (`task`, `note`, `place`) are allowed per-manifest
         for shortcut_kind in CROSS_APP_KINDS {
-            let shortcut = direct("add", "create")
-                .replace(r#""kind": "thing""#, &format!(r#""kind": "{shortcut_kind}""#));
+            let shortcut = direct("add", "create").replace(
+                r#""kind": "thing""#,
+                &format!(r#""kind": "{shortcut_kind}""#),
+            );
             parse_manifest(&minimal(&format!(r#", "actions": [{shortcut}]"#))).unwrap();
         }
         // the shell manifest is outside the assistant's catalog and declares no `"kinds"` block

@@ -18,8 +18,7 @@ use centraid_assist_eval::gold::Session;
 use centraid_assist_eval::source::EvalSource;
 use serde_json::Value;
 
-use crate::settings::Split;
-use crate::world::seed_document_of;
+use crate::world::{Split, seed_document_of};
 
 /// The file a run writes its sessions to, in each split's directory.
 pub const SESSIONS: &str = "sessions.jsonl";
@@ -80,9 +79,9 @@ impl DatagenSource {
         Self::from_texts(dir, &texts)
     }
 
-    /// Open a data version (`datagen render`, `datagen build`): `<dir>/data/<name>.jsonl.zst` for each of `names` (`train`,
-    /// `val`, `test`, `noise`) and the world documents under `<dir>/worlds/`. The records are read as they are written,
-    /// the `render` object and `meta` beside the session, and the eval ignores what it does not read.
+    /// Open a data version (`datagen build`): reads sharded `<dir>/data/<name>/shard-*.jsonl.zst`
+    /// with fallback to single-file `<dir>/data/<name>.jsonl.zst` (plus `<dir>/worlds/<split>/`
+    /// or flat `<dir>/worlds/`).
     ///
     /// # Errors
     ///
@@ -90,11 +89,27 @@ impl DatagenSource {
     pub fn open_version(dir: &Path, names: &[&str]) -> Result<Self> {
         let mut texts = Vec::new();
         for name in names {
-            let path = crate::version::split_path(dir, name);
-            if let Ok(file) = std::fs::File::open(&path) {
-                let bytes =
-                    zstd::stream::decode_all(file).with_context(|| path.display().to_string())?;
-                texts.push(((*name).to_owned(), String::from_utf8(bytes)?));
+            let paths = crate::version::split_paths(dir, name);
+            if !paths.is_empty() {
+                let mut combined = String::new();
+                for path in paths {
+                    let file =
+                        std::fs::File::open(&path).with_context(|| path.display().to_string())?;
+                    let bytes = zstd::stream::decode_all(file)
+                        .with_context(|| path.display().to_string())?;
+                    combined.push_str(&String::from_utf8(bytes)?);
+                    if !combined.ends_with('\n') {
+                        combined.push('\n');
+                    }
+                }
+                texts.push(((*name).to_owned(), combined));
+            } else {
+                let path = crate::version::split_path(dir, name);
+                if let Ok(file) = std::fs::File::open(&path) {
+                    let bytes = zstd::stream::decode_all(file)
+                        .with_context(|| path.display().to_string())?;
+                    texts.push(((*name).to_owned(), String::from_utf8(bytes)?));
+                }
             }
         }
         Self::from_texts(dir, &texts)

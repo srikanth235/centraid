@@ -191,7 +191,11 @@ fn scope_and_refer_are_inferred_from_the_rows_and_the_reason() {
         "trace": "v4", "intent": "write", "verb": "reveal", "name": "Home wifi",
         "set": [{"key": "field", "value": "password"}]
     }));
-    assert_eq!(inferred(&reveal), ["kind: locker item", "scope: one"], "{reveal}");
+    assert_eq!(
+        inferred(&reveal),
+        ["kind: locker item", "scope: one"],
+        "{reveal}"
+    );
 }
 
 #[test]

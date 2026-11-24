@@ -367,6 +367,7 @@ impl HashDrift {
 pub struct Drift {
     pub version: String,
     pub hashes: HashDrift,
+    pub declarations_hash: Option<(String, String)>,
     pub sessions: usize,
     pub turns: usize,
     pub calls: usize,
@@ -464,6 +465,7 @@ pub fn judge(
     Drift {
         version: version.to_owned(),
         hashes,
+        declarations_hash: None,
         sessions: sessions.len(),
         turns: replayed
             .turns
@@ -501,6 +503,12 @@ impl Drift {
             ("catalog_hash", &h.catalog),
         ] {
             let _ = writeln!(out, "  {name}: {}", word(was == now));
+            if was != now {
+                let _ = writeln!(out, "    data {was}\n    runtime {now}");
+            }
+        }
+        if let Some((was, now)) = &self.declarations_hash {
+            let _ = writeln!(out, "  declarations_hash: {}", word(was == now));
             if was != now {
                 let _ = writeln!(out, "    data {was}\n    runtime {now}");
             }
@@ -573,6 +581,7 @@ pub fn report(dir: &Path) -> Result<Drift> {
             pinned.tools_mode
         )
     })?;
+    let decls_now = crate::declarations::Declarations::build()?.hash();
     let now = Contract::current(
         mode,
         &crate::catalog::Catalog::build()?.hash(),
@@ -601,6 +610,12 @@ pub fn report(dir: &Path) -> Result<Drift> {
         &kinds,
         floor,
     );
+    if let Some(was_decl) = pinned.declarations_hash {
+        if was_decl != decls_now {
+            drift.level = drift.level.max(Level::Wording);
+        }
+        drift.declarations_hash = Some((was_decl, decls_now));
+    }
     let shipped = centraid_assist::record::record().current.tools_mode;
     if shipped != pinned.tools_mode {
         drift.notes.insert(

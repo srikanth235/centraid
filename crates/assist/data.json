@@ -9,6 +9,11 @@
   "tokenizer_blake3": "3fd498e7fff0650ca4cf62dccd4e0844ed5ad2f1abcee9adfda013fef06c4220",
   "stale": {
     "since": "create and edit cover 13 kinds and almost only `name`; no money, measurement or Locker fields. Chat is meant to create Locker secrets, so those are gaps to fill, not exclusions",
-    "level": "coverage"
+    "level": "coverage",
+    "at": {
+      "tools_hash": "e636aaf269cdec66668803783f96d1c64854705c482a4d9cb982e1bfefe1d3f5",
+      "prompt_hash": "0ec8e0e6a076ce1278381d85d3373cb78ea794842738150e9c36c6c94d0b96f4",
+      "catalog_hash": "9f5727cd21022b45369860ff0d489f162324dd8c33ccec1cdcbb7b6841a3af16"
+    }
   }
 }

@@ -76,9 +76,7 @@ fn valid_comma_grouping(whole: &str) -> bool {
     let intl = (1..=3).contains(&groups[0].len()) && groups[1..].iter().all(|g| g.len() == 3);
     let indian = groups.len() >= 3
         && (1..=2).contains(&groups[0].len())
-        && groups[1..groups.len() - 1]
-            .iter()
-            .all(|g| g.len() == 2)
+        && groups[1..groups.len() - 1].iter().all(|g| g.len() == 2)
         && groups.last().is_some_and(|g| g.len() == 3);
     intl || indian
 }
@@ -286,7 +284,9 @@ pub fn read_nums(message: &str, date_phrases: &[&str]) -> Vec<Num> {
             continue;
         }
         currency_prefixed = false;
-        if letter.is_alphabetic() && !before.is_some_and(|b| is_word_char(b) || b == '#' || b == '@') {
+        if letter.is_alphabetic()
+            && !before.is_some_and(|b| is_word_char(b) || b == '#' || b == '@')
+        {
             if let Some(prefix_len) = glued_currency_prefix_len(&chars, at) {
                 at += prefix_len;
                 currency_prefixed = true;

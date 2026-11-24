@@ -26,13 +26,14 @@ use centraid_assist_eval::EvalError;
 use centraid_assist_eval::compare;
 use centraid_assist_eval::report::{self, RunConfig};
 use centraid_assist_eval::run::{DeclineStepper, Runner, SessionResult, Stepper};
-use centraid_assist_eval::source::{EvalSource, Exclusion, JsonlSource};
+use centraid_assist_eval::source::{EvalSource, Exclusion, open_set};
 use centraid_assist_eval::tally::{WithoutInProgress, WithoutTally};
 
 struct Args {
     model: Option<PathBuf>,
     stub: bool,
     set: Option<PathBuf>,
+    split: Option<String>,
     worlds: Vec<PathBuf>,
     out: Option<PathBuf>,
     threads: Option<i32>,
@@ -51,14 +52,15 @@ struct Args {
     label: Option<String>,
 }
 
-const USAGE: &str = "usage: assist-eval (--model GGUF | --stub) --set SET.jsonl [--worlds DIR]… [--out PREFIX] \
-[--tools s2|sig|compact|full] [--grammar off|handles|full] [--adapter GGUF] [--threads N] [--limit N] [--only ID,ID] [--shard K/N] [--resume] [--gpu-layers N] [--label TEXT]\n       assist-eval --rescore RUN.sessions.jsonl… --set SET.jsonl [--out PREFIX] [--tools …] [--grammar …]\n       assist-eval replay --set SET.jsonl [--worlds DIR]… [--tools …]   (the reference calls must replay to 100%)\n       assist-eval compare A.json B.json [--out FILE.json]   (B against the baseline A, paired by session)";
+const USAGE: &str = "usage: assist-eval (--model GGUF | --stub) --set SET.jsonl [--split SPLIT] [--worlds DIR]… [--out PREFIX] \
+[--tools s2|sig|compact|full] [--grammar off|handles|full] [--adapter GGUF] [--threads N] [--limit N] [--only ID,ID] [--shard K/N] [--resume] [--gpu-layers N] [--label TEXT]\n       assist-eval --rescore RUN.sessions.jsonl… --set SET.jsonl [--split SPLIT] [--out PREFIX] [--tools …] [--grammar …]\n       assist-eval replay --set SET.jsonl [--split SPLIT] [--worlds DIR]… [--tools …]   (the reference calls must replay to 100%)\n       assist-eval compare A.json B.json [--out FILE.json]   (B against the baseline A, paired by session)";
 
 fn args() -> Result<Args> {
     let mut out = Args {
         model: std::env::var_os("ASSIST_EVAL_MODEL").map(PathBuf::from),
         stub: false,
         set: None,
+        split: None,
         worlds: Vec::new(),
         out: None,
         threads: std::env::var("ASSIST_EVAL_THREADS")
@@ -89,6 +91,7 @@ fn args() -> Result<Args> {
             "--model" => out.model = Some(value("--model")?.into()),
             "--stub" => out.stub = true,
             "--set" => out.set = Some(value("--set")?.into()),
+            "--split" => out.split = Some(value("--split")?),
             "--worlds" => out.worlds.push(value("--worlds")?.into()),
             "--out" => out.out = Some(value("--out")?.into()),
             "--threads" => out.threads = Some(value("--threads")?.parse().context("--threads N")?),
@@ -180,7 +183,11 @@ fn run() -> Result<()> {
             .map_err(anyhow::Error::msg)?;
     // a set written before the vault rebuild may carry Tally and the `in_progress` status, which the runtime no longer
     // has: the wrappers read them out and the report counts the sessions this leaves out (a data version has none)
-    let source = WithoutInProgress::new(WithoutTally::new(JsonlSource::new(&set, worlds)));
+    let source = WithoutInProgress::new(WithoutTally::new(open_set(
+        &set,
+        &worlds,
+        args.split.as_deref(),
+    )?));
     let prefix = args.out.clone();
     let mut set_total = None;
     let word = |mode: ToolsMode| format!("{mode:?}").to_lowercase();
@@ -493,6 +500,7 @@ fn compare_cmd(argv: &[String]) -> Result<()> {
 /// `assist-eval replay`: only the precondition, with no model.
 fn replay_cmd(argv: &[String]) -> Result<()> {
     let mut set = None;
+    let mut split: Option<String> = None;
     let mut worlds = Vec::new();
     let mut tools = centraid_assist::native_turn::phone_options().tools;
     let mut it = argv.iter();
@@ -500,6 +508,7 @@ fn replay_cmd(argv: &[String]) -> Result<()> {
         let mut value = |name: &str| it.next().with_context(|| format!("{name} takes a value"));
         match arg.as_str() {
             "--set" => set = Some(value("--set")?.into()),
+            "--split" => split = Some(value("--split")?.clone()),
             "--worlds" => worlds.push(PathBuf::from(value("--worlds")?)),
             "--tools" => tools = tools_of(value("--tools")?)?,
             other => bail!("unknown argument {other}\n{USAGE}"),
@@ -507,7 +516,11 @@ fn replay_cmd(argv: &[String]) -> Result<()> {
     }
     let (set, worlds) =
         centraid_assist_eval::source::require_set(set, worlds).map_err(anyhow::Error::msg)?;
-    let source = WithoutInProgress::new(WithoutTally::new(JsonlSource::new(&set, worlds)));
+    let source = WithoutInProgress::new(WithoutTally::new(open_set(
+        &set,
+        &worlds,
+        split.as_deref(),
+    )?));
     let sessions = source.sessions()?;
     let report = centraid_assist_eval::replay::require(&source, &sessions, tools)?;
     println!(

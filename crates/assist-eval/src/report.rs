@@ -191,6 +191,10 @@ pub struct Report {
     pub by_gold_type: BTreeMap<String, Rate>,
     pub by_tag: BTreeMap<String, Rate>,
     pub by_app: BTreeMap<String, AppSlice>,
+    pub by_outcome: BTreeMap<String, Slice>,
+    pub by_field: BTreeMap<String, Slice>,
+    pub by_currency: BTreeMap<String, Slice>,
+    pub by_slice: BTreeMap<String, Slice>,
     pub failed: Vec<Failure>,
 }
 
@@ -272,6 +276,29 @@ fn slice(rows: &[Row<'_>]) -> Slice {
     out
 }
 
+fn slice_by_keys<'a>(
+    rows: &[Row<'a>],
+    keys: impl for<'t> Fn(&'t TurnResult) -> Vec<&'t str>,
+) -> BTreeMap<String, Slice> {
+    let mut grouped: BTreeMap<String, Vec<Row<'a>>> = BTreeMap::new();
+    for row in rows {
+        let mut seen: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+        for key in keys(row.turn) {
+            let key = key.trim();
+            if !key.is_empty() && seen.insert(key) {
+                grouped.entry(key.to_owned()).or_default().push(Row {
+                    turn: row.turn,
+                    clean: row.clean,
+                });
+            }
+        }
+    }
+    grouped
+        .into_iter()
+        .map(|(k, group)| (k, slice(&group)))
+        .collect()
+}
+
 /// Aggregate a run.
 #[must_use]
 pub fn build(
@@ -343,6 +370,18 @@ pub fn build(
             },
         );
     }
+    let by_outcome = slice_by_keys(&rows, |turn| {
+        turn.outcome.iter().map(String::as_str).collect()
+    });
+    let by_field = slice_by_keys(&rows, |turn| {
+        turn.fields.iter().map(String::as_str).collect()
+    });
+    let by_currency = slice_by_keys(&rows, |turn| {
+        turn.currency.iter().map(String::as_str).collect()
+    });
+    let by_slice = slice_by_keys(&rows, |turn| {
+        turn.slice.iter().map(String::as_str).collect()
+    });
     let failed = sessions
         .iter()
         .flat_map(|s| {
@@ -411,6 +450,10 @@ pub fn build(
             .map(|(k, (a, b))| (k, Rate::of(a, b)))
             .collect(),
         by_app,
+        by_outcome,
+        by_field,
+        by_currency,
+        by_slice,
         failed,
     }
 }
@@ -466,6 +509,21 @@ fn args_line(slice: &Slice) -> String {
         })
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+fn append_slices(out: &mut String, heading: &str, map: &BTreeMap<String, Slice>) {
+    if map.is_empty() {
+        return;
+    }
+    *out += &format!("\n{heading} (turn pass | tool | arguments)\n");
+    for (name, s) in map {
+        *out += &format!(
+            "  {name:<16} {} | {:.0}% | {}\n",
+            s.turn_pass.pct(),
+            100.0 * s.tool_accuracy.rate,
+            args_line(s)
+        );
+    }
 }
 
 /// The short summary people read.
@@ -544,6 +602,10 @@ pub fn text(report: &Report) -> String {
             args_line(&s.slice)
         );
     }
+    append_slices(&mut out, "By outcome", &report.by_outcome);
+    append_slices(&mut out, "By field", &report.by_field);
+    append_slices(&mut out, "By currency", &report.by_currency);
+    append_slices(&mut out, "By slice", &report.by_slice);
     out += &format!(
         "\nloop turns {}, cap turns {}, think_cut steps {}, engine errors {}, turns not run {}\n",
         o.loop_turns, o.cap_turns, o.think_cut_steps, o.engine_errors, o.not_run_turns

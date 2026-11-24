@@ -49,7 +49,16 @@ pub const FAMILIES: [&str; 11] = [
 /// budget) or that Health keeps the row (a daily figure, a workout). A bad edit there is a decline turn, not a repair.
 /// The same holds for a verb the kind lacks (`reschedule` on a document): the runtime ends that turn with its
 /// `does_not_apply` decline, so it is taught as a decline and no repair is built from it.
-const NO_EDIT: [&str; 4] = ["category", "budget", "daily figure", "workout"];
+const NO_EDIT: [&str; 8] = [
+    "category",
+    "budget",
+    "daily figure",
+    "workout",
+    "locker passkey",
+    "gift",
+    "journal entry",
+    "section",
+];
 
 /// A value no fixed list holds.
 const NOT_A_VALUE: &str = "zz_not_a_value";
@@ -189,11 +198,13 @@ pub fn for_write(
                     ],
                 });
             }
-            out.push(Mistake {
-                family: "empty_edit",
-                tool: "edit",
-                args: vec![("rows", rows), ("args", String::new())],
-            });
+            if !matches!(kind, "locker field" | "contact point") {
+                out.push(Mistake {
+                    family: "empty_edit",
+                    tool: "edit",
+                    args: vec![("rows", rows), ("args", String::new())],
+                });
+            }
         }
         "create" => {
             out.push(Mistake {
