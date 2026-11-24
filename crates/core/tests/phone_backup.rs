@@ -1545,3 +1545,82 @@ fn a_zero_step_metered_pass_does_not_clear_an_earlier_refusal() {
     );
 }
 
+#[test]
+fn revoked_token_stops_with_pair_again_and_persists_across_restart() {
+    let home = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    let id = pair(&phone, &home)
+        .destination
+        .expect("a destination")
+        .gateway_id;
+    owned_photo(&phone, "a photograph before revocation", 60_000);
+    let first = drain(&phone, at_home());
+    assert_eq!(first.stopped, wire::DrainStop::Empty as i32, "{first:?}");
+    assert_eq!(tokens(&home), 1);
+
+    // Revoke this phone's token on the gateway.
+    home.spawned
+        .shared()
+        .rules(|rules| {
+            for pairing in rules.pairings()? {
+                for token in pairing.tokens {
+                    rules.revoke_hash(&token.hash)?;
+                }
+            }
+            Ok(())
+        })
+        .expect("revokes token");
+    assert_eq!(tokens(&home), 0);
+
+    // Next pass hits 401 Unauthorized -> stops with Refused and persists Reach::PairAgain.
+    let after_revoke = drain(&phone, at_home());
+    assert_eq!(
+        after_revoke.stopped,
+        wire::DrainStop::Refused as i32,
+        "{after_revoke:?}"
+    );
+    let st = status(&phone);
+    let dest = st
+        .destinations
+        .iter()
+        .find(|d| d.gateway_id == id)
+        .expect("gateway row present");
+    assert_eq!(
+        dest.reach_state,
+        wire::DestinationReach::PairAgain as i32,
+        "status must report PairAgain immediately after revoked token: {st:?}"
+    );
+    assert_eq!(
+        dest.reach,
+        wire::WaitReason::PairAgain as i32,
+        "wait reason must be PairAgain: {st:?}"
+    );
+    assert!(dest.pair_again, "pair_again flag must be set: {dest:?}");
+
+    // Restart (reopen Core without running a pass yet): backup_status still reports PairAgain
+    // from persisted state.db.
+    let path = phone.path().to_owned();
+    drop(phone);
+    let reopened = reopen(&path);
+    let after_restart = status(&reopened);
+    let dest_after = after_restart
+        .destinations
+        .iter()
+        .find(|d| d.gateway_id == id)
+        .expect("gateway row present after restart");
+    assert_eq!(
+        dest_after.reach_state,
+        wire::DestinationReach::PairAgain as i32,
+        "status must still report PairAgain after restart: {after_restart:?}"
+    );
+    assert_eq!(
+        dest_after.reach,
+        wire::WaitReason::PairAgain as i32,
+        "wait reason must still be PairAgain after restart: {after_restart:?}"
+    );
+    assert!(
+        dest_after.pair_again,
+        "pair_again flag must still be set after restart: {dest_after:?}"
+    );
+}

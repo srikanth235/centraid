@@ -362,7 +362,7 @@ pub fn backup_status(
             refusal: plane
                 .notes(&gateway.gateway_id)
                 .refusal
-                .filter(|_| gateway.reach == Reach::Unreachable),
+                .filter(|_| matches!(gateway.reach, Reach::Ok | Reach::Unreachable)),
         });
     }
     // A GATEWAY A NEWER WRITER SUPERSEDED IS NOT FED, and so is not one a file waits for.

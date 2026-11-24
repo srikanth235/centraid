@@ -867,3 +867,159 @@ fn retention_keeps_seven_daily_four_weekly_six_monthly_and_always_the_newest() {
         "the newest that is not held stands"
     );
 }
+
+struct RefusingStore {
+    inner: MemoryStore,
+    head_err: Option<centraid_vault::backup::store::Refusal>,
+    bundle_err: Option<centraid_vault::backup::store::Refusal>,
+}
+
+impl Store for RefusingStore {
+    fn gateway_id(&self) -> &str {
+        self.inner.gateway_id()
+    }
+    fn exists(&self, names: &[Name]) -> Result<Vec<Name>, StoreError> {
+        self.inner.exists(names)
+    }
+    fn bundle(&self, parts: &[Outgoing]) -> Result<Vec<(Name, FrameAnswer)>, StoreError> {
+        if let Some(refusal) = &self.bundle_err {
+            return Err(StoreError::Refused(refusal.clone()));
+        }
+        self.inner.bundle(parts)
+    }
+    fn get(&self, name: &Name, sink: &mut dyn std::io::Write) -> Result<u64, StoreError> {
+        self.inner.get(name, sink)
+    }
+    fn check_name(&self, name: &Name) -> Result<NameCheck, StoreError> {
+        self.inner.check_name(name)
+    }
+    fn head(&self) -> Result<Option<Head>, StoreError> {
+        if let Some(refusal) = &self.head_err {
+            return Err(StoreError::Refused(refusal.clone()));
+        }
+        self.inner.head()
+    }
+    fn generation(&self) -> u64 {
+        self.inner.generation()
+    }
+    fn set_head(
+        &self,
+        name: &Name,
+        prev: Option<&Name>,
+        at: u64,
+        writes: u64,
+    ) -> Result<Head, StoreError> {
+        self.inner.set_head(name, prev, at, writes)
+    }
+    fn snapshots(&self) -> Result<Vec<SnapshotEntry>, StoreError> {
+        self.inner.snapshots()
+    }
+    fn list(&self, after: Option<&Name>, limit: usize) -> Result<Vec<ObjectEntry>, StoreError> {
+        self.inner.list(after, limit)
+    }
+    fn delete(&self, names: &[Name], head_root: Option<&Name>) -> Result<Deleted, StoreError> {
+        self.inner.delete(names, head_root)
+    }
+    fn held(&self, after: Option<&Name>, limit: usize) -> Result<Vec<HeldEntry>, StoreError> {
+        self.inner.held(after, limit)
+    }
+    fn undo(&self, names: Option<&[Name]>) -> Result<u64, StoreError> {
+        self.inner.undo(names)
+    }
+}
+
+#[test]
+fn unauthorized_stops_with_pair_again_and_persists_reach_pair_again() {
+    use centraid_vault::backup::engine::Stop;
+    use centraid_vault::backup::state::Reach;
+    use centraid_vault::backup::store::Refusal;
+
+    let rig = Rig::new("unauth");
+    rig.grow(5, "unauth");
+    let (inner, _) = front(&rig);
+    let store = RefusingStore {
+        inner,
+        head_err: Some(Refusal::Unauthorized),
+        bundle_err: None,
+    };
+    let env = rig.env(T0);
+    let mut pass = GatewayPass::new(&env, &store).expect("a pass");
+    let step = pass.step().expect("steps");
+    assert_eq!(step, Step::Stopped(Stop::PairAgain));
+    assert_eq!(pass.stop_reason(), Some(&Stop::PairAgain));
+    let row = rig
+        .state
+        .gateway(store.gateway_id())
+        .expect("reads")
+        .expect("paired");
+    assert_eq!(
+        row.reach,
+        Reach::PairAgain,
+        "401 Unauthorized must persist Reach::PairAgain on the gateway row"
+    );
+}
+
+#[test]
+fn full_and_restage_do_not_persist_reach_unreachable() {
+    use centraid_vault::backup::engine::Stop;
+    use centraid_vault::backup::state::Reach;
+    use centraid_vault::backup::store::Refusal;
+
+    // 1. Stop::Full must leave Reach::Ok intact (the gateway answered, its disk is full).
+    let rig_full = Rig::new("full_reach");
+    rig_full.grow(5, "full_reach");
+    let (inner, _) = front(&rig_full);
+    let store = RefusingStore {
+        inner,
+        head_err: None,
+        bundle_err: Some(Refusal::DiskFull),
+    };
+    let env = rig_full.env(T0);
+    let mut pass = GatewayPass::new(&env, &store).expect("a pass");
+    loop {
+        match pass.step().expect("steps") {
+            Step::Worked | Step::Restarted => {}
+            Step::Stopped(stop) => {
+                assert_eq!(stop, Stop::Full);
+                break;
+            }
+            Step::Done => panic!("expected Stop::Full"),
+        }
+    }
+    let row = rig_full
+        .state
+        .gateway(store.gateway_id())
+        .expect("reads")
+        .expect("paired");
+    assert_eq!(
+        row.reach,
+        Reach::Ok,
+        "Stop::Full must not overwrite Reach::Ok with Reach::Unreachable"
+    );
+
+    // 2. Stop::Restage must leave Reach::Ok intact (staging miss is local, not unreachable).
+    let rig_restage = Rig::new("restage_reach");
+    rig_restage.grow(5, "restage_reach");
+    let (store, _) = front(&rig_restage);
+    for name in rig_restage.staging.names().expect("names") {
+        rig_restage.staging.release(&name).expect("release");
+    }
+    let env = rig_restage.env(T0);
+    let mut pass = GatewayPass::new(&env, &store).expect("a pass");
+    loop {
+        match pass.step().expect("steps") {
+            Step::Worked | Step::Restarted => {}
+            Step::Stopped(stop) => {
+                assert_eq!(stop, Stop::Restage);
+                break;
+            }
+            Step::Done => panic!("expected Stop::Restage"),
+        }
+    }
+    let row = gateway(&rig_restage, &store);
+    assert_eq!(
+        row.reach,
+        Reach::Ok,
+        "Stop::Restage must not overwrite Reach::Ok with Reach::Unreachable"
+    );
+}

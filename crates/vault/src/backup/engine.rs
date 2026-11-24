@@ -334,6 +334,8 @@ pub enum Stop {
     Unreachable,
     Untrusted,
     TooOld,
+    /// The gateway refused this phone's token (`UNAUTHORIZED`): pair again.
+    PairAgain,
     Moved {
         epoch: u64,
     },
@@ -348,16 +350,18 @@ pub enum Stop {
 }
 
 impl Stop {
-    const fn reach(&self) -> (Reach, Option<u64>) {
+    const fn reach(&self) -> Option<(Reach, Option<u64>)> {
         match self {
-            Self::Unreachable | Self::Full | Self::Restage | Self::Refused(_) => {
-                (Reach::Unreachable, None)
-            }
-            Self::Untrusted => (Reach::Untrusted, None),
-            Self::TooOld => (Reach::TooOld, None),
-            Self::Moved { epoch } => (Reach::Moved, Some(*epoch)),
-            Self::Frozen => (Reach::Frozen, None),
-            Self::Busy => (Reach::Busy, None),
+            Self::Unreachable => Some((Reach::Unreachable, None)),
+            Self::Untrusted => Some((Reach::Untrusted, None)),
+            Self::TooOld => Some((Reach::TooOld, None)),
+            Self::PairAgain => Some((Reach::PairAgain, None)),
+            Self::Moved { epoch } => Some((Reach::Moved, Some(*epoch))),
+            Self::Frozen => Some((Reach::Frozen, None)),
+            Self::Busy => Some((Reach::Busy, None)),
+            // `Full` and `Refused` are write refusals from a reached gateway, not an unreachable
+            // gateway; `Restage` is a local staging miss.
+            Self::Full | Self::Restage | Self::Refused(_) => None,
         }
     }
 }
@@ -527,10 +531,11 @@ impl<'e, 's> GatewayPass<'e, 's> {
     }
 
     fn stop(&mut self, stop: Stop) -> Result<Step> {
-        let (reach, moved) = stop.reach();
-        self.env
-            .state
-            .set_reach(&self.id, reach, moved, self.env.now_ms)?;
+        if let Some((reach, moved)) = stop.reach() {
+            self.env
+                .state
+                .set_reach(&self.id, reach, moved, self.env.now_ms)?;
+        }
         self.stage = Stage::Stopped(stop.clone());
         Ok(Step::Stopped(stop))
     }
@@ -542,6 +547,7 @@ impl<'e, 's> GatewayPass<'e, 's> {
             StoreError::Untrusted(_) => self.stop(Stop::Untrusted),
             StoreError::GatewayOld { .. } => self.stop(Stop::TooOld),
             StoreError::Moved { epoch } => self.stop(Stop::Moved { epoch }),
+            StoreError::Refused(Refusal::Unauthorized) => self.stop(Stop::PairAgain),
             StoreError::Refused(Refusal::Frozen) => self.stop(Stop::Frozen),
             StoreError::Refused(Refusal::Busy) => self.stop(Stop::Busy),
             StoreError::Refused(Refusal::DiskFull) => self.stop(Stop::Full),

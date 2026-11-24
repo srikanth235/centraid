@@ -273,7 +273,9 @@ fn stop_of(stops: &[Stop]) -> Option<wire::DrainStop> {
             Stop::Unreachable | Stop::Busy | Stop::Frozen => wire::DrainStop::Unreachable,
             Stop::Untrusted => wire::DrainStop::Untrusted,
             Stop::TooOld => wire::DrainStop::TooOld,
-            Stop::Full | Stop::Restage | Stop::Refused(_) => wire::DrainStop::Refused,
+            Stop::PairAgain | Stop::Full | Stop::Restage | Stop::Refused(_) => {
+                wire::DrainStop::Refused
+            }
             // A gateway that proved a takeover stops its own pass and is told apart by the
             // status; it does not stop the others.
             Stop::Moved { .. } => continue,
@@ -360,6 +362,7 @@ pub(crate) fn run_cancellable(
     let mut attempts = 0_u8;
     let mut stats;
     let mut stops: Vec<Stop> = Vec::new();
+    let mut stopped_gateways: BTreeSet<String> = BTreeSet::new();
     let mut deadline_hit;
     loop {
         let new_gateway = state
@@ -426,6 +429,7 @@ pub(crate) fn run_cancellable(
 
         stats = PassStats::default();
         stops.clear();
+        stopped_gateways.clear();
         deadline_hit = false;
         if env.newest().map_err(plane_error)?.is_some() {
             engine::housekeeping(&env, &[]).map_err(plane_error)?;
@@ -483,6 +487,7 @@ pub(crate) fn run_cancellable(
                 stats.waiting += pass.stats.waiting;
                 if let Some(stop) = pass.stop_reason() {
                     stops.push(stop.clone());
+                    stopped_gateways.insert(pass.gateway_id().to_owned());
                 }
                 if ran {
                     // A REFUSAL IS NAMED BY ITS REASON, at the gateway that gave it and no other.
@@ -561,7 +566,9 @@ pub(crate) fn run_cancellable(
             let Some(row) = state.gateway(gateway_id).map_err(plane_error)? else {
                 continue;
             };
-            if row.reach != centraid_vault::backup::state::Reach::Ok {
+            if row.reach != centraid_vault::backup::state::Reach::Ok
+                || stopped_gateways.contains(gateway_id)
+            {
                 continue;
             }
             if read_back_allowed && let Ok(report) = engine::read_back(&env, &reached.store) {
@@ -619,7 +626,16 @@ pub(crate) fn run_cancellable(
     )?;
     handle.plan_library(plan);
     let os_bundles = if request.os_uploads {
-        hand_to_the_os(plane, &env, &fleet, keyring, &conditions, &state, room_stop)?
+        hand_to_the_os(
+            plane,
+            &env,
+            &fleet,
+            keyring,
+            &conditions,
+            &state,
+            room_stop,
+            &stopped_gateways,
+        )?
     } else {
         for gone in state.rotate_os_bundles(&[]).map_err(plane_error)? {
             let _ = std::fs::remove_file(gone);
@@ -638,6 +654,8 @@ pub(crate) fn run_cancellable(
             wire::DrainStop::Untrusted
         } else if !fleet.too_old.is_empty() && fleet.silent.is_empty() {
             wire::DrainStop::TooOld
+        } else if !fleet.pair_again.is_empty() && fleet.silent.is_empty() {
+            wire::DrainStop::Refused
         } else {
             wire::DrainStop::Unreachable
         }
@@ -818,6 +836,7 @@ fn need_bytes(
 /// `POST bundle`, at most [`OS_BUNDLES`] in all (§6.5). Previous pass files not referenced by
 /// this pass go at the end: a task still reading one only fails and wakes a pass, while a file
 /// still needed in this pass is kept intact.
+#[allow(clippy::too_many_arguments)]
 fn hand_to_the_os(
     plane: &Plane,
     env: &Env<'_>,
@@ -826,6 +845,7 @@ fn hand_to_the_os(
     conditions: &Conditions,
     state: &DeviceState,
     room_stop: bool,
+    stopped_gateways: &BTreeSet<String>,
 ) -> Result<Vec<wire::HandoffPart>> {
     let mut parts = Vec::new();
     let mut written: Vec<(Name, std::path::PathBuf)> = Vec::new();
@@ -839,7 +859,9 @@ fn hand_to_the_os(
         let Some(row) = state.gateway(gateway_id).map_err(plane_error)? else {
             continue;
         };
-        if row.reach != centraid_vault::backup::state::Reach::Ok {
+        if row.reach != centraid_vault::backup::state::Reach::Ok
+            || stopped_gateways.contains(gateway_id)
+        {
             continue;
         }
         let debt = engine::debt(env, gateway_id).map_err(plane_error)?;
