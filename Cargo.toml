@@ -51,7 +51,7 @@ image = { version = "0.25.10", default-features = false, features = [
 ] }
 blake3 = "1.8"
 unicode-normalization = "0.1"
-jsonschema = "0.30"
+jsonschema = "0.61"
 proptest = "1"
 # `bundled` gives a known SQLite amalgamation compiled with FTS5 and
 # `SQLITE_ENABLE_DBPAGE_VTAB` (which `pagesource::walk` reads pages through);
@@ -59,7 +59,7 @@ proptest = "1"
 # `commit_hook` (backup device state) and `authorizer` (read-only connections).
 # `backup` is enabled only in `centraid-vault`'s `[dev-dependencies]` for
 # `tests/page_source.rs`'s comparison against SQLite's online-backup API.
-rusqlite = { version = "0.41", features = ["bundled", "hooks"] }
+rusqlite = { version = "0.43", features = ["bundled", "hooks"] }
 serde = { version = "1", features = ["derive"] }
 # `float_roundtrip` is NOT optional here (#1020, D-1020-D1-18). serde_json's
 # default float parser is fast and approximate: it can land one ULP away, and
@@ -92,7 +92,7 @@ sha1 = "0.11"
 thiserror = "2"
 # The design tokens file (`design/tokens.toml`, #1173). Parse and serde only:
 # no writer, no ordered maps. Already in the lock via cbindgen.
-toml = { version = "0.9", default-features = false, features = [
+toml = { version = "1.1", default-features = false, features = [
   "parse",
   "serde",
   "std",
@@ -101,12 +101,12 @@ tracing = "0.1"
 
 # Wave 2 lane C — the schema workspace, the transport-generic protocol and the
 # one binary (#1020).
-base64 = "0.22"
+base64 = "0.23"
 bytes = "1"
 prost = "0.14"
 prost-build = "0.14"
-protox = "0.9"
-qrcode = { version = "0.14", default-features = false }
+protox = "0.10"
+qrcode = { version = "0.15", default-features = false }
 
 # THE PHONE'S CLIENT TO ITS GATEWAY (#1080): HTTP/2 (HTTP/1.1 by ALPN fallback)
 # over TLS over TCP, `hyper`'s connection API with `tokio-rustls` underneath
@@ -120,7 +120,7 @@ hyper = { version = "1", default-features = false, features = [
 ] }
 hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
 http-body-util = "0.1"
-rand = "0.9"
+rand = "0.10"
 tokio = { version = "1", features = [
   "macros",
   "rt-multi-thread",
@@ -153,11 +153,11 @@ tempfile = "3"
 # must reproduce those bytes, or read-back would call it damaged forever. So the zstd crate is not a routine bump:
 # `contracts/crypto/chunk-digest-vectors.json` (`crates/media/tests/chunk_digest_vectors.rs`) fails when the output moves,
 # and a change that moves it is a format change that regenerates the vectors and says so.
-zstd = "=0.14.3"
+zstd = "=0.14.4"
 # THE DATA PIPELINE'S TOKENIZER (#1171 M4) is `crates/datagen/src/bpe.rs`, a byte-level BPE of our own that reads the chat
 # model's `tokenizer.json`. Its pre-tokenizer regex has a lookahead (`\s+(?!\S)`), which `regex` cannot do; `fancy-regex`
 # was already in the lock through `jsonschema`. (The `tokenizers` crate pulled in `paste`, RUSTSEC-2024-0436.)
-fancy-regex = "0.14"
+fancy-regex = "0.20"
 # THE SPOOL'S BUDGET IS A TENTH OF THE FREE SPACE (#1080, "Ledger"), and the
 # standard library cannot say how much is free. `statvfs` is POSIX and rustix
 # answers it with no `unsafe` in this tree, on iOS and Android alike. Already
@@ -168,7 +168,7 @@ rustix = { version = "1.1.4", features = ["fs"] }
 futures = "0.3"
 
 # Wave 4 lane automations — civil time with a BUNDLED tzdb (#1020, D-1020-AU2).
-jiff = { version = "0.2", default-features = false, features = [
+jiff = { version = "1.0", default-features = false, features = [
   "std",
   "tzdb-bundle-always",
 ] }
@@ -218,7 +218,7 @@ x25519-dalek = { version = "3", default-features = false, features = [
 # `mint` feature there so the hosted adapter could link the crate on `wasm32`
 # without an RNG backend; that adapter is struck from v0 (#1029, scope amendment
 # 2026-09-21) and the feature is gone.
-hpke = { version = "0.14", default-features = false, features = [
+hpke = { version = "0.15", default-features = false, features = [
   "x25519",
   "aes",
   "alloc",
@@ -261,7 +261,7 @@ rcgen = { version = "0.14", default-features = false, features = [
 # destination's addresses without a pairing QR. Pure Rust on its own thread,
 # no async runtime; `default-features = false` drops its `log` and async
 # channel halves, which nothing here reads.
-mdns-sd = { version = "0.21", default-features = false }
+mdns-sd = { version = "0.22", default-features = false }
 # The pairing QR lists the bound port on every non-loopback interface address.
 # This enumerates them, and `mdns-sd` already links it.
 if-addrs = "0.15"
