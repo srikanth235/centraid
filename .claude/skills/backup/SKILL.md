@@ -8,7 +8,7 @@ description: >-
 
 The phone is the vault; the gateway is a blind store for its sealed backup. "Backed up" says only what a gateway acknowledged.
 
-The plane is specified by [`contracts/backup/spec.md`](../../../contracts/backup/spec.md) ([#1209](https://github.com/srikanth235/centraid/issues/1209)): the rulings R1 to R8, the object format, the tree, the protocol revision, the engine. Code comments cite its section numbers. The pages below say what to keep true when you change the code; the design decisions that outlive the spec (keys and signed records, the ordering rule, takeover, held deletes, the directory, read-back sampling, token storage, housekeeping) are folded into [gateway.md](gateway.md) and [phone.md](phone.md).
+The plane is specified by [`contracts/backup/spec.md`](../../../contracts/backup/spec.md) ([#1209](https://github.com/srikanth235/centraid/issues/1209), [#1212](https://github.com/srikanth235/centraid/issues/1212)): the rulings R1 to R8, the object format, the tree, the protocol revision, the engine. Code comments cite its section numbers. The pages below say what to keep true when you change the code; the design decisions that outlive the spec (keys and signed records, the ordering rule, takeover, held deletes, the directory, read-back sampling, token storage, housekeeping) are folded into [gateway.md](gateway.md) and [phone.md](phone.md).
 
 | If you are doing | Read |
 | --- | --- |

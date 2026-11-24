@@ -7,7 +7,7 @@
 // WAL-segment seal and the snapshot-manifest seal, with the AES-GCM primitives
 // under them — are deleted with their last callers (#1029 B9: their nonces
 // were derived from an address). The one sealing format is now
-// `centraid-sealed/3` (`crate::sealed`, #1209), whose nonces are derived.
+// `centraid-sealed/4` (`crate::sealed`, #1209, #1212), whose nonces are derived.
 
 use anyhow::{Result, bail};
 use serde_json::Value;

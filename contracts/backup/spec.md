@@ -44,10 +44,12 @@ digest       = blake3(object)                                                  3
 ```
 
 Where `padme_len(L)` (Padmé length padding, ≤ 3% max overhead, 0% overhead at full `CHUNK_BYTES`):
+
 - If `L <= 64`: `64`.
 - Else: `e = ilog2(L)`, `s = ilog2(e) + 1`, `last_bits = e - s`, `mask = (1 << last_bits) - 1`, `((L + mask) & !mask).min(6 + CHUNK_BYTES)`.
 
 Properties and strict verification:
+
 - Outer wire header is `"CSB4" (4) ‖ u8(4) (1) ‖ nonce (24)` = 29 clear bytes (`OUTER_HEADER_BYTES = 29`, `TAG_BYTES = 16`). Neither `flags` nor `class` appears in clear on the wire; exact file lengths are hidden in Padmé buckets.
 - Minimum object length is `MIN_OBJECT_BYTES = 29 + 64 + 16 = 109` bytes; maximum object length is `MAX_OBJECT_BYTES = CHUNK_BYTES + 51 = 4,194,355` bytes (`SEAL_OVERHEAD_BYTES = 51`).
 - Class-aware compression: `Class::Thumbnails` and `Class::Originals` (already entropy-coded JPEG/HEIC/WebP/MP4/PDF) never run `zstd` (`flags` must be `0x00`). `Class::Records` uses `zstd` level 3 when strictly shorter (`flags = 0x01`).

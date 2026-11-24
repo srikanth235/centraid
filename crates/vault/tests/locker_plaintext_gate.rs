@@ -555,7 +555,7 @@ fn nothing_the_vault_serves_or_backs_up_carries_locker_plaintext() {
     // ---- 4. THE BACKUP SNAPSHOT, SEALED AND OPENED (#1080, #1209) --------
     //
     // A backup is the file read page for page, cut into 64 KiB ranges, each
-    // sealed as a `centraid-sealed/3` object, plus the tree's nodes. The scan
+    // sealed as a `centraid-sealed/4` object, plus the tree's nodes. The scan
     // reads every sealed object — which would pass vacuously if the sealing
     // were ever removed — AND every opened one: a range that leaked a Locker
     // secret into the plaintext it seals is a leak the moment its key is lost.

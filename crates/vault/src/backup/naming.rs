@@ -1,4 +1,4 @@
-//! The vault's side of `centraid-sealed/3`'s naming (#1080 ruling 4, #1209).
+//! The vault's side of `centraid-sealed/4`'s naming (#1080 ruling 4, #1209, #1212).
 //!
 //! **The database plus the words is the whole index.** An object's name is a
 //! keyed hash of its own plaintext, so the names a vault's content implies
