@@ -28,7 +28,7 @@ use serde_json::Value;
 
 use crate::native::compile::{
     CALL_ORDER, HANDLE_SLOTS, PICK_REASONS, Shape, date_text, default_tool, infers_kind,
-    kind_a_verb_fixes, outside_the_tool, pick_states_rows, reading_expr,
+    is_rowless_do_call, kind_a_verb_fixes, outside_the_tool, pick_states_rows, reading_expr,
 };
 use crate::native::meta::{Verb, is_write};
 use crate::native::prompt::ToolsMode;
@@ -1337,7 +1337,13 @@ fn compile_slots(
         return refuse(format!("{} time values with no `t` marker", times.len()));
     }
     // the tools of the regroup name rows: a selector on `answer`, `edit` or `do` is a step missing
+    let think_verb = args
+        .iter()
+        .find(|(name, _)| name == "verb")
+        .map(|(_, val)| val.as_str());
     if !lenient
+        && !(tool == "do"
+            && is_rowless_do_call(think_verb, args.iter().map(|(name, _)| name.as_str())))
         && let Some(key) = outside_the_tool(&tool, args.iter().map(|(name, _)| name.as_str()))
     {
         return refuse(format!(

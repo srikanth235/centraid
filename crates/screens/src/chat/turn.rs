@@ -868,11 +868,13 @@ pub(super) fn app_name(id: &str) -> String {
 }
 
 /// A Locker card that asks the member for a secret action that opens a page (`edit_secret:cvv`,
-/// `export:`): it names no row to look for. A reveal or a code is shown on the card itself.
+/// `export:`), or a `handoff:` card: it names no row to look for. A reveal or a code is shown on
+/// the card itself.
 fn is_member_action(row: &RowRef) -> bool {
-    row.app == "locker"
-        && row.entity == "locker_item"
-        && ["edit_secret:", "export:"]
-            .iter()
-            .any(|word| row.qualifier.starts_with(word))
+    row.qualifier.starts_with("handoff:")
+        || (row.app == "locker"
+            && row.entity == "locker_item"
+            && ["edit_secret:", "export:"]
+                .iter()
+                .any(|word| row.qualifier.starts_with(word)))
 }

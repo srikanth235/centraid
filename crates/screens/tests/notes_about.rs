@@ -46,7 +46,7 @@ fn the_notes_about_a_thing_are_one_read_newest_first_live_only() {
         arrange(
             &d,
             act::people::AddNote {
-                id: who.clone(),
+                note_id: who.clone(),
                 text: words.into(),
             },
         );

@@ -74,7 +74,7 @@ const fn home(kind: Kind, app: App, entity: &'static str) -> CardKind {
 }
 
 /// THE TABLE. Every kind.
-pub const TABLE: [CardKind; 18] = [
+pub const TABLE: [CardKind; 28] = [
     row(Kind::Person, App::People, "person"),
     row(Kind::Event, App::Calendar, "event"),
     row(Kind::Task, App::Reminders, "task"),
@@ -101,6 +101,16 @@ pub const TABLE: [CardKind; 18] = [
     home(Kind::Category, App::Money, "category"),
     home(Kind::Budget, App::Money, "budget"),
     home(Kind::Rule, App::Money, "rule"),
+    home(Kind::Calendar, App::Calendar, "calendar"),
+    row(Kind::LockerField, App::Locker, "locker_item"),
+    row(Kind::LockerPasskey, App::Locker, "locker_item"),
+    home(Kind::ContactPoint, App::People, "contact_point"),
+    home(Kind::ImportantDate, App::People, "important_date"),
+    home(Kind::Gift, App::People, "gift"),
+    home(Kind::PeopleList, App::People, "people_list"),
+    home(Kind::JournalEntry, App::People, "journal_entry"),
+    row(Kind::Place, App::Photos, "place"),
+    home(Kind::Section, App::Reminders, "section"),
 ];
 
 /// How a kind is drawn.
@@ -119,7 +129,11 @@ pub fn app_of(kind: Kind) -> Option<App> {
 #[must_use]
 pub fn card_of(row: &Row, today: Date) -> Option<Card> {
     let how = card_kind(row.kind)?;
-    let mut card = Card::new(how.app, how.entity, row.id.clone(), row.name.clone());
+    let id = match (row.kind, row.field("item_id")) {
+        (Kind::LockerField, Some(Val::Text(item_id))) => item_id.clone(),
+        _ => row.id.clone(),
+    };
+    let mut card = Card::new(how.app, how.entity, id, row.name.clone());
     // A person's date is when the row was made, which says nothing about them; every other kind's
     // is the day it is about.
     if let Some(stamp) = row.date.filter(|_| row.kind != Kind::Person) {

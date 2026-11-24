@@ -132,7 +132,7 @@ impl Session {
         let candidates = self.unmatched_candidates(verb, selector, into);
         let mut outcome = match candidates.as_slice() {
             [] => {
-                let in_the_trash = verb != Verb::Restore
+                let in_the_trash = !matches!(verb, Verb::Restore | Verb::Purge)
                     && selector.name.as_ref().is_some_and(|name| {
                         !self
                             .resolve_name(name, &selector.kinds, true, None)
@@ -196,7 +196,7 @@ impl Session {
         let Some(name) = &selector.name else {
             return Vec::new();
         };
-        let restoring = verb == Verb::Restore;
+        let restoring = matches!(verb, Verb::Restore | Verb::Purge);
         if !restoring
             && !self
                 .resolve_name(name, &selector.kinds, true, None)
@@ -277,7 +277,7 @@ impl Session {
         selector: &Selector,
         into: Option<Kind>,
     ) -> Option<Key> {
-        if matches!(verb, Verb::Delete | Verb::RemoveFrom | Verb::Reveal)
+        if matches!(verb, Verb::Delete | Verb::Purge | Verb::RemoveFrom | Verb::Reveal)
             || self.said_every_row().is_some()
         {
             return None;
@@ -301,7 +301,7 @@ impl Session {
         if constrained(selector) || selector.within.is_some() {
             return None;
         }
-        let restoring = verb == Verb::Restore;
+        let restoring = matches!(verb, Verb::Restore | Verb::Purge);
         if !restoring
             && !self
                 .resolve_name(name, &selector.kinds, true, None)

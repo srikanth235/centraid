@@ -1034,8 +1034,8 @@ CREATE TRIGGER transfer_halves_are_in_one_pair_on_update BEFORE UPDATE OF a, b O
   BEGIN SELECT RAISE(ABORT, 'a line is in at most one transfer'); END;
 
 -- trigger txn_line_is_fixed on txn
-CREATE TRIGGER txn_line_is_fixed BEFORE UPDATE OF account_id, currency, posted_on, amount_minor ON txn
-  BEGIN SELECT RAISE(ABORT, 'a statement line is never edited'); END;
+CREATE TRIGGER txn_line_is_fixed BEFORE UPDATE OF account_id, currency ON txn
+  BEGIN SELECT RAISE(ABORT, 'a statement line cannot change account or currency'); END;
 
 -- trigger txn_void_is_final on txn
 CREATE TRIGGER txn_void_is_final BEFORE UPDATE OF status ON txn WHEN old.status = 'void'

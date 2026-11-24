@@ -157,7 +157,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -170,11 +171,13 @@
               "with",
               "related",
               "depicts"
-            ]
+            ],
+            "aliases": ["rel"]
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["to"]
           },
           "label": {
             "type": ["string", "null"],
@@ -228,7 +231,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -241,11 +245,13 @@
               "with",
               "related",
               "depicts"
-            ]
+            ],
+            "aliases": ["rel"]
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["from", "to"]
           },
           "label": {
             "type": ["string", "null"],
@@ -272,11 +278,12 @@
     },
     {
       "name": "record-days",
-      "verb": "log",
+      "verb": "follow",
       "kind": "daily_figure",
       "inverse": "stop-following",
       "sealed": [],
       "bulk": true,
+      "handoff": true,
       "command": "measurement.record",
       "phrasings": [
         "log 8000 steps for today",
@@ -358,11 +365,12 @@
     },
     {
       "name": "follow-workouts",
-      "verb": "import",
+      "verb": "follow",
       "kind": "workout",
       "inverse": "stop-following",
       "sealed": [],
       "bulk": true,
+      "handoff": true,
       "command": "follow.health",
       "phrasings": [
         "pull in my latest workouts",
@@ -505,7 +513,7 @@
     },
     {
       "name": "stop-following",
-      "verb": "detach",
+      "verb": "unfollow",
       "kind": "daily_figure",
       "inverse": null,
       "sealed": [],
@@ -531,11 +539,13 @@
               "health",
               "statement",
               "phone_reminders"
-            ]
+            ],
+            "aliases": ["system"]
           },
           "ref": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["ref"]
           }
         }
       },
@@ -591,7 +601,7 @@
           "ends": {
             "type": "string",
             "minLength": 1,
-            "aliases": ["end"]
+            "aliases": ["ends", "end", "end_time"]
           },
           "moving_s": {
             "type": "integer",
@@ -683,7 +693,7 @@
           "ends": {
             "type": "string",
             "minLength": 1,
-            "aliases": ["end"]
+            "aliases": ["ends", "end", "end_time"]
           },
           "moving_s": {
             "type": ["integer", "null"],
@@ -811,7 +821,7 @@
     },
     {
       "name": "empty-trash",
-      "verb": "purge",
+      "verb": "empty_trash",
       "kind": "workout",
       "inverse": null,
       "sealed": [],
@@ -1061,7 +1071,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -1069,7 +1080,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -1109,7 +1121,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -1117,7 +1130,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["from", "to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -1140,8 +1154,9 @@
     },
     {
       "name": "export-csv",
-      "verb": "log",
+      "verb": "export",
       "bulk": true,
+      "handoff": true,
       "kind": "workout",
       "inverse": null,
       "writes_nothing": true,
@@ -1483,6 +1498,11 @@
           "type": "number",
           "source": ["workout", "climb_m"],
           "unit": "m"
+        },
+        {
+          "name": "ends",
+          "type": "date",
+          "source": ["activity", "ends"]
         }
       ],
       "links": [],

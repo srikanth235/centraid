@@ -271,7 +271,14 @@ fn nt13_r1_an_arg_literal_is_read_the_same_way() {
         text(&made).contains("note: read bank as bank_account"),
         "{made}"
     );
-    assert_eq!(diff_rows(&made).len(), 1, "{made}");
+    assert_eq!(
+        diff_rows(&made)
+            .iter()
+            .filter(|row| row["kind"] == "locker item")
+            .count(),
+        1,
+        "{made}"
+    );
 }
 
 #[test]

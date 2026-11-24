@@ -182,10 +182,16 @@ fn scope_and_refer_are_inferred_from_the_rows_and_the_reason() {
     assert!(inferred(&create).is_empty(), "{create}");
     let read = session.compile(&json!({"trace": "v4", "intent": "read", "kind": "task"}));
     assert!(inferred(&read).is_empty(), "{read}");
-    // a selector under a verb that acts on one row is one
+    // a selector under a verb that acts on one row is one (`log` now applies to person and account)
     let log =
         session.compile(&json!({"trace": "v4", "intent": "write", "verb": "log", "name": "Ray"}));
-    assert_eq!(inferred(&log), ["kind: person", "scope: one"], "{log}");
+    assert_eq!(inferred(&log), ["scope: one"], "{log}");
+    // a single-kind verb still infers its kind as well as scope
+    let reveal = session.compile(&json!({
+        "trace": "v4", "intent": "write", "verb": "reveal", "name": "Home wifi",
+        "set": [{"key": "field", "value": "password"}]
+    }));
+    assert_eq!(inferred(&reveal), ["kind: locker item", "scope: one"], "{reveal}");
 }
 
 #[test]

@@ -598,7 +598,7 @@
     },
     {
       "name": "empty-trash",
-      "verb": "purge",
+      "verb": "empty_trash",
       "kind": "note",
       "inverse": null,
       "sealed": [],
@@ -642,7 +642,7 @@
     },
     {
       "name": "restore-note-version",
-      "verb": "restore",
+      "verb": "restore_version",
       "kind": "note",
       "inverse": "undo-change",
       "sealed": [],
@@ -663,7 +663,8 @@
           },
           "seq": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 1,
+            "aliases": ["version", "seq"]
           }
         },
         "required": ["id", "seq"],
@@ -791,7 +792,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -799,7 +801,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["to"]
           },
           "anchor": {
             "type": "object"
@@ -842,7 +845,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -850,7 +854,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["from", "to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -873,7 +878,7 @@
     },
     {
       "name": "send-to-tasks",
-      "verb": "create",
+      "verb": "create:from_note",
       "kind": "task",
       "inverse": "undo-create",
       "sealed": [],
@@ -890,15 +895,18 @@
         "properties": {
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           },
           "due": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["date", "due"]
           },
           "note_id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["from_note", "note"]
           },
           "exact": {
             "type": "string"
@@ -941,7 +949,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -949,7 +958,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -989,7 +999,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -997,7 +1008,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["from", "to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -1110,8 +1122,9 @@
     },
     {
       "name": "import-notes",
-      "verb": "log",
+      "verb": "import",
       "bulk": true,
+      "handoff": true,
       "kind": "note",
       "inverse": null,
       "sealed": [],
@@ -1156,8 +1169,9 @@
     },
     {
       "name": "export-notes",
-      "verb": "log",
+      "verb": "export",
       "bulk": true,
+      "handoff": true,
       "kind": "note",
       "inverse": null,
       "writes_nothing": true,

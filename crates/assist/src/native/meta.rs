@@ -86,6 +86,12 @@ impl Kind {
         }
     }
 
+    /// The app that owns this kind, as cards and handoffs name it.
+    #[must_use]
+    pub fn app(self) -> Option<crate::app::App> {
+        crate::native_turn::cards::app_of(self)
+    }
+
     /// The link a row of this kind holds its contents by: a list its tasks, a
     /// notebook its notes, an album its photos, a folder its documents, a task
     /// its subtasks. `None` for a kind that holds nothing.
@@ -98,6 +104,14 @@ impl Kind {
             spec.links.iter().find(|link| link.via == Via::Subtask)
         }
     }
+}
+
+/// How chat runs or surfaces an action: directly via a vault command, or by handing off to an app sheet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ActionSurface {
+    Direct,
+    Handoff,
 }
 
 /// What a field holds.
@@ -259,6 +273,8 @@ pub struct ActionSpec {
     /// The field an `edit` targets (`edit:cadence`).
     pub qualifier: Option<&'static str>,
     pub kind: Kind,
+    /// Whether chat runs this action directly or hands off to an app sheet.
+    pub surface: ActionSurface,
     /// The input property that names the row.
     pub id_param: &'static str,
     /// Every property of the action's input, in the manifest's order.
@@ -274,6 +290,18 @@ pub struct ActionSpec {
     pub minted: &'static [&'static str],
     /// The action that takes it back, as the manifest names it.
     pub inverse: Option<InverseSpec>,
+}
+
+/// Every manifest action across all 9 apps, preserving cross-app exact-command duplicates.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct ManifestAction {
+    pub app: &'static str,
+    pub action: &'static str,
+    pub verb: Verb,
+    pub kind: Kind,
+    pub qualifier: Option<&'static str>,
+    pub surface: ActionSurface,
+    pub command: &'static str,
 }
 
 /// The action that undoes another, with the property that names the row for it.
@@ -302,6 +330,18 @@ impl ActionSpec {
     #[must_use]
     pub const fn backed(&self) -> bool {
         !self.action.is_empty()
+    }
+
+    /// Whether chat runs this action directly via a vault command.
+    #[must_use]
+    pub const fn is_direct(&self) -> bool {
+        matches!(self.surface, ActionSurface::Direct)
+    }
+
+    /// Whether chat hands this action off to an app sheet.
+    #[must_use]
+    pub const fn is_handoff(&self) -> bool {
+        matches!(self.surface, ActionSurface::Handoff)
     }
 
     /// The property chat's `name` means: an alias of it, or its own name.
@@ -362,8 +402,26 @@ impl ActionSpec {
     }
 }
 
+/// Every action row in `ACTIONS`.
+#[must_use]
+pub const fn all_actions() -> &'static [ActionSpec] {
+    ACTIONS
+}
+
+/// Every manifest action across all 9 apps (`ALL_MANIFEST_ACTIONS`).
+#[must_use]
+pub const fn manifest_actions() -> &'static [ManifestAction] {
+    ALL_MANIFEST_ACTIONS
+}
+
+/// The app that owns `kind`.
+#[must_use]
+pub fn kind_app(kind: Kind) -> Option<crate::app::App> {
+    kind.app()
+}
+
 /// The action chat runs for `verb` on `kind`, and the `qualifier` of the field an edit targets;
-/// `None` when no direct action serves the triple.
+/// `None` when no action serves the triple.
 #[must_use]
 pub fn lookup(verb: Verb, kind: Kind, qualifier: Option<&str>) -> Option<&'static ActionSpec> {
     ACTIONS

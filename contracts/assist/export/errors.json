@@ -420,6 +420,66 @@
       "why_no_example": ""
     },
     {
+      "argument": "rows",
+      "example": null,
+      "family": "value",
+      "id": "act.locker_field_is_missing_its_item",
+      "source": "act.rs",
+      "template": "error: locker field is missing its item id",
+      "tool": "do",
+      "why_no_example": "defensive check on a loaded locker_field row whose parent item_id is always populated by World::load_locker"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.contact_point_is_missing_its_person",
+      "source": "act.rs",
+      "template": "error: contact point is missing its person id",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.recolor_needs_label_and_color",
+      "source": "act.rs",
+      "template": "error: recolor needs label and color.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.recolor_needs_color",
+      "source": "act.rs",
+      "template": "error: recolor needs color.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.log_on_an_account_needs_balance",
+      "source": "act.rs",
+      "template": "error: log on an account needs balance: <amount>.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.checkpoint_day_must_be_a_single",
+      "source": "act.rs",
+      "template": "error: checkpoint day must be a single date.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
       "argument": "kind",
       "example": [
         {
@@ -761,6 +821,446 @@
       "why_no_example": ""
     },
     {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.expected_a_x_got_x",
+      "source": "act.rs",
+      "template": "error: expected a {}, got {}.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.expected_one_target_row_matched_x",
+      "source": "act.rs",
+      "template": "error: expected one target row, matched {}.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.empty_target",
+      "source": "act.rs",
+      "template": "error: empty target.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.ambiguous_target_query",
+      "source": "act.rs",
+      "template": "error: ambiguous target \"{query}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.no_match_for_query",
+      "source": "act.rs",
+      "template": "error: no match for \"{query}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.multiple_matches_for_query",
+      "source": "act.rs",
+      "template": "error: multiple matches for \"{query}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.origin_is_missing_its_ref",
+      "source": "act.rs",
+      "template": "error: origin is missing its ref.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.nothing_is_currently_followed_in_system",
+      "source": "act.rs",
+      "template": "error: nothing is currently followed in {system}.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.multiple_system_sources_are_followed_pass",
+      "source": "act.rs",
+      "template": "error: multiple {system} sources are followed; pass ref: <source ref>.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.respond_takes_answer_accepted_declined_tentative",
+      "source": "act.rs",
+      "template": "error: respond takes answer (accepted | declined | tentative); not \"{key}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.respond_needs_answer_accepted_declined_tentative",
+      "source": "act.rs",
+      "template": "error: respond needs answer: accepted | declined | tentative.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.respond_answer_must_be_accepted_declined",
+      "source": "act.rs",
+      "template": "error: respond answer must be accepted, declined or tentative; not \"{other}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.categorize_takes_category_category_not_key",
+      "source": "act.rs",
+      "template": "error: categorize takes category: <category>; not \"{key}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.categorize_needs_category_category",
+      "source": "act.rs",
+      "template": "error: categorize needs category: <category>.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.x_does_not_take_arg_key",
+      "source": "act.rs",
+      "template": "error: {} does not take arg \"{key}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.link_on_a_transaction_needs_to",
+      "source": "act.rs",
+      "template": "error: link on a transaction needs to: <transaction>.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.relationship_needs_relation_kind",
+      "source": "act.rs",
+      "template": "error: relationship needs relation/kind.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.relationship_needs_name_or_related_person",
+      "source": "act.rs",
+      "template": "error: relationship needs name or related person.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.x_needs_to_row",
+      "source": "act.rs",
+      "template": "error: {} needs to: <row>.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.merge_takes_into_x_not_key",
+      "source": "act.rs",
+      "template": "error: merge takes into: <{}>; not \"{key}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.merge_needs_into_x",
+      "source": "act.rs",
+      "template": "error: merge needs into: <{}>.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.cannot_merge_a_row_into_itself",
+      "source": "act.rs",
+      "template": "error: cannot merge a row into itself.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.unfollow_takes_optional_system_and_ref",
+      "source": "act.rs",
+      "template": "error: unfollow takes optional system and ref; not \"{key}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.restore_version_takes_version_number_not_key",
+      "source": "act.rs",
+      "template": "error: restore_version takes version: <number>; not \"{key}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.restore_version_needs_version_number",
+      "source": "act.rs",
+      "template": "error: restore_version needs version: <number>.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.restore_version_version_must_be_a_positive",
+      "source": "act.rs",
+      "template": "error: restore_version version must be a positive integer.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.reschedule_occurrence_only_applies_to_events",
+      "source": "act.rs",
+      "template": "error: reschedule:occurrence only applies to events, not {}.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.reschedule_occurrence_does_not_take_key",
+      "source": "act.rs",
+      "template": "error: reschedule:occurrence does not take \"{key}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.reschedule_occurrence_needs_original_start_or_occurrence",
+      "source": "act.rs",
+      "template": "error: reschedule:occurrence needs original_start or occurrence date.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.empty_trash_takes_optional_kind_and_due_only",
+      "source": "act.rs",
+      "template": "error: empty_trash takes optional kind and due_only; not \"{key}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.unknown_kind_s",
+      "source": "act.rs",
+      "template": "error: unknown kind \"{s}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "vault",
+      "id": "act.empty_trash_was_refused_x",
+      "source": "act.rs",
+      "template": "error: empty_trash was refused: {}",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.recolor_takes_label_and_color_not",
+      "source": "act.rs",
+      "template": "error: recolor takes label and color; not \"{key}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.recolor_needs_label_tag_color_color",
+      "source": "act.rs",
+      "template": "error: recolor needs label: <tag>, color: <color>.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.recolor_needs_color_color",
+      "source": "act.rs",
+      "template": "error: recolor needs color: <color>.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "vault",
+      "id": "act.recolor_was_refused_x",
+      "source": "act.rs",
+      "template": "error: recolor was refused: {}",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.unfollow_takes_system_kind_and_optional",
+      "source": "act.rs",
+      "template": "error: unfollow takes system/kind and optional ref; not \"{key}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.unfollow_needs_a_row_kind_or",
+      "source": "act.rs",
+      "template": "error: unfollow needs a row, kind or system.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "vault",
+      "id": "act.unfollow_was_refused_x",
+      "source": "act.rs",
+      "template": "error: unfollow was refused: {}",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.apply_takes_optional_overwrite_true_false",
+      "source": "act.rs",
+      "template": "error: apply takes optional overwrite: true|false; not \"{key}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "vault",
+      "id": "act.apply_was_refused_x",
+      "source": "act.rs",
+      "template": "error: apply was refused: {}",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.unknown_kind_ks",
+      "source": "act.rs",
+      "template": "error: unknown kind \"{ks}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.unknown_app_other",
+      "source": "act.rs",
+      "template": "error: unknown app \"{other}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.x_requires_kind_or_rows",
+      "source": "act.rs",
+      "template": "error: {} requires kind or rows.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
       "argument": "args",
       "example": [
         {
@@ -847,25 +1347,134 @@
       "why_no_example": "the figure was read a moment before the write that named it, so only a vault that lost it in between reaches this"
     },
     {
-      "argument": "args",
-      "example": [
-        {
-          "args": {
-            "kind": "note",
-            "name": "Dal"
-          },
-          "strict": false,
-          "think": null,
-          "tool": "edit",
-          "user": null
-        }
-      ],
-      "family": "value",
-      "id": "act.edit_needs_field_value_lines_x",
+      "argument": "",
+      "example": null,
+      "family": "schema",
+      "id": "act.could_not_read_the_activity_first",
       "source": "act.rs",
-      "template": "error: edit needs field: value lines. {} editable fields: {}.",
-      "tool": "edit",
-      "why_no_example": ""
+      "template": "error: could not read the activity first: {why}",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "schema",
+      "id": "act.could_not_read_the_txn_first",
+      "source": "act.rs",
+      "template": "error: could not read the txn first: {why}",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "schema",
+      "id": "act.could_not_read_the_account_origin",
+      "source": "act.rs",
+      "template": "error: could not read the account origin first: {why}",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.category_x_is_archived",
+      "source": "act.rs",
+      "template": "error: category \"{}\" is archived.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "schema",
+      "id": "act.could_not_read_categories_why",
+      "source": "act.rs",
+      "template": "error: could not read categories: {why}",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "schema",
+      "id": "act.could_not_read_category_keys_why",
+      "source": "act.rs",
+      "template": "error: could not read category keys: {why}",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.no_category_called_trimmed",
+      "source": "act.rs",
+      "template": "error: no category called \"{trimmed}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.could_not_check_category_flags_why",
+      "source": "act.rs",
+      "template": "error: could not check category flags: {why}",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.category_trimmed_is_archived",
+      "source": "act.rs",
+      "template": "error: category \"{trimmed}\" is archived.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.expected_a_single_day_not_open",
+      "source": "act.rs",
+      "template": "error: expected a single day, not open-ended {}.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.expected_a_single_day_not_x",
+      "source": "act.rs",
+      "template": "error: expected a single day, not {}.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.ends_needs_an_instant_x_is",
+      "source": "act.rs",
+      "template": "error: ends needs an instant; {} is open-ended.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.ends_needs_a_single_time_or",
+      "source": "act.rs",
+      "template": "error: ends needs a single time or day, not {}.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
     },
     {
       "argument": "args",
@@ -888,6 +1497,267 @@
       "template": "error: name cannot be empty.",
       "tool": "edit",
       "why_no_example": ""
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.transaction_status_is_one_of_pending",
+      "source": "act.rs",
+      "template": "error: transaction status is one of pending, posted, void, not \"{}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.other_cannot_be_edited_on_a",
+      "source": "act.rs",
+      "template": "error: {other} cannot be edited on a transaction. transaction editable fields: name, date, amount, category, status.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.an_opening_balance_needs_the_day",
+      "source": "act.rs",
+      "template": "error: An opening balance needs the day it was true (opening_on: <date>).",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.malformed_budget_id_x",
+      "source": "act.rs",
+      "template": "error: malformed budget id \"{}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.a_budget_amount_cannot_be_negative",
+      "source": "act.rs",
+      "template": "error: a budget amount cannot be negative.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.other_cannot_be_edited_on_a_2",
+      "source": "act.rs",
+      "template": "error: {other} cannot be edited on a budget. budget editable fields: amount, carry.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.edit_on_a_rule_needs_field",
+      "source": "act.rs",
+      "template": "error: edit on a rule needs field: value lines (match, text, category, display_name, min, max, account, position).",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.rule_match_must_be_is_contains",
+      "source": "act.rs",
+      "template": "error: rule match must be is, contains or matches.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.rule_text_cannot_be_empty",
+      "source": "act.rs",
+      "template": "error: rule text cannot be empty.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.rule_raw_key_must_be_0",
+      "source": "act.rs",
+      "template": "error: rule {raw_key} must be >= 0.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.position_must_be_a_number",
+      "source": "act.rs",
+      "template": "error: position must be a number.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.rules_have_no_editable_field_other",
+      "source": "act.rs",
+      "template": "error: rules have no editable field \"{other}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.locker_field_is_missing_its_item_2",
+      "source": "act.rs",
+      "template": "error: locker field is missing its item id.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.locker_field_label_cannot_be_empty",
+      "source": "act.rs",
+      "template": "error: locker field label cannot be empty.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.locker_field_kind_must_be_text",
+      "source": "act.rs",
+      "template": "error: locker field kind must be text, sealed, url, date or otp.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.position_must_be_an_integer",
+      "source": "act.rs",
+      "template": "error: position must be an integer.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.locker_fields_have_no_editable_field",
+      "source": "act.rs",
+      "template": "error: locker fields have no editable field \"{other}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.contact_point_is_missing_its_person_2",
+      "source": "act.rs",
+      "template": "error: contact point is missing its person id.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.contact_point_channel_must_be_phone",
+      "source": "act.rs",
+      "template": "error: contact point channel must be phone, email, address, url or handle.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.contact_point_value_cannot_be_empty",
+      "source": "act.rs",
+      "template": "error: contact point value cannot be empty.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.contact_points_have_no_editable_field",
+      "source": "act.rs",
+      "template": "error: contact points have no editable field \"{other}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "args",
+      "example": [
+        {
+          "args": {
+            "kind": "note",
+            "name": "Dal"
+          },
+          "strict": false,
+          "think": null,
+          "tool": "edit",
+          "user": null
+        }
+      ],
+      "family": "value",
+      "id": "act.edit_needs_field_value_lines_x",
+      "source": "act.rs",
+      "template": "error: edit needs field: value lines. {} editable fields: {}.",
+      "tool": "edit",
+      "why_no_example": ""
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.workout_has_no_start_time",
+      "source": "act.rs",
+      "template": "error: workout has no start time.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.a_workout_cannot_end_before_it",
+      "source": "act.rs",
+      "template": "error: a workout cannot end before it starts (ends is earlier than starts).",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.end_civil_is_not_a_time_in",
+      "source": "act.rs",
+      "template": "error: {end_civil} is not a time in {zone}.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
     },
     {
       "argument": "args",
@@ -932,6 +1802,16 @@
       "template": "error: a {item_type} item has no place for {field}; nothing was stored.",
       "tool": "edit",
       "why_no_example": ""
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.reminders_takes_integer_minutes_not_p",
+      "source": "act.rs",
+      "template": "error: reminders takes integer minutes, not \"{p}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
     },
     {
       "argument": "args",
@@ -1178,6 +2058,146 @@
       "why_no_example": ""
     },
     {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.create_about_task_needs_about_person",
+      "source": "act.rs",
+      "template": "error: create:about task needs about: <person>.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.create_about_note_needs_about_person",
+      "source": "act.rs",
+      "template": "error: create:about note needs about: <person>.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.coord_must_be_a_number",
+      "source": "act.rs",
+      "template": "error: {coord} must be a number.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.create_important_date_needs_person_person",
+      "source": "act.rs",
+      "template": "error: create important date needs person: <person>.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.date_must_be_a_single_day",
+      "source": "act.rs",
+      "template": "error: date must be a single day.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.create_important_date_needs_date_month",
+      "source": "act.rs",
+      "template": "error: create important date needs date: <month and day>.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.create_gift_needs_person_person",
+      "source": "act.rs",
+      "template": "error: create gift needs person: <person>.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.journal_entry_date_must_be_a",
+      "source": "act.rs",
+      "template": "error: journal entry date must be a single day.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.create_rule_needs_category_category",
+      "source": "act.rs",
+      "template": "error: create rule needs category: <category>.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.rule_bound_must_be_0",
+      "source": "act.rs",
+      "template": "error: rule {bound} must be >= 0.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.create_budget_needs_amount_money",
+      "source": "act.rs",
+      "template": "error: create budget needs amount: <money>.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.budget_amount_must_be_0",
+      "source": "act.rs",
+      "template": "error: budget amount must be >= 0.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.create_locker_field_needs_item_locker",
+      "source": "act.rs",
+      "template": "error: create locker field needs item: <locker item>.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.create_contact_point_needs_person_person",
+      "source": "act.rs",
+      "template": "error: create contact point needs person: <person>.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
       "argument": "args",
       "example": [
         {
@@ -1218,6 +2238,16 @@
       "template": "error: create account needs type: checking | savings | credit card | cash.",
       "tool": "create",
       "why_no_example": ""
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.currency_must_be_a_3_letter",
+      "source": "act.rs",
+      "template": "error: currency must be a 3-letter ISO code like USD or INR, not \"{}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
     },
     {
       "argument": "kind",
@@ -1362,6 +2392,16 @@
       "template": "error: nothing to undo",
       "tool": "do",
       "why_no_example": ""
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.amounts_are_in_currency_here_x",
+      "source": "act.rs",
+      "template": "error: amounts are in {currency} here; \"{}\" names {code}. Write the number in {currency}.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
     },
     {
       "argument": "verb",
@@ -2809,11 +3849,41 @@
       "argument": "",
       "example": null,
       "family": "value",
-      "id": "whr.symbol_char_names_more_than_one_currency",
+      "id": "whr.symbol_names_more_than_one_currency",
       "source": "whr.rs",
-      "template": "error: {symbol_char} names more than one currency here ({}); write the amount with its code (50 {}).",
+      "template": "error: {symbol} names more than one currency here ({}); write the amount with its code (50 {}).",
       "tool": "",
-      "why_no_example": "needs a vault that holds two currencies of one symbol (USD and CAD for a dollar sign); the fixture vault holds one"
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "whr.amount_is_empty",
+      "source": "whr.rs",
+      "template": "error: amount is empty.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "whr.trimmed_is_not_a_valid_amount",
+      "source": "whr.rs",
+      "template": "error: \"{trimmed}\" is not a valid amount.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "whr.trimmed_mixes_sym_with_code",
+      "source": "whr.rs",
+      "template": "error: \"{trimmed}\" mixes {sym} with {code}.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
     },
     {
       "argument": "where",
@@ -3097,6 +4167,16 @@
       "template": "error: could not read \"{part}\". Operators: = != < <= > >=, contains \"…\", in (\"a\", \"b\"), is empty, is set.",
       "tool": "find",
       "why_no_example": ""
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "whr.x_is_an_amount_optionally_with",
+      "source": "whr.rs",
+      "template": "error: {} is an amount, optionally with a currency code (50 EUR); \"{value}\" is not.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
     },
     {
       "argument": "where",

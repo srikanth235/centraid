@@ -699,7 +699,42 @@ pub fn full_ending(seen: &Visible, retried: bool, via_words: &[&str], end: &str)
             sets.extend(action.chat_names());
         }
         sets.extend(fields.iter().copied());
-        sets.extend(["kind", "to", "from", "label", "choice", "row", "field"]);
+        sets.extend([
+            "kind",
+            "to",
+            "from",
+            "label",
+            "choice",
+            "row",
+            "field",
+            "into",
+            "answer",
+            "version",
+            "seq",
+            "color",
+            "icon",
+            "system",
+            "ref",
+            "balance",
+            "day",
+            "due_only",
+            "overwrite",
+            "occurrence",
+            "original_start",
+            "scope",
+            "action",
+            "app",
+            "about",
+            "from_note",
+            "relation",
+            "related",
+            "pet",
+            "cover",
+            "place",
+            "addresses",
+            "note",
+            "content",
+        ]);
         sets.extend(
             spec.links
                 .iter()

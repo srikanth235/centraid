@@ -363,9 +363,13 @@ fn create_writes_every_creatable_kind_and_echoes_its_number() {
             json!({"verb": "create", "kind": kind, "args": args}),
         );
         let created = diff_rows(&response);
-        assert_eq!(created.len(), 1, "{args}: {}", response["text"]);
-        assert_eq!(created[0]["change"], "created");
-        assert_eq!(created[0]["fields"]["name"][1], args["name"]);
+        let top: Vec<_> = created
+            .iter()
+            .filter(|row| row["kind"] != "locker field")
+            .collect();
+        assert_eq!(top.len(), 1, "{args}: {}", response["text"]);
+        assert_eq!(top[0]["change"], "created");
+        assert_eq!(top[0]["fields"]["name"][1], args["name"]);
         assert!(
             response["text"].as_str().unwrap().starts_with("created: #"),
             "{}",

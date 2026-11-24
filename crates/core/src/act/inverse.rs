@@ -236,6 +236,7 @@ const MONEY: &[Row] = &[
     ("add-account", "close-account", Input::CreatedWith("flag", "archived")),
     ("edit-account", "edit-account", Input::Earlier),
     ("set-display-name", "set-display-name", Input::Earlier),
+    ("edit-transaction", "edit-transaction", Input::Earlier),
     ("categorize", "categorize", Input::Prior),
     ("save-import-profile", "save-import-profile", Input::Prior),
     ("unlink-transfer", "link-transfer", Input::Relinks),

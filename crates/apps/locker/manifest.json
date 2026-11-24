@@ -542,7 +542,7 @@
     },
     {
       "name": "empty-trash",
-      "verb": "purge",
+      "verb": "empty_trash",
       "kind": "locker_item",
       "inverse": null,
       "sealed": [],
@@ -915,25 +915,31 @@
           },
           "field_id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["field_id"]
           },
           "section": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["section"]
           },
           "label": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["label"]
           },
           "kind": {
             "type": "string",
-            "enum": ["text", "sealed", "url", "date", "otp"]
+            "enum": ["text", "sealed", "url", "date", "otp"],
+            "aliases": ["field_kind"]
           },
           "value": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["value"]
           },
           "position": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "aliases": ["position"]
           }
         },
         "required": ["item_id", "label", "kind"],
@@ -977,7 +983,8 @@
           },
           "field_id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["field_id"]
           }
         },
         "required": ["item_id", "field_id"],
@@ -1000,7 +1007,7 @@
     },
     {
       "name": "set-addresses",
-      "verb": "edit",
+      "verb": "edit:addresses",
       "kind": "locker_item",
       "inverse": "undo-change",
       "sealed": [],
@@ -1021,6 +1028,7 @@
           },
           "addresses": {
             "type": "array",
+            "aliases": ["addresses"],
             "items": {
               "type": "object",
               "properties": {
@@ -1054,10 +1062,11 @@
     },
     {
       "name": "set-passkey",
-      "verb": "edit",
+      "verb": "configure",
       "kind": "locker_passkey",
       "inverse": "undo-change",
       "sealed": ["private_key"],
+      "handoff": true,
       "command": "locker.set_passkey",
       "phrasings": [
         "save a passkey on my GitHub login",
@@ -1153,7 +1162,7 @@
     },
     {
       "name": "set-memo",
-      "verb": "edit",
+      "verb": "edit:note",
       "kind": "locker_item",
       "inverse": "undo-change",
       "sealed": [],
@@ -1173,7 +1182,8 @@
             "minLength": 1
           },
           "note": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["note"]
           }
         },
         "required": ["item_id", "note"],
@@ -1196,11 +1206,12 @@
     },
     {
       "name": "export",
-      "verb": "reveal",
+      "verb": "export",
       "kind": "locker_item",
       "inverse": null,
       "sealed": [],
       "bulk": true,
+      "handoff": true,
       "command": "locker.export",
       "phrasings": [
         "export my whole locker",
@@ -1299,15 +1310,18 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
-            "enum": ["about", "with", "links"]
+            "enum": ["about", "with", "links"],
+            "aliases": ["rel"]
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -1347,15 +1361,18 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
-            "enum": ["about", "with", "links"]
+            "enum": ["about", "with", "links"],
+            "aliases": ["rel"]
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["from", "to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -1610,6 +1627,83 @@
       ],
       "links": [],
       "trash": true,
+      "container": false
+    },
+    {
+      "id": "locker_field",
+      "name": "locker field",
+      "plural": "locker fields",
+      "order": 19,
+      "live": "write",
+      "entity": "locker_field",
+      "table": "locker_item_field",
+      "pk": "id",
+      "nameSource": ["locker_item_field", "label"],
+      "fields": [
+        {
+          "name": "item_id",
+          "type": "text",
+          "source": ["locker_item_field", "item_id"]
+        },
+        {
+          "name": "section",
+          "type": "text",
+          "source": ["locker_item_field", "section"]
+        },
+        {
+          "name": "label",
+          "type": "text",
+          "source": ["locker_item_field", "label"]
+        },
+        {
+          "name": "field_kind",
+          "type": "text",
+          "source": ["locker_item_field", "kind"]
+        },
+        {
+          "name": "value",
+          "type": "text",
+          "source": ["locker_item_field", "value_text"]
+        },
+        {
+          "name": "position",
+          "type": "number",
+          "source": ["locker_item_field", "position"]
+        }
+      ],
+      "links": [],
+      "trash": false,
+      "container": false
+    },
+    {
+      "id": "locker_passkey",
+      "name": "locker passkey",
+      "plural": "locker passkeys",
+      "order": 20,
+      "live": "write",
+      "entity": "locker_passkey",
+      "table": "locker_item_passkey",
+      "pk": "item_id",
+      "nameSource": ["locker_item_passkey", "rp_id"],
+      "fields": [
+        {
+          "name": "rp_id",
+          "type": "text",
+          "source": ["locker_item_passkey", "rp_id"]
+        },
+        {
+          "name": "user_handle",
+          "type": "text",
+          "source": ["locker_item_passkey", "user_handle"]
+        },
+        {
+          "name": "display_name",
+          "type": "text",
+          "source": ["locker_item_passkey", "display_name"]
+        }
+      ],
+      "links": [],
+      "trash": false,
       "container": false
     }
   ],

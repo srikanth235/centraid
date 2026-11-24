@@ -399,7 +399,11 @@ fn facets(world: &World, key: &Key) -> Vec<String> {
             out.extend(text_field(world, key, "role"));
             out.extend(text_field(world, key, "nickname"));
         }
-        Kind::Event => out.extend(row.date.map(|stamp| stamp.show())),
+        Kind::Event | Kind::ImportantDate | Kind::Gift | Kind::JournalEntry => {
+            out.extend(row.date.map(|stamp| stamp.show()));
+        }
+        Kind::ContactPoint => out.extend(text_field(world, key, "channel")),
+        Kind::Place => out.extend(text_field(world, key, "locality")),
         Kind::Task => {
             out.extend(row.date.map(|stamp| stamp.show()));
             container(&mut out);
@@ -756,9 +760,11 @@ fn container_kind_said(message: &str) -> Option<Kind> {
         }
         match pair[1].0.as_str() {
             "album" | "albums" => Some(Kind::Album),
+            "calendar" | "calendars" => Some(Kind::Calendar),
             "folder" | "folders" => Some(Kind::Folder),
             "list" | "lists" => Some(Kind::List),
             "notebook" | "notebooks" => Some(Kind::Notebook),
+            "section" | "sections" => Some(Kind::Section),
             _ => None,
         }
     })

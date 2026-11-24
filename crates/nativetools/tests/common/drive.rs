@@ -15,6 +15,50 @@ pub type Measure<'a> = &'a mut dyn FnMut(&mut Session, Value) -> Value;
 #[allow(clippy::too_many_lines)]
 pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>) -> Option<Value> {
     let name = kind.name();
+    if verb == "create" {
+        session.user("");
+        let args = match kind {
+            Kind::Person => json!({"name": "Ada Lovelace", "role": "friend"}),
+            Kind::Event => {
+                json!({"name": "Coffee", "date": {"unit": "week", "rel": 1, "weekday": 1, "time": "14:00"}})
+            }
+            Kind::Task => {
+                json!({"name": "Call plumber", "date": {"unit": "day", "rel": 1}, "effort": 15})
+            }
+            Kind::Note => json!({"name": "Packing list", "body": "socks"}),
+            Kind::Document => json!({"name": "Receipt", "text": "paid"}),
+            Kind::Album => json!({"name": "Autumn"}),
+            Kind::LockerItem => json!({"name": "Gym", "type": "membership"}),
+            Kind::Notebook => json!({"name": "Travel"}),
+            Kind::Folder => json!({"name": "Medical"}),
+            Kind::List => json!({"name": "Errands"}),
+            Kind::Account => json!({"name": "Holiday fund", "type": "savings"}),
+            Kind::Category => json!({"name": "Pets"}),
+            Kind::Calendar => json!({"name": "Work"}),
+            Kind::PeopleList => json!({"name": "Friends"}),
+            Kind::Place => json!({"name": "Cafe"}),
+            Kind::Section => {
+                let home = number(session, "list", "Home");
+                json!({"name": "Backlog", "parent": home})
+            }
+            Kind::Photo
+            | Kind::Transaction
+            | Kind::Budget
+            | Kind::Rule
+            | Kind::DailyFigure
+            | Kind::Workout
+            | Kind::LockerField
+            | Kind::LockerPasskey
+            | Kind::ContactPoint
+            | Kind::ImportantDate
+            | Kind::Gift
+            | Kind::JournalEntry => return None,
+        };
+        return Some(measure(
+            session,
+            json!({"verb": "create", "kind": name, "args": args}),
+        ));
+    }
     // The row each kind's single-row verbs act on, by a find that selects one.
     let subject = match kind {
         Kind::Person => "Ray",
@@ -28,52 +72,33 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
         Kind::Notebook => "Recipes",
         Kind::Folder => "Taxes",
         Kind::List => "Home",
-        // Money's kinds (#1135): only the pairs the catalog runs directly are driven; the rest
-        // are cards the member finishes (a mass, a secret-free irreversible act)
+        // Money's kinds (#1135)
         Kind::Transaction => "To savings",
         Kind::Account => "Everyday",
         Kind::Rule => "BLUE BOTTLE",
         Kind::Category => "Pets fund",
-        Kind::Budget => return None,
-        // Health's kinds are read-only in chat (#1135): no verb applies.
-        Kind::DailyFigure | Kind::Workout => return None,
+        // New live kinds and Health/Budget (handled in UNDRIVEN or specialized suites)
+        Kind::Budget
+        | Kind::DailyFigure
+        | Kind::Workout
+        | Kind::Calendar
+        | Kind::LockerField
+        | Kind::LockerPasskey
+        | Kind::ContactPoint
+        | Kind::ImportantDate
+        | Kind::Gift
+        | Kind::PeopleList
+        | Kind::JournalEntry
+        | Kind::Place
+        | Kind::Section => return None,
     };
     Some(match verb {
-        "create" => {
-            session.user("");
-            let args = match kind {
-                Kind::Person => json!({"name": "Ada Lovelace", "role": "friend"}),
-                Kind::Event => {
-                    json!({"name": "Coffee", "date": {"unit": "week", "rel": 1, "weekday": 1, "time": "14:00"}})
-                }
-                Kind::Task => {
-                    json!({"name": "Call plumber", "date": {"unit": "day", "rel": 1}, "effort": 15})
-                }
-                Kind::Note => json!({"name": "Packing list", "body": "socks"}),
-                Kind::Document => json!({"name": "Receipt", "text": "paid"}),
-                Kind::Album => json!({"name": "Autumn"}),
-                Kind::LockerItem => json!({"name": "Gym", "type": "membership"}),
-                Kind::Notebook => json!({"name": "Travel"}),
-                Kind::Folder => json!({"name": "Medical"}),
-                Kind::List => json!({"name": "Errands"}),
-                Kind::Account => json!({"name": "Holiday fund", "type": "savings"}),
-                Kind::Category => json!({"name": "Pets"}),
-                Kind::Photo
-                | Kind::Transaction
-                | Kind::Budget
-                | Kind::Rule
-                | Kind::DailyFigure
-                | Kind::Workout => return None,
-            };
-            measure(
-                session,
-                json!({"verb": "create", "kind": name, "args": args}),
-            )
-        }
+        "edit" if kind == Kind::Transaction => return None,
         "edit" => {
             let row = number(session, name, subject);
             let args = match kind {
                 Kind::Note => json!({"body+": "and salt"}),
+                Kind::Document => json!({"text": "updated lease"}),
                 Kind::Task => json!({"effort": 45}),
                 Kind::LockerItem => json!({"username": "sam2"}),
                 Kind::Rule => json!({"position": 1}),
@@ -101,6 +126,7 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
             let row = number(session, name, subject);
             measure(session, json!({"verb": "cancel", "rows": row}))
         }
+        "delete" if kind == Kind::Rule => return None,
         "delete" => {
             // A folder with documents and a notebook with notes ask first; the
             // empty ones go.
@@ -193,6 +219,7 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
             let row = number(session, name, row_name);
             measure(session, json!({"verb": verb, "rows": row}))
         }
+        "add_to" | "remove_from" if kind == Kind::Person => return None,
         "add_to" | "remove_from" => {
             let (row_name, container_kind, container) = match (kind, verb) {
                 (Kind::Photo, "add_to") => ("Hike", "album", "Wedding"),
@@ -223,6 +250,7 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
                 json!({"verb": verb, "rows": row, "args": "label: urgent"}),
             )
         }
+        "unlink" if kind != Kind::Transaction => return None,
         "unlink" => {
             let row = number(session, name, subject);
             measure(session, json!({"verb": "unlink", "rows": row}))
@@ -238,9 +266,14 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
         }
         "log" => {
             let row = number(session, name, subject);
+            let args = if kind == Kind::Account {
+                "balance: 100"
+            } else {
+                "kind: coffee"
+            };
             measure(
                 session,
-                json!({"verb": "log", "rows": row, "args": "kind: coffee"}),
+                json!({"verb": "log", "rows": row, "args": args}),
             )
         }
         "reveal" => {
@@ -249,6 +282,10 @@ pub fn drive(session: &mut Session, verb: &str, kind: Kind, measure: Measure<'_>
                 session,
                 json!({"verb": "reveal", "rows": row, "args": "field: password"}),
             )
+        }
+        "duplicate" | "apply" => {
+            let row = number(session, name, subject);
+            measure(session, json!({"verb": verb, "rows": row}))
         }
         _ => return None,
     })

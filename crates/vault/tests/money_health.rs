@@ -308,18 +308,148 @@ fn a_line_is_never_edited_and_the_members_category_and_name_survive_a_restatemen
             .as_deref(),
         Some("Groceries")
     );
-    // The schema says so too: a line's day and amount are never written.
-    let refused = world.scratch.vault.commit(|tx| {
-        tx.connection()
-            .execute("UPDATE txn SET amount_minor = 1 WHERE id = ?1", [&grocer])?;
+    // The schema fixes a line's account and currency, while txn.edit can correct other fields.
+    let other_account = world.account("Savings");
+    let refused_account = world.scratch.vault.commit(|tx| {
+        tx.connection().execute(
+            "UPDATE txn SET account_id = ?2 WHERE id = ?1",
+            [&grocer, &other_account],
+        )?;
         Ok(())
     });
     assert!(
-        refused
-            .expect_err("refused")
+        refused_account
+            .expect_err("refused account_id")
             .to_string()
-            .contains("never edited")
+            .contains("account or currency")
     );
+    let refused_currency = world.scratch.vault.commit(|tx| {
+        tx.connection()
+            .execute("UPDATE txn SET currency = 'EUR' WHERE id = ?1", [&grocer])?;
+        Ok(())
+    });
+    assert!(
+        refused_currency
+            .expect_err("refused currency")
+            .to_string()
+            .contains("account or currency")
+    );
+    let edited = world.ok(
+        "txn.edit",
+        json!({
+            "id": grocer,
+            "title": "Whole Foods Market",
+            "posted_on": "2026-03-03",
+            "amount_minor": -4_500,
+        }),
+    );
+    assert_eq!(edited["changed"], true);
+}
+
+#[test]
+fn txn_edit_updates_fields_preserves_on_reimport_and_enforces_guards() {
+    let world = World::new();
+    let current = world.account("Everyday");
+    let savings = world.account("Savings");
+    world.import(&current, &[GROCER, ("csv:xfer-out", "2026-03-05", -50_000, "TO SAVINGS")]);
+    world.import(&savings, &[("csv:xfer-in", "2026-03-05", 50_000, "FROM EVERYDAY")]);
+    let grocer = world.line(GROCER.0);
+    let xfer_out = world.line("csv:xfer-out");
+    let xfer_in = world.line("csv:xfer-in");
+
+    // Edit title, posted_on, amount_minor, category_id, and status.
+    let first = world.ok(
+        "txn.edit",
+        json!({
+            "id": grocer,
+            "title": "  Fresh   Market  ",
+            "posted_on": "2026-03-08",
+            "amount_minor": -4_999,
+            "category_id": "category:food.groceries",
+            "status": "pending",
+            "expected_rev": 0,
+        }),
+    );
+    assert_eq!(first["changed"], true);
+    let rev = first["rev"].as_i64().expect("rev");
+    assert_eq!(
+        world
+            .text(
+                "SELECT posted_on || ' ' || amount_minor || ' ' || COALESCE(category_id, '') || ' ' || status FROM txn WHERE id = ?1",
+                &[&grocer]
+            )
+            .as_deref(),
+        Some("2026-03-08 -4999 category:food.groceries pending")
+    );
+    assert_eq!(
+        world
+            .text("SELECT title FROM entity WHERE id = ?1", &[&grocer])
+            .as_deref(),
+        Some("Fresh Market")
+    );
+
+    // Clear category_id to null with expected_rev.
+    let cleared = world.ok(
+        "txn.edit",
+        json!({
+            "id": grocer,
+            "category_id": null,
+            "status": "posted",
+            "expected_rev": rev,
+        }),
+    );
+    assert_eq!(cleared["changed"], true);
+    assert_eq!(
+        world.text("SELECT COALESCE(category_id, 'NULL') || ' ' || status FROM txn WHERE id = ?1", &[&grocer]).as_deref(),
+        Some("NULL posted")
+    );
+
+    // Stale expected_rev is refused.
+    let stale = world.refused(
+        "txn.edit",
+        json!({
+            "id": grocer,
+            "amount_minor": -5_000,
+            "expected_rev": rev,
+        }),
+    );
+    assert!(stale.contains("conflicts") || stale.contains("changed"), "{stale}");
+
+    // Re-importing via follow.statement preserves member-edited posted_on and amount_minor.
+    world.ok(
+        "follow.statement",
+        json!({
+            "origin": { "ref": current, "label": "Everyday", "fills": current },
+            "records": [{
+                "external_id": GROCER.0,
+                "fields": {
+                    "title": "WHOLE FOODS MKT 123",
+                    "posted_on": "2026-03-02",
+                    "amount_minor": -4_250,
+                }
+            }],
+        }),
+    );
+    assert_eq!(
+        world
+            .text("SELECT posted_on || ' ' || amount_minor FROM txn WHERE id = ?1", &[&grocer])
+            .as_deref(),
+        Some("2026-03-08 -4999")
+    );
+
+    // Linked transfer: cannot flip sign or set to 0, but same-sign edit works.
+    world.ok("txn.link_transfer", json!({ "id": xfer_out, "other_id": xfer_in }));
+    let flip = world.refused("txn.edit", json!({ "id": xfer_out, "amount_minor": 50_000 }));
+    assert_eq!(flip, "Cannot change the direction of a linked transfer; unlink it first.");
+    let zero = world.refused("txn.edit", json!({ "id": xfer_out, "amount_minor": 0 }));
+    assert_eq!(zero, "Cannot change the direction of a linked transfer; unlink it first.");
+    world.ok("txn.edit", json!({ "id": xfer_out, "amount_minor": -51_000 }));
+
+    // Voiding via txn.edit ends the linked transfer and blocks further edits.
+    world.ok("txn.edit", json!({ "id": xfer_out, "status": "void" }));
+    assert_eq!(world.count("SELECT COUNT(*) FROM transfer", &[]), 0);
+    let after_void = world.refused("txn.edit", json!({ "id": xfer_out, "title": "Nope" }));
+    assert_eq!(after_void, "A removed transaction cannot be edited.");
 }
 
 #[test]

@@ -63,21 +63,47 @@ fn tens_word(word: &str) -> Option<u64> {
         .map(|(_, value)| *value)
 }
 
-/// `1,200.50` as `1200.5`; `None` when the text is no number.
+/// Whether `whole` has valid international (`1,500`) or Indian (`1,20,000`, `12,34,567`) comma grouping.
+fn valid_comma_grouping(whole: &str) -> bool {
+    let groups: Vec<&str> = whole.split(',').collect();
+    if groups.len() < 2
+        || groups
+            .iter()
+            .any(|g| g.is_empty() || !g.chars().all(|c| c.is_ascii_digit()))
+    {
+        return false;
+    }
+    let intl = (1..=3).contains(&groups[0].len()) && groups[1..].iter().all(|g| g.len() == 3);
+    let indian = groups.len() >= 3
+        && (1..=2).contains(&groups[0].len())
+        && groups[1..groups.len() - 1]
+            .iter()
+            .all(|g| g.len() == 2)
+        && groups.last().is_some_and(|g| g.len() == 3);
+    intl || indian
+}
+
+/// `1,200.50` as `1200.5`; `1,20,000` as `120000`; `None` when the text is no number.
 fn canonical(text: &str) -> Option<String> {
-    let plain: String = text.chars().filter(|letter| *letter != ',').collect();
-    if plain.is_empty() || plain.starts_with('.') || plain.ends_with('.') {
+    if text.is_empty() || text.starts_with('.') || text.ends_with('.') {
         return None;
     }
-    let (whole, fraction) = plain.split_once('.').unwrap_or((&plain, ""));
-    if whole.is_empty()
-        || !whole.chars().all(|d| d.is_ascii_digit())
+    let (whole_raw, fraction) = text.split_once('.').unwrap_or((text, ""));
+    if fraction.contains(',') {
+        return None;
+    }
+    if whole_raw.contains(',') && !valid_comma_grouping(whole_raw) {
+        return None;
+    }
+    let whole_digits: String = whole_raw.chars().filter(|letter| *letter != ',').collect();
+    if whole_digits.is_empty()
+        || !whole_digits.chars().all(|d| d.is_ascii_digit())
         || !fraction.chars().all(|d| d.is_ascii_digit())
-        || whole.len() > 12
+        || whole_digits.len() > 12
     {
         return None;
     }
-    let whole = whole.trim_start_matches('0');
+    let whole = whole_digits.trim_start_matches('0');
     let whole = if whole.is_empty() { "0" } else { whole };
     let fraction = fraction.trim_end_matches('0');
     Some(if fraction.is_empty() {
@@ -118,18 +144,82 @@ fn is_word_char(letter: char) -> bool {
     letter.is_alphanumeric() || letter == '_'
 }
 
+fn is_currency_symbol(letter: char) -> bool {
+    matches!(letter, '$' | '\u{20ac}' | '\u{a3}' | '\u{a5}' | '\u{20b9}')
+}
+
+/// Length of an alphabetic currency prefix (`Rs`, `AED`, `INR`) glued directly before digits.
+fn glued_currency_prefix_len(chars: &[char], at: usize) -> Option<usize> {
+    for prefix in ["aed", "inr", "rs"] {
+        let len = prefix.len();
+        if chars.len() > at + len
+            && chars[at + len].is_ascii_digit()
+            && chars[at..at + len]
+                .iter()
+                .zip(prefix.chars())
+                .all(|(a, b)| a.to_ascii_lowercase() == b)
+        {
+            return Some(len);
+        }
+    }
+    None
+}
+
+/// Scale suffix after a number (`k`/`K`, currency-prefixed `m`/`M`, `lakh`/`lakhs`/`lac`/`lacs`, `crore`/`crores`/`cr`).
+/// Returns `(new_end, power_of_10)`.
+fn scale_suffix(chars: &[char], end: usize, has_currency_prefix: bool) -> Option<(usize, usize)> {
+    let after = chars.get(end).copied()?;
+    if matches!(after, 'k' | 'K') && !chars.get(end + 1).is_some_and(|c| is_word_char(*c)) {
+        return Some((end + 1, 3));
+    }
+    if has_currency_prefix
+        && matches!(after, 'm' | 'M')
+        && !chars.get(end + 1).is_some_and(|c| is_word_char(*c))
+    {
+        return Some((end + 1, 6));
+    }
+    if after != ' ' && !after.is_alphabetic() {
+        return None;
+    }
+    let mut word_start = end;
+    while word_start < chars.len() && chars[word_start] == ' ' {
+        word_start += 1;
+    }
+    let mut word_end = word_start;
+    while word_end < chars.len() && chars[word_end].is_alphabetic() {
+        word_end += 1;
+    }
+    if word_end == word_start || chars.get(word_end).is_some_and(|c| is_word_char(*c)) {
+        return None;
+    }
+    let word: String = chars[word_start..word_end]
+        .iter()
+        .collect::<String>()
+        .to_lowercase();
+    let zeros = match word.as_str() {
+        "lakh" | "lakhs" | "lac" | "lacs" => 5,
+        "crore" | "crores" | "cr" => 7,
+        _ => return None,
+    };
+    Some((word_end, zeros))
+}
+
 /// The numbers of `message`, in order, outside its `date_phrases`.
 #[must_use]
 pub fn read_nums(message: &str, date_phrases: &[&str]) -> Vec<Num> {
     let chars = without(message, date_phrases);
     let mut out = Vec::new();
     let mut at = 0;
+    let mut currency_prefixed = false;
     while at < chars.len() {
         let letter = chars[at];
         let before = at.checked_sub(1).map(|i| chars[i]);
+        let has_currency_prefix = currency_prefixed || before.is_some_and(is_currency_symbol);
         if letter.is_ascii_digit()
-            && !before.is_some_and(|b| is_word_char(b) || b == '#' || b == '@')
+            && (currency_prefixed
+                || !before.is_some_and(|b| is_word_char(b) || b == '#' || b == '@'))
         {
+            currency_prefixed = false;
             let start = at;
             let mut end = at;
             while end < chars.len()
@@ -165,9 +255,8 @@ pub fn read_nums(message: &str, date_phrases: &[&str]) -> Vec<Num> {
                 && !chars.get(end + 2).is_some_and(|c| c.is_alphabetic());
             let iso = matches!(after, Some('-' | '/'))
                 && chars.get(end + 1).is_some_and(char::is_ascii_digit);
-            let glued = after.is_some_and(|a| a.is_alphabetic() && !matches!(a, 'k' | 'K'))
-                || (matches!(after, Some('k' | 'K'))
-                    && chars.get(end + 1).is_some_and(|c| is_word_char(*c)));
+            let scale = scale_suffix(&chars, end, has_currency_prefix);
+            let glued = after.is_some_and(char::is_alphabetic) && scale.is_none();
             if clock || meridiem || ordinal || iso || glued {
                 // a clock's minutes, an ISO date's other parts and the like are skipped with their first digits
                 let mut skip = end.max(at + 1);
@@ -180,12 +269,12 @@ pub fn read_nums(message: &str, date_phrases: &[&str]) -> Vec<Num> {
                 at = skip;
                 continue;
             }
-            let (phrase, value) = if matches!(after, Some('k' | 'K')) {
+            let (phrase, value) = if let Some((scaled_end, zeros)) = scale {
                 let base = canonical(&text);
-                end += 1;
+                end = scaled_end;
                 (
                     chars[start..end].iter().collect::<String>(),
-                    base.and_then(|base| times_thousand(&base)),
+                    base.and_then(|base| times_pow10(&base, zeros)),
                 )
             } else {
                 (text.clone(), canonical(&text))
@@ -196,7 +285,13 @@ pub fn read_nums(message: &str, date_phrases: &[&str]) -> Vec<Num> {
             at = end;
             continue;
         }
-        if letter.is_alphabetic() && !before.is_some_and(is_word_char) {
+        currency_prefixed = false;
+        if letter.is_alphabetic() && !before.is_some_and(|b| is_word_char(b) || b == '#' || b == '@') {
+            if let Some(prefix_len) = glued_currency_prefix_len(&chars, at) {
+                at += prefix_len;
+                currency_prefixed = true;
+                continue;
+            }
             let (num, end) = word_number(&chars, at);
             if let Some(num) = num {
                 out.push(num);
@@ -214,13 +309,15 @@ pub fn read_nums(message: &str, date_phrases: &[&str]) -> Vec<Num> {
     out
 }
 
-fn times_thousand(base: &str) -> Option<String> {
+fn times_pow10(base: &str, zeros: usize) -> Option<String> {
     let (whole, fraction) = base.split_once('.').unwrap_or((base, ""));
-    if fraction.len() > 3 {
-        return None;
-    }
-    let padded = format!("{fraction:0<3}");
-    let joined = format!("{whole}{padded}");
+    let joined = if fraction.len() > zeros {
+        let (head, tail) = fraction.split_at(zeros);
+        format!("{whole}{head}.{tail}")
+    } else {
+        let padded = format!("{fraction:0<zeros$}");
+        format!("{whole}{padded}")
+    };
     canonical(&joined)
 }
 
@@ -282,6 +379,8 @@ fn word_number(chars: &[char], at: usize) -> (Option<Num>, usize) {
         let factor = match word.as_str() {
             "hundred" => Some(100),
             "thousand" => Some(1000),
+            "lakh" | "lakhs" | "lac" | "lacs" => Some(100_000),
+            "crore" | "crores" => Some(10_000_000),
             _ => None,
         };
         if let Some(factor) = factor {
@@ -430,5 +529,37 @@ mod tests {
         assert!(fill("amount > nums[2]", line).is_err());
         assert!(fill("amount > nums[0]", None).is_err());
         assert_eq!(fill("a nums[x] b", line).unwrap(), "a nums[x] b");
+    }
+
+    #[test]
+    fn indian_grouping_and_multi_currency_prefixes_and_scales() {
+        assert_eq!(
+            line("₹1,50,000").as_deref(),
+            Some("nums: 1,50,000 = 150000")
+        );
+        assert_eq!(
+            line("12,34,567.50").as_deref(),
+            Some("nums: 12,34,567.50 = 1234567.5")
+        );
+        assert_eq!(
+            line("Rs. 2.5 lakh").as_deref(),
+            Some("nums: 2.5 lakh = 250000")
+        );
+        assert_eq!(line("Rs 450").as_deref(), Some("nums: 450 = 450"));
+        assert_eq!(line("Rs450").as_deref(), Some("nums: 450 = 450"));
+        assert_eq!(
+            line("1.2 crore").as_deref(),
+            Some("nums: 1.2 crore = 12000000")
+        );
+        assert_eq!(line("S$85").as_deref(), Some("nums: 85 = 85"));
+        assert_eq!(line("AED 320").as_deref(), Some("nums: 320 = 320"));
+        assert_eq!(line("AED320").as_deref(), Some("nums: 320 = 320"));
+        assert_eq!(line("$2k").as_deref(), Some("nums: 2k = 2000"));
+        assert_eq!(line("$2m").as_deref(), Some("nums: 2m = 2000000"));
+        assert_eq!(line("€45.50").as_deref(), Some("nums: 45.50 = 45.5"));
+        assert_eq!(line("£120").as_deref(), Some("nums: 120 = 120"));
+        assert_eq!(line("30m walk"), None);
+        assert_eq!(line("1,2,3"), None);
+        assert_eq!(line("12,34"), None);
     }
 }

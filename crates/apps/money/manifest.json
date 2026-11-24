@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "money",
   "name": "Money",
-  "description": "Where your money went — a personal ledger as a projection of the vault. Import a bank or card statement (CSV, OFX or QFX) and see spending by category against a monthly plan, cash flow, and balances checked against the balances your statements state. An account is the vault's own account entity and an imported line its own transaction, followed from the statement the member imported; the app adds your names, rules, plans and checkpoints. A line is never edited, only named, filed under a category or moved to the trash (and brought back, exactly as it was); importing the same file twice writes nothing; a possible duplicate or transfer is proposed and never decided for you. Every balance, total and forecast is derived at read time — nothing is stored — and nothing is ever added across currencies. The statement itself is read once and never kept. The app stores no separate copy of the data.",
+  "description": "Where your money went — a personal ledger as a projection of the vault. Import a bank or card statement (CSV, OFX or QFX) and see spending by category against a monthly plan, cash flow, and balances checked against the balances your statements state. An account is the vault's own account entity and an imported line its own transaction, followed from the statement the member imported; the app adds your names, rules, plans and checkpoints. A line's title, date, amount, category and status can be corrected, or the line moved to the trash (and brought back, exactly as it was); importing the same file twice writes nothing; a possible duplicate or transfer is proposed and never decided for you. Every balance, total and forecast is derived at read time — nothing is stored — and nothing is ever added across currencies. The statement itself is read once and never kept. The app stores no separate copy of the data.",
   "version": "0.2.0",
   "iconKey": "Coin",
   "colorKey": "indigo",
@@ -112,6 +112,11 @@
       {
         "schema": "txn",
         "table": "categorize",
+        "verbs": "act"
+      },
+      {
+        "schema": "txn",
+        "table": "edit",
         "verbs": "act"
       },
       {
@@ -236,11 +241,13 @@
         "additionalProperties": false,
         "properties": {
           "currency": {
+            "aliases": ["currency"],
             "maxLength": 3,
             "minLength": 3,
             "type": "string"
           },
           "external_ref": {
+            "aliases": ["external_ref"],
             "maxLength": 64,
             "minLength": 1,
             "type": "string"
@@ -250,12 +257,15 @@
             "type": "string"
           },
           "on_budget": {
+            "aliases": ["on_budget"],
             "type": "boolean"
           },
           "opening_minor": {
+            "aliases": ["opening"],
             "type": "integer"
           },
           "opening_on": {
+            "aliases": ["opening_on"],
             "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
             "type": "string"
           },
@@ -306,6 +316,7 @@
         "additionalProperties": false,
         "properties": {
           "external_ref": {
+            "aliases": ["external_ref"],
             "maxLength": 64,
             "minLength": 1,
             "type": ["string", "null"]
@@ -315,6 +326,7 @@
             "type": "string"
           },
           "on_budget": {
+            "aliases": ["on_budget"],
             "type": "boolean"
           },
           "title": {
@@ -324,6 +336,7 @@
             "type": "string"
           },
           "type": {
+            "aliases": ["type"],
             "enum": ["checking", "savings", "credit_card", "cash"]
           },
           "expected_rev": {
@@ -439,7 +452,7 @@
     },
     {
       "name": "set-opening-balance",
-      "verb": "edit",
+      "verb": "edit:opening",
       "kind": "account",
       "inverse": null,
       "sealed": [],
@@ -459,6 +472,7 @@
             "type": "string"
           },
           "opening_minor": {
+            "aliases": ["opening"],
             "type": "integer"
           },
           "opening_on": {
@@ -491,6 +505,7 @@
       "inverse": null,
       "sealed": [],
       "bulk": true,
+      "handoff": true,
       "command": "follow.statement",
       "phrasings": [
         "import this bank statement",
@@ -610,12 +625,15 @@
         "properties": {
           "account_id": {
             "minLength": 1,
-            "type": "string"
+            "type": "string",
+            "x-target": true
           },
           "balance_minor": {
+            "aliases": ["balance"],
             "type": "integer"
           },
           "day": {
+            "aliases": ["day"],
             "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
             "type": "string"
           }
@@ -640,10 +658,11 @@
     },
     {
       "name": "save-import-profile",
-      "verb": "edit",
+      "verb": "configure",
       "kind": "account",
       "inverse": "save-import-profile",
       "sealed": [],
+      "handoff": true,
       "command": "account.remember_layout",
       "phrasings": [
         "remember how this bank's CSV is laid out",
@@ -763,6 +782,7 @@
         "additionalProperties": false,
         "properties": {
           "category_id": {
+            "aliases": ["category"],
             "minLength": 1,
             "type": ["string", "null"]
           },
@@ -773,7 +793,8 @@
             },
             "maxItems": 2000,
             "minItems": 1,
-            "type": "array"
+            "type": "array",
+            "x-target": true
           },
           "expected_rev": {
             "minimum": 0,
@@ -920,7 +941,7 @@
     },
     {
       "name": "empty-trash",
-      "verb": "purge",
+      "verb": "empty_trash",
       "kind": "transaction",
       "inverse": null,
       "sealed": [],
@@ -964,7 +985,7 @@
     },
     {
       "name": "set-display-name",
-      "verb": "edit",
+      "verb": "edit:name",
       "kind": "transaction",
       "inverse": "set-display-name",
       "sealed": [],
@@ -1012,6 +1033,75 @@
       }
     },
     {
+      "name": "edit-transaction",
+      "verb": "edit",
+      "kind": "transaction",
+      "inverse": "edit-transaction",
+      "sealed": [],
+      "command": "txn.edit",
+      "phrasings": [
+        "correct the amount on that Coffee line to 5.50",
+        "fix the date on yesterday's Uber charge to March 3",
+        "change the category and status on that transaction",
+        "rename the grocery charge to Trader Joe's and mark it posted"
+      ],
+      "description": "Edit a transaction line through txn.edit: update its title, posted date, amount, category or status.",
+      "confirmation": "none",
+      "input": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string",
+            "x-target": true
+          },
+          "title": {
+            "aliases": ["name"],
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "posted_on": {
+            "aliases": ["date"],
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "type": "string"
+          },
+          "amount_minor": {
+            "aliases": ["amount"],
+            "type": "integer"
+          },
+          "category_id": {
+            "aliases": ["category"],
+            "minLength": 1,
+            "type": ["string", "null"]
+          },
+          "status": {
+            "aliases": ["status"],
+            "enum": ["pending", "posted", "void"]
+          },
+          "expected_rev": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": ["id"],
+        "type": "object"
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
       "name": "link-transfer",
       "verb": "link",
       "kind": "transaction",
@@ -1033,6 +1123,7 @@
             "type": "string"
           },
           "other_id": {
+            "aliases": ["to", "other"],
             "minLength": 1,
             "type": "string"
           }
@@ -1113,22 +1204,27 @@
         "additionalProperties": false,
         "properties": {
           "amount_minor": {
+            "aliases": ["amount"],
             "minimum": 0,
             "type": ["integer", "null"]
           },
           "carry": {
+            "aliases": ["carry"],
             "type": "boolean"
           },
           "category_id": {
+            "aliases": ["category"],
             "minLength": 1,
             "type": "string"
           },
           "currency": {
+            "aliases": ["currency"],
             "maxLength": 3,
             "minLength": 3,
             "type": "string"
           },
           "month": {
+            "aliases": ["month"],
             "pattern": "^[0-9]{4}-[0-9]{2}$",
             "type": "string"
           }
@@ -1169,13 +1265,16 @@
         "additionalProperties": false,
         "properties": {
           "carry": {
+            "aliases": ["carry"],
             "type": "boolean"
           },
           "category_id": {
+            "aliases": ["category"],
             "minLength": 1,
             "type": "string"
           },
           "month": {
+            "aliases": ["month"],
             "pattern": "^[0-9]{4}-[0-9]{2}$",
             "type": "string"
           }
@@ -1216,14 +1315,17 @@
         "additionalProperties": false,
         "properties": {
           "account_id": {
+            "aliases": ["account"],
             "minLength": 1,
             "type": ["string", "null"]
           },
           "category_id": {
+            "aliases": ["category"],
             "minLength": 1,
             "type": "string"
           },
           "display_name": {
+            "aliases": ["display_name"],
             "maxLength": 80,
             "type": ["string", "null"]
           },
@@ -1232,21 +1334,26 @@
             "type": "string"
           },
           "match": {
+            "aliases": ["match"],
             "enum": ["is", "contains", "matches"]
           },
           "max": {
+            "aliases": ["max"],
             "minimum": 0,
             "type": ["integer", "null"]
           },
           "min": {
+            "aliases": ["min"],
             "minimum": 0,
             "type": ["integer", "null"]
           },
           "position": {
+            "aliases": ["position"],
             "minimum": 0,
             "type": "number"
           },
           "text": {
+            "aliases": ["text"],
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
@@ -1288,14 +1395,17 @@
         "additionalProperties": false,
         "properties": {
           "account_id": {
+            "aliases": ["account"],
             "minLength": 1,
             "type": ["string", "null"]
           },
           "category_id": {
+            "aliases": ["category"],
             "minLength": 1,
             "type": "string"
           },
           "display_name": {
+            "aliases": ["display_name"],
             "maxLength": 80,
             "type": ["string", "null"]
           },
@@ -1304,21 +1414,26 @@
             "type": "string"
           },
           "match": {
+            "aliases": ["match"],
             "enum": ["is", "contains", "matches"]
           },
           "max": {
+            "aliases": ["max"],
             "minimum": 0,
             "type": ["integer", "null"]
           },
           "min": {
+            "aliases": ["min"],
             "minimum": 0,
             "type": ["integer", "null"]
           },
           "position": {
+            "aliases": ["position"],
             "minimum": 0,
             "type": "number"
           },
           "text": {
+            "aliases": ["text"],
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
@@ -1491,9 +1606,11 @@
         "properties": {
           "from_id": {
             "minLength": 1,
-            "type": "string"
+            "type": "string",
+            "x-target": true
           },
           "into_id": {
+            "aliases": ["into"],
             "minLength": 1,
             "type": "string"
           }
@@ -1606,7 +1723,7 @@
     },
     {
       "name": "add-with",
-      "verb": "link",
+      "verb": "link:with",
       "kind": "transaction",
       "inverse": "remove-with",
       "sealed": [],
@@ -1623,7 +1740,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -1636,11 +1754,13 @@
               "with",
               "related",
               "depicts"
-            ]
+            ],
+            "aliases": ["with"]
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["to"]
           },
           "label": {
             "type": ["string", "null"],
@@ -1677,7 +1797,7 @@
     },
     {
       "name": "remove-with",
-      "verb": "unlink",
+      "verb": "unlink:with",
       "kind": "transaction",
       "inverse": "add-with",
       "sealed": [],
@@ -1694,7 +1814,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -1707,11 +1828,13 @@
               "with",
               "related",
               "depicts"
-            ]
+            ],
+            "aliases": ["with"]
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["from", "to"]
           },
           "label": {
             "type": ["string", "null"],
@@ -1755,7 +1878,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -1763,7 +1887,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -1803,7 +1928,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -1811,7 +1937,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["from", "to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -1834,8 +1961,9 @@
     },
     {
       "name": "export-csv",
-      "verb": "log",
+      "verb": "export",
       "bulk": true,
+      "handoff": true,
       "kind": "transaction",
       "inverse": null,
       "writes_nothing": true,
@@ -2425,6 +2553,31 @@
           "name": "position",
           "type": "number",
           "source": ["rule", "position"]
+        },
+        {
+          "name": "display_name",
+          "type": "text",
+          "source": ["rule", "display_name"]
+        },
+        {
+          "name": "match",
+          "type": "text",
+          "source": ["rule", "pattern"]
+        },
+        {
+          "name": "text",
+          "type": "text",
+          "source": ["rule", "pattern"]
+        },
+        {
+          "name": "min",
+          "type": "number",
+          "source": ["rule", "pattern"]
+        },
+        {
+          "name": "max",
+          "type": "number",
+          "source": ["rule", "pattern"]
         }
       ],
       "links": [],

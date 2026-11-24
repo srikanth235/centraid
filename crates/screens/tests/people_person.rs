@@ -54,7 +54,7 @@ fn dana(d: &Driver) -> String {
     arrange(
         d,
         act::people::AddNote {
-            id: id.clone(),
+            note_id: id.clone(),
             text: "Loves ceramics".to_owned(),
         },
     );
@@ -720,7 +720,7 @@ fn in_your_vault_lists_a_task_about_the_person_in_agendas_own_page_and_colour() 
     let task = arrange(
         &d,
         act::people::AddTask {
-            id: id.clone(),
+            task_id: id.clone(),
             text: "Send Ada the book".to_owned(),
         },
     );

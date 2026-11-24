@@ -245,7 +245,7 @@
   "actions": [
     {
       "name": "link",
-      "verb": "link:rel",
+      "verb": "link",
       "kind": "person",
       "inverse": "unlink",
       "sealed": [],
@@ -262,7 +262,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -270,7 +271,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -310,7 +312,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -318,7 +321,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["from", "to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -648,7 +652,7 @@
     },
     {
       "name": "empty-trash",
-      "verb": "purge",
+      "verb": "empty_trash",
       "kind": "person",
       "inverse": null,
       "sealed": [],
@@ -847,7 +851,8 @@
           },
           "list_id": {
             "type": ["string", "null"],
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["to", "from", "list"]
           }
         },
         "required": ["id", "list_id"],
@@ -870,7 +875,7 @@
     },
     {
       "name": "add-note",
-      "verb": "create",
+      "verb": "create:about",
       "kind": "note",
       "inverse": "undo-create",
       "sealed": [],
@@ -887,11 +892,13 @@
         "properties": {
           "id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["about"]
           },
           "text": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name", "text"]
           }
         },
         "required": ["id", "text"],
@@ -914,7 +921,7 @@
     },
     {
       "name": "add-task",
-      "verb": "create",
+      "verb": "create:about",
       "kind": "task",
       "inverse": "undo-create",
       "sealed": [],
@@ -931,11 +938,13 @@
         "properties": {
           "id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["about"]
           },
           "text": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name", "text"]
           }
         },
         "required": ["id", "text"],
@@ -1055,18 +1064,22 @@
         "properties": {
           "id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["person"]
           },
           "label": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["label", "name"]
           },
           "month_day": {
             "type": "string",
-            "pattern": "^(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\\d|3[01])$"
+            "pattern": "^(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\\d|3[01])$",
+            "aliases": ["date", "month_day"]
           },
           "reminder_on": {
-            "type": "boolean"
+            "type": "boolean",
+            "aliases": ["reminder_on"]
           }
         },
         "required": ["id", "label", "month_day"],
@@ -1113,7 +1126,8 @@
             "items": {
               "type": "integer",
               "minimum": 0
-            }
+            },
+            "aliases": ["reminders"]
           }
         },
         "required": ["id", "reminders"],
@@ -1136,7 +1150,7 @@
     },
     {
       "name": "add-relationship",
-      "verb": "link",
+      "verb": "link:related",
       "kind": "person",
       "inverse": "remove-relationship",
       "sealed": [],
@@ -1157,11 +1171,13 @@
           },
           "name": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           },
           "kind": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["related", "relation"]
           },
           "pet": {
             "type": "string"
@@ -1191,7 +1207,7 @@
     },
     {
       "name": "remove-relationship",
-      "verb": "unlink",
+      "verb": "unlink:related",
       "kind": "person",
       "inverse": null,
       "sealed": [],
@@ -1208,15 +1224,18 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
-            "enum": ["related"]
+            "enum": ["related"],
+            "aliases": ["related"]
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["from", "to"]
           },
           "label": {
             "type": "string",
@@ -1260,11 +1279,13 @@
         "properties": {
           "id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["person"]
           },
           "text": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name", "text"]
           }
         },
         "required": ["id", "text"],
@@ -1313,7 +1334,8 @@
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           }
         },
         "required": ["kind", "title"],
@@ -1357,7 +1379,8 @@
           },
           "title": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["name"]
           }
         },
         "required": ["id", "title"],
@@ -1477,14 +1500,17 @@
         "properties": {
           "mood": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["mood"]
           },
           "text": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["body", "text"]
           },
           "entry_date": {
-            "type": "string"
+            "type": "string",
+            "aliases": ["date", "entry_date"]
           },
           "tz": {
             "type": "string",
@@ -1536,17 +1562,21 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["phone", "email", "address", "url", "handle"]
+            "enum": ["phone", "email", "address", "url", "handle"],
+            "aliases": ["channel"]
           },
           "label": {
-            "type": ["string", "null"]
+            "type": ["string", "null"],
+            "aliases": ["label"]
           },
           "value": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["value"]
           },
           "preferred": {
-            "type": "boolean"
+            "type": "boolean",
+            "aliases": ["preferred"]
           }
         },
         "required": ["id", "kind", "value"],
@@ -1586,7 +1616,8 @@
         "properties": {
           "point_id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           }
         },
         "required": ["point_id"],
@@ -1627,11 +1658,13 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "into": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["into"]
           }
         },
         "required": ["from", "into"],
@@ -1654,11 +1687,12 @@
     },
     {
       "name": "follow-contacts",
-      "verb": "import",
+      "verb": "follow",
       "kind": "person",
       "inverse": "stop-following",
       "sealed": [],
       "bulk": true,
+      "handoff": true,
       "command": "follow.contacts",
       "phrasings": [
         "import my phone's contacts",
@@ -1761,7 +1795,7 @@
     },
     {
       "name": "stop-following",
-      "verb": "detach",
+      "verb": "unfollow",
       "kind": "person",
       "inverse": null,
       "sealed": [],
@@ -1784,7 +1818,8 @@
           },
           "ref": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["ref"]
           }
         }
       },
@@ -1805,8 +1840,9 @@
     },
     {
       "name": "import-vcf",
-      "verb": "log",
+      "verb": "import",
       "bulk": true,
+      "handoff": true,
       "kind": "person",
       "inverse": null,
       "sealed": [],
@@ -1852,8 +1888,9 @@
     },
     {
       "name": "export-vcf",
-      "verb": "log",
+      "verb": "export",
       "bulk": true,
+      "handoff": true,
       "kind": "person",
       "inverse": null,
       "writes_nothing": true,
@@ -1907,7 +1944,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -1915,7 +1953,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -1955,7 +1994,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -1963,7 +2003,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["from", "to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -2276,6 +2317,142 @@
           "via": "about"
         }
       ],
+      "trash": true,
+      "container": false
+    },
+    {
+      "id": "contact_point",
+      "name": "contact point",
+      "plural": "contact points",
+      "order": 21,
+      "live": "write",
+      "entity": "contact_point",
+      "table": "contact_point",
+      "pk": "id",
+      "nameSource": ["contact_point", "value"],
+      "fields": [
+        {
+          "name": "person_id",
+          "type": "text",
+          "source": ["contact_point", "person_id"]
+        },
+        {
+          "name": "channel",
+          "type": "text",
+          "source": ["contact_point", "kind"]
+        },
+        {
+          "name": "value",
+          "type": "text",
+          "source": ["contact_point", "value"]
+        },
+        {
+          "name": "label",
+          "type": "text",
+          "source": ["contact_point", "label"]
+        },
+        {
+          "name": "preferred",
+          "type": "bool",
+          "source": ["contact_point", "preferred"]
+        }
+      ],
+      "links": [],
+      "trash": false,
+      "container": false
+    },
+    {
+      "id": "important_date",
+      "name": "important date",
+      "plural": "important dates",
+      "order": 22,
+      "live": "write",
+      "entity": "event",
+      "table": "event",
+      "pk": "id",
+      "nameSource": ["entity", "title"],
+      "date": {
+        "label": "date",
+        "source": ["event", "starts"]
+      },
+      "fields": [
+        {
+          "name": "reminders",
+          "type": "number",
+          "source": ["reminder", "offset_min"]
+        }
+      ],
+      "links": [],
+      "trash": false,
+      "container": false
+    },
+    {
+      "id": "gift",
+      "name": "gift",
+      "plural": "gifts",
+      "order": 23,
+      "live": "write",
+      "entity": "task",
+      "table": "task",
+      "pk": "id",
+      "nameSource": ["entity", "title"],
+      "date": {
+        "label": "due",
+        "source": ["task", "due"]
+      },
+      "fields": [
+        {
+          "name": "description",
+          "type": "text",
+          "source": ["task", "description"]
+        }
+      ],
+      "links": [],
+      "trash": true,
+      "container": false
+    },
+    {
+      "id": "people_list",
+      "name": "people list",
+      "plural": "people lists",
+      "order": 24,
+      "live": "write",
+      "entity": "list",
+      "table": "container",
+      "pk": "id",
+      "nameSource": ["entity", "title"],
+      "fields": [],
+      "links": [],
+      "trash": false,
+      "container": true
+    },
+    {
+      "id": "journal_entry",
+      "name": "journal entry",
+      "plural": "journal entries",
+      "order": 25,
+      "live": "write",
+      "entity": "note",
+      "table": "note",
+      "pk": "id",
+      "nameSource": ["entity", "title"],
+      "date": {
+        "label": "filed",
+        "source": ["entity", "created_at"]
+      },
+      "fields": [
+        {
+          "name": "mood",
+          "type": "text",
+          "source": ["entity", "title"]
+        },
+        {
+          "name": "body",
+          "type": "text",
+          "source": ["note", "body"]
+        }
+      ],
+      "links": [],
       "trash": true,
       "container": false
     }

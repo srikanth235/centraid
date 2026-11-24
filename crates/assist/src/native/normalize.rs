@@ -778,6 +778,16 @@ impl Session {
             return;
         };
         let allowed = create_args(kind);
+        let extra_allowed: &[&str] = match kind {
+            Kind::Task => &["from_note", "note", "about", "text", "exact"],
+            Kind::Note => &["about", "text"],
+            Kind::ImportantDate => &["name", "date"],
+            Kind::Gift => &["name"],
+            Kind::JournalEntry => &["name", "date"],
+            Kind::Rule => &["name"],
+            _ => &[],
+        };
+        let is_allowed = |key: &str| allowed.contains(&key) || extra_allowed.contains(&key);
         let mut changed = false;
 
         // an arg under another spelling of a field is that field, as `create` reads it
@@ -889,7 +899,7 @@ impl Session {
                 out.entries
                     .push(json!({"rule": "secret_not_stored", "arg": key, "type": item_type}));
                 changed = true;
-            } else if !allowed.contains(&key.as_str()) {
+            } else if !is_allowed(&key) {
                 let value = args.remove(&key).unwrap_or_default();
                 let why = if kind.spec().field(&key).is_some() {
                     format!("{} cannot be created with {key}", kind.plural())

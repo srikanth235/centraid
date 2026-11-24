@@ -736,6 +736,23 @@ fn value_line(session: &Session, value: &Value, result: Option<usize>) -> String
     }
 }
 
+fn friendly_action_title(action: &str) -> String {
+    let spaced = action.replace(['-', '_'], " ");
+    let mut chars = spaced.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
+    }
+}
+
+fn static_entity_for(entity: &str) -> Option<&'static str> {
+    Kind::ALL
+        .into_iter()
+        .map(|kind| kind.spec().entity)
+        .chain(cards::TABLE.iter().map(|entry| entry.entity))
+        .find(|&known| known == entity)
+}
+
 /// The cards of the secret actions a turn offered the member, and the line that says the first
 /// (#1135). A card is the Locker item's, its qualifier the action ([`MemberAction::qualifier`]); a
 /// value is never on it.
@@ -748,6 +765,63 @@ fn member_actions(session: &Session, effect: &Value) -> (Vec<Card>, String) {
         .flatten()
         .filter_map(MemberAction::of_json)
     {
+        if action.kind == ActionKind::Handoff {
+            let mut parts = action.column.splitn(3, '/');
+            let app_id = parts.next().unwrap_or("");
+            let entity = parts.next().unwrap_or("");
+            let action_name = parts.next().unwrap_or("");
+            let app = App::from_id(app_id).unwrap_or(App::Reminders);
+            let matched_row = (!action.item_id.is_empty())
+                .then(|| {
+                    session.world.rows.values().find(|row| {
+                        row.id == action.item_id
+                            && (row.kind.spec().entity == entity
+                                || cards::card_kind(row.kind)
+                                    .is_some_and(|ck| ck.app.id() == app_id && ck.entity == entity))
+                    })
+                })
+                .flatten();
+            let (card, target_name) = if let Some(row) = matched_row {
+                if let Some(card) = cards::card_of(row, session.today()) {
+                    (card.qualifier(action.qualifier()), row.name.as_str())
+                } else {
+                    let static_entity = static_entity_for(entity).unwrap_or(app.id());
+                    (
+                        Card::new(
+                            app,
+                            static_entity,
+                            &action.item_id,
+                            friendly_action_title(action_name),
+                        )
+                        .subtitle(app.display())
+                        .qualifier(action.qualifier()),
+                        row.name.as_str(),
+                    )
+                }
+            } else {
+                let static_entity = static_entity_for(entity).unwrap_or(app.id());
+                (
+                    Card::new(
+                        app,
+                        static_entity,
+                        &action.item_id,
+                        friendly_action_title(action_name),
+                    )
+                    .subtitle(app.display())
+                    .qualifier(action.qualifier()),
+                    app.display(),
+                )
+            };
+            if line.is_empty() {
+                let phrase = action_name.replace(['-', '_'], " ");
+                line = say_with(
+                    Say::OfferEditSecret,
+                    &[("field", phrase.as_str()), ("title", target_name)],
+                );
+            }
+            cards.push(card);
+            continue;
+        }
         let Some(row) = session
             .world
             .row(&(Kind::LockerItem, action.item_id.clone()))
@@ -767,7 +841,9 @@ fn member_actions(session: &Session, effect: &Value) -> (Vec<Card>, String) {
             line = match action.kind {
                 ActionKind::Code => say_with(Say::OfferCode, &fills),
                 ActionKind::EditSecret => say_with(Say::OfferEditSecret, &fills),
-                ActionKind::Reveal | ActionKind::Export => say_with(Say::OfferReveal, &fills),
+                ActionKind::Reveal | ActionKind::Export | ActionKind::Handoff => {
+                    say_with(Say::OfferReveal, &fills)
+                }
             };
         }
         cards.push(card.qualifier(action.qualifier()));

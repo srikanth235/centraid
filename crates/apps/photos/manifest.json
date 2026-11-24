@@ -144,6 +144,7 @@
       "kind": "photo",
       "inverse": "delete-photo",
       "sealed": [],
+      "handoff": true,
       "command": "photo.add",
       "phrasings": [
         "add this photo to my library",
@@ -273,10 +274,11 @@
     },
     {
       "name": "edit-photo",
-      "verb": "edit",
+      "verb": "edit_media",
       "kind": "photo",
       "inverse": "undo-change",
       "sealed": [],
+      "handoff": true,
       "command": "photo.edit",
       "phrasings": [
         "fix the date on this photo",
@@ -668,7 +670,7 @@
     },
     {
       "name": "empty-trash",
-      "verb": "purge",
+      "verb": "empty_trash",
       "kind": "photo",
       "inverse": null,
       "sealed": [],
@@ -811,7 +813,7 @@
     },
     {
       "name": "set-album-cover",
-      "verb": "edit",
+      "verb": "edit:cover",
       "kind": "album",
       "inverse": "undo-change",
       "sealed": [],
@@ -832,7 +834,8 @@
           },
           "photo_id": {
             "type": ["string", "null"],
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["cover"]
           }
         },
         "required": ["id"],
@@ -1038,8 +1041,8 @@
     },
     {
       "name": "set-place",
-      "verb": "edit",
-      "kind": "place",
+      "verb": "edit:place",
+      "kind": "photo",
       "inverse": "undo-change",
       "sealed": [],
       "command": "photo.set_place",
@@ -1059,7 +1062,8 @@
           },
           "place_id": {
             "type": ["string", "null"],
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["place"]
           }
         },
         "required": ["id"],
@@ -1104,7 +1108,8 @@
           "title": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 120
+            "maxLength": 120,
+            "aliases": ["name"]
           },
           "expected_rev": {
             "type": "integer",
@@ -1238,15 +1243,18 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
-            "enum": ["depicts", "links"]
+            "enum": ["depicts", "links"],
+            "aliases": ["rel"]
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -1286,15 +1294,18 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
-            "enum": ["depicts", "links"]
+            "enum": ["depicts", "links"],
+            "aliases": ["rel"]
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["from", "to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -1334,7 +1345,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -1342,7 +1354,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -1382,7 +1395,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -1390,7 +1404,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["from", "to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -1413,8 +1428,9 @@
     },
     {
       "name": "export-zip",
-      "verb": "log",
+      "verb": "export",
       "bulk": true,
+      "handoff": true,
       "kind": "photo",
       "inverse": null,
       "writes_nothing": true,
@@ -1769,6 +1785,47 @@
       "links": [{ "kind": "photo", "label": "photos", "via": "entry" }],
       "trash": false,
       "container": true
+    },
+    {
+      "id": "place",
+      "name": "place",
+      "plural": "places",
+      "order": 26,
+      "live": "write",
+      "entity": "place",
+      "table": "place",
+      "pk": "id",
+      "nameSource": ["entity", "title"],
+      "fields": [
+        {
+          "name": "address",
+          "type": "text",
+          "source": ["place", "address"]
+        },
+        {
+          "name": "locality",
+          "type": "text",
+          "source": ["place", "locality"]
+        },
+        {
+          "name": "zone",
+          "type": "text",
+          "source": ["place", "zone"]
+        },
+        {
+          "name": "lat",
+          "type": "number",
+          "source": ["place", "lat"]
+        },
+        {
+          "name": "lon",
+          "type": "number",
+          "source": ["place", "lon"]
+        }
+      ],
+      "links": [],
+      "trash": false,
+      "container": false
     }
   ],
   "knobs": [

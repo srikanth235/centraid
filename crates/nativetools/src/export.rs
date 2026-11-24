@@ -199,11 +199,13 @@ pub fn metadata() -> Value {
                     "verb": row.verb.spec().name,
                     "qualifier": row.qualifier,
                     "kind": row.kind.name(),
+                    "surface": row.surface,
                     "id_param": row.id_param,
                     "names": row.chat_names(),
                 })
             })
             .collect::<Vec<_>>(),
+        "manifest_actions": meta::ALL_MANIFEST_ACTIONS,
         "unbacked_verbs": serde_json::from_str::<Value>(CHAT_VERBS_JSON).map_or(Value::Null, |verbs| verbs["unbacked"].clone()),
         "declared_kinds": DECLARED_KINDS,
         "declared_verbs": DECLARED_VERBS,

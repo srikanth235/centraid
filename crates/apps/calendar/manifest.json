@@ -192,7 +192,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -200,7 +201,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -240,7 +242,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -248,7 +251,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["from", "to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -404,7 +408,8 @@
           },
           "person_id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["person"]
           },
           "state": {
             "type": "string",
@@ -547,7 +552,7 @@
     },
     {
       "name": "edit-occurrence",
-      "verb": "reschedule",
+      "verb": "reschedule:occurrence",
       "kind": "event",
       "inverse": "undo-change",
       "sealed": [],
@@ -569,15 +574,18 @@
           "original_start": {
             "type": "string",
             "minLength": 1,
-            "description": "The series-local wall clock the rule produced for the day."
+            "description": "The series-local wall clock the rule produced for the day.",
+            "aliases": ["occurrence"]
           },
           "scope": {
             "type": "string",
-            "enum": ["occurrence", "future", "series"]
+            "enum": ["occurrence", "future", "series"],
+            "aliases": ["scope"]
           },
           "action": {
             "type": "string",
-            "enum": ["skip", "override", "restore"]
+            "enum": ["skip", "override", "restore"],
+            "aliases": ["action"]
           },
           "title": {
             "type": "string"
@@ -787,7 +795,7 @@
     },
     {
       "name": "empty-trash",
-      "verb": "purge",
+      "verb": "empty_trash",
       "kind": "event",
       "inverse": null,
       "sealed": [],
@@ -932,7 +940,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -940,7 +949,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -980,7 +990,8 @@
         "properties": {
           "from": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "x-target": true
           },
           "rel": {
             "type": "string",
@@ -988,7 +999,8 @@
           },
           "to": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["from", "to"]
           }
         },
         "required": ["from", "rel", "to"],
@@ -1011,11 +1023,12 @@
     },
     {
       "name": "follow-calendar",
-      "verb": "import",
+      "verb": "follow",
       "kind": "event",
       "inverse": "stop-following",
       "sealed": [],
       "bulk": true,
+      "handoff": true,
       "command": "follow.calendar",
       "phrasings": [
         "import my phone's calendar",
@@ -1118,7 +1131,7 @@
     },
     {
       "name": "stop-following",
-      "verb": "detach",
+      "verb": "unfollow",
       "kind": "event",
       "inverse": null,
       "sealed": [],
@@ -1141,7 +1154,8 @@
           },
           "ref": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "aliases": ["ref"]
           }
         }
       },
@@ -1162,8 +1176,8 @@
     },
     {
       "name": "create-calendar",
-      "verb": "create:kind",
-      "kind": "list",
+      "verb": "create",
+      "kind": "calendar",
       "sealed": [],
       "command": "container.create",
       "phrasings": [
@@ -1202,11 +1216,13 @@
               "raspberry",
               "orchid",
               null
-            ]
+            ],
+            "aliases": ["color"]
           },
           "icon": {
             "type": ["string", "null"],
-            "description": "A key of design/icons.toml a calendar may wear."
+            "description": "A key of design/icons.toml a calendar may wear.",
+            "aliases": ["icon"]
           },
           "position": {
             "type": ["number", "null"]
@@ -1337,7 +1353,7 @@
     {
       "name": "add-place",
       "verb": "create",
-      "kind": "event",
+      "kind": "place",
       "inverse": "undo-create",
       "sealed": [],
       "command": "place.add",
@@ -1363,7 +1379,8 @@
           },
           "address": {
             "type": ["string", "null"],
-            "maxLength": 1000
+            "maxLength": 1000,
+            "aliases": ["address"]
           }
         },
         "required": ["title"],
@@ -1386,8 +1403,9 @@
     },
     {
       "name": "export-ics",
-      "verb": "log",
+      "verb": "export",
       "bulk": true,
+      "handoff": true,
       "kind": "event",
       "inverse": null,
       "writes_nothing": true,
@@ -1738,12 +1756,23 @@
       "name": "calendar",
       "plural": "calendars",
       "order": 18,
-      "live": "declared",
+      "live": "write",
       "entity": "calendar",
       "table": "container",
       "pk": "id",
       "nameSource": ["entity", "title"],
-      "fields": [],
+      "fields": [
+        {
+          "name": "color",
+          "type": "text",
+          "source": ["container", "color"]
+        },
+        {
+          "name": "icon",
+          "type": "text",
+          "source": ["container", "icon"]
+        }
+      ],
       "links": [],
       "trash": false,
       "container": true

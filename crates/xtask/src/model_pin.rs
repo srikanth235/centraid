@@ -36,15 +36,46 @@ pub struct Pin<'a> {
     pub base: Option<Base<'a>>,
     pub adapter: Option<AdapterPin<'a>>,
     pub no_adapter: bool,
+    pub refresh_hashes: bool,
 }
 
 pub fn run(root: &Path, pin: &Pin<'_>) -> Result<()> {
-    if pin.base.is_none() && pin.adapter.is_none() && !pin.no_adapter {
+    if pin.base.is_none() && pin.adapter.is_none() && !pin.no_adapter && !pin.refresh_hashes {
         bail!(
-            "name a base (--url, --file, --tools-mode), an adapter (--adapter-url, --adapter-file) or --no-adapter"
+            "name a base (--url, --file, --tools-mode), an adapter (--adapter-url, --adapter-file), --no-adapter, or --refresh-hashes"
         );
     }
     let path = root.join(RECORD);
+    if pin.refresh_hashes {
+        let text = std::fs::read_to_string(&path)
+            .with_context(|| format!("read {}", path.display()))?;
+        let mut record: Value =
+            serde_json::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
+        let mode = record
+            .get("current")
+            .and_then(|c| c.get("tools_mode"))
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("{RECORD} has no current.tools_mode"))?
+            .to_owned();
+        let hashes = runtime_hashes(root)?;
+        let mode_hashes = hashes
+            .get(&mode)
+            .ok_or_else(|| anyhow!("{mode:?} is not a catalogue mode"))?;
+        let tools_hash = mode_hashes["tools_hash"].clone();
+        let prompt_hash = mode_hashes["prompt_hash"].clone();
+        if let Some(current) = record.get_mut("current").and_then(Value::as_object_mut) {
+            current.insert("tools_hash".to_owned(), tools_hash.clone());
+            current.insert("prompt_hash".to_owned(), prompt_hash.clone());
+        }
+        if let Some(adapter) = record.get_mut("adapter").and_then(Value::as_object_mut) {
+            adapter.insert("tools_hash".to_owned(), tools_hash);
+            adapter.insert("prompt_hash".to_owned(), prompt_hash);
+        }
+        std::fs::write(&path, serde_json::to_string_pretty(&record)? + "\n")
+            .with_context(|| format!("write {}", path.display()))?;
+        println!("model-pin: refreshed hashes in {RECORD} for mode {mode}");
+        return Ok(());
+    }
     let mut record: Value = std::fs::read_to_string(&path)
         .ok()
         .and_then(|text| serde_json::from_str(&text).ok())
