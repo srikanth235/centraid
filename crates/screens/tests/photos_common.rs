@@ -416,7 +416,7 @@ fn update(
     event: &wire::PhotosSelectionEvent,
     ordered: &[String],
 ) -> Outcome {
-    d.with_ctx(|ctx| selection.update(event, ordered, ctx))
+    d.with_ctx(|ctx| selection.update(event, ordered, &|_: &str| String::new(), ctx))
 }
 
 // -----------------------------------------------------------------------------

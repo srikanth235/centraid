@@ -483,6 +483,29 @@ internal fun WordsEntryScreen(
                 KitSpinner(state.progress)
             }
         }
+        // R3 (#1209): the order the vault comes back in. The vault opens when the records are back;
+        // previews, then originals, follow. Counts are said on Home afterwards.
+        if (state.restore_rows.isNotEmpty()) {
+            Column(Modifier.testTag("words-restore-rows")) {
+                state.restore_rows.forEach { row ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                            .testTag("words-restore-" + row.name)
+                            .semantics(mergeDescendants = true) { },
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                            KitText(row.name, KitType.Row, Surface.ink)
+                            if (row.detail.isNotEmpty()) KitText(row.detail, KitType.Meta, Surface.meta)
+                        }
+                        KitText(row.state, KitType.Meta, Surface.meta)
+                    }
+                }
+            }
+        }
     }
 }
 

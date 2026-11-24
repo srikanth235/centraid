@@ -74,6 +74,8 @@ struct Home {
     search_origin: Dest,
     sheet: Sheet,
     library: Library,
+    /// What a restore still owes, read with the library (#1209, R3).
+    restoring: Option<wire::RestoreProgress>,
     filter: Filter,
     grain: Grain,
     rung: u32,
@@ -115,6 +117,7 @@ impl Home {
             },
             sheet: Sheet::None,
             library: Library::default(),
+            restoring: None,
             filter: Filter::All,
             grain: Grain::All,
             rung: layout::DEFAULT_RUNG,
@@ -149,6 +152,7 @@ impl Home {
     }
 
     fn read_library(&mut self, ctx: &Ctx) {
+        self.restoring = crate::kit::restoring::owed(ctx);
         if self.library.loaded() {
             self.library.refresh(ctx, self.filter);
             let shown: Vec<String> = self
@@ -272,7 +276,15 @@ impl Home {
             }
             H::Selection(event) => {
                 let ordered = self.ordered();
-                let outcome = self.selection.update(&event, &ordered, ctx);
+                let cells = &self.library.cells;
+                let content_of = |id: &str| {
+                    cells
+                        .iter()
+                        .find(|cell| cell.photo_id == id)
+                        .map(|cell| cell.content_id.clone())
+                        .unwrap_or_default()
+                };
+                let outcome = self.selection.update(&event, &ordered, &content_of, ctx);
                 self.after_selection(outcome, ctx);
             }
             H::AlbumChoice(event) => {
@@ -675,6 +687,12 @@ impl Home {
         for tile in &mut tiles {
             if self.fetching.contains(&tile.content_id) {
                 tile.held = wire::photo_tile::Held::Fetching as i32;
+            } else if crate::kit::restoring::originals_owed(self.restoring.as_ref())
+                && tile.held == wire::photo_tile::Held::ThumbnailOnly as i32
+                && !tile.content_id.is_empty()
+            {
+                // THE ORIGINAL IS ON ITS WAY BACK: the arrow, with nothing to press.
+                tile.held = wire::photo_tile::Held::ComingBack as i32;
             }
         }
         let ids: Vec<String> = tiles.iter().map(|tile| tile.photo_id.clone()).collect();
@@ -778,13 +796,20 @@ impl Home {
         };
         let complete = self.library.complete();
         wire::PhotosLibraryData {
-            count_label: cells::count_phrase(
-                locale,
-                self.library
-                    .total
-                    .unwrap_or(u32::try_from(tiles.len()).unwrap_or(u32::MAX)),
-                self.library.total.is_none() && !complete,
-            ),
+            // WHILE A RESTORE BRINGS THE PHOTOS BACK the scope line says how far (#1209, R3).
+            count_label: self
+                .restoring
+                .as_ref()
+                .and_then(|owed| crate::backup::line::restore_sentence(locale, owed))
+                .unwrap_or_else(|| {
+                    cells::count_phrase(
+                        locale,
+                        self.library
+                            .total
+                            .unwrap_or(u32::try_from(tiles.len()).unwrap_or(u32::MAX)),
+                        self.library.total.is_none() && !complete,
+                    )
+                }),
             open: Some(routes::lightbox("", &ids, "")),
             rows,
             grain_items,

@@ -420,13 +420,14 @@ struct BackupHomeView: View {
         if let id { drawn.accessibilityIdentifier(id) } else { drawn }
     }
 
-    /// "IN THIS BACKUP" and "Not backed up yet": one row per app, its mark, what it holds and its
-    /// size, and whether it is backed up. A row that waits draws its status in the amber state word.
+    /// "IN THIS BACKUP": one row per class (records, photo previews, photos and files), its mark,
+    /// what it holds, what waits, and whether it is backed up. A row that waits draws its status in the amber state word.
     @ViewBuilder
     private func appRows(_ rows: [Centraid_Core_V1_BackupAppRow]) -> some View {
         ForEach(Array(rows.enumerated()), id: \.element.appID) { index, row in
             HStack(spacing: 12) {
-                AppTile(appID: row.appID, size: 32)
+                // ONE ROW PER CLASS (#1209): its own mark, not an app's.
+                KitTile(iconKey: row.iconKey, size: 32)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(row.name).kitType(.row).foregroundStyle(Surface.ink)
                     if !row.detail.isEmpty { sentence(row.detail) }
@@ -452,7 +453,7 @@ struct BackupHomeView: View {
             .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(row.accessibilityLabel.isEmpty ? row.name : row.accessibilityLabel)
-            .accessibilityIdentifier("backup-app-\(row.appID)")
+            .accessibilityIdentifier("backup-class-\(row.appID)")
             if index < rows.count - 1 { hairline() }
         }
     }

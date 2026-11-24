@@ -92,6 +92,8 @@ pub struct Gateway {
     pub sample_counter: u64,
     pub scrub_cursor: Option<Name>,
     pub directory_dirty: bool,
+    /// The last head that was not `conf` had gone backwards; cleared when a new head is confirmed.
+    pub regressed: bool,
 }
 
 impl Gateway {
@@ -122,6 +124,7 @@ impl Gateway {
             sample_counter: 0,
             scrub_cursor: None,
             directory_dirty: true,
+            regressed: false,
         }
     }
 }
@@ -212,7 +215,7 @@ fn pair_of(name: Option<String>, ms: Option<i64>) -> Result<Option<(Name, u64)>>
 
 const GATEWAY_COLUMNS: &str = "gateway_id, addrs, cert_der, label, epoch, generation, conf, conf_ms, \
      troot, troot_ms, oroot, oroot_ms, reach, moved_epoch, reach_ms, paired_ms, sample_counter, \
-     scrub_cursor, directory_dirty";
+     scrub_cursor, directory_dirty, regressed";
 
 impl DeviceState {
     /// Open (founding when new) the state at `path`.
@@ -313,6 +316,7 @@ impl DeviceState {
                oroot = CASE WHEN gateway.epoch = excluded.epoch THEN gateway.oroot END,
                oroot_ms = CASE WHEN gateway.epoch = excluded.epoch THEN gateway.oroot_ms END,
                generation = CASE WHEN gateway.epoch = excluded.epoch THEN gateway.generation ELSE 0 END,
+               regressed = CASE WHEN gateway.epoch = excluded.epoch THEN gateway.regressed ELSE 0 END,
                epoch = excluded.epoch, directory_dirty = 1",
             params![
                 gateway.gateway_id,
@@ -346,6 +350,7 @@ impl DeviceState {
             sample_counter: unsigned(row.get(16)?),
             scrub_cursor: None,
             directory_dirty: row.get::<_, i64>(18)? != 0,
+            regressed: row.get::<_, i64>(19)? != 0,
         };
         // The text columns are parsed by the caller, which can fail with the plane's error.
         let texts = vec![
@@ -435,8 +440,21 @@ impl DeviceState {
     /// SQLite's refusal.
     pub fn confirm_records(&self, gateway_id: &str, head: &Name, now_ms: u64) -> Result<()> {
         self.connection.execute(
-            "UPDATE gateway SET conf = ?2, conf_ms = ?3 WHERE gateway_id = ?1",
+            "UPDATE gateway SET conf = ?2, conf_ms = ?3, regressed = 0 WHERE gateway_id = ?1",
             params![gateway_id, head.to_hex(), signed(now_ms)],
+        )?;
+        Ok(())
+    }
+
+    /// Record whether the head last read at a gateway, which was not `conf`, had gone backwards.
+    /// Cleared by [`Self::confirm_records`], not by a pass that finds nothing to compare.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn set_regressed(&self, gateway_id: &str, regressed: bool) -> Result<()> {
+        self.connection.execute(
+            "UPDATE gateway SET regressed = ?2 WHERE gateway_id = ?1",
+            params![gateway_id, i64::from(regressed)],
         )?;
         Ok(())
     }

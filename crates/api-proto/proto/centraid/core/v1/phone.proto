@@ -238,6 +238,28 @@ message ClassStatus {
   BackupClass class = 1;
   bool backed_up = 2;
   uint64 owed = 3;
+  // HOW MANY FILES THE CLASS COVERS AND HOW MANY ARE HELD (#1209, wave 4b): the photos and files
+  // behind "1,162 of 1,282 backed up", counted from the vault's content rows, a video the member
+  // left out not among them. `held` is the files this gateway holds whole (the originals tree or
+  // the thumbnail tree lists them); on the aggregate it is the least any fed gateway holds. Zero
+  // for records, which are one tree and not counted in files.
+  uint64 total = 4;
+  uint64 held = 5;
+  // WHY THE FILES OF THIS CLASS THAT ARE NOT BACKED UP WAIT, one row per reason with a count: the
+  // class's share of `BackupStatusResponse.waiting`. Set on the aggregate rows only (those of
+  // `BackupStatusResponse.classes`); empty for records and on a gateway's own rows.
+  repeated Waiting waiting = 6;
+}
+
+// HOW FAR A RESTORE HAS BROUGHT THE PHOTOS BACK (#1209, R3), counted from the vault's own content
+// rows against what the content store holds on this phone. Previews and originals are files, not
+// chunks; an original the member freed from this phone on purpose, or one the OS library holds, is
+// counted as back, because a restore does not owe it.
+message RestoreProgress {
+  uint64 previews_total = 1;
+  uint64 previews_back = 2;
+  uint64 originals_total = 3;
+  uint64 originals_back = 4;
 }
 
 // WHICH GATEWAYS HOLD ONE ORIGINAL WHOLE (#1209, R4). The delete warning asks before a photo
@@ -245,6 +267,11 @@ message ClassStatus {
 message HeldWholeRequest {
   // 32 raw bytes: the BLAKE3 of the whole plaintext.
   bytes content_hash = 1;
+  // MANY AT ONCE (#1209, wave 4b): a selection or an emptied trash asks about every photo in one
+  // read, so the cost is one pass over each gateway's tree and not one per photo. Each is 32 raw
+  // bytes; `content_hash` is read as well when it is set. `not_held` names the ones no gateway
+  // holds whole.
+  repeated bytes content_hashes = 2;
 }
 
 message HeldWholeResponse {
@@ -252,6 +279,9 @@ message HeldWholeResponse {
   repeated string gateway_ids = 1;
   // Whether any does: the warning shows when this is false.
   bool held_whole = 2;
+  // OF `HeldWholeRequest.content_hashes`, the ones no gateway holds whole, in the order asked and
+  // without repeats. The delete warning counts these.
+  repeated bytes not_held = 3;
 }
 
 // ONE ITEM WHOSE BYTES ONLY THE SHELL CAN READ (#1080), and everything the
@@ -581,6 +611,8 @@ message BackupStatusResponse {
   // A GATEWAY ANSWERED `VAULT_MOVED`: another phone holds this vault's writer
   // epoch, and this one is read-only for it (#1029 F1). Nothing is wiped.
   bool frozen = 11;
+  // DEPRECATED (#1209): the Backup screen draws per class (`classes`), so this is never filled.
+  // The field stays: proto changes are additive only.
   // WHAT EACH APP'S BACKUP HOLDS (#1144), one row per app in the product's
   // order. Empty on a core holding no vault, or no keys to name its files by.
   repeated AppHolding apps = 12;
@@ -609,6 +641,9 @@ message BackupStatusResponse {
   optional int64 first_item_ms = 18;
   // WHAT IS BACKED UP, PER CLASS (#1209, §6.6): records, thumbnails, originals.
   repeated ClassStatus classes = 19;
+  // WHAT A RESTORE STILL HAS TO BRING BACK (#1209, R3), present only from a restore until every
+  // preview and original it owes is on this phone: the vault is open and the screens say so.
+  optional RestoreProgress restoring = 20;
 }
 
 // ONE APP'S PART OF THE BACKUP (#1144). Counts come from the app's own
@@ -754,6 +789,7 @@ message Destination {
   // When this phone paired with it, on this phone's clock (#1188, NB2): the age a device that
   // never confirmed anything is counted from.
   int64 paired_at_ms = 15;
+  // DEPRECATED (#1209): what a device owes is `classes`, and the screens read no per-app rows.
   // WHAT IT STILL OWES, BY APP (#1188, NB1): the originals this gateway has not acknowledged whole,
   // per app, for the Backup screen's "waiting for <device>" rows. Set only by `backup_status`.
   repeated DeviceWaiting waiting_apps = 16;

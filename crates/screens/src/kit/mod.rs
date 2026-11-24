@@ -23,6 +23,7 @@ pub mod permission;
 pub mod quantity;
 pub mod read;
 pub mod reads_page;
+pub mod restoring;
 pub mod schedule;
 pub mod search;
 pub mod secret;

@@ -50,6 +50,7 @@ The contract is `contracts/backup/spec.md`.
 | `drill` | `dump`, every row of every table, for proving a restored vault is the one that was lost. The drill itself is `tests/restore_drill.rs`. |
 
 There is **no backup index in the vault** and no outbox on the device: a name is a keyed hash of its plaintext, so what a gateway is owed is the difference between two trees, and the gateway is asked only when the phone cannot know (a recovery pass, a media phase). The plane speaks to a gateway through `Store` and never to a socket; the phone's core wires it to `crates/gateway`'s client.
+
 ## Decisions specific to this file format
 
 Each with its reason in the module, and each recorded as a decision.

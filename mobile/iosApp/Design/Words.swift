@@ -33,7 +33,7 @@ public enum KitWords {
     public static let VAULT_DAMAGED_TITLE = "Vault damaged"
     public static let VAULT_DAMAGED_LINE = "This phone's vault is damaged. No new backup is made."
     public static let VAULT_DAMAGED_SAFE = "The backups already on your backup devices are untouched."
-    public static let VAULT_DAMAGED_RESTORE = "Restore my vaults"
+    public static let VAULT_DAMAGED_RESTORE = "Restore my vault"
 
     /// A pushed page's back control, spoken: "Back to People"; "Back" with no parent.
     public static func backTo(parent: String) -> String {

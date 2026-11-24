@@ -100,8 +100,6 @@ struct State {
     /// another is a switch the tabs have not followed yet (see
     /// [`Runtime::follow_foreground`]).
     foreground: Option<String>,
-    /// A vault a screen asked to bring to the front during this call.
-    switch: Option<String>,
     /// Topics screens announced during the update in flight, relayed to every
     /// open screen by [`Runtime::settle`].
     announced: Vec<String>,
@@ -164,7 +162,6 @@ impl Runtime {
                 units: None,
                 started: false,
                 foreground: None,
-                switch: None,
                 announced: Vec::new(),
                 commands: Vec::new(),
                 opened: Vec::new(),
@@ -441,9 +438,6 @@ impl Runtime {
             }
         }
         instance.tables.extend(done.tables);
-        if let Some(vault_id) = done.switch {
-            state.switch = Some(vault_id);
-        }
         let Some(instance) = state.instances.get_mut(&id) else {
             return;
         };
@@ -606,8 +600,7 @@ impl Runtime {
         }
         for (effect, number) in effects.into_iter().zip(numbers) {
             // WHEN THE CORE IS THE DOOR TO A SHELF, THE SHELF IS RUST'S: a
-            // screen's request of it (Home's switch, make, restore, forget and
-            // rename) is the shelf service's to perform and never reaches a
+            // screen's request of it (Home's make and restore) is the shelf service's to perform and never reaches a
             // shell. The platform's own doors (`Open`: the transfer rules, the
             // notification settings) do. A core that holds one vault has no
             // shelf, and the shell performs them all.
@@ -615,7 +608,7 @@ impl Runtime {
                 && !matches!(command.kind, Some(wire::vault_command::Kind::Open(_)))
                 && core.vaults().is_some()
             {
-                state.commands.push(command.clone());
+                state.commands.push(*command);
                 continue;
             }
             if let Some(wire::effect::Kind::Announce(note)) = &effect.kind {
@@ -845,20 +838,15 @@ impl Runtime {
     /// The shelf behind the core ([`ScreenCtx::vaults`]) decides which vault
     /// every read and write goes to, so the screens need no change of their own
     /// — but a screen that loaded one vault's rows must not go on showing them
-    /// over another's. Two cases, both run at the end of every call, change,
-    /// wake and finished job:
+    /// over another's. It runs at the end of every call, change, wake and finished job, when:
     ///
-    /// * a screen asked for a switch ([`Ctx::switch_vault`]): every screen in a
-    ///   tab hears it is being left FIRST, so what the member typed is written
-    ///   to the vault it was typed in, and only then is the vault brought to
-    ///   the front;
     /// * the shelf's foreground is not the one the tabs were made for (a vault
     ///   founded, the one in front forgotten, a launch that has just opened
     ///   its vaults): the screens are closed WITHOUT that last event, because
     ///   the vault they would write it to is gone or is not the one they were
     ///   typed in.
     ///
-    /// Either way each tab's root is closed with everything stacked over it and
+    /// Each tab's root is closed with everything stacked over it and
     /// opened again, the selected tab stays selected, and the shell draws an
     /// ordinary update. Services are not touched: they hold no vault's rows.
     fn follow_foreground(
@@ -868,23 +856,8 @@ impl Runtime {
         out: &mut wire::ScreenUpdate,
     ) {
         let Some(vaults) = core.vaults() else {
-            state.switch = None;
             return;
         };
-        if let Some(target) = state.switch.take()
-            && vaults.foreground_id().as_deref() != Some(target.as_str())
-            && vaults.held().iter().any(|held| held.vault_id == target)
-        {
-            let screens: Vec<u64> = state
-                .tabs
-                .iter()
-                .flat_map(|tab| tab.stack.iter().rev().copied())
-                .collect();
-            for id in screens {
-                Self::leave(state, core, id, out);
-            }
-            vaults.bring_to_front(&target);
-        }
         let now = vaults.foreground_id();
         if !state.started || now == state.foreground {
             return;
@@ -981,8 +954,8 @@ impl Runtime {
                     state,
                     core,
                     |instance| {
-                        instance.service.then(|| wire::ScreenEvent {
-                            kind: Some(wire::screen_event::Kind::VaultCommanded(command.clone())),
+                        instance.service.then_some(wire::ScreenEvent {
+                            kind: Some(wire::screen_event::Kind::VaultCommanded(command)),
                         })
                     },
                     out,

@@ -543,15 +543,9 @@ fn held_is_newer(held: &Path, restored: &Path) -> bool {
     let writes = |file: &Path| -> Option<u64> {
         let vault = Vault::open(file).ok()?;
         let writes = vault
-            .read(|connection| {
-                use centraid_vault::rusqlite::OptionalExtension as _;
-                Ok(connection
-                    .query_row("SELECT writes FROM vault", [], |row| row.get::<_, i64>(0))
-                    .optional()?
-                    .unwrap_or(0))
-            })
+            .read(centraid_vault::clock::writes_and_written_at)
             .ok()
-            .and_then(|writes| u64::try_from(writes).ok());
+            .and_then(|(writes, _)| u64::try_from(writes).ok());
         let _ = vault.close();
         writes
     };

@@ -854,7 +854,22 @@ fn after_a_restore_only_what_is_new_is_sent() {
     let new_dir = tempfile::tempdir().expect("a directory");
     let path = PathBuf::from(&restore(new_dir.path(), &gateway).vaults[0].path);
     let phone = reopen(&path);
+    // R3: the vault is open, and the status says what the restore still owes: the two originals,
+    // none of them back yet. When nothing is owed it says nothing.
+    let owed = status(&phone)
+        .restoring
+        .expect("a restore owes its originals");
+    assert_eq!(
+        (owed.originals_total, owed.originals_back),
+        (2, 0),
+        "{owed:?}"
+    );
+    assert!(owed.previews_back <= owed.previews_total, "{owed:?}");
     drain(&phone, at_home());
+    assert!(
+        status(&phone).restoring.is_none(),
+        "every original is back, so nothing is owed"
+    );
     let backed = status(&phone);
     assert_eq!(
         backed.content_confirmed, backed.content_total,

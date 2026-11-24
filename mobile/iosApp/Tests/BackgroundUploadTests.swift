@@ -6,11 +6,10 @@ import XCTest
 /// THE BACKGROUND MOVER'S PURE HALF (#1080 rulings 1, 2; A6, A10).
 ///
 /// Everything here runs without a gateway, a network or the core: the pin
-/// verdict, the tag a relaunch recovers a task by, the code a finished task
+/// verdict, the tag a relaunch reads off a task, the code a finished task
 /// reports, the host a pinned address answers for, the refusal of an upload
 /// outside TLS, and the link each part may cross. Each law has its NEGATIVE
-/// case beside it — a pin that differs by one byte is refused, a path the
-/// protocol did not shape names no part, a part the core did not allow
+/// case beside it — a pin that differs by one byte is refused, a part the core did not allow
 /// cellular never gets it — because a gate shown only green is a gate nobody
 /// saw refuse. The
 /// session itself, the relaunch and the OS carrying the files are device
@@ -47,20 +46,11 @@ final class BackgroundUploadTests: XCTestCase {
         XCTAssertEqual(UploadTag.decode(tag.encoded), tag)
     }
 
-    func testTheProtocolPathNamesTheVaultAndThePart() throws {
-        let url = URL(string: "https://192.168.1.4:8443/v1/v/\(vault)/o/\(part)")
-        let parsed = try XCTUnwrap(UploadTag.parse(url: url))
-        XCTAssertEqual(parsed.vault, vault)
-        XCTAssertEqual(parsed.name, part)
-    }
-
-    func testAPathThisFileDidNotBuildNamesNothing() {
-        // The head, a short name, upper-case hex and a foreign prefix.
-        XCTAssertNil(UploadTag.parse(url: URL(string: "https://h/v1/v/\(vault)/head")))
-        XCTAssertNil(UploadTag.parse(url: URL(string: "https://h/v1/v/\(vault)/o/abc")))
-        XCTAssertNil(UploadTag.parse(url: URL(string: "https://h/v1/v/\(vault)/o/\(part.uppercased())")))
-        XCTAssertNil(UploadTag.parse(url: URL(string: "https://h/v2/v/\(vault)/o/\(part)")))
+    func testATaskWithNoDescriptionNamesNothingAndNothingIsReadOffItsURL() {
+        // The vault id is never read back off the request's path: no description, no tag.
         XCTAssertNil(UploadTag.decode("not a tag"))
+        XCTAssertNil(UploadTag.decode(nil))
+        XCTAssertEqual(UploadTag.unknown.key, "//")
     }
 
     // MARK: what a finished task reports
@@ -151,6 +141,51 @@ final class BackgroundUploadTests: XCTestCase {
         XCTAssertEqual(refusal, .notHTTPS)
     }
 
+    // MARK: the bundles the core named
+
+    func testEveryBundleBecomesOneOrderWithItsRequestAsGiven() throws {
+        var first = Centraid_Core_V1_HandoffPart()
+        first.name = "b1"
+        first.path = "/staging/b1"
+        first.url = "https://gw.local:8443/v1/v/\(vault)/bundle"
+        first.method = "POST"
+        var header = Centraid_Core_V1_Header()
+        header.name = "Authorization"
+        header.value = "Bearer t"
+        first.headers = [header]
+        first.allowsCellular = true
+        var second = first
+        second.name = "b2"
+        second.allowsCellular = false
+        let orders = BackgroundUploader.orders(from: [first, second])
+        XCTAssertEqual(orders.count, 2)
+        XCTAssertEqual(orders.map(\.allowsCellular), [true, false])
+        let request = try orders[0].request().get()
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer t")
+        XCTAssertEqual(request.url?.absoluteString, first.url)
+        XCTAssertEqual(BackgroundUploader.orders(from: []).count, 0)
+    }
+
+    // MARK: a report is a wake
+
+    @MainActor
+    func testWakesWaitForTheSinkThenArriveOnceEachInOrder() async {
+        let settlement = UploadSettlement()
+        let sink = CountingSink()
+        for name in ["a", "b", "c"] {
+            settlement.report(SettledUpload(name: name, httpStatus: 201, error: nil, gateway: "gw", vault: vault))
+        }
+        XCTAssertEqual(sink.settledNames, [], "no sink yet: held, not dropped")
+        settlement.attach(sink)
+        await sink.waitForSettled(3)
+        XCTAssertEqual(sink.settledNames, ["a", "b", "c"])
+        XCTAssertEqual(sink.drainedCount, 0)
+        settlement.report(SettledUpload(name: "d", httpStatus: 0, error: "TRANSPORT_-1005", gateway: "gw", vault: vault))
+        await sink.waitForSettled(4)
+        XCTAssertEqual(sink.settledNames.count, 4)
+    }
+
     // MARK: the pinned addresses
 
     func testAnAddressAnswersForItsHost() {
@@ -170,5 +205,19 @@ final class BackgroundUploadTests: XCTestCase {
         XCTAssertEqual(reopened.gateway(serving: "192.168.1.4"), "gw-1")
         XCTAssertNil(reopened.gateway(serving: "192.168.1.5"))
         XCTAssertNil(reopened.certificate(of: "gw-2"))
+    }
+}
+
+/// A sink that counts the wakes it is given.
+@MainActor
+private final class CountingSink: UploadSink {
+    var settledNames: [String] = []
+    var drainedCount = 0
+
+    func settled(_ upload: SettledUpload) async { settledNames.append(upload.name) }
+    func drained() async { drainedCount += 1 }
+
+    func waitForSettled(_ count: Int) async {
+        while settledNames.count < count { await Task.yield() }
     }
 }

@@ -539,6 +539,7 @@ impl Screen for Editor {
             body: words::confirm_discard_body(locale),
             confirm_label: words::quick_discard(locale),
             destructive: true,
+            warning: String::new(),
         });
         wire::ViewState {
             kind: Some(wire::view_state::Kind::AgendaEditor(

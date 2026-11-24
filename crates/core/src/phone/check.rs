@@ -453,8 +453,7 @@ fn files_of(
             .trim()
             .to_ascii_lowercase()
             .starts_with("video/");
-        let skipped_video = request.exclude_videos && video;
-        if !entry.original.is_empty() && !skipped_video {
+        if !(entry.original.is_empty() || request.exclude_videos && video) {
             files.push(Listed {
                 entry: entry.clone(),
                 class: Class::Originals,

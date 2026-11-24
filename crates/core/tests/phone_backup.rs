@@ -515,6 +515,7 @@ fn held_whole_names_the_gateways_that_hold_an_original_and_says_none_before_the_
             &phone,
             wire::request::Kind::HeldWhole(wire::HeldWholeRequest {
                 content_hash: hash.to_vec(),
+                ..Default::default()
             }),
         ) else {
             panic!("a held_whole answers");
@@ -543,11 +544,24 @@ fn held_whole_names_the_gateways_that_hold_an_original_and_says_none_before_the_
         !held_whole(&[7; 32]).held_whole,
         "a hash nothing names is held nowhere"
     );
+    // MANY AT ONCE: of three hashes with one repeated, only the one nothing holds comes back,
+    // once, in the order asked.
+    let wire::response::Kind::HeldWhole(many) = ask(
+        &phone,
+        wire::request::Kind::HeldWhole(wire::HeldWholeRequest {
+            content_hash: Vec::new(),
+            content_hashes: vec![vec![7; 32], hash.clone(), vec![7; 32], vec![8; 32]],
+        }),
+    ) else {
+        panic!("a held_whole answers");
+    };
+    assert_eq!(many.not_held, vec![vec![7; 32], vec![8; 32]]);
     assert!(
         try_ask(
             &phone,
             wire::request::Kind::HeldWhole(wire::HeldWholeRequest {
                 content_hash: vec![1, 2, 3],
+                ..Default::default()
             })
         )
         .is_err(),
@@ -920,4 +934,49 @@ fn a_machine_that_is_not_the_pinned_gateway_is_untrusted_and_a_damaged_copy_is_d
         "{status:?}"
     );
     assert_eq!(tokens(&impostor), 0, "nothing paired with the impostor");
+}
+
+#[test]
+fn a_second_pass_with_no_write_walks_nothing() {
+    let home = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone(dir.path());
+    pair(&phone, &home);
+    owned_photo(&phone, "a photograph the app holds", 90_000);
+
+    let first = drain(&phone, at_home());
+    assert_eq!(first.stopped, wire::DrainStop::Empty as i32, "{first:?}");
+    let held = home.held(&vault_id());
+    let commits = committed(&home);
+    assert!(commits > 0, "the first pass sent the vault");
+
+    // NOTHING WAS WRITTEN: the pass finds the vault unchanged, takes no snapshot, sends nothing.
+    let second = drain(&phone, at_home());
+    assert_eq!(second.stopped, wire::DrainStop::Empty as i32, "{second:?}");
+    assert_eq!(second.confirmed_parts, 0, "{second:?}");
+    assert_eq!(committed(&home), commits, "no object was committed again");
+    assert_eq!(
+        home.held(&vault_id()),
+        held,
+        "the gateway holds the same set"
+    );
+}
+
+#[test]
+fn a_phone_with_no_room_says_so() {
+    let home = gateway();
+    let dir = tempfile::tempdir().expect("a directory");
+    let phone = phone_with(dir.path(), |config| config.with_staging_ceiling(1));
+    pair(&phone, &home);
+    owned_photo(&phone, "a photograph the app holds", 90_000);
+
+    drain(&phone, at_home());
+    assert!(
+        status(&phone)
+            .waiting
+            .iter()
+            .any(|row| row.reason == wire::WaitReason::NoRoom as i32),
+        "the page says there is no room"
+    );
+    assert!(home.held(&vault_id()).is_empty(), "nothing went anywhere");
 }

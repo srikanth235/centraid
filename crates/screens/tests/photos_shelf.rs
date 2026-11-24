@@ -813,7 +813,7 @@ fn send_a_copy_asks_how_much_place_travels_then_hands_the_pick_to_the_platform()
 #[test]
 fn the_trash_says_the_kits_words_and_empties_through_the_shared_verb() {
     use centraid_screens::kit::trash;
-    use centraid_screens::strings::{Locale, shared};
+    use centraid_screens::strings::{Locale, photos as words, shared};
     let mut d = driver();
     let (a, b) = (photo(&d, "a"), photo(&d, "b"));
     trash(&d, &a);
@@ -850,6 +850,14 @@ fn the_trash_says_the_kits_words_and_empties_through_the_shared_verb() {
     );
     assert_eq!(confirm.confirm_label, shared::trash_purge(Locale::En));
     assert!(confirm.destructive);
+    // R4 (#1209): this core has no backup device, so no backup holds the photograph whole, and the
+    // confirm says so in one amber line above the body. The member can still delete: the button
+    // and the body are the kit's own.
+    assert_eq!(
+        confirm.warning,
+        "This photo isn\u{2019}t backed up yet. No backup device can bring it back."
+    );
+    assert_eq!(confirm.body, words::photos_delete_forever_body(Locale::En));
 
     // Empty trash, in the kit's sentences, through `empty-trash`: both photographs go.
     send(
@@ -861,6 +869,10 @@ fn the_trash_says_the_kits_words_and_empties_through_the_shared_verb() {
     let confirm = state(&d, shelf).confirm.clone().expect("a confirm");
     assert_eq!(confirm.title, shared::trash_empty_title(Locale::En));
     assert_eq!(confirm.body, shared::trash_empty_body(Locale::En));
+    assert_eq!(
+        confirm.warning,
+        "2 of these photos aren\u{2019}t backed up yet. No backup device can bring them back."
+    );
     assert_eq!(
         confirm.confirm_label,
         shared::trash_empty_action(Locale::En)

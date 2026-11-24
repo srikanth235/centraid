@@ -410,6 +410,7 @@ impl Screen for Export {
                         body: words::export_confirm_body(locale),
                         confirm_label: words::export_confirm(locale),
                         destructive: true,
+                        warning: String::new(),
                     }),
                     phase: self.phase as i32,
                     status: self.status.clone(),

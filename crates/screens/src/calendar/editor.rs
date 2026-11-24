@@ -987,12 +987,14 @@ impl Editor {
                 body: words::confirm_discard_body(locale),
                 confirm_label: words::quick_discard(locale),
                 destructive: true,
+                warning: String::new(),
             }),
             Asking::Skip => Some(wire::Confirm {
                 title: words::confirm_skip_title(locale),
                 body: words::confirm_skip_body(locale),
                 confirm_label: words::confirm_skip(locale),
                 destructive: true,
+                warning: String::new(),
             }),
             _ => None,
         }

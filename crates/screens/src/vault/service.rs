@@ -232,7 +232,6 @@ impl Service {
                 wire::home_event::VaultsTold {
                     vault: held.vaults.iter().find(|v| v.foreground).map(shell_vault),
                     none: vaults.is_empty(),
-                    vaults,
                 },
             )),
         );
@@ -254,7 +253,6 @@ impl Service {
                 Self::told(wire::home_event::Kind::OutcomeTold(
                     wire::home_event::OutcomeTold {
                         status_line: sentence,
-                        rename_failed: false,
                     },
                 )),
             );
@@ -307,18 +305,6 @@ impl Service {
         })
     }
 
-    fn outcome(ctx: &Ctx, sentence: &str, rename_failed: bool) {
-        ctx.post(
-            HOME,
-            Self::told(wire::home_event::Kind::OutcomeTold(
-                wire::home_event::OutcomeTold {
-                    status_line: sentence.to_owned(),
-                    rename_failed,
-                },
-            )),
-        );
-    }
-
     // ---- what Home asks ------------------------------------------------------
 
     fn open(route: wire::Route) -> wire::Effect {
@@ -329,28 +315,12 @@ impl Service {
         }
     }
 
-    fn commanded(&mut self, command: wire::VaultCommand, ctx: &Ctx) -> Vec<wire::Effect> {
+    fn commanded(&mut self, command: wire::VaultCommand) -> Vec<wire::Effect> {
         use wire::vault_command::Kind as C;
         match command.kind {
-            // THE VAULT IN FRONT CHANGES at the end of this call, and the tabs
-            // follow it (`Runtime::follow_foreground`).
-            Some(C::SwitchTo(vault_id)) => {
-                ctx.switch_vault(&vault_id);
-                Vec::new()
-            }
             // MAKING AND RESTORING ARE THE WORDS' PAGES, pushed where the member is.
             Some(C::Make(true)) => vec![Self::open(crate::custody::routes::make())],
             Some(C::Restore(true)) => vec![Self::open(crate::custody::routes::restore())],
-            Some(C::Forget(vault_id)) => {
-                let forgotten = self.shelf.forget(&vault_id);
-                Self::outcome(ctx, "", false);
-                self.send(forgotten.writes, Then::Nothing, ctx)
-            }
-            Some(C::Rename(rename)) => {
-                let renamed = self.shelf.rename(&rename.vault_id, &rename.name);
-                Self::outcome(ctx, "", !renamed);
-                Vec::new()
-            }
             _ => Vec::new(),
         }
     }
@@ -415,7 +385,7 @@ impl Screen for Service {
                 }
                 Vec::new()
             }
-            Some(E::VaultCommanded(command)) => self.commanded(command, ctx),
+            Some(E::VaultCommanded(command)) => self.commanded(command),
             Some(E::MemoryWarning(_)) => {
                 if self.launch == Launch::Ready {
                     self.shelf.rest();

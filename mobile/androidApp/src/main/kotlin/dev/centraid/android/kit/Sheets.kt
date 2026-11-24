@@ -61,6 +61,18 @@ public fun ConfirmSheet(
             SheetOutline(label = cancelLabel, testTag = "confirm-cancel", link = true, pageInk = true, onPress = onDismiss),
         ),
     ) {
+        // R4 (#1209): one amber line above the body, for a photograph no backup device holds
+        // whole. The member can still delete; nothing else about the confirm changes.
+        if (confirm.warning.isNotEmpty()) {
+            Text(
+                confirm.warning,
+                style = kitTextStyle(KitType.Row),
+                color = StateColor.Amber.text,
+                modifier = Modifier
+                    .padding(horizontal = KitGeometry.GUTTER, vertical = 4.dp)
+                    .testTag("confirm-warning"),
+            )
+        }
         if (confirm.body.isNotEmpty()) {
             Text(
                 confirm.body,

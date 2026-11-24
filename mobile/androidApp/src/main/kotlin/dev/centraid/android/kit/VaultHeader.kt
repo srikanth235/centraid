@@ -57,7 +57,6 @@ import dev.centraid.design.CentraidScale
 @Composable
 public fun VaultHeader(
     bar: HomeBar,
-    onSwitchVault: () -> Unit,
     modifier: Modifier = Modifier,
     /**
      * Open the transfer-rules sheet (#1025 S4). Defaulted so a preview and a
@@ -104,13 +103,11 @@ public fun VaultHeader(
         Row(
             Modifier
                 .weight(1f)
-                .clickable(onClick = onSwitchVault)
-                .testTag("home-vault-switch")
-                // The label REPLACES the lines for assistive tech, so a screen
-                // reader hears one sentence rather than a name and an orphan
-                // line. The backup status is a door of its own, below.
+                // The lockup is not a control: a phone holds one vault (#1209, R1). A screen reader
+                // hears the vault's own sentence, and the backup status is a door of its own, below.
+                .testTag("home-vault-name")
                 .semantics(mergeDescendants = true) {
-                    contentDescription = bar.switch_label
+                    contentDescription = vault?.accessibility_label.orEmpty().ifEmpty { name }
                 },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),

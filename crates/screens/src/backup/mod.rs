@@ -6,7 +6,7 @@
 //! |---|---|
 //! | [`home`] | the screen `backup.home`: the line, the gateways, the controls, the key |
 //! | [`check`] | the page `backup.check`, "Check my backup": each device's backup opened in a spare copy |
-//! | [`apps`] | "In this backup": one row per app, what it holds and whether it is backed up |
+//! | [`classes`] | "In this backup": one row per class (records, photo previews, photos and files) |
 //! | [`line`] | the one honest line Home draws too: never more than a gateway acknowledged |
 //! | [`reading`] | the ledger's reading, and the `backup-status` query behind it |
 //! | [`states`] | what a device says about itself when it is not just behind, a check's stated rate, the restore ask |
@@ -28,9 +28,9 @@ use crate::Registry;
 use crate::custody::secrets::VaultSecrets;
 
 pub mod alerts;
-pub mod apps;
 pub mod check;
 pub mod claim;
+pub mod classes;
 mod doors;
 pub mod freeze;
 pub mod home;

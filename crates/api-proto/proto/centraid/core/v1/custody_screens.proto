@@ -131,6 +131,12 @@ message WordsNameTyped {
 // words.enter: type the words back
 // ---------------------------------------------------------------------------
 
+message WordsRestoreRow {
+  string name = 1;
+  string detail = 2;
+  string state = 3;
+}
+
 message WordsEnterState {
   Phase phase = 1;
   // 2 was `purpose`: nothing read it (#1152).
@@ -191,6 +197,9 @@ message WordsEnterState {
   // claimed until the member picks the first.
   repeated WordsOfferRow offer_rows = 29;
   string another_label = 30;
+  // WORKING a restore (#1209, R3): the three classes in the order they come back, each with what
+  // it is and where it stands ("Restoring", "Next", "Then"). Empty for a re-key.
+  repeated WordsRestoreRow restore_rows = 31;
 
   enum Phase {
     PHASE_UNSPECIFIED = 0;

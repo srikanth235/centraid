@@ -101,8 +101,7 @@ Per gateway: pairing (id, addresses, pin, label), epoch, `conf` (the head this p
 2. **Records.** Owed = the new tree's records refs minus those reachable from `conf` (incremental) or minus those `exists` reports (recovery). Send owed objects in bundles. `taken` with another digest and `state: damaged` → one signed delete frees it, then resend; `taken` live or held with another digest → wait with that reason (cannot happen with deterministic sealing unless the gateway is wrong).
 3. **Commit rule (asserted).** Before the compare-and-set: every records ref reachable from the new root is either reachable from `conf` with the head unchanged, or answered `stored`/`there`/`held` in this pass, or reported held by `exists`. A violation is a bug, not a refusal: debug builds panic, release builds abort the pass and log.
 4. **Set the head** (signed compare-and-set, E2/E3), then persist `conf`. The status may now say records are backed up at that gateway.
-5. **Thumbnails, then originals** (newest first), each a phase like 2–3 for its class, ending in persisting `troot`, then `oroot`. A media phase first asks `exists` about its owed names, so a pass cut off mid-phase never resends gigabytes the gateway already holds; records never do.
-   If an owed range is no longer staged, the engine stops with `Restage` and the driver takes a snapshot that stages every range again.
+5. **Thumbnails, then originals** (newest first), each a phase like 2–3 for its class, ending in persisting `troot`, then `oroot`. A media phase first asks `exists` about its owed names, so a pass cut off mid-phase never resends gigabytes the gateway already holds; records never do. If an owed range is no longer staged, the engine stops with `Restage` and the driver takes a snapshot that stages every range again.
 6. **While past records,** re-read the head at records priority every `max(4, ceil(2 × gateways / W))` windows (W = calls the window allows); if it moved, restart at 1.
 7. **Read-back and retention** (E10 sampling over the kept trees; retention 7 daily, 4 weekly, 6 monthly). Collection lists the gateway's names and deletes, by one head-bound signed delete (§4), every name not reachable from: the head, `conf`, `troot`, `oroot`, every kept snapshot, the newest snapshot, and anything Undo restored this week. A kept root whose nodes will not open stops collection: doubt never deletes.
 
@@ -118,7 +117,7 @@ Sealed objects are rebuilt from source when needed. Staging (`<stem>.staging/`, 
 
 ### 6.5 OS background
 
-The core writes up to `OS_BUNDLES` (4) bundle files of at most 32 MiB each for originals or thumbnails and hands them to the shell; iOS uploads them through a background `URLSession`, Android through WorkManager. A finished, failed or lost task only wakes a pass; the pass re-reads the head and diffs. Nothing the OS reports is recorded as stored.
+On iOS the core writes up to `OS_BUNDLES` (4) bundle files of at most 32 MiB each for originals or thumbnails and hands them to the shell, which uploads them through a background `URLSession`; a finished, failed or lost task only wakes a pass, which re-reads the head and diffs. Android has no such carrier: WorkManager runs the pass itself inside its window, so it writes no bundle files. Nothing the OS reports is recorded as stored.
 
 ### 6.6 Status
 

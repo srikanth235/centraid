@@ -756,6 +756,7 @@ impl Screen for Editor {
             body: String::new(),
             confirm_label: words::photos_edit_discard(locale),
             destructive: true,
+            warning: String::new(),
         });
         let state = wire::PhotosEditorState {
             photo_id: self.photo_id.clone(),

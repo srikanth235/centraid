@@ -396,10 +396,6 @@ pub const REGISTER: &[Entry] = &[
         ),
     ),
     (
-        "HomeEvent.OutcomeTold.rename_failed",
-        rust_only(VAULT_TELLS_HOME),
-    ),
-    (
         "HomeEvent.VaultsTold.none",
         rust_only_named(
             "the vault service tells Home by name (`Ctx::post`, vault/service.rs to shell/home.rs); no shell sends it. Kotlin's `none { }` is another symbol",
@@ -527,9 +523,15 @@ pub const REGISTER: &[Entry] = &[
         ),
     ),
     (
-        "VaultCommand.switch_to",
+        "Holdings.vaults",
         rust_only(
-            "Home builds the `VaultCommand` effect and the vault service handles it (shell/home.rs to vault/service.rs); the effect never reaches a shell",
+            "the `shell.holdings` answer is read by Rust only (vault/service.rs tells the pass conductor which vault is held); the vault picker that read it in the shells is gone (#1209, R1)",
+        ),
+    ),
+    (
+        "VaultsHeld.vaults",
+        rust_only(
+            "the vault service tells the pass conductor by name (vault/service.rs to passes/service.rs); no shell sends it",
         ),
     ),
     // Runtime: the runtime itself originates or consumes it.

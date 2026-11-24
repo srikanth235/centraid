@@ -1452,7 +1452,13 @@ impl HandleState {
     /// The ledger's or the spool's refusal, or a vault that will not read.
     pub(crate) fn backup_standing(&self) -> Result<wire::BackupStatusResponse> {
         self.with_vault_if_any(|vault| {
-            crate::phone::backup_status(&self.plane, vault, self.keys.as_ref())
+            let mut status = crate::phone::backup_status(&self.plane, vault, self.keys.as_ref())?;
+            // A RESTORE'S PROGRESS, while one is owed (R3): previews and originals back so far.
+            if let (Some(vault), Some(door)) = (vault, self.bytes()) {
+                status.restoring =
+                    crate::phone::restore_progress(&self.plane, vault, door.store())?;
+            }
+            Ok(status)
         })
     }
 
@@ -4504,6 +4510,7 @@ mod tests {
             wire::request::Kind::Drain(wire::DrainRequest::default()),
             wire::request::Kind::HeldWhole(wire::HeldWholeRequest {
                 content_hash: vec![7; 32],
+                ..Default::default()
             }),
             wire::request::Kind::Releasable(wire::ReleasableRequest { limit: 1 }),
         ] {

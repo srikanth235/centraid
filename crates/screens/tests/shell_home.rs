@@ -46,10 +46,9 @@ fn vault(id: &str, name: &str) -> wire::ShellVault {
     }
 }
 
-fn told(front: &wire::ShellVault, all: &[wire::ShellVault]) -> H {
+fn told(front: &wire::ShellVault, _all: &[wire::ShellVault]) -> H {
     H::VaultsTold(wire::home_event::VaultsTold {
         vault: Some(front.clone()),
-        vaults: all.to_vec(),
         none: false,
     })
 }
@@ -377,186 +376,6 @@ fn the_lockup_is_worded_from_the_vault_the_shell_names() {
 }
 
 #[test]
-fn the_switcher_lists_the_roster_as_told_and_picking_another_vault_asks_the_shelf() {
-    let (mut d, i) = started();
-    let (a, b) = (vault("v1", "Personal"), vault("v2", "House"));
-    tell(&mut d, i, told(&a, &[a.clone(), b.clone()]));
-    assert!(state(&d, i).sheet.is_none());
-    tell(&mut d, i, H::Vault(wire::home_event::VaultPressed {}));
-    let sheet = state(&d, i).sheet.expect("the sheet opens");
-    assert_eq!(sheet.title, "Vaults");
-    assert_eq!(sheet.active_vault_id, "v1");
-    assert_eq!(
-        sheet
-            .vaults
-            .iter()
-            .map(|v| v.name.as_str())
-            .collect::<Vec<_>>(),
-        ["Personal", "House"]
-    );
-    assert!(sheet.one_line.is_empty());
-    // Choosing the open vault is a dismissal and nothing else.
-    d.effects.clear();
-    tell(
-        &mut d,
-        i,
-        H::VaultPicked(wire::home_event::VaultPicked {
-            vault_id: "v1".into(),
-        }),
-    );
-    assert!(state(&d, i).sheet.is_none());
-    assert!(d.effects.is_empty());
-    // Choosing another asks the shelf to switch, and shuts the sheet at once.
-    tell(&mut d, i, H::Vault(wire::home_event::VaultPressed {}));
-    tell(
-        &mut d,
-        i,
-        H::VaultPicked(wire::home_event::VaultPicked {
-            vault_id: "v2".into(),
-        }),
-    );
-    assert!(state(&d, i).sheet.is_none());
-    let effect = d
-        .effects
-        .last()
-        .and_then(|e| e.effect.as_ref())
-        .and_then(|e| e.kind.as_ref());
-    assert!(
-        matches!(effect, Some(wire::effect::Kind::VaultCommand(wire::VaultCommand { kind: Some(wire::vault_command::Kind::SwitchTo(id)) })) if id == "v2"),
-        "{effect:?}"
-    );
-}
-
-#[test]
-fn a_single_vault_keeps_its_sentence_and_a_delete_is_confirmed_in_words() {
-    let (mut d, i) = started();
-    let only = vault("v1", "Personal");
-    tell(&mut d, i, told(&only, std::slice::from_ref(&only)));
-    tell(&mut d, i, H::Vault(wire::home_event::VaultPressed {}));
-    assert_eq!(
-        state(&d, i).sheet.unwrap().one_line,
-        "This phone has one vault."
-    );
-    tell(
-        &mut d,
-        i,
-        H::ForgetAsked(wire::home_event::ForgetAsked {
-            vault_id: "v1".into(),
-        }),
-    );
-    let ask = state(&d, i).sheet.unwrap().ask.expect("a question");
-    let Some(wire::home_vault_ask::Kind::Forget(forget)) = ask.kind else {
-        panic!("not a delete");
-    };
-    assert_eq!(forget.title, "Delete Personal?");
-    assert_eq!(forget.confirm_label, "Delete");
-    assert_eq!(forget.cancel_label, "Cancel");
-    // Dismissing asks nothing of the shelf.
-    d.effects.clear();
-    tell(
-        &mut d,
-        i,
-        H::AskDismissed(wire::home_event::AskDismissed {}),
-    );
-    assert!(state(&d, i).sheet.unwrap().ask.is_none());
-    assert!(d.effects.is_empty());
-    // Confirming does, and shuts the sheet.
-    tell(
-        &mut d,
-        i,
-        H::ForgetAsked(wire::home_event::ForgetAsked {
-            vault_id: "v1".into(),
-        }),
-    );
-    tell(
-        &mut d,
-        i,
-        H::AskConfirmed(wire::home_event::AskConfirmed {}),
-    );
-    assert!(state(&d, i).sheet.is_none());
-    assert!(matches!(
-        d.effects.last().and_then(|e| e.effect.as_ref()).and_then(|e| e.kind.as_ref()),
-        Some(wire::effect::Kind::VaultCommand(wire::VaultCommand { kind: Some(wire::vault_command::Kind::Forget(id)) })) if id == "v1"
-    ));
-}
-
-#[test]
-fn a_rename_needs_a_name_and_a_refusal_is_worded() {
-    let (mut d, i) = started();
-    let only = vault("v1", "Personal");
-    tell(&mut d, i, told(&only, std::slice::from_ref(&only)));
-    tell(&mut d, i, H::Vault(wire::home_event::VaultPressed {}));
-    tell(
-        &mut d,
-        i,
-        H::RenameAsked(wire::home_event::RenameAsked {
-            vault_id: "v1".into(),
-        }),
-    );
-    let rename = |d: &Driver| match state(d, i).sheet.unwrap().ask.unwrap().kind.unwrap() {
-        wire::home_vault_ask::Kind::Rename(rename) => rename,
-        other => panic!("{other:?}"),
-    };
-    assert_eq!(rename(&d).title, "Rename vault");
-    assert_eq!(rename(&d).name, "Personal");
-    // Cleared, it cannot be saved and confirming sends nothing.
-    tell(
-        &mut d,
-        i,
-        H::RenameTyped(wire::home_event::RenameTyped { name: "  ".into() }),
-    );
-    assert!(!rename(&d).can_save);
-    d.effects.clear();
-    tell(
-        &mut d,
-        i,
-        H::AskConfirmed(wire::home_event::AskConfirmed {}),
-    );
-    assert!(d.effects.is_empty());
-    assert!(state(&d, i).sheet.unwrap().ask.is_some());
-    // Typed, it saves the trimmed name.
-    tell(
-        &mut d,
-        i,
-        H::RenameTyped(wire::home_event::RenameTyped {
-            name: " House ".into(),
-        }),
-    );
-    tell(
-        &mut d,
-        i,
-        H::AskConfirmed(wire::home_event::AskConfirmed {}),
-    );
-    assert!(matches!(
-        d.effects.last().and_then(|e| e.effect.as_ref()).and_then(|e| e.kind.as_ref()),
-        Some(wire::effect::Kind::VaultCommand(wire::VaultCommand { kind: Some(wire::vault_command::Kind::Rename(r)) })) if r.name == "House" && r.vault_id == "v1"
-    ));
-}
-
-#[test]
-fn a_different_vault_in_front_reads_the_tiles_again_and_the_first_lockup_does_not() {
-    let (mut d, i) = started();
-    let a = vault("v1", "Personal");
-    // The first lockup is not a switch: the tiles that landed stay.
-    let before = state(&d, i);
-    tell(&mut d, i, told(&a, std::slice::from_ref(&a)));
-    assert_eq!(state(&d, i).content, before.content);
-    // The same vault again (a gateway changed) moves only the lockup.
-    tell(&mut d, i, told(&a, std::slice::from_ref(&a)));
-    assert_eq!(state(&d, i).content, before.content);
-    // Another vault in front re-reads, with the sheet shut.
-    tell(&mut d, i, H::Vault(wire::home_event::VaultPressed {}));
-    let b = vault("v2", "House");
-    tell(&mut d, i, told(&b, &[a, b.clone()]));
-    let after = state(&d, i);
-    assert!(after.sheet.is_none());
-    assert!(matches!(
-        after.content,
-        Some(wire::home_state::Content::Data(_))
-    ));
-}
-
-#[test]
 fn home_keeps_the_appearance_settings_chooses_and_leads_to_settings() {
     let (mut d, i) = started();
     // Opening asks the Keychain for what was chosen.
@@ -680,32 +499,6 @@ fn a_stranded_write_ribbon_is_shown_and_its_door_goes_where_it_says() {
 }
 
 #[test]
-fn two_vaults_sharing_a_name_are_still_two_vaults_and_an_unnamed_lockup_compares_by_name() {
-    let (mut d, i) = started();
-    let first = vault("v1", "Personal");
-    tell(&mut d, i, told(&first, std::slice::from_ref(&first)));
-    // The sheet is open so a reload (which shuts it) is visible.
-    tell(&mut d, i, H::Vault(wire::home_event::VaultPressed {}));
-    let twin = vault("v2", "Personal");
-    tell(&mut d, i, told(&twin, &[first.clone(), twin.clone()]));
-    assert!(
-        state(&d, i).sheet.is_none(),
-        "another id is a switch even under the same name"
-    );
-    // With no ids a lockup is compared by name: the same name is the same vault...
-    let (mut d, i) = started();
-    let bare = vault("", "Personal");
-    tell(&mut d, i, told(&bare, std::slice::from_ref(&bare)));
-    tell(&mut d, i, H::Vault(wire::home_event::VaultPressed {}));
-    tell(&mut d, i, told(&bare, std::slice::from_ref(&bare)));
-    assert!(state(&d, i).sheet.is_some());
-    // ...and another name is another vault.
-    let other = vault("", "House");
-    tell(&mut d, i, told(&other, std::slice::from_ref(&other)));
-    assert!(state(&d, i).sheet.is_none());
-}
-
-#[test]
 fn founding_a_vault_leaves_the_failed_home_and_reads_the_tiles() {
     let (mut d, i) = started();
     tell(
@@ -735,27 +528,6 @@ fn founding_a_vault_leaves_the_failed_home_and_reads_the_tiles() {
         data.tiles.iter().filter(|t| t.widget == t.app_id).count(),
         9
     );
-}
-
-#[test]
-fn a_dismissal_carries_no_id_changes_no_vault_and_asks_the_shelf_nothing() {
-    let (mut d, i) = started();
-    let a = vault("v1", "Personal");
-    tell(&mut d, i, told(&a, std::slice::from_ref(&a)));
-    tell(&mut d, i, H::Vault(wire::home_event::VaultPressed {}));
-    d.effects.clear();
-    tell(
-        &mut d,
-        i,
-        H::VaultPicked(wire::home_event::VaultPicked {
-            vault_id: String::new(),
-        }),
-    );
-    assert!(state(&d, i).sheet.is_none());
-    assert!(d.effects.is_empty());
-    // Pressing the lockup asks for nothing either.
-    tell(&mut d, i, H::Vault(wire::home_event::VaultPressed {}));
-    assert!(d.effects.is_empty());
 }
 
 #[test]
@@ -814,13 +586,13 @@ fn an_outside_entry_is_answered_with_the_route_and_the_shell_names_no_screen() {
 }
 
 #[test]
-fn the_lockups_spoken_sentences_are_finished_by_rust() {
+fn the_backup_lines_spoken_door_is_finished_by_rust() {
     let (mut d, i) = started();
     let front = vault("v1", "Personal");
     tell(&mut d, i, told(&front, std::slice::from_ref(&front)));
-    // No backup line and a vault that is simply here: the name alone.
+    // No backup line and a vault that is simply here: the lockup is not a press, so it has no
+    // spoken switch (#1209, R1), and the backup line has no door.
     let bar = state(&d, i).bar.unwrap();
-    assert_eq!(bar.switch_label, "Personal. Switch vault");
     assert_eq!(bar.backup_open_label, "");
     // A backup line replaces the state line, and is a door of its own.
     tell(
@@ -837,7 +609,6 @@ fn the_lockups_spoken_sentences_are_finished_by_rust() {
         }),
     );
     let bar = state(&d, i).bar.unwrap();
-    assert_eq!(bar.switch_label, "Personal. Switch vault");
     assert_eq!(bar.backup_open_label, "Backed up today. Open backup");
 }
 

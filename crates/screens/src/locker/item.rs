@@ -1115,18 +1115,21 @@ impl Item {
                 body: crate::kit::trash::purge_body(locale, Some(words::purge_lead)),
                 confirm_label: kit_words::trash_purge(locale),
                 destructive: true,
+                warning: String::new(),
             },
             Confirming::Field => wire::Confirm {
                 title: words::field_remove_title(locale),
                 body: words::field_remove_body(locale),
                 confirm_label: words::field_remove(locale),
                 destructive: true,
+                warning: String::new(),
             },
             Confirming::Passkey => wire::Confirm {
                 title: words::passkey_remove_title(locale),
                 body: words::passkey_remove_body(locale),
                 confirm_label: words::passkey_remove(locale),
                 destructive: true,
+                warning: String::new(),
             },
         })
     }

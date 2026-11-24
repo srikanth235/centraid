@@ -6,7 +6,7 @@ Current state: the gateway and vault entries below are tests that exist. The pho
 
 A name below is the checklist's title for the test; the function in the named file may carry a different name.
 
-Rules for all of them: assertions are on counts (statements, calls, rows, bytes), never on durations; attacker tests play the attacker through the real client against a real gateway (`server::harness::spawn`) unless the line says the rules in memory; durability tests cause the fault for real (a child process that is killed, a page of the file overwritten on disk, a file left at the earlier rung). A new rule gets a named case in `rules::conformance::CASES`  so it runs over the rules and over the wire.
+Rules for all of them: assertions are on counts (statements, calls, rows, bytes), never on durations; attacker tests play the attacker through the real client against a real gateway (`server::harness::spawn`) unless the line says the rules in memory; durability tests cause the fault for real (a child process that is killed, a page of the file overwritten on disk, a file left at the earlier rung). A new rule gets a named case in `rules::conformance::CASES` so it runs over the rules and over the wire.
 
 Layout used below: `gateway/tests/` is `crates/gateway/tests/`, `gateway/conformance` is a case in `crates/gateway/src/rules/conformance.rs`, `vault/tests/` is `crates/vault/tests/`, `core/tests/` is `crates/core/tests/`, `xtask` is `crates/xtask/src`.
 

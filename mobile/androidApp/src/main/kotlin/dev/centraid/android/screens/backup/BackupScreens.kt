@@ -72,7 +72,6 @@ import centraid.core.v1.BackupHomeEvent
 import centraid.core.v1.BackupHomeState
 import centraid.core.v1.BackupInk
 import centraid.core.v1.Route
-import dev.centraid.android.kit.AppTile
 import dev.centraid.android.kit.ReadStateView
 import dev.centraid.android.kit.InkButton
 import dev.centraid.android.kit.KitProgressBar
@@ -744,7 +743,7 @@ private fun Destinations(model: BackupHomeData, onEvent: (BackupHomeEvent) -> Un
     if (model.add_destination_label.isNotEmpty()) AddDevice(model.add_destination_label, onAddDestination)
 }
 
-/** "IN THIS BACKUP" and "Not backed up yet": one row per app, its mark, what it holds, whether it is backed up. */
+/** "IN THIS BACKUP": one row per class (records, photo previews, photos and files): its mark, what it holds, what waits, whether it is backed up. */
 @Composable
 private fun Apps(rows: List<BackupAppRow>) {
     rows.forEachIndexed { index, row ->
@@ -753,12 +752,13 @@ private fun Apps(rows: List<BackupAppRow>) {
                 .fillMaxWidth()
                 .heightIn(min = 56.dp)
                 .padding(horizontal = 12.dp, vertical = 8.dp)
-                .testTag("backup-app-" + row.app_id)
+                .testTag("backup-class-" + row.app_id)
                 .clearAndSetSemantics { contentDescription = row.accessibility_label.ifEmpty { row.name } },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            AppTile(appId = row.app_id, size = 32.dp)
+            // ONE ROW PER CLASS (#1209): its own mark, not an app's.
+            KitTile(iconKey = row.icon_key, size = 32.dp)
             // THE STATUS UNDER THE NAME at the largest text (#1202): beside it "Photos" broke as "Phot / os".
             val stacked = rememberLargestText()
             val status: @Composable () -> Unit = {

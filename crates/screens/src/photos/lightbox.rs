@@ -96,6 +96,8 @@ pub fn build(route: &wire::Route) -> Option<Box<dyn Screen>> {
         albums: AlbumChoice::for_one_photo(),
         places: Vec::new(),
         confirm: false,
+        unbacked: 0,
+        restoring: false,
         fetching: false,
         dismissed: false,
         pending: VecDeque::new(),
@@ -188,6 +190,11 @@ struct Lightbox {
     albums: AlbumChoice,
     places: Vec<wire::PhotosPlaceCard>,
     confirm: bool,
+    /// Whether no backup device holds this photograph whole, read when Delete forever was
+    /// tapped (#1209, R4).
+    unbacked: u32,
+    /// A restore is still bringing the originals back (#1209, R3), read when the photograph loads.
+    restoring: bool,
     fetching: bool,
     dismissed: bool,
     pending: VecDeque<Pending>,
@@ -669,7 +676,15 @@ impl Lightbox {
                     Some(words::photos_receipt_restored(ctx.locale())),
                 );
             }
-            V::DeleteForever => self.confirm = true,
+            V::DeleteForever => {
+                let content = self
+                    .detail()
+                    .map(|detail| detail.cell.content_id.clone())
+                    .filter(|content| !content.is_empty());
+                self.unbacked =
+                    content.map_or(0, |content| super::unbacked::count(ctx, &[content]));
+                self.confirm = true;
+            }
             // (i) TOGGLES THE DETAILS: they open under the photograph and the same key closes them.
             V::Info => {
                 self.sheet = if self.sheet == Sheet::Info {
@@ -898,6 +913,12 @@ impl Lightbox {
         let mut tile = cells::tile(cell, Link::default(), locale);
         if self.fetching && cell.photo_id == self.photo_id && !cell.original_held {
             tile.held = Held::Fetching as i32;
+        } else if self.restoring
+            && !cell.original_held
+            && !cell.content_id.is_empty()
+            && tile.held == Held::ThumbnailOnly as i32
+        {
+            tile.held = Held::ComingBack as i32;
         }
         tile
     }
@@ -917,6 +938,7 @@ impl Lightbox {
         let status_line = |playing: bool| match held {
             Held::Fetching => crate::strings::shared::original_downloading(locale),
             Held::WithheldByRule => words::photos_original_held_back(locale),
+            Held::ComingBack => words::photos_coming_back(locale),
             Held::Absent => words::photos_nothing_on_phone(locale),
             _ if video && !playing && !cell.original_held => words::photos_video_still_only(locale),
             Held::ThumbnailOnly if offers_fetch => words::photos_smaller_copy_only(locale),
@@ -926,6 +948,7 @@ impl Lightbox {
             Held::Original => words::photos_original_on_phone(locale),
             Held::WithheldByRule => words::photos_original_your_choice(locale),
             Held::Fetching => words::photos_original_downloading_now(locale),
+            Held::ComingBack => words::photos_coming_back(locale),
             Held::Absent => words::photos_nothing_on_phone(locale),
             Held::ThumbnailOnly | Held::Unspecified => words::photos_smaller_copy_only(locale),
         };
@@ -1313,11 +1336,17 @@ impl Screen for Lightbox {
         let locale = ctx.locale();
         match event.kind {
             Some(E::Appeared(_)) => {
+                self.restoring = crate::kit::restoring::originals_owed(
+                    crate::kit::restoring::owed(ctx).as_ref(),
+                );
                 let id = self.photo_id.clone();
                 return self.open(ctx, &id);
             }
             Some(E::EnvironmentChanged(_)) => return self.reload(ctx),
             Some(E::DataChanged(_)) => {
+                self.restoring = crate::kit::restoring::originals_owed(
+                    crate::kit::restoring::owed(ctx).as_ref(),
+                );
                 self.albums.reload(ctx);
                 // THE EDITOR ABOVE CLOSED: its line and Undo are drawn here.
                 let effects = self.reload(ctx);
@@ -1651,6 +1680,7 @@ impl Screen for Lightbox {
                 body: words::photos_delete_forever_body(locale),
                 confirm_label: shared::trash_purge(locale),
                 destructive: true,
+                warning: super::unbacked::warning(locale, 1, self.unbacked),
             }),
             dismissed: self.dismissed,
             film: window

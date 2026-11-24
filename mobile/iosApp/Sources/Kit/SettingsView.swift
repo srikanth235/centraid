@@ -108,7 +108,7 @@ struct SettingsView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("home-settings")
-        // THE PAGE HANDED ITS JOB TO HOME (the vault switcher is Home's sheet): it steps aside.
+        // A PAGE THAT HANDS ITS JOB ELSEWHERE (`finished`) steps aside.
         .onChange(of: state.finished) { _, finished in
             if finished { onBack() }
         }

@@ -29,6 +29,9 @@ Members read _backup device_; code and docs say _gateway_.
 | photo | photograph |
 | backed up | synced, sealed, drained, copied to the gateway |
 | Try again | Retry |
+| vault (one per phone; "Restore my vault") | vaults |
+| Records, Photo previews, Photos and files (the three backup classes) | thumbnails, originals, chunks, tree |
+| backed up, not backed up yet (a photo no backup device holds whole) | held whole, unreplicated |
 
 A literal command the member types stays as written (`centraid-gateway pair`), and where the member types the key, "the 24 words of your recovery key" is fine. Internals are not copy: never seal/unseal, receipt, ledger, drain, "derived", "at rest" or `core.*`. Do not hard-code counts that rot ("Eight apps").
 

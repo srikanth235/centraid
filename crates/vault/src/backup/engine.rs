@@ -646,6 +646,15 @@ impl<'e, 's> GatewayPass<'e, 's> {
             Mode::Incremental
         } else {
             // A head this phone did not last confirm: a rollback, another writer, a lost state.
+            // Whether it went BACKWARDS is kept for the status ("rolled back"): the head names no
+            // snapshot, or sits at a writer position no later than the one this phone last set,
+            // so it cannot be a successor of `conf`. With no `conf` there is nothing to compare.
+            if conf.is_some() {
+                let regressed = head.is_none_or(|head| {
+                    (head.epoch, head.generation) <= (gateway.epoch, gateway.generation)
+                });
+                self.env.state.set_regressed(&self.id, regressed)?;
+            }
             self.env.state.withdraw(&self.id)?;
             Mode::Recovery
         };

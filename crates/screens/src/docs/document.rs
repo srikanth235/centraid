@@ -728,6 +728,7 @@ impl Document {
                 body: crate::kit::trash::purge_body(locale, None),
                 confirm_label: shared::trash_purge(locale),
                 destructive: true,
+                warning: String::new(),
             }),
             _ => None,
         }

@@ -132,6 +132,9 @@ pub(crate) struct GatewayNotes {
     /// When retention last collected there, on the phone's clock; 0 until the gateway was first
     /// seen by a pass.
     pub collected_ms: u64,
+    /// Why the last pass stopped at this gateway when it refused (its disk is full, an object
+    /// too large, another code): the reason the status names, until a pass is not refused there.
+    pub refusal: Option<wire::WaitReason>,
 }
 
 /// THE PLANE'S FILES FOR ONE VAULT, beside the vault file, stated once.
@@ -520,7 +523,7 @@ pub fn wire_destination(gateway: &Gateway) -> wire::Destination {
         records_behind: false,
         head_snapshot_ms: None,
         reach: wire::WaitReason::Unspecified as i32,
-        rolled_back: false,
+        rolled_back: gateway.regressed,
         paired_at_ms: i64::try_from(gateway.paired_ms).unwrap_or(0),
         waiting_apps: Vec::new(),
         refused_limit_bytes: 0,
@@ -933,6 +936,7 @@ fn revoke(
 // ─── status ─────────────────────────────────────────────────────────────────
 
 pub use status::backup_status;
+pub(crate) use status::restore_progress;
 
 /// THE MEMBER'S FIRST ITEM: the earliest `created_at` of a row they made or imported. One bounded
 /// read, a `MIN` per kind over the `entity_by_created` index (nothing is scanned or counted). The
@@ -960,11 +964,33 @@ pub fn held_whole(
     keyring: &Keyring,
     request: &wire::HeldWholeRequest,
 ) -> Result<wire::HeldWholeResponse> {
-    let h = hash_of(&request.content_hash)?;
-    let gateway_ids = status::holders(&plane.state()?, &keyring.backup, &h)?;
+    let state = plane.state()?;
+    let (gateway_ids, held_whole) =
+        if request.content_hash.is_empty() && !request.content_hashes.is_empty() {
+            (Vec::new(), false)
+        } else {
+            let h = hash_of(&request.content_hash)?;
+            let gateway_ids = status::holders(&state, &keyring.backup, &h)?;
+            let held = !gateway_ids.is_empty();
+            (gateway_ids, held)
+        };
+    let many = request
+        .content_hashes
+        .iter()
+        .map(|raw| hash_of(raw))
+        .collect::<Result<Vec<_>>>()?;
+    let not_held = if many.is_empty() {
+        Vec::new()
+    } else {
+        status::unheld(&state, &keyring.backup, &many)?
+            .into_iter()
+            .map(|h| h.as_bytes().to_vec())
+            .collect()
+    };
     Ok(wire::HeldWholeResponse {
-        held_whole: !gateway_ids.is_empty(),
+        held_whole,
         gateway_ids,
+        not_held,
     })
 }
 

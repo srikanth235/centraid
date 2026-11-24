@@ -554,6 +554,7 @@ impl Screen for Accounts {
                         body: words::account_remove_number_body(locale),
                         confirm_label: words::account_remove_number_confirm(locale),
                         destructive: true,
+                        warning: String::new(),
                     }),
                     chrome: Some(fold::chrome(
                         locale,

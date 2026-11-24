@@ -372,6 +372,7 @@ impl Attachments {
                     },
                     confirm_label: words::remove_label(locale),
                     destructive: true,
+                    warning: String::new(),
                 })
             }),
             status: self.line.status(),
