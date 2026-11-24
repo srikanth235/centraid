@@ -1,5 +1,6 @@
-//! `centraid-sealed/3`: the one format every object a gateway stores wears
-//! ([#1209](https://github.com/srikanth235/centraid/issues/1209), spec §2).
+//! `centraid-sealed/4`: the one format every object a gateway stores wears
+//! ([#1209](https://github.com/srikanth235/centraid/issues/1209),
+//! [#1212](https://github.com/srikanth235/centraid/issues/1212), spec §2).
 //!
 //! Every stored object (a vault range, a tree node, a thumbnail chunk, an
 //! original chunk) is **one sealed chunk** of at most [`CHUNK_BYTES`] of
@@ -7,42 +8,50 @@
 //! cut into chunks by the caller and each chunk is sealed on its own.
 //!
 //! ```text
-//! name   = blake3_keyed(K_name, "obj3" ‖ c ‖ p)                       32 bytes
-//! body   = zstd(p) if strictly shorter, else p;  flags bit0 = compressed
-//! aad    = "CSB3" ‖ u8(3) ‖ flags ‖ c ‖ name
-//! nonce  = blake3_keyed(K_nonce, aad ‖ blake3(body))[0..24]
-//! object = "CSB3" ‖ u8(3) ‖ flags ‖ c ‖ nonce ‖ XChaCha20-Poly1305(K_obj, nonce, aad, body)
-//! digest = blake3(object)                                            32 bytes
+//! name         = blake3_keyed(K_name, "obj4" ‖ c ‖ p)                            32 bytes
+//! (body, flags)= if c == 1 && len(zstd_3(p)) < len(p) { (zstd_3(p), 0x01) }
+//!                else                                 { (p,         0x00) }
+//! inner_len    = 6 + len(body)
+//! padded_len   = padme_len(inner_len)                                            64 ..= 6 + CHUNK_BYTES
+//! padded_inner = flags (1) ‖ c (1) ‖ u32be(len(body)) (4) ‖ body ‖ 0x00 * (padded_len - inner_len)
+//! aad          = "CSB4" ‖ u8(4) ‖ c ‖ name                                       38 bytes
+//! nonce        = blake3_keyed(K_nonce, aad ‖ blake3(padded_inner))[0..24]        24 bytes
+//! object       = "CSB4" ‖ u8(4) ‖ nonce ‖ XChaCha20-Poly1305(K_obj, nonce, aad, padded_inner)
+//! digest       = blake3(object)                                                  32 bytes
 //! ```
 //!
 //! `p` is the chunk's plaintext and `c` its [`Class`] byte.
 //!
-//! ## SEALING IS DETERMINISTIC
+//! ## SEALING IS DETERMINISTIC, LENGTH-PADDED AND CLASS-AWARE
 //!
 //! The same plaintext and class under the same vault's keys give the same
 //! name, object and digest, so a chunk is rebuilt from its source rather than
-//! kept, and a resend is byte-identical. The nonce is derived from
-//! `aad ‖ blake3(body)` (SIV-style), so no `(K_obj, nonce)` pair ever meets
-//! two bodies, even if zstd's output changed; the same plaintext and body
-//! under the same nonce is the same object, which is the point. What a
-//! gateway learns is equality of chunks within one vault, which the keyed
-//! name already reveals, plus the sealed length.
+//! kept, and a resend is byte-identical. Neither `flags` nor `class` appears
+//! in clear on the wire (`"CSB4" ‖ u8(4) ‖ nonce` is the entire 29-byte outer
+//! header), and exact payload lengths are hidden inside Padmé buckets
+//! ([`padme_len`], clamped at [`MAX_INNER_BYTES`] so a full 4 MiB chunk adds
+//! zero padding bytes). Only [`Class::Records`] runs `zstd`; [`Class::Thumbnails`]
+//! and [`Class::Originals`] are already entropy-coded media and never compress.
+//! The nonce is derived from `aad ‖ blake3(padded_inner)` (SIV-style), so no
+//! `(K_obj, nonce)` pair ever meets two inner frames.
 //!
 //! ## EVERY CONSTANT HERE IS A FORMAT DECISION
 //!
-//! The four `derive_key` contexts, the `"obj3"` name preimage, the header
-//! fields and order, the AAD, the nonce derivation, the 4 MiB chunk, the flag
-//! bit and zstd level 3. `contracts/crypto/sealed3-vectors.json` pins them
-//! (`tests/sealed3_vectors.rs`).
+//! The four `derive_key` contexts, the `"obj4"` name preimage, the outer and
+//! inner header layouts, Padmé's floor and cap, the AAD, the nonce derivation,
+//! the 4 MiB chunk, the flag bit and zstd level 3.
+//! `contracts/crypto/sealed4-vectors.json` pins them (`tests/sealed4_vectors.rs`).
 //!
 //! ## WHAT OPENING REFUSES
 //!
 //! [`open`] runs the strict procedure and any failure is [`SealedError::Damaged`]
-//! in one of its named forms: a length other than the reference's, a digest
-//! that is not the object's, a bad magic or version, an unknown flag, a class
-//! other than the one asked for, a failed tag over the header's AAD naming
-//! `name`, a nonce other than the one derived from `aad ‖ blake3(body)`, a
-//! decompression past [`CHUNK_BYTES`], a body flagged compressed that is not
+//! in one of its named forms: a length other than the reference's or outside
+//! `[MIN_OBJECT_BYTES, MAX_OBJECT_BYTES]`, a digest that is not the object's, a
+//! bad magic or version, a failed AEAD tag over the AAD naming `class` and
+//! `name`, an unknown flag bit, an inner class other than the one asked for, a
+//! compressed media class, a non-canonical Padmé length, any non-zero padding
+//! byte, a nonce other than the one derived from `aad ‖ blake3(padded_inner)`,
+//! a decompression past [`CHUNK_BYTES`], a body flagged compressed that is not
 //! shorter than the plaintext, and a plaintext whose recomputed name is not
 //! the one the object was asked for.
 
@@ -54,33 +63,49 @@ use chacha20poly1305::{Key, XChaCha20Poly1305, XNonce};
 use zeroize::Zeroize;
 
 /// The format's name, as a vector file spells it.
-pub const FORMAT_NAME: &str = "centraid-sealed/3";
+pub const FORMAT_NAME: &str = "centraid-sealed/4";
 
 /// The four bytes every object starts with.
-pub const MAGIC: [u8; 4] = *b"CSB3";
+pub const MAGIC: [u8; 4] = *b"CSB4";
 
 /// The version byte after the magic.
-pub const VERSION: u8 = 3;
+pub const VERSION: u8 = 4;
 
-/// The clear header: magic, version, flags, class.
-pub const HEADER_BYTES: usize = 4 + 1 + 1 + 1;
+/// The clear prefix before the nonce: magic and version (`flags` and `class`
+/// live inside the encrypted inner header).
+pub const HEADER_BYTES: usize = 4 + 1;
 
 /// XChaCha20's nonce.
 pub const NONCE_BYTES: usize = 24;
 
+/// The clear wire header: magic, version and nonce (`29` bytes).
+pub const OUTER_HEADER_BYTES: usize = HEADER_BYTES + NONCE_BYTES;
+
+/// The encrypted inner header: `flags (1) ‖ class (1) ‖ u32be(body.len()) (4)`.
+pub const INNER_HEADER_BYTES: usize = 1 + 1 + 4;
+
 /// Poly1305's tag.
 pub const TAG_BYTES: usize = 16;
-
-/// What sealing adds to a chunk's body: header, nonce and tag.
-pub const OVERHEAD_BYTES: usize = HEADER_BYTES + NONCE_BYTES + TAG_BYTES;
 
 /// **R2: a chunk is at most 4 MiB of plaintext.**
 pub const CHUNK_BYTES: usize = 4 * 1024 * 1024;
 
-/// The largest sealed object a 4 MiB chunk makes (the gateway's cap).
+/// The largest unsealed inner frame (`6 + CHUNK_BYTES = 4,194,310` bytes).
+pub const MAX_INNER_BYTES: usize = INNER_HEADER_BYTES + CHUNK_BYTES;
+
+/// The smallest Padmé-padded inner frame (`64` bytes).
+pub const MIN_INNER_BYTES: usize = 64;
+
+/// What sealing adds at a full chunk: outer header, inner header and tag (`51` bytes).
+pub const OVERHEAD_BYTES: usize = OUTER_HEADER_BYTES + INNER_HEADER_BYTES + TAG_BYTES;
+
+/// The smallest valid sealed object (`29 + 64 + 16 = 109` bytes).
+pub const MIN_OBJECT_BYTES: usize = OUTER_HEADER_BYTES + MIN_INNER_BYTES + TAG_BYTES;
+
+/// The largest sealed object a 4 MiB chunk makes (`4,194,355` bytes, the gateway's cap).
 pub const MAX_OBJECT_BYTES: usize = CHUNK_BYTES + OVERHEAD_BYTES;
 
-/// Flag bit 0: the body is zstd.
+/// Flag bit 0: the body is zstd (`Class::Records` only).
 pub const FLAG_ZSTD: u8 = 0b0000_0001;
 
 /// zstd level; the crate is pinned exactly so output never drifts.
@@ -88,9 +113,23 @@ pub const ZSTD_LEVEL: i32 = 3;
 
 const ROOT_CONTEXT: &str = "centraid backup v2 root";
 const NAME_CONTEXT: &str = "centraid backup v2 name";
-const OBJECT_CONTEXT: &str = "centraid backup v3 object";
-const NONCE_CONTEXT: &str = "centraid backup v3 nonce";
-const NAME_PREIMAGE: &[u8; 4] = b"obj3";
+const OBJECT_CONTEXT: &str = "centraid backup v4 object";
+const NONCE_CONTEXT: &str = "centraid backup v4 nonce";
+const NAME_PREIMAGE: &[u8; 4] = b"obj4";
+const AAD_BYTES: usize = HEADER_BYTES + 1 + 32;
+
+/// Padmé length padding in `[MIN_INNER_BYTES, MAX_INNER_BYTES]`.
+#[must_use]
+pub fn padme_len(len: usize) -> usize {
+    if len <= MIN_INNER_BYTES {
+        return MIN_INNER_BYTES;
+    }
+    let e = len.ilog2();
+    let s = e.ilog2() + 1;
+    let last_bits = e - s;
+    let mask = (1_usize << last_bits) - 1;
+    (len.saturating_add(mask) & !mask).min(MAX_INNER_BYTES)
+}
 
 /// Everything sealing and naming needs, derived from a vault's root key.
 #[derive(Clone)]
@@ -104,8 +143,8 @@ pub struct BackupKeys {
 impl BackupKeys {
     /// `K_backup = derive_key("centraid backup v2 root", root_key)`,
     /// `K_name = derive_key("centraid backup v2 name", K_backup)`,
-    /// `K_obj = derive_key("centraid backup v3 object", K_backup)` and
-    /// `K_nonce = derive_key("centraid backup v3 nonce", K_backup)`.
+    /// `K_obj = derive_key("centraid backup v4 object", K_backup)` and
+    /// `K_nonce = derive_key("centraid backup v4 nonce", K_backup)`.
     #[must_use]
     pub fn from_root(root_key: &[u8; 32]) -> Self {
         let k_backup = blake3::derive_key(ROOT_CONTEXT, root_key);
@@ -238,7 +277,7 @@ macro_rules! hex32 {
     };
 }
 
-/// An object's name: `blake3_keyed(K_name, "obj3" ‖ c ‖ p)`.
+/// An object's name: `blake3_keyed(K_name, "obj4" ‖ c ‖ p)`.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Name([u8; 32]);
 hex32!(Name, "an object name");
@@ -362,6 +401,7 @@ pub struct Sealed {
     pub name: Name,
     pub digest: Digest,
     pub class: Class,
+    pub flags: u8,
     pub object: Vec<u8>,
 }
 
@@ -371,6 +411,7 @@ impl fmt::Debug for Sealed {
             .debug_struct("Sealed")
             .field("name", &self.name)
             .field("class", &self.class)
+            .field("flags", &self.flags)
             .field("len", &self.object.len())
             .finish()
     }
@@ -405,7 +446,7 @@ pub enum SealedError {
     Seal,
 }
 
-/// `name = blake3_keyed(K_name, "obj3" ‖ c ‖ p)`.
+/// `name = blake3_keyed(K_name, "obj4" ‖ c ‖ p)`.
 #[must_use]
 pub fn name_of(keys: &BackupKeys, class: Class, plaintext: &[u8]) -> Name {
     let mut hasher = blake3::Hasher::new_keyed(keys.k_name());
@@ -415,44 +456,66 @@ pub fn name_of(keys: &BackupKeys, class: Class, plaintext: &[u8]) -> Name {
     Name(*hasher.finalize().as_bytes())
 }
 
-fn nonce_of(keys: &BackupKeys, aad: &[u8; 39], body: &[u8]) -> [u8; NONCE_BYTES] {
-    let body_hash = blake3::hash(body);
+fn aad_of(class: u8, name: &Name) -> [u8; AAD_BYTES] {
+    let mut aad = [0_u8; AAD_BYTES];
+    aad[..4].copy_from_slice(&MAGIC);
+    aad[4] = VERSION;
+    aad[5] = class;
+    aad[6..].copy_from_slice(name.as_bytes());
+    aad
+}
+
+fn nonce_of(keys: &BackupKeys, aad: &[u8; AAD_BYTES], padded_inner: &[u8]) -> [u8; NONCE_BYTES] {
+    let inner_hash = blake3::hash(padded_inner);
     let mut hasher = blake3::Hasher::new_keyed(keys.k_nonce());
     hasher.update(aad);
-    hasher.update(body_hash.as_bytes());
+    hasher.update(inner_hash.as_bytes());
     let full = hasher.finalize();
     let mut nonce = [0_u8; NONCE_BYTES];
     nonce.copy_from_slice(&full.as_bytes()[..NONCE_BYTES]);
     nonce
 }
 
-fn aad_of(flags: u8, class: u8, name: &Name) -> [u8; 39] {
-    let mut aad = [0_u8; 39];
-    aad[..4].copy_from_slice(&MAGIC);
-    aad[4] = VERSION;
-    aad[5] = flags;
-    aad[6] = class;
-    aad[7..].copy_from_slice(name.as_bytes());
-    aad
+fn build_padded_inner(
+    flags: u8,
+    inner_class: u8,
+    body: &[u8],
+    padded_len: usize,
+) -> Result<Vec<u8>, SealedError> {
+    let body_len = u32::try_from(body.len()).map_err(|_| SealedError::TooLarge(body.len()))?;
+    let inner_len = INNER_HEADER_BYTES
+        .checked_add(body.len())
+        .ok_or(SealedError::TooLarge(body.len()))?;
+    if padded_len < inner_len {
+        return Err(SealedError::Seal);
+    }
+    let mut padded_inner = vec![0_u8; padded_len];
+    padded_inner[0] = flags;
+    padded_inner[1] = inner_class;
+    padded_inner[2..INNER_HEADER_BYTES].copy_from_slice(&body_len.to_be_bytes());
+    padded_inner[INNER_HEADER_BYTES..inner_len].copy_from_slice(body);
+    Ok(padded_inner)
 }
 
-fn frame_with_nonce(
+fn encrypt_inner_with_nonce(
     keys: &BackupKeys,
-    aad: &[u8; 39],
+    aad: &[u8; AAD_BYTES],
     nonce: [u8; NONCE_BYTES],
-    flags: u8,
-    class: u8,
-    body: &[u8],
+    padded_inner: &[u8],
 ) -> Result<Vec<u8>, SealedError> {
     let cipher = XChaCha20Poly1305::new(&Key::from(*keys.k_obj()));
     let sealed = cipher
-        .encrypt(&XNonce::from(nonce), Payload { msg: body, aad })
+        .encrypt(
+            &XNonce::from(nonce),
+            Payload {
+                msg: padded_inner,
+                aad,
+            },
+        )
         .map_err(|_| SealedError::Seal)?;
-    let mut object = Vec::with_capacity(HEADER_BYTES + NONCE_BYTES + sealed.len());
+    let mut object = Vec::with_capacity(OUTER_HEADER_BYTES + sealed.len());
     object.extend_from_slice(&MAGIC);
     object.push(VERSION);
-    object.push(flags);
-    object.push(class);
     object.extend_from_slice(&nonce);
     object.extend_from_slice(&sealed);
     Ok(object)
@@ -467,12 +530,20 @@ fn frame(
     class: u8,
     body: &[u8],
 ) -> Result<Vec<u8>, SealedError> {
-    let aad = aad_of(flags, class, name);
-    let nonce = nonce_of(keys, &aad, body);
-    frame_with_nonce(keys, &aad, nonce, flags, class, body)
+    let inner_len = INNER_HEADER_BYTES
+        .checked_add(body.len())
+        .ok_or(SealedError::TooLarge(body.len()))?;
+    let padded_inner = build_padded_inner(flags, class, body, padme_len(inner_len))?;
+    let aad = aad_of(class, name);
+    let nonce = nonce_of(keys, &aad, &padded_inner);
+    encrypt_inner_with_nonce(keys, &aad, nonce, &padded_inner)
 }
 
 /// Seal one chunk.
+///
+/// [`Class::Records`] uses `zstd` level 3 when strictly shorter than
+/// `plaintext`; [`Class::Thumbnails`] and [`Class::Originals`] never run
+/// `zstd`.
 ///
 /// # Errors
 /// [`SealedError::TooLarge`] past [`CHUNK_BYTES`].
@@ -481,25 +552,33 @@ pub fn seal(keys: &BackupKeys, class: Class, plaintext: &[u8]) -> Result<Sealed,
         return Err(SealedError::TooLarge(plaintext.len()));
     }
     let name = name_of(keys, class, plaintext);
-    let compressed = zstd::bulk::compress(plaintext, ZSTD_LEVEL).map_err(|_| SealedError::Seal)?;
-    let (flags, body): (u8, &[u8]) = if compressed.len() < plaintext.len() {
-        (FLAG_ZSTD, &compressed)
-    } else {
-        (0, plaintext)
+    let compressed = match class {
+        Class::Records => {
+            let candidate =
+                zstd::bulk::compress(plaintext, ZSTD_LEVEL).map_err(|_| SealedError::Seal)?;
+            (candidate.len() < plaintext.len()).then_some(candidate)
+        }
+        Class::Thumbnails | Class::Originals => None,
+    };
+    let (flags, body): (u8, &[u8]) = match compressed.as_deref() {
+        Some(shorter) => (FLAG_ZSTD, shorter),
+        None => (0, plaintext),
     };
     let object = frame(keys, &name, flags, class.byte(), body)?;
     Ok(Sealed {
         name,
         digest: Digest::of(&object),
         class,
+        flags,
         object,
     })
 }
 
-/// Open an object **strictly**: the reference's length and digest, the
-/// header, the class, the tag over the AAD naming `name`, the nonce derived
-/// from `aad ‖ blake3(body)`, a bounded decompression, and a recomputed name
-/// that equals `name`.
+/// Open an object **strictly**: the reference's length and digest, the outer
+/// bounds and header, the AEAD tag over the AAD naming `class` and `name`, the
+/// inner flags and class, the uncompressed media rule, canonical Padmé length
+/// and zero padding, the nonce derived from `aad ‖ blake3(padded_inner)`, a
+/// bounded decompression, and a recomputed name that equals `name`.
 ///
 /// `digest` and `len` are `None` only when opening an object known by name
 /// alone (a head's root).
@@ -524,43 +603,68 @@ pub fn open_checked(
     {
         return Err(SealedError::Damaged("its digest is not the reference's"));
     }
-    if object.len() < OVERHEAD_BYTES || object.len() > MAX_OBJECT_BYTES {
+    if object.len() < MIN_OBJECT_BYTES || object.len() > MAX_OBJECT_BYTES {
         return Err(SealedError::Damaged("its length cannot be an object"));
     }
     if object[..4] != MAGIC {
         return Err(SealedError::Damaged("the magic is wrong"));
     }
     if object[4] != VERSION {
-        return Err(SealedError::Damaged("the version is not 3"));
+        return Err(SealedError::Damaged("the version is not 4"));
     }
-    let flags = object[5];
-    if flags & !FLAG_ZSTD != 0 {
-        return Err(SealedError::Damaged("it sets an unknown flag"));
-    }
-    if object[6] != class.byte() {
-        return Err(SealedError::Damaged("its class is not the one asked for"));
-    }
-    let nonce: [u8; NONCE_BYTES] = object[HEADER_BYTES..HEADER_BYTES + NONCE_BYTES]
+    let nonce: [u8; NONCE_BYTES] = object[HEADER_BYTES..OUTER_HEADER_BYTES]
         .try_into()
         .map_err(|_| SealedError::Damaged("its nonce is cut short"))?;
+    let aad = aad_of(class.byte(), name);
     let cipher = XChaCha20Poly1305::new(&Key::from(*keys.k_obj()));
-    let aad = aad_of(flags, object[6], name);
-    let body = cipher
+    let padded_inner = cipher
         .decrypt(
             &XNonce::from(nonce),
             Payload {
-                msg: &object[HEADER_BYTES + NONCE_BYTES..],
+                msg: &object[OUTER_HEADER_BYTES..],
                 aad: &aad,
             },
         )
         .map_err(|_| SealedError::Damaged("it does not open"))?;
-    if nonce != nonce_of(keys, &aad, &body) {
+    if padded_inner.len() < MIN_INNER_BYTES || padded_inner.len() > MAX_INNER_BYTES {
+        return Err(SealedError::Damaged("its inner length is out of bounds"));
+    }
+    let flags = padded_inner[0];
+    let inner_class = padded_inner[1];
+    let body_len_bytes: [u8; 4] = padded_inner[2..INNER_HEADER_BYTES]
+        .try_into()
+        .map_err(|_| SealedError::Damaged("its inner header is cut short"))?;
+    let body_len = usize::try_from(u32::from_be_bytes(body_len_bytes))
+        .map_err(|_| SealedError::Damaged("its body length overflows"))?;
+    if flags & !FLAG_ZSTD != 0 {
+        return Err(SealedError::Damaged("it sets an unknown flag"));
+    }
+    if inner_class != class.byte() {
+        return Err(SealedError::Damaged("its class is not the one asked for"));
+    }
+    if class != Class::Records && (flags & FLAG_ZSTD != 0) {
+        return Err(SealedError::Damaged("media classes are never compressed"));
+    }
+    let inner_len = INNER_HEADER_BYTES
+        .checked_add(body_len)
+        .ok_or(SealedError::Damaged("its body length overflows"))?;
+    if body_len > CHUNK_BYTES || inner_len > padded_inner.len() {
+        return Err(SealedError::Damaged("its body length cannot fit"));
+    }
+    if padded_inner.len() != padme_len(inner_len) {
+        return Err(SealedError::Damaged("its padding length is not canonical"));
+    }
+    if !padded_inner[inner_len..].iter().all(|&byte| byte == 0) {
+        return Err(SealedError::Damaged("its padding is not zero"));
+    }
+    if nonce != nonce_of(keys, &aad, &padded_inner) {
         return Err(SealedError::Damaged("its nonce is not the derived one"));
     }
+    let body = &padded_inner[INNER_HEADER_BYTES..inner_len];
     let plaintext = if flags & FLAG_ZSTD == 0 {
-        body
+        body.to_vec()
     } else {
-        let mut plain = zstd::bulk::decompress(&body, CHUNK_BYTES)
+        let mut plain = zstd::bulk::decompress(body, CHUNK_BYTES)
             .map_err(|_| SealedError::Damaged("its body does not decompress within a chunk"))?;
         if body.len() >= plain.len() {
             return Err(SealedError::Damaged(
@@ -634,17 +738,94 @@ mod tests {
         out
     }
 
+    fn seal_raw_inner(
+        keys: &BackupKeys,
+        aad_class: u8,
+        name: &Name,
+        padded_inner: &[u8],
+    ) -> Vec<u8> {
+        let aad = aad_of(aad_class, name);
+        let nonce = nonce_of(keys, &aad, padded_inner);
+        encrypt_inner_with_nonce(keys, &aad, nonce, padded_inner).expect("encrypts")
+    }
+
     #[test]
-    fn the_same_plaintext_gives_the_same_object_and_another_class_does_not() {
+    fn constants_match_the_csb4_wire_budget() {
+        assert_eq!(FORMAT_NAME, "centraid-sealed/4");
+        assert_eq!(MAGIC, *b"CSB4");
+        assert_eq!(VERSION, 4);
+        assert_eq!(HEADER_BYTES, 5);
+        assert_eq!(NONCE_BYTES, 24);
+        assert_eq!(OUTER_HEADER_BYTES, 29);
+        assert_eq!(INNER_HEADER_BYTES, 6);
+        assert_eq!(TAG_BYTES, 16);
+        assert_eq!(CHUNK_BYTES, 4_194_304);
+        assert_eq!(MAX_INNER_BYTES, 4_194_310);
+        assert_eq!(MIN_INNER_BYTES, 64);
+        assert_eq!(OVERHEAD_BYTES, 51);
+        assert_eq!(MIN_OBJECT_BYTES, 109);
+        assert_eq!(MAX_OBJECT_BYTES, 4_194_355);
+        assert_eq!(
+            OUTER_HEADER_BYTES + MAX_INNER_BYTES + TAG_BYTES,
+            MAX_OBJECT_BYTES
+        );
+    }
+
+    #[test]
+    fn padme_is_monotonic_idempotent_and_within_overhead_bounds() {
+        assert_eq!(padme_len(0), MIN_INNER_BYTES);
+        assert_eq!(padme_len(MIN_INNER_BYTES), MIN_INNER_BYTES);
+        assert_eq!(padme_len(65), 72);
+        // Inner frames of 73B (67B body) and 78B (72B body) share the 80B Padmé bucket.
+        assert_eq!(padme_len(73), 80);
+        assert_eq!(padme_len(78), 80);
+        assert_eq!(padme_len(MAX_INNER_BYTES), MAX_INNER_BYTES);
+        assert_eq!(padme_len(MAX_INNER_BYTES + 100), MAX_INNER_BYTES);
+
+        let mut prev = MIN_INNER_BYTES;
+        for len in 0..=MAX_INNER_BYTES {
+            let padded = padme_len(len);
+            assert!(padded >= len.max(MIN_INNER_BYTES), "underflow at {len}");
+            assert!(padded <= MAX_INNER_BYTES, "overflow at {len}");
+            assert!(padded >= prev, "non-monotonic at {len}: {padded} < {prev}");
+            assert_eq!(padme_len(padded), padded, "not idempotent at {len}");
+            if len > MIN_INNER_BYTES {
+                let e = len.ilog2();
+                let s = e.ilog2() + 1;
+                assert!(
+                    (padded - len) * (1_usize << s) < len,
+                    "exceeded 1/2^{s} bound at {len}: {padded}"
+                );
+                // From 64 KiB ranges up to CHUNK_BYTES, s == 5 so Padmé adds < 1/32 (~3%).
+                if len >= 65_536 {
+                    assert!((padded - len) * 32 < len, "exceeded ~3% bound at {len}");
+                }
+            }
+            prev = padded;
+        }
+    }
+
+    #[test]
+    fn the_same_plaintext_gives_the_same_object_and_only_records_compress() {
         let plain = compressible(5000);
         let one = seal(&keys(), Class::Records, &plain).expect("seals");
         let two = seal(&keys(), Class::Records, &plain).expect("seals");
         assert_eq!(one, two);
-        assert!(one.object.len() < plain.len(), "compressible bytes shrink");
-        assert_eq!(one.object[5] & FLAG_ZSTD, FLAG_ZSTD);
-        let other = seal(&keys(), Class::Originals, &plain).expect("seals");
-        assert_ne!(one.name, other.name);
-        assert_ne!(one.digest, other.digest);
+        assert!(one.object.len() < plain.len(), "records shrink");
+        assert_eq!(one.flags, FLAG_ZSTD);
+        assert_eq!(&one.object[..4], b"CSB4");
+        assert_eq!(one.object[4], VERSION);
+
+        let orig = seal(&keys(), Class::Originals, &plain).expect("seals");
+        assert_eq!(orig.flags, 0, "originals never run zstd");
+        assert!(orig.object.len() > plain.len());
+        assert_ne!(one.name, orig.name);
+        assert_ne!(one.digest, orig.digest);
+
+        let thumb = seal(&keys(), Class::Thumbnails, &plain).expect("seals");
+        assert_eq!(thumb.flags, 0, "thumbnails never run zstd");
+        assert!(thumb.object.len() > plain.len());
+
         let elsewhere = seal(&BackupKeys::from_root(&[8; 32]), Class::Records, &plain).unwrap();
         assert_ne!(one.name, elsewhere.name, "names are per vault");
         assert_ne!(one.object, elsewhere.object);
@@ -660,13 +841,19 @@ mod tests {
             compressible(CHUNK_BYTES),
             incompressible(CHUNK_BYTES),
         ] {
-            let sealed = seal(&keys(), Class::Thumbnails, &plain).expect("seals");
-            assert_eq!(
-                open(&keys(), &sealed.reference(), &sealed.object).unwrap(),
-                plain
-            );
-            assert!(sealed.object.len() <= MAX_OBJECT_BYTES);
+            for class in Class::ALL {
+                let sealed = seal(&keys(), class, &plain).expect("seals");
+                assert_eq!(
+                    open(&keys(), &sealed.reference(), &sealed.object).unwrap(),
+                    plain
+                );
+                assert!(sealed.object.len() >= MIN_OBJECT_BYTES);
+                assert!(sealed.object.len() <= MAX_OBJECT_BYTES);
+            }
         }
+        let full_media = seal(&keys(), Class::Originals, &incompressible(CHUNK_BYTES)).unwrap();
+        assert_eq!(full_media.object.len(), MAX_OBJECT_BYTES);
+
         assert!(matches!(
             seal(&keys(), Class::Records, &vec![0; CHUNK_BYTES + 1]),
             Err(SealedError::TooLarge(_))
@@ -712,7 +899,33 @@ mod tests {
         let cut = &sealed.object[..sealed.object.len() - 1];
         assert!(damaged(open(&keys(), &reference, cut)).contains("length"));
 
-        // Header fields, with the reference's digest recomputed so only the layer under test fails.
+        // Outer size bounds on unreferenced opens.
+        let too_short = vec![0_u8; MIN_OBJECT_BYTES - 1];
+        assert!(
+            damaged(open_checked(
+                &keys(),
+                &sealed.name,
+                Class::Records,
+                None,
+                None,
+                &too_short,
+            ))
+            .contains("cannot be an object")
+        );
+        let too_long = vec![0_u8; MAX_OBJECT_BYTES + 1];
+        assert!(
+            damaged(open_checked(
+                &keys(),
+                &sealed.name,
+                Class::Records,
+                None,
+                None,
+                &too_long,
+            ))
+            .contains("cannot be an object")
+        );
+
+        // Outer header fields, with the reference's digest recomputed so only the layer under test fails.
         let retarget = |mutate: &dyn Fn(&mut Vec<u8>)| {
             let mut object = sealed.object.clone();
             mutate(&mut object);
@@ -721,24 +934,79 @@ mod tests {
             damaged(open(&keys(), &reference, &object))
         };
         assert!(retarget(&|o| o[0] = b'X').contains("magic"));
-        assert!(retarget(&|o| o[4] = 2).contains("version"));
-        assert!(retarget(&|o| o[5] |= 0b10).contains("unknown flag"));
-        assert!(
-            retarget(&|o| o[5] ^= FLAG_ZSTD).contains("open"),
-            "the flag is in the AAD"
-        );
-        assert!(retarget(&|o| o[6] = Class::Originals.byte()).contains("class"));
+        assert!(retarget(&|o| o[4] = 3).contains("version"));
         assert!(
             retarget(&|o| o[HEADER_BYTES] ^= 1).contains("open"),
-            "a flipped header nonce fails AEAD before the post-decrypt nonce check"
+            "a flipped outer nonce fails AEAD before the post-decrypt nonce check"
         );
 
-        // The name: another name asked for.
+        // Wrong Class fails AEAD because class is bound in AAD (not sent in the outer header).
+        let mut wrong_class_ref = reference;
+        wrong_class_ref.class = Class::Originals;
+        assert!(
+            damaged(open(&keys(), &wrong_class_ref, &sealed.object)).contains("open"),
+            "class is bound in AAD"
+        );
+
+        // The name: another name asked for fails AEAD.
         let mut other = reference;
         other.name = Name::from_bytes([9; 32]);
         assert!(
             damaged(open(&keys(), &other, &sealed.object)).contains("open"),
             "the name is in the AAD"
+        );
+
+        // Unknown inner flag bit (valid AEAD and SIV nonce).
+        let bad_flag = forge(&keys(), &sealed.name, 0b10, Class::Records.byte(), b"hi").unwrap();
+        assert!(
+            damaged(open_checked(
+                &keys(),
+                &sealed.name,
+                Class::Records,
+                None,
+                None,
+                &bad_flag,
+            ))
+            .contains("unknown flag")
+        );
+
+        // Inner class disagrees with AAD class.
+        let mismatched_inner =
+            build_padded_inner(0, Class::Originals.byte(), b"hi", MIN_INNER_BYTES).unwrap();
+        let mismatched_obj = seal_raw_inner(
+            &keys(),
+            Class::Records.byte(),
+            &sealed.name,
+            &mismatched_inner,
+        );
+        assert!(
+            damaged(open_checked(
+                &keys(),
+                &sealed.name,
+                Class::Records,
+                None,
+                None,
+                &mismatched_obj,
+            ))
+            .contains("class is not the one asked for")
+        );
+
+        // Declared body_len exceeds the decrypted inner frame.
+        let mut bad_len_inner = vec![0_u8; MIN_INNER_BYTES];
+        bad_len_inner[1] = Class::Records.byte();
+        bad_len_inner[2..INNER_HEADER_BYTES].copy_from_slice(&100_u32.to_be_bytes());
+        let bad_len_obj =
+            seal_raw_inner(&keys(), Class::Records.byte(), &sealed.name, &bad_len_inner);
+        assert!(
+            damaged(open_checked(
+                &keys(),
+                &sealed.name,
+                Class::Records,
+                None,
+                None,
+                &bad_len_obj,
+            ))
+            .contains("body length cannot fit")
         );
 
         // A valid object for other plaintext, handed under this name.
@@ -760,23 +1028,90 @@ mod tests {
     }
 
     #[test]
-    fn nonce_depends_on_body_and_aad() {
+    fn non_canonical_padding_length_is_refused() {
+        let plain = b"ten bytes!";
+        let name = name_of(&keys(), Class::Records, plain);
+        // Canonical padme_len(6 + 10) is 64; pad to 72 (the next Padmé bucket) instead.
+        let non_canonical = build_padded_inner(0, Class::Records.byte(), plain, 72).unwrap();
+        let forged = seal_raw_inner(&keys(), Class::Records.byte(), &name, &non_canonical);
+        let why = damaged(open_checked(
+            &keys(),
+            &name,
+            Class::Records,
+            Some(&Digest::of(&forged)),
+            Some(u32::try_from(forged.len()).unwrap()),
+            &forged,
+        ));
+        assert!(why.contains("padding length is not canonical"), "{why}");
+    }
+
+    #[test]
+    fn non_zero_padding_byte_is_refused() {
+        let plain = b"ten bytes!";
+        let name = name_of(&keys(), Class::Records, plain);
+        for dirty_index in [INNER_HEADER_BYTES + plain.len(), MIN_INNER_BYTES - 1] {
+            let mut inner =
+                build_padded_inner(0, Class::Records.byte(), plain, MIN_INNER_BYTES).unwrap();
+            inner[dirty_index] = 1;
+            let forged = seal_raw_inner(&keys(), Class::Records.byte(), &name, &inner);
+            let why = damaged(open_checked(
+                &keys(),
+                &name,
+                Class::Records,
+                Some(&Digest::of(&forged)),
+                Some(u32::try_from(forged.len()).unwrap()),
+                &forged,
+            ));
+            assert!(why.contains("padding is not zero"), "{why}");
+        }
+    }
+
+    #[test]
+    fn compressed_media_classes_are_refused() {
+        let plain = compressible(512);
+        let compressed = zstd::bulk::compress(&plain, ZSTD_LEVEL).unwrap();
+        assert!(compressed.len() < plain.len());
+        for class in [Class::Thumbnails, Class::Originals] {
+            let name = name_of(&keys(), class, &plain);
+            let forged = forge(&keys(), &name, FLAG_ZSTD, class.byte(), &compressed).unwrap();
+            let why = damaged(open_checked(
+                &keys(),
+                &name,
+                class,
+                Some(&Digest::of(&forged)),
+                Some(u32::try_from(forged.len()).unwrap()),
+                &forged,
+            ));
+            assert!(why.contains("media classes are never compressed"), "{why}");
+        }
+    }
+
+    #[test]
+    fn nonce_depends_on_padded_inner_and_aad() {
         let k = keys();
         let name = name_of(&k, Class::Records, b"same name");
-        let aad_plain = aad_of(0, Class::Records.byte(), &name);
-        let aad_zstd = aad_of(FLAG_ZSTD, Class::Records.byte(), &name);
+        let aad_records = aad_of(Class::Records.byte(), &name);
+        let aad_originals = aad_of(Class::Originals.byte(), &name);
+        let inner_a =
+            build_padded_inner(0, Class::Records.byte(), b"body A", MIN_INNER_BYTES).unwrap();
+        let inner_b =
+            build_padded_inner(0, Class::Records.byte(), b"body B", MIN_INNER_BYTES).unwrap();
+        let inner_flagged =
+            build_padded_inner(FLAG_ZSTD, Class::Records.byte(), b"body A", MIN_INNER_BYTES)
+                .unwrap();
 
-        let n_body_a = nonce_of(&k, &aad_plain, b"body A");
-        let n_body_b = nonce_of(&k, &aad_plain, b"body B");
+        let n_a = nonce_of(&k, &aad_records, &inner_a);
+        let n_b = nonce_of(&k, &aad_records, &inner_b);
+        let n_flagged = nonce_of(&k, &aad_records, &inner_flagged);
+        let n_other_class = nonce_of(&k, &aad_originals, &inner_a);
         assert_ne!(
-            n_body_a, n_body_b,
-            "different bodies under the same name must never share a nonce"
+            n_a, n_b,
+            "different bodies under the same name never share a nonce"
         );
-
-        let n_flag_zstd = nonce_of(&k, &aad_zstd, b"body A");
+        assert_ne!(n_a, n_flagged, "different inner flags never share a nonce");
         assert_ne!(
-            n_body_a, n_flag_zstd,
-            "different flags under the same name and body must never share a nonce"
+            n_a, n_other_class,
+            "different AAD classes never share a nonce"
         );
     }
 
@@ -785,14 +1120,15 @@ mod tests {
         let k = keys();
         let plain = b"valid plaintext";
         let name = name_of(&k, Class::Records, plain);
-        let aad = aad_of(0, Class::Records.byte(), &name);
-        let mut wrong_nonce = nonce_of(&k, &aad, plain);
+        let aad = aad_of(Class::Records.byte(), &name);
+        let padded_inner =
+            build_padded_inner(0, Class::Records.byte(), plain, MIN_INNER_BYTES).unwrap();
+        let mut wrong_nonce = nonce_of(&k, &aad, &padded_inner);
         wrong_nonce[0] ^= 1;
 
         // Encrypted with the wrong nonce so AEAD decrypt succeeds, then the
-        // post-decrypt nonce check must reject it.
-        let forged =
-            frame_with_nonce(&k, &aad, wrong_nonce, 0, Class::Records.byte(), plain).unwrap();
+        // post-decrypt SIV nonce check must reject it.
+        let forged = encrypt_inner_with_nonce(&k, &aad, wrong_nonce, &padded_inner).unwrap();
         let why = damaged(open_checked(
             &k,
             &name,
