@@ -1517,7 +1517,7 @@ fn a_tapped_download_asks_the_core_off_the_lock_and_says_why_it_did_not_land() {
     let status = r.state().status.as_ref().expect("a status");
     assert_eq!(
         status.sentence,
-        "Can't reach your backup device. Try again later."
+        "Your backup device doesn't hold this original."
     );
     assert!(status.refused);
     assert!(r.tile_ids().contains(&a));
