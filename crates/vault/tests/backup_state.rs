@@ -172,6 +172,10 @@ fn every_constraint_the_code_states_is_in_the_database_too() {
         "pages are four bytes"
     );
     assert!(refused(c, "UPDATE device SET since_full = -1", []));
+    assert!(
+        refused(c, "UPDATE device SET disk_mark = x'0102'", []),
+        "disk_mark is 32 bytes"
+    );
     // undone
     assert!(
         c.execute(

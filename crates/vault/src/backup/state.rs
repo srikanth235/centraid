@@ -744,7 +744,8 @@ impl DeviceState {
         })
     }
 
-    /// Write the device row.
+    /// Write the device row. Clears `disk_mark` until the caller records the post-checkpoint
+    /// fingerprint via [`Self::set_disk_mark`].
     ///
     /// # Errors
     /// SQLite's refusal.
@@ -755,7 +756,8 @@ impl DeviceState {
             .flat_map(|page| page.to_be_bytes())
             .collect();
         self.connection.execute(
-            "UPDATE device SET newest = ?1, newest_ms = ?2, since_full = ?3, full_ms = ?4, carry = ?5
+            "UPDATE device SET newest = ?1, newest_ms = ?2, since_full = ?3, full_ms = ?4, carry = ?5,
+                    disk_mark = NULL
               WHERE id = 1",
             params![
                 device.newest.map(|(name, _)| name.to_hex()),
@@ -764,6 +766,37 @@ impl DeviceState {
                 device.full_ms.map(signed),
                 carry
             ],
+        )?;
+        Ok(())
+    }
+
+    /// The fingerprint of the main vault file after the last checkpoint, or `None` when none has
+    /// been recorded yet (or a checkpoint did not complete).
+    ///
+    /// # Errors
+    /// SQLite's refusal, or a stored mark that is not 32 bytes.
+    pub fn disk_mark(&self) -> Result<Option<[u8; 32]>> {
+        let bytes: Option<Vec<u8>> = self.connection.query_row(
+            "SELECT disk_mark FROM device WHERE id = 1",
+            [],
+            |row| row.get(0),
+        )?;
+        bytes
+            .map(|raw| {
+                <[u8; 32]>::try_from(raw.as_slice())
+                    .map_err(|_| invariant("the stored disk_mark is not 32 bytes"))
+            })
+            .transpose()
+    }
+
+    /// Record the fingerprint of the main vault file after a checkpoint.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn set_disk_mark(&self, mark: Option<&[u8; 32]>) -> Result<()> {
+        self.connection.execute(
+            "UPDATE device SET disk_mark = ?1 WHERE id = 1",
+            params![mark.map(<[u8; 32]>::as_slice)],
         )?;
         Ok(())
     }

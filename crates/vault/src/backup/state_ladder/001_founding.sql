@@ -72,8 +72,10 @@ CREATE TABLE os_chunk (
 ) STRICT, WITHOUT ROWID;
 
 -- The one row of what the snapshot reads need to remember: the newest snapshot's root, how many
--- snapshots since a full read (and when it was), and the pages written during the last pin, which
--- the next snapshot reads although the checkpoint has since moved them out of the WAL.
+-- snapshots since a full read (and when it was), the pages written during the last pin (which the
+-- next snapshot reads although the checkpoint has since moved them out of the WAL), and the
+-- fingerprint of the main vault file after the last checkpoint so any checkpoint made behind the
+-- core's back (including a clean close) forces a full read on the next snapshot.
 CREATE TABLE device (
   id         INTEGER PRIMARY KEY CHECK (id = 1),
   newest     TEXT CHECK (newest IS NULL OR (length(newest) = 64 AND newest NOT GLOB '*[^0-9a-f]*')),
@@ -81,6 +83,7 @@ CREATE TABLE device (
   since_full INTEGER NOT NULL DEFAULT 0 CHECK (since_full >= 0),
   full_ms    INTEGER,
   carry      BLOB NOT NULL DEFAULT x'' CHECK (length(carry) % 4 = 0),
+  disk_mark  BLOB CHECK (disk_mark IS NULL OR length(disk_mark) = 32),
   CHECK ((newest IS NULL) = (newest_ms IS NULL))
 ) STRICT;
 

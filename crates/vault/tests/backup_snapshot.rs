@@ -83,7 +83,7 @@ fn nothing_changed_reads_no_range_and_makes_the_same_root_but_for_its_time() {
 }
 
 #[test]
-fn a_checkpoint_made_behind_the_core_is_caught_by_the_next_full_read() {
+fn a_checkpoint_made_behind_the_core_is_caught_immediately_by_the_next_snapshot() {
     let rig = Rig::new("behind");
     rig.grow(40, "behind");
     let first = rig.snapshot(T0);
@@ -105,29 +105,31 @@ fn a_checkpoint_made_behind_the_core_is_caught_by_the_next_full_read() {
         "the WAL no longer says what changed"
     );
 
-    // The normal snapshots miss it: their ranges are the old ones.
-    let mut stale = None;
-    for step in 1..FULL_EVERY {
-        let taken = rig.snapshot(T0 + step * 1_000);
-        assert!(!taken.full);
-        assert_eq!(
-            taken.ranges_read, 0,
-            "the dirty set is empty and so is the read"
-        );
-        stale = Some(taken);
-    }
-    let stale = root_of(&rig, &stale.expect("a snapshot"));
-    assert!(stale.db_hash.is_none());
-
-    // The fourth after the full read is the next full read: it finds the range and sets db_hash.
-    let caught = rig.snapshot(T0 + FULL_EVERY * 1_000);
-    assert!(caught.full);
+    // The very next snapshot sees the main file's disk_mark changed and forces a full read.
+    let caught = rig.snapshot(T0 + 1_000);
+    assert!(caught.full, "an outside checkpoint forces a full read");
     assert_eq!(
         caught.ranges_new, 1,
         "exactly the range the dirty set missed"
     );
     let healed = root_of(&rig, &caught);
     assert!(healed.db_hash.is_some());
+}
+
+#[test]
+fn the_periodic_full_read_runs_every_full_every_snapshots() {
+    let rig = Rig::new("cadence");
+    rig.grow(20, "cadence");
+    let first = rig.snapshot(T0);
+    assert!(first.full);
+    for step in 1..FULL_EVERY {
+        let taken = rig.snapshot(T0 + step * 1_000);
+        assert!(!taken.full, "step {step} is incremental");
+        assert!(root_of(&rig, &taken).db_hash.is_none());
+    }
+    let periodic = rig.snapshot(T0 + FULL_EVERY * 1_000);
+    assert!(periodic.full, "step {FULL_EVERY} is a periodic full read");
+    assert!(root_of(&rig, &periodic).db_hash.is_some());
 }
 
 #[test]
@@ -408,3 +410,214 @@ fn the_quick_check_runs_before_the_head_is_signed() {
     assert!(store.head().expect("head").is_none());
     assert_eq!(store.counts().heads, 0);
 }
+
+fn upload_and_restore(
+    vault: &centraid_vault::Vault,
+    keys: &sealed::BackupKeys,
+    state: &centraid_vault::backup::state::DeviceState,
+    staging: &centraid_vault::backup::staging::Staging,
+    store: &centraid_vault::backup::store::MemoryStore,
+    root: &sealed::Name,
+    now_ms: u64,
+) -> std::collections::BTreeMap<String, Vec<String>> {
+    use centraid_vault::Vault;
+    use centraid_vault::backup::drill::dump;
+    use centraid_vault::backup::engine::{Env, GatewayPass, Policy, Scheduler};
+    use centraid_vault::backup::restore::Restore;
+    use centraid_vault::backup::store::Store;
+
+    let env = Env::new(vault, keys, state, staging, Policy::WIFI, now_ms);
+    Scheduler::new(vec![GatewayPass::new(&env, store).expect("a pass")], 8)
+        .run(10_000)
+        .expect("runs");
+    let dir = tempfile::tempdir().expect("a directory");
+    let out = dir.path().join("restored.db");
+    let restore = Restore::open(keys, &[store as &dyn Store], root).expect("opens");
+    restore.records(&out).expect("restores");
+    dump(&Vault::open(&out).expect("opens restored")).expect("dumps restored")
+}
+
+#[test]
+fn a_clean_close_after_a_write_forces_a_full_read_and_restores_all_rows() {
+    use centraid_vault::Vault;
+    use centraid_vault::backup::directory::Directory;
+    use centraid_vault::backup::drill::dump;
+    use centraid_vault::backup::snapshot;
+    use centraid_vault::backup::staging::Staging;
+    use centraid_vault::backup::state::{DeviceState, Gateway};
+    use centraid_vault::backup::store::{MemoryStore, Store as _};
+
+    let dir = tempfile::tempdir().expect("a directory");
+    let vault_path = dir.path().join("vault.db");
+    let vault = Vault::create(&vault_path).expect("creates vault");
+    vault.found("The Household", "Ada").expect("founds");
+    for round in 0..40 {
+        backup_support::common::insert_note(&vault, &format!("seed {round} {}", "x".repeat(900)))
+            .expect("inserts");
+    }
+
+    let keys = sealed::BackupKeys::from_root(&[0x42; 32]);
+    let state = DeviceState::open_beside(&vault_path).expect("state");
+    let staging = Staging::open(dir.path().join("vault.staging"), 512 * 1024 * 1024).expect("s");
+    let directory = Directory::new(Vec::new()).expect("directory");
+    let store = MemoryStore::new("desk");
+    store.set_clock_ms(T0 * 2);
+    state
+        .add_gateway(&Gateway::paired(
+            store.gateway_id().to_owned(),
+            vec!["192.168.1.20:7443".to_owned()],
+            vec![0x30],
+            "desk".to_owned(),
+            store.epoch(),
+            T0,
+        ))
+        .expect("pairs");
+
+    // First snapshot (full), uploaded so the gateway holds the baseline ranges.
+    let first = snapshot::take(&vault, &keys, &state, &staging, &directory, Options::at(T0))
+        .expect("first snapshot");
+    assert!(first.full);
+    let _ = upload_and_restore(&vault, &keys, &state, &staging, &store, &first.root.name, T0);
+
+    // A normal write without closing stays incremental.
+    backup_support::common::insert_note(&vault, "normal incremental write").expect("commits");
+    let incremental = snapshot::take(
+        &vault,
+        &keys,
+        &state,
+        &staging,
+        &directory,
+        Options::at(T0 + 1_000),
+    )
+    .expect("incremental snapshot");
+    assert!(!incremental.full, "normal write without close stays incremental");
+    let _ = upload_and_restore(
+        &vault,
+        &keys,
+        &state,
+        &staging,
+        &store,
+        &incremental.root.name,
+        T0 + 1_000,
+    );
+
+    // Write a small row (without necessarily growing page_count) and cleanly close the last
+    // connection, which checkpoints the WAL into vault.db and removes -wal.
+    backup_support::common::insert_note(&vault, "written before clean close").expect("commits");
+    vault.close().expect("clean close");
+    assert!(
+        wal::frame_pages(&vault_path).expect("frames").is_empty(),
+        "clean close folded and removed the WAL"
+    );
+
+    // Reopen and snapshot: WAL and carry are both empty, yet the main file changed on disk, so
+    // snapshot::take must force a full read and the restored vault must equal the live one.
+    let reopened = Vault::open(&vault_path).expect("reopens");
+    let live = dump(&reopened).expect("dumps live");
+    let after_close = snapshot::take(
+        &reopened,
+        &keys,
+        &state,
+        &staging,
+        &directory,
+        Options::at(T0 + 2_000),
+    )
+    .expect("snapshot after clean close");
+    assert!(
+        after_close.full,
+        "a clean close after a write must force a full read"
+    );
+    let restored = upload_and_restore(
+        &reopened,
+        &keys,
+        &state,
+        &staging,
+        &store,
+        &after_close.root.name,
+        T0 + 2_000,
+    );
+    assert_eq!(restored, live, "restored rows equal live rows after clean close");
+}
+
+#[test]
+fn a_clean_close_then_new_write_forces_a_full_read_and_restores_both_writes() {
+    use centraid_vault::Vault;
+    use centraid_vault::backup::directory::Directory;
+    use centraid_vault::backup::drill::dump;
+    use centraid_vault::backup::snapshot;
+    use centraid_vault::backup::staging::Staging;
+    use centraid_vault::backup::state::{DeviceState, Gateway};
+    use centraid_vault::backup::store::{MemoryStore, Store as _};
+
+    let dir = tempfile::tempdir().expect("a directory");
+    let vault_path = dir.path().join("vault.db");
+    let vault = Vault::create(&vault_path).expect("creates vault");
+    vault.found("The Household", "Ada").expect("founds");
+    for round in 0..40 {
+        backup_support::common::insert_note(&vault, &format!("seed {round} {}", "x".repeat(900)))
+            .expect("inserts");
+    }
+
+    let keys = sealed::BackupKeys::from_root(&[0x43; 32]);
+    let state = DeviceState::open_beside(&vault_path).expect("state");
+    let staging = Staging::open(dir.path().join("vault.staging"), 512 * 1024 * 1024).expect("s");
+    let directory = Directory::new(Vec::new()).expect("directory");
+    let store = MemoryStore::new("desk");
+    store.set_clock_ms(T0 * 2);
+    state
+        .add_gateway(&Gateway::paired(
+            store.gateway_id().to_owned(),
+            vec!["192.168.1.20:7443".to_owned()],
+            vec![0x30],
+            "desk".to_owned(),
+            store.epoch(),
+            T0,
+        ))
+        .expect("pairs");
+
+    let first = snapshot::take(&vault, &keys, &state, &staging, &directory, Options::at(T0))
+        .expect("first snapshot");
+    assert!(first.full);
+    let _ = upload_and_restore(&vault, &keys, &state, &staging, &store, &first.root.name, T0);
+
+    // Write 1 before clean close (folded into vault.db on close).
+    backup_support::common::insert_note(&vault, "before clean close").expect("commits 1");
+    vault.close().expect("clean close");
+
+    // Reopen and do Write 2 so the WAL is NON-empty, yet Write 1 is only in vault.db.
+    let reopened = Vault::open(&vault_path).expect("reopens");
+    backup_support::common::insert_note(&reopened, "after reopen").expect("commits 2");
+    assert!(
+        !wal::frame_pages(&vault_path).expect("frames").is_empty(),
+        "WAL is non-empty from the post-reopen write"
+    );
+
+    let live = dump(&reopened).expect("dumps live");
+    let after = snapshot::take(
+        &reopened,
+        &keys,
+        &state,
+        &staging,
+        &directory,
+        Options::at(T0 + 2_000),
+    )
+    .expect("snapshot after reopen + write");
+    assert!(
+        after.full,
+        "a clean close before a post-reopen write must still force a full read"
+    );
+    let restored = upload_and_restore(
+        &reopened,
+        &keys,
+        &state,
+        &staging,
+        &store,
+        &after.root.name,
+        T0 + 2_000,
+    );
+    assert_eq!(
+        restored, live,
+        "restored rows include both the pre-close write and the post-reopen write"
+    );
+}
+

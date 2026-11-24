@@ -9,17 +9,22 @@
 //!   frames name (plus the pages written during the previous pin, which the
 //!   checkpoint has since folded away) are read, named and sealed; every
 //!   other range reuses the previous snapshot's ref.
-//! - **The periodic full read.** Every [`FULL_EVERY`]th snapshot, and at
-//!   least daily, every range is read and the root carries `db_hash`; a range
-//!   the dirty set missed (a checkpoint behind the core's back) is caught
-//!   there. Other roots carry no `db_hash`.
+//! - **The periodic full read and checkpoint detection.** Every [`FULL_EVERY`]th
+//!   snapshot, at least daily, and whenever the main vault file's on-disk
+//!   fingerprint (`disk_mark`) changed behind the core's back (for instance on
+//!   last-connection close), every range is read and the root carries `db_hash`.
+//!   Other roots carry no `db_hash`.
 //! - The pin covers reading, hashing and sealing and never network I/O. The
 //!   sealed range objects that changed go to staging; the tree's nodes go to
 //!   the node cache. The checkpoint comes after the pin ends, and the device
-//!   row is written before it, so a crash between them only makes the next
+//!   row is written before it (clearing `disk_mark`, which is recorded once the
+//!   checkpoint finishes), so a crash between them only makes the next
 //!   snapshot read more.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom};
+use std::path::Path;
 
 use centraid_media::sealed::{self, BackupKeys, Class, Name, PlaintextHash, Ref};
 
@@ -133,6 +138,46 @@ fn entry_of(
     })
 }
 
+/// Fingerprint of the main vault file on disk (ignoring `-wal`): its length, page 1 (which carries
+/// SQLite's file change counter, page count, freelist and schema cookie), and the `vault` table's
+/// root page (which carries `vault.writes` and `vault.written_at`, updated on every commit).
+///
+/// In WAL mode with `wal_autocheckpoint = 0`, normal commits write only to `-wal` and leave the
+/// main file untouched until the core checkpoints after a snapshot. Any checkpoint behind the
+/// core's back — including SQLite's checkpoint on last-connection close — writes dirty pages into
+/// the main file and changes this mark, telling the next snapshot to take a full read.
+fn disk_mark(path: &Path, page_size: u64, vault_root_page: Option<u64>) -> Result<Option<[u8; 32]>> {
+    let page_len = usize::try_from(page_size).unwrap_or(0);
+    if page_len == 0 {
+        return Ok(None);
+    }
+    let mut file = File::open(path)?;
+    let len = file.metadata()?.len();
+    if len < page_size {
+        return Ok(None);
+    }
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(&len.to_le_bytes());
+
+    let mut page = vec![0_u8; page_len];
+    file.seek(SeekFrom::Start(0))?;
+    file.read_exact(&mut page)?;
+    hasher.update(&page);
+
+    if let Some(root) = vault_root_page
+        && root > 1
+    {
+        let offset = (root - 1).saturating_mul(page_size);
+        if offset.saturating_add(page_size) <= len {
+            file.seek(SeekFrom::Start(offset))?;
+            file.read_exact(&mut page)?;
+            hasher.update(&page);
+        }
+    }
+
+    Ok(Some(*hasher.finalize().as_bytes()))
+}
+
 /// Take one snapshot of `vault` into `state` and `staging`.
 ///
 /// # Errors
@@ -153,6 +198,7 @@ pub fn take(
     }
     let path = vault.path().to_owned();
     let device = state.device()?;
+    let prior_disk_mark = state.disk_mark()?;
     let prior = previous(state, keys, &device);
     let prior_ranges = match &prior {
         Some((_, root)) => tree::ranges_of(state, root)?,
@@ -175,6 +221,9 @@ pub fn take(
     let page_size = pinned.page_size();
     let page_count = pinned.page_count();
     let range_count = pinned.range_count();
+    let vault_root_page = pinned.root_page("vault")?;
+    let live_disk_mark = disk_mark(&path, page_size, vault_root_page)?;
+    let disk_changed = prior_disk_mark.is_none() || prior_disk_mark != live_disk_mark;
 
     let cadence = device.since_full + 1 >= FULL_EVERY
         || device
@@ -182,7 +231,7 @@ pub fn take(
             .is_none_or(|at| options.now_ms.saturating_sub(at) >= FULL_AT_LEAST_MS);
     let full = options.force_full
         || prior.is_none()
-        || (cadence && !options.bugs.no_full_read())
+        || ((cadence || disk_changed) && !options.bugs.no_full_read())
         || prior
             .as_ref()
             .is_some_and(|(_, root)| root.page_size != page_size);
@@ -302,8 +351,9 @@ pub fn take(
         state.put_node(&made.sealed.name, &made.plaintext)?;
     }
 
-    // The device row first, the checkpoint after: a crash between them only makes the next
-    // snapshot read more. Both happen while nothing can commit.
+    // The device row first (clearing `disk_mark`), the checkpoint after, then `disk_mark` once the
+    // checkpoint finishes: a crash anywhere in between leaves `disk_mark = None` and only makes
+    // the next snapshot read more. All of it happens while nothing can commit.
     let mut failure = None;
     let kept = before.len();
     vault.with_exclusive_connection(|connection| {
@@ -330,10 +380,18 @@ pub fn take(
             failure = Some(error);
             return Ok(());
         }
-        // Busy (a reader holds the log) is not a failure: the next snapshot re-reads those frames.
-        let _ = connection.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
-            row.get::<_, i64>(0)
-        });
+        // Busy (a reader holds the log) is not a failure: the next snapshot re-reads those frames
+        // and, seeing `disk_mark = None`, takes a full read.
+        let checkpointed = connection
+            .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .is_ok_and(|busy| busy == 0);
+        if checkpointed
+            && let Ok(mark @ Some(_)) = disk_mark(&path, page_size, vault_root_page)
+        {
+            let _ = state.set_disk_mark(mark.as_ref());
+        }
         Ok(())
     })?;
     if let Some(error) = failure {

@@ -729,9 +729,8 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         .iter()
         .map(|(key, (kind, id))| (key.clone(), json!({"kind": kind.name(), "id": id})))
         .collect();
-    // THE VAULT NEVER CHECKPOINTS ON CLOSE (`NO_CKPT_ON_CLOSE`), so the
-    // seed checkpoints itself: the vault is then one file (plus its `.blobs`
-    // and `.seat` siblings) and a copy does not drag a large `-wal` along.
+    // Checkpoint explicitly before closing so the seeded vault is a single
+    // file (plus its `.blobs` and `.seat` siblings) with no lingering `-wal`.
     seeder.handle.checkpoint()?;
     let dropped = std::mem::take(&mut seeder.dropped);
     seeder
