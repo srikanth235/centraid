@@ -28,7 +28,14 @@ CREATE TABLE gateway (
   directory_dirty INTEGER NOT NULL DEFAULT 1 CHECK (directory_dirty IN (0, 1)),
   -- The last head that did not match `conf` went backwards (a lower writer position, or no head, or
   -- not a successor of `conf`): the gateway reads as rolled back until a new head is confirmed there.
-  regressed       INTEGER NOT NULL DEFAULT 0 CHECK (regressed IN (0, 1)),
+  regressed           INTEGER NOT NULL DEFAULT 0 CHECK (regressed IN (0, 1)),
+  collected_ms        INTEGER NOT NULL DEFAULT 0 CHECK (collected_ms >= 0),
+  held_count          INTEGER NOT NULL DEFAULT 0 CHECK (held_count >= 0),
+  held_purge_at_ms    INTEGER CHECK (held_purge_at_ms IS NULL OR held_purge_at_ms >= 0),
+  refusal_code        INTEGER,
+  damaged_flag        INTEGER NOT NULL DEFAULT 0 CHECK (damaged_flag IN (0, 1)),
+  sample_checked      INTEGER NOT NULL DEFAULT 0 CHECK (sample_checked >= 0),
+  manifest_unreadable INTEGER NOT NULL DEFAULT 0 CHECK (manifest_unreadable IN (0, 1)),
   CHECK ((conf IS NULL) = (conf_ms IS NULL)),
   CHECK ((troot IS NULL) = (troot_ms IS NULL)),
   CHECK ((oroot IS NULL) = (oroot_ms IS NULL))
@@ -59,17 +66,25 @@ CREATE TABLE local_bytes (
   edited INTEGER NOT NULL DEFAULT 0 CHECK (edited IN (0, 1) AND (edited = 0 OR source = 'os'))
 ) STRICT;
 
--- The chunk refs of an original whose bytes only the OS photo library holds (§6.4). The stage
--- door seals the stream once to learn them; the sealed chunks that fit go to staging, and the
--- snapshot lists these refs in the tree so a gateway can be owed them before every byte is staged.
-CREATE TABLE os_chunk (
-  hash   TEXT NOT NULL CHECK (length(hash) = 64 AND hash NOT GLOB '*[^0-9a-f]*'),
+-- The sealed chunk refs of a content blob (class 2 = thumbnails, class 3 = originals), kept so
+-- OS-only originals, freed-up cloud-only blobs, and toggled video exclusions keep their refs
+-- without re-reading local bytes (spec §5).
+CREATE TABLE blob_chunk (
+  hash   TEXT    NOT NULL CHECK (length(hash) = 64 AND hash NOT GLOB '*[^0-9a-f]*'),
+  class  INTEGER NOT NULL CHECK (class IN (2, 3)),
   idx    INTEGER NOT NULL CHECK (idx >= 0),
-  name   TEXT NOT NULL CHECK (length(name) = 64 AND name NOT GLOB '*[^0-9a-f]*'),
-  digest TEXT NOT NULL CHECK (length(digest) = 64 AND digest NOT GLOB '*[^0-9a-f]*'),
+  name   TEXT    NOT NULL CHECK (length(name) = 64 AND name NOT GLOB '*[^0-9a-f]*'),
+  digest TEXT    NOT NULL CHECK (length(digest) = 64 AND digest NOT GLOB '*[^0-9a-f]*'),
   len    INTEGER NOT NULL CHECK (len > 0),
-  PRIMARY KEY (hash, idx)
+  PRIMARY KEY (hash, class, idx)
 ) STRICT, WITHOUT ROWID;
+
+-- Vault 64 KiB ranges folded from an oversized WAL when unpaired or offline (spec §5, R5):
+-- unioned into the next snapshot's dirty set and cleared once recorded.
+CREATE TABLE dirty_range (
+  range_index INTEGER PRIMARY KEY CHECK (range_index >= 0),
+  noted_ms    INTEGER NOT NULL CHECK (noted_ms >= 0)
+) STRICT;
 
 -- The one row of what the snapshot reads need to remember: the newest snapshot's root, how many
 -- snapshots since a full read (and when it was), the pages written during the last pin (which the

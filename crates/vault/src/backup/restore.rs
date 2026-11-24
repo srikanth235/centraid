@@ -391,9 +391,15 @@ impl<'a> Restore<'a> {
     ) -> Result<MediaReport> {
         let mut report = MediaReport::default();
         for entry in self.entries()? {
+            match (class, entry.kind) {
+                (_, tree::EntryKind::ExcludedOriginal) => continue,
+                (Class::Thumbnails, tree::EntryKind::Thumbnail)
+                | (Class::Originals, tree::EntryKind::Original) => {}
+                _ => continue,
+            }
             let refs = entry.refs(class);
-            let wanted = !refs.is_empty() || (class == Class::Originals && entry.size == 0);
-            if !wanted {
+            if entry.size > 0 && refs.is_empty() {
+                report.missing += 1;
                 continue;
             }
             let mut content = Vec::with_capacity(usize::try_from(entry.size).unwrap_or(0));
@@ -487,7 +493,8 @@ pub fn check(
     std::fs::create_dir_all(scratch)?;
     let outcome = (|| -> std::result::Result<CheckReport, RestoreError> {
         let records = restore.records(&scratch.join("check.db"))?;
-        let mut missing = [0_u64; 2];
+        let stats = tree::stats_of(&restore, &restore.root.blobs)?;
+        let mut missing = [stats.unheld_thumb_files, stats.unheld_orig_files];
         for (slot, class) in [Class::Thumbnails, Class::Originals]
             .into_iter()
             .enumerate()

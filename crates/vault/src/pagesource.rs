@@ -338,6 +338,18 @@ impl PinnedPages {
         Ok(crate::file::quick_check(&self.connection)?)
     }
 
+    /// Live content files at the pin, read on the pinned connection without locking `Vault`.
+    ///
+    /// # Errors
+    /// What [`crate::backup::files::content_files_on`] refuses.
+    pub fn content_files(
+        &self,
+        now_text: &str,
+        now_ms: i64,
+    ) -> crate::backup::Result<Vec<crate::backup::files::ContentFile>> {
+        crate::backup::files::content_files_on(&self.connection, now_text, now_ms)
+    }
+
     /// End the pin.
     ///
     /// # Errors

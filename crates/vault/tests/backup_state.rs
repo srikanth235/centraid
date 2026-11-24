@@ -2,11 +2,11 @@
 //! constraint the code states written with raw SQL, and the crash a rename leaves behind.
 //! Counts and rows, never durations.
 
-use centraid_media::sealed::{Name, PlaintextHash};
+use centraid_media::sealed::{Class, Digest, Name, PlaintextHash, Ref};
 use centraid_vault::backup::PlaneError;
 use centraid_vault::backup::staging::{self, Staging};
 use centraid_vault::backup::state::{
-    Device, DeviceState, Gateway, LocalBytes, LocalSource, STATE_APPLICATION_ID,
+    Device, DeviceState, Gateway, GatewayNotesRecord, LocalBytes, LocalSource, STATE_APPLICATION_ID,
 };
 use rusqlite::Connection;
 
@@ -54,16 +54,17 @@ fn the_schema_has_no_outbox_and_one_rung() {
     assert_eq!(
         tables,
         [
+            "blob_chunk",
             "device",
+            "dirty_range",
             "gateway",
             "local_bytes",
             "node",
             "os_bundle",
-            "os_chunk",
             "staged",
             "undone"
         ],
-        "pairings, what each confirmed, the node cache, staging, the device row, undone names, local bytes, the chunks and bundles handed to the OS"
+        "pairings, what each confirmed, the node cache, staging, the device row, folded dirty ranges, undone names, local bytes, blob chunk refs and OS bundles"
     );
     assert!(!tables.iter().any(|table| table.contains("outbox")));
     let (application_id, version): (i64, i64) = (
@@ -75,6 +76,7 @@ fn the_schema_has_no_outbox_and_one_rung() {
             .expect("version"),
     );
     assert_eq!((application_id, version), (STATE_APPLICATION_ID, 1));
+    assert_eq!(STATE_APPLICATION_ID, 0x4342_5332);
 }
 
 #[test]
@@ -134,6 +136,18 @@ fn every_constraint_the_code_states_is_in_the_database_too() {
     assert!(refused(c, "UPDATE gateway SET directory_dirty = 2", []));
     assert!(refused(c, "UPDATE gateway SET scrub_cursor = 'x'", []));
     assert!(refused(c, "UPDATE gateway SET regressed = 2", []));
+    assert!(
+        refused(c, "UPDATE gateway SET collected_ms = -1", []),
+        "collected_ms >= 0"
+    );
+    assert!(refused(c, "UPDATE gateway SET held_count = -1", []));
+    assert!(refused(c, "UPDATE gateway SET held_purge_at_ms = -1", []));
+    assert!(
+        refused(c, "UPDATE gateway SET damaged_flag = 2", []),
+        "damaged_flag is boolean"
+    );
+    assert!(refused(c, "UPDATE gateway SET sample_checked = -1", []));
+    assert!(refused(c, "UPDATE gateway SET manifest_unreadable = 2", []));
     // node
     assert!(refused(
         c,
@@ -231,6 +245,56 @@ fn every_constraint_the_code_states_is_in_the_database_too() {
             [&hex]
         ),
         "an os_bundle path is non-empty"
+    );
+    // blob_chunk
+    assert!(
+        refused(
+            c,
+            "INSERT INTO blob_chunk (hash, class, idx, name, digest, len) VALUES (?1, 1, 0, ?1, ?1, 100)",
+            [&hex]
+        ),
+        "blob_chunk class is only 2 (Thumbnails) or 3 (Originals)"
+    );
+    assert!(
+        refused(
+            c,
+            "INSERT INTO blob_chunk (hash, class, idx, name, digest, len) VALUES (?1, 4, 0, ?1, ?1, 100)",
+            [&hex]
+        ),
+        "blob_chunk class rejects out-of-range values"
+    );
+    assert!(
+        refused(
+            c,
+            "INSERT INTO blob_chunk (hash, class, idx, name, digest, len) VALUES (?1, 2, -1, ?1, ?1, 100)",
+            [&hex]
+        ),
+        "blob_chunk idx >= 0"
+    );
+    assert!(
+        refused(
+            c,
+            "INSERT INTO blob_chunk (hash, class, idx, name, digest, len) VALUES (?1, 3, 0, ?1, ?1, 0)",
+            [&hex]
+        ),
+        "blob_chunk len > 0"
+    );
+    // dirty_range
+    assert!(
+        refused(
+            c,
+            "INSERT INTO dirty_range (range_index, noted_ms) VALUES (-1, 0)",
+            []
+        ),
+        "dirty_range range_index >= 0"
+    );
+    assert!(
+        refused(
+            c,
+            "INSERT INTO dirty_range (range_index, noted_ms) VALUES (0, -1)",
+            []
+        ),
+        "dirty_range noted_ms >= 0"
     );
 }
 
@@ -524,4 +588,95 @@ fn os_bundles_persist_across_reopen_and_rotate_by_set_difference() {
     gone.sort();
     assert_eq!(gone, vec![p2, p3]);
     assert!(state.os_bundles().expect("empty").is_empty());
+}
+
+#[test]
+fn gateway_notes_blob_chunks_and_dirty_ranges_round_trip() {
+    let (_dir, state) = open();
+    // Unpaired gateway returns default notes.
+    assert_eq!(
+        state.gateway_notes(GATEWAY).expect("default"),
+        GatewayNotesRecord::default()
+    );
+    state.add_gateway(&paired(GATEWAY, 1)).expect("pairs");
+    let notes = GatewayNotesRecord {
+        collected_ms: 123_456,
+        held_count: 7,
+        held_purge_at_ms: Some(999_000),
+        refusal_code: Some(42),
+        damaged: true,
+        sample_checked: 64,
+        manifest_unreadable: true,
+    };
+    state
+        .set_gateway_notes(GATEWAY, &notes)
+        .expect("sets notes");
+    assert_eq!(state.gateway_notes(GATEWAY).expect("reads notes"), notes);
+    assert_eq!(
+        state
+            .gateway(GATEWAY)
+            .expect("gateway")
+            .expect("there")
+            .notes,
+        notes
+    );
+    // Re-adding the same gateway preserves persisted notes.
+    state.add_gateway(&paired(GATEWAY, 1)).expect("re-adds");
+    assert_eq!(state.gateway_notes(GATEWAY).expect("kept"), notes);
+
+    // blob_chunk stores Thumbnails and Originals independently and refuses Records.
+    let hash = PlaintextHash::of(b"sample media");
+    let thumb_ref = Ref {
+        name: name(10),
+        digest: Digest::of(b"thumb"),
+        len: 120,
+        class: Class::Thumbnails,
+    };
+    let orig_ref = Ref {
+        name: name(11),
+        digest: Digest::of(b"orig"),
+        len: 4096,
+        class: Class::Originals,
+    };
+    assert!(
+        state
+            .put_blob_chunks(&hash, Class::Records, &[thumb_ref])
+            .is_err(),
+        "Class::Records must be refused"
+    );
+    state
+        .put_blob_chunks(&hash, Class::Thumbnails, &[thumb_ref])
+        .expect("puts thumb");
+    state
+        .put_os_chunks(&hash, &[orig_ref])
+        .expect("puts os orig");
+    assert_eq!(
+        state.blob_chunks(&hash, Class::Thumbnails).expect("thumbs"),
+        vec![thumb_ref]
+    );
+    assert_eq!(state.os_chunks(&hash).expect("os"), vec![orig_ref]);
+    state.remove_blob_chunks(&hash).expect("removes");
+    assert!(
+        state
+            .blob_chunks(&hash, Class::Thumbnails)
+            .expect("empty")
+            .is_empty()
+    );
+    assert!(
+        state
+            .blob_chunks(&hash, Class::Originals)
+            .expect("empty")
+            .is_empty()
+    );
+
+    // dirty_ranges persist, union across calls, and clear cleanly.
+    assert!(state.dirty_ranges().expect("empty").is_empty());
+    state.add_dirty_ranges([3_u64, 1], 1_000).expect("adds");
+    state.add_dirty_ranges([5_u64, 3], 2_000).expect("adds");
+    assert_eq!(
+        state.dirty_ranges().expect("ranges"),
+        [1_u64, 3, 5].into_iter().collect()
+    );
+    state.clear_dirty_ranges().expect("clears");
+    assert!(state.dirty_ranges().expect("cleared").is_empty());
 }

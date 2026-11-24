@@ -11,6 +11,7 @@ use std::io::{Read, Seek, SeekFrom};
 use centraid_media::sealed::{self, BackupKeys, CHUNK_BYTES, Class, PlaintextHash, Ref, Sealed};
 
 use super::Result;
+use crate::bytes::BlobStore;
 use crate::file::Vault;
 
 /// How many chunks a file of `len` bytes is: none for an empty file.
@@ -24,8 +25,8 @@ enum Source {
     Memory(Vec<u8>),
 }
 
-fn open(vault: &Vault, h: &PlaintextHash) -> Result<Option<Source>> {
-    let Some(store) = vault.blobs() else {
+fn open(store: Option<&dyn BlobStore>, h: &PlaintextHash) -> Result<Option<Source>> {
+    let Some(store) = store else {
         return Ok(None);
     };
     let id = h.to_hex();
@@ -42,12 +43,16 @@ fn open(vault: &Vault, h: &PlaintextHash) -> Result<Option<Source>> {
     }
 }
 
-/// Chunk `index` of the content `h`, when the local store holds it whole.
+/// Chunk `index` of the content `h` from `store`, when the store holds it whole.
 ///
 /// # Errors
-/// Only a vault that will not read; absent bytes are `None`.
-pub fn read_chunk(vault: &Vault, h: &PlaintextHash, index: u64) -> Result<Option<Vec<u8>>> {
-    let Some(source) = open(vault, h)? else {
+/// Only an unreadable source; absent bytes are `None`.
+pub fn read_chunk_from(
+    store: Option<&dyn BlobStore>,
+    h: &PlaintextHash,
+    index: u64,
+) -> Result<Option<Vec<u8>>> {
+    let Some(source) = open(store, h)? else {
         return Ok(None);
     };
     let at = index * CHUNK_BYTES as u64;
@@ -71,6 +76,57 @@ pub fn read_chunk(vault: &Vault, h: &PlaintextHash, index: u64) -> Result<Option
     })
 }
 
+/// Seal chunk `index` of `h` as `class` from `store`, when the bytes are there.
+///
+/// # Errors
+/// An unreadable source, or a chunk that does not seal.
+pub fn seal_chunk_from(
+    store: Option<&dyn BlobStore>,
+    keys: &BackupKeys,
+    h: &PlaintextHash,
+    index: u64,
+    class: Class,
+) -> Result<Option<Sealed>> {
+    read_chunk_from(store, h, index)?
+        .map(|bytes| sealed::seal(keys, class, &bytes).map_err(Into::into))
+        .transpose()
+}
+
+/// Every chunk's ref of the content `h` from `store`, read and sealed in one pass, **only
+/// when the bytes hash to `h`**: a file that changed under its name is not backed up under it.
+///
+/// # Errors
+/// An unreadable source, or a chunk that does not seal.
+pub fn refs_of_from(
+    store: Option<&dyn BlobStore>,
+    keys: &BackupKeys,
+    h: &PlaintextHash,
+    len: u64,
+    class: Class,
+) -> Result<Option<Vec<Ref>>> {
+    let mut hasher = blake3::Hasher::new();
+    let mut refs = Vec::new();
+    for index in 0..chunk_count(len) {
+        let Some(bytes) = read_chunk_from(store, h, index)? else {
+            return Ok(None);
+        };
+        hasher.update(&bytes);
+        refs.push(sealed::seal(keys, class, &bytes)?.reference());
+    }
+    if refs.is_empty() && open(store, h)?.is_none() && len > 0 {
+        return Ok(None);
+    }
+    Ok((hasher.finalize().as_bytes() == h.as_bytes()).then_some(refs))
+}
+
+/// Chunk `index` of the content `h`, when the local store holds it whole.
+///
+/// # Errors
+/// Only a vault that will not read; absent bytes are `None`.
+pub fn read_chunk(vault: &Vault, h: &PlaintextHash, index: u64) -> Result<Option<Vec<u8>>> {
+    read_chunk_from(vault.blobs().map(|s| s as &dyn BlobStore), h, index)
+}
+
 /// Seal chunk `index` of `h` as `class`, when the bytes are there.
 ///
 /// # Errors
@@ -82,9 +138,13 @@ pub fn seal_chunk(
     index: u64,
     class: Class,
 ) -> Result<Option<Sealed>> {
-    read_chunk(vault, h, index)?
-        .map(|bytes| sealed::seal(keys, class, &bytes).map_err(Into::into))
-        .transpose()
+    seal_chunk_from(
+        vault.blobs().map(|s| s as &dyn BlobStore),
+        keys,
+        h,
+        index,
+        class,
+    )
 }
 
 /// Every chunk's ref of the content `h`, read and sealed in one pass, **only
@@ -100,17 +160,11 @@ pub fn refs_of(
     len: u64,
     class: Class,
 ) -> Result<Option<Vec<Ref>>> {
-    let mut hasher = blake3::Hasher::new();
-    let mut refs = Vec::new();
-    for index in 0..chunk_count(len) {
-        let Some(bytes) = read_chunk(vault, h, index)? else {
-            return Ok(None);
-        };
-        hasher.update(&bytes);
-        refs.push(sealed::seal(keys, class, &bytes)?.reference());
-    }
-    if refs.is_empty() && open(vault, h)?.is_none() && len > 0 {
-        return Ok(None);
-    }
-    Ok((hasher.finalize().as_bytes() == h.as_bytes()).then_some(refs))
+    refs_of_from(
+        vault.blobs().map(|s| s as &dyn BlobStore),
+        keys,
+        h,
+        len,
+        class,
+    )
 }

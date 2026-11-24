@@ -822,3 +822,279 @@ fn a_steady_vault_that_is_not_closed_reads_no_range_snapshot_after_snapshot() {
         assert!(!taken.full);
     }
 }
+
+#[test]
+fn fold_wal_if_needed_truncates_wal_and_next_incremental_snapshot_restores_every_write() {
+    use centraid_vault::Vault;
+    use centraid_vault::backup::drill::dump;
+    use centraid_vault::backup::engine::{Env, GatewayPass, Policy, Scheduler};
+    use centraid_vault::backup::restore::Restore;
+    use centraid_vault::backup::snapshot::{self, Options};
+    use centraid_vault::backup::store::MemoryStore;
+
+    let rig = Rig::new("foldwal");
+    rig.grow(20, "foldwal");
+    let store = MemoryStore::new("desk");
+    store.set_clock_ms(T0 * 2);
+    rig.pair(&store);
+
+    // Baseline full snapshot uploaded to gateway.
+    let first = rig.snapshot(T0);
+    assert!(first.full);
+    let env = rig.env(T0);
+    Scheduler::new(vec![GatewayPass::new(&env, &store).expect("pass")], 8)
+        .run(10_000)
+        .expect("runs");
+
+    // Accumulate offline writes in the WAL, then fold them without taking a snapshot yet.
+    rig.grow(15, "offline-before-fold");
+    let frames_before = wal::frame_pages(rig.vault().path()).expect("wal frames");
+    assert!(
+        !frames_before.is_empty(),
+        "WAL holds uncommitted-to-snapshot frames"
+    );
+
+    // Below threshold does not fold.
+    assert!(
+        !snapshot::fold_wal_if_needed(rig.vault(), &rig.state, T0 + 500, frames_before.len() + 1,)
+            .expect("below threshold")
+    );
+    assert_eq!(
+        wal::frame_pages(rig.vault().path()).expect("frames").len(),
+        frames_before.len()
+    );
+
+    // At/above threshold folds WAL ranges into `dirty_range` and truncates `-wal` to 0 frames.
+    assert!(
+        snapshot::fold_wal_if_needed(rig.vault(), &rig.state, T0 + 600, frames_before.len())
+            .expect("folds")
+    );
+    assert!(
+        wal::frame_pages(rig.vault().path())
+            .expect("frames after fold")
+            .is_empty(),
+        "-wal was truncated to 0 frames"
+    );
+    assert!(
+        !rig.state.dirty_ranges().expect("dirty_ranges").is_empty(),
+        "folded ranges are recorded in dirty_range"
+    );
+
+    // The next snapshot is incremental (disk_mark matched post-fold), yet reads every folded range
+    // and clears `dirty_range` once recorded.
+    let live = dump(rig.vault()).expect("dumps live");
+    let next = rig.snapshot_with(Options::at(T0 + 1_000));
+    assert!(
+        !next.full,
+        "disk_mark stayed valid across fold_wal_if_needed"
+    );
+    assert!(next.ranges_read > 0, "folded dirty ranges were read");
+    assert!(
+        rig.state
+            .dirty_ranges()
+            .expect("dirty_ranges cleared")
+            .is_empty()
+    );
+
+    // Upload the incremental snapshot and prove every folded row restores faithfully.
+    let env = Env::new(
+        rig.vault(),
+        &rig.keys,
+        &rig.state,
+        &rig.staging,
+        Policy::WIFI,
+        T0 + 1_000,
+    );
+    Scheduler::new(vec![GatewayPass::new(&env, &store).expect("pass")], 8)
+        .run(10_000)
+        .expect("runs");
+    let dir = tempfile::tempdir().expect("dir");
+    let out = dir.path().join("restored.db");
+    Restore::open(
+        &rig.keys,
+        &[&store as &dyn centraid_vault::backup::store::Store],
+        &next.root.name,
+    )
+    .expect("opens")
+    .records(&out)
+    .expect("restores");
+    let restored = dump(&Vault::open(&out).expect("opens restored")).expect("dumps");
+    assert_eq!(restored, live);
+}
+
+#[test]
+fn toggling_exclude_videos_after_free_up_space_preserves_video_refs_via_blob_chunk() {
+    let rig = Rig::new("excludetoggle");
+    let video_bytes = b"a cloud-only video original ".repeat(300);
+    let video_id = rig
+        .vault()
+        .blobs()
+        .expect("blobs")
+        .put(&video_bytes)
+        .expect("puts");
+    let video_hash = centraid_media::sealed::PlaintextHash::from_hex(&video_id).expect("hash");
+    let entity_id = rig.vault().ids().next();
+    let now = rig.vault().clock().now_text();
+    rig.vault()
+        .commit(|tx| {
+            let c = tx.connection();
+            centraid_vault::blob::stage(c, &video_id, video_bytes.len() as i64)?;
+            tx.insert_entity(&entity_id, centraid_vault::model::Kind::Photo, "", &now)?;
+            c.execute(
+                "INSERT INTO photo (id, blob, media_type, form) VALUES (?1, ?2, 'video/mp4', 'video')",
+                rusqlite::params![entity_id, video_id],
+            )?;
+            Ok(())
+        })
+        .expect("commits video");
+
+    // Snapshot 1 (exclude_videos = false): seals and records refs in blob_chunk.
+    let first = rig.snapshot_with(Options::at(T0));
+    assert_eq!(first.entries_new, 1);
+    let first_entries =
+        tree::entries_of(&rig.state, &root_of(&rig, &first).blobs).expect("entries");
+    let first_entry = first_entries
+        .iter()
+        .find(|e| e.h == video_hash)
+        .expect("video entry");
+    assert_eq!(first_entry.kind, tree::EntryKind::Original);
+    assert_eq!(first_entry.original.len(), 1);
+    let expected_refs = first_entry.original.clone();
+
+    // Remove local bytes ("Free up space") so BlobStore no longer holds the video.
+    rig.vault()
+        .blobs()
+        .expect("blobs")
+        .remove(&video_id)
+        .expect("removes local copy");
+
+    // Toggle exclude_videos ON -> snapshot writes EntryKind::ExcludedOriginal with empty refs.
+    let mut off_opts = Options::at(T0 + 1_000);
+    off_opts.exclude_videos = true;
+    let excluded = rig.snapshot_with(off_opts);
+    let excluded_entries =
+        tree::entries_of(&rig.state, &root_of(&rig, &excluded).blobs).expect("entries");
+    let excluded_entry = excluded_entries
+        .iter()
+        .find(|e| e.h == video_hash)
+        .expect("excluded entry");
+    assert_eq!(excluded_entry.kind, tree::EntryKind::ExcludedOriginal);
+    assert!(excluded_entry.original.is_empty());
+
+    // Toggle exclude_videos back OFF -> snapshot recovers the original Refs from blob_chunk.
+    let restored = rig.snapshot_with(Options::at(T0 + 2_000));
+    let restored_entries =
+        tree::entries_of(&rig.state, &root_of(&rig, &restored).blobs).expect("entries");
+    let restored_entry = restored_entries
+        .iter()
+        .find(|e| e.h == video_hash)
+        .expect("restored entry");
+    assert_eq!(restored_entry.kind, tree::EntryKind::Original);
+    assert_eq!(restored_entry.original, expected_refs);
+}
+
+#[test]
+fn hydrate_blob_chunks_from_root_recovers_cloud_only_originals_across_lose_state() {
+    use centraid_vault::backup::engine::{GatewayPass, Scheduler};
+    use centraid_vault::backup::snapshot;
+    use centraid_vault::backup::store::{MemoryStore, Store as _};
+
+    let mut rig = Rig::new("hydrate");
+    let orig_bytes = b"a freed-up original photo ".repeat(300);
+    let orig_hash = rig.add_original(&orig_bytes);
+    let thumb_hash = rig.add_thumbnail(&orig_hash, b"thumb bytes", "2026-01-02T03:04:05.000Z");
+
+    let store = MemoryStore::new("desk");
+    store.set_clock_ms(T0 * 2);
+    rig.pair(&store);
+    let first = rig.snapshot(T0);
+    let first_entries =
+        tree::entries_of(&rig.state, &root_of(&rig, &first).blobs).expect("entries");
+    let expected_orig_refs = first_entries
+        .iter()
+        .find(|e| e.h == orig_hash)
+        .expect("orig")
+        .original
+        .clone();
+    let expected_thumb_refs = first_entries
+        .iter()
+        .find(|e| e.h == thumb_hash)
+        .expect("thumb")
+        .thumbnail
+        .clone();
+
+    let env = rig.env(T0);
+    Scheduler::new(vec![GatewayPass::new(&env, &store).expect("pass")], 8)
+        .run(10_000)
+        .expect("runs");
+
+    // "Free up space": delete local original bytes, then lose state.db and staging.
+    rig.vault()
+        .blobs()
+        .expect("blobs")
+        .remove(&orig_hash.to_hex())
+        .expect("removes local original");
+    rig.lose_state(&[&store]);
+    assert!(
+        rig.state
+            .blob_chunks(&orig_hash, Class::Originals)
+            .expect("empty")
+            .is_empty()
+    );
+
+    // Fetch the standing root nodes into the fresh state.db (as VAULT_KNOWN re-pair does),
+    // hydrate blob_chunks, and verify the next snapshot preserves the cloud-only original's Refs.
+    let head_ref = store.head().expect("head").expect("set").name;
+    let restore = centraid_vault::backup::restore::Restore::open(
+        &rig.keys,
+        &[&store as &dyn centraid_vault::backup::store::Store],
+        &head_ref,
+    )
+    .expect("opens standing root");
+    // Load the standing tree nodes into state.db via NodeSource/put_node.
+    let mut stack = vec![restore.root.blobs, restore.root.directory];
+    stack.extend(restore.root.range_leaves.iter().copied());
+    let root_bytes =
+        centraid_vault::backup::tree::Node::Root(Box::new(restore.root.clone())).encode();
+    rig.state
+        .put_node(&restore.root_ref.name, &root_bytes)
+        .expect("puts root");
+    while let Some(r) = stack.pop() {
+        if let Some(plaintext) = tree::NodeSource::plaintext(&restore, &r.name).expect("reads") {
+            rig.state.put_node(&r.name, &plaintext).expect("puts node");
+            if r.name != restore.root.directory.name
+                && let Ok(tree::Node::Blobs(tree::BlobsNode {
+                    body: tree::BlobsBody::Children(children),
+                    ..
+                })) = tree::Node::decode(&plaintext)
+            {
+                stack.extend(children.into_iter().map(|(_, child)| child));
+            }
+        }
+    }
+
+    let hydrated =
+        snapshot::hydrate_blob_chunks_from_root(&rig.state, &restore.root_ref).expect("hydrates");
+    assert_eq!(hydrated, 2);
+    assert_eq!(
+        rig.state
+            .blob_chunks(&orig_hash, Class::Originals)
+            .expect("orig chunks"),
+        expected_orig_refs
+    );
+    assert_eq!(
+        rig.state
+            .blob_chunks(&thumb_hash, Class::Thumbnails)
+            .expect("thumb chunks"),
+        expected_thumb_refs
+    );
+
+    let after = rig.snapshot(T0 + 1_000);
+    let after_entries =
+        tree::entries_of(&rig.state, &root_of(&rig, &after).blobs).expect("entries");
+    let after_orig = after_entries
+        .iter()
+        .find(|e| e.h == orig_hash)
+        .expect("orig after");
+    assert_eq!(after_orig.original, expected_orig_refs);
+}

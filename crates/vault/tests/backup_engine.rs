@@ -1136,3 +1136,203 @@ fn partial_bundle_response_retries_unanswered_frames() {
         missing.len()
     );
 }
+
+#[test]
+fn unstreamed_os_original_blocks_oroot_confirmation_until_streamed() {
+    let rig = Rig::new("unstreamed_os");
+    rig.grow(5, "unstreamed_os");
+    // A thumbnail exists locally, while the OS-library original is claimed in SQLite without bytes
+    // in BlobStore or blob_chunk/os_chunk yet.
+    let os_bytes = b"os-library original photo bytes that arrive later".repeat(40);
+    let os_hash = centraid_media::sealed::PlaintextHash::of(&os_bytes);
+    rig.vault()
+        .commit(|tx| {
+            tx.connection().execute(
+                "INSERT INTO blob (hash, size) VALUES (?1, ?2)",
+                centraid_vault::rusqlite::params![os_hash.to_hex(), os_bytes.len() as i64],
+            )?;
+            Ok(())
+        })
+        .expect("claims unstreamed os blob");
+    rig.add_thumbnail(&os_hash, b"thumb bytes", "2026-04-01T00:00:00.000Z");
+
+    let (store, root) = front(&rig);
+    let root_node = tree::root_of(&rig.state, &root).expect("root");
+    let stats = tree::stats_of(&rig.state, &root_node.blobs).expect("stats");
+    assert_eq!(stats.unheld_orig_files, 1);
+    assert_eq!(stats.unheld_thumb_files, 0);
+
+    let pass_stats = run(&rig, &[&store], Policy::WIFI, T0);
+    assert!(pass_stats[0].waiting >= 1);
+    let gw = gateway(&rig, &store);
+    assert_eq!(gw.conf.map(|(n, _)| n), Some(root.name));
+    assert_eq!(gw.troot.map(|(n, _)| n), Some(root.name));
+    assert_eq!(
+        gw.oroot, None,
+        "oroot must never confirm while an in-scope original lacks bytes"
+    );
+    let standing = engine::standing(&rig.state, store.gateway_id()).expect("standing");
+    assert!(standing.records.is_some());
+    assert!(standing.thumbnails);
+    assert!(!standing.originals);
+
+    // Now the OS library streams the original: seal chunk, stage it, record os_chunks, re-snapshot.
+    let sealed =
+        centraid_media::sealed::seal(&rig.keys, Class::Originals, &os_bytes).expect("seal");
+    let staged_path = rig
+        .staging
+        .put(&sealed.name, &sealed.object)
+        .expect("stage");
+    rig.state
+        .stage(
+            &sealed.name,
+            &staged_path.to_string_lossy(),
+            sealed.object.len() as u64,
+        )
+        .expect("record stage");
+    rig.state
+        .put_os_chunks(&os_hash, &[sealed.reference()])
+        .expect("record os_chunks");
+
+    let next = rig.snapshot(T0 + 1_000);
+    let next_root = tree::root_of(&rig.state, &next.root).expect("next root");
+    let next_stats = tree::stats_of(&rig.state, &next_root.blobs).expect("next stats");
+    assert_eq!(next_stats.unheld_orig_files, 0);
+
+    run(&rig, &[&store], Policy::WIFI, T0 + 1_000);
+    let gw = gateway(&rig, &store);
+    assert_eq!(gw.oroot.map(|(n, _)| n), Some(next.root.name));
+    assert!(
+        engine::standing(&rig.state, store.gateway_id())
+            .expect("standing")
+            .originals
+    );
+    assert!(store.has_bytes(&sealed.name));
+}
+
+#[test]
+fn peer_gateway_repairs_cloud_only_original_to_newly_paired_gateway() {
+    let rig = Rig::new("peer_repair");
+    rig.grow(5, "peer_repair");
+    let raw_bytes = b"cloud-only photo original ".repeat(300);
+    let orig_hash = rig.add_original(&raw_bytes);
+    rig.add_thumbnail(&orig_hash, b"thumb", "2026-04-02T00:00:00.000Z");
+
+    let store_a = MemoryStore::new("gw-a");
+    store_a.set_clock_ms(T0 * 2);
+    rig.pair(&store_a);
+    let taken = rig.snapshot(T0);
+    run(&rig, &[&store_a], Policy::WIFI, T0);
+    assert!(
+        engine::standing(&rig.state, store_a.gateway_id())
+            .expect("standing")
+            .originals
+    );
+
+    // Simulate "Free up space": delete the local file from BlobStore (and drop any staged copy).
+    assert!(
+        rig.vault()
+            .blobs()
+            .expect("blobs")
+            .remove(&orig_hash.to_hex())
+            .expect("removes local blob")
+    );
+    for name in rig.staging.names().expect("staged names") {
+        rig.staging.release(&name).expect("release");
+    }
+
+    // Pair a second gateway and run a pass with store_a passed as a peer.
+    let store_b = MemoryStore::new("gw-b");
+    store_b.set_clock_ms(T0 * 2);
+    rig.pair(&store_b);
+    let env = Env::new(
+        rig.vault(),
+        &rig.keys,
+        &rig.state,
+        &rig.staging,
+        Policy::WIFI,
+        T0 + 1_000,
+    )
+    .with_peers(vec![&store_a as &dyn Store]);
+    let mut pass = GatewayPass::new(&env, &store_b).expect("pass");
+    while matches!(pass.step().expect("steps"), Step::Worked | Step::Restarted) {}
+    assert!(pass.is_over() && pass.stop_reason().is_none());
+    assert_eq!(
+        gateway(&rig, &store_b).oroot.map(|(n, _)| n),
+        Some(taken.root.name)
+    );
+    assert!(
+        engine::standing(&rig.state, store_b.gateway_id())
+            .expect("standing")
+            .originals
+    );
+
+    // Restore the original from store_b alone and verify the exact plaintext bytes come back.
+    let restore =
+        centraid_vault::backup::restore::Restore::open(&rig.keys, &[&store_b], &taken.root.name)
+            .expect("restore opens from store_b");
+    let mut restored_orig = None;
+    let report = restore
+        .originals(&mut |entry, bytes| {
+            if entry.h == orig_hash {
+                restored_orig = Some(bytes.to_vec());
+            }
+            Ok(())
+        })
+        .expect("restores originals");
+    assert_eq!(report.restored, 1);
+    assert_eq!(restored_orig.as_deref(), Some(raw_bytes.as_slice()));
+}
+
+#[test]
+fn retention_collect_visits_shared_blobs_subtrees_once_across_kept_snapshots() {
+    let rig = Rig::new("memo_collect");
+    rig.grow(10, "memo_collect");
+    photos(&rig, 4);
+    let store = MemoryStore::new("desk");
+    store.set_clock_ms(T0 * 4);
+    rig.pair(&store);
+    let day = 24 * 60 * 60 * 1000;
+
+    let mut roots = Vec::new();
+    for n in 0..5_u64 {
+        rig.raw()
+            .execute("UPDATE vault SET writes = writes + 1", [])
+            .expect("one page edit");
+        let taken = rig.snapshot(T0 + n * day);
+        run(&rig, &[&store], Policy::WIFI, T0 + n * day);
+        roots.push(taken.root);
+    }
+
+    // Counting Store wrapper on `get`: clear cached subtrees (except roots? or clear all nodes so
+    // Fetching reads from the store and caches into `state`). Because `Fetching` populates `state`
+    // on first miss, count `NodeSource::plaintext` calls via `CountingSource` on `retention::reachable`,
+    // AND verify `retention::collect` succeeds with memoized shared blobs subtree!
+    struct CountingSource<'a> {
+        inner: &'a dyn tree::NodeSource,
+        reads: std::cell::RefCell<std::collections::BTreeMap<Name, usize>>,
+    }
+    impl tree::NodeSource for CountingSource<'_> {
+        fn plaintext(&self, name: &Name) -> centraid_vault::backup::Result<Option<Vec<u8>>> {
+            *self.reads.borrow_mut().entry(*name).or_insert(0) += 1;
+            self.inner.plaintext(name)
+        }
+    }
+
+    let source = CountingSource {
+        inner: &rig.state,
+        reads: std::cell::RefCell::new(std::collections::BTreeMap::new()),
+    };
+    let reached = retention::reachable(&source, &roots).expect("reachable");
+    let shared_blobs = tree::root_of(&rig.state, &roots[0]).expect("root0").blobs;
+    assert_eq!(
+        source.reads.borrow().get(&shared_blobs.name).copied(),
+        Some(1),
+        "shared blobs root across all 5 kept snapshots must be decoded once"
+    );
+    assert!(reached.contains_key(&shared_blobs.name));
+
+    let env = rig.env(T0 + 6 * day);
+    let outcome = retention::collect(&env, &store).expect("collects");
+    assert!(matches!(outcome, Collected::Done { .. }));
+}

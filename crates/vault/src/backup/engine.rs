@@ -218,6 +218,7 @@ pub struct Env<'a> {
     pub policy: Policy,
     pub now_ms: u64,
     pub bugs: Bugs,
+    peers: Vec<&'a dyn Store>,
     /// Objects built this window, so a chunk is read and sealed once for every gateway that owes it.
     cache: RefCell<HashMap<Name, Vec<u8>>>,
     /// How many chunks were read from the vault's content and sealed (the cache's misses).
@@ -243,9 +244,18 @@ impl<'a> Env<'a> {
             policy,
             now_ms,
             bugs: Bugs::none(),
+            peers: Vec::new(),
             cache: RefCell::new(HashMap::new()),
             source_reads: Cell::new(0),
         }
+    }
+
+    /// Peer gateways to fetch sealed chunks from when neither staging nor the local content store
+    /// holds a chunk (e.g., syncing a cloud-only original to a newly paired second gateway).
+    #[must_use]
+    pub fn with_peers(mut self, peers: Vec<&'a dyn Store>) -> Self {
+        self.peers = peers;
+        self
     }
 
     /// Chunks read from the vault's content and sealed so far.
@@ -303,26 +313,34 @@ impl<'a> Env<'a> {
         }
         match reference.class {
             Class::Records => {
-                let Some(plaintext) = self.state.get_node(&reference.name)? else {
-                    return Ok(None);
-                };
-                let sealed = sealed::seal(self.keys, Class::Records, &plaintext)?;
-                Ok((sealed.reference() == *reference)
-                    .then(|| self.remember(reference.name, sealed.object)))
+                if let Some(plaintext) = self.state.get_node(&reference.name)? {
+                    let sealed = sealed::seal(self.keys, Class::Records, &plaintext)?;
+                    if sealed.reference() == *reference {
+                        return Ok(Some(self.remember(reference.name, sealed.object)));
+                    }
+                }
             }
             class => {
-                let Some((h, index)) = lookup.get(&reference.name) else {
-                    return Ok(None);
-                };
-                self.source_reads.set(self.source_reads.get() + 1);
-                let Some(sealed) = content::seal_chunk(self.vault, self.keys, h, *index, class)?
-                else {
-                    return Ok(None);
-                };
-                Ok((sealed.reference() == *reference)
-                    .then(|| self.remember(reference.name, sealed.object)))
+                if let Some((h, index)) = lookup.get(&reference.name) {
+                    self.source_reads.set(self.source_reads.get() + 1);
+                    if let Some(sealed) =
+                        content::seal_chunk(self.vault, self.keys, h, *index, class)?
+                        && sealed.reference() == *reference
+                    {
+                        return Ok(Some(self.remember(reference.name, sealed.object)));
+                    }
+                }
             }
         }
+        for peer in &self.peers {
+            let mut buf = Vec::new();
+            if peer.get(&reference.name, &mut buf).is_ok()
+                && sealed::open(self.keys, reference, &buf).is_ok()
+            {
+                return Ok(Some(self.remember(reference.name, buf)));
+            }
+        }
+        Ok(None)
     }
 }
 
@@ -910,9 +928,13 @@ impl<'e, 's> GatewayPass<'e, 's> {
 
     fn enter_media(&mut self, class: Class) -> Result<Step> {
         let gateway = self.gateway()?;
-        let entries = {
-            let root = tree::root_of(self.env.state, &self.target)?;
-            tree::entries_of(self.env.state, &root.blobs)?
+        let root = tree::root_of(self.env.state, &self.target)?;
+        let blob_stats = tree::stats_of(self.env.state, &root.blobs)?;
+        let entries = tree::entries_of(self.env.state, &root.blobs)?;
+        let unheld = match class {
+            Class::Thumbnails => blob_stats.unheld_thumb_files,
+            Class::Originals => blob_stats.unheld_orig_files,
+            Class::Records => 0,
         };
         let held_root = match class {
             Class::Thumbnails => gateway.troot,
@@ -940,6 +962,7 @@ impl<'e, 's> GatewayPass<'e, 's> {
                 });
             }
         }
+        self.stats.waiting += unheld;
         self.stage = Stage::Media(Box::new(MediaPhase {
             class,
             items,
@@ -947,7 +970,7 @@ impl<'e, 's> GatewayPass<'e, 's> {
             lookup,
             held,
             ready: VecDeque::new(),
-            skipped: 0,
+            skipped: unheld,
         }));
         Ok(Step::Worked)
     }
@@ -1199,11 +1222,8 @@ pub fn held_whole(env: &Env<'_>, gateway_id: &str, h: &PlaintextHash) -> Result<
         return Ok(false);
     };
     let root = tree::root_of(env.state, &reference)?;
-    let entries = tree::entries_of(env.state, &root.blobs)?;
-    Ok(entries
-        .iter()
-        .find(|entry| entry.h == *h)
-        .is_some_and(|entry| !entry.original.is_empty() || entry.size == 0))
+    let entry = tree::lookup_entry(env.state, &root.blobs, h)?;
+    Ok(entry.is_some_and(|e| e.kind == tree::EntryKind::Original && e.has_bytes()))
 }
 
 /// Which gateways hold the original `h` whole (R4 asks whether this is any).
@@ -1246,31 +1266,61 @@ pub fn debt(env: &Env<'_>, gateway_id: &str) -> Result<Debt> {
         }
     };
     let mut out = Debt::default();
-    let new_records = tree::records_of(env.state, &newest)?;
-    let old_records: BTreeSet<Name> = match held_tree(gateway.conf)? {
-        Some(reference) => tree::records_of(env.state, &reference)
-            .map(|refs| refs.into_keys().collect())
-            .unwrap_or_default(),
-        None => BTreeSet::new(),
-    };
-    out.records = new_records
-        .keys()
-        .filter(|name| !old_records.contains(name))
-        .count() as u64;
-    for (class, root) in [
-        (Class::Thumbnails, gateway.troot),
-        (Class::Originals, gateway.oroot),
-    ] {
-        let held: BTreeSet<Name> = match held_tree(root)? {
-            Some(reference) => tree::media_of(env.state, &reference, class)
+    if gateway.conf.map(|(name, _)| name) == Some(newest.name) {
+        out.records = 0;
+    } else {
+        let new_records = tree::records_of(env.state, &newest)?;
+        let old_records: BTreeSet<Name> = match held_tree(gateway.conf)? {
+            Some(reference) => tree::records_of(env.state, &reference)
                 .map(|refs| refs.into_keys().collect())
                 .unwrap_or_default(),
             None => BTreeSet::new(),
         };
-        let owed = tree::media_of(env.state, &newest, class)?
+        out.records = new_records
             .keys()
-            .filter(|name| !held.contains(name))
+            .filter(|name| !old_records.contains(name))
             .count() as u64;
+    }
+    let mut new_root: Option<tree::Root> = None;
+    for (class, root_ptr) in [
+        (Class::Thumbnails, gateway.troot),
+        (Class::Originals, gateway.oroot),
+    ] {
+        let owed = if root_ptr.map(|(name, _)| name) == Some(newest.name) {
+            0
+        } else {
+            let new_blobs = match &new_root {
+                Some(root) => root.blobs,
+                None => {
+                    let root = tree::root_of(env.state, &newest)?;
+                    let blobs = root.blobs;
+                    new_root = Some(root);
+                    blobs
+                }
+            };
+            let old_ref = held_tree(root_ptr)?;
+            let old_root = old_ref
+                .as_ref()
+                .and_then(|reference| tree::root_of(env.state, reference).ok());
+            if old_root.as_ref().is_some_and(|old| {
+                old.blobs.name == new_blobs.name
+                    || tree::diff_entries(env.state, Some(&old.blobs), &new_blobs)
+                        .is_ok_and(|diff| diff.is_empty())
+            }) {
+                0
+            } else {
+                let held: BTreeSet<Name> = match old_ref {
+                    Some(reference) => tree::media_of(env.state, &reference, class)
+                        .map(|refs| refs.into_keys().collect())
+                        .unwrap_or_default(),
+                    None => BTreeSet::new(),
+                };
+                tree::media_of(env.state, &newest, class)?
+                    .keys()
+                    .filter(|name| !held.contains(name))
+                    .count() as u64
+            }
+        };
         match class {
             Class::Thumbnails => out.thumbnails = owed,
             _ => out.originals = owed,
@@ -1578,35 +1628,44 @@ pub fn housekeeping(env: &Env<'_>, extra_roots: &[Ref]) -> Result<(usize, usize)
     let gateways = env.state.gateways()?;
     let mut needed: BTreeSet<Name> = BTreeSet::new();
     if let Some(newest) = &newest {
-        let records = tree::records_of(env.state, newest)?;
-        let thumbs = tree::media_of(env.state, newest, Class::Thumbnails)?;
-        let originals = tree::media_of(env.state, newest, Class::Originals)?;
-        let held_of = |root: Option<(Name, u64)>, class: Option<Class>| -> Result<BTreeSet<Name>> {
-            let Some((name, _)) = root else {
-                return Ok(BTreeSet::new());
-            };
-            let Some(reference) = env.node_ref(&name)? else {
-                return Ok(BTreeSet::new());
-            };
-            Ok(match class {
-                None => tree::records_of(env.state, &reference)
-                    .map(|refs| refs.into_keys().collect())
-                    .unwrap_or_default(),
-                Some(class) => tree::media_of(env.state, &reference, class)
-                    .map(|refs| refs.into_keys().collect())
-                    .unwrap_or_default(),
-            })
-        };
-        if gateways.is_empty() {
-            needed.extend(records.keys().chain(thumbs.keys()).chain(originals.keys()));
-        }
-        for gateway in &gateways {
-            let have = held_of(gateway.conf, None)?;
-            needed.extend(records.keys().filter(|name| !have.contains(name)));
-            let have = held_of(gateway.troot, Some(Class::Thumbnails))?;
-            needed.extend(thumbs.keys().filter(|name| !have.contains(name)));
-            let have = held_of(gateway.oroot, Some(Class::Originals))?;
-            needed.extend(originals.keys().filter(|name| !have.contains(name)));
+        let all_caught_up = !gateways.is_empty()
+            && gateways.iter().all(|gateway| {
+                gateway.conf.map(|(name, _)| name) == Some(newest.name)
+                    && gateway.troot.map(|(name, _)| name) == Some(newest.name)
+                    && gateway.oroot.map(|(name, _)| name) == Some(newest.name)
+            });
+        if !all_caught_up {
+            let records = tree::records_of(env.state, newest)?;
+            let thumbs = tree::media_of(env.state, newest, Class::Thumbnails)?;
+            let originals = tree::media_of(env.state, newest, Class::Originals)?;
+            let held_of =
+                |root: Option<(Name, u64)>, class: Option<Class>| -> Result<BTreeSet<Name>> {
+                    let Some((name, _)) = root else {
+                        return Ok(BTreeSet::new());
+                    };
+                    let Some(reference) = env.node_ref(&name)? else {
+                        return Ok(BTreeSet::new());
+                    };
+                    Ok(match class {
+                        None => tree::records_of(env.state, &reference)
+                            .map(|refs| refs.into_keys().collect())
+                            .unwrap_or_default(),
+                        Some(class) => tree::media_of(env.state, &reference, class)
+                            .map(|refs| refs.into_keys().collect())
+                            .unwrap_or_default(),
+                    })
+                };
+            if gateways.is_empty() {
+                needed.extend(records.keys().chain(thumbs.keys()).chain(originals.keys()));
+            }
+            for gateway in &gateways {
+                let have = held_of(gateway.conf, None)?;
+                needed.extend(records.keys().filter(|name| !have.contains(name)));
+                let have = held_of(gateway.troot, Some(Class::Thumbnails))?;
+                needed.extend(thumbs.keys().filter(|name| !have.contains(name)));
+                let have = held_of(gateway.oroot, Some(Class::Originals))?;
+                needed.extend(originals.keys().filter(|name| !have.contains(name)));
+            }
         }
     }
     for staged in env.state.staged_all()? {
@@ -1631,9 +1690,7 @@ pub fn housekeeping(env: &Env<'_>, extra_roots: &[Ref]) -> Result<(usize, usize)
     }
     let mut keep: BTreeSet<Name> = BTreeSet::new();
     for root in &roots {
-        if let Ok(nodes) = tree::nodes_of(env.state, root) {
-            keep.extend(nodes);
-        }
+        let _ = tree::collect_nodes_into(env.state, root, &mut keep);
     }
     let forgotten = env.state.forget_nodes_except(&keep)?;
     Ok((released, forgotten))
