@@ -235,3 +235,29 @@ fn the_phone_alerts_for_what_it_states_and_the_vault_for_what_the_member_changed
     );
     assert_eq!(out["refused"], 1, "{out}");
 }
+
+#[test]
+fn a_read_that_lost_most_of_the_list_trashes_none_of_its_reminders() {
+    let w = World::new("remind_doubted");
+    let all: Vec<Value> = (0..6)
+        .map(|i| rec(&format!("r{i}"), &format!("R{i}"), json!({})))
+        .collect();
+    follow(&w, json!(all), true);
+    // Five of six gone from a complete read is a glitch of the phone's store, not a delete.
+    let told = follow(&w, json!([all[0].clone()]), true);
+    assert_eq!(
+        (told["trashed"].as_i64(), told["doubted"].as_i64()),
+        (Some(0), Some(5)),
+        "{told}"
+    );
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM entity WHERE kind = 'task' AND deleted_at IS NOT NULL",
+            &[]
+        ),
+        0
+    );
+    // Four of six is an ordinary removal.
+    let told = follow(&w, json!(all[..2]), true);
+    assert_eq!(told["trashed"].as_i64(), Some(4), "{told}");
+}

@@ -1,7 +1,8 @@
 //! What the old `lane_follow_*` files said of the phone's contacts, on the v0 engine (#1214): a
 //! contact's points follow item by item, the owner is nobody's record, a read that lost most of
 //! what is followed is doubted, a returned record restores its row, and another phone re-finds a
-//! purged person's tombstone. (The rest of those files is other lanes'.)
+//! purged person's tombstone; what the phone says that differs and taking it, for a contact's
+//! title, fields and points. (The rest of those files is other lanes'.)
 
 mod common;
 
@@ -291,5 +292,352 @@ fn another_phone_re_finds_a_purged_persons_tombstone_and_a_gone_tombstone_is_for
     assert_eq!(
         w.one::<i64>("SELECT COUNT(*) FROM source WHERE entity_id IS NULL", &[]),
         0
+    );
+}
+
+// ---------------------------------------------------------------------------------------------
+// What the phone says that differs, and taking it (`follow::differences`, `follow.take_stated`)
+// ---------------------------------------------------------------------------------------------
+
+fn diff(w: &World, id: &str) -> Vec<centraid_vault::commands::follow::Difference> {
+    w.vault()
+        .read(|c| centraid_vault::commands::follow::differences(c, id))
+        .expect("the read")
+}
+
+/// The names of the fields that differ.
+fn fields(w: &World, id: &str) -> Vec<String> {
+    diff(w, id).into_iter().map(|d| d.field).collect()
+}
+
+fn take(w: &World, id: &str, field: &str, item: Option<&str>) -> Value {
+    let mut input = json!({ "entity": id, "field": field });
+    if let Some(item) = item {
+        input["item_key"] = json!(item);
+    }
+    w.ok("follow.take_stated", input)
+}
+
+/// Grace Hopper, read from the phone with `fields` besides her name.
+fn hopper(w: &World, fields: Value) -> String {
+    let mut fields = fields;
+    fields["title"] = json!("Grace Hopper");
+    pass(
+        w,
+        "phone-1",
+        true,
+        vec![json!({ "external_id": "c1", "fields": fields })],
+    );
+    id_of(w, "Grace Hopper")
+}
+
+fn two_points() -> Value {
+    json!({ "points": [point("phone", "+1 555 010 0100", Some("mobile")), point("email", "grace@navy.example", None)] })
+}
+
+#[test]
+fn a_person_reports_title_scalars_and_points_while_they_differ_and_nothing_once_equal() {
+    let w = World::new("lfp_stated");
+    let mut said = two_points();
+    said["role"] = json!("Admiral");
+    said["org"] = json!("Navy");
+    let id = hopper(&w, said);
+    assert!(diff(&w, &id).is_empty(), "untouched: nothing differs");
+
+    w.ok(
+        "entity.retitle",
+        json!({ "id": id, "title": "Amazing Grace" }),
+    );
+    w.ok("person.edit", json!({ "id": id, "role": "Rear Admiral" }));
+    w.ok(
+        "person.save_contact_point",
+        json!({ "id": id, "kind": "address", "value": "1 Navy Yard" }),
+    );
+    let phone = point_id(&w, &id, "phone");
+    w.ok(
+        "person.save_contact_point",
+        json!({ "id": id, "point_id": phone, "kind": "phone", "value": "+1 555 010 0100", "label": "home" }),
+    );
+    let email = point_id(&w, &id, "email");
+    w.ok("person.remove_contact_point", json!({ "point_id": email }));
+
+    let differing = diff(&w, &id);
+    let by = |name: &str| differing.iter().find(|d| d.field == name).expect(name);
+    assert_eq!(fields(&w, &id), ["title", "role", "points"]);
+    assert_eq!(by("title").stated, json!("Grace Hopper"));
+    assert_eq!(by("title").held, json!("Amazing Grace"));
+    assert_eq!(by("role").stated, json!("Admiral"));
+    assert_eq!(by("role").held, json!("Rear Admiral"));
+    let items: Vec<(&str, Option<&Value>, bool)> = by("points")
+        .items
+        .iter()
+        .map(|i| (i.key.as_str(), i.stated.as_ref(), i.held.is_some()))
+        .collect();
+    assert_eq!(
+        items,
+        [
+            ("address:1 navy yard", None, true),
+            (
+                "email:grace@navy.example",
+                Some(&json!({ "kind": "email", "value": "grace@navy.example" })),
+                false
+            ),
+            (
+                "phone:+15550100100",
+                Some(&json!({ "kind": "phone", "value": "+1 555 010 0100", "label": "mobile" })),
+                true
+            ),
+        ],
+        "an item the member added (no stated), one they removed (no held), one they relabelled"
+    );
+    // `org` was stated and not changed: not reported.
+    assert!(!fields(&w, &id).contains(&"org".to_owned()));
+    // Setting the title back by hand re-attaches it: nothing is stored, the line just goes.
+    w.ok(
+        "entity.retitle",
+        json!({ "id": id, "title": "Grace Hopper" }),
+    );
+    assert_eq!(fields(&w, &id), ["role", "points"]);
+}
+
+#[test]
+fn nothing_is_reported_without_a_live_link_a_stated_field_or_for_a_tombstone() {
+    let w = World::new("lfp_unlinked");
+    // A person nothing follows.
+    let mine = w.ok("person.add", json!({ "title": "Katherine" }))["id"]
+        .as_str()
+        .expect("id")
+        .to_owned();
+    w.ok("entity.retitle", json!({ "id": mine, "title": "Kat" }));
+    assert!(diff(&w, &mine).is_empty());
+    assert!(diff(&w, "no-such-id").is_empty());
+
+    // A field the source never stated (no role) is not compared, whatever the member sets.
+    let id = hopper(&w, json!({ "org": "Navy" }));
+    w.ok("person.edit", json!({ "id": id, "role": "Admiral" }));
+    assert!(diff(&w, &id).is_empty(), "role was never stated");
+
+    // A trashed row has no differences; a restored one has them again.
+    w.ok("entity.retitle", json!({ "id": id, "title": "Grace" }));
+    assert_eq!(fields(&w, &id), ["title"]);
+    w.ok("entity.trash", json!({ "id": id }));
+    assert!(diff(&w, &id).is_empty());
+    w.ok("entity.restore", json!({ "id": id }));
+    assert_eq!(fields(&w, &id), ["title"]);
+
+    // A purged row is a tombstone: no entity, no differences.
+    w.ok("entity.trash", json!({ "id": id }));
+    w.ok("entity.purge", json!({ "id": id }));
+    assert!(diff(&w, &id).is_empty());
+}
+
+#[test]
+fn taking_a_scalar_makes_it_follow_again_and_the_next_pass_propagates() {
+    let w = World::new("lfp_take_scalar");
+    let id = hopper(&w, json!({ "role": "Admiral" }));
+    w.ok(
+        "entity.retitle",
+        json!({ "id": id, "title": "Amazing Grace" }),
+    );
+    w.ok("person.edit", json!({ "id": id, "role": "Rear Admiral" }));
+    assert_eq!(fields(&w, &id), ["title", "role"]);
+
+    let stamped = w.stamp(&id);
+    assert_eq!(take(&w, &id, "title", None)["changed"], true);
+    assert_eq!(
+        w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&id]),
+        "Grace Hopper"
+    );
+    assert_eq!(fields(&w, &id), ["role"], "the title is no longer reported");
+    assert_ne!(
+        w.stamp(&id),
+        stamped,
+        "an ordinary edit: the row is touched"
+    );
+    assert_eq!(
+        take(&w, &id, "title", None)["changed"],
+        false,
+        "taking what agrees is a no-op"
+    );
+
+    // The source now renames her: the taken field is untouched, so it follows; the role, still the
+    // member's, does not.
+    pass(
+        &w,
+        "phone-1",
+        true,
+        vec![
+            json!({ "external_id": "c1", "fields": { "title": "Rear Admiral Hopper", "role": "Commodore" } }),
+        ],
+    );
+    assert_eq!(
+        w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&id]),
+        "Rear Admiral Hopper"
+    );
+    assert_eq!(
+        w.one::<String>("SELECT role FROM person WHERE id = ?1", &[&id]),
+        "Rear Admiral"
+    );
+    assert_eq!(fields(&w, &id), ["role"]);
+    take(&w, &id, "role", None);
+    assert_eq!(
+        w.one::<String>("SELECT role FROM person WHERE id = ?1", &[&id]),
+        "Commodore"
+    );
+    assert!(diff(&w, &id).is_empty());
+}
+
+#[test]
+fn taking_points_restores_replaces_or_removes_each_item() {
+    let w = World::new("lfp_take_points");
+    let id = hopper(&w, two_points());
+    let phone = point_id(&w, &id, "phone");
+    let email = point_id(&w, &id, "email");
+    w.ok(
+        "person.save_contact_point",
+        json!({ "id": id, "point_id": phone, "kind": "phone", "value": "+1 555 010 0100", "label": "home", "preferred": true }),
+    );
+    w.ok("person.remove_contact_point", json!({ "point_id": email }));
+    w.ok(
+        "person.save_contact_point",
+        json!({ "id": id, "kind": "address", "value": "1 Navy Yard" }),
+    );
+    let keys = |w: &World| -> Vec<String> {
+        diff(w, &id)
+            .into_iter()
+            .flat_map(|d| d.items.into_iter().map(|i| i.key))
+            .collect()
+    };
+    assert_eq!(
+        keys(&w),
+        [
+            "address:1 navy yard",
+            "email:grace@navy.example",
+            "phone:+15550100100"
+        ]
+    );
+
+    // One item at a time: restore the removed one, remove the added one, replace the relabelled one.
+    take(&w, &id, "points", Some("email:grace@navy.example"));
+    assert_eq!(keys(&w), ["address:1 navy yard", "phone:+15550100100"]);
+    take(&w, &id, "points", Some("address:1 navy yard"));
+    assert_eq!(keys(&w), ["phone:+15550100100"]);
+    take(&w, &id, "points", Some("phone:+15550100100"));
+    assert!(diff(&w, &id).is_empty());
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM contact_point WHERE person_id = ?1",
+            &[&id]
+        ),
+        2
+    );
+    assert_eq!(
+        w.one::<String>(
+            "SELECT label FROM contact_point WHERE person_id = ?1 AND kind = 'phone'",
+            &[&id]
+        ),
+        "mobile"
+    );
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT preferred FROM contact_point WHERE person_id = ?1 AND kind = 'phone'",
+            &[&id]
+        ),
+        1,
+        "what the member set beside the statement stays"
+    );
+
+    // The whole field at once, then the next source change reaches the points.
+    let email = point_id(&w, &id, "email");
+    w.ok("person.remove_contact_point", json!({ "point_id": email }));
+    take(&w, &id, "points", None);
+    assert!(diff(&w, &id).is_empty());
+    grace_points(&w, vec![point("phone", "+1 555 010 0100", Some("work"))]);
+    assert_eq!(
+        points(&w, &id),
+        ["phone:+1 555 010 0100=work"],
+        "the taken points follow: the relabel lands and the dropped email goes"
+    );
+}
+
+/// The phone says Grace Hopper's points again (her record `c1`).
+fn grace_points(w: &World, points: Vec<Value>) {
+    pass(
+        w,
+        "phone-1",
+        true,
+        vec![
+            json!({ "external_id": "c1", "fields": { "title": "Grace Hopper", "points": points } }),
+        ],
+    );
+}
+
+#[test]
+fn a_take_that_has_nothing_to_take_is_refused_with_a_sentence_and_writes_nothing() {
+    let w = World::new("lfp_take_refused");
+    let mine = w.ok("person.add", json!({ "title": "Katherine" }))["id"]
+        .as_str()
+        .expect("id")
+        .to_owned();
+    let sentence = w.refused(
+        "follow.take_stated",
+        json!({ "entity": mine, "field": "title" }),
+    );
+    assert!(sentence.contains("not following anything"), "{sentence}");
+    assert!(
+        w.refused(
+            "follow.take_stated",
+            json!({ "entity": "no-such", "field": "title" })
+        )
+        .contains("not following")
+    );
+
+    let id = hopper(
+        &w,
+        json!({ "role": "Admiral", "points": [point("phone", "+1 555 010 0100", None)] }),
+    );
+    // Never stated.
+    assert!(
+        w.refused(
+            "follow.take_stated",
+            json!({ "entity": id, "field": "org" })
+        )
+        .contains("never said")
+    );
+    assert!(
+        w.refused(
+            "follow.take_stated",
+            json!({ "entity": id, "field": "no_such_field" })
+        )
+        .contains("never said")
+    );
+    // An item on a scalar, and an item that is nowhere.
+    assert!(
+        w.refused(
+            "follow.take_stated",
+            json!({ "entity": id, "field": "role", "item_key": "x" })
+        )
+        .contains("as a whole")
+    );
+    assert!(
+        w.refused(
+            "follow.take_stated",
+            json!({ "entity": id, "field": "points", "item_key": "email:nobody@x.example" })
+        )
+        .contains("no `email:nobody@x.example`")
+    );
+    // A trashed row has no link to take from.
+    w.ok("entity.retitle", json!({ "id": id, "title": "Grace" }));
+    w.ok("entity.trash", json!({ "id": id }));
+    assert!(
+        w.refused(
+            "follow.take_stated",
+            json!({ "entity": id, "field": "title" })
+        )
+        .contains("not following")
+    );
+    assert_eq!(
+        w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&id]),
+        "Grace"
     );
 }

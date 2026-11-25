@@ -506,8 +506,8 @@ CREATE TABLE derivative (
 ) STRICT;
 -- Reader: the blob collector (a derivative file is a rented blob).
 CREATE INDEX derivative_by_out ON derivative(out) WHERE out IS NOT NULL;
--- No index on `variant`: nothing reads derivatives by variant alone (every read is by `blob`, the primary
--- key, or by `out`), and a lookup row is written only by a rung, so the key's child side is never walked.
+-- Reader: the child side of the key to derivative_variant (every foreign key leads an index).
+CREATE INDEX derivative_by_variant ON derivative(variant, blob);
 
 -- ---------------------------------------------------------------------------------------------
 -- Following: where a row came from. The followed stores only (A10): a one-time import is two

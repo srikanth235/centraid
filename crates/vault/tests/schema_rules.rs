@@ -3,8 +3,8 @@
 //! is taken, so a refusal is the rule's and not a typo's.
 //!
 //! The rules of the app tables (a task's due, a budget, a workout, an event's alerts...) are held by
-//! the same file and are re-proved by the lane that owns each app (`tests/unplugged/schema_rules.rs`
-//! is the earlier proof of them, written against the model before #1214).
+//! the same file, each proved by the lane that owns the app. The last test is the one rule every
+//! table shares: a time column is the clock's one form.
 
 mod common;
 
@@ -2524,4 +2524,101 @@ fn an_attachment_is_a_photo_a_document_or_an_image_and_a_purged_item_leaves_its_
             .unwrap(),
         1
     );
+}
+
+// ---------------------------------------------------------------------------------------------
+// A2: an instant is the clock's one form, in every table that holds one
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn every_instant_column_carries_the_clocks_form_and_the_database_refuses_the_rest() {
+    let w = World::new("rules_instants");
+    // The file's own reading: a column that holds a moment (`at`, `*_at`, `*_until`, a workout's
+    // or a touch's `starts`, `ends`) says so in its CHECK, in the same form, whatever its table.
+    let missing: Vec<String> = w
+        .scratch
+        .vault
+        .read(|c| {
+            let mut missing = Vec::new();
+            let mut looked_at = 0;
+            let tables: Vec<(String, String)> = c
+                .prepare("SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'")?
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .collect::<rusqlite::Result<_>>()?;
+            for (table, sql) in tables {
+                let sql = sql.split_whitespace().collect::<Vec<_>>().join(" ");
+                let columns: Vec<String> = c
+                    .prepare("SELECT name FROM pragma_table_info(?1) WHERE type = 'TEXT'")?
+                    .query_map([&table], |row| row.get(0))?
+                    .collect::<rusqlite::Result<_>>()?;
+                for column in columns {
+                    let moment = column == "at"
+                        || column.ends_with("_at")
+                        || column.ends_with("_until")
+                        || (matches!(column.as_str(), "starts" | "ends")
+                            && matches!(table.as_str(), "workout" | "touch"));
+                    // A column that reads in more than one form (an event's start) names the
+                    // form in its own CHECK; the others carry the instant's.
+                    looked_at += usize::from(moment);
+                    if moment
+                        && !sql.contains(&format!("strftime('%Y-%m-%dT%H:%M:%fZ', {column}) IS {column}"))
+                    {
+                        missing.push(format!("{table}.{column}"));
+                    }
+                }
+            }
+            assert!(looked_at > 20, "the reading found the moments of the file");
+            Ok(missing)
+        })
+        .expect("reads the schema");
+    assert!(
+        missing.is_empty(),
+        "a moment that is not held to the clock's form: {missing:?}"
+    );
+
+    // And the database refuses a form that is not it, for the columns a write can reach by hand.
+    for bad in [
+        "2026-03-01T09:00:00Z",
+        "2026-03-01 09:00:00.000Z",
+        "2026-03-01T09:00:00.000",
+        "2026-03-01",
+        "2026-02-30T09:00:00.000Z",
+        "yesterday",
+    ] {
+        w.refuses(&format!(
+            "INSERT INTO entity (id, kind, title, created_at, updated_at)
+             VALUES ('{}', 'note', 'x', '{bad}', '{AT}')",
+            id(900)
+        ));
+    }
+    w.refuses(&format!(
+        "INSERT INTO entity (id, kind, title, created_at, updated_at, deleted_at, purge_at)
+         VALUES ('{}', 'note', 'x', '{AT}', '{AT}', '2026-03-01T09:00:00Z', '{AT}')",
+        id(901)
+    ));
+    w.refuses("UPDATE vault SET written_at = '2026-03-01T09:00:00Z'");
+    w.refuses("INSERT INTO action_key (key, asked, at) VALUES ('k', 'a', '2026-03-01')");
+    w.refuses(
+        "INSERT INTO origin (id, system, ref, label, created_at)
+         VALUES ('o', 'files', 'r', 'r', '2026-03-01 09:00:00')",
+    );
+    w.takes(&format!(
+        "INSERT INTO origin (id, system, ref, label, created_at)
+         VALUES ('o', 'files', 'r', 'r', '{AT}')"
+    ));
+    w.refuses(
+        "INSERT INTO source (id, origin_id, system, external_id, stated, seen_at)
+         VALUES ('s-1', 'o', 'files', 'x', '{}', '2026-03-01T09:00:00Z')",
+    );
+    w.refuses("UPDATE origin SET retired_at = '2026-03-01' WHERE id = 'o'");
+    let note = w.entity(902, "note", "n");
+    w.refuses(&format!(
+        "INSERT INTO revision (entity_id, seq, at) VALUES ('{note}', 1, '2026-03-01T09:00:00')"
+    ));
+    let thread = w.entity(903, "thread", "t");
+    w.takes(&format!("INSERT INTO thread (id) VALUES ('{thread}')"));
+    w.refuses(&format!(
+        "INSERT INTO message (thread_id, ordinal, role, text, outcome, created_at, updated_at)
+         VALUES ('{thread}', 0, 'user', 'hi', 'sent', '{AT}', 'later')"
+    ));
 }
