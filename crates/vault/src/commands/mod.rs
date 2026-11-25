@@ -398,6 +398,7 @@ impl Registry {
             flag::definitions,
             follow::definitions,
             history::definitions,
+            locker::definitions,
             money::definitions,
             note::definitions,
             person::definitions,

@@ -1,25 +1,38 @@
-//! Item lifecycle commands: `locker.add_item`, `locker.edit_item`, `locker.duplicate_item`,
-//! `locker.counts`, and `locker.export`.
+//! Item commands: `locker.add_item`, `locker.edit_item`, `locker.duplicate_item`,
+//! `locker.counts` and `locker.export`.
+//!
+//! An item is an entity of its own kind like every other: its title, home, trash, star, archive,
+//! tags, links, `[[title]]` and attachments are the vault's shared verbs (`entity.*`, `tag.*`,
+//! `edge.add`, `link.add`), and this file adds only what an item's own rows are: its type, its
+//! compromised flag and its fields.
 
-use std::collections::BTreeMap;
-
-use crate::commands::{CommandCondition, CommandDefinition, Idempotency, Risk, arrival};
+use crate::commands::entity::{self, STALE_GUARD, with_rev};
+use crate::commands::{
+    CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk, arrival,
+};
 use crate::error::Result;
 use crate::model::Kind;
 
-use super::custody::{
-    ADD_ITEM_PRE, DUPLICATE_ITEM_PRE, EDIT_ITEM_PRE, ITEM_EXISTS_SQL, NONE, assert_fresh_id,
-    assert_key_generation, assert_sealed_cell, assert_sealed_cells, carries_secret, invalid,
-    password_rotated,
-};
-use super::schema::{
-    ALL_FIELDS, SEALED_ITEM_CELLS, SEALED_PLACEHOLDER, field_schema, field_values, is_sealed_kind,
-    type_enum, type_fields,
-};
-use super::sidecars::{
-    FieldWrite, mint_template_fields, set_addresses, set_alias, write_built_in_field, write_field,
-};
-use super::{count, definition, item_type_of};
+use super::custody::{ITEM_LIVE_CHECK, NONE, assert_fresh_id, invalid, sentence_of};
+use super::fields::{FieldIn, field_schema, refusal_of, write_all};
+use super::schema::is_sealed_kind;
+use super::{definition, item_type_of};
+
+fn fields_of(ctx: &CommandCtx<'_, '_>, key: &str) -> Result<Vec<FieldIn>> {
+    match ctx.input.get(key) {
+        None => Ok(Vec::new()),
+        Some(value) => serde_json::from_value(value.clone())
+            .map_err(|error| invalid(key, format!("a field list is malformed: {error}"))),
+    }
+}
+
+fn item_id_refusal(ctx: &CommandCtx<'_, '_>, key: &str) -> Result<Option<String>> {
+    let id = ctx.required_str(key)?;
+    if !crate::model::is_minted_id(id) {
+        return Ok(Some("an item's id is a lowercase UUIDv7".to_owned()));
+    }
+    Ok(assert_fresh_id(ctx, key, id).err().map(sentence_of))
+}
 
 #[derive(serde::Deserialize)]
 struct AddItemInput {
@@ -28,19 +41,27 @@ struct AddItemInput {
     item_type: String,
     title: String,
     compromised: Option<bool>,
-    alias: Option<String>,
-    key_id: Option<String>,
 }
 
 pub(super) fn add_item() -> CommandDefinition {
-    static POST: &[CommandCondition] = &[CommandCondition {
-        predicate: "item_created",
-        check: |ctx| {
-            let item_id = ctx.required_str("item_id")?;
-            let found = count(ctx, ITEM_EXISTS_SQL, &[item_id])?;
-            Ok((found != 1).then(|| "the item was not saved".to_owned()))
+    static PRE: &[CommandCondition] = &[
+        CommandCondition {
+            predicate: "item_id_is_fresh",
+            check: |ctx| item_id_refusal(ctx, "item_id"),
         },
-    }];
+        CommandCondition {
+            predicate: "fields_are_well_formed_and_secrets_are_sealed",
+            check: |ctx| {
+                let fields = fields_of(ctx, "fields")?;
+                refusal_of(
+                    ctx,
+                    ctx.required_str("item_id")?,
+                    ctx.required_str("type")?,
+                    &fields,
+                )
+            },
+        },
+    ];
     let mut definition = definition(
         "locker.add_item",
         concat!(
@@ -50,91 +71,44 @@ pub(super) fn add_item() -> CommandDefinition {
           "additionalProperties": false,
           "properties": {
             "item_id": { "type": "string", "minLength": 1, "maxLength": 64 },
-            "#,
-            type_enum!(),
-            r#"
-            "title": { "type": "string", "minLength": 1 },
+            "type": { "type": "string", "enum": [
+              "login", "card", "note", "identity", "wifi", "password",
+              "ssh_key", "api_credential", "passport", "bank_account",
+              "driving_licence", "software_licence", "crypto_wallet",
+              "membership", "document"
+            ] },
+            "title": { "type": "string", "maxLength": 1000 },
             "compromised": { "type": "boolean" },
-            "alias": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" },
+            "fields": { "type": "array", "maxItems": 200, "items": "#,
+            field_schema!(),
+            r#" },
             "#,
             arrival::arrived_property!(),
-            r#","#,
-            field_schema!(),
             r#"
           }
         }"#
         ),
         Idempotency::Once,
-        ADD_ITEM_PRE,
-        POST,
+        PRE,
+        NONE,
         |ctx| {
             let input: AddItemInput = ctx.parse_input()?;
-            assert_fresh_id(ctx, "item_id", &input.item_id)?;
-            assert_sealed_cells(ctx, &SEALED_ITEM_CELLS)?;
-            // The placeholder means "leave alone", and a new item has nothing to leave.
-            for column in SEALED_ITEM_CELLS {
-                if ctx.optional_str(column) == Some(SEALED_PLACEHOLDER) {
-                    return Err(invalid(
-                        column,
-                        format!(
-                            "a new item has no saved {column} to keep; type it, or leave it empty"
-                        ),
-                    ));
-                }
-            }
-            let secret = carries_secret(ctx, &SEALED_ITEM_CELLS);
-            assert_key_generation(ctx, secret)?;
-
-            let values = field_values(ctx, &input.item_type);
-            let password = values
-                .iter()
-                .find(|(column, _)| *column == "password")
-                .and_then(|(_, value)| value.clone());
-            let compromised = i64::from(input.compromised.unwrap_or(false));
-            // PASSWORD AGE IS SET-TIME, NEVER `updated_at`: a retag must not
-            // make a three-year-old password look fresh (GAPS §3.3 #6d).
-            let password_set_at = password.as_ref().map(|_| ctx.now.clone());
-
-            // THE ENTITY FIRST, under the caller's id (D-1020-L9): the kind row
-            // joins it by `(id, kind)`, and the title, the stamps and the trash
-            // window are the entity's, like every kind's.
-            ctx.insert_entity_as(&input.item_id, Kind::LockerItem, &input.title)?;
+            let fields = fields_of(ctx, "fields")?;
+            ctx.insert_entity_as(&input.item_id, Kind::LockerItem, input.title.trim())?;
             ctx.connection().execute(
-                "INSERT INTO locker_item (id, type, compromised, password_set_at)
-                 VALUES (?1, ?2, ?3, ?4)",
-                rusqlite::params![input.item_id, input.item_type, compromised, password_set_at],
+                "INSERT INTO locker_item (id, type, compromised) VALUES (?1, ?2, ?3)",
+                rusqlite::params![
+                    input.item_id,
+                    input.item_type,
+                    i64::from(input.compromised.unwrap_or(false))
+                ],
             )?;
-
-            // Only the type's own built-in fields are stored, uniformly in
-            // `locker_item_field` keyed by `field_key`, so a member who filled
-            // a login and switched to Wi-Fi never stores the login's fields.
-            for (position, (column, value)) in values.iter().enumerate() {
-                if let Some(value) = value.as_deref() {
-                    write_built_in_field(
-                        ctx,
-                        &input.item_id,
-                        column,
-                        Some(value),
-                        input.key_id.as_deref(),
-                        i64::try_from(position).unwrap_or(0),
-                    )?;
-                }
-            }
-
-            if let Some(alias) = input.alias.as_deref() {
-                set_alias(ctx, &input.item_id, alias)?;
-            }
-            // A type is a set of sections and fields: the nine expansion types
-            // arrive as EMPTY template rows the member fills in, which is also
-            // what lets an unknown type degrade to a note that still carries
-            // them. Empty needs no key, so a vault with no `K` can still make
-            // a passport item and list it.
-            let minted = mint_template_fields(ctx, &input.item_id, &input.item_type)?;
+            let written = write_all(ctx, &input.item_id, &input.item_type, &fields)?;
             arrival::record(ctx, &input.item_id, Kind::LockerItem)?;
-            Ok(serde_json::json!({ "item_id": input.item_id, "template_fields": minted }))
+            Ok(serde_json::json!({ "item_id": input.item_id, "fields": written }))
         },
     );
-    definition.sealed_input = &SEALED_ITEM_CELLS;
+    definition.sealed_input = &["fields[].value"];
     definition
 }
 
@@ -143,331 +117,201 @@ struct EditItemInput {
     item_id: String,
     title: Option<String>,
     compromised: Option<bool>,
-    alias: Option<String>,
-    key_id: Option<String>,
-    password: Option<String>,
+    #[serde(default)]
+    remove: Vec<String>,
 }
 
 pub(super) fn edit_item() -> CommandDefinition {
+    static PRE: &[CommandCondition] = &[
+        STALE_GUARD[0],
+        STALE_GUARD[1],
+        ITEM_LIVE_CHECK,
+        CommandCondition {
+            predicate: "fields_are_well_formed_and_secrets_are_sealed",
+            check: |ctx| {
+                let item_id = ctx.required_str("item_id")?;
+                let item_type = item_type_of(ctx, item_id)?;
+                let fields = fields_of(ctx, "fields")?;
+                if let Some(sentence) = refusal_of(ctx, item_id, &item_type, &fields)? {
+                    return Ok(Some(sentence));
+                }
+                let input: EditItemInput = ctx.parse_input()?;
+                for id in &input.remove {
+                    let own = super::count(
+                        ctx,
+                        "SELECT COUNT(*) FROM locker_item_field WHERE id = ?1 AND item_id = ?2",
+                        &[id, item_id],
+                    )?;
+                    if own != 1 {
+                        return Ok(Some("that is not one of this item's fields".to_owned()));
+                    }
+                }
+                Ok(None)
+            },
+        },
+    ];
     let mut definition = definition(
         "locker.edit_item",
         concat!(
             r#"{
           "type": "object",
-          "description": "REPLACES, does not patch. Every field of the item's type (username, url, password, one-time-code seed, notes, and the rest of its type's fields) is rewritten from this input, and each one the input leaves out or leaves empty is CLEARED: an edit carrying only a password erases the username, address, seed and notes. Send the whole draft; a sealed secret you are keeping goes as the placeholder «sealed». Only the title, the alias (an empty one clears it) and the compromised flag (a changed password clears it) are left alone when omitted. Tags, the star and the archive are the vault's own (`tag.add`, `flag.set`); custom fields, addresses, the passkey and the memo are their own commands. None is touched here.",
+          "description": "Changes what it is given and nothing else: the title, the compromised flag, the fields it lists (each as locker.set_field would) and the field ids it removes. One save is one version.",
           "required": ["item_id"],
           "additionalProperties": false,
           "properties": {
             "item_id": { "type": "string", "minLength": 1 },
-            "title": { "type": "string", "minLength": 1 },
-            "compromised": { "type": "boolean" },
             "expected_rev": { "type": "integer", "minimum": 0 },
-            "alias": { "type": "string", "pattern": "^[A-Za-z0-9._-]{0,64}$" },
-            "#,
+            "title": { "type": "string", "maxLength": 1000 },
+            "compromised": { "type": "boolean" },
+            "fields": { "type": "array", "maxItems": 200, "items": "#,
             field_schema!(),
-            r#"
+            r#" },
+            "remove": { "type": "array", "maxItems": 200, "items": { "type": "string", "minLength": 1 } }
           }
         }"#
         ),
         Idempotency::Idempotent,
-        EDIT_ITEM_PRE,
+        PRE,
         NONE,
         |ctx| {
             let input: EditItemInput = ctx.parse_input()?;
             let item_type = item_type_of(ctx, &input.item_id)?;
-            assert_sealed_cells(ctx, &SEALED_ITEM_CELLS)?;
-            let secret = carries_secret(ctx, &SEALED_ITEM_CELLS);
-            assert_key_generation(ctx, secret)?;
-            let rotated = password_rotated(ctx)?;
-
-            let mut sets: Vec<String> = Vec::new();
-            let mut binds: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
-            let push = |sets: &mut Vec<String>,
-                        binds: &mut Vec<Box<dyn rusqlite::ToSql>>,
-                        column: &str,
-                        value: Box<dyn rusqlite::ToSql>| {
-                binds.push(value);
-                sets.push(format!("{column} = ?{}", binds.len()));
-            };
-
+            let fields = fields_of(ctx, "fields")?;
             if let Some(title) = input.title.as_deref() {
+                entity::rename(ctx, &input.item_id, title.trim())?;
+            }
+            if let Some(compromised) = input.compromised {
                 ctx.connection().execute(
-                    "UPDATE entity SET title = ?2 WHERE id = ?1",
-                    [input.item_id.as_str(), title],
+                    "UPDATE locker_item SET compromised = ?2 WHERE id = ?1",
+                    rusqlite::params![input.item_id, i64::from(compromised)],
                 )?;
             }
-            // THE COMPROMISED FLAG (#1047, R-1047-F7): the member's, set and
-            // cleared by hand — nothing produces it automatically. A ROTATION
-            // CLEARS IT, because the fix Review asks for ("change the
-            // password") has been made; a write that states the flag itself
-            // wins over that rule, since the member said so in the same breath.
-            if let Some(compromised) = input.compromised.or_else(|| rotated.then_some(false)) {
-                push(
-                    &mut sets,
-                    &mut binds,
-                    "compromised",
-                    Box::new(i64::from(compromised)),
-                );
-            }
-            // A ROTATION, distinguished from any other edit. The core says so
-            // (see `password_rotated`); only a real change re-stamps the age.
-            if rotated {
-                let stamp = input
-                    .password
-                    .as_deref()
-                    .filter(|value| !value.is_empty())
-                    .map(|_| ctx.now.clone());
-                push(&mut sets, &mut binds, "password_set_at", Box::new(stamp));
-            }
-            if !sets.is_empty() {
-                binds.push(Box::new(input.item_id.clone()));
-                let sql = format!(
-                    "UPDATE locker_item SET {} WHERE id = ?{}",
-                    sets.join(", "),
-                    binds.len()
-                );
-                let params: Vec<&dyn rusqlite::ToSql> =
-                    binds.iter().map(std::convert::AsRef::as_ref).collect();
-                ctx.connection().execute(&sql, params.as_slice())?;
-            }
-
-            // EDIT REPLACES THE TYPE'S FIELDS; IT DOES NOT PATCH THEM, AND SAYS SO
-            // (L4, ruled 2026-10-15). A round-tripped placeholder is the one
-            // exception to the clearing and is SKIPPED: that is what "leave this
-            // secret alone" means.
-            let mut changed: Vec<&str> = Vec::new();
-            for (position, (column, value)) in field_values(ctx, &item_type).into_iter().enumerate()
-            {
-                if ctx.optional_str(column) == Some(SEALED_PLACEHOLDER) {
-                    continue;
-                }
-                write_built_in_field(
-                    ctx,
-                    &input.item_id,
-                    column,
-                    value.as_deref(),
-                    input.key_id.as_deref(),
-                    i64::try_from(position).unwrap_or(0),
+            for id in &input.remove {
+                ctx.connection().execute(
+                    "DELETE FROM locker_item_field WHERE id = ?1 AND item_id = ?2",
+                    [id, &input.item_id],
                 )?;
-                changed.push(column);
             }
+            let written = write_all(ctx, &input.item_id, &item_type, &fields)?;
             ctx.touch(&input.item_id)?;
-
-            if let Some(alias) = input.alias.as_deref() {
-                // An EMPTY alias clears the binding, which is the paper cut
-                // README-Locker §8 names: a member could set one and never
-                // take it back.
-                set_alias(ctx, &input.item_id, alias)?;
-            }
-            crate::commands::entity::with_rev(
+            with_rev(
                 ctx,
                 &input.item_id,
-                serde_json::json!({
-                    "item_id": input.item_id,
-                    "rotated": rotated,
-                    "columns": changed
-                }),
+                serde_json::json!({ "item_id": input.item_id, "fields": written }),
             )
         },
     );
-    definition.sealed_input = &SEALED_ITEM_CELLS;
+    definition.sealed_input = &["fields[].value"];
     definition
 }
 
 #[derive(serde::Deserialize)]
-struct DuplicateFieldInput {
-    field_id: String,
-    #[serde(default)]
-    section: String,
-    #[serde(default)]
-    label: String,
-    kind: Option<String>,
-    value: Option<String>,
-    position: Option<i64>,
-}
-
-#[derive(serde::Deserialize)]
-struct DuplicateItemInput {
+struct DuplicateInput {
     item_id: String,
     new_item_id: String,
-    key_id: Option<String>,
-    #[serde(default)]
-    fields: Vec<DuplicateFieldInput>,
 }
 
 pub(super) fn duplicate_item() -> CommandDefinition {
+    static PRE: &[CommandCondition] = &[
+        ITEM_LIVE_CHECK,
+        CommandCondition {
+            predicate: "new_item_id_is_fresh",
+            check: |ctx| item_id_refusal(ctx, "new_item_id"),
+        },
+        CommandCondition {
+            predicate: "fields_are_well_formed_and_secrets_are_sealed",
+            check: |ctx| {
+                let item_type = item_type_of(ctx, ctx.required_str("item_id")?)?;
+                let fields = fields_of(ctx, "fields")?;
+                refusal_of(ctx, ctx.required_str("new_item_id")?, &item_type, &fields)
+            },
+        },
+    ];
     let mut definition = definition(
         "locker.duplicate_item",
         concat!(
             r#"{
           "type": "object",
+          "description": "A copy takes the source's plain fields, its tags and its type. Each secret (a sealed field, a one-time-code seed, a file) is sent by the core RE-SEALED against the copy's own field ids, in `fields`: a ciphertext is bound to its row and cannot be copied. The alias is not copied (one item holds it).",
           "required": ["item_id", "new_item_id"],
           "additionalProperties": false,
           "properties": {
             "item_id": { "type": "string", "minLength": 1 },
             "new_item_id": { "type": "string", "minLength": 1, "maxLength": 64 },
-            "fields": { "type": "array", "items": {
-              "type": "object",
-              "required": ["field_id", "section", "label", "kind"],
-              "additionalProperties": false,
-              "properties": {
-                "field_id": { "type": "string", "minLength": 1, "maxLength": 64 },
-                "section": { "type": "string" },
-                "label": { "type": "string", "minLength": 1 },
-                "kind": { "type": "string",
-                  "enum": ["text", "sealed", "url", "date", "otp"] },
-                "value": { "type": "string" },
-                "position": { "type": "integer", "minimum": 0 }
-              }
-            } },
-            "#,
+            "fields": { "type": "array", "maxItems": 200, "items": "#,
             field_schema!(),
-            r#"
+            r#" }
           }
         }"#
         ),
         Idempotency::Once,
-        DUPLICATE_ITEM_PRE,
+        PRE,
         NONE,
         |ctx| {
-            let input: DuplicateItemInput = ctx.parse_input()?;
-            let source_id = &input.item_id;
-            let item_id = &input.new_item_id;
-            assert_fresh_id(ctx, "new_item_id", item_id)?;
-            assert_sealed_cells(ctx, &SEALED_ITEM_CELLS)?;
-            let secret = carries_secret(ctx, &SEALED_ITEM_CELLS);
-            assert_key_generation(ctx, secret)?;
-
-            // CLONE-AND-EDIT FOR SIBLING ACCOUNTS (GAPS §3.3 #10): the core
-            // re-encrypts every secret under the new field id and sends the
-            // cells, so the command plane never reads a secret.
-            let source_title: String = ctx.connection().query_row(
-                "SELECT title FROM entity WHERE id = ?1",
-                [source_id],
-                |row| row.get(0),
-            )?;
-            let (source_type, compromised, password_set_at): (String, i64, Option<String>) =
+            let input: DuplicateInput = ctx.parse_input()?;
+            let (source_title, source_type, compromised): (String, String, i64) =
                 ctx.connection().query_row(
-                    "SELECT type, compromised, password_set_at FROM locker_item WHERE id = ?1",
-                    [source_id],
+                    "SELECT e.title, i.type, i.compromised FROM locker_item i
+                       JOIN entity e ON e.id = i.id WHERE i.id = ?1",
+                    [&input.item_id],
                     |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
                 )?;
             let title = format!("{source_title} copy");
-            ctx.insert_entity_as(item_id, Kind::LockerItem, &title)?;
+            ctx.insert_entity_as(&input.new_item_id, Kind::LockerItem, &title)?;
             ctx.connection().execute(
-                "INSERT INTO locker_item (id, type, compromised, password_set_at)
-                 VALUES (?1, ?2, ?3, ?4)",
-                rusqlite::params![item_id, source_type, compromised, password_set_at],
+                "INSERT INTO locker_item (id, type, compromised) VALUES (?1, ?2, ?3)",
+                rusqlite::params![input.new_item_id, source_type, compromised],
             )?;
-
-            // Copy plain built-in fields verbatim from the source item.
-            let plain_fields: Vec<(String, Option<String>, i64)> = {
+            // The plain fields come verbatim; the core's re-sealed secrets follow.
+            let plain: Vec<(Option<String>, String, String, String, f64, String)> = {
                 let mut statement = ctx.connection().prepare(
-                    "SELECT field_key, value_text, CAST(position AS INTEGER)
+                    "SELECT field_key, section, label, kind, position, value_text
                        FROM locker_item_field
-                      WHERE item_id = ?1 AND field_key IS NOT NULL
-                        AND kind NOT IN ('sealed', 'otp')
+                      WHERE item_id = ?1 AND claimed = 0 AND value_text IS NOT NULL
                       ORDER BY position, id",
                 )?;
-                let rows = statement.query_map([source_id], |row| {
-                    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                let rows = statement.query_map([&input.item_id], |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                    ))
                 })?;
-                rows.collect::<rusqlite::Result<Vec<_>>>()?
+                rows.collect::<rusqlite::Result<_>>()?
             };
-            for (field_key, value_text, position) in plain_fields {
-                if let Some(value) = value_text.as_deref() {
-                    write_built_in_field(ctx, item_id, &field_key, Some(value), None, position)?;
-                }
+            let mut copied = Vec::new();
+            for (key, section, label, kind, position, value) in plain {
+                let field = FieldIn {
+                    field_key: key,
+                    section: Some(section),
+                    label: Some(label),
+                    kind: Some(kind),
+                    value: Some(value),
+                    position: Some(position),
+                    ..FieldIn::default()
+                };
+                copied.extend(write_all(ctx, &input.new_item_id, &source_type, &[field])?);
             }
-            // Write any re-sealed built-in secret cells the core sent.
-            let owned = type_fields(&source_type);
-            for column in SEALED_ITEM_CELLS {
-                if !owned.contains(&column) {
-                    continue;
-                }
-                if let Some(value) = ctx
-                    .optional_str(column)
-                    .filter(|value| !value.is_empty() && *value != SEALED_PLACEHOLDER)
-                {
-                    let position = owned
-                        .iter()
-                        .position(|known| *known == column)
-                        .and_then(|pos| i64::try_from(pos).ok())
-                        .unwrap_or(0);
-                    write_built_in_field(
-                        ctx,
-                        item_id,
-                        column,
-                        Some(value),
-                        input.key_id.as_deref(),
-                        position,
-                    )?;
-                }
-            }
-
-            // The custom fields, re-sealed by the core against their own new
-            // ids for the same AAD reason.
-            let mut copied = 0_usize;
-            for field in &input.fields {
-                let kind = field.kind.as_deref().unwrap_or("text");
-                if is_sealed_kind(kind) {
-                    assert_sealed_cell("fields[].value", field.value.as_deref())?;
-                }
-                assert_fresh_id(ctx, "fields[].field_id", &field.field_id)?;
-                write_field(
-                    ctx,
-                    item_id,
-                    &FieldWrite {
-                        field_id: Some(&field.field_id),
-                        section: &field.section,
-                        label: &field.label,
-                        kind,
-                        value: field.value.as_deref(),
-                        position: field.position.unwrap_or(0),
-                    },
-                )?;
-                copied += 1;
-            }
-
-            // The addresses copy as they are — no secret is involved.
-            let addresses = {
-                let mut statement = ctx.connection().prepare(
-                    "SELECT url FROM locker_item_address
-                      WHERE item_id = ?1 ORDER BY position, id",
-                )?;
-                let rows = statement.query_map([source_id], |row| row.get::<_, String>(0))?;
-                rows.collect::<rusqlite::Result<Vec<_>>>()?
-            };
-            set_addresses(ctx, item_id, &addresses)?;
-            // The source's TAGS come along (`tagged` edges to tags); its star
-            // and archive are flags and do not. The copy is a new thing.
+            let resealed = fields_of(ctx, "fields")?;
+            copied.extend(write_all(ctx, &input.new_item_id, &source_type, &resealed)?);
+            // The source's tags come along; its star and archive do not. The copy is a new thing.
             ctx.connection().execute(
                 "INSERT INTO edge (from_id, rel, to_id, created_at)
-                 SELECT ?2, 'tagged', e.to_id, ?3
-                   FROM edge e JOIN entity t ON t.id = e.to_id
-                  WHERE e.from_id = ?1 AND e.rel = 'tagged' AND t.kind = 'tag'",
-                rusqlite::params![source_id, item_id, ctx.now],
+                 SELECT ?2, 'tagged', e.to_id, ?3 FROM edge e
+                  WHERE e.from_id = ?1 AND e.rel = 'tagged'",
+                rusqlite::params![input.item_id, input.new_item_id, ctx.now],
             )?;
-            // NOT starred, NOT archived, and the alias is NOT copied: an alias
-            // is unique among live items, so a copy carrying it would steal
-            // the connector binding.
             Ok(serde_json::json!({
-                "item_id": item_id,
+                "item_id": input.new_item_id,
                 "title": title,
-                "fields": copied
+                "fields": copied,
             }))
         },
     );
-    // The five cells, and the custom fields the copy re-sealed: a nested
-    // ciphertext is scrubbed out of a message like a top-level one.
-    definition.sealed_input = &[
-        "password",
-        "otp_seed",
-        "card_number",
-        "cvv",
-        "content",
-        "fields[].value",
-    ];
+    definition.sealed_input = &["fields[].value"];
     definition
 }
 
@@ -479,23 +323,15 @@ pub(super) fn counts() -> CommandDefinition {
         NONE,
         NONE,
         |ctx| {
-            // A COUNT runs INSIDE the vault so the answer is exact without
-            // shipping every row to get it — the alternative was reading the
-            // 2,000-row ceiling back just to take its length, which is what
-            // makes the foot line ("300 of 312") circular.
             let one = |sql: &str| -> Result<i64> {
                 Ok(ctx.connection().query_row(sql, [], |row| row.get(0))?)
             };
-            // Archived is the vault's flag: a `tagged` edge to `flag:archived`.
-            // Trash wins over it, as for every kind: a trashed item is counted
-            // as trashed whether or not it is also archived.
-            const ARCHIVED: &str = "EXISTS (SELECT 1 FROM edge a WHERE a.from_id = i.id
-                    AND a.rel = 'tagged' AND a.to_id = 'flag:archived')";
-            let mut statement = ctx.connection().prepare(&format!(
+            // Trash wins over archive, as for every kind.
+            let mut statement = ctx.connection().prepare(
                 "SELECT i.type, COUNT(*) FROM locker_item i JOIN entity e ON e.id = i.id
-                  WHERE e.deleted_at IS NULL AND NOT {ARCHIVED}
-                  GROUP BY i.type ORDER BY i.type"
-            ))?;
+                  WHERE e.deleted_at IS NULL AND e.archived_at IS NULL
+                  GROUP BY i.type ORDER BY i.type",
+            )?;
             let by_type: Vec<serde_json::Value> = statement
                 .query_map([], |row| {
                     Ok(serde_json::json!({
@@ -503,164 +339,152 @@ pub(super) fn counts() -> CommandDefinition {
                         "n": row.get::<_, i64>(1)?
                     }))
                 })?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
+                .collect::<rusqlite::Result<_>>()?;
             Ok(serde_json::json!({
-                "live": one(&format!(
-                    "SELECT COUNT(*) FROM locker_item i JOIN entity e ON e.id = i.id
-                      WHERE e.deleted_at IS NULL AND NOT {ARCHIVED}"
-                ))?,
-                "archived": one(&format!(
-                    "SELECT COUNT(*) FROM locker_item i JOIN entity e ON e.id = i.id
-                      WHERE e.deleted_at IS NULL AND {ARCHIVED}"
-                ))?,
-                "trashed": one(
-                    "SELECT COUNT(*) FROM locker_item i JOIN entity e ON e.id = i.id
-                      WHERE e.deleted_at IS NOT NULL",
-                )?,
+                "live": one("SELECT COUNT(*) FROM locker_item i JOIN entity e ON e.id = i.id
+                              WHERE e.deleted_at IS NULL AND e.archived_at IS NULL")?,
+                "archived": one("SELECT COUNT(*) FROM locker_item i JOIN entity e ON e.id = i.id
+                              WHERE e.deleted_at IS NULL AND e.archived_at IS NOT NULL")?,
+                "trashed": one("SELECT COUNT(*) FROM locker_item i JOIN entity e ON e.id = i.id
+                              WHERE e.deleted_at IS NOT NULL")?,
                 "by_type": by_type,
             }))
         },
     )
 }
 
-#[derive(serde::Deserialize)]
-struct ExportLockerInput {
-    include_trashed: Option<bool>,
-}
-
+/// LOCKER'S OWN EXPORT, the only way an item's contents leave the phone (nothing else reads a
+/// Locker table: "Export everything" leaves Locker out and an item has no share).
+///
+/// It is a mass reveal of secrets, so it is confirmed, high-risk, and REFUSED on a phone with no
+/// passcode (`device_passcode`, which the shell states from the platform: a phone with nothing
+/// protecting it would hand the export to whoever holds it). The command answers the plain values
+/// and each secret as the ciphertext it is, with its key generation and the field id it is bound
+/// to; the core, which holds `K`, opens them into the file. The file's own bytes (a sealed file)
+/// are named by hash and read from the store sealed, then opened by the core the same way.
+/// An export stamps no item: a file is not a use of any one of them.
 pub(super) fn export() -> CommandDefinition {
+    static PRE: &[CommandCondition] = &[CommandCondition {
+        predicate: "phone_has_a_passcode",
+        check: |ctx| {
+            let secured = ctx
+                .input
+                .get("device_passcode")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false);
+            Ok((!secured).then(|| {
+                "Locker's export needs a passcode on this phone: set one in Settings, then \
+                 try again"
+                    .to_owned()
+            }))
+        },
+    }];
     let mut definition = definition(
         "locker.export",
         r#"{
           "type": "object",
-          "required": ["confirm"],
+          "required": ["confirm", "device_passcode"],
           "additionalProperties": false,
           "properties": {
             "confirm": { "type": "boolean", "const": true },
-            "include_trashed": { "type": "boolean" },
-            "include_history": { "type": "boolean" }
+            "device_passcode": { "type": "boolean" },
+            "include_trashed": { "type": "boolean" }
           }
         }"#,
         Idempotency::RetrySafe,
-        // The gate is the schema's `const: true` plus `confirm` below, not a
-        // SQL precondition: a precondition binds parameters as strings, so a
-        // boolean read back through one would be theatre.
-        NONE,
+        PRE,
         NONE,
         |ctx| {
-            let input: ExportLockerInput = ctx.parse_input()?;
-            let include_trashed = input.include_trashed.unwrap_or(false);
-
-            // A MASS UNSEAL IS A COMMAND AND NOT A QUERY, twice over: it is
-            // confirmed and run before any cell opens. The command answers the
-            // PLAIN half plus key generation addresses; the core holding `K`
-            // unseals the secret cells into the exported file.
-            let mut plain_by_item: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
-            let mut key_by_item: BTreeMap<String, String> = BTreeMap::new();
-            {
-                let mut statement = ctx.connection().prepare(
-                    "SELECT item_id, field_key, value_text, key_id
-                       FROM locker_item_field
-                      WHERE field_key IS NOT NULL",
-                )?;
-                let rows = statement.query_map([], |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, Option<String>>(2)?,
-                        row.get::<_, Option<String>>(3)?,
-                    ))
-                })?;
-                for row in rows {
-                    let (item_id, field_key, value_text, key_id) = row?;
-                    if let Some(value) = value_text
-                        && !SEALED_ITEM_CELLS.contains(&field_key.as_str())
-                    {
-                        plain_by_item
-                            .entry(item_id.clone())
-                            .or_default()
-                            .insert(field_key, value);
-                    }
-                    if let Some(key_id) = key_id {
-                        key_by_item.entry(item_id).or_insert(key_id);
-                    }
-                }
-            }
-
+            let include_trashed = ctx
+                .input
+                .get("include_trashed")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false);
             let predicate = if include_trashed {
                 ""
             } else {
                 "WHERE e.deleted_at IS NULL"
             };
-            let mut statement = ctx.connection().prepare(&format!(
-                "SELECT i.id, i.type, e.title, i.compromised, i.password_set_at,
-                        e.created_at, e.updated_at,
-                        (SELECT a.created_at FROM edge a WHERE a.from_id = i.id
-                           AND a.rel = 'tagged' AND a.to_id = 'flag:archived'),
-                        e.deleted_at
+            let mut items_statement = ctx.connection().prepare(&format!(
+                "SELECT i.id, i.type, e.title, i.compromised, e.created_at, e.updated_at,
+                        e.archived_at, e.deleted_at, i.last_used_at
                    FROM locker_item i JOIN entity e ON e.id = i.id
                  {predicate} ORDER BY e.created_at, i.id"
             ))?;
-            let items: Vec<serde_json::Value> = statement
+            let mut fields = ctx.connection().prepare(
+                "SELECT id, field_key, section, label, kind, value_text, value_sealed,
+                        value_blob, key_id, value_set_at
+                   FROM locker_item_field WHERE item_id = ?1 ORDER BY position, id",
+            )?;
+            let mut passkeys = ctx.connection().prepare(
+                "SELECT id, rp_id, user_handle, display_name, credential_id, algorithm,
+                        private_key, key_id FROM locker_item_passkey WHERE item_id = ?1 ORDER BY id",
+            )?;
+            let rows: Vec<[Option<String>; 9]> = items_statement
                 .query_map([], |row| {
-                    let item_id: String = row.get(0)?;
-                    let mut item = serde_json::Map::new();
-                    item.insert(
-                        "item_id".to_owned(),
-                        serde_json::Value::String(item_id.clone()),
-                    );
-                    item.insert(
-                        "key_id".to_owned(),
-                        key_by_item
-                            .get(&item_id)
-                            .cloned()
-                            .map_or(serde_json::Value::Null, serde_json::Value::String),
-                    );
-                    let plain = plain_by_item.get(&item_id);
-                    item.insert(
-                        "type".to_owned(),
-                        serde_json::Value::String(row.get::<_, String>(1)?),
-                    );
-                    item.insert(
-                        "title".to_owned(),
-                        serde_json::Value::String(row.get::<_, String>(2)?),
-                    );
-                    for field in ALL_FIELDS
-                        .iter()
-                        .copied()
-                        .filter(|field| !SEALED_ITEM_CELLS.contains(field))
-                    {
-                        item.insert(
-                            field.to_owned(),
-                            plain
-                                .and_then(|fields| fields.get(field))
-                                .cloned()
-                                .map_or(serde_json::Value::Null, serde_json::Value::String),
-                        );
+                    let mut cells: [Option<String>; 9] = Default::default();
+                    cells[0] = Some(row.get(0)?);
+                    cells[1] = Some(row.get(1)?);
+                    cells[2] = Some(row.get(2)?);
+                    cells[3] = Some(row.get::<_, i64>(3)?.to_string());
+                    for (at, cell) in cells.iter_mut().enumerate().skip(4) {
+                        *cell = row.get(at)?;
                     }
-                    item.insert(
-                        "compromised".to_owned(),
-                        serde_json::Value::String(row.get::<_, i64>(3)?.to_string()),
-                    );
-                    for (index, name) in [
-                        (4, "password_set_at"),
-                        (5, "created_at"),
-                        (6, "updated_at"),
-                        (7, "archived_at"),
-                        (8, "deleted_at"),
-                    ] {
-                        let value: Option<String> = row.get(index)?;
-                        item.insert(
-                            name.to_owned(),
-                            value.map_or(serde_json::Value::Null, serde_json::Value::String),
-                        );
-                    }
-                    Ok(serde_json::Value::Object(item))
+                    Ok(cells)
                 })?
-                .collect::<rusqlite::Result<Vec<_>>>()?;
-
-            // AN EXPORT STAMPS NO ITEM (#1146): a file is not a use of any
-            // one of them, and the Locker keeps no log of the file.
+                .collect::<rusqlite::Result<_>>()?;
+            let mut items = Vec::with_capacity(rows.len());
+            for cells in rows {
+                let item_id = cells[0].clone().unwrap_or_default();
+                let field_rows: Vec<serde_json::Value> = fields
+                    .query_map([&item_id], |row| {
+                        let kind: String = row.get(4)?;
+                        let mut field = serde_json::json!({
+                            "field_id": row.get::<_, String>(0)?,
+                            "field_key": row.get::<_, Option<String>>(1)?,
+                            "section": row.get::<_, String>(2)?,
+                            "label": row.get::<_, String>(3)?,
+                            "kind": kind,
+                            "value_set_at": row.get::<_, Option<String>>(9)?,
+                        });
+                        if is_sealed_kind(&kind) {
+                            field["sealed"] = row.get::<_, Option<String>>(6)?.into();
+                            field["key_id"] = row.get::<_, Option<String>>(8)?.into();
+                            field["blob"] = row.get::<_, Option<String>>(7)?.into();
+                        } else {
+                            field["value"] = row.get::<_, Option<String>>(5)?.into();
+                        }
+                        Ok(field)
+                    })?
+                    .collect::<rusqlite::Result<_>>()?;
+                let passkey_rows: Vec<serde_json::Value> = passkeys
+                    .query_map([&item_id], |row| {
+                        Ok(serde_json::json!({
+                            "passkey_id": row.get::<_, String>(0)?,
+                            "rp_id": row.get::<_, String>(1)?,
+                            "user_handle": row.get::<_, Option<String>>(2)?,
+                            "display_name": row.get::<_, Option<String>>(3)?,
+                            "credential_id": row.get::<_, Option<String>>(4)?,
+                            "algorithm": row.get::<_, Option<String>>(5)?,
+                            "private_key": row.get::<_, Option<String>>(6)?,
+                            "key_id": row.get::<_, Option<String>>(7)?,
+                        }))
+                    })?
+                    .collect::<rusqlite::Result<_>>()?;
+                items.push(serde_json::json!({
+                    "item_id": item_id,
+                    "type": cells[1],
+                    "title": cells[2],
+                    "compromised": cells[3],
+                    "created_at": cells[4],
+                    "updated_at": cells[5],
+                    "archived_at": cells[6],
+                    "deleted_at": cells[7],
+                    "last_used_at": cells[8],
+                    "fields": field_rows,
+                    "passkeys": passkey_rows,
+                }));
+            }
             Ok(serde_json::json!({
                 "exported_at": ctx.now,
                 "item_count": items.len(),
