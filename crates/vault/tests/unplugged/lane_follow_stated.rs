@@ -305,41 +305,6 @@ fn an_event_reports_its_followed_fields_and_its_guests_item_by_item() {
 }
 
 #[test]
-fn a_document_reports_its_title() {
-    let w = World::new();
-    let folder = w.ok(
-        "container.create",
-        json!({ "kind": "folder", "title": "Taxes" }),
-    )["id"]
-        .as_str()
-        .expect("id")
-        .to_owned();
-    let hash = centraid_vault::blob::content_digest(b"v1");
-    w.ok("blob.stage", json!({ "hash": hash, "size": 2 }));
-    w.ok(
-        "follow.files",
-        json!({ "origin": { "ref": "/Documents/Taxes", "label": "Taxes", "fills": folder },
-                 "complete": true, "records": [{ "external_id": "/a.pdf", "fields": {
-                    "title": "a.pdf", "blob": hash, "media_type": "application/pdf", "stat": "2:1" } }] }),
-    );
-    let doc: String = w.one(
-        "SELECT entity_id FROM source WHERE external_id = '/a.pdf'",
-        &[],
-    );
-    assert!(w.diff(&doc).is_empty());
-    w.ok(
-        "entity.retitle",
-        json!({ "id": doc, "title": "Taxes 2025.pdf" }),
-    );
-    let diff = w.diff(&doc);
-    assert_eq!(diff.len(), 1);
-    assert_eq!(
-        (diff[0].field.as_str(), &diff[0].stated, &diff[0].held),
-        ("title", &json!("a.pdf"), &json!("Taxes 2025.pdf"))
-    );
-}
-
-#[test]
 fn a_workout_reports_a_measure_the_member_changed_by_column() {
     let w = World::new();
     w.ok(
@@ -706,49 +671,6 @@ fn taking_a_workout_measure_and_a_document_title_follow_again() {
         w.one::<f64>("SELECT distance_m FROM workout WHERE id = ?1", &[&id]),
         7000.0,
         "the next pass treats the measure as untouched"
-    );
-}
-
-#[test]
-fn a_document_title_taken_follows_the_next_pass() {
-    let w = World::new();
-    let folder = w.ok(
-        "container.create",
-        json!({ "kind": "folder", "title": "Taxes" }),
-    )["id"]
-        .as_str()
-        .expect("id")
-        .to_owned();
-    let hash = centraid_vault::blob::content_digest(b"v1");
-    w.ok("blob.stage", json!({ "hash": hash, "size": 2 }));
-    let files = |title: &str| {
-        w.ok(
-            "follow.files",
-            json!({ "origin": { "ref": "/Documents/Taxes", "label": "Taxes", "fills": folder },
-                     "complete": true, "records": [{ "external_id": "/a.pdf", "fields": {
-                        "title": title, "blob": hash, "media_type": "application/pdf", "stat": "2:1" } }] }),
-        )
-    };
-    files("a.pdf");
-    let doc: String = w.one(
-        "SELECT entity_id FROM source WHERE external_id = '/a.pdf'",
-        &[],
-    );
-    w.ok("entity.retitle", json!({ "id": doc, "title": "Mine.pdf" }));
-    files("b.pdf");
-    assert_eq!(
-        w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&doc]),
-        "Mine.pdf"
-    );
-    w.take(&doc, "title", None);
-    assert_eq!(
-        w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&doc]),
-        "b.pdf"
-    );
-    files("c.pdf");
-    assert_eq!(
-        w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&doc]),
-        "c.pdf"
     );
 }
 

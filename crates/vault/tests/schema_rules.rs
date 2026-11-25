@@ -1455,3 +1455,163 @@ fn a_touch_has_a_touch_kind_and_does_not_end_before_it_starts() {
     w.refuses(&touch(90, &tag, "2026-03-01T10:00:00.000Z", "NULL"));
     w.refuses(&touch(91, &kind, "tomorrow", "NULL"));
 }
+
+// ---------------------------------------------------------------------------------------------
+// Docs, Photos and Places (#1214): C2, A11, H1, H3, D5
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn a_document_a_folder_an_album_and_a_place_need_a_name_and_a_photograph_does_not() {
+    let w = World::new("rules_docs_names");
+    for (n, kind) in [
+        (402, "document"),
+        (404, "folder"),
+        (406, "album"),
+        (408, "place"),
+    ] {
+        for blank in ["", "  "] {
+            w.refuses_with(
+                &format!(
+                    "INSERT INTO entity (id, kind, title, created_at, updated_at)
+                     VALUES ('{}', '{kind}', '{blank}', '{AT}', '{AT}')",
+                    id(401)
+                ),
+                "FOREIGN KEY",
+            );
+        }
+        w.entity(n, kind, "Named");
+    }
+    w.entity(403, "photo", "");
+}
+
+#[test]
+fn a_document_sits_in_a_folder_and_a_folder_in_a_folder_and_nothing_else_is_a_home_for_one() {
+    let w = World::new("rules_docs_home");
+    let (outer, inner) = (
+        w.entity(410, "folder", "Outer"),
+        w.entity(411, "folder", "Inner"),
+    );
+    let book = w.entity(412, "notebook", "Book");
+    let insert = |n: u64, kind: &str, parent: &str, parent_kind: &str| {
+        format!(
+            "INSERT INTO entity (id, kind, title, parent_id, parent_kind, created_at, updated_at)
+             VALUES ('{}', '{kind}', 'x', '{parent}', '{parent_kind}', '{AT}', '{AT}')",
+            id(n)
+        )
+    };
+    w.takes(&insert(413, "document", &outer, "folder"));
+    w.refuses_with(&insert(414, "document", &book, "notebook"), "FOREIGN KEY");
+    w.takes(&format!(
+        "UPDATE entity SET parent_id = '{outer}', parent_kind = 'folder' WHERE id = '{inner}'"
+    ));
+    // A folder never ends up inside itself, however deep.
+    w.refuses_with(
+        &format!(
+            "UPDATE entity SET parent_id = '{inner}', parent_kind = 'folder' WHERE id = '{outer}'"
+        ),
+        "no loops",
+    );
+    // Two siblings may repeat a name.
+    w.takes(&insert(415, "folder", &outer, "folder").replace("'x'", "'Inner'"));
+    // A document is one column's home: it has no second one.
+    w.takes(&format!(
+        "UPDATE entity SET parent_id = NULL, parent_kind = NULL WHERE id = '{}'",
+        id(413)
+    ));
+}
+
+#[test]
+fn a_photograph_is_a_picture_with_a_kept_clip_whole_coordinates_and_a_lineage_without_loops() {
+    let w = World::new("rules_photo");
+    let hash = "d".repeat(64);
+    let clip = "e".repeat(64);
+    w.takes(&format!(
+        "INSERT INTO blob (hash, size) VALUES ('{hash}', 3), ('{clip}', 4)"
+    ));
+    let one = w.entity(420, "photo", "");
+    let row = |id: &str, extra_cols: &str, extra_vals: &str, media: &str| {
+        format!(
+            "INSERT INTO photo (id, blob, media_type, form{extra_cols})
+             VALUES ('{id}', '{hash}', '{media}', 'photo'{extra_vals})"
+        )
+    };
+    // Sound is kept in Docs.
+    w.refuses_with(&row(&one, "", "", "audio/mpeg"), "CHECK");
+    w.refuses_with(&row(&one, "", "", "AUDIO/ogg"), "CHECK");
+    // `form` is a lookup row.
+    w.refuses_with(
+        &format!("INSERT INTO photo (id, blob, media_type, form) VALUES ('{one}', '{hash}', 'image/png', 'hologram')"),
+        "FOREIGN KEY",
+    );
+    // A latitude and a longitude go together and stay on the globe.
+    w.refuses_with(&row(&one, ", lat", ", 1.0", "image/png"), "CHECK");
+    w.refuses_with(
+        &row(&one, ", lat, lon", ", 91.0, 0.0", "image/png"),
+        "CHECK",
+    );
+    w.refuses_with(
+        &row(&one, ", lat, lon", ", 0.0, 181.0", "image/png"),
+        "CHECK",
+    );
+    // A clip's length needs the clip.
+    w.refuses_with(
+        &row(&one, ", motion_duration_s", ", 1.5", "image/png"),
+        "CHECK",
+    );
+    w.takes(&row(
+        &one,
+        ", lat, lon, motion_blob, motion_duration_s",
+        &format!(", 48.0, 2.0, '{clip}', 1.5"),
+        "image/png",
+    ));
+    // The same bytes may be a second photograph: the blob is not unique.
+    let two = w.entity(421, "photo", "");
+    w.takes(&row(&two, "", "", "image/png"));
+    // A photograph is never an edit of itself or of its own edit.
+    w.refuses_with(
+        &format!("UPDATE photo SET edited_from = '{one}' WHERE id = '{one}'"),
+        "no loops",
+    );
+    w.takes(&format!(
+        "UPDATE photo SET edited_from = '{one}' WHERE id = '{two}'"
+    ));
+    w.refuses_with(
+        &format!("UPDATE photo SET edited_from = '{two}' WHERE id = '{one}'"),
+        "no loops",
+    );
+    // A place is a named place the member has; a photograph's `place_id` is a place's id.
+    let note = w.entity(422, "note", "N");
+    w.refuses_with(
+        &format!("UPDATE photo SET place_id = '{note}' WHERE id = '{one}'"),
+        "FOREIGN KEY",
+    );
+    let place = w.entity(423, "place", "Cabin");
+    w.takes(&format!(
+        "INSERT INTO place (id, lat, lon) VALUES ('{place}', 61.0, 7.0)"
+    ));
+    w.refuses_with(
+        &format!("UPDATE place SET lat = NULL WHERE id = '{place}'"),
+        "CHECK",
+    );
+    w.takes(&format!(
+        "UPDATE photo SET place_id = '{place}' WHERE id = '{one}'"
+    ));
+}
+
+#[test]
+fn an_album_holds_photographs_in_an_order_and_a_photograph_may_be_in_two() {
+    let w = World::new("rules_album");
+    let (a, b) = (w.entity(430, "album", "A"), w.entity(431, "album", "B"));
+    let photo = w.entity(432, "photo", "");
+    let note = w.entity(433, "note", "N");
+    let edge = |from: &str, to: &str, position: &str| {
+        format!(
+            "INSERT INTO edge (from_id, rel, to_id, position, created_at)
+             VALUES ('{from}', 'contains', '{to}', {position}, '{AT}')"
+        )
+    };
+    w.takes(&edge(&a, &photo, "1.0"));
+    w.takes(&edge(&b, &photo, "1.0"));
+    w.refuses_with(&edge(&a, &note, "2.0"), "no edge of this relation");
+    w.refuses_with(&edge(&photo, &a, "2.0"), "no edge of this relation");
+}

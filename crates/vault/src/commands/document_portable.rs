@@ -58,10 +58,7 @@ pub fn left_out_json(left: &[LeftOut]) -> serde_json::Value {
 
 /// `Left out.txt` into the archive, naming every original it could not include, or nothing when
 /// none was left out. Returns whether it wrote the file.
-pub fn add_left_out<W: Write + Seek>(
-    zip: &mut ZipWriter<W>,
-    left: &[LeftOut],
-) -> Result<bool> {
+pub fn add_left_out<W: Write + Seek>(zip: &mut ZipWriter<W>, left: &[LeftOut]) -> Result<bool> {
     if left.is_empty() {
         return Ok(false);
     }

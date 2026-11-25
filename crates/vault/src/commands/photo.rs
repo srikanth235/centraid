@@ -167,7 +167,10 @@ fn pre_add(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if let Some(sentence) = pre_claimable(ctx, "motion_blob", "motion_size")? {
         return Ok(Some(sentence));
     }
-    if ctx.input.get("motion_duration_s").is_some_and(|d| !d.is_null())
+    if ctx
+        .input
+        .get("motion_duration_s")
+        .is_some_and(|d| !d.is_null())
         && ctx.optional_str("motion_blob").is_none()
     {
         return Ok(Some(
@@ -312,11 +315,7 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             input.blob,
             input.media_type,
             form,
-            input
-                .taken_at
-                .as_deref()
-                .map(instant)
-                .or(source.taken_at),
+            input.taken_at.as_deref().map(instant).or(source.taken_at),
             input.offset_min.or(source.offset_min),
             input.width,
             input.height,

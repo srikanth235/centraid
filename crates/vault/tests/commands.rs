@@ -90,6 +90,10 @@ fn the_registry_carries_the_shared_verbs_and_the_plugged_modules_and_nothing_els
                 "reminder",
                 "person",
                 "touch",
+                "document",
+                "photo",
+                "album",
+                "place",
             ]
             .contains(&schema),
             "`{name}` is not a shared verb or Locker's"

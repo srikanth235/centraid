@@ -56,7 +56,6 @@ and make it pass. Tests of removed behaviour are deleted, not ported.
 |---|---|---|
 | `event` (`event/`), `event_portable`, `ical` | calendar lane | `Rel::Attendee` is `event_guest`; calendar is the home (`parent_id`); `location`; series split; `reminder` rows |
 | `task`, `task_portable` | tasks lane | home is `parent_id`; `due_timing`, `scheduled_on`, `series_id`; reminders are rows |
-| `document`, `document_portable`, `photo`, `photo_portable`, `place` | docs/photos lane | folder is the home; photo lat/lon, motion, no `blob UNIQUE`; no place from coordinates |
 | `money`, `txn_portable`, `rule`, `csv` | money lane | `txn_split`, `entered`, no `void`, no `txn.currency`, `Flag` gone |
 | `workout`, `measurement`, `health_portable` | health lane | `workout`, `touch` and `reading` are kinds; `measurement.origin_id`; `reading` |
 | `thread` (chat) | chat lane | chats are ordinary trashable entities (L5); refusals/notices are lookups |
@@ -84,7 +83,6 @@ and moves it back.
 - **people parts of `lane_follow_*`** (contacts' points, owner, doubt, return, tombstones) are ported to `tests/lane_follow_people.rs`; what stays in those files is the other lanes'
 - **K12 commitments and generated pages**: `commitments`, `stored_rules`, `ontology_page`, `ontology_widen`
 - **app lane: calendar/tasks (event, ical, task, occurrence, reminders UI reads)**: `agenda`, `agenda_days`, `agenda_portable`, `agenda_wave2`, `calendar_follow`, `follow_reminders` (the phone Reminders' tasks), `lane_follow_items` (an event's guests), `lane_follow_stated` (an event's fields, a followed series' days), `lane_follow_gaps` (a series' overrides, a followed calendar the member trashed), `lane_follow_retire` (a calendar and the Reminders followed again)
-- **app lane: documents and photos**: `docs_photos`, `document_portable`, `photo_portable`, `store_health`, `lane_follow_stated` (a followed document), `lane_follow_gaps` (a followed file claims its bytes in its command), `lane_origin_cursor` (`photo.add`'s `roll_cursor` and `roll_device`; the engine's own cursor tests are `tests/origin_cursor.rs`), `arrival` was deleted (below)
 - **app lane: money (money, txn, rule, csv, splits)**: the ignored TODO `a_line_split_across_categories_keeps_a_sum_when_one_is_purged` in `shared_verbs.rs` (purging a category drops the `txn_split` parts that name it; a line left with other parts no longer sums to its amount, which E3 leaves to this lane), `money_health`, `money_opening_rename`, `txn_portable`, `lane_follow_gaps` (a statement line, its payee kept and its origin one per account; the engine's own statement test is `tests/follow_retire.rs`)
 - **app lane: health (workout, measurement, reading)**: `health_portable`, `workout_whole`, `lane_follow_stated` (a followed workout's measures), `lane_follow_retire` (Health followed again), `lane_origin_cursor` (health days and a delta's deleted workouts; `follow::write_day_totals` is the one writer of `measurement.origin_id`)
 - **app lane: locker**: `locker_clock`, `locker_commands`, `locker_plaintext_gate`, `locker_wall`

@@ -455,7 +455,10 @@ fn file_defaults(
     )])
 }
 
-fn as_stated(_: &CommandCtx<'_, '_>, _: &mut serde_json::Map<String, Json>) -> std::result::Result<(), String> {
+fn as_stated(
+    _: &CommandCtx<'_, '_>,
+    _: &mut serde_json::Map<String, Json>,
+) -> std::result::Result<(), String> {
     Ok(())
 }
 
