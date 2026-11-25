@@ -984,3 +984,251 @@ fn what_the_phone_holds_the_phone_alerts_until_the_member_changes_it_or_the_foll
     w.scratch.vault.rebuild_index().expect("rebuilds");
     assert_eq!(before, w.dump());
 }
+
+// ---------------------------------------------------------------------------------------------
+// A LONG EVENT KEEPS ITS BANNER: a one-off row outlives its firing by two days, and while the
+// event is running; it goes when the event has ended.
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn an_event_that_is_still_running_keeps_its_row_past_the_keep_window() {
+    let w = World::new("alerts_running");
+    let ends = |n: u64, ends: &str| {
+        let e = w.event(n, "2026-03-01T10:00", "floating", None, None);
+        w.sql(&format!(
+            "UPDATE event SET ends = '{ends}' WHERE id = '{e}'"
+        ));
+        w.remind(&e, 0)
+    };
+    let long = ends(1, "2026-03-10T10:00");
+    let short = ends(2, "2026-03-01T11:00");
+    let none = {
+        let e = w.event(3, "2026-03-01T10:00", "floating", None, None);
+        w.remind(&e, 0)
+    };
+    // Four days on, in the vault's own pass: the firing is past the keep window for all three.
+    w.scratch.clock.set_ms(1_772_582_400_000); // 2026-03-04T00:00Z
+    w.scratch.vault.advance_alerts().expect("advance");
+    assert!(w.key(&long).is_some(), "the event is still running");
+    assert!(
+        w.key(&short).is_none() && w.key(&none).is_none(),
+        "the others are over"
+    );
+    // A rebuild says the same.
+    w.scratch.vault.rebuild_index().expect("rebuilds");
+    assert!(w.key(&long).is_some() && w.key(&short).is_none() && w.key(&none).is_none());
+    // The event ends: the next pass lets the row go.
+    w.scratch.clock.set_ms(1_773_273_600_000 + 86_400_000 * 2); // 2026-03-14
+    w.scratch.vault.advance_alerts().expect("advance");
+    assert!(w.key(&long).is_none());
+}
+
+// ---------------------------------------------------------------------------------------------
+// DST AND ZONES (#1202, S12): a zoned alert is an instant that follows its zone's offset; a
+// floating or all-day one is a wall-clock key that no zone changes. No alert is skipped or doubled
+// by a clock change, and no assertion is on a duration: only on keys and counts. The vault's own
+// zone is set (America/New_York), because the floating reference reads it.
+// ---------------------------------------------------------------------------------------------
+
+impl World {
+    fn at(&self, iso: &str) {
+        let at: jiff::Timestamp = iso.parse().expect("an instant");
+        self.scratch.clock.set_ms(at.as_millisecond());
+    }
+
+    fn zone(&self, zone: &str) {
+        self.sql(&format!("UPDATE vault SET zone = '{zone}'"));
+    }
+
+    /// Every firing from the clock on, taken one at a time: the key, then advance past it.
+    fn firings(&self, count: usize) -> Vec<String> {
+        let mut keys = Vec::new();
+        for _ in 0..count {
+            let rows = self.rows();
+            assert_eq!(rows.len(), 1, "one next firing, never two: {rows:?}");
+            let key = rows[0].fire_key.clone();
+            let instant: jiff::Timestamp = key.parse().expect("a fixed key");
+            self.scratch.clock.set_ms(instant.as_millisecond() + 1_000);
+            assert_eq!(self.scratch.vault.advance_alerts().expect("advance"), 1);
+            keys.push(key);
+        }
+        keys
+    }
+
+    fn zoned_daily(&self, now: &str, zone: &str, starts_utc: &str) -> String {
+        self.at(now);
+        let e = self.event(1, starts_utc, "zoned", Some(zone), Some("FREQ=DAILY"));
+        self.remind(&e, 0)
+    }
+}
+
+#[test]
+fn a_zoned_alert_follows_its_zones_offset_through_the_spring_forward() {
+    let w = World::new("alerts_dst1");
+    w.zone("America/New_York");
+    // 09:00 EST on 5 March, daily.
+    w.zoned_daily(
+        "2026-03-06T15:00:00Z",
+        "America/New_York",
+        "2026-03-05T14:00:00.000Z",
+    );
+    assert_eq!(
+        w.firings(4),
+        [
+            "2026-03-07T14:00:00.000Z",
+            // The clocks sprang forward on the 8th: 09:00 is 13:00Z from then, one alert a day.
+            "2026-03-08T13:00:00.000Z",
+            "2026-03-09T13:00:00.000Z",
+            "2026-03-10T13:00:00.000Z",
+        ]
+    );
+}
+
+#[test]
+fn an_alert_in_the_spring_gap_moves_forward_once_and_the_next_day_is_back_on_its_clock() {
+    let w = World::new("alerts_dst2");
+    w.zone("America/New_York");
+    // 02:30 EST on 5 March.
+    w.zoned_daily(
+        "2026-03-06T12:00:00Z",
+        "America/New_York",
+        "2026-03-05T07:30:00.000Z",
+    );
+    assert_eq!(
+        w.firings(3),
+        [
+            "2026-03-07T07:30:00.000Z",
+            // 02:30 does not exist on the 8th: it sounds at 03:30 EDT, once.
+            "2026-03-08T07:30:00.000Z",
+            "2026-03-09T06:30:00.000Z",
+        ]
+    );
+}
+
+#[test]
+fn an_alert_in_the_fall_back_fold_sounds_once_at_the_earlier_instant() {
+    let w = World::new("alerts_dst3");
+    w.zone("America/New_York");
+    // 01:30 EDT on 29 October.
+    w.zoned_daily(
+        "2026-10-30T12:00:00Z",
+        "America/New_York",
+        "2026-10-29T05:30:00.000Z",
+    );
+    assert_eq!(
+        w.firings(3),
+        [
+            "2026-10-31T05:30:00.000Z",
+            // 01:30 happens twice on 1 November: the earlier (EDT) only.
+            "2026-11-01T05:30:00.000Z",
+            "2026-11-02T06:30:00.000Z",
+        ]
+    );
+}
+
+#[test]
+fn a_date_and_a_floating_alert_stay_on_their_wall_clock_through_both_changes() {
+    let w = World::new("alerts_dst4");
+    w.zone("America/New_York");
+    w.at("2026-03-06T12:00:00Z");
+    // A repeating all-day event: each day at 09:00, a key that names no zone.
+    let d = w.event(1, "2026-03-06", "all-day", None, Some("FREQ=DAILY"));
+    let rd = w.remind(&d, 0);
+    // A repeating floating one at 02:30, a time the 8th does not have in New York: the key stays.
+    let f = w.event(2, "2026-03-06T02:30", "floating", None, Some("FREQ=DAILY"));
+    let rf = w.remind(&f, 0);
+    let mut days = Vec::new();
+    let mut floats = Vec::new();
+    for _ in 0..4 {
+        let rows = w.rows();
+        assert_eq!(rows.len(), 2);
+        assert!(rows.iter().all(|r| r.timing == alerts::Timing::Floating));
+        days.push(w.key(&rd).expect("row").1);
+        floats.push(w.key(&rf).expect("row").1);
+        w.scratch.clock.advance_days(1);
+        assert_eq!(w.scratch.vault.advance_alerts().expect("advance"), 2);
+    }
+    assert_eq!(
+        days,
+        [
+            "2026-03-06T09:00",
+            "2026-03-07T09:00",
+            "2026-03-08T09:00",
+            "2026-03-09T09:00"
+        ]
+    );
+    assert_eq!(
+        floats,
+        [
+            "2026-03-07T02:30",
+            "2026-03-08T02:30",
+            "2026-03-09T02:30",
+            "2026-03-10T02:30"
+        ]
+    );
+    // A wall-clock task on the fold day keeps its key.
+    let t = w.task(3, "2026-11-01T01:30", "floating", None, None);
+    is(
+        Some(w.key(&w.remind(&t, 0)).expect("row")),
+        "floating",
+        "2026-11-01T01:30",
+    );
+}
+
+#[test]
+fn the_nine_oclock_rule_and_a_lead_on_a_dst_day_are_wall_clock_arithmetic() {
+    let w = World::new("alerts_dst5");
+    w.zone("America/New_York");
+    w.at("2026-03-07T12:00:00Z");
+    let person = w.person(1, "Ada");
+    let day = w.date(&person, 2, "other", "--03-08", None);
+    let today = w.add(&person, Some(&day), None, 0).unwrap();
+    is(w.key(&today), "floating", "2026-03-08T09:00");
+    // A lead of 10 hours counts back from 09:00 on the wall clock: no hour is lost to the change
+    // (23:00 the evening before, never 22:00 or 00:00).
+    let eve = w.add(&person, Some(&day), None, 600).unwrap();
+    is(w.key(&eve), "floating", "2026-03-07T23:00");
+    // 06:00 EDT on the 8th: the 09:00 date is still ahead in the vault's own wall clock, though in
+    // UTC's wall (10:00) it would have passed; the evening's lead has gone by, so it is next year's.
+    w.at("2026-03-08T10:00:00Z");
+    w.scratch.vault.rebuild_index().expect("rebuilds");
+    is(w.key(&today), "floating", "2026-03-08T09:00");
+    is(w.key(&eve), "floating", "2027-03-07T23:00");
+    // The fold day, from a clock before it.
+    w.at("2026-10-31T12:00:00Z");
+    let fall = w.date(&person, 3, "other", "--11-01", None);
+    let r = w.add(&person, Some(&fall), None, 0).unwrap();
+    is(w.key(&r), "floating", "2026-11-01T09:00");
+    // An all-day event on the change day, a lead of 600 minutes: the same arithmetic.
+    let e = w.event(4, "2026-11-01", "all-day", None, None);
+    let re = w.remind(&e, 600);
+    is(w.key(&re), "floating", "2026-10-31T23:00");
+}
+
+#[test]
+fn the_same_wall_time_is_a_different_instant_in_each_zone_and_travel_changes_nothing_stored() {
+    let w = World::new("alerts_dst6");
+    // 09:00 in New York (EDT) and in Kolkata, on 10 March.
+    let ny = w.event(
+        1,
+        "2026-03-10T13:00:00.000Z",
+        "zoned",
+        Some("America/New_York"),
+        None,
+    );
+    let kolkata = w.event(
+        2,
+        "2026-03-10T03:30:00.000Z",
+        "zoned",
+        Some("Asia/Kolkata"),
+        None,
+    );
+    let (a, b) = (w.remind(&ny, 0), w.remind(&kolkata, 0));
+    let before = (w.key(&a), w.key(&b));
+    // The vault's zone (where the member is) changes nothing a zoned alert holds.
+    w.zone("Asia/Tokyo");
+    w.scratch.vault.rebuild_index().expect("rebuilds");
+    assert_eq!((w.key(&a), w.key(&b)), before);
+    is(w.key(&a), "fixed", "2026-03-10T13:00:00.000Z");
+    is(w.key(&b), "fixed", "2026-03-10T03:30:00.000Z");
+}

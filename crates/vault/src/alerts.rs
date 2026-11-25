@@ -185,6 +185,9 @@ struct Fire {
     space: Timing,
     at: i64,
     repeats: bool,
+    /// A one-off event's end, in `space`: its row stays while the event is running (a long event
+    /// keeps its banner).
+    until: Option<i64>,
 }
 
 /// A reminder row as the writer reads it.
@@ -262,7 +265,10 @@ pub fn sync(connection: &Connection, n: i64, now: i64) -> Result<()> {
     )?;
     for (reminder, fire) in fires {
         // A one-off that came due longer ago than the keep window is no banner any more.
-        if !fire.repeats && fire.at < refs.of(fire.space) - KEEP_PAST_MS {
+        if !fire.repeats
+            && fire.at < refs.of(fire.space) - KEEP_PAST_MS
+            && fire.until.is_none_or(|end| end <= refs.of(fire.space))
+        {
             continue;
         }
         insert.execute(params![
@@ -469,7 +475,15 @@ fn same_moment(ours: Option<&str>, stated: Option<&str>) -> bool {
 // Events
 // ---------------------------------------------------------------------------------------------
 
-type EventRow = (String, String, Option<String>, Option<String>, String, i64);
+type EventRow = (
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    String,
+    i64,
+    Option<String>,
+);
 
 fn event_fires(
     connection: &Connection,
@@ -479,7 +493,7 @@ fn event_fires(
 ) -> Result<Vec<(String, Fire)>> {
     let row: Option<EventRow> = connection
         .prepare_cached(
-            "SELECT starts, timing, zone, rule, status, rule_supported FROM event WHERE id = ?1",
+            "SELECT starts, timing, zone, rule, status, rule_supported, ends FROM event WHERE id = ?1",
         )?
         .query_row([id], |row| {
             Ok((
@@ -489,10 +503,11 @@ fn event_fires(
                 row.get(3)?,
                 row.get(4)?,
                 row.get(5)?,
+                row.get(6)?,
             ))
         })
         .optional()?;
-    let Some((starts, timing, zone, rule, status, supported)) = row else {
+    let Some((starts, timing, zone, rule, status, supported, ends)) = row else {
         return Ok(Vec::new());
     };
     if status == "cancelled" {
@@ -518,6 +533,18 @@ fn event_fires(
             true,
         ),
     };
+    // The end of a one-off event, in its own space (a day's end is the start of that day).
+    let until = ends
+        .as_deref()
+        .filter(|_| !repeats)
+        .and_then(|text| moment(&timing, text))
+        .map(|(_, at)| {
+            if timing == "all-day" {
+                at - DAY_ALERT_MS
+            } else {
+                at
+            }
+        });
     let mut out = Vec::new();
     for reminder in reminders.iter().filter(|r| r.date_id.is_none()) {
         let lead = reminder.offset_min * MINUTE_MS;
@@ -534,6 +561,7 @@ fn event_fires(
                     space,
                     at: at - lead,
                     repeats,
+                    until,
                 },
             ));
         }
@@ -648,6 +676,7 @@ fn task_fires(
                         space: Timing::Fixed,
                         at: until,
                         repeats: false,
+                        until: None,
                     },
                 )
             })
@@ -687,6 +716,7 @@ fn task_fires(
                 space,
                 at: at - lead,
                 repeats,
+                until: None,
             },
         ));
     }
@@ -793,6 +823,7 @@ fn date_fires(
                     space: Timing::Floating,
                     at,
                     repeats,
+                    until: None,
                 },
             ));
         }
@@ -815,7 +846,11 @@ pub fn has_stale(connection: &Connection, now: i64) -> Result<bool> {
         let stale: bool = connection
             .prepare_cached(
                 "SELECT EXISTS (SELECT 1 FROM alert WHERE timing = ?1
-                   AND ((repeats = 1 AND fire_key < ?2) OR (repeats = 0 AND fire_key < ?3)))",
+                   AND ((repeats = 1 AND fire_key < ?2)
+                        OR (repeats = 0 AND fire_key < ?3 AND NOT EXISTS (SELECT 1 FROM reminder r
+                              JOIN event e ON e.id = r.entity_id
+                             WHERE r.id = alert.reminder_id AND e.ends IS NOT NULL
+                               AND julianday(e.ends) > julianday(?2)))))",
             )?
             .query_row(
                 params![
@@ -862,11 +897,15 @@ pub fn advance(connection: &Connection, now: i64) -> Result<usize> {
         );
         connection
             .prepare_cached(
-                "DELETE FROM alert WHERE timing = ?1 AND repeats = 0 AND fire_key < ?2",
+                "DELETE FROM alert WHERE timing = ?1 AND repeats = 0 AND fire_key < ?2
+                   AND NOT EXISTS (SELECT 1 FROM reminder r JOIN event e ON e.id = r.entity_id
+                                    WHERE r.id = alert.reminder_id AND e.ends IS NOT NULL
+                                      AND julianday(e.ends) > julianday(?3))",
             )?
             .execute(params![
                 timing.as_str(),
-                timing.key_of(reference - KEEP_PAST_MS)
+                timing.key_of(reference - KEEP_PAST_MS),
+                timing.key_of(reference)
             ])?;
     }
     stale.sort_unstable();
