@@ -907,3 +907,28 @@ fn a_notes_title_and_body_are_searchable_now_and_in_earlier_versions() {
     w.ok("entity.move", json!({ "id": id, "parent": book }));
     assert_eq!(now("cartography"), 1);
 }
+
+#[test]
+fn restoring_a_version_with_an_earlier_title_resolves_the_mentions_waiting_for_it() {
+    let w = world("note_restore_title");
+    let target = note(&w, "Old Name", "");
+    w.ok("note.edit", json!({ "id": target, "title": "New Name" }));
+    let waiting = note(&w, "waits", "[[Old Name]]");
+    assert_eq!(mentions(&w, &waiting)[0].1, None);
+    let seq = w.one::<i64>(
+        "SELECT seq FROM revision WHERE entity_id = ?1 ORDER BY seq LIMIT 1",
+        &[&target],
+    );
+    w.ok(
+        "history.restore_version",
+        json!({ "id": target, "seq": seq }),
+    );
+    assert_eq!(
+        w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&target]),
+        "Old Name"
+    );
+    assert_eq!(
+        mentions(&w, &waiting)[0].1.as_deref(),
+        Some(target.as_str())
+    );
+}

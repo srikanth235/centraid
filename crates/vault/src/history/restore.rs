@@ -152,7 +152,8 @@ fn restore_state(
             now.pointer("/entity/title").and_then(Json::as_str),
         ) && was != is
         {
-            connection.execute("UPDATE entity SET title = ?2 WHERE id = ?1", [id, was])?;
+            // The one rename path: what waits for the old title is resolved like any rename.
+            crate::commands::entity::rename(ctx, id, was)?;
             writer.changed = true;
         }
         // A version from before the home was kept names none: it says nothing about it.
