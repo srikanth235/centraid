@@ -78,6 +78,15 @@ impl From<std::io::Error> for RestoreError {
 /// are applied to an empty in-memory file, so the answer is whatever the ladder says that rung
 /// makes, never a constant that could drift from it.
 fn rung_digest(ladder: &[Migration], version: i64) -> std::result::Result<String, RestoreError> {
+    let connection = rung_file(ladder, version)?;
+    Ok(crate::format::schema_digest(&connection)?)
+}
+
+/// An empty in-memory file with the ladder applied up to and including `version`.
+fn rung_file(
+    ladder: &[Migration],
+    version: i64,
+) -> std::result::Result<rusqlite::Connection, RestoreError> {
     let connection = rusqlite::Connection::open_in_memory()?;
     let mut reached = 0_i64;
     for rung in ladder.iter().filter(|rung| rung.version <= version) {
@@ -94,7 +103,40 @@ fn rung_digest(ladder: &[Migration], version: i64) -> std::result::Result<String
             ),
         });
     }
-    Ok(crate::format::schema_digest(&connection)?)
+    Ok(connection)
+}
+
+/// Remove the index file beside the vault at `vault_path`, and its sidecars: derived data that is
+/// never restored. A restore that laid a vault down over another leaves no index file built from
+/// the replaced one's rows (its check names only the vault, not its rows), so the next open
+/// founds the file again and owes it every entity.
+///
+/// # Errors
+/// A file that exists and will not be removed.
+pub fn discard_index_file(vault_path: &Path) -> std::result::Result<(), RestoreError> {
+    let Some(directory) = vault_path.parent().filter(|d| !d.as_os_str().is_empty()) else {
+        return discard_in(Path::new("."), vault_path);
+    };
+    discard_in(directory, vault_path)
+}
+
+fn discard_in(directory: &Path, vault_path: &Path) -> std::result::Result<(), RestoreError> {
+    let entries = match std::fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.into()),
+    };
+    for entry in entries {
+        let candidate = entry?.path();
+        if crate::index::is_index_file(vault_path, &candidate) {
+            match std::fs::remove_file(&candidate) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+    }
+    Ok(())
 }
 
 /// What one check of a restored vault found.
@@ -273,11 +315,44 @@ impl<'a> Restore<'a> {
         if found > supported {
             return Err(RestoreError::NewerBuild { found, supported });
         }
+        // A BACKUP OF ANOTHER MODEL OF THE VAULT is refused here, from the tables the root counted
+        // and before a byte is written: a vault founded on the earlier baseline names tables this
+        // build's rung does not make (or lacks ones it does), and its pages would only be
+        // written to be refused. The file's own schema digest is checked again once it is laid down.
+        self.refuse_another_model(ladder, found)?;
         let outcome = self.write_records(ladder, path);
-        if outcome.is_err() {
-            let _ = std::fs::remove_file(path);
+        match &outcome {
+            // The vault's index file is derived data and is never in a backup: whatever stands
+            // beside the path (the replaced vault's own, built from rows this backup does not
+            // have) is removed, so the first open founds a fresh one and owes it every entity.
+            Ok(_) => discard_index_file(path)?,
+            Err(_) => {
+                let _ = std::fs::remove_file(path);
+            }
         }
         outcome
+    }
+
+    fn refuse_another_model(
+        &self,
+        ladder: &[Migration],
+        version: i64,
+    ) -> std::result::Result<(), RestoreError> {
+        // A root that counted no tables says nothing to compare.
+        if self.root.census.is_empty() || version < 1 {
+            return Ok(());
+        }
+        let expected: std::collections::BTreeSet<String> =
+            crate::pagesource::census_of(&rung_file(ladder, version)?)?
+                .into_keys()
+                .collect();
+        let counted: std::collections::BTreeSet<String> =
+            self.root.census.keys().cloned().collect();
+        if expected == counted {
+            Ok(())
+        } else {
+            Err(RestoreError::EarlierModel)
+        }
     }
 
     fn write_records(
@@ -459,6 +534,13 @@ impl<'a> Restore<'a> {
         sink: &mut dyn FnMut(&Entry, &[u8]) -> Result<()>,
     ) -> std::result::Result<(RecordsReport, MediaReport, MediaReport), RestoreError> {
         let records = self.records(path)?;
+        // THE INDEX FILE IS FOUNDED AND WRITTEN HERE, from the restored rows, before the vault is
+        // handed over: search, the spatial index and the alerts a restored vault answers equal
+        // the ones the backed-up vault did, with no wait for the idle pass.
+        {
+            let vault = crate::file::Vault::open(path).map_err(PlaneError::from)?;
+            vault.rebuild_index().map_err(PlaneError::from)?;
+        }
         opened(path)?;
         let thumbnails = self.thumbnails(sink)?;
         let originals = self.originals(sink)?;
@@ -691,14 +773,38 @@ mod tests {
         let (store, keys, head) = published(dir.path());
         let restore = Restore::open(&keys, &[&store], &head).expect("opens");
         let out = dir.path().join("restored.db");
+        // The same tables with one more index: not the digest the file has.
+        let altered_sql: &'static str = Box::leak(
+            format!(
+                "{} CREATE INDEX not_in_the_file ON entity(id);",
+                LADDER[0].sql
+            )
+            .into_boxed_str(),
+        );
         let mut altered = two_rungs();
-        altered[0].sql = "CREATE TABLE not_the_baseline (id TEXT) STRICT;";
+        altered[0].sql = altered_sql;
         let error = restore.records_on(&altered, &out).expect_err("refused");
         assert!(
             matches!(error, RestoreError::SchemaMismatch { .. }),
             "{error:?}"
         );
         assert!(!out.exists());
+    }
+
+    /// A backup of another model of the vault (other tables than this rung makes) is refused with
+    /// a sentence before a byte is written.
+    #[test]
+    fn a_backup_of_another_model_is_refused_before_anything_is_written() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let (store, keys, head) = published(dir.path());
+        let restore = Restore::open(&keys, &[&store], &head).expect("opens");
+        let out = dir.path().join("restored.db");
+        let mut altered = two_rungs();
+        altered[0].sql = "CREATE TABLE not_the_baseline (id TEXT) STRICT;";
+        let error = restore.records_on(&altered, &out).expect_err("refused");
+        assert!(matches!(error, RestoreError::EarlierModel), "{error:?}");
+        assert!(error.to_string().contains("earlier model"), "{error}");
+        assert!(!out.exists(), "nothing was written");
     }
 
     /// **12a.** A damaged root on the first gateway does not stop a restore when a second gateway

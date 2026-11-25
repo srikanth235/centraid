@@ -1273,3 +1273,67 @@ fn reusing_unchanged_blob_updates_taken_at_metadata() {
     assert_eq!(second_entry.media_type, "image/heic");
     assert_eq!(second_entry.original, first_entry.original);
 }
+
+/// The index file (`<stem>.index.db`: search, the spatial index, the alerts) is derived data and is
+/// in no snapshot, no staging area and no dirty-range record: the tree's tables are the vault file's
+/// alone, and a write that only the index file sees is no change to the vault.
+#[test]
+fn the_index_file_is_in_no_snapshot_staging_or_dirty_range_record() {
+    use centraid_vault::backup::tree::ranges_of;
+    let rig = Rig::new("index-out");
+    rig.grow(40, "lighthouse");
+    // Both files are written: the vault has rows and the index file has their words.
+    while rig.vault().reindex_owed().expect("a batch") > 0 {}
+    let index_file = centraid_vault::index::index_file_for(rig.vault().path());
+    assert!(
+        std::fs::metadata(&index_file).expect("an index file").len() > 0,
+        "the vault has an index file beside it"
+    );
+
+    let first = rig.snapshot(T0);
+    let root = root_of(&rig, &first);
+    // The tree counts the vault's tables and none of the index file's.
+    let index_tables: Vec<String> = rusqlite::Connection::open(&index_file)
+        .expect("opens")
+        .prepare("SELECT name FROM sqlite_schema WHERE type = 'table'")
+        .expect("prepares")
+        .query_map([], |row| row.get(0))
+        .expect("queries")
+        .collect::<rusqlite::Result<_>>()
+        .expect("names");
+    assert!(index_tables.iter().any(|name| name == "search"));
+    for table in &index_tables {
+        assert!(
+            !root.census.contains_key(table),
+            "`{table}` is the index file's and is in the snapshot's census"
+        );
+    }
+    // Staging holds sealed ranges of the vault and nothing else: no file there is the index's.
+    for entry in std::fs::read_dir(rig.scratch.join("vault.staging")).expect("lists") {
+        let path = entry.expect("an entry").path();
+        assert!(!centraid_vault::index::is_index_file(
+            rig.vault().path(),
+            &path
+        ));
+    }
+    assert_eq!(
+        rig.staging.names().expect("names").len() as u64,
+        first.ranges_new as u64
+    );
+    // No range of the tree is a range of the index file: nothing is dirty after the snapshot.
+    assert!(rig.state.dirty_ranges().expect("reads").is_empty());
+
+    // A write only the index file sees changes nothing the vault is.
+    rusqlite::Connection::open(&index_file)
+        .expect("opens")
+        .execute_batch("CREATE TABLE scribble (x); INSERT INTO scribble VALUES (1);")
+        .expect("writes the index file alone");
+    let second = rig.snapshot(T0 + 60_000);
+    assert_eq!(second.ranges_read, 0, "no range of vault.db changed");
+    assert_eq!(second.ranges_new, 0);
+    let root_two = root_of(&rig, &second);
+    assert_eq!(
+        ranges_of(&rig.state, &root).expect("ranges"),
+        ranges_of(&rig.state, &root_two).expect("ranges")
+    );
+}

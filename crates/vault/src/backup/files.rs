@@ -10,6 +10,10 @@
 //! photograph just taken is safe before last year's). The SQL stays here
 //! because SQL is confined to this crate.
 //!
+//! **Which columns rent a blob is the schema's** ([`renting_columns`]; [`RENTERS`] says whose a row
+//! is), and a Locker sealed file is flagged ([`ContentFile::sealed`]): opaque, always an original,
+//! never excluded.
+//!
 //! **A file is a `blob` row** ([#1135](https://github.com/srikanth235/centraid/issues/1135)):
 //! the originals and, because `derivative.out` is a foreign key into `blob`,
 //! every thumbnail, preview and poster. A body kept in a row (a note's text) is
@@ -38,6 +42,10 @@ pub struct ContentFile {
     /// When the row that holds the bytes was made, as it stores it; empty for
     /// bytes whose renter does not say.
     pub created_at: String,
+    /// A Locker sealed file: bytes already encrypted under the Locker key. Always part of a backup,
+    /// whatever the member's exclusions, never freed from the phone, and no derivative is made from
+    /// it, so it is never a [`Self::variant`] and never a video (its media type is sealed with it).
+    pub sealed: bool,
 }
 
 impl ContentFile {
@@ -77,28 +85,12 @@ pub fn content_files_on(
     now_text: &str,
     now_ms: i64,
 ) -> Result<Vec<ContentFile>> {
-    type Row = (String, i64, Option<String>, Option<String>, String);
+    type Row = (String, i64, Option<String>, Option<String>, String, bool);
     let rows: Vec<Row> = (|| -> rusqlite::Result<Vec<Row>> {
-        let mut statement = connection.prepare(
-            "SELECT b.hash, b.size,
-                    (SELECT variant FROM derivative WHERE out = b.hash LIMIT 1) AS variant,
-                    COALESCE((SELECT media_type FROM derivative WHERE out = b.hash LIMIT 1),
-                             (SELECT media_type FROM photo WHERE blob = b.hash),
-                             (SELECT media_type FROM document WHERE blob = b.hash LIMIT 1),
-                             (SELECT media_type FROM revision_blob WHERE blob = b.hash AND media_type IS NOT NULL LIMIT 1)),
-                    COALESCE((SELECT p.taken_at FROM derivative dv JOIN photo p ON p.blob = dv.blob
-                               WHERE dv.out = b.hash LIMIT 1),
-                             (SELECT created_at FROM derivative WHERE out = b.hash LIMIT 1),
-                             (SELECT COALESCE(p.taken_at, e.created_at) FROM photo p JOIN entity e ON e.id = p.id
-                               WHERE p.blob = b.hash),
-                             (SELECT e.created_at FROM document d JOIN entity e ON e.id = d.id
-                               WHERE d.blob = b.hash LIMIT 1),
-                             (SELECT r.at FROM revision_blob rb JOIN revision r ON r.entity_id = rb.entity_id AND r.seq = rb.seq
-                               WHERE rb.blob = b.hash LIMIT 1),
-                             '')
-               FROM blob b
-              ORDER BY 5 DESC, variant IS NOT NULL, 1",
-        )?;
+        let mut statement = connection.prepare(&format!(
+            "{} ORDER BY 5 DESC, variant IS NOT NULL, 1",
+            select_files("")
+        ))?;
         let rows = statement.query_map([], |row| {
             Ok((
                 row.get(0)?,
@@ -106,13 +98,14 @@ pub fn content_files_on(
                 row.get(2)?,
                 row.get(3)?,
                 row.get(4)?,
+                row.get(5)?,
             ))
         })?;
         rows.collect::<rusqlite::Result<Vec<_>>>()
     })()?;
     let lapsed = lapsed_blobs_on(connection, now_text, now_ms)?;
     let mut out = Vec::with_capacity(rows.len());
-    for (hash, size, variant, media_type, created_at) in rows {
+    for (hash, size, variant, media_type, created_at, sealed) in rows {
         if lapsed.contains(&hash) {
             continue;
         }
@@ -120,8 +113,7 @@ pub fn content_files_on(
             .map_err(|_| invariant(format!("a blob's hash `{hash}` cannot be named")))?;
         let len = u64::try_from(size)
             .map_err(|_| invariant(format!("blob `{hash}` has a negative size")))?;
-        let media_type = media_type.unwrap_or_else(|| "application/octet-stream".to_owned());
-        let video = media_type.trim().to_ascii_lowercase().starts_with("video/");
+        let (media_type, variant, video) = read_as(media_type, variant, sealed);
         out.push(ContentFile {
             h,
             len,
@@ -129,9 +121,52 @@ pub fn content_files_on(
             variant,
             video,
             created_at,
+            sealed,
         });
     }
     Ok(out)
+}
+
+/// The query behind [`content_files_on`] and [`content_files_for`]: one row per blob,
+/// `(hash, size, variant, media type, taken, sealed)`.
+fn select_files(filter: &str) -> String {
+    format!(
+        "SELECT b.hash, b.size,
+                (SELECT variant FROM derivative WHERE out = b.hash LIMIT 1) AS variant,
+                COALESCE((SELECT media_type FROM derivative WHERE out = b.hash LIMIT 1),
+                         (SELECT media_type FROM photo WHERE blob = b.hash LIMIT 1),
+                         (SELECT media_type FROM document WHERE blob = b.hash LIMIT 1),
+                         (SELECT media_type FROM revision_blob WHERE blob = b.hash AND media_type IS NOT NULL LIMIT 1)),
+                COALESCE((SELECT p.taken_at FROM derivative dv JOIN photo p ON p.blob = dv.blob
+                           WHERE dv.out = b.hash LIMIT 1),
+                         (SELECT created_at FROM derivative WHERE out = b.hash LIMIT 1),
+                         (SELECT COALESCE(p.taken_at, e.created_at) FROM photo p JOIN entity e ON e.id = p.id
+                           WHERE p.blob = b.hash LIMIT 1),
+                         (SELECT e.created_at FROM document d JOIN entity e ON e.id = d.id
+                           WHERE d.blob = b.hash LIMIT 1),
+                         (SELECT r.at FROM revision_blob rb JOIN revision r ON r.entity_id = rb.entity_id AND r.seq = rb.seq
+                           WHERE rb.blob = b.hash LIMIT 1),
+                         ''),
+                {sealed}
+           FROM blob b {filter}",
+        sealed = crate::blob::sealed_condition("b.hash"),
+    )
+}
+
+/// What the vault reads a file as. A sealed file is read as opaque bytes whatever else names its
+/// hash (its real name and type are sealed inside the Locker item), is no one's derivative and is
+/// never a moving image, so no exclusion of videos reaches it.
+fn read_as(
+    media_type: Option<String>,
+    variant: Option<String>,
+    sealed: bool,
+) -> (String, Option<String>, bool) {
+    if sealed {
+        return ("application/octet-stream".to_owned(), None, false);
+    }
+    let media_type = media_type.unwrap_or_else(|| "application/octet-stream".to_owned());
+    let video = media_type.trim().to_ascii_lowercase().starts_with("video/");
+    (media_type, variant, video)
 }
 
 /// What the vault says of one hash a walk of its claims met.
@@ -153,29 +188,11 @@ pub fn content_files_for(
     vault: &Vault,
     hashes: &[PlaintextHash],
 ) -> Result<std::collections::BTreeMap<PlaintextHash, Found>> {
-    type Row = (String, i64, Option<String>, Option<String>, String);
+    type Row = (String, i64, Option<String>, Option<String>, String, bool);
     let lapsed = lapsed_blobs(vault)?;
     let mut out = std::collections::BTreeMap::new();
     let rows: Vec<Row> = vault.read(|connection| {
-        let mut statement = connection.prepare(
-            "SELECT b.hash, b.size,
-                    (SELECT variant FROM derivative WHERE out = b.hash LIMIT 1),
-                    COALESCE((SELECT media_type FROM derivative WHERE out = b.hash LIMIT 1),
-                             (SELECT media_type FROM photo WHERE blob = b.hash),
-                             (SELECT media_type FROM document WHERE blob = b.hash LIMIT 1),
-                             (SELECT media_type FROM revision_blob WHERE blob = b.hash AND media_type IS NOT NULL LIMIT 1)),
-                    COALESCE((SELECT p.taken_at FROM derivative dv JOIN photo p ON p.blob = dv.blob
-                               WHERE dv.out = b.hash LIMIT 1),
-                             (SELECT created_at FROM derivative WHERE out = b.hash LIMIT 1),
-                             (SELECT COALESCE(p.taken_at, e.created_at) FROM photo p JOIN entity e ON e.id = p.id
-                               WHERE p.blob = b.hash),
-                             (SELECT e.created_at FROM document d JOIN entity e ON e.id = d.id
-                               WHERE d.blob = b.hash LIMIT 1),
-                             (SELECT r.at FROM revision_blob rb JOIN revision r ON r.entity_id = rb.entity_id AND r.seq = rb.seq
-                               WHERE rb.blob = b.hash LIMIT 1),
-                             '')
-               FROM blob b WHERE b.hash = ?1",
-        )?;
+        let mut statement = connection.prepare(&select_files("WHERE b.hash = ?1"))?;
         let mut rows = Vec::new();
         for hash in hashes {
             let found = statement
@@ -186,6 +203,7 @@ pub fn content_files_for(
                         row.get(2)?,
                         row.get(3)?,
                         row.get(4)?,
+                        row.get(5)?,
                     ))
                 })?
                 .collect::<rusqlite::Result<Vec<Row>>>()?;
@@ -193,7 +211,7 @@ pub fn content_files_for(
         }
         Ok(rows)
     })?;
-    for (hash, size, variant, media_type, created_at) in rows {
+    for (hash, size, variant, media_type, created_at, sealed) in rows {
         let h = PlaintextHash::from_hex(&hash)
             .map_err(|_| invariant(format!("a blob's hash `{hash}` cannot be named")))?;
         if lapsed.contains(&hash) {
@@ -202,8 +220,7 @@ pub fn content_files_for(
         }
         let len = u64::try_from(size)
             .map_err(|_| invariant(format!("blob `{hash}` has a negative size")))?;
-        let media_type = media_type.unwrap_or_else(|| "application/octet-stream".to_owned());
-        let video = media_type.trim().to_ascii_lowercase().starts_with("video/");
+        let (media_type, variant, video) = read_as(media_type, variant, sealed);
         out.insert(
             h,
             Found::Live(ContentFile {
@@ -213,19 +230,21 @@ pub fn content_files_for(
                 variant,
                 video,
                 created_at,
+                sealed,
             }),
         );
     }
     Ok(out)
 }
 
-/// Every column that rents a blob, as `(table, column, the SQL that names the
-/// renting row's entity)`: [`lapsed_blobs`] asks each of them whose the bytes are.
-/// `derivative.out` is not here: a derivative's file is its original's.
+/// Whose each renting column is: `(table, column, the column of that table naming the entity it
+/// belongs to)`. **Which columns rent a blob is the schema's** (`PRAGMA foreign_key_list`, read by
+/// [`crate::blob::references`], the same walk the collector makes); this list only says whose a
+/// row of each is, which the schema cannot. [`lapsed_blobs`] fails, naming the column, when the
+/// schema has a renter this list does not, and `tests/backup_renters.rs` holds the two equal, so a
+/// column that rents bytes cannot be added without saying whose they are.
 ///
-/// A commitment test requires this to be exactly the vault's plain references
-/// into `blob`, so a column that rents bytes cannot be added without saying
-/// whose they are.
+/// `derivative.out` is not here: a derivative's file is its original's.
 pub const RENTERS: &[(&str, &str, &str)] = &[
     ("container", "cover", "id"),
     ("document", "blob", "id"),
@@ -239,6 +258,21 @@ pub const RENTERS: &[(&str, &str, &str)] = &[
     ("photo", "motion_blob", "id"),
     ("revision_blob", "blob", "entity_id"),
 ];
+
+/// The columns that keep a blob alive, read from the file: every plain (not cascading) reference
+/// into `blob(hash)`, as `(table, column)`, `derivative.out` included.
+///
+/// # Errors
+/// SQLite's refusal.
+pub fn renting_columns(
+    connection: &rusqlite::Connection,
+) -> crate::error::Result<std::collections::BTreeSet<(String, String)>> {
+    Ok(crate::blob::references(connection)?
+        .into_iter()
+        .filter(|reference| reference.keeps_alive)
+        .map(|reference| (reference.table, reference.column))
+        .collect())
+}
 
 /// The hashes only lapsed entities rent: every renter of each is an entity
 /// whose `purge_at` is at or before now, or a derivative of such a blob.
@@ -262,7 +296,21 @@ fn lapsed_blobs_on(
         }
         // hash -> whether some renter is live
         let mut live: HashMap<String, bool> = HashMap::new();
-        for (table, column, owner) in RENTERS {
+        for (table, column) in renting_columns(connection)? {
+            // A derivative's file is its original's (below).
+            if (table.as_str(), column.as_str()) == ("derivative", "out") {
+                continue;
+            }
+            let Some((_, _, owner)) = RENTERS
+                .iter()
+                .find(|(name, rents, _)| *name == table && *rents == column)
+            else {
+                return Err(crate::error::VaultError::Invariant {
+                    context: format!(
+                        "`{table}.{column}` holds a blob hash and the backup does not know whose it is"
+                    ),
+                });
+            };
             let mut statement = connection.prepare(&format!(
                 "SELECT t.{column}, e.purge_at IS NOT NULL AND e.purge_at <= ?1
                    FROM {table} t JOIN entity e ON e.id = t.{owner}

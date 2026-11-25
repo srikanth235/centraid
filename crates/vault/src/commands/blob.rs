@@ -82,6 +82,17 @@ fn pre_variant(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     })
 }
 
+/// A variant to drop is a lookup row; which kinds exist is the table's, not a list kept here.
+fn pre_drop(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let variant = ctx.required_str("variant")?;
+    let known: bool = ctx.connection().query_row(
+        "SELECT EXISTS (SELECT 1 FROM derivative_variant WHERE code = ?1)",
+        [variant],
+        |row| row.get(0),
+    )?;
+    Ok((!known).then(|| format!("`{variant}` is not a kind of derivative")))
+}
+
 /// The file a variant of `blob` holds now (zero or one hash): what a write or a drop may release.
 fn replaced_file(ctx: &CommandCtx<'_, '_>, blob: &str, variant: &str) -> Result<Vec<String>> {
     use rusqlite::OptionalExtension as _;
@@ -178,8 +189,7 @@ const DROP_SCHEMA: &str = r#"{
   "additionalProperties": false,
   "properties": {
     "blob": { "type": "string", "minLength": 64, "maxLength": 64 },
-    "variant": { "type": "string",
-                 "enum": ["thumb", "preview", "poster", "text", "caption", "phash", "thumbhash"] }
+    "variant": { "type": "string", "minLength": 1 }
   }
 }"#;
 
@@ -227,7 +237,10 @@ pub fn definitions() -> Vec<CommandDefinition> {
             "derivative",
             DROP_SCHEMA,
             Idempotency::Idempotent,
-            &[],
+            &[CommandCondition {
+                predicate: "variant_is_known",
+                check: pre_drop,
+            }],
             drop_derivative,
         ),
     ]

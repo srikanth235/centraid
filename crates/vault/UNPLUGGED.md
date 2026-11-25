@@ -48,9 +48,6 @@ and make it pass. Tests of removed behaviour are deleted, not ported.
 | `commands/follow/` (the pass) | a follow pass commits through `Vault::commit` or `Command::as_actor`; it must say `Actor::Store { origin_id }` (`CommitTx::set_actor`) so its revisions carry `actor = 'store'` and the origin, which the table's CHECK demands of a store. `follow::system_of` (read only by the old cause parsing) is gone | K9 |
 | `history/write.rs`, `commands/event/times.rs` | `history.keep_version` keeps `table.column` fields only; the event overlay (`attendee`, `reminder` lists, the `occurrence`/`DAY` day) is gone: an occurrence is outside a series' snapshot (B1) and guests and reminders are rows with their own keys. `commands/event/times.rs` still names `history::DAY` | calendar lane |
 | `history/restore.rs` | a restore re-links a note only when its words came back different (`note::relink`), so restoring a note's words works once `commands/note.rs` is rewritten | K11 |
-| `backup/files.rs` | `RENTERS` and the original-file read use `revision_blob`, `note_asset`, `locker_item_field.value_blob`, `photo.motion_blob`; **the backup plane does not yet call `index::is_index_file` to keep the index file out of a snapshot, staging and the dirty-range record; a restore brings back only `vault.db`, and the next open founds the index file again and owes it every entity (K7 did that half)**, and the sealed-file hook is not written | K10 |
-| `commands/blob.rs` | the variant check reads `derivative_variant.has_out` (no list in Rust); `blob.claim` helpers removed (dead) | K10 |
-| `backup/drill.rs` | `dump` leaves the index's own queue (`search_owed`) out: a restored vault founds its index file again and owes it every entity, a live one does not | K10 |
 
 ## Test files under `tests/unplugged/`
 
@@ -61,7 +58,6 @@ and moves it back.
 - **K5 graph, also**: `edge_walks` (the `edge_order` plan, moved out of `index_walks`; its fixture writes the old ids)
 - **money and people lanes, also**: the budget-key plan and the contact-point index plan were in the old `index_walks`: each lane re-proves its own statement beside its own tests
 - **K9 following (commands/follow/, arrival.rs, origin_cursor.rs)**: `arrival` (an arrival is two columns of `entity` now and makes no origin or source; `arrival::SYSTEMS` is read only by `follow/merge.rs`'s exclusion clause, now dead), `shared_verbs_people_follow`, `origin_cursor`, `follow_items`, `follow_reminders`, `follow_retire`, `follow_stated`, `follow_gaps`, `calendar_follow`
-- **K10 blobs and backup, phone side (blob.rs, backup/)**: `backup_sim`, `restore_drill`, `blob_release` (the bytes under the trash, from the old `trash_and_bytes`), `shared_verbs_blobs` (`backup_snapshot` is plugged: its proof file is named by the `promises` rule)
 - **K12 commitments and generated pages**: `commitments`, `stored_rules`, `ontology_page`, `ontology_widen`
 - **app lane: calendar/tasks (event, ical, task, occurrence, reminders UI reads)**: `agenda`, `agenda_days`, `agenda_portable`, `agenda_wave2`
 - **app lane: documents and photos**: `docs_photos`, `document_portable`, `photo_portable`, `store_health`

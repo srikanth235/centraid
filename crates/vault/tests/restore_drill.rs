@@ -6,7 +6,7 @@ mod backup_support;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
-use backup_support::{Rig, T0};
+use backup_support::{Rig, T0, common};
 use centraid_media::sealed::{Class, Name, PlaintextHash};
 use centraid_vault::Vault;
 use centraid_vault::backup::drill::dump;
@@ -14,6 +14,7 @@ use centraid_vault::backup::engine::{Env, GatewayPass, Policy, Scheduler};
 use centraid_vault::backup::restore::{self, Restore};
 use centraid_vault::backup::store::{MemoryStore, Store};
 use centraid_vault::backup::tree::Entry;
+use common::index as index_dump;
 
 fn back_up(
     rig: &Rig,
@@ -274,4 +275,207 @@ fn the_structural_check_still_judges_a_vault_file() {
     let report = restore::restore_check(rig.vault().path()).expect("checks");
     assert!(report.is_clean());
     assert!(restore::restore_check(&rig.scratch.join("nothing.db")).is_err());
+}
+
+/// A photograph with a place, so the spatial index has a point to keep.
+fn add_located_photo(rig: &Rig, title: &str, lat: f64, lon: f64) {
+    let original = rig.add_original(format!("{title} pixels").as_bytes());
+    let id = rig.vault().ids().next();
+    let now = rig.vault().clock().now_text();
+    rig.vault()
+        .commit(|tx| {
+            tx.insert_entity(&id, centraid_vault::model::Kind::Photo, title, &now)?;
+            tx.connection().execute(
+                "INSERT INTO photo (id, blob, media_type, form, lat, lon)
+                 VALUES (?1, ?2, 'image/jpeg', 'photo', ?3, ?4)",
+                rusqlite::params![id, original.to_hex(), lat, lon],
+            )?;
+            Ok(())
+        })
+        .expect("a located photograph");
+}
+
+fn copy_index_file(from: &std::path::Path, to: &std::path::Path) {
+    for suffix in ["", "-wal", "-shm"] {
+        let mut source = from.to_path_buf().into_os_string();
+        source.push(suffix);
+        let mut target = to.to_path_buf().into_os_string();
+        target.push(suffix);
+        if std::path::Path::new(&source).exists() {
+            std::fs::copy(source, target).expect("copies");
+        }
+    }
+}
+
+fn alerts_of(vault: &Vault) -> Vec<String> {
+    vault
+        .read(|c| {
+            let mut statement = c.prepare("SELECT * FROM ix.alert")?;
+            let columns = statement.column_count();
+            let rows = statement
+                .query_map([], |row| {
+                    Ok(format!(
+                        "{:?}",
+                        (0..columns)
+                            .map(|i| row.get::<_, rusqlite::types::Value>(i))
+                            .collect::<rusqlite::Result<Vec<_>>>()?
+                    ))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            Ok(rows)
+        })
+        .expect("reads")
+}
+
+/// A restore brings back `vault.db` only. The index file (search, the spatial index, the alerts) is
+/// derived data: it is founded again and written from the restored rows, so what is searched, found
+/// on the map and alerted after a restore is what it was before the backup, even when an index
+/// file built from NEWER rows stands where the restore lands (a vault restored over a damaged one).
+#[test]
+fn a_restore_founds_the_index_file_again_and_search_equals_the_backed_up_vault() {
+    let (rig, _) = rig_with_a_library("index-restore");
+    add_located_photo(&rig, "the harbour at dawn", 52.52, 13.405);
+    rig.grow(3, "lighthouse");
+    index_dump::drain(rig.vault());
+    let dir = rig.scratch.dir().to_path_buf();
+    let before = index_dump::dump(&dir);
+    assert!(
+        before.iter().any(|line| line.starts_with("geo|"))
+            && before.iter().any(|line| line.contains("lighthouse")),
+        "the backed-up vault has words and a point to find"
+    );
+    let alerts_before = alerts_of(rig.vault());
+    // The backup is taken with the index owed some rows (a commit's rest, not yet paid): the queue
+    // is in `vault.db` and travels with it, and a restored vault pays it (and everything else).
+    rig.vault()
+        .commit(|tx| {
+            tx.connection().execute(
+                "INSERT INTO search_owed (n) SELECT n FROM entity ORDER BY n LIMIT 5
+                 ON CONFLICT (n) DO NOTHING",
+                [],
+            )?;
+            Ok(())
+        })
+        .expect("owes");
+    assert!(rig.vault().index_owed().expect("asks"));
+    let store = MemoryStore::new("desk");
+    let taken = back_up(&rig, &[&store], T0);
+
+    // The vault goes on: more rows, so its index file now holds words the backup does not.
+    rig.grow(2, "afterwards");
+    index_dump::drain(rig.vault());
+    assert_ne!(index_dump::dump(&dir), before);
+
+    // A restore lands where an index file built from those newer rows stands.
+    let restored_dir = tempfile::tempdir().expect("a directory");
+    let path = restored_dir.path().join("vault.db");
+    copy_index_file(
+        &centraid_vault::index::index_file_for(rig.vault().path()),
+        &centraid_vault::index::index_file_for(&path),
+    );
+    let restore =
+        Restore::open(&rig.keys, &[&store as &dyn Store], &taken.root.name).expect("opens");
+    let mut checked = false;
+    let (records, _, _) = restore
+        .restore_all(
+            &path,
+            &mut |opened_path| {
+                let vault = Vault::open(opened_path).expect("opens through the ladder");
+                assert!(
+                    !vault.index_owed().expect("asks"),
+                    "nothing is left owed to the index"
+                );
+                assert_eq!(alerts_of(&vault), alerts_before);
+                checked = true;
+                Ok(())
+            },
+            &mut |_, _| Ok(()),
+        )
+        .expect("restores");
+    assert!(checked && records.ranges > 2);
+    let after = index_dump::dump(restored_dir.path());
+    assert_eq!(
+        after, before,
+        "search and the spatial index after a restore equal those before the backup"
+    );
+    assert!(
+        !after.iter().any(|line| line.contains("afterwards")),
+        "an index built from newer rows did not survive the restore"
+    );
+    // And the restored vault's index is exactly what a rebuild from its rows gives.
+    index_dump::assert_equals_a_rebuild(restored_dir.path(), "after a restore");
+}
+
+/// Restoring over a path that has an index file and sidecars removes them, even when the restore
+/// is driven in two steps (`records`, then the caller opens): the next open founds the file again
+/// and owes it every entity.
+#[test]
+fn records_leaves_no_index_file_and_the_first_open_owes_every_entity() {
+    let (rig, _) = rig_with_a_library("index-owed");
+    index_dump::drain(rig.vault());
+    let store = MemoryStore::new("desk");
+    let taken = back_up(&rig, &[&store], T0);
+    let restored_dir = tempfile::tempdir().expect("a directory");
+    let path = restored_dir.path().join("vault.db");
+    copy_index_file(
+        &centraid_vault::index::index_file_for(rig.vault().path()),
+        &centraid_vault::index::index_file_for(&path),
+    );
+    let restore =
+        Restore::open(&rig.keys, &[&store as &dyn Store], &taken.root.name).expect("opens");
+    restore.records(&path).expect("restores");
+    let beside: Vec<_> = std::fs::read_dir(restored_dir.path())
+        .expect("lists")
+        .map(|entry| entry.expect("an entry").path())
+        .collect();
+    assert!(
+        beside
+            .iter()
+            .all(|file| !centraid_vault::index::is_index_file(&path, file)),
+        "no index file stood after the records: {beside:?}"
+    );
+    let vault = Vault::open(&path).expect("opens");
+    assert!(
+        vault.index_owed().expect("asks"),
+        "a founded-again index owes every entity"
+    );
+    index_dump::drain(&vault);
+    vault.finish().expect("closes");
+    assert_eq!(
+        index_dump::dump(restored_dir.path()),
+        index_dump::dump(rig.scratch.dir())
+    );
+}
+
+/// A backup of a vault founded on another baseline (tables this build's rung does not make) is
+/// refused with a sentence and nothing is written: no vault file, no index file.
+#[test]
+fn a_backup_of_an_earlier_baseline_is_refused_with_a_sentence_before_anything_is_written() {
+    use centraid_vault::backup::restore::RestoreError;
+    use centraid_vault::migrations::Migration;
+    let (rig, _) = rig_with_a_library("earlier");
+    let store = MemoryStore::new("desk");
+    let taken = back_up(&rig, &[&store], T0);
+    let restore =
+        Restore::open(&rig.keys, &[&store as &dyn Store], &taken.root.name).expect("opens");
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("vault.db");
+    // This build's rung one, with a table the backed-up vault does not have: the backed-up tables
+    // are not the ones this rung makes, as when the backup was founded on the earlier baseline.
+    let ladder = [Migration {
+        version: 1,
+        name: "baseline",
+        sql: "CREATE TABLE a_table_of_another_baseline (id TEXT PRIMARY KEY) STRICT;",
+    }];
+    let error = restore.records_on(&ladder, &path).expect_err("refused");
+    assert!(matches!(error, RestoreError::EarlierModel), "{error:?}");
+    assert_eq!(
+        error.to_string(),
+        "this backup is of an earlier model of the vault, which this version does not read"
+    );
+    assert_eq!(
+        std::fs::read_dir(dir.path()).expect("lists").count(),
+        0,
+        "nothing was written"
+    );
 }
