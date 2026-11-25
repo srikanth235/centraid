@@ -47,6 +47,7 @@ pub mod arrival;
 pub mod blob;
 pub mod contact_point;
 pub mod container;
+pub mod csv;
 pub mod document;
 pub mod document_portable;
 pub mod edge;
@@ -55,6 +56,7 @@ pub mod flag;
 pub mod follow;
 pub mod history;
 pub mod locker;
+pub mod money;
 pub mod note;
 pub mod note_portable;
 pub mod origin_cursor;
@@ -65,9 +67,12 @@ pub mod photo;
 pub mod photo_portable;
 pub mod place;
 pub mod reminder;
+pub mod rule;
 pub mod sealed;
 pub mod tag;
 pub mod touch;
+pub mod txn;
+pub mod txn_portable;
 pub mod vault;
 
 use std::collections::BTreeMap;
@@ -386,6 +391,7 @@ impl Registry {
             flag::definitions,
             follow::definitions,
             history::definitions,
+            money::definitions,
             note::definitions,
             person::definitions,
             person_date::definitions,
@@ -393,8 +399,11 @@ impl Registry {
             photo_portable::definitions,
             place::definitions,
             reminder::definitions,
+            rule::definitions,
             tag::definitions,
             touch::definitions,
+            txn::definitions,
+            txn_portable::definitions,
             vault::definitions,
         ];
         for definitions in modules.iter().copied() {
