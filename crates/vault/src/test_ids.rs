@@ -4,5 +4,8 @@
 /// The `n`th test id.
 #[must_use]
 pub(crate) fn uuid(n: u64) -> String {
-    format!("{:08x}-0000-7000-8000-{n:012x}", 0x0190_0000_u64 + (n >> 32))
+    format!(
+        "{:08x}-0000-7000-8000-{n:012x}",
+        0x0190_0000_u64 + (n >> 32)
+    )
 }

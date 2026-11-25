@@ -80,8 +80,15 @@ fn the_ddl_fixture_is_not_vacuous() {
         assert!(fixture.contains(object), "`{object}` is not in the fixture");
     }
     // The derived tables are the index file's own ladder (A15), never the vault's.
-    for derived in ["CREATE VIRTUAL TABLE search ", "CREATE TABLE alert ", "geo USING rtree"] {
-        assert!(!fixture.contains(derived), "`{derived}` is in the vault's fixture");
+    for derived in [
+        "CREATE VIRTUAL TABLE search ",
+        "CREATE TABLE alert ",
+        "geo USING rtree",
+    ] {
+        assert!(
+            !fixture.contains(derived),
+            "`{derived}` is in the vault's fixture"
+        );
     }
 }
 

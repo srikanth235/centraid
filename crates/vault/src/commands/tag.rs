@@ -76,21 +76,15 @@ pub(crate) fn next_color(ctx: &CommandCtx<'_, '_>) -> Result<&'static str> {
 /// A sentence when this entity cannot carry a tag: it is missing, in the
 /// trash, or is itself a word.
 pub(crate) fn pre_taggable(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    pre_word_bearer(ctx, false)
+    pre_word_bearer(ctx)
 }
 
-/// A sentence when this entity cannot carry a flag. The same, except that a
-/// category can be archived: it is a word the member manages, like a project.
-pub(crate) fn pre_flaggable(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    pre_word_bearer(ctx, true)
-}
-
-fn pre_word_bearer(ctx: &CommandCtx<'_, '_>, flags: bool) -> Result<Option<String>> {
+fn pre_word_bearer(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let found = match lookup_live(ctx.connection(), ctx.required_str("id")?)? {
         Ok(found) => found,
         Err(sentence) => return Ok(Some(sentence)),
     };
-    let word = found.kind.is_concept() && !(flags && found.kind == Kind::Category);
+    let word = found.kind.is_concept();
     Ok(word.then(|| {
         format!(
             "a {} is a word, not something that takes a word",

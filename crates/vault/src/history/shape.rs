@@ -245,7 +245,9 @@ pub const TABLES: &[(&str, Role)] = &[
     ),
     (
         "blob",
-        Role::Outside("bytes, by hash; a version names one through `revision_blob` and copies none"),
+        Role::Outside(
+            "bytes, by hash; a version names one through `revision_blob` and copies none",
+        ),
     ),
     (
         "derivative",
@@ -259,18 +261,12 @@ pub const TABLES: &[(&str, Role)] = &[
         "source",
         Role::Outside("what the phone last said; `follow::differences` reads it"),
     ),
-    (
-        "revision",
-        Role::Outside("the history itself"),
-    ),
+    ("revision", Role::Outside("the history itself")),
     (
         "revision_blob",
         Role::Outside("the history's own blob claims"),
     ),
-    (
-        "action_key",
-        Role::Outside("the keys of acts already run"),
-    ),
+    ("action_key", Role::Outside("the keys of acts already run")),
     (
         "measurement",
         Role::Outside("a day's total, not an edit; a correction overwrites it"),
@@ -303,18 +299,9 @@ pub const TABLES: &[(&str, Role)] = &[
         "message_attachment",
         Role::Outside("a chat's transcript is appended, never edited"),
     ),
-    (
-        "locker_key",
-        Role::Outside("custody's own bookkeeping"),
-    ),
-    (
-        "search_word",
-        Role::Outside("the search index"),
-    ),
-    (
-        "search_owed",
-        Role::Outside("the search index's queue"),
-    ),
+    ("locker_key", Role::Outside("custody's own bookkeeping")),
+    ("search_word", Role::Outside("the search index")),
+    ("search_owed", Role::Outside("the search index's queue")),
     (
         "alert",
         Role::Outside("derived from the reminder it belongs to"),
@@ -430,12 +417,28 @@ pub const OMITTED: &[(&str, &str, &str)] = &[
     ("entity", "parent_kind", "identity: the home's kind"),
     ("entity", "created_at", "stamp, never edited"),
     ("entity", "updated_at", "stamp; every commit moves it"),
-    ("entity", "deleted_at", "trash is not state: a trashed record is the same record"),
+    (
+        "entity",
+        "deleted_at",
+        "trash is not state: a trashed record is the same record",
+    ),
     ("entity", "purge_at", "trash is not state"),
     ("entity", "trashed_by", "trash is not state"),
-    ("entity", "starred_at", "A14: a star is not an edit; it stamps no revision"),
-    ("entity", "pinned_at", "A14: a pin is not an edit; it stamps no revision"),
-    ("entity", "archived_at", "A14: an archive is not an edit; it stamps no revision"),
+    (
+        "entity",
+        "starred_at",
+        "A14: a star is not an edit; it stamps no revision",
+    ),
+    (
+        "entity",
+        "pinned_at",
+        "A14: a pin is not an edit; it stamps no revision",
+    ),
+    (
+        "entity",
+        "archived_at",
+        "A14: an archive is not an edit; it stamps no revision",
+    ),
     ("entity", "arrived_via", "provenance, never edited"),
     ("entity", "arrived_label", "provenance, never edited"),
     (

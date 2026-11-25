@@ -8,8 +8,8 @@
 
 use serde_json::Value as Json;
 
-use super::{Child, SystemMap};
 use super::merge::same;
+use super::{Child, SystemMap};
 
 /// The name a system gives a record: `stated.title`, kept in a column of its own so a read of it
 /// parses no JSON.

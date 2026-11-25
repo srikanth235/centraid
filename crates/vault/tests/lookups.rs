@@ -41,7 +41,13 @@ fn the_lookup_list_is_the_tables_founding_seeds_beyond_the_three_that_hold_membe
     for table in &tables {
         let rows: i64 = scratch
             .vault
-            .read(|c| Ok(c.query_row(&format!("SELECT COUNT(*) FROM \"{table}\""), [], |r| r.get(0))?))
+            .read(|c| {
+                Ok(
+                    c.query_row(&format!("SELECT COUNT(*) FROM \"{table}\""), [], |r| {
+                        r.get(0)
+                    })?,
+                )
+            })
             .expect("a count");
         if rows > 0 {
             seeded.insert(table.clone());
@@ -74,7 +80,10 @@ fn nothing_writes_a_lookup_table_after_founding() {
             })
             .expect("a column");
         for (verb, sql) in [
-            ("insert", format!("INSERT INTO {table} SELECT * FROM {table} LIMIT 1")),
+            (
+                "insert",
+                format!("INSERT INTO {table} SELECT * FROM {table} LIMIT 1"),
+            ),
             ("update", format!("UPDATE {table} SET {first} = {first}")),
             ("delete", format!("DELETE FROM {table}")),
         ] {
@@ -146,33 +155,66 @@ fn a_label_colour_is_a_palette_key() {
 fn a_founded_vault_has_its_index_file_attached_and_its_tables_are_not_the_vaults() {
     let scratch = common::Scratch::founded("lookups_index").expect("a vault");
     let index = scratch.dir().join("vault.index.db");
-    assert!(index.exists(), "{} is founded beside the vault", index.display());
+    assert!(
+        index.exists(),
+        "{} is founded beside the vault",
+        index.display()
+    );
     // The index tables answer through the vault's connection...
-    for table in ["search", "search_past", "search_word", "alert", "geo", "index_state"] {
+    for table in [
+        "search",
+        "search_past",
+        "search_word",
+        "alert",
+        "geo",
+        "index_state",
+    ] {
         scratch
             .vault
-            .read(|c| Ok(c.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get::<_, i64>(0))?))
+            .read(|c| {
+                Ok(
+                    c.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| {
+                        r.get::<_, i64>(0)
+                    })?,
+                )
+            })
             .unwrap_or_else(|error| panic!("{table} does not answer: {error}"));
     }
     // ...but they are not in the vault's own schema, so no snapshot of it holds one.
-    let vault_tables = words(&scratch, "SELECT name FROM main.sqlite_schema WHERE name NOT LIKE 'sqlite_%'");
-    for table in ["search", "search_past", "search_word", "alert", "geo", "index_state"] {
+    let vault_tables = words(
+        &scratch,
+        "SELECT name FROM main.sqlite_schema WHERE name NOT LIKE 'sqlite_%'",
+    );
+    for table in [
+        "search",
+        "search_past",
+        "search_word",
+        "alert",
+        "geo",
+        "index_state",
+    ] {
         assert!(!vault_tables.contains(table), "{table} is in vault.db");
     }
-    scratch.vault.read(|c| {
-        let attached: String = c.query_row(
-            "SELECT file FROM pragma_database_list WHERE name = 'ix'",
-            [],
-            |r| r.get(0),
-        )?;
-        assert!(attached.ends_with("vault.index.db"), "{attached}");
-        Ok(())
-    })
-    .expect("a read");
+    scratch
+        .vault
+        .read(|c| {
+            let attached: String = c.query_row(
+                "SELECT file FROM pragma_database_list WHERE name = 'ix'",
+                [],
+                |r| r.get(0),
+            )?;
+            assert!(attached.ends_with("vault.index.db"), "{attached}");
+            Ok(())
+        })
+        .expect("a read");
     // The file carries its own tag and rung.
     let plain = rusqlite::Connection::open(&index).expect("opens as a plain file");
-    let tag: i64 = plain.query_row("PRAGMA application_id", [], |r| r.get(0)).expect("a tag");
-    let rung: i64 = plain.query_row("PRAGMA user_version", [], |r| r.get(0)).expect("a rung");
+    let tag: i64 = plain
+        .query_row("PRAGMA application_id", [], |r| r.get(0))
+        .expect("a tag");
+    let rung: i64 = plain
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .expect("a rung");
     assert_eq!(tag, centraid_vault::format::INDEX_APPLICATION_ID);
     assert_eq!(rung, centraid_vault::migrations::index_head_version());
 }
@@ -219,7 +261,9 @@ fn a_database_that_is_not_ours_at_the_index_path_is_refused_and_left_alone() {
         plain
             .pragma_update(None, "application_id", 0x5a5a_5a5a_i64)
             .expect("a tag");
-        plain.execute_batch("CREATE TABLE theirs (x TEXT)").expect("a table");
+        plain
+            .execute_batch("CREATE TABLE theirs (x TEXT)")
+            .expect("a table");
     }
     let before = std::fs::read(&index).expect("bytes");
     let refused = match centraid_vault::Vault::open(&file) {
@@ -227,6 +271,10 @@ fn a_database_that_is_not_ours_at_the_index_path_is_refused_and_left_alone() {
         Err(error) => error.to_string(),
     };
     assert!(refused.contains("is not a Centraid vault"), "{refused}");
-    assert_eq!(std::fs::read(&index).expect("bytes"), before, "left byte-identical");
+    assert_eq!(
+        std::fs::read(&index).expect("bytes"),
+        before,
+        "left byte-identical"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

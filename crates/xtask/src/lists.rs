@@ -16,6 +16,9 @@ use anyhow::{Context, Result, anyhow, bail};
 use crate::rules::RuleReport;
 
 const NAME: &str = "generated-lists-are-fresh";
+/// The alias the generated list names its rows by, in the shape rustfmt leaves it.
+const SHAPE_TYPE: &str = "/// One shape: (rel, from kind, to kind, label kind, ordered, anchored).\npub type Shape = (\n    &'static str,\n    &'static str,\n    &'static str,\n    Option<&'static str>,\n    bool,\n    bool,\n);\n";
+
 const BASELINE: &str = "contracts/migrations/001_baseline.sql";
 const SHAPES_OUTPUT: &str = "crates/vault/tests/common/edge_shapes.rs";
 
@@ -61,13 +64,27 @@ fn render_shapes(root: &Path) -> Result<String> {
             .split(',')
             .map(|part| part.trim().trim_matches('\''))
             .collect();
-        let [rel, from, to] = parts.as_slice() else {
+        let [rel, from, to, label, ordered, anchored] = parts.as_slice() else {
             bail!(
-                "an edge_shape row is not three values: {}",
+                "an edge_shape row is not six values (rel, from, to, label kind, ordered, anchored): {}",
                 &rest[open..=close]
             );
         };
-        rows.push(format!("    (\"{rel}\", \"{from}\", \"{to}\"),\n"));
+        let label = if *label == "NULL" {
+            "None".to_owned()
+        } else {
+            format!("Some(\"{label}\")")
+        };
+        let (ordered, anchored) = (*ordered == "1", *anchored == "1");
+        let one = format!("(\"{rel}\", \"{from}\", \"{to}\", {label}, {ordered}, {anchored})");
+        // rustfmt keeps an array element on one line up to 60 characters, and breaks a longer one.
+        if one.len() <= 60 {
+            rows.push(format!("    {one},\n"));
+        } else {
+            rows.push(format!(
+                "    (\n        \"{rel}\",\n        \"{from}\",\n        \"{to}\",\n        {label},\n        {ordered},\n        {anchored},\n    ),\n"
+            ));
+        }
         rest = &rest[close + 1..];
     }
     Ok(format!(
@@ -75,7 +92,8 @@ fn render_shapes(root: &Path) -> Result<String> {
          //!\n\
          //! The shapes the baseline seeds `edge_shape` with, for a test to hold the trigger and the\n\
          //! commands against (#1191, L1).\n\n\
-         pub const SHAPES: [(&str, &str, &str); {}] = [\n{}];\n",
+         {SHAPE_TYPE}\n\
+         pub const SHAPES: [Shape; {}] = [\n{}];\n",
         rows.len(),
         rows.concat()
     ))
@@ -101,7 +119,7 @@ mod tests {
         fs::create_dir_all(root.join("contracts/migrations")).unwrap();
         fs::write(
             root.join(BASELINE),
-            "INSERT INTO edge_shape (rel, from_kind, to_kind) VALUES\n  ('contains', 'album', 'photo'),\n  -- a note\n  ('tagged', '*', 'tag');\n",
+            "INSERT INTO edge_shape (rel, from_kind, to_kind, label_kind, ordered, anchored) VALUES\n  ('contains', 'album', 'photo', NULL, 1, 0),\n  -- a note\n  ('tagged', '*', 'tag', NULL, 0, 0);\n",
         )
         .unwrap();
         assert!(run(&root, true).is_err(), "nothing written yet is stale");
@@ -111,7 +129,7 @@ mod tests {
         let path = root.join(SHAPES_OUTPUT);
         let text = fs::read_to_string(&path).unwrap();
         assert!(
-            text.contains("(\"contains\", \"album\", \"photo\")"),
+            text.contains("(\"contains\", \"album\", \"photo\", None, true, false)"),
             "{text}"
         );
         fs::write(&path, text.replace("photo", "other")).unwrap();

@@ -157,15 +157,18 @@ pub fn reindex_owed(connection: &Connection, limit: usize) -> Result<usize> {
                 )?;
             }
             _ => {
-                connection.execute("DELETE FROM search_owed WHERE n = (SELECT n FROM entity WHERE id = ?1)", [&id])?;
+                connection.execute(
+                    "DELETE FROM search_owed WHERE n = (SELECT n FROM entity WHERE id = ?1)",
+                    [&id],
+                )?;
             }
         }
     }
-    Ok(
-        connection.query_row("SELECT count(*) FROM search_owed WHERE after IS NOT NULL", [], |row| {
-            row.get::<_, i64>(0)
-        })? as usize,
-    )
+    Ok(connection.query_row(
+        "SELECT count(*) FROM search_owed WHERE after IS NOT NULL",
+        [],
+        |row| row.get::<_, i64>(0),
+    )? as usize)
 }
 
 /// How many labels still have members owed a search row.
@@ -173,11 +176,11 @@ pub fn reindex_owed(connection: &Connection, limit: usize) -> Result<usize> {
 /// # Errors
 /// SQLite's refusal.
 pub fn owed(connection: &Connection) -> Result<usize> {
-    Ok(
-        connection.query_row("SELECT EXISTS (SELECT 1 FROM search_owed WHERE after IS NOT NULL)", [], |row| {
-            row.get::<_, i64>(0)
-        })? as usize,
-    )
+    Ok(connection.query_row(
+        "SELECT EXISTS (SELECT 1 FROM search_owed WHERE after IS NOT NULL)",
+        [],
+        |row| row.get::<_, i64>(0),
+    )? as usize)
 }
 
 /// Whatever a touched entity's title is part of the text of: one parameter, the

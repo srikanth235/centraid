@@ -781,7 +781,7 @@ fn a_search_only_write_then_clean_close_forces_a_full_read_and_restores_a_whole_
     vault
         .commit(|tx| {
             tx.connection().execute(
-                "INSERT INTO search_owed (id, after) VALUES ('nothing', '')",
+                "INSERT INTO search_owed (n, after) VALUES (900000000, '')",
                 [],
             )?;
             Ok(())

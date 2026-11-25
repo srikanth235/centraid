@@ -222,33 +222,27 @@ mod tests {
 
     /// THE THREE LISTS THAT MUST AGREE, and the one that is the schema's.
     ///
-    /// `ITEM_TYPES` is the CHECK constraint's list; the `add_item` schema's
-    /// enum is the door's; `type_fields` decides which columns each type owns.
-    /// This is the leg of the tripwire that `crates/apps/locker` cannot hold,
-    /// because reading a DDL statement belongs in the layer that owns one
-    /// (`sql-confinement`).
+    /// `ITEM_TYPES` is the `locker_type` lookup's rows (#1214, A1: a 16th type is a row in a later
+    /// rung, never a rebuild); the `add_item` schema's enum is the door's; `type_fields` decides
+    /// which columns each type owns.
     #[test]
-    fn the_type_list_is_the_check_constraints_and_the_doors() {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../..")
-            .join("contracts/schema/vault-ddl.sql");
-        let ddl = std::fs::read_to_string(&path).expect("the committed DDL");
-        let check = ddl
-            .split("locker_item (")
-            .nth(1)
-            .expect("the DDL declares locker_item")
-            .split("CHECK (type IN (")
-            .nth(1)
-            .expect("locker_item CHECKs its type")
-            .split("))")
-            .next()
-            .expect("the CHECK closes");
-        let declared: Vec<String> = check
-            .split(',')
-            .map(|value| value.trim().trim_matches('\'').trim().to_owned())
-            .filter(|value| !value.is_empty())
-            .collect();
-        assert_eq!(declared, ITEM_TYPES.map(str::to_owned).to_vec());
+    fn the_type_list_is_the_lookup_and_the_doors() {
+        let dir = centraid_ontology::scratch::scratch_dir();
+        std::fs::create_dir_all(&dir).expect("a directory");
+        let vault = crate::Vault::create(dir.join("vault.db")).expect("a vault");
+        let declared: Vec<String> = vault
+            .read(|connection| {
+                Ok(connection
+                    .prepare("SELECT code FROM locker_type ORDER BY code")?
+                    .query_map([], |row| row.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<_>>()?)
+            })
+            .expect("the lookup reads");
+        let mut held = ITEM_TYPES.map(str::to_owned).to_vec();
+        held.sort();
+        assert_eq!(declared, held);
+        drop(vault);
+        let _ = std::fs::remove_dir_all(&dir);
 
         // And the door's own enum is the same set.
         let schema: serde_json::Value =

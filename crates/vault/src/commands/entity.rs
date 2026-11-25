@@ -254,7 +254,9 @@ fn members(connection: &Connection, holder: &Found) -> Result<Vec<String>> {
         // A subtask follows its parent.
         Kind::Task => "SELECT id FROM entity WHERE parent_id = ?1",
         // The words kept of a touch or a workout belong to it.
-        Kind::Workout | Kind::Touch => "SELECT from_id FROM edge WHERE to_id = ?1 AND rel = 'about'",
+        Kind::Workout | Kind::Touch => {
+            "SELECT from_id FROM edge WHERE to_id = ?1 AND rel = 'about'"
+        }
         _ => return Ok(Vec::new()),
     };
     ids(connection, sql, &holder.id)

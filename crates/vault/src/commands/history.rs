@@ -157,10 +157,6 @@ fn fields(ctx: &CommandCtx<'_, '_>) -> serde_json::Map<String, serde_json::Value
         .unwrap_or_default()
 }
 
-/// The overlay's field for a text document's words: not a column, the words themselves, which the
-/// handler writes into the content store and keeps by their hash.
-const DOCUMENT_TEXT: &str = "document.text";
-
 /// The record is there (in the trash or not: a record trashed elsewhere keeps the words that
 /// were being written to it) and each field is one its history keeps. A sealed cell of a Locker
 /// item is never one: the vault holds no key, so a secret the member typed is not kept this way (the
@@ -170,7 +166,7 @@ fn pre_keep(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let Some(found) = crate::commands::entity::find(ctx.connection(), id)? else {
         return Ok(Some(format!("there is nothing with the id `{id}`")));
     };
-    let mut overlay = fields(ctx);
+    let overlay = fields(ctx);
     // UNPLUGGED (#1214): the event overlay and a text document's words come back with their app lanes.
     let _ = &found;
     history::overlay_refusal(ctx.connection(), id, &overlay)

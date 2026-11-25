@@ -89,11 +89,11 @@ fn notes(dir: &std::path::Path) -> i64 {
     let vault = Vault::open(dir.join("vault.db")).expect("a killed commit opens clean");
     let count = vault
         .read(|c| {
-            Ok(c.query_row(
-                "SELECT COUNT(*) FROM entity WHERE kind = 'note'",
-                [],
-                |r| r.get(0),
-            )?)
+            Ok(
+                c.query_row("SELECT COUNT(*) FROM entity WHERE kind = 'note'", [], |r| {
+                    r.get(0)
+                })?,
+            )
         })
         .expect("counts");
     vault.finish().expect("closes");

@@ -29,9 +29,7 @@ use rusqlite::Connection;
 
 use crate::clock::{Clock, ClockIds, Ids, SystemClock};
 use crate::error::{Result, VaultError};
-use crate::format::{
-    APPLICATION_ID, EARLIER_APPLICATION_ID, INDEX_APPLICATION_ID, SCHEMA_DIGEST,
-};
+use crate::format::{APPLICATION_ID, EARLIER_APPLICATION_ID, INDEX_APPLICATION_ID, SCHEMA_DIGEST};
 use crate::migrations::head_version;
 
 /// THE PAGE SIZE, PINNED (#1029 §1).

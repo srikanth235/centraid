@@ -50,7 +50,12 @@ impl World {
         match self.raw(sql) {
             Ok(()) => panic!("the database took what it should refuse: {sql}"),
             Err(why) => {
-                for not_a_rule in ["no such", "syntax error", "has no column", "datatype mismatch"] {
+                for not_a_rule in [
+                    "no such",
+                    "syntax error",
+                    "has no column",
+                    "datatype mismatch",
+                ] {
                     assert!(
                         !why.contains(not_a_rule),
                         "`{sql}` failed for a reason that is not a held rule ({not_a_rule}): {why}"
@@ -166,7 +171,9 @@ fn a_home_is_of_a_kind_the_shape_allows_and_never_a_loop() {
     ));
     // A home with a loop in it, and a thing in itself.
     w.refuses_with(
-        &format!("UPDATE entity SET parent_id = '{inner}', parent_kind = 'notebook' WHERE id = '{book}'"),
+        &format!(
+            "UPDATE entity SET parent_id = '{inner}', parent_kind = 'notebook' WHERE id = '{book}'"
+        ),
         "no loops",
     );
     w.refuses(&format!(
@@ -189,20 +196,30 @@ fn a_trashed_by_names_a_trash_and_an_arrival_has_both_its_words() {
     let w = World::new("rules_trash");
     let note = w.entity(9, "note", "N");
     let book = w.entity(10, "notebook", "B");
-    w.refuses(&format!("UPDATE entity SET trashed_by = '{book}' WHERE id = '{note}'"));
+    w.refuses(&format!(
+        "UPDATE entity SET trashed_by = '{book}' WHERE id = '{note}'"
+    ));
     w.takes(&format!(
         "UPDATE entity SET deleted_at = '{AT}', purge_at = '{AT}', trashed_by = '{book}' WHERE id = '{note}'"
     ));
-    w.refuses(&format!("UPDATE entity SET deleted_at = '{AT}' WHERE id = '{book}'"));
-    w.refuses(&format!("UPDATE entity SET arrived_via = 'vcard' WHERE id = '{book}'"));
+    w.refuses(&format!(
+        "UPDATE entity SET deleted_at = '{AT}' WHERE id = '{book}'"
+    ));
+    w.refuses(&format!(
+        "UPDATE entity SET arrived_via = 'vcard' WHERE id = '{book}'"
+    ));
     w.refuses(&format!(
         "UPDATE entity SET arrived_via = 'telepathy', arrived_label = 'x' WHERE id = '{book}'"
     ));
     w.takes(&format!(
         "UPDATE entity SET arrived_via = 'vcard', arrived_label = 'contacts.vcf' WHERE id = '{book}'"
     ));
-    w.refuses(&format!("UPDATE entity SET starred_at = '2026-03-01 09:00' WHERE id = '{book}'"));
-    w.takes(&format!("UPDATE entity SET starred_at = '{AT}' WHERE id = '{book}'"));
+    w.refuses(&format!(
+        "UPDATE entity SET starred_at = '2026-03-01 09:00' WHERE id = '{book}'"
+    ));
+    w.takes(&format!(
+        "UPDATE entity SET starred_at = '{AT}' WHERE id = '{book}'"
+    ));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -220,12 +237,16 @@ fn a_link_has_its_lower_id_first_and_joins_only_linkable_kinds() {
         &format!("INSERT INTO link (a, b, created_at) VALUES ('{b}', '{a}', '{AT}')"),
         "a < b",
     );
-    w.refuses(&format!("INSERT INTO link (a, b, created_at) VALUES ('{a}', '{a}', '{AT}')"));
+    w.refuses(&format!(
+        "INSERT INTO link (a, b, created_at) VALUES ('{a}', '{a}', '{AT}')"
+    ));
     w.refuses_with(
         &format!("INSERT INTO link (a, b, created_at) VALUES ('{a}', '{reading}', '{AT}')"),
         "cannot be linked",
     );
-    w.takes(&format!("INSERT INTO link (a, b, created_at) VALUES ('{a}', '{b}', '{AT}')"));
+    w.takes(&format!(
+        "INSERT INTO link (a, b, created_at) VALUES ('{a}', '{b}', '{AT}')"
+    ));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -238,18 +259,30 @@ fn a_colour_is_a_palette_key_and_only_a_tag_wears_one() {
     let tag = w.entity(14, "tag", "t");
     let cat = w.entity(15, "category", "c");
     let list = w.entity(16, "list", "l");
-    w.refuses(&format!("INSERT INTO concept (id, kind, key, color) VALUES ('{tag}', 'tag', 't', 'var(--c-rose)')"));
-    w.refuses(&format!("INSERT INTO concept (id, kind, key, color) VALUES ('{cat}', 'category', 'c', 'blue')"));
-    w.takes(&format!("INSERT INTO concept (id, kind, key, color) VALUES ('{tag}', 'tag', 't', 'blue')"));
-    w.refuses(&format!("INSERT INTO container (id, kind, color) VALUES ('{list}', 'list', 'chartreuse')"));
-    w.takes(&format!("INSERT INTO container (id, kind, color) VALUES ('{list}', 'list', 'rose')"));
+    w.refuses(&format!(
+        "INSERT INTO concept (id, kind, key, color) VALUES ('{tag}', 'tag', 't', 'var(--c-rose)')"
+    ));
+    w.refuses(&format!(
+        "INSERT INTO concept (id, kind, key, color) VALUES ('{cat}', 'category', 'c', 'blue')"
+    ));
+    w.takes(&format!(
+        "INSERT INTO concept (id, kind, key, color) VALUES ('{tag}', 'tag', 't', 'blue')"
+    ));
+    w.refuses(&format!(
+        "INSERT INTO container (id, kind, color) VALUES ('{list}', 'list', 'chartreuse')"
+    ));
+    w.takes(&format!(
+        "INSERT INTO container (id, kind, color) VALUES ('{list}', 'list', 'rose')"
+    ));
 }
 
 #[test]
 fn a_derivative_is_a_file_or_text_as_its_variant_says() {
     let w = World::new("rules_derivatives");
     let hash = "a".repeat(64);
-    w.takes(&format!("INSERT INTO blob (hash, size) VALUES ('{hash}', 1)"));
+    w.takes(&format!(
+        "INSERT INTO blob (hash, size) VALUES ('{hash}', 1)"
+    ));
     let row = |variant: &str, out: &str, media: &str, text: &str| {
         format!(
             "INSERT INTO derivative (blob, variant, out, media_type, text, created_at)
@@ -278,8 +311,14 @@ fn an_origin_fills_the_kind_its_system_says_and_only_a_phone_store_retires_or_na
     };
     w.refuses(&origin("telepathy", ""));
     w.refuses(&origin("statement", ", device_id|, 'phone-1'"));
-    w.refuses(&origin("statement", ", retired_at|, '2026-03-01T09:00:00.000Z'"));
-    w.refuses(&origin("calendar", &format!(", fills, fills_kind|, '{book}', 'notebook'")));
+    w.refuses(&origin(
+        "statement",
+        ", retired_at|, '2026-03-01T09:00:00.000Z'",
+    ));
+    w.refuses(&origin(
+        "calendar",
+        &format!(", fills, fills_kind|, '{book}', 'notebook'"),
+    ));
     w.takes(&origin("calendar", ", device_id|, 'phone-1'"));
     w.takes(&format!(
         "INSERT INTO origin (id, system, ref, label, created_at, fills, fills_kind)
@@ -298,7 +337,9 @@ fn a_split_goes_to_a_category_and_a_reading_is_one_of_its_metric() {
     let txn = w.entity(20, "txn", "T");
     let person = w.entity(21, "person", "P");
     let note = w.entity(22, "note", "N");
-    w.takes(&format!("INSERT INTO account (id, type, currency) VALUES ('{account}', 'checking', 'USD')"));
+    w.takes(&format!(
+        "INSERT INTO account (id, type, currency) VALUES ('{account}', 'checking', 'USD')"
+    ));
     w.takes(&format!(
         "INSERT INTO txn (id, account_id, posted_on, amount_minor) VALUES ('{txn}', '{account}', '2026-03-01', -300)"
     ));
@@ -331,10 +372,14 @@ fn a_split_goes_to_a_category_and_a_reading_is_one_of_its_metric() {
 fn a_locker_field_holds_the_columns_its_kind_says() {
     let w = World::new("rules_locker");
     let item = w.entity(28, "locker_item", "Bank");
-    w.takes(&format!("INSERT INTO locker_item (id, type) VALUES ('{item}', 'login')"));
+    w.takes(&format!(
+        "INSERT INTO locker_item (id, type) VALUES ('{item}', 'login')"
+    ));
     w.takes("INSERT INTO locker_key (id, key_id, created_at) VALUES (1, 'k1', '2026-03-01T09:00:00.000Z')");
     let blob = "b".repeat(64);
-    w.takes(&format!("INSERT INTO blob (hash, size) VALUES ('{blob}', 1)"));
+    w.takes(&format!(
+        "INSERT INTO blob (hash, size) VALUES ('{blob}', 1)"
+    ));
     let field = |idn: &str, kind: &str, cols: &str, vals: &str| {
         format!(
             "INSERT INTO locker_item_field (id, item_id, label, kind, created_at, updated_at {cols})

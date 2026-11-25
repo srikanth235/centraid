@@ -144,12 +144,11 @@ pub(crate) fn put(
     // An anchor is a JSON object the vault defines, so it carries "v":1 (A3).
     let anchor = match &extras.anchor {
         Some(text) => {
-            let mut value: serde_json::Value = serde_json::from_str(text).map_err(|_| {
-                crate::error::VaultError::InvalidInput {
+            let mut value: serde_json::Value =
+                serde_json::from_str(text).map_err(|_| crate::error::VaultError::InvalidInput {
                     name: "anchor".to_owned(),
                     detail: "an anchor is an object".to_owned(),
-                }
-            })?;
+                })?;
             if let Some(object) = value.as_object_mut() {
                 object.insert("v".to_owned(), serde_json::json!(1));
             }

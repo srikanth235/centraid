@@ -574,11 +574,10 @@ mod tests {
                     "Zeppelin",
                     "2026-03-01T09:00:00.000Z",
                 )?;
-                tx.connection()
-                    .execute(
-                        "INSERT INTO note (id, body) VALUES (?1, 'hangar')",
-                        [crate::test_ids::uuid(1)],
-                    )?;
+                tx.connection().execute(
+                    "INSERT INTO note (id, body) VALUES (?1, 'hangar')",
+                    [crate::test_ids::uuid(1)],
+                )?;
                 Ok(())
             })
             .expect("commits");

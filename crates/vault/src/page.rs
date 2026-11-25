@@ -1603,7 +1603,7 @@ mod keyset_tests {
         let asked = |limit, after| KeysetPage {
             limit,
             after,
-            predicate: Some("kind = 'tag' AND id LIKE 't%'".to_owned()),
+            predicate: Some("kind = 'tag'".to_owned()),
             ..page("entity", &["id", "created_at"], "created_at", "id")
         };
         let first = vault.keyset_page(&asked(3, None)).expect("page one");
@@ -1632,7 +1632,12 @@ mod keyset_tests {
         vault
             .commit(|tx| {
                 for index in 0..rows {
-                    tx.insert_entity(&crate::test_ids::uuid(1000 + index as u64), crate::model::Kind::Tag, "t", &now)?;
+                    tx.insert_entity(
+                        &crate::test_ids::uuid(1000 + index as u64),
+                        crate::model::Kind::Tag,
+                        "t",
+                        &now,
+                    )?;
                     tx.connection().execute(
                         "INSERT INTO concept (id, kind, key) VALUES (?1, 'tag', ?1)",
                         [crate::test_ids::uuid(1000 + index as u64)],
@@ -1644,7 +1649,7 @@ mod keyset_tests {
         let answer = vault
             .keyset_page(&KeysetPage {
                 limit: MAX_PAGE_ROWS + 100,
-                predicate: Some("id LIKE 'n%'".to_owned()),
+                predicate: Some("kind = 'tag'".to_owned()),
                 ..page("entity", &["id", "created_at"], "created_at", "id")
             })
             .expect("it serves");

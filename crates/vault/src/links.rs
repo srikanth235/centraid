@@ -45,7 +45,7 @@ pub const KEYS: [&str; 10] = [
 
 /// The key of one kind of item, `None` for a kind no link joins.
 #[must_use]
-pub fn key_of(kind: Kind, is_workout: bool) -> Option<&'static str> {
+pub fn key_of(kind: Kind) -> Option<&'static str> {
     Some(match kind {
         Kind::Person => "person",
         Kind::Place => "place",
@@ -237,11 +237,11 @@ pub fn linked(connection: &Connection, id: &str) -> Result<Vec<Linked>> {
             ))
         })?;
         for row in rows {
-            let (other, kind, title, workout, owner, in_text) = row?;
+            let (other, kind, title, _is_workout, owner, in_text) = row?;
             let Some(kind) = Kind::parse(&kind) else {
                 continue;
             };
-            let Some(key) = key_of(kind, workout) else {
+            let Some(key) = key_of(kind) else {
                 continue;
             };
             // A Locker item is read only where the page is its own and the link is its own.
