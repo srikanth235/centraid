@@ -253,9 +253,26 @@ fn a_trashed_by_names_a_trash_and_an_arrival_has_both_its_words() {
     w.refuses(&format!(
         "UPDATE entity SET arrived_via = 'telepathy', arrived_label = 'x' WHERE id = '{book}'"
     ));
+    // A way in brings in only the kinds `arrival_via_kind` says: a vCard a person, not a notebook.
+    w.refuses_with(
+        &format!(
+            "UPDATE entity SET arrived_via = 'vcard', arrived_label = 'contacts.vcf' WHERE id = '{book}'"
+        ),
+        "FOREIGN KEY",
+    );
+    let person = w.entity(70, "person", "P");
+    w.refuses_with(
+        &format!(
+            "UPDATE entity SET arrived_via = 'markdown', arrived_label = 'a.md' WHERE id = '{person}'"
+        ),
+        "FOREIGN KEY",
+    );
     w.takes(&format!(
-        "UPDATE entity SET arrived_via = 'vcard', arrived_label = 'contacts.vcf' WHERE id = '{book}'"
+        "UPDATE entity SET arrived_via = 'vcard', arrived_label = 'contacts.vcf' WHERE id = '{person}'"
     ));
+    // The pairs are rows too: a pair names a way in and a kind, and a way in is brought to a kind once.
+    w.refuses("INSERT INTO arrival_via_kind (via, entity_kind) VALUES ('telepathy', 'person')");
+    w.refuses("INSERT INTO arrival_via_kind (via, entity_kind) VALUES ('vcard', 'unicorn')");
     w.refuses(&format!(
         "UPDATE entity SET starred_at = '2026-03-01 09:00' WHERE id = '{book}'"
     ));
@@ -932,6 +949,50 @@ fn an_account_a_line_a_transfer_a_budget_and_a_rule_hold_the_rules_money_states(
         &format!("UPDATE txn SET amount_minor = 1 WHERE id = '{stated}'"),
         "never edited",
     );
+    // A dismissed match is a hand line against a statement line of one account, once, never against
+    // itself, and goes with either line.
+    let dismiss = |hand: &str, statement: &str| {
+        format!(
+            "INSERT INTO txn_match_dismissal (hand_id, statement_id) VALUES ('{hand}', '{statement}')"
+        )
+    };
+    w.refuses_with(
+        &dismiss(&stated, &h3),
+        "a hand line against a statement line",
+    );
+    w.refuses_with(&dismiss(&h2, &h3), "a hand line against a statement line");
+    w.refuses_with(&dismiss(&h1, &stated), "of one account");
+    w.refuses(&dismiss(&h3, &h3));
+    w.refuses_with(
+        &dismiss(&h3, "nobody"),
+        "a hand line against a statement line",
+    );
+    w.takes(&dismiss(&h3, &stated));
+    w.refuses(&dismiss(&h3, &stated));
+    let dismissals = || -> i64 {
+        w.scratch
+            .vault
+            .read(
+                |c| Ok(c.query_row("SELECT COUNT(*) FROM txn_match_dismissal", [], |r| r.get(0))?),
+            )
+            .expect("a count")
+    };
+    assert_eq!(dismissals(), 1);
+    w.takes(&format!("DELETE FROM txn WHERE id = '{stated}'"));
+    assert_eq!(
+        dismissals(),
+        0,
+        "the dismissal goes with the statement line"
+    );
+    w.takes(&format!(
+        "INSERT INTO txn (id, account_id, posted_on, amount_minor) VALUES ('{stated}', '{a2}', '2026-03-01', -4)"
+    ));
+    w.takes(&dismiss(&h3, &stated));
+    w.takes(&format!("DELETE FROM txn WHERE id = '{h3}'"));
+    assert_eq!(dismissals(), 0, "and with the hand line");
+    w.takes(&format!(
+        "INSERT INTO txn (id, account_id, posted_on, amount_minor, entered) VALUES ('{h3}', '{a2}', '2026-03-01', -9, 'hand')"
+    ));
     // A transfer: two accounts, two directions, the lower id first, a line in one pair, and a paired
     // line keeps its account and direction; the pair goes with either line.
     let (lo, hi) = if h1 < h2 {

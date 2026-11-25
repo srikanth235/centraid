@@ -83,6 +83,17 @@ CREATE TABLE arrival_via (
   code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z]*')
 ) STRICT, WITHOUT ROWID;
 
+-- A1, A10: the kind of item each one-time arrival brings in (a vCard a person, an upload a document,
+-- a CSV a person, a Locker item or a line). `entity` keys (`arrived_via`, `kind`) here, so a way in
+-- that does not bring in that kind is refused by the file, and `commands/arrival.rs` reads the same rows.
+CREATE TABLE arrival_via_kind (
+  via         TEXT NOT NULL REFERENCES arrival_via(code) ON DELETE NO ACTION,
+  entity_kind TEXT NOT NULL REFERENCES entity_kind(code) ON DELETE NO ACTION,
+  PRIMARY KEY (via, entity_kind)
+) STRICT, WITHOUT ROWID;
+-- Reader: which ways bring in a kind (a lookup's child side of `entity_kind`'s key).
+CREATE INDEX arrival_via_kind_by_kind ON arrival_via_kind(entity_kind, via);
+
 -- A1, A10, A11: the stores the engine follows (an `origin` is one of these only).
 --   fills_kind  the kind of home a follow of this system fills (a calendar's calendar, a folder's folder,
 --               the phone reminders' project, a statement's account); NULL: it fills none.
@@ -245,6 +256,7 @@ CREATE TABLE entity (
   CHECK (trashed_by IS NULL OR trashed_by <> id),
   CHECK ((arrived_via IS NULL) = (arrived_label IS NULL)),
   UNIQUE (id, kind),
+  FOREIGN KEY (arrived_via, kind) REFERENCES arrival_via_kind(via, entity_kind) ON DELETE NO ACTION,
   FOREIGN KEY (parent_id, parent_kind) REFERENCES entity(id, kind) ON DELETE NO ACTION,
   FOREIGN KEY (kind, parent_kind) REFERENCES home_shape(kind, home_kind) ON DELETE NO ACTION,
   FOREIGN KEY (kind, topless) REFERENCES entity_kind(code, may_be_top) ON DELETE NO ACTION,
@@ -272,7 +284,8 @@ CREATE INDEX entity_by_trashed_by ON entity(trashed_by) WHERE trashed_by IS NOT 
 CREATE INDEX entity_starred    ON entity(kind, starred_at, id)  WHERE starred_at IS NOT NULL;
 CREATE INDEX entity_pinned     ON entity(kind, pinned_at, id)   WHERE pinned_at IS NOT NULL;
 CREATE INDEX entity_archived   ON entity(kind, archived_at, id) WHERE archived_at IS NOT NULL;
--- A10. Child side of `arrived_via`'s key (nothing reads "everything from this import" by itself).
+-- A10. Child side of `arrived_via`'s key and of the arrival's own (`arrived_via`, `kind`) key (nothing reads
+-- "everything from this import" by itself).
 CREATE INDEX entity_by_arrival ON entity(arrived_via, n) WHERE arrived_via IS NOT NULL;
 CREATE TRIGGER entity_kind_is_fixed BEFORE UPDATE OF id, kind ON entity
   BEGIN SELECT RAISE(ABORT, 'an entity''s id and kind never change'); END;
@@ -493,8 +506,8 @@ CREATE TABLE derivative (
 ) STRICT;
 -- Reader: the blob collector (a derivative file is a rented blob).
 CREATE INDEX derivative_by_out ON derivative(out) WHERE out IS NOT NULL;
--- Reader: what still lacks a variant (the idle pass that makes thumbnails and extracts text); also the child side of `variant`.
-CREATE INDEX derivative_by_variant ON derivative(variant, blob);
+-- No index on `variant`: nothing reads derivatives by variant alone (every read is by `blob`, the primary
+-- key, or by `out`), and a lookup row is written only by a rung, so the key's child side is never walked.
 
 -- ---------------------------------------------------------------------------------------------
 -- Following: where a row came from. The followed stores only (A10): a one-time import is two
@@ -1184,6 +1197,23 @@ CREATE TABLE txn_split (
 -- Reader: spending by category (every report); the child side of `category_id`.
 CREATE INDEX txn_split_by_category ON txn_split(category_id, txn_id);
 
+-- E2: a hand line and a statement line the member said are NOT the same money. A dismissed pair is
+-- never proposed again (`txn::proposed_matches` leaves it out); purging either line takes the
+-- dismissal with it, and so does confirming the hand line against another statement line.
+CREATE TABLE txn_match_dismissal (
+  hand_id      TEXT NOT NULL REFERENCES txn(id) ON DELETE CASCADE,
+  statement_id TEXT NOT NULL REFERENCES txn(id) ON DELETE CASCADE,
+  PRIMARY KEY (hand_id, statement_id),
+  CHECK (hand_id <> statement_id)
+) STRICT, WITHOUT ROWID;
+-- Reader: purging a statement line removes the dismissals that name it (the child side of `statement_id`).
+CREATE INDEX txn_match_dismissal_by_statement ON txn_match_dismissal(statement_id, hand_id);
+CREATE TRIGGER txn_match_dismissal_is_a_hand_line_against_a_statement_line BEFORE INSERT ON txn_match_dismissal
+  WHEN NOT EXISTS (SELECT 1 FROM txn h JOIN txn s ON s.account_id = h.account_id
+                    WHERE h.id = new.hand_id AND h.entered = 'hand'
+                      AND s.id = new.statement_id AND s.entered = 'statement')
+  BEGIN SELECT RAISE(ABORT, 'a dismissal is a hand line against a statement line of one account'); END;
+
 -- Two lines that are the two halves of one movement of the member's own money, across currencies
 -- too (E4). The lower id is `a`, so a pair is one row; a line is in at most one pair. The money in
 -- the pair is the command's to check; the pair goes with either line.
@@ -1461,6 +1491,9 @@ INSERT INTO palette (key) VALUES
   ('rose'), ('amber'), ('ochre'), ('forest'), ('teal'), ('slate');
 
 INSERT INTO arrival_via (code) VALUES ('vcard'), ('csv'), ('upload'), ('picker'), ('markdown'), ('scan');
+INSERT INTO arrival_via_kind (via, entity_kind) VALUES
+  ('picker','photo'), ('vcard','person'), ('markdown','note'), ('csv','person'), ('csv','locker_item'),
+  ('csv','txn'), ('scan','document'), ('upload','document');
 
 -- A10, A11: the followed stores. A camera roll is one now; the one-shot arrivals above are not.
 INSERT INTO origin_system (code, fills_kind, can_retire, on_device) VALUES

@@ -14,13 +14,14 @@ use crate::error::Result;
 /// Every lookup table of the baseline, and the shape tables that are vocabularies like them
 /// (`edge_shape` says which kinds a relation joins, `home_shape` which kind sits in which).
 /// `tests/lookups.rs` holds this list to the founded file.
-pub const LOOKUP_TABLES: [&str; 20] = [
+pub const LOOKUP_TABLES: [&str; 21] = [
     "entity_kind",
     "home_shape",
     "concept_kind",
     "container_kind",
     "palette",
     "arrival_via",
+    "arrival_via_kind",
     "origin_system",
     "source_shape",
     "derivative_variant",

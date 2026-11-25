@@ -54,7 +54,6 @@ and make it pass. Tests of removed behaviour are deleted, not ported.
 
 | Module | Owner | Why it cannot compile or run yet |
 |---|---|---|
-| `vault_export` | export | reads every kind |
 
 ## Kernel code that is a stub or a minimal patch (compiled; each lane finishes its own)
 
@@ -68,8 +67,6 @@ Each is the old test of a thing the new schema changed; the owner rewrites it ag
 and moves it back.
 
 - **checkpoint 2/3: crates/ontology**: `ontology_graph` (was `graph`): tests `centraid_ontology::graph`'s catalogue of edge relations and column links and its Locker-wall reads. It waits because `crates/ontology` is rewritten in a later checkpoint (its list still names `links` and `attendee`, and there is no Locker wall now); the vault-only edge tests are `tests/graph.rs`
-- **K5 graph, also**: `edge_walks` (the `edge_order` plan, moved out of `index_walks`; its fixture writes the old ids)
-- **export (vault_export, every kind)**: `vault_export`, `unusual_input` (every app's export of unusual text; none of it the kernel)
 - **follow leftovers, closed by lane B**: the `lane_follow_*` and `lane_origin_cursor` files are gone. Contacts' cases are `tests/lane_follow_people.rs` (points, owner, doubt, return, tombstones, and what the phone says that differs and taking it); the engine holds the rest (`follow_gaps`, `follow_items`, `follow_retire`, `follow_stated`, `origin_cursor`, `follow_totals`); the doubted read of every system that trashes is `follow_gaps::every_system_that_trashes_what_a_read_loses_has_a_doubted_read_proved`; a re-read that writes nothing is `follow_gaps` and `calendar_follow`; a merge's pointers are `people_merge`.
 - `schema_rules` (the earlier proof of the app tables' rules) is deleted: every rule in it is re-proved in `tests/schema_rules.rs`, but a budget's own currency (the budget is in the vault's currency now), a workout being an activity of a workout kind, and a task following its section to another project (a home is `entity.parent_id` now), which are removed behaviour; the instants test is `every_instant_column_carries_the_clocks_form_and_the_database_refuses_the_rest`.
 

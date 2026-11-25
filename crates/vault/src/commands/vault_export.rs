@@ -3,24 +3,23 @@
 //!
 //! | Folder | What is in it | Written by |
 //! |---|---|---|
-//! | `Notes/` | the Markdown tree, a folder per notebook | [`note::markdown_entries`] |
+//! | `Notes/` | the Markdown tree, a folder per notebook; a journal entry is a note with its day in the front matter | [`note::markdown_entries`] |
 //! | `People/people.vcf` | everyone, including the member, as vCards | [`person::vcard_file_for_vault`] |
-//! | `People/Journal/` | the owner's Journal entries as Markdown | [`note::journal_markdown_entries`] |
 //! | `Calendar/calendar.ics` | every event | [`event_portable::calendar_text`] |
 //! | `Reminders/reminders.ics` | every reminder | [`task_portable::reminders_text`] |
 //! | `Money/transactions.csv` | every transaction | [`txn_portable::transactions_csv`] |
-//! | `Health/` | `Daily totals.csv`, `Workouts.csv` | [`health_portable`] |
+//! | `Health/` | `Daily totals.csv`, `Workouts.csv`, `Readings.csv` | [`health_portable`] |
 //! | `Docs/` | the originals, in the member's folders | [`document_portable::add_documents`] |
 //! | `Photos/` | the originals, named by when they were taken | [`photo_portable::add_photos`] |
 //!
-//! The aggregate includes the owner's Journal and My card as well as each app's portable data.
+//! The aggregate includes the member's own card as well as each app's portable data.
 //! Originals are streamed from the content store's files in fixed-size chunks, never read into
 //! memory. A `README.txt` at the top says what each folder is.
 //!
 //! **LOCKER IS NOT IN IT** (owner decision D11): a Locker item's contents leave the phone only
 //! through Locker's own export, which asks for its own, stricter owner check. Nothing here reads
-//! a Locker table. The aggregate adds the owner's Journal entries and card because they are part
-//! of the member's own data; the individual Notes and People exports retain their own destinations.
+//! a Locker table. The aggregate adds the member's own card because it is part of the member's own
+//! data; the individual People export leaves it out.
 //!
 //! The zip is written to a private per-job folder in the store's staging area. The shell deletes
 //! the file once the save sheet is done with it, and the core removes leftover job folders on the
@@ -43,7 +42,7 @@ use crate::commands::document::no_store;
 use crate::commands::document_portable::{
     LeftOut, add_left_out, clear, left_out_json, live_documents, live_folders, unique,
 };
-use crate::commands::health_portable::{measurements, workouts};
+use crate::commands::health_portable::{measurements, readings, workouts};
 use crate::commands::photo_portable::{Item as PhotoItem, live_photos};
 use crate::commands::{
     CommandCondition, CommandCtx, CommandDefinition, Idempotency, event_portable, note, person,
@@ -96,16 +95,14 @@ impl VaultExportSnapshot {
         use crate::bytes::Located;
 
         let mut entries = vec![("README.txt".to_owned(), README.as_bytes().to_vec())];
-        let (_, notes) = note::markdown_entries(connection, None)?;
+        // A journal entry is a note with a day: it is in `Notes/` with the front matter that
+        // says which day.
+        let notes = note::markdown_entries(connection, None, None)?;
         entries.extend(
             notes
+                .entries
                 .into_iter()
                 .map(|entry| (format!("Notes/{}", entry.path), entry.bytes)),
-        );
-        entries.extend(
-            note::journal_markdown_entries(connection)?
-                .into_iter()
-                .map(|entry| (entry.path, entry.bytes)),
         );
         let (people, _) = person::vcard_file_for_vault(connection)?;
         entries.push(("People/people.vcf".to_owned(), people.into_bytes()));
@@ -119,6 +116,8 @@ impl VaultExportSnapshot {
         entries.push(("Health/Daily totals.csv".to_owned(), daily.into_bytes()));
         let (moves, _, _) = workouts(connection, None)?;
         entries.push(("Health/Workouts.csv".to_owned(), moves.into_bytes()));
+        let (spot, _) = readings(connection, None)?;
+        entries.push(("Health/Readings.csv".to_owned(), spot.into_bytes()));
 
         let folders = live_folders(connection)?;
         let documents = live_documents(connection)?;
@@ -604,12 +603,12 @@ fn photo_path(item: &PhotoItem) -> String {
 pub const README: &str = "\
 This is a copy of what Centraid holds on your phone, one folder per app.
 
-Notes: your notes as Markdown files, a folder for each notebook.
-People: everyone's card, including yours, in people.vcf; your Journal entries as Markdown.
+Notes: your notes and journal entries as Markdown files, a folder for each notebook.
+People: everyone's card, including yours, in people.vcf.
 Calendar: your events as one calendar file (calendar.ics).
 Reminders: your reminders as one calendar file (reminders.ics).
 Money: your transactions as one spreadsheet (transactions.csv).
-Health: your daily totals and your workouts as two spreadsheets.
+Health: your daily totals, your workouts and your readings as three spreadsheets.
 Docs: your documents, as the original files, in the folders you made.
 Photos: your photos and videos, as the original files, by the year and time they were taken.
 

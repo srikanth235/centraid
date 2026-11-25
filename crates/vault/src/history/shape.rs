@@ -149,6 +149,10 @@ pub const TABLES: &[(&str, Role)] = &[
         Role::Outside("B1: a transfer pairs two lines and belongs to neither"),
     ),
     (
+        "txn_match_dismissal",
+        Role::Outside("B1: a dismissed match names two lines and belongs to neither"),
+    ),
+    (
         "budget",
         Role::Outside("B1: a budget is not part of its category's snapshot"),
     ),
@@ -208,6 +212,7 @@ pub const TABLES: &[(&str, Role)] = &[
     ("container_kind", LOOKUP),
     ("palette", LOOKUP),
     ("arrival_via", LOOKUP),
+    ("arrival_via_kind", LOOKUP),
     ("origin_system", LOOKUP),
     ("source_shape", LOOKUP),
     ("derivative_variant", LOOKUP),
