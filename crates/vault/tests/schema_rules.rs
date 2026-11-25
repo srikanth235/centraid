@@ -1341,6 +1341,122 @@ fn an_alert_row_is_a_key_in_a_timing_it_says() {
 }
 
 // ---------------------------------------------------------------------------------------------
+// People (G1-G3, L1): the sentences of `person.*`, `touch.*` are the database's too
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn a_person_needs_a_name_and_a_form_the_lookup_holds() {
+    let w = World::new("rules_person");
+    let blank = id(80);
+    w.refuses(&format!(
+        "INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES ('{blank}', 'person', '  ', '{AT}', '{AT}')"
+    ));
+    let ada = w.entity(81, "person", "Ada");
+    w.takes(&format!("INSERT INTO person (id, given, family, org, cadence_days) VALUES ('{ada}', 'Ada', 'L', 'Engines', 7)"));
+    let bob = w.entity(82, "person", "Bob");
+    w.refuses(&format!(
+        "INSERT INTO person (id, form) VALUES ('{bob}', 'robot')"
+    ));
+    w.refuses(&format!(
+        "INSERT INTO person (id, cadence_days) VALUES ('{bob}', 0)"
+    ));
+    w.takes(&format!(
+        "INSERT INTO person (id, form) VALUES ('{bob}', 'pet')"
+    ));
+}
+
+#[test]
+fn a_person_date_is_a_day_of_a_kind_the_lookup_holds_and_a_single_kind_is_held_once() {
+    let w = World::new("rules_person_date");
+    let ada = w.entity(83, "person", "Ada");
+    w.takes(&format!("INSERT INTO person (id) VALUES ('{ada}')"));
+    let row = |rid: &str, kind: &str, single: u8, date: &str| {
+        format!(
+            "INSERT INTO person_date (id, person_id, kind, single, date) VALUES ('{rid}', '{ada}', '{kind}', {single}, '{date}')"
+        )
+    };
+    w.takes(&row("a", "birthday", 1, "1990-03-14"));
+    // A second birthday, whatever its day.
+    w.refuses(&row("b", "birthday", 1, "--03-15"));
+    // A kind the lookup does not hold, and a `single` that is not the kind's own.
+    w.refuses(&row("c", "feast", 0, "--03-15"));
+    w.refuses(&row("d", "anniversary", 1, "--03-15"));
+    // A yearless day, a leap day with no year; and what is not a day.
+    w.takes(&row("e", "anniversary", 0, "--02-29"));
+    w.takes(&row("f", "other", 0, "2024-02-29"));
+    for bad in [
+        "soon",
+        "--02-30",
+        "2023-02-29",
+        "03-14",
+        "--13-01",
+        "1990-3-14",
+    ] {
+        w.refuses(&row("g", "other", 0, bad));
+    }
+    w.refuses(&format!(
+        "INSERT INTO person_date (id, person_id, kind, single, label, date) VALUES ('h', '{ada}', 'other', 0, '  ', '--01-01')"
+    ));
+}
+
+#[test]
+fn a_contact_point_is_one_per_spelling_and_one_is_preferred_per_kind() {
+    let w = World::new("rules_contact_point");
+    let ada = w.entity(84, "person", "Ada");
+    w.takes(&format!("INSERT INTO person (id) VALUES ('{ada}')"));
+    let row = |rid: &str, kind: &str, normalized: &str, preferred: u8| {
+        format!(
+            "INSERT INTO contact_point (id, person_id, kind, value, normalized, preferred, position)
+             VALUES ('{rid}', '{ada}', '{kind}', '{normalized}', '{normalized}', {preferred}, 1)"
+        )
+    };
+    w.takes(&row("a", "phone", "+15550100", 1));
+    w.refuses(&row("b", "phone", "+15550100", 0));
+    w.refuses(&row("c", "phone", "+15550101", 1));
+    w.takes(&row("d", "phone", "+15550101", 0));
+    w.takes(&row("e", "email", "a@b.c", 1));
+    w.refuses(&row("f", "fax", "1", 0));
+    w.refuses(&format!(
+        "INSERT INTO contact_point (id, person_id, kind, value, normalized, position) VALUES ('g', '{ada}', 'url', '  ', 'x', 1)"
+    ));
+}
+
+#[test]
+fn a_touch_has_a_touch_kind_and_does_not_end_before_it_starts() {
+    let w = World::new("rules_touch");
+    let kind = w.entity(85, "touch_kind", "Call");
+    w.takes(&format!(
+        "INSERT INTO concept (id, kind, key) VALUES ('{kind}', 'touch_kind', 'postcard')"
+    ));
+    let tag = w.entity(86, "tag", "Tag");
+    w.takes(&format!(
+        "INSERT INTO concept (id, kind, key) VALUES ('{tag}', 'tag', 'tag')"
+    ));
+    let touch = |n: u64, type_id: &str, starts: &str, ends: &str| {
+        let t = w.entity(n, "touch", "Call");
+        format!(
+            "INSERT INTO touch (id, type_id, starts, ends) VALUES ('{t}', '{type_id}', '{starts}', {ends})"
+        )
+    };
+    w.takes(&touch(
+        87,
+        &kind,
+        "2026-03-01T10:00:00.000Z",
+        "'2026-03-01T11:00:00.000Z'",
+    ));
+    w.takes(&touch(88, &kind, "2026-03-01T10:00:00.000Z", "NULL"));
+    w.refuses(&touch(
+        89,
+        &kind,
+        "2026-03-01T10:00:00.000Z",
+        "'2026-03-01T09:00:00.000Z'",
+    ));
+    // A tag is not a touch kind; a start that is not an instant is refused.
+    w.refuses(&touch(90, &tag, "2026-03-01T10:00:00.000Z", "NULL"));
+    w.refuses(&touch(91, &kind, "tomorrow", "NULL"));
+}
+
+// ---------------------------------------------------------------------------------------------
 // Calendar lane (#1214): an event, its guests and the one-day overrides of a series
 // ---------------------------------------------------------------------------------------------
 

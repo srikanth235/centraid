@@ -54,7 +54,6 @@ and make it pass. Tests of removed behaviour are deleted, not ported.
 
 | Module | Owner | Why it cannot compile or run yet |
 |---|---|---|
-| `contact_point`, `person`, `person_portable` | people lane | `person` columns moved (`given`, `family`, `org`, `person_date`); birthday and anniversaries; `touch` is its own kind; merge is rewritten (A8) |
 | `document`, `document_portable`, `photo`, `photo_portable`, `place` | docs/photos lane | folder is the home; photo lat/lon, motion, no `blob UNIQUE`; no place from coordinates |
 | `money`, `txn_portable`, `rule`, `csv` | money lane | `txn_split`, `entered`, no `void`, no `txn.currency`, `Flag` gone |
 | `workout`, `measurement`, `health_portable` | health lane | `workout`, `touch` and `reading` are kinds; `measurement.origin_id`; `reading` |
@@ -78,10 +77,10 @@ and moves it back.
 
 - **checkpoint 2/3: crates/ontology**: `ontology_graph` (was `graph`): tests `centraid_ontology::graph`'s catalogue of edge relations and column links and its Locker-wall reads. It waits because `crates/ontology` is rewritten in a later checkpoint (its list still names `links` and `attendee`, and there is no Locker wall now); the vault-only edge tests are `tests/graph.rs`
 - **K5 graph, also**: `edge_walks` (the `edge_order` plan, moved out of `index_walks`; its fixture writes the old ids)
-- **money and people lanes, also**: the budget-key plan and the contact-point index plan were in the old `index_walks`: each lane re-proves its own statement beside its own tests
+- **money lane, also**: the budget-key plan was in the old `index_walks`: the lane re-proves its own statement beside its own tests (People's contact-point and date plans are in `tests/people.rs`)
+- **people parts of `lane_follow_*`** (contacts' points, owner, doubt, return, tombstones) are ported to `tests/lane_follow_people.rs`; what stays in those files is the other lanes'
 - **K12 commitments and generated pages**: `commitments`, `stored_rules`, `ontology_page`, `ontology_widen`
 - **app lane: documents and photos**: `docs_photos`, `document_portable`, `photo_portable`, `store_health`, `lane_follow_stated` (a followed document), `lane_follow_gaps` (a followed file claims its bytes in its command), `lane_origin_cursor` (`photo.add`'s `roll_cursor` and `roll_device`; the engine's own cursor tests are `tests/origin_cursor.rs`), `arrival` was deleted (below)
-- **app lane: people (person, contact_point, touch, person_date)**: `people`, `person_portable`, `shared_verbs_people_follow` (the contacts pass through `follow.contacts`, and `person.merge` calls `follow::move_sources` for every source of the row that goes), `lane_follow_items` (contact points), `lane_follow_stated` (a person's fields and points), `lane_follow_gaps` (`person.merge` carries the phone links)
 - **app lane: money (money, txn, rule, csv, splits)**: the ignored TODO `a_line_split_across_categories_keeps_a_sum_when_one_is_purged` in `shared_verbs.rs` (purging a category drops the `txn_split` parts that name it; a line left with other parts no longer sums to its amount, which E3 leaves to this lane), `money_health`, `money_opening_rename`, `txn_portable`, `lane_follow_gaps` (a statement line, its payee kept and its origin one per account; the engine's own statement test is `tests/follow_retire.rs`)
 - **app lane: health (workout, measurement, reading)**: `health_portable`, `workout_whole`, `lane_follow_stated` (a followed workout's measures), `lane_follow_retire` (Health followed again), `lane_origin_cursor` (health days and a delta's deleted workouts; `follow::write_day_totals` is the one writer of `measurement.origin_id`)
 - **app lane: locker**: `locker_clock`, `locker_commands`, `locker_plaintext_gate`, `locker_wall`

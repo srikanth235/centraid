@@ -687,6 +687,8 @@ CREATE TABLE person (
 CREATE INDEX person_by_form ON person(form, id);
 -- Reader: the blob collector (an avatar is a rented blob).
 CREATE INDEX person_by_avatar ON person(avatar) WHERE avatar IS NOT NULL;
+-- Reader: People's "who is due" (the people who keep a cadence, `touch::due`).
+CREATE INDEX person_by_cadence ON person(cadence_days, id) WHERE cadence_days IS NOT NULL;
 
 -- G3: EVERY date of a person, the birthday included; anniversaries are no longer yearly events
 -- `about` the person. `date` is a full date or a yearless vCard `--MM-DD`. Each row has its own id
@@ -1395,7 +1397,7 @@ CREATE TABLE locker_key (
 -- ---------------------------------------------------------------------------------------------
 
 INSERT INTO entity_kind (code, linkable, may_be_top, may_be_named, may_be_unnamed) VALUES
-  ('person',1,1,1,1), ('place',1,1,1,1), ('event',1,0,1,1), ('task',1,1,1,0), ('workout',1,1,1,1),
+  ('person',1,1,1,0), ('place',1,1,1,1), ('event',1,0,1,1), ('task',1,1,1,0), ('workout',1,1,1,1),
   ('touch',1,1,1,1), ('reading',0,1,0,1), ('note',1,1,1,0), ('document',1,1,1,1), ('photo',1,1,1,1),
   ('account',1,1,1,1), ('txn',1,1,1,1), ('thread',0,1,1,1), ('locker_item',1,1,1,1),
   ('tag',0,1,1,1), ('category',0,1,1,1), ('workout_kind',0,1,1,1), ('touch_kind',0,1,1,1), ('relation',0,1,1,1),

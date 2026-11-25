@@ -199,6 +199,9 @@ CREATE INDEX origin_system_by_fills ON origin_system(fills_kind) WHERE fills_kin
 -- index person_by_avatar on person
 CREATE INDEX person_by_avatar ON person(avatar) WHERE avatar IS NOT NULL;
 
+-- index person_by_cadence on person
+CREATE INDEX person_by_cadence ON person(cadence_days, id) WHERE cadence_days IS NOT NULL;
+
 -- index person_by_form on person
 CREATE INDEX person_by_form ON person(form, id);
 
