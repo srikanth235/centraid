@@ -1370,8 +1370,18 @@ fn an_event_reads_its_times_in_the_form_its_timing_says_and_needs_a_calendar() {
     w.refuses(&kind("2026-03-02T09:00", "NULL", "floating", "'UTC'"));
     w.refuses(&kind("2026-03-02T09:00:00.000Z", "NULL", "zoned", "' '"));
     // The end is in the same form and not before the start.
-    w.refuses(&kind("2026-03-02T09:00", "'2026-03-02T08:00'", "floating", "NULL"));
-    w.refuses(&kind("2026-03-02T09:00", "'2026-03-02'", "floating", "NULL"));
+    w.refuses(&kind(
+        "2026-03-02T09:00",
+        "'2026-03-02T08:00'",
+        "floating",
+        "NULL",
+    ));
+    w.refuses(&kind(
+        "2026-03-02T09:00",
+        "'2026-03-02'",
+        "floating",
+        "NULL",
+    ));
     w.refuses(&kind("2026-03-02", "'2026-03-01'", "all-day", "NULL"));
     w.takes(&kind("2026-03-02", "'2026-03-02'", "all-day", "NULL"));
     // The other columns say what they hold: a closed status, busy as 0 or 1, a travel allowance of
@@ -1383,7 +1393,9 @@ fn an_event_reads_its_times_in_the_form_its_timing_says_and_needs_a_calendar() {
         ("location", "'  '"),
         ("rule_supported", "3"),
     ] {
-        w.refuses(&format!("UPDATE event SET {column} = {value} WHERE id = '{ev}'"));
+        w.refuses(&format!(
+            "UPDATE event SET {column} = {value} WHERE id = '{ev}'"
+        ));
     }
     w.takes(&format!(
         "UPDATE event SET status = 'tentative', busy = 0, travel_min = 20, location = 'Room 4' WHERE id = '{ev}'"
@@ -1396,13 +1408,19 @@ fn an_event_reads_its_times_in_the_form_its_timing_says_and_needs_a_calendar() {
             .expect("a row")
     };
     assert_eq!(long(&ev), None);
-    w.takes(&format!("UPDATE event SET ends = '2026-03-10' WHERE id = '{ev}'"));
+    w.takes(&format!(
+        "UPDATE event SET ends = '2026-03-10' WHERE id = '{ev}'"
+    ));
     assert_eq!(long(&ev), Some(1));
     let floating = event_in_default_calendar(&w, 101, "F");
     w.takes(&format!(
         "INSERT INTO event (id, starts, ends, timing) VALUES ('{floating}', '2026-03-02T09:00', '2026-03-09T09:00', 'floating')"
     ));
-    assert_eq!(long(&floating), None, "a week to the minute is not past a week");
+    assert_eq!(
+        long(&floating),
+        None,
+        "a week to the minute is not past a week"
+    );
     let zoned = event_in_default_calendar(&w, 102, "Z");
     w.takes(&format!(
         "INSERT INTO event (id, starts, ends, timing, zone) VALUES ('{zoned}', '2026-03-02T09:00:00.000Z', '2026-03-12T09:00:00.000Z', 'zoned', 'UTC')"
@@ -1429,7 +1447,9 @@ fn a_guest_is_one_address_of_an_event_with_one_organizer_and_outlives_its_person
         "INSERT INTO event (id, starts, timing) VALUES ('{ev}', '2026-03-02T09:00', 'floating')"
     ));
     let with = |address: &str, column: &str, value: &str| {
-        format!("INSERT INTO event_guest (event_id, address, {column}) VALUES ('{ev}', '{address}', {value})")
+        format!(
+            "INSERT INTO event_guest (event_id, address, {column}) VALUES ('{ev}', '{address}', {value})"
+        )
     };
     w.refuses(&with(" ", "role", "'required'"));
     w.refuses(&with("a@example.com", "role", "'chair'"));
@@ -1444,8 +1464,12 @@ fn a_guest_is_one_address_of_an_event_with_one_organizer_and_outlives_its_person
     // The person an address resolves to is a person; purging them leaves the guest.
     let ada = w.entity(111, "person", "Ada");
     w.takes(&format!("INSERT INTO person (id) VALUES ('{ada}')"));
-    w.refuses(&format!("UPDATE event_guest SET person_id = '{ev}' WHERE address = 'b@example.com'"));
-    w.takes(&format!("UPDATE event_guest SET person_id = '{ada}' WHERE address = 'b@example.com'"));
+    w.refuses(&format!(
+        "UPDATE event_guest SET person_id = '{ev}' WHERE address = 'b@example.com'"
+    ));
+    w.takes(&format!(
+        "UPDATE event_guest SET person_id = '{ada}' WHERE address = 'b@example.com'"
+    ));
     w.takes(&format!("DELETE FROM entity WHERE id = '{ada}'"));
     let held: (i64, Option<String>) = w
         .scratch
@@ -1458,13 +1482,20 @@ fn a_guest_is_one_address_of_an_event_with_one_organizer_and_outlives_its_person
             )?)
         })
         .expect("a row");
-    assert_eq!(held, (1, None), "the guest is still there, with nobody behind the address");
+    assert_eq!(
+        held,
+        (1, None),
+        "the guest is still there, with nobody behind the address"
+    );
     // The guests go with their event.
     w.takes(&format!("DELETE FROM entity WHERE id = '{ev}'"));
     assert_eq!(
         w.scratch
             .vault
-            .read(|c| Ok(c.query_row("SELECT COUNT(*) FROM event_guest", [], |r| r.get::<_, i64>(0))?))
+            .read(
+                |c| Ok(c.query_row("SELECT COUNT(*) FROM event_guest", [], |r| r
+                    .get::<_, i64>(0))?)
+            )
             .expect("a count"),
         0
     );
@@ -1482,10 +1513,14 @@ fn a_one_day_override_is_keyed_in_its_series_form_and_belongs_to_its_timing() {
          INSERT INTO event (id, starts, timing, rule) VALUES ('{all_day}', '2026-03-02', 'all-day', 'FREQ=WEEKLY');"
     ));
     let day = |series: &str, timing: &str, key: &str, _: &str| {
-        format!("INSERT INTO occurrence (series_id, series_timing, original_start) VALUES ('{series}', '{timing}', '{key}')")
+        format!(
+            "INSERT INTO occurrence (series_id, series_timing, original_start) VALUES ('{series}', '{timing}', '{key}')"
+        )
     };
     let day2 = |series: &str, timing: &str, key: &str, columns: &str, values: &str| {
-        format!("INSERT INTO occurrence (series_id, series_timing, original_start, {columns}) VALUES ('{series}', '{timing}', '{key}', {values})")
+        format!(
+            "INSERT INTO occurrence (series_id, series_timing, original_start, {columns}) VALUES ('{series}', '{timing}', '{key}', {values})"
+        )
     };
     // The key is in the form the series reads in.
     w.refuses(&day(&zoned, "zoned", "2026-03-09T09:00", ""));
@@ -1499,19 +1534,59 @@ fn a_one_day_override_is_keyed_in_its_series_form_and_belongs_to_its_timing() {
     // One row a day.
     w.refuses(&day(&all_day, "all-day", "2026-03-09", ""));
     // A moved day reads in the series' timing unless it names its own, and only a zoned one has a zone.
-    w.refuses(&day2(&all_day, "all-day", "2026-03-16", "starts", "'2026-03-16T10:00'"));
-    w.takes(&day2(&all_day, "all-day", "2026-03-16", "starts, timing", "'2026-03-16T10:00', 'floating'"));
-    w.refuses(&day2(&all_day, "all-day", "2026-03-23", "starts, timing, zone", "'2026-03-23T10:00', 'floating', 'UTC'"));
-    w.refuses(&day2(&all_day, "all-day", "2026-03-23", "starts, timing", "'2026-03-23T10:00:00.000Z', 'zoned'"));
-    w.takes(&day2(&all_day, "all-day", "2026-03-23", "starts, timing, zone", "'2026-03-23T10:00:00.000Z', 'zoned', 'UTC'"));
-    w.refuses(&day2(&floating, "floating", "2026-03-16T09:00", "location", "' '"));
+    w.refuses(&day2(
+        &all_day,
+        "all-day",
+        "2026-03-16",
+        "starts",
+        "'2026-03-16T10:00'",
+    ));
+    w.takes(&day2(
+        &all_day,
+        "all-day",
+        "2026-03-16",
+        "starts, timing",
+        "'2026-03-16T10:00', 'floating'",
+    ));
+    w.refuses(&day2(
+        &all_day,
+        "all-day",
+        "2026-03-23",
+        "starts, timing, zone",
+        "'2026-03-23T10:00', 'floating', 'UTC'",
+    ));
+    w.refuses(&day2(
+        &all_day,
+        "all-day",
+        "2026-03-23",
+        "starts, timing",
+        "'2026-03-23T10:00:00.000Z', 'zoned'",
+    ));
+    w.takes(&day2(
+        &all_day,
+        "all-day",
+        "2026-03-23",
+        "starts, timing, zone",
+        "'2026-03-23T10:00:00.000Z', 'zoned', 'UTC'",
+    ));
+    w.refuses(&day2(
+        &floating,
+        "floating",
+        "2026-03-16T09:00",
+        "location",
+        "' '",
+    ));
     // A series cannot change timing under its days; deleting it takes them.
     w.refuses(&format!("UPDATE event SET timing = 'floating', zone = NULL, starts = '2026-03-02T09:00' WHERE id = '{zoned}'"));
     w.takes(&format!("DELETE FROM entity WHERE id = '{zoned}'"));
     assert_eq!(
         w.scratch
             .vault
-            .read(|c| Ok(c.query_row("SELECT COUNT(*) FROM occurrence WHERE series_id = ?1", [&zoned], |r| r.get::<_, i64>(0))?))
+            .read(|c| Ok(c.query_row(
+                "SELECT COUNT(*) FROM occurrence WHERE series_id = ?1",
+                [&zoned],
+                |r| r.get::<_, i64>(0)
+            )?))
             .expect("a count"),
         0
     );
@@ -1538,7 +1613,9 @@ fn a_task_has_a_title_a_due_in_the_form_its_timing_says_and_a_day_of_its_own() {
         id(130)
     ));
     let t = task_row(&w, 131, "Call");
-    let ins = |columns: &str, values: &str| format!("INSERT INTO task (id, {columns}) VALUES ('{t}', {values})");
+    let ins = |columns: &str, values: &str| {
+        format!("INSERT INTO task (id, {columns}) VALUES ('{t}', {values})")
+    };
     // The due and its timing are set together, the zone exactly when zoned.
     w.refuses(&ins("due", "'2026-03-02'"));
     w.refuses(&ins("due_timing", "'all-day'"));
@@ -1546,8 +1623,14 @@ fn a_task_has_a_title_a_due_in_the_form_its_timing_says_and_a_day_of_its_own() {
     w.refuses(&ins("due, due_timing", "'2026-03-02', 'floating'"));
     w.refuses(&ins("due, due_timing", "'2026-03-02T09:00:30', 'floating'"));
     w.refuses(&ins("due, due_timing", "'2026-03-02T09:00:00Z', 'zoned'"));
-    w.refuses(&ins("due, due_timing, zone", "'2026-03-02T09:00:00.000Z', 'zoned', NULL"));
-    w.refuses(&ins("due, due_timing, zone", "'2026-03-02T09:00', 'floating', 'UTC'"));
+    w.refuses(&ins(
+        "due, due_timing, zone",
+        "'2026-03-02T09:00:00.000Z', 'zoned', NULL",
+    ));
+    w.refuses(&ins(
+        "due, due_timing, zone",
+        "'2026-03-02T09:00', 'floating', 'UTC'",
+    ));
     w.refuses(&ins("due, due_timing", "'2026-03-02', 'noon'"));
     // The planned day is a date, and not the due.
     w.refuses(&ins("scheduled_on", "'2026-03-02T09:00'"));
@@ -1569,21 +1652,39 @@ fn a_task_has_a_title_a_due_in_the_form_its_timing_says_and_a_day_of_its_own() {
     ));
     // Done is exactly when it says when, in the clock's one form; a snooze belongs to an open task.
     w.refuses(&format!("UPDATE task SET status = 'done' WHERE id = '{t}'"));
-    w.refuses(&format!("UPDATE task SET done_at = '{AT}' WHERE id = '{t}'"));
-    w.refuses(&format!("UPDATE task SET status = 'done', done_at = '2026-03-01' WHERE id = '{t}'"));
-    w.takes(&format!("UPDATE task SET snoozed_until = '{AT}' WHERE id = '{t}'"));
-    w.refuses(&format!("UPDATE task SET snoozed_until = '2026-03-01T09:00' WHERE id = '{t}'"));
-    w.refuses(&format!("UPDATE task SET status = 'done', done_at = '{AT}' WHERE id = '{t}'"));
-    w.takes(&format!("UPDATE task SET snoozed_until = NULL WHERE id = '{t}'"));
-    w.takes(&format!("UPDATE task SET status = 'done', done_at = '{AT}' WHERE id = '{t}'"));
-    w.refuses(&format!("UPDATE task SET snoozed_until = '{AT}' WHERE id = '{t}'"));
+    w.refuses(&format!(
+        "UPDATE task SET done_at = '{AT}' WHERE id = '{t}'"
+    ));
+    w.refuses(&format!(
+        "UPDATE task SET status = 'done', done_at = '2026-03-01' WHERE id = '{t}'"
+    ));
+    w.takes(&format!(
+        "UPDATE task SET snoozed_until = '{AT}' WHERE id = '{t}'"
+    ));
+    w.refuses(&format!(
+        "UPDATE task SET snoozed_until = '2026-03-01T09:00' WHERE id = '{t}'"
+    ));
+    w.refuses(&format!(
+        "UPDATE task SET status = 'done', done_at = '{AT}' WHERE id = '{t}'"
+    ));
+    w.takes(&format!(
+        "UPDATE task SET snoozed_until = NULL WHERE id = '{t}'"
+    ));
+    w.takes(&format!(
+        "UPDATE task SET status = 'done', done_at = '{AT}' WHERE id = '{t}'"
+    ));
+    w.refuses(&format!(
+        "UPDATE task SET snoozed_until = '{AT}' WHERE id = '{t}'"
+    ));
 }
 
 #[test]
 fn a_repeat_needs_a_due_and_its_series_is_a_minted_id_that_points_at_no_row() {
     let w = World::new("rules_task_series");
     let t = task_row(&w, 140, "Water");
-    let ins = |columns: &str, values: &str| format!("INSERT INTO task (id, {columns}) VALUES ('{t}', {values})");
+    let ins = |columns: &str, values: &str| {
+        format!("INSERT INTO task (id, {columns}) VALUES ('{t}', {values})")
+    };
     w.refuses(&ins("rule", "'FREQ=DAILY'"));
     w.refuses(&ins("series_id", "'not-an-id'"));
     w.refuses(&ins("series_id", "'01900000-0000-4000-8000-000000000001'"));
@@ -1611,7 +1712,9 @@ fn a_repeat_needs_a_due_and_its_series_is_a_minted_id_that_points_at_no_row() {
         .expect("a count");
     assert_eq!(held, 1, "the series outlives its first task");
     // A task that repeats keeps a due: it cannot lose it and keep the rule.
-    w.refuses(&format!("UPDATE task SET due = NULL, due_timing = NULL WHERE id = '{next}'"));
+    w.refuses(&format!(
+        "UPDATE task SET due = NULL, due_timing = NULL WHERE id = '{next}'"
+    ));
 }
 
 #[test]
@@ -1620,17 +1723,29 @@ fn a_reminder_counts_back_from_a_due_so_a_task_without_one_holds_none() {
     let t = task_row(&w, 150, "Call");
     w.takes(&format!("INSERT INTO task (id) VALUES ('{t}')"));
     let remind = |rid: &str| {
-        format!("INSERT INTO reminder (id, entity_id, entity_kind, offset_min) VALUES ('{rid}', '{t}', 'task', 10)")
+        format!(
+            "INSERT INTO reminder (id, entity_id, entity_kind, offset_min) VALUES ('{rid}', '{t}', 'task', 10)"
+        )
     };
     w.refuses_with(&remind("r1"), "counts back from a due date");
-    w.takes(&format!("UPDATE task SET due = '2026-03-02', due_timing = 'all-day' WHERE id = '{t}'"));
+    w.takes(&format!(
+        "UPDATE task SET due = '2026-03-02', due_timing = 'all-day' WHERE id = '{t}'"
+    ));
     w.takes(&remind("r1"));
     // Clearing the due takes the task's reminders with it.
-    w.takes(&format!("UPDATE task SET due = NULL, due_timing = NULL WHERE id = '{t}'"));
+    w.takes(&format!(
+        "UPDATE task SET due = NULL, due_timing = NULL WHERE id = '{t}'"
+    ));
     let held: i64 = w
         .scratch
         .vault
-        .read(|c| Ok(c.query_row("SELECT COUNT(*) FROM reminder WHERE entity_id = ?1", [&t], |r| r.get(0))?))
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT COUNT(*) FROM reminder WHERE entity_id = ?1",
+                [&t],
+                |r| r.get(0),
+            )?)
+        })
         .expect("a count");
     assert_eq!(held, 0);
 }

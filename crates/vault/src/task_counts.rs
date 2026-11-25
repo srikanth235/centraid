@@ -162,13 +162,11 @@ pub const DONE: &str = list!(
 );
 
 /// Counts: `OVERDUE_ZONED`'s tasks, `?1` the instant today begins.
-pub const COUNT_OVERDUE_ZONED: &str = count!(
-    "t.status = 'open' AND t.rule IS NULL AND t.due_timing = 'zoned' AND t.due < ?1"
-);
+pub const COUNT_OVERDUE_ZONED: &str =
+    count!("t.status = 'open' AND t.rule IS NULL AND t.due_timing = 'zoned' AND t.due < ?1");
 /// Counts: `OVERDUE_DAYS`'s tasks, `?1` today.
-pub const COUNT_OVERDUE_DAYS: &str = count!(
-    "t.status = 'open' AND t.rule IS NULL AND t.due_timing <> 'zoned' AND t.due < ?1"
-);
+pub const COUNT_OVERDUE_DAYS: &str =
+    count!("t.status = 'open' AND t.rule IS NULL AND t.due_timing <> 'zoned' AND t.due < ?1");
 /// Counts: `TODAY_ZONED`'s tasks, `?1` the instant today begins, `?2` tomorrow's.
 pub const COUNT_TODAY_ZONED: &str = count!(
     "t.status = 'open' AND t.rule IS NULL AND t.due_timing = 'zoned' AND t.due >= ?1 AND t.due < ?2"
@@ -187,11 +185,7 @@ pub const COUNT_STARRED: &str = concat!(
     root!()
 );
 
-fn rows(
-    connection: &Connection,
-    sql: &str,
-    params: impl rusqlite::Params,
-) -> Result<Vec<TaskRow>> {
+fn rows(connection: &Connection, sql: &str, params: impl rusqlite::Params) -> Result<Vec<TaskRow>> {
     Ok(connection
         .prepare_cached(sql)?
         .query_map(params, |row| {
@@ -275,11 +269,7 @@ pub fn today(connection: &Connection, day: &Day<'_>, limit: usize) -> Result<Vec
 pub fn upcoming(connection: &Connection, day: &Day<'_>, limit: usize) -> Result<Vec<TaskRow>> {
     let n = limit_of(limit);
     Ok(merged(
-        rows(
-            connection,
-            UPCOMING_ZONED,
-            rusqlite::params![day.ends, n],
-        )?,
+        rows(connection, UPCOMING_ZONED, rusqlite::params![day.ends, n])?,
         rows(
             connection,
             UPCOMING_DAYS,
@@ -322,11 +312,7 @@ impl Vault {
                     connection,
                     COUNT_OVERDUE_ZONED,
                     rusqlite::params![day.starts],
-                )? + count(
-                    connection,
-                    COUNT_OVERDUE_DAYS,
-                    rusqlite::params![day.today],
-                )?,
+                )? + count(connection, COUNT_OVERDUE_DAYS, rusqlite::params![day.today])?,
                 today: count(
                     connection,
                     COUNT_TODAY_ZONED,

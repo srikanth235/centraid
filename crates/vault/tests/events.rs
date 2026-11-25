@@ -7,7 +7,7 @@
 mod common;
 
 use centraid_vault::model::Kind;
-use common::world::{AT, World};
+use common::world::World;
 use serde_json::{Value, json};
 
 fn standup(w: &World) -> String {
@@ -223,7 +223,7 @@ fn the_calendar_is_the_events_home_and_a_move_is_the_shared_verb() {
     // An event in the trash on its own comes back on its own.
     w.ok("entity.trash", json!({ "id": &plain }));
     w.ok("entity.restore", json!({ "id": &plain }));
-    assert_eq!(w.stamp(&plain).is_empty(), false);
+    assert!(!w.stamp(&plain).is_empty());
 }
 
 #[test]
@@ -315,7 +315,6 @@ fn an_edit_changes_what_it_states_and_a_moved_start_keeps_the_length() {
     w.ok("entity.trash", json!({ "id": &id }));
     let sentence = w.refused("event.edit", json!({ "id": &id, "title": "Nope" }));
     assert!(sentence.contains("trash"), "{sentence}");
-    let _ = AT;
 }
 
 // ---------------------------------------------------------------------------------------------

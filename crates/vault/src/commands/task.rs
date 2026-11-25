@@ -434,8 +434,10 @@ fn resulting_due(
         None => {
             let Some(due) = held.and_then(Held::due) else {
                 return Ok(if matches!(zone, Some(Some(_))) {
-                    Err("a zone goes with a due that is a moment, and this task has none"
-                        .to_owned())
+                    Err(
+                        "a zone goes with a due that is a moment, and this task has none"
+                            .to_owned(),
+                    )
                 } else {
                     Ok(None)
                 });
@@ -712,24 +714,27 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let input: EditTaskInput = ctx.parse_input()?;
     let connection = ctx.connection();
     let was = held(connection, &input.id)?.ok_or_else(|| VaultError::Invariant {
-        context: format!("`{}` is not a task, and a precondition said it was", input.id),
+        context: format!(
+            "`{}` is not a task, and a precondition said it was",
+            input.id
+        ),
     })?;
     let due = resulting_due(ctx, Some(&was))?.map_err(|sentence| VaultError::InvalidInput {
         name: "due".to_owned(),
         detail: sentence,
     })?;
     let mut sets = Sets::default();
-    sets.change(
-        "due",
-        &was.due,
-        due.as_ref().map(|due| due.at.clone()),
-    );
+    sets.change("due", &was.due, due.as_ref().map(|due| due.at.clone()));
     sets.change(
         "due_timing",
         &was.timing,
         due.as_ref().map(|due| due.timing.to_owned()),
     );
-    sets.change("zone", &was.zone, due.as_ref().and_then(|due| due.zone.clone()));
+    sets.change(
+        "zone",
+        &was.zone,
+        due.as_ref().and_then(|due| due.zone.clone()),
+    );
     let rule = match &input.rule {
         Some(rule) => rule.as_deref().map(rrule::canonicalize),
         None => was.rule.clone(),
@@ -798,7 +803,10 @@ struct OrganizeTaskInput {
 fn organize(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let input: OrganizeTaskInput = ctx.parse_input()?;
     let was = held(ctx.connection(), &input.id)?.ok_or_else(|| VaultError::Invariant {
-        context: format!("`{}` is not a task, and a precondition said it was", input.id),
+        context: format!(
+            "`{}` is not a task, and a precondition said it was",
+            input.id
+        ),
     })?;
     let due = resulting_due(ctx, Some(&was))?.map_err(|sentence| VaultError::InvalidInput {
         name: "zone".to_owned(),
@@ -881,7 +889,8 @@ fn next_due(
     )
     .into_iter()
     .find(|occurrence| {
-        parse_wall_iso(&occurrence.start).is_some_and(|wall| wall_epoch(wall) > wall_epoch(after_wall))
+        parse_wall_iso(&occurrence.start)
+            .is_some_and(|wall| wall_epoch(wall) > wall_epoch(after_wall))
     })?;
     temporal::floating_minute(&found.start)
 }
@@ -1227,7 +1236,10 @@ fn has_due(connection: &Connection, id: &str) -> Result<bool> {
 /// What a reminder of the phone states, read into the form the vault holds it, so the statement
 /// and the row compare equal (the module doc: `due`, `zone`, `due_timing`, `rule`, `status`,
 /// `done_at`, `priority`, `url`, `reminders`). A record it refuses is counted and left out.
-fn shape(ctx: &CommandCtx<'_, '_>, fields: &mut Map<String, Json>) -> std::result::Result<(), String> {
+fn shape(
+    ctx: &CommandCtx<'_, '_>,
+    fields: &mut Map<String, Json>,
+) -> std::result::Result<(), String> {
     let connection = ctx.connection();
     if fields
         .get("title")
@@ -1241,7 +1253,10 @@ fn shape(ctx: &CommandCtx<'_, '_>, fields: &mut Map<String, Json>) -> std::resul
     if fields.contains_key("due") {
         match fields.get("due").cloned() {
             Some(Json::String(text)) if !text.trim().is_empty() => {
-                let named = zone.as_ref().and_then(Json::as_str).filter(|z| !z.trim().is_empty());
+                let named = zone
+                    .as_ref()
+                    .and_then(Json::as_str)
+                    .filter(|z| !z.trim().is_empty());
                 let due = due_of(connection, text.trim(), named, None)
                     .map_err(|error| error.to_string())??;
                 fields.insert("due".to_owned(), json!(due.at));
@@ -1271,7 +1286,9 @@ fn shape(ctx: &CommandCtx<'_, '_>, fields: &mut Map<String, Json>) -> std::resul
         }
     }
     if let Some(priority) = fields.get("priority")
-        && !priority.as_i64().is_some_and(|mark| (0..=9).contains(&mark))
+        && !priority
+            .as_i64()
+            .is_some_and(|mark| (0..=9).contains(&mark))
     {
         return Err("a priority is 0 to 9".to_owned());
     }
@@ -1290,22 +1307,25 @@ fn shape(ctx: &CommandCtx<'_, '_>, fields: &mut Map<String, Json>) -> std::resul
     // A reminder counts back from a due.
     if let Some(reminders) = fields.get("reminders").cloned() {
         if let Some(list) = reminders.as_array()
-            && list
-                .iter()
-                .any(|lead| !lead.as_i64().is_some_and(|m| (0..=MAX_OFFSET_MIN).contains(&m)))
+            && list.iter().any(|lead| {
+                !lead
+                    .as_i64()
+                    .is_some_and(|m| (0..=MAX_OFFSET_MIN).contains(&m))
+            })
         {
             return Err("reminders are minutes before the due".to_owned());
         }
-        let leads = if has_due { canon_reminders(&reminders) } else { Json::Null };
+        let leads = if has_due {
+            canon_reminders(&reminders)
+        } else {
+            Json::Null
+        };
         fields.insert("reminders".to_owned(), leads);
     }
     Ok(())
 }
 
-fn no_defaults(
-    _: &Connection,
-    _: &OriginRow,
-) -> Result<Vec<(&'static str, Sql)>> {
+fn no_defaults(_: &Connection, _: &OriginRow) -> Result<Vec<(&'static str, Sql)>> {
     Ok(Vec::new())
 }
 

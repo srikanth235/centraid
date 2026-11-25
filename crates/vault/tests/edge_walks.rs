@@ -46,7 +46,11 @@ fn the_edge_order_index_has_a_reader_and_is_kept() {
         .expect("a big list");
     // The statement `edge.add` and a restore run for the next position.
     let read = centraid_vault::commands::edge::NEXT_POSITION;
-    let with = plan(&scratch, read, &["01900000-0000-7000-8000-ffffffffff01", "contains"]);
+    let with = plan(
+        &scratch,
+        read,
+        &["01900000-0000-7000-8000-ffffffffff01", "contains"],
+    );
     assert!(
         with.contains("INDEX edge_order"),
         "the next position reads the ordered index: {with}"
@@ -58,7 +62,11 @@ fn the_edge_order_index_has_a_reader_and_is_kept() {
             Ok(())
         })
         .expect("drops");
-    let without = plan(&scratch, read, &["01900000-0000-7000-8000-ffffffffff01", "contains"]);
+    let without = plan(
+        &scratch,
+        read,
+        &["01900000-0000-7000-8000-ffffffffff01", "contains"],
+    );
     assert!(
         !without.contains("edge_order")
             && (without.contains("TEMP B-TREE") || without.contains("SCAN")),

@@ -42,9 +42,11 @@ fn status(w: &World, id: &str) -> String {
 fn leads(w: &World, id: &str) -> Vec<i64> {
     w.vault()
         .read(|c| {
-            Ok(c.prepare("SELECT offset_min FROM reminder WHERE entity_id = ?1 ORDER BY offset_min")?
-                .query_map([id], |row| row.get(0))?
-                .collect::<rusqlite::Result<Vec<i64>>>()?)
+            Ok(c.prepare(
+                "SELECT offset_min FROM reminder WHERE entity_id = ?1 ORDER BY offset_min",
+            )?
+            .query_map([id], |row| row.get(0))?
+            .collect::<rusqlite::Result<Vec<i64>>>()?)
         })
         .expect("leads")
 }
@@ -103,7 +105,10 @@ fn a_task_is_made_edited_completed_reopened_and_cancelled() {
         "Call Mum"
     );
     assert_eq!(status(&w, &id), "open");
-    assert_eq!(w.one::<i64>("SELECT priority FROM task WHERE id = ?1", &[&id]), 3);
+    assert_eq!(
+        w.one::<i64>("SELECT priority FROM task WHERE id = ?1", &[&id]),
+        3
+    );
     assert_eq!(
         w.one::<i64>("SELECT effort_min FROM task WHERE id = ?1", &[&id]),
         20
@@ -133,7 +138,10 @@ fn a_task_is_made_edited_completed_reopened_and_cancelled() {
             "{column} was cleared"
         );
     }
-    assert_eq!(w.one::<i64>("SELECT priority FROM task WHERE id = ?1", &[&id]), 0);
+    assert_eq!(
+        w.one::<i64>("SELECT priority FROM task WHERE id = ?1", &[&id]),
+        0
+    );
 
     let done = w.ok("task.complete", json!({ "id": id }));
     assert_eq!(done["status"], "done");
@@ -161,7 +169,10 @@ fn a_task_is_made_edited_completed_reopened_and_cancelled() {
 #[test]
 fn a_task_is_refused_what_a_sentence_says_and_the_database_holds_too() {
     let w = World::new("task_refusals");
-    assert!(w.refused("task.add", json!({ "title": "   " })).contains("needs a title"));
+    assert!(
+        w.refused("task.add", json!({ "title": "   " }))
+            .contains("needs a title")
+    );
     assert!(
         w.refused("task.add", json!({ "title": "x", "url": "  " }))
             .contains("needs an address")
@@ -198,7 +209,10 @@ fn a_task_is_refused_what_a_sentence_says_and_the_database_holds_too() {
             .contains("needs a due date")
     );
     // A task with no alert can still be told to snooze: it only moves a reminder that is there.
-    w.ok("task.edit", json!({ "id": id, "snoozed_until": "2026-03-02T10:00:00Z" }));
+    w.ok(
+        "task.edit",
+        json!({ "id": id, "snoozed_until": "2026-03-02T10:00:00Z" }),
+    );
     // A task made with the id of another is refused, and an edit of a note is.
     assert!(
         w.refused("task.add", json!({ "title": "y", "id": id }))
@@ -211,15 +225,6 @@ fn a_task_is_refused_what_a_sentence_says_and_the_database_holds_too() {
     );
 }
 
-trait Not {
-    fn not(self) -> bool;
-}
-impl Not for bool {
-    fn not(self) -> bool {
-        !self
-    }
-}
-
 // ---------------------------------------------------------------------------------------------
 // 2. One home
 // ---------------------------------------------------------------------------------------------
@@ -229,11 +234,10 @@ fn a_task_is_made_in_a_project_a_section_or_under_a_task_and_moved_by_entity_mov
     let w = World::new("task_home");
     let errands = w.container("project", "Errands");
     let garden = w.container("project", "Garden");
-    let section = w
-        .ok(
-            "container.create",
-            json!({ "kind": "section", "title": "Soon", "parent": errands }),
-        )["id"]
+    let section = w.ok(
+        "container.create",
+        json!({ "kind": "section", "title": "Soon", "parent": errands }),
+    )["id"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -291,10 +295,7 @@ fn a_task_is_made_in_a_project_a_section_or_under_a_task_and_moved_by_entity_mov
 fn trashing_a_task_takes_its_subtasks_and_a_restore_brings_them_back() {
     let w = World::new("task_trash");
     let parent = task(&w, json!({ "title": "Move house" }));
-    let child = task(
-        &w,
-        json!({ "title": "Box up books", "parent_id": parent }),
-    );
+    let child = task(&w, json!({ "title": "Box up books", "parent_id": parent }));
     let both = |w: &World| {
         w.one::<i64>(
             "SELECT COUNT(*) FROM entity WHERE id IN (?1, ?2) AND deleted_at IS NOT NULL",
@@ -352,7 +353,10 @@ fn a_due_is_a_zoned_instant_a_floating_minute_or_a_day_and_its_timing_follows() 
     let w = World::new("task_due");
     // An instant in any spelling is held in the clock's one form, read in a zone (the vault's, else
     // UTC) unless one is named.
-    let a = task(&w, json!({ "title": "a", "due": "2026-03-02T10:00:00+01:00" }));
+    let a = task(
+        &w,
+        json!({ "title": "a", "due": "2026-03-02T10:00:00+01:00" }),
+    );
     assert_eq!(
         due(&w, &a),
         (
@@ -370,7 +374,11 @@ fn a_due_is_a_zoned_instant_a_floating_minute_or_a_day_and_its_timing_follows() 
     let c = task(&w, json!({ "title": "c", "due": "2026-03-02T09:00:00" }));
     assert_eq!(
         due(&w, &c),
-        (Some("2026-03-02T09:00".into()), Some("floating".into()), None)
+        (
+            Some("2026-03-02T09:00".into()),
+            Some("floating".into()),
+            None
+        )
     );
     // A wall clock with a zone is the instant it is there.
     let d = task(
@@ -395,7 +403,10 @@ fn a_due_is_a_zoned_instant_a_floating_minute_or_a_day_and_its_timing_follows() 
     for (input, fragment) in [
         (json!({ "due": "banana" }), "due"),
         (json!({ "due": "2026-03-02T09:00:30" }), "to the minute"),
-        (json!({ "due": "2026-03-02", "zone": "Europe/Paris" }), "no zone"),
+        (
+            json!({ "due": "2026-03-02", "zone": "Europe/Paris" }),
+            "no zone",
+        ),
         (
             json!({ "due": "2026-03-02T10:00:00Z", "zone": "Mars/Olympus" }),
             "not a time zone",
@@ -460,7 +471,11 @@ fn the_planned_day_is_not_the_due_and_today_reads_both() {
         w.one::<String>("SELECT scheduled_on FROM task WHERE id = ?1", &[&id]),
         "2026-03-02"
     );
-    assert_eq!(due(&w, &id).0.as_deref(), Some("2026-03-09"), "the due is its own");
+    assert_eq!(
+        due(&w, &id).0.as_deref(),
+        Some("2026-03-09"),
+        "the due is its own"
+    );
     let day = Day {
         today: "2026-03-02",
         tomorrow: "2026-03-03",
@@ -474,8 +489,15 @@ fn the_planned_day_is_not_the_due_and_today_reads_both() {
             .read(|c| task_counts::today(c, &day, 50))
             .expect("today"))
     };
-    assert_eq!(today(&w), [id.clone()], "planned for today though not due");
-    w.ok("task.edit", json!({ "id": id, "scheduled_on": "2026-03-03" }));
+    assert_eq!(
+        today(&w),
+        std::slice::from_ref(&id),
+        "planned for today though not due"
+    );
+    w.ok(
+        "task.edit",
+        json!({ "id": id, "scheduled_on": "2026-03-03" }),
+    );
     assert!(today(&w).is_empty());
     w.ok("task.edit", json!({ "id": id, "scheduled_on": null }));
     assert_eq!(
@@ -536,7 +558,10 @@ fn a_repeating_task_names_its_series_when_the_rule_is_first_set_and_the_successo
         2
     );
     assert_eq!(parent_of(&w, &next).as_deref(), Some(project.as_str()));
-    assert_eq!(w.one::<i64>("SELECT priority FROM task WHERE id = ?1", &[&next]), 3);
+    assert_eq!(
+        w.one::<i64>("SELECT priority FROM task WHERE id = ?1", &[&next]),
+        3
+    );
     assert!(
         w.one::<Option<String>>("SELECT starred_at FROM entity WHERE id = ?1", &[&next])
             .is_some()
@@ -547,7 +572,10 @@ fn a_repeating_task_names_its_series_when_the_rule_is_first_set_and_the_successo
         [(30, "floating".to_owned(), "2026-03-09T08:30".to_owned())],
         "an all-day lead counts back from nine in the morning"
     );
-    assert!(fires(&w, &id).is_empty(), "a finished occurrence alerts no more");
+    assert!(
+        fires(&w, &id).is_empty(),
+        "a finished occurrence alerts no more"
+    );
     // Purging the first occurrence no longer cuts the series.
     w.ok("entity.trash", json!({ "id": id }));
     w.ok("entity.purge", json!({ "id": id }));
@@ -564,11 +592,13 @@ fn a_repeating_task_names_its_series_when_the_rule_is_first_set_and_the_successo
         "SELECT id FROM task WHERE series_id = ?1 ORDER BY due, id",
         &[&series],
     );
-    assert!(seek.contains("task_by_series") && !seek.contains("TEMP B-TREE"), "{seek}");
+    assert!(
+        seek.contains("task_by_series") && !seek.contains("TEMP B-TREE"),
+        "{seek}"
+    );
     // Reopening makes it open and spawns nothing; cancelling ends it so.
-    let count = |w: &World| {
-        w.one::<i64>("SELECT COUNT(*) FROM task WHERE series_id = ?1", &[&series])
-    };
+    let count =
+        |w: &World| w.one::<i64>("SELECT COUNT(*) FROM task WHERE series_id = ?1", &[&series]);
     let before = count(&w);
     w.ok("task.reopen", json!({ "id": next }));
     w.ok("task.cancel", json!({ "id": next }));
@@ -613,13 +643,19 @@ fn a_successor_is_one_step_on_in_the_form_its_due_has_and_a_series_that_ran_out_
         &w,
         json!({ "title": "d", "due": "2026-03-02", "rule": "FREQ=DAILY" }),
     );
-    assert_eq!(w.ok("task.complete", json!({ "id": day }))["next_due"], "2026-03-03");
+    assert_eq!(
+        w.ok("task.complete", json!({ "id": day }))["next_due"],
+        "2026-03-03"
+    );
     let floating = task(
         &w,
         json!({ "title": "f", "due": "2026-03-02T09:00", "rule": "FREQ=DAILY" }),
     );
     let next = w.ok("task.complete", json!({ "id": floating }));
-    assert_eq!(next["next_due"], "2026-03-03T09:00", "a wall clock repeats on the wall clock");
+    assert_eq!(
+        next["next_due"], "2026-03-03T09:00",
+        "a wall clock repeats on the wall clock"
+    );
     let next_id = next["next_id"].as_str().unwrap();
     assert_eq!(due(&w, next_id).1.as_deref(), Some("floating"));
     // A zoned due keeps its wall clock across the change of the clocks.
@@ -628,7 +664,10 @@ fn a_successor_is_one_step_on_in_the_form_its_due_has_and_a_series_that_ran_out_
         json!({ "title": "z", "due": "2026-03-28T09:00", "zone": "Europe/Paris", "rule": "FREQ=DAILY" }),
     );
     let next = w.ok("task.complete", json!({ "id": zoned }));
-    assert_eq!(next["next_due"], "2026-03-29T07:00:00.000Z", "09:00 in Paris after the spring change");
+    assert_eq!(
+        next["next_due"], "2026-03-29T07:00:00.000Z",
+        "09:00 in Paris after the spring change"
+    );
     let next_id = next["next_id"].as_str().unwrap();
     assert_eq!(
         due(&w, next_id),
@@ -666,7 +705,11 @@ fn a_snooze_moves_the_alert_and_not_the_due_and_an_edit_of_the_due_ends_it() {
         fires(&w, &id),
         [
             (0, "fixed".to_owned(), "2026-03-02T10:00:00.000Z".to_owned()),
-            (60, "fixed".to_owned(), "2026-03-02T09:00:00.000Z".to_owned()),
+            (
+                60,
+                "fixed".to_owned(),
+                "2026-03-02T09:00:00.000Z".to_owned()
+            ),
         ]
     );
     w.ok(
@@ -678,7 +721,11 @@ fn a_snooze_moves_the_alert_and_not_the_due_and_an_edit_of_the_due_ends_it() {
         [(0, "fixed".to_owned(), "2026-03-02T11:30:00.000Z".to_owned())],
         "the task's one alert, on its smallest lead"
     );
-    assert_eq!(due(&w, &id).0.as_deref(), Some("2026-03-02T10:00:00.000Z"), "the due is unmoved");
+    assert_eq!(
+        due(&w, &id).0.as_deref(),
+        Some("2026-03-02T10:00:00.000Z"),
+        "the due is unmoved"
+    );
     assert_eq!(
         w.one::<String>("SELECT snoozed_until FROM task WHERE id = ?1", &[&id]),
         "2026-03-02T11:30:00.000Z"
@@ -689,7 +736,10 @@ fn a_snooze_moves_the_alert_and_not_the_due_and_an_edit_of_the_due_ends_it() {
         w.one::<Option<String>>("SELECT snoozed_until FROM task WHERE id = ?1", &[&id])
             .is_some()
     );
-    w.ok("task.edit", json!({ "id": id, "due": "2026-03-02T12:00:00Z" }));
+    w.ok(
+        "task.edit",
+        json!({ "id": id, "due": "2026-03-02T12:00:00Z" }),
+    );
     assert_eq!(
         w.one::<Option<String>>("SELECT snoozed_until FROM task WHERE id = ?1", &[&id]),
         None
@@ -801,10 +851,17 @@ fn an_edit_states_the_leads_or_leaves_them_and_a_due_moves_their_alerts() {
     assert!(leads(&w, &id).is_empty() && fires(&w, &id).is_empty());
     w.ok("task.edit", json!({ "id": id, "reminders": [15] }));
     // A moved due moves the alerts.
-    w.ok("task.edit", json!({ "id": id, "due": "2026-03-04T10:00:00Z" }));
+    w.ok(
+        "task.edit",
+        json!({ "id": id, "due": "2026-03-04T10:00:00Z" }),
+    );
     assert_eq!(
         fires(&w, &id),
-        [(15, "fixed".to_owned(), "2026-03-04T09:45:00.000Z".to_owned())]
+        [(
+            15,
+            "fixed".to_owned(),
+            "2026-03-04T09:45:00.000Z".to_owned()
+        )]
     );
     // A reminder needs a due, in a sentence first and in the database too.
     let bare = task(&w, json!({ "title": "bare" }));
@@ -813,8 +870,11 @@ fn an_edit_states_the_leads_or_leaves_them_and_a_due_moves_their_alerts() {
             .contains("needs a due date")
     );
     assert!(
-        w.refused("reminder.add", json!({ "entity_id": bare, "offset_min": 5 }))
-            .contains("no due date")
+        w.refused(
+            "reminder.add",
+            json!({ "entity_id": bare, "offset_min": 5 })
+        )
+        .contains("no due date")
     );
     // Clearing the due takes the reminders with it.
     w.ok("task.edit", json!({ "id": id, "due": null }));
@@ -831,7 +891,10 @@ fn an_edit_states_the_leads_or_leaves_them_and_a_due_moves_their_alerts() {
         &w,
         json!({ "title": "q", "due": "2026-03-02T10:00", "reminders": [] }),
     );
-    w.ok("task.edit", json!({ "id": quiet, "due": "2026-03-03T10:00" }));
+    w.ok(
+        "task.edit",
+        json!({ "id": quiet, "due": "2026-03-03T10:00" }),
+    );
     assert!(leads(&w, &quiet).is_empty());
 }
 
@@ -853,7 +916,10 @@ fn a_task_alerts_only_while_it_is_open_and_live() {
     assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM reminder", &[]), 0);
     assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM alert", &[]), 0);
     // The alerts equal a rebuild from the rows.
-    let keep = task(&w, json!({ "title": "k", "due": "2026-03-02", "reminders": [30] }));
+    let keep = task(
+        &w,
+        json!({ "title": "k", "due": "2026-03-02", "reminders": [30] }),
+    );
     let before = fires(&w, &keep);
     w.vault().rebuild_index().expect("rebuilds");
     assert_eq!(fires(&w, &keep), before);
@@ -879,21 +945,28 @@ fn titles(rows: &[task_counts::TaskRow]) -> Vec<String> {
 
 fn world_of_days() -> (World, String) {
     let w = World::new("task_reads");
-    let paris = |title: &str, due: &str| {
-        json!({ "title": title, "due": due, "zone": "Europe/Paris", "reminders": [] })
-    };
+    let paris = |title: &str, due: &str| json!({ "title": title, "due": due, "zone": "Europe/Paris", "reminders": [] });
     // Zoned: today, tomorrow's first half hour and the late evening before.
     task(&w, paris("zoned today", "2026-03-02T09:00"));
     task(&w, paris("zoned tomorrow", "2026-03-03T00:30"));
     task(&w, paris("zoned yesterday", "2026-03-01T23:30"));
     // Floating and all-day.
-    task(&w, json!({ "title": "floating today", "due": "2026-03-02T20:00", "reminders": [] }));
-    task(&w, json!({ "title": "floating yesterday", "due": "2026-03-01T20:00", "reminders": [] }));
+    task(
+        &w,
+        json!({ "title": "floating today", "due": "2026-03-02T20:00", "reminders": [] }),
+    );
+    task(
+        &w,
+        json!({ "title": "floating yesterday", "due": "2026-03-01T20:00", "reminders": [] }),
+    );
     task(&w, json!({ "title": "day today", "due": "2026-03-02" }));
     task(&w, json!({ "title": "day yesterday", "due": "2026-03-01" }));
     task(&w, json!({ "title": "day later", "due": "2026-03-05" }));
     // Planned only, and planned and due.
-    task(&w, json!({ "title": "planned", "scheduled_on": "2026-03-02" }));
+    task(
+        &w,
+        json!({ "title": "planned", "scheduled_on": "2026-03-02" }),
+    );
     task(
         &w,
         json!({ "title": "planned and due", "due": "2026-03-02", "scheduled_on": "2026-03-02" }),
@@ -925,11 +998,20 @@ fn world_of_days() -> (World, String) {
 #[test]
 fn today_upcoming_overdue_and_done_read_each_form_of_a_due_as_what_it_is() {
     let (w, _) = world_of_days();
-    let read = |f: fn(&rusqlite::Connection, &Day<'_>, usize) -> centraid_vault::Result<Vec<task_counts::TaskRow>>| {
+    let read = |f: fn(
+        &rusqlite::Connection,
+        &Day<'_>,
+        usize,
+    ) -> centraid_vault::Result<Vec<task_counts::TaskRow>>| {
         let rows = w.vault().read(|c| f(c, &day(), 50)).expect("a read");
         titles(&rows).into_iter().collect::<BTreeSet<_>>()
     };
-    let set = |names: &[&str]| names.iter().map(|n| (*n).to_owned()).collect::<BTreeSet<_>>();
+    let set = |names: &[&str]| {
+        names
+            .iter()
+            .map(|n| (*n).to_owned())
+            .collect::<BTreeSet<_>>()
+    };
     assert_eq!(
         read(task_counts::today),
         set(&[
@@ -946,17 +1028,29 @@ fn today_upcoming_overdue_and_done_read_each_form_of_a_due_as_what_it_is() {
         read(task_counts::overdue),
         set(&["zoned yesterday", "floating yesterday", "day yesterday"])
     );
-    assert_eq!(read(task_counts::upcoming), set(&["zoned tomorrow", "day later"]));
-    // Today lists what is due in order, then what is only planned, each once.
-    let rows = w.vault().read(|c| task_counts::today(c, &day(), 50)).unwrap();
     assert_eq!(
-        titles(&rows).iter().filter(|t| *t == "planned and due").count(),
+        read(task_counts::upcoming),
+        set(&["zoned tomorrow", "day later"])
+    );
+    // Today lists what is due in order, then what is only planned, each once.
+    let rows = w
+        .vault()
+        .read(|c| task_counts::today(c, &day(), 50))
+        .unwrap();
+    assert_eq!(
+        titles(&rows)
+            .iter()
+            .filter(|t| *t == "planned and due")
+            .count(),
         1
     );
     assert_eq!(titles(&rows).last().map(String::as_str), Some("planned"));
     assert!(rows.iter().any(|r| r.title == "repeats" && r.repeats));
     // A limit cuts the list, not the walk's order.
-    let two = w.vault().read(|c| task_counts::upcoming(c, &day(), 1)).unwrap();
+    let two = w
+        .vault()
+        .read(|c| task_counts::upcoming(c, &day(), 1))
+        .unwrap();
     assert_eq!(titles(&two), ["zoned tomorrow"]);
     // Done: latest first, paged by the instant the page before ended at.
     let done = w.vault().read(|c| task_counts::done(c, None, 10)).unwrap();
@@ -965,7 +1059,10 @@ fn today_upcoming_overdue_and_done_read_each_form_of_a_due_as_what_it_is() {
         .vault()
         .read(|c| task_counts::done(c, done.first().and_then(|r| r.done_at.as_deref()), 10))
         .unwrap();
-    assert!(page.len() < done.len(), "the page before the latest leaves it out");
+    assert!(
+        page.len() < done.len(),
+        "the page before the latest leaves it out"
+    );
 }
 
 #[test]
@@ -1007,16 +1104,36 @@ fn each_read_and_count_is_a_bounded_walk_of_the_index_it_names() {
     let cases: [(&str, &[&str], &str); 13] = [
         (task_counts::OVERDUE_ZONED, &[d.starts, "50"], "task_by_due"),
         (task_counts::OVERDUE_DAYS, &[d.today, "50"], "task_by_due"),
-        (task_counts::TODAY_ZONED, &[d.starts, d.ends, "50"], "task_by_due"),
-        (task_counts::TODAY_DAYS, &[d.today, d.tomorrow, "50"], "task_by_due"),
+        (
+            task_counts::TODAY_ZONED,
+            &[d.starts, d.ends, "50"],
+            "task_by_due",
+        ),
+        (
+            task_counts::TODAY_DAYS,
+            &[d.today, d.tomorrow, "50"],
+            "task_by_due",
+        ),
         (task_counts::PLANNED, &[d.today, "50"], "task_by_scheduled"),
         (task_counts::UPCOMING_ZONED, &[d.ends, "50"], "task_by_due"),
-        (task_counts::UPCOMING_DAYS, &[d.tomorrow, "50"], "task_by_due"),
+        (
+            task_counts::UPCOMING_DAYS,
+            &[d.tomorrow, "50"],
+            "task_by_due",
+        ),
         (task_counts::DONE, &["9999", "50"], "task_by_done"),
         (task_counts::COUNT_OVERDUE_ZONED, &[d.starts], "task_by_due"),
         (task_counts::COUNT_OVERDUE_DAYS, &[d.today], "task_by_due"),
-        (task_counts::COUNT_TODAY_ZONED, &[d.starts, d.ends], "task_by_due"),
-        (task_counts::COUNT_TODAY_DAYS, &[d.today, d.tomorrow], "task_by_due"),
+        (
+            task_counts::COUNT_TODAY_ZONED,
+            &[d.starts, d.ends],
+            "task_by_due",
+        ),
+        (
+            task_counts::COUNT_TODAY_DAYS,
+            &[d.today, d.tomorrow],
+            "task_by_due",
+        ),
         (task_counts::COUNT_PLANNED, &[d.today], "task_by_scheduled"),
     ];
     for (sql, binds, index) in cases {
@@ -1030,7 +1147,10 @@ fn each_read_and_count_is_a_bounded_walk_of_the_index_it_names() {
     }
     let starred = plan(&w, task_counts::COUNT_STARRED, &[]);
     assert!(starred.contains("entity_starred"), "{starred}");
-    assert!(!starred.contains("TEMP B-TREE") && !starred.contains("SCAN e"), "{starred}");
+    assert!(
+        !starred.contains("TEMP B-TREE") && !starred.contains("SCAN e"),
+        "{starred}"
+    );
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1071,7 +1191,10 @@ fn a_tasks_words_are_searchable_now_and_in_earlier_versions_and_an_edit_makes_a_
     assert_eq!((now("marmoset"), now("quokka")), (0, 0));
     assert_eq!((before("marmoset"), before("quokka")), (1, 1));
     // A save that changes nothing makes no version.
-    w.ok("task.edit", json!({ "id": id, "description": "wombat words" }));
+    w.ok(
+        "task.edit",
+        json!({ "id": id, "description": "wombat words" }),
+    );
     assert_eq!(versions(&w, &id), 1);
     // Restoring the earlier version puts back its words, its due, its timing and its reminders.
     let seq: i64 = w.one(
@@ -1108,17 +1231,29 @@ fn a_tasks_words_are_searchable_now_and_in_earlier_versions_and_an_edit_makes_a_
         w.one::<String>("SELECT series_id FROM task WHERE id = ?1", &[&rep]),
         series
     );
-    assert_eq!(w.one::<i64>("SELECT priority FROM task WHERE id = ?1", &[&rep]), 0);
+    assert_eq!(
+        w.one::<i64>("SELECT priority FROM task WHERE id = ?1", &[&rep]),
+        0
+    );
 }
 
 #[test]
 fn a_stale_save_of_a_task_is_refused_and_a_fresh_one_answers_the_next_revision() {
     let w = World::new("task_stale");
     let id = task(&w, json!({ "title": "x" }));
-    let first = w.ok("task.edit", json!({ "id": id, "title": "y", "expected_rev": 0 }));
+    let first = w.ok(
+        "task.edit",
+        json!({ "id": id, "title": "y", "expected_rev": 0 }),
+    );
     let rev = first["rev"].as_i64().expect("a revision");
-    w.ok("task.edit", json!({ "id": id, "title": "z", "expected_rev": rev }));
-    let sentence = w.refused("task.edit", json!({ "id": id, "title": "w", "expected_rev": rev }));
+    w.ok(
+        "task.edit",
+        json!({ "id": id, "title": "z", "expected_rev": rev }),
+    );
+    let sentence = w.refused(
+        "task.edit",
+        json!({ "id": id, "title": "w", "expected_rev": rev }),
+    );
     assert!(sentence.contains("changed somewhere else"), "{sentence}");
 }
 
@@ -1141,7 +1276,12 @@ fn the_words_the_code_reads_are_the_checks_the_file_holds() {
             .map(|word| word.trim().trim_matches('\'').to_owned())
             .collect()
     };
-    let set = |words: &[&str]| words.iter().map(|w| (*w).to_owned()).collect::<BTreeSet<_>>();
+    let set = |words: &[&str]| {
+        words
+            .iter()
+            .map(|w| (*w).to_owned())
+            .collect::<BTreeSet<_>>()
+    };
     assert_eq!(words("status"), set(&task::STATUSES));
     assert_eq!(
         words("anchor"),
