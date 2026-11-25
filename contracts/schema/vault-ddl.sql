@@ -19,6 +19,9 @@ CREATE INDEX account_by_type ON account(type, id);
 -- index action_key_by_at on action_key
 CREATE INDEX action_key_by_at ON action_key(at);
 
+-- index arrival_via_kind_by_kind on arrival_via_kind
+CREATE INDEX arrival_via_kind_by_kind ON arrival_via_kind(entity_kind, via);
+
 -- index budget_by_month on budget
 CREATE INDEX budget_by_month ON budget(month, category_id);
 
@@ -42,9 +45,6 @@ CREATE INDEX container_by_kind  ON container(kind, id);
 
 -- index derivative_by_out on derivative
 CREATE INDEX derivative_by_out ON derivative(out) WHERE out IS NOT NULL;
-
--- index derivative_by_variant on derivative
-CREATE INDEX derivative_by_variant ON derivative(variant, blob);
 
 -- index document_by_blob on document
 CREATE INDEX document_by_blob ON document(blob);
@@ -310,6 +310,9 @@ CREATE INDEX txn_by_day         ON txn(posted_on, id);
 -- index txn_hand_by_account on txn
 CREATE INDEX txn_hand_by_account ON txn(account_id, posted_on, id) WHERE entered = 'hand';
 
+-- index txn_match_dismissal_by_statement on txn_match_dismissal
+CREATE INDEX txn_match_dismissal_by_statement ON txn_match_dismissal(statement_id, hand_id);
+
 -- index txn_split_by_category on txn_split
 CREATE INDEX txn_split_by_category ON txn_split(category_id, txn_id);
 
@@ -353,6 +356,13 @@ CREATE TABLE action_key (
 -- table arrival_via on arrival_via
 CREATE TABLE arrival_via (
   code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z]*')
+) STRICT, WITHOUT ROWID;
+
+-- table arrival_via_kind on arrival_via_kind
+CREATE TABLE arrival_via_kind (
+  via         TEXT NOT NULL REFERENCES arrival_via(code) ON DELETE NO ACTION,
+  entity_kind TEXT NOT NULL REFERENCES entity_kind(code) ON DELETE NO ACTION,
+  PRIMARY KEY (via, entity_kind)
 ) STRICT, WITHOUT ROWID;
 
 -- table blob on blob
@@ -541,6 +551,7 @@ CREATE TABLE entity (
   CHECK (trashed_by IS NULL OR trashed_by <> id),
   CHECK ((arrived_via IS NULL) = (arrived_label IS NULL)),
   UNIQUE (id, kind),
+  FOREIGN KEY (arrived_via, kind) REFERENCES arrival_via_kind(via, entity_kind) ON DELETE NO ACTION,
   FOREIGN KEY (parent_id, parent_kind) REFERENCES entity(id, kind) ON DELETE NO ACTION,
   FOREIGN KEY (kind, parent_kind) REFERENCES home_shape(kind, home_kind) ON DELETE NO ACTION,
   FOREIGN KEY (kind, topless) REFERENCES entity_kind(code, may_be_top) ON DELETE NO ACTION,
@@ -1177,6 +1188,14 @@ CREATE TABLE txn (
   CHECK ((original_amount_minor IS NULL) = (original_currency IS NULL))
 ) STRICT;
 
+-- table txn_match_dismissal on txn_match_dismissal
+CREATE TABLE txn_match_dismissal (
+  hand_id      TEXT NOT NULL REFERENCES txn(id) ON DELETE CASCADE,
+  statement_id TEXT NOT NULL REFERENCES txn(id) ON DELETE CASCADE,
+  PRIMARY KEY (hand_id, statement_id),
+  CHECK (hand_id <> statement_id)
+) STRICT, WITHOUT ROWID;
+
 -- table txn_split on txn_split
 CREATE TABLE txn_split (
   txn_id        TEXT NOT NULL REFERENCES txn(id) ON DELETE CASCADE,
@@ -1416,6 +1435,13 @@ CREATE TRIGGER txn_in_a_transfer_keeps_its_account_and_direction BEFORE UPDATE O
   WHEN EXISTS (SELECT 1 FROM transfer WHERE a = old.id OR b = old.id)
    AND (new.account_id IS NOT old.account_id OR (new.amount_minor < 0) IS NOT (old.amount_minor < 0))
   BEGIN SELECT RAISE(ABORT, 'a line in a transfer keeps its account and its direction: unlink the transfer first'); END;
+
+-- trigger txn_match_dismissal_is_a_hand_line_against_a_statement_line on txn_match_dismissal
+CREATE TRIGGER txn_match_dismissal_is_a_hand_line_against_a_statement_line BEFORE INSERT ON txn_match_dismissal
+  WHEN NOT EXISTS (SELECT 1 FROM txn h JOIN txn s ON s.account_id = h.account_id
+                    WHERE h.id = new.hand_id AND h.entered = 'hand'
+                      AND s.id = new.statement_id AND s.entered = 'statement')
+  BEGIN SELECT RAISE(ABORT, 'a dismissal is a hand line against a statement line of one account'); END;
 
 -- trigger txn_statement_line_is_fixed on txn
 CREATE TRIGGER txn_statement_line_is_fixed

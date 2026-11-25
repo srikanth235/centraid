@@ -884,6 +884,149 @@ fn a_statement_that_seems_to_be_a_hand_line_only_proposes_the_match_and_confirm_
     assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM txn", &[]), 4);
 }
 
+/// How many dismissals a vault holds.
+fn dismissals(w: &World) -> i64 {
+    w.one::<i64>("SELECT COUNT(*) FROM txn_match_dismissal", &[])
+}
+
+#[test]
+fn a_dismissed_pair_is_not_proposed_again_and_the_other_pairs_still_are() {
+    let w = world("dismiss");
+    let id = account(&w, "Everyday");
+    let by_hand = hand(&w, &id, "2026-03-01", -4_250, "Whole Foods");
+    import(
+        &w,
+        &id,
+        &[
+            GROCER,
+            ("csv:twin", "2026-03-02", -4_250, "WHOLE FOODS MKT 9"),
+        ],
+    );
+    let (first, twin) = (stated(&w, GROCER.0), stated(&w, "csv:twin"));
+    let proposed = |w: &World| read(w, |c| txn::proposed_matches(c, &id));
+    assert_eq!(proposed(&w).len(), 2, "one hand line, two seeming matches");
+
+    let said = w.ok(
+        "txn.dismiss_match",
+        json!({ "hand_id": by_hand, "statement_id": first }),
+    );
+    assert_eq!(said["dismissed"], true);
+    assert_eq!(
+        proposed(&w),
+        [txn::Proposal {
+            hand_id: by_hand.clone(),
+            statement_id: twin.clone()
+        }],
+        "the dismissed pair is gone and the other is not"
+    );
+    // Importing the same statement again does not bring the pair back.
+    import(&w, &id, &[GROCER]);
+    assert_eq!(proposed(&w).len(), 1);
+    // Saying it twice is one dismissal.
+    let again = w.ok(
+        "txn.dismiss_match",
+        json!({ "hand_id": by_hand, "statement_id": first }),
+    );
+    assert_eq!(
+        (again["dismissed"].clone(), dismissals(&w)),
+        (json!(false), 1)
+    );
+    // A dismissal is not a confirmation: nothing merged, and the pair can still be confirmed.
+    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM txn", &[]), 3);
+    w.ok(
+        "txn.confirm_match",
+        json!({ "hand_id": by_hand, "statement_id": first }),
+    );
+    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM txn", &[]), 2);
+}
+
+#[test]
+fn only_a_hand_line_against_a_statement_line_of_one_account_is_dismissed() {
+    let w = world("dismiss_refused");
+    let (one, two) = (account(&w, "Everyday"), account(&w, "Savings"));
+    let by_hand = hand(&w, &one, "2026-03-01", -4_250, "Whole Foods");
+    let other_hand = hand(&w, &one, "2026-03-01", -4_250, "Whole Foods again");
+    let elsewhere = hand(&w, &two, "2026-03-01", -4_250, "Elsewhere");
+    import(&w, &one, &[GROCER]);
+    import(
+        &w,
+        &two,
+        &[("csv:two", "2026-03-02", -4_250, "WHOLE FOODS MKT 2")],
+    );
+    let (statement, far) = (stated(&w, GROCER.0), stated(&w, "csv:two"));
+    for (a, b) in [
+        (&statement, &by_hand),
+        (&by_hand, &other_hand),
+        (&by_hand, &"nobody".to_owned()),
+    ] {
+        w.refused(
+            "txn.dismiss_match",
+            json!({ "hand_id": a, "statement_id": b }),
+        );
+    }
+    assert!(
+        w.refused(
+            "txn.dismiss_match",
+            json!({ "hand_id": by_hand, "statement_id": far })
+        )
+        .contains("one account")
+    );
+    let _ = elsewhere;
+    assert_eq!(dismissals(&w), 0, "nothing was written");
+}
+
+#[test]
+fn purging_either_line_removes_the_dismissal_and_confirming_the_hand_line_clears_its_others() {
+    let w = world("dismiss_purge");
+    let id = account(&w, "Everyday");
+    let kept_hand = hand(&w, &id, "2026-03-01", -4_250, "Whole Foods");
+    let doomed_hand = hand(&w, &id, "2026-03-01", -4_250, "Whole Foods too");
+    import(
+        &w,
+        &id,
+        &[
+            GROCER,
+            ("csv:twin", "2026-03-02", -4_250, "WHOLE FOODS MKT 9"),
+        ],
+    );
+    let (first, twin) = (stated(&w, GROCER.0), stated(&w, "csv:twin"));
+    for (h, s) in [
+        (&kept_hand, &first),
+        (&kept_hand, &twin),
+        (&doomed_hand, &first),
+    ] {
+        w.ok(
+            "txn.dismiss_match",
+            json!({ "hand_id": h, "statement_id": s }),
+        );
+    }
+    assert_eq!(dismissals(&w), 3);
+    // A hand line forgotten for good takes its dismissals with it.
+    w.ok("entity.trash", json!({ "id": doomed_hand }));
+    assert_eq!(
+        dismissals(&w),
+        3,
+        "the trash keeps them: it can be restored"
+    );
+    w.ok("entity.purge", json!({ "id": doomed_hand }));
+    assert_eq!(dismissals(&w), 2);
+    // So does a statement line.
+    w.ok("entity.trash", json!({ "id": twin }));
+    w.ok("entity.purge", json!({ "id": twin }));
+    assert_eq!(dismissals(&w), 1);
+    // Confirming the hand line against the other statement line makes it a statement line, which
+    // is nobody's hand line: what it was told not to match is gone, and so is the purged one's.
+    w.ok(
+        "txn.dismiss_match",
+        json!({ "hand_id": kept_hand, "statement_id": first }),
+    );
+    w.ok(
+        "txn.confirm_match",
+        json!({ "hand_id": kept_hand, "statement_id": first }),
+    );
+    assert_eq!(dismissals(&w), 0);
+}
+
 #[test]
 fn a_line_in_a_transfer_or_a_split_that_would_change_amount_is_not_confirmed_silently() {
     let w = world("match_refused");
@@ -1723,6 +1866,23 @@ fn what_a_month_balance_and_proposal_read_each_walk_an_index_and_sort_nothing() 
             .iter()
             .any(|line| line.contains("txn_hand_by_account")),
         "{proposals:?}"
+    );
+    assert!(
+        proposals
+            .iter()
+            .any(|line| line.starts_with("SEARCH d USING PRIMARY KEY")),
+        "a dismissed pair is a seek of the pair's key: {proposals:?}"
+    );
+    let purge = plan(
+        "DELETE FROM txn_match_dismissal WHERE statement_id = ?1",
+        &[&id.as_str()],
+    );
+    clean("a purged statement line's dismissals", &purge);
+    assert!(
+        purge
+            .iter()
+            .any(|line| line.contains("txn_match_dismissal_by_statement")),
+        "{purge:?}"
     );
     let budgets = plan(money::BUDGETS_OF_MONTH, &[&"2026-03"]);
     clean("a month's budgets", &budgets);

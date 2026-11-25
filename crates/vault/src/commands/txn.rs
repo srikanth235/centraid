@@ -9,7 +9,8 @@
 //!   the hand lines it seems to match are PROPOSED ([`proposed_matches`]) and nothing merges until
 //!   the member confirms (`txn.confirm_match`): then the statement's amount and day win, the hand
 //!   line's categories and memo carry over, and the hand line becomes the statement line (the one
-//!   change of `entered` the table allows).
+//!   change of `entered` the table allows). A pair the member says is not the same money is
+//!   dismissed (`txn.dismiss_match`) and kept, so it is not proposed again.
 //! - **A line's categories are `txn_split`** (E3): one part for an ordinary line, several for a
 //!   split, none for an uncategorised one, and every report reads that one table. **The parts add
 //!   up to the line's amount.** No row-level constraint can say so, so the commit guard says it
@@ -762,7 +763,8 @@ pub struct Proposal {
 }
 
 /// The pairs of an account's hand lines and statement lines that seem to be one: the same amount,
-/// at most [`MATCH_DAYS`] days apart, neither in the trash. **Only a proposal**: nothing is merged
+/// at most [`MATCH_DAYS`] days apart, neither in the trash, and not a pair the member dismissed
+/// (`txn.dismiss_match`, one `txn_match_dismissal` row, a seek of its primary key). **Only a proposal**: nothing is merged
 /// until `txn.confirm_match`. One walk of the account's hand lines (`txn_hand_by_account`), each
 /// with a seek of the days around it (`txn_by_account_day`).
 ///
@@ -792,7 +794,9 @@ pub const PROPOSALS: &str = "SELECT h.id, s.id
              AND s.posted_on <= date(h.posted_on, '+' || ?2 || ' days')
              AND s.amount_minor = h.amount_minor AND s.entered = 'statement'
    JOIN entity se ON se.id = s.id AND se.deleted_at IS NULL
-  WHERE h.account_id = ?1 AND h.entered = 'hand'";
+  WHERE h.account_id = ?1 AND h.entered = 'hand'
+    AND NOT EXISTS (SELECT 1 FROM txn_match_dismissal d
+                     WHERE d.hand_id = h.id AND d.statement_id = s.id)";
 
 fn pre_confirm(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let connection = ctx.connection();
@@ -900,9 +904,44 @@ fn confirm(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         [hand, statement],
     )?;
     entity::purge_one(ctx, statement, &mut Vec::new())?;
+    // A statement line is nobody's hand line any more: what it was told not to match goes.
+    connection.execute("DELETE FROM txn_match_dismissal WHERE hand_id = ?1", [hand])?;
     connection.execute("UPDATE txn SET entered = 'statement' WHERE id = ?1", [hand])?;
     ctx.touch(hand)?;
     with_rev(ctx, hand, json!({ "id": hand }))
+}
+
+fn pre_dismiss(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let connection = ctx.connection();
+    let (hand, statement) = (
+        ctx.required_str("hand_id")?,
+        ctx.required_str("statement_id")?,
+    );
+    let (Some(h), Some(s)) = (line(connection, hand)?, line(connection, statement)?) else {
+        return Ok(Some("Both must be transactions.".to_owned()));
+    };
+    if h.entered != "hand" || s.entered != "statement" {
+        return Ok(Some(
+            "Only a statement line against a line you entered by hand can be dismissed.".to_owned(),
+        ));
+    }
+    Ok(unless(
+        h.account_id == s.account_id,
+        "Both lines are in one account.",
+    ))
+}
+
+/// `txn.dismiss_match`: the member says this hand line and this statement line are NOT the same
+/// money. The pair is kept (`txn_match_dismissal`) and [`proposed_matches`] leaves it out from now
+/// on. Dismissing a pair twice is one dismissal.
+fn dismiss(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let input: ConfirmInput = ctx.parse_input()?;
+    let dismissed = ctx.connection().execute(
+        "INSERT INTO txn_match_dismissal (hand_id, statement_id) VALUES (?1, ?2)
+         ON CONFLICT DO NOTHING",
+        [input.hand_id.as_str(), input.statement_id.as_str()],
+    )? > 0;
+    Ok(json!({ "dismissed": dismissed }))
 }
 
 // ---------------------------------------------------------------------------
@@ -1029,6 +1068,11 @@ pub fn definitions() -> Vec<CommandDefinition> {
         check: pre_confirm,
     }];
 
+    const DISMISS: &[CommandCondition] = &[CommandCondition {
+        predicate: "a_hand_line_and_a_statement_line_of_one_account",
+        check: pre_dismiss,
+    }];
+
     let mut confirm_match = CommandDefinition::plain(
         "txn.confirm_match",
         "txn",
@@ -1086,6 +1130,22 @@ pub fn definitions() -> Vec<CommandDefinition> {
             split,
         ),
         confirm_match,
+        CommandDefinition::plain(
+            "txn.dismiss_match",
+            "txn",
+            r#"{
+              "type": "object",
+              "required": ["hand_id", "statement_id"],
+              "additionalProperties": false,
+              "properties": {
+                "hand_id": { "type": "string", "minLength": 1 },
+                "statement_id": { "type": "string", "minLength": 1 }
+              }
+            }"#,
+            Idempotency::Idempotent,
+            DISMISS,
+            dismiss,
+        ),
         CommandDefinition::plain(
             "txn.link_transfer",
             "txn",

@@ -20,19 +20,6 @@ use super::CommandCtx;
 use crate::error::{Result, VaultError};
 use crate::model::Kind;
 
-/// Each one-time arrival and the kind of item it brings in. `tests/lookups.rs` holds the names
-/// equal to the rows of `arrival_via`.
-pub const SYSTEMS: &[(&str, Kind)] = &[
-    ("picker", Kind::Photo),
-    ("vcard", Kind::Person),
-    ("markdown", Kind::Note),
-    ("csv", Kind::LockerItem),
-    ("csv", Kind::Person),
-    ("scan", Kind::Document),
-    ("upload", Kind::Document),
-    ("csv", Kind::Txn),
-];
-
 /// The longest label kept, in characters.
 const LABEL_MOST: usize = 200;
 
@@ -92,10 +79,12 @@ pub fn record(ctx: &CommandCtx<'_, '_>, id: &str, kind: Kind) -> Result<()> {
             Ok(())
         };
     };
-    if !SYSTEMS
-        .iter()
-        .any(|(name, brings)| *name == via && *brings == kind)
-    {
+    let brings: bool = ctx.connection().query_row(
+        "SELECT EXISTS (SELECT 1 FROM arrival_via_kind WHERE via = ?1 AND entity_kind = ?2)",
+        rusqlite::params![via, kind.as_str()],
+        |row| row.get(0),
+    )?;
+    if !brings {
         return Err(invalid(
             "arrived_via",
             format!("`{via}` does not bring in {}", kind.noun()),

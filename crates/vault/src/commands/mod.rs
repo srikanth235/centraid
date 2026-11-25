@@ -83,6 +83,7 @@ pub mod touch;
 pub mod txn;
 pub mod txn_portable;
 pub mod vault;
+pub mod vault_export;
 pub mod workout;
 
 use std::collections::BTreeMap;
@@ -424,6 +425,7 @@ impl Registry {
             txn::definitions,
             txn_portable::definitions,
             vault::definitions,
+            vault_export::definitions,
             workout::definitions,
         ];
         for definitions in modules.iter().copied() {
