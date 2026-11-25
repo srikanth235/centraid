@@ -1072,7 +1072,9 @@ fn a_mention_is_one_row_of_its_note_by_ordinal_and_goes_with_it() {
         0,
         "a note's mentions go with it"
     );
+}
 
+// ---------------------------------------------------------------------------------------------
 // K8: THE ONE NOTIFICATION RULE (D2): the sentences of `reminder.add` are the database's too
 // ---------------------------------------------------------------------------------------------
 
