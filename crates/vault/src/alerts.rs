@@ -373,11 +373,13 @@ fn expand_series(
 // ---------------------------------------------------------------------------------------------
 
 /// Whether the phone's own calendar or reminders app alerts for this event or task (#1188, NA2): a
-/// source of the record comes from a phone store (`origin_system.on_device`) whose origin is not
-/// retired, the source is not gone, AND the record's alert is still what that source stated. A
-/// record has several sources (A9): any one that holds it is enough. An alert the member set or
-/// changed in Centraid is Centraid's own and notifies, because a control that never fires would
-/// lie; a retired origin is followed by nobody, so the vault alerts again. Decided by comparing
+/// source of the record comes from a phone store (`origin_system.on_device`), the source is not
+/// gone, AND the record's alert is still what that source stated. A record has several sources
+/// (A9): any one that holds it is enough. **Stopping a follow changes nothing**: the record stays in
+/// the phone's own app, which still alerts it, so the vault alerting too would be the double
+/// notification this rule prevents; a retired origin's items keep their source and stay silent. An
+/// alert the member set or changed in Centraid is Centraid's own and notifies, because a control
+/// that never fires would lie. Decided by comparing
 /// with `source.stated` (the follower's three-way rule), never by a stored flag.
 ///
 /// What is compared is what the old rule compared: the moment (`starts` or `due`, a day as a day)
@@ -397,7 +399,7 @@ fn phone_holds(
                JOIN origin o ON o.id = s.origin_id
                JOIN origin_system y ON y.code = o.system
               WHERE s.entity_id = ?1 AND y.on_device = 1
-                AND o.retired_at IS NULL AND s.gone_at IS NULL",
+                AND s.gone_at IS NULL",
         )?
         .query_map([id], |row| row.get::<_, String>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;

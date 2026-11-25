@@ -901,7 +901,7 @@ impl World {
 }
 
 #[test]
-fn what_the_phone_holds_the_phone_alerts_until_the_member_changes_it_or_the_follow_stops() {
+fn what_the_phone_holds_the_phone_alerts_until_the_member_changes_it_or_it_is_gone() {
     let w = World::new("alerts_na2");
     let e = w.event(1, "2026-03-02T09:00", "floating", None, None);
     let r10 = w.remind(&e, 10);
@@ -927,15 +927,20 @@ fn what_the_phone_holds_the_phone_alerts_until_the_member_changes_it_or_the_foll
         "UPDATE event SET starts = '2026-03-02T09:00' WHERE id = '{e}'"
     ));
     assert!(w.key(&r10).is_none());
-    // Stopping the follow retires the origin: nobody follows it, the vault alerts again; following
-    // it again hands the alert back to the phone.
+    // STOPPING THE FOLLOW CHANGES NOTHING: the record stays in the phone's own app, which still
+    // alerts it. A retired origin's items stay silent, and following it again keeps them so.
     w.sql(&format!(
         "UPDATE origin SET retired_at = '{AT}' WHERE id = '{live}'"
     ));
     assert!(
-        w.key(&r10).is_some(),
-        "a retired origin's record alerts in Centraid"
+        w.key(&r10).is_none(),
+        "a retired origin's untouched alert stays silent"
     );
+    // The member's change still makes it Centraid's, retired or not.
+    let r30 = w.remind(&e, 30);
+    assert!(w.key(&r10).is_some() && w.key(&r30).is_some());
+    w.ok("reminder.remove", json!({ "id": r30 }));
+    assert!(w.key(&r10).is_none());
     w.sql(&format!(
         "UPDATE origin SET retired_at = NULL WHERE id = '{live}'"
     ));
@@ -950,17 +955,20 @@ fn what_the_phone_holds_the_phone_alerts_until_the_member_changes_it_or_the_foll
     ));
     assert!(w.key(&r10).is_none());
 
-    // TWO SOURCES (a merged record keeps both): one live source is enough.
+    // TWO SOURCES (a merged record keeps both): one that holds it is enough.
     let old = w.origin("old", "calendar");
     w.source(2, &old, "calendar", &e, "event", stated);
     w.sql(&format!(
-        "UPDATE origin SET retired_at = '{AT}' WHERE id = '{old}'"
+        "UPDATE source SET gone_at = '{AT}' WHERE id = '{source}'"
     ));
-    assert!(w.key(&r10).is_none(), "the live one still holds it");
+    assert!(w.key(&r10).is_none(), "the second source still holds it");
+    w.sql("UPDATE source SET gone_at = NULL WHERE id = 'source-2'");
     w.sql(&format!(
-        "UPDATE origin SET retired_at = '{AT}' WHERE id = '{live}'"
+        "UPDATE source SET gone_at = '{AT}' WHERE id IN ('{source}', 'source-2')"
     ));
-    assert!(w.key(&r10).is_some(), "both origins retired: Centraid's");
+    assert!(w.key(&r10).is_some(), "both gone: Centraid's");
+    w.sql("UPDATE source SET gone_at = NULL WHERE id = 'source-2'");
+    assert!(w.key(&r10).is_none());
 
     // A phone reminder (a task), a day as a day and one `remind_before_min`.
     let list = w.origin("list", "phone_reminders");
@@ -978,7 +986,11 @@ fn what_the_phone_holds_the_phone_alerts_until_the_member_changes_it_or_the_foll
     w.sql(&format!(
         "UPDATE origin SET retired_at = '{AT}' WHERE id = '{list}'"
     ));
-    assert!(w.key(&rt).is_some());
+    assert!(w.key(&rt).is_none(), "stopped following: still the phone's");
+    w.sql(&format!(
+        "UPDATE task SET due = '2026-03-03' WHERE id = '{t}'"
+    ));
+    assert!(w.key(&rt).is_some(), "a moved due is Centraid's");
     // The index equals a rebuild with all of this in place.
     let before = w.dump();
     w.scratch.vault.rebuild_index().expect("rebuilds");

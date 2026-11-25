@@ -860,18 +860,6 @@ impl Shape {
             Some("old.entity_id IS NOT NULL"),
             mark_reindex("old.entity_id"),
         );
-        touch_trigger(
-            "origin_retired",
-            "AFTER UPDATE OF retired_at",
-            "origin",
-            Some("old.retired_at IS NOT new.retired_at"),
-            format!(
-                "INSERT OR IGNORE INTO temp.{t} (entity_id, stamp, born)
-                   SELECT entity_id, 0, 0 FROM main.source
-                    WHERE origin_id = new.id AND entity_id IS NOT NULL;",
-                t = super::COMMIT_TOUCHED,
-            ),
-        );
         for part in &self.parts {
             match part.role {
                 Role::Host => {
