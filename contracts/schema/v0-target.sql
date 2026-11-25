@@ -25,6 +25,8 @@
 --   * No `'now'`, `CURRENT_*`, `unixepoch()` or `julianday()`: the command stamps the injected clock.
 --   * A hash is only ever a foreign key into `blob(hash)`: never inside JSON or a sealed value.
 --   * `position` is REAL wherever rows are ordered.
+--   * Lookup rows are written only by a migration rung, and the Rust connection will refuse any other write to a
+--     lookup table (checkpoint 1; nothing in this file enforces it).
 
 -- ---------------------------------------------------------------------------------------------
 -- Lookup tables (A1): the values that will grow, each with the attributes the schema keys on.
@@ -132,6 +134,28 @@ CREATE TABLE message_refusal (      -- A1
 
 CREATE TABLE message_notice (       -- A1
   code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z_]*')
+) STRICT, WITHOUT ROWID;
+
+-- A1 (amendment 6): what a person row is, like `photo_form`.
+CREATE TABLE person_form (
+  code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z]*')
+) STRICT, WITHOUT ROWID;
+
+-- A1, G3 (amendment 1): what a person's date is. `single`: a person has at most one date of this kind
+-- (a birthday); the row carries it, a composite key ties it to this lookup row, and a partial unique index
+-- on `single = 1` does the rest, so nothing names `birthday`.
+CREATE TABLE person_date_kind (
+  code   TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z]*'),
+  single INTEGER NOT NULL CHECK (single IN (0,1)),
+  UNIQUE (code, single)
+) STRICT, WITHOUT ROWID;
+
+-- D2 (amendment 3): where a reminder may go, because only these have a time to fire at. `via_child`: the
+-- reminder must name a dated child row (a person's date, a Locker date field) when 1, and none when 0.
+CREATE TABLE reminder_target (
+  kind      TEXT NOT NULL REFERENCES entity_kind(code) ON DELETE NO ACTION,
+  via_child INTEGER NOT NULL CHECK (via_child IN (0,1)),
+  PRIMARY KEY (kind, via_child)
 ) STRICT, WITHOUT ROWID;
 
 -- A1, F1: the Health metrics. `cadence` says how a figure of the metric arrives: 'total' is one figure
@@ -265,12 +289,16 @@ CREATE TRIGGER entity_home_is_acyclic BEFORE UPDATE OF parent_id ON entity
 -- `event_guest` A6; an event `about` a person -> `person_date` G3).
 --   label_kind  the kind of the label a relation wears (`related`'s relation concept); NULL: no label.
 --   ordered     the relation keeps a `position` (an album's photos, a list's people).
+--   anchored    the edge may carry an `anchor` (where in a note's text it was made): only a note's `about`.
+-- `*` means ANY LINKABLE KIND (`entity_kind.linkable`), the same attribute `link` and `mention` use, not
+-- any kind: a reading, a chat, a container or a label is not at the end of a wildcard shape.
 CREATE TABLE edge_shape (
   rel        TEXT NOT NULL CHECK (rel GLOB '[a-z]*' AND rel NOT GLOB '*[^a-z_]*'),
   from_kind  TEXT NOT NULL,
   to_kind    TEXT NOT NULL,
   label_kind TEXT,
   ordered    INTEGER NOT NULL DEFAULT 0 CHECK (ordered IN (0,1)),
+  anchored   INTEGER NOT NULL DEFAULT 0 CHECK (anchored IN (0,1)),
   PRIMARY KEY (rel, from_kind, to_kind)
 ) STRICT, WITHOUT ROWID;
 
@@ -280,6 +308,9 @@ CREATE TABLE edge (
   to_id      TEXT NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
   label_id   TEXT REFERENCES entity(id) ON DELETE CASCADE,
   position   REAL,
+  -- A5 (amended): where in a note the member made this `about`, set by hand and so an edge's, never the
+  -- note-rebuilt `mention`'s. A3: a JSON object the vault defines carries "v":1.
+  anchor     TEXT CHECK (anchor IS NULL OR (json_valid(anchor) AND json_type(anchor) = 'object' AND json_extract(anchor, '$.v') IS 1)),
   created_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
   CHECK (from_id <> to_id)
 ) STRICT;
@@ -291,17 +322,30 @@ CREATE INDEX edge_to    ON edge(to_id, rel, from_id);
 CREATE INDEX edge_order ON edge(from_id, rel, position) WHERE position IS NOT NULL;
 -- Reader: who wears this relation label; also the child side of `label_id`.
 CREATE INDEX edge_label ON edge(label_id) WHERE label_id IS NOT NULL;
--- An edge joins only the kinds a shape allows, wears a label exactly when its relation does, of the
--- kind the shape names, and is ordered only where the relation is. No value is named here.
+-- An edge joins only the kinds a shape allows (`*` is any linkable kind), wears a label exactly when its
+-- relation does, of the kind the shape names, is ordered only where the relation is, and carries an anchor
+-- only where the shape says so. No vocabulary value is named here.
 CREATE TRIGGER edge_has_a_shape BEFORE INSERT ON edge
   WHEN NOT EXISTS (
     SELECT 1 FROM edge_shape s
-      JOIN entity f ON f.id = new.from_id
-      JOIN entity t ON t.id = new.to_id
+      JOIN entity f ON f.id = new.from_id JOIN entity_kind fk ON fk.code = f.kind
+      JOIN entity t ON t.id = new.to_id   JOIN entity_kind tk ON tk.code = t.kind
       LEFT JOIN entity l ON l.id = new.label_id
-     WHERE s.rel = new.rel AND s.from_kind IN (f.kind, '*') AND s.to_kind IN (t.kind, '*')
-       AND s.label_kind IS l.kind AND (new.position IS NULL OR s.ordered = 1))
-  BEGIN SELECT RAISE(ABORT, 'no edge of this relation joins these kinds'); END;
+     WHERE s.rel = new.rel
+       AND (s.from_kind = f.kind OR (s.from_kind = '*' AND fk.linkable = 1))
+       AND (s.to_kind   = t.kind OR (s.to_kind   = '*' AND tk.linkable = 1))
+       AND s.label_kind IS l.kind AND (new.position IS NULL OR s.ordered = 1)
+       AND (new.anchor IS NULL OR s.anchored = 1))
+  BEGIN SELECT RAISE(ABORT, 'no edge of this relation joins these kinds, or it cannot carry this'); END;
+CREATE TRIGGER edge_anchor_needs_an_anchored_shape BEFORE UPDATE OF anchor ON edge
+  WHEN new.anchor IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM edge_shape s
+      JOIN entity f ON f.id = new.from_id JOIN entity_kind fk ON fk.code = f.kind
+      JOIN entity t ON t.id = new.to_id   JOIN entity_kind tk ON tk.code = t.kind
+     WHERE s.rel = new.rel AND s.anchored = 1
+       AND (s.from_kind = f.kind OR (s.from_kind = '*' AND fk.linkable = 1))
+       AND (s.to_kind   = t.kind OR (s.to_kind   = '*' AND tk.linkable = 1)))
+  BEGIN SELECT RAISE(ABORT, 'this edge cannot carry an anchor'); END;
 CREATE TRIGGER edge_ends_are_fixed BEFORE UPDATE OF from_id, rel, to_id, label_id ON edge
   BEGIN SELECT RAISE(ABORT, 'an edge''s ends never change; remove it and add another'); END;
 
@@ -325,30 +369,24 @@ CREATE TRIGGER link_ends_are_linkable BEFORE INSERT ON link
 CREATE TRIGGER link_ends_are_fixed BEFORE UPDATE OF a, b ON link
   BEGIN SELECT RAISE(ABORT, 'a link''s ends never change; remove it and add another'); END;
 
--- A5, K6: what a note says about other items, owned by the note and rebuilt on every save.
---   form 'wikilink': a `[[title]]`; `wikilink` holds the words; `to_id` is the item it resolves to, or NULL
---         while nothing carries the title (creating or renaming an item resolves the waiting mentions;
---         purging a target turns its mentions back into unresolved ones, as the note's text reads).
---   form 'about': an anchored `about` (the note is about `to_id`, at `anchor`): it needs its target and
---         goes with it (a purge rule below). An unanchored `about` is an `edge`.
+-- A5, K6 (amended): the `[[title]]` links of a note, and nothing else. The note owns this table and
+-- rebuilds it on every save, so it must not hold what the member set by hand: every `about`, anchored or
+-- not, is an `edge` (an anchored one wears `edge.anchor`). `wikilink` holds the words; `to_id` is the item
+-- it resolves to, or NULL while nothing carries the title (creating or renaming an item resolves the
+-- waiting mentions; purging a target turns its mentions back into unresolved ones, as the note's text reads).
 -- Key `(note_id, ordinal)`: `[[Alex]]` twice, or two items sharing a title, keep both.
 CREATE TABLE mention (
   note_id  TEXT NOT NULL,
   ordinal  INTEGER NOT NULL CHECK (ordinal >= 0),
-  form     TEXT NOT NULL CHECK (form IN ('wikilink','about')),
+  wikilink TEXT NOT NULL CHECK (length(trim(wikilink)) > 0),
   to_id    TEXT REFERENCES entity(id) ON DELETE SET NULL,
-  wikilink TEXT CHECK (wikilink IS NULL OR length(trim(wikilink)) > 0),
-  -- A3: a JSON object the vault defines carries "v":1.
-  anchor   TEXT CHECK (anchor IS NULL OR (json_valid(anchor) AND json_type(anchor) = 'object' AND json_extract(anchor, '$.v') IS 1)),
   PRIMARY KEY (note_id, ordinal),
-  FOREIGN KEY (note_id) REFERENCES note(id) ON DELETE CASCADE,
-  CHECK ((form = 'wikilink') = (wikilink IS NOT NULL)),
-  CHECK (form = 'wikilink' OR (to_id IS NOT NULL AND anchor IS NOT NULL))
+  FOREIGN KEY (note_id) REFERENCES note(id) ON DELETE CASCADE
 ) STRICT, WITHOUT ROWID;
 -- Reader: backlinks ("mentioned in"), and the child side of `to_id`.
 CREATE INDEX mention_by_target ON mention(to_id, note_id) WHERE to_id IS NOT NULL;
 -- Reader: the mentions waiting for a title, found when an item is made or renamed.
-CREATE INDEX mention_by_words  ON mention(wikilink COLLATE NOCASE) WHERE to_id IS NULL AND wikilink IS NOT NULL;
+CREATE INDEX mention_by_words  ON mention(wikilink COLLATE NOCASE) WHERE to_id IS NULL;
 CREATE TRIGGER mention_target_is_linkable BEFORE INSERT ON mention
   WHEN new.to_id IS NOT NULL AND EXISTS (
     SELECT 1 FROM entity e JOIN entity_kind k ON k.code = e.kind WHERE e.id = new.to_id AND k.linkable = 0)
@@ -357,9 +395,6 @@ CREATE TRIGGER mention_target_is_linkable_on_resolve BEFORE UPDATE OF to_id ON m
   WHEN new.to_id IS NOT NULL AND EXISTS (
     SELECT 1 FROM entity e JOIN entity_kind k ON k.code = e.kind WHERE e.id = new.to_id AND k.linkable = 0)
   BEGIN SELECT RAISE(ABORT, 'a note cannot mention this kind of item'); END;
--- The anchored-about half of the purge rule: SET NULL cannot hold a row that needs its target.
-CREATE TRIGGER mention_about_goes_with_its_target BEFORE DELETE ON entity
-  BEGIN DELETE FROM mention WHERE to_id = old.id AND form = 'about'; END;
 
 -- A1, J1: a label's kind row. Tags, categories, workout kinds, touch kinds, relations. The colour is a
 -- palette key and only a kind that takes one may wear one; the hierarchy is `entity.parent_id` (A19).
@@ -592,7 +627,7 @@ CREATE TABLE search_owed (
 CREATE TABLE person (
   id           TEXT PRIMARY KEY,
   kind         TEXT GENERATED ALWAYS AS ('person') VIRTUAL,
-  form         TEXT NOT NULL DEFAULT 'person' CHECK (form IN ('person','org','group','pet')),
+  form         TEXT NOT NULL DEFAULT 'person' REFERENCES person_form(code) ON DELETE NO ACTION,   -- A1 (amendment 6)
   sort_name    TEXT,
   given        TEXT,
   family       TEXT,
@@ -605,27 +640,39 @@ CREATE TABLE person (
   cadence_days INTEGER CHECK (cadence_days IS NULL OR cadence_days > 0),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
+-- Reader: People's filter by form (people, organisations, groups, pets); the child side of `form`.
+CREATE INDEX person_by_form ON person(form, id);
 -- Reader: the blob collector (an avatar is a rented blob).
 CREATE INDEX person_by_avatar ON person(avatar) WHERE avatar IS NOT NULL;
 
 -- G3: EVERY date of a person, the birthday included; anniversaries are no longer yearly events
 -- `about` the person. `date` is a full date or a yearless vCard `--MM-DD`. Each row has its own id
 -- so a reminder can name it (D2). Calendar shows them derived from these rows; a reminder is optional.
+-- `kind` is a lookup the app translates (amendment 1); `label` is only the member's own words, absent
+-- when they added none. `single` is the kind's attribute copied onto the row so a composite key holds it
+-- and a partial unique index keeps one date per person of a kind that says so.
 CREATE TABLE person_date (
   id        TEXT PRIMARY KEY,
   person_id TEXT NOT NULL REFERENCES person(id) ON DELETE CASCADE,
-  label     TEXT NOT NULL CHECK (length(trim(label)) > 0),
+  kind      TEXT NOT NULL,
+  single    INTEGER NOT NULL CHECK (single IN (0,1)),
+  label     TEXT CHECK (label IS NULL OR length(trim(label)) > 0),
   date      TEXT NOT NULL CHECK (
               date(date) IS date
               OR (length(date) = 7 AND substr(date, 1, 2) = '--'
                   AND date('2000-' || substr(date, 3)) IS '2000-' || substr(date, 3))),
   position  REAL NOT NULL DEFAULT 0,
-  UNIQUE (id, person_id)
+  UNIQUE (id, person_id),
+  FOREIGN KEY (kind, single) REFERENCES person_date_kind(code, single) ON DELETE NO ACTION
 ) STRICT;
 -- Reader: a person's dates; the child side of `person_id`.
 CREATE INDEX person_date_by_person ON person_date(person_id, position, id);
 -- Reader: Calendar's day and month views ("whose date is on 03-14"), whatever the year or none.
 CREATE INDEX person_date_by_day ON person_date(substr(date, -5), person_id);
+-- Reader: "everyone's birthdays"; the child side of `kind`.
+CREATE INDEX person_date_by_kind ON person_date(kind, person_id);
+-- One date per person of a kind that is `single` (a birthday). Reader: the person's own birthday.
+CREATE UNIQUE INDEX person_date_one_of_a_single_kind ON person_date(person_id, kind) WHERE single = 1;
 
 CREATE TABLE contact_point (
   id         TEXT PRIMARY KEY,
@@ -709,26 +756,34 @@ CREATE INDEX event_guest_by_person ON event_guest(person_id, event_id) WHERE per
 -- One organizer per event.
 CREATE UNIQUE INDEX event_guest_one_organizer ON event_guest(event_id) WHERE organizer = 1;
 
--- D2, G3, I8: THE ONE NOTIFICATION RULE. A reminder has its own id, belongs to an entity (an event, a
--- task, a person, a Locker item) and may name a dated child row of that entity: a `person_date` or a
--- Locker `date` field. `alert` (the index file) is keyed on this id. The old key (entity, offset)
--- would collide when one person has two dates with the same lead time. The composite keys make a
--- named child belong to the entity, and the Locker one a `date` field (plain, never sealed: a
--- notification names the item and the field's label, nothing else, I8).
+-- D2, G3, I8: THE ONE NOTIFICATION RULE. A reminder has its own id, belongs to an entity and may name a
+-- dated child row of that entity: a `person_date` or a Locker `date` field. `alert` (the index file) is
+-- keyed on this id. The old key (entity, offset) would collide when one person has two dates with the
+-- same lead time. The composite keys make a named child belong to the entity, and the Locker one a `date`
+-- field (plain, never sealed: a notification names the item and the field's label, nothing else, I8).
+-- Amendment 3: a reminder goes only where there is a time to fire at. It carries its entity's kind
+-- (a key into `entity(id, kind)`) and `via_child` (whether it names a child row), and `reminder_target`
+-- says which pairs exist: an event or a task names no child, a person or a Locker item must name one.
 CREATE TABLE reminder (
-  id         TEXT PRIMARY KEY,
-  entity_id  TEXT NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
-  date_id    TEXT,
-  field_id   TEXT,
-  offset_min INTEGER NOT NULL CHECK (offset_min >= 0),
+  id          TEXT PRIMARY KEY,
+  entity_id   TEXT NOT NULL,
+  entity_kind TEXT NOT NULL,
+  date_id     TEXT,
+  field_id    TEXT,
+  offset_min  INTEGER NOT NULL CHECK (offset_min >= 0),
+  via_child   INTEGER GENERATED ALWAYS AS (date_id IS NOT NULL OR field_id IS NOT NULL) VIRTUAL,
   dated_field INTEGER GENERATED ALWAYS AS (CASE WHEN field_id IS NOT NULL THEN 1 END) VIRTUAL,
   CHECK (date_id IS NULL OR field_id IS NULL),
+  FOREIGN KEY (entity_id, entity_kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
+  FOREIGN KEY (entity_kind, via_child) REFERENCES reminder_target(kind, via_child) ON DELETE NO ACTION,
   FOREIGN KEY (date_id, entity_id)  REFERENCES person_date(id, person_id)    ON DELETE CASCADE,
   FOREIGN KEY (field_id, entity_id) REFERENCES locker_item_field(id, item_id) ON DELETE CASCADE,
   FOREIGN KEY (field_id, dated_field) REFERENCES locker_item_field(id, dated) ON DELETE CASCADE
 ) STRICT;
 -- A lead time once per target. Reader: an item's reminders; the child side of `entity_id`.
 CREATE UNIQUE INDEX reminder_key ON reminder(entity_id, ifnull(date_id, ''), ifnull(field_id, ''), offset_min);
+-- Reader: the alert refresh of one kind of item (every event's, every task's); the child side of `entity_kind`.
+CREATE INDEX reminder_by_kind ON reminder(entity_kind, entity_id);
 -- Child sides of `date_id` and `field_id`; readers: a date's or a field's reminders.
 CREATE INDEX reminder_by_date  ON reminder(date_id)  WHERE date_id  IS NOT NULL;
 CREATE INDEX reminder_by_field ON reminder(field_id) WHERE field_id IS NOT NULL;
@@ -856,11 +911,10 @@ CREATE TABLE measurement (
   metric    TEXT NOT NULL,
   cadence   TEXT GENERATED ALWAYS AS ('total') VIRTUAL,
   value     REAL NOT NULL CHECK (value >= 0),
-  origin_id TEXT,
-  origin_system TEXT GENERATED ALWAYS AS (CASE WHEN origin_id IS NOT NULL THEN 'health' END) VIRTUAL,
+  -- Plain foreign key (amendment 7): that it is a health store is the writer's, not named here.
+  origin_id TEXT REFERENCES origin(id) ON DELETE NO ACTION,
   PRIMARY KEY (person_id, day, metric),
-  FOREIGN KEY (metric, cadence) REFERENCES health_metric(code, cadence) ON DELETE NO ACTION,
-  FOREIGN KEY (origin_id, origin_system) REFERENCES origin(id, system) ON DELETE NO ACTION
+  FOREIGN KEY (metric, cadence) REFERENCES health_metric(code, cadence) ON DELETE NO ACTION
 ) STRICT, WITHOUT ROWID;
 -- Reader: one metric across days (a trend); the child side of `metric`.
 CREATE INDEX measurement_by_metric ON measurement(metric, person_id, day);
@@ -1063,13 +1117,13 @@ CREATE TRIGGER transfer_halves_are_in_one_pair_on_update BEFORE UPDATE OF a, b O
   BEGIN SELECT RAISE(ABORT, 'a line is in at most one transfer'); END;
 
 -- B1: a budget and a rule belong to their category but are not part of its snapshot (setting a budget
--- writes no copy of the category's other budgets or rules).
+-- writes no copy of the category's other budgets or rules). A budget is in the vault's currency
+-- (`vault.currency`; E4 took the currency off a line too), so it carries none.
 CREATE TABLE budget (
   category_id   TEXT NOT NULL,
   category_kind TEXT GENERATED ALWAYS AS ('category') VIRTUAL,
   month         TEXT NOT NULL CHECK (date(month || '-01') IS month || '-01'),
   amount_minor  INTEGER NOT NULL CHECK (amount_minor >= 0),
-  currency      TEXT NOT NULL CHECK (currency GLOB '[A-Z][A-Z][A-Z]'),
   carry         INTEGER NOT NULL DEFAULT 0 CHECK (carry IN (0,1)),
   PRIMARY KEY (category_id, month),
   FOREIGN KEY (category_id, category_kind) REFERENCES entity(id, kind) ON DELETE CASCADE
@@ -1335,6 +1389,9 @@ INSERT INTO message_refusal (code) VALUES
   ('no_tool_fits'), ('query_failed'), ('unparsable'), ('model_absent'), ('model_failed'),
   ('vision_absent'), ('attachment_unsupported'), ('attachment_unreadable'), ('attachment_too_large');
 INSERT INTO message_notice (code) VALUES ('doc_truncated');
+INSERT INTO person_form (code) VALUES ('person'), ('org'), ('group'), ('pet');
+INSERT INTO person_date_kind (code, single) VALUES ('birthday', 1), ('anniversary', 0), ('other', 0);
+INSERT INTO reminder_target (kind, via_child) VALUES ('event', 0), ('task', 0), ('person', 1), ('locker_item', 1);
 
 -- F1: daily totals (`measurement`) and readings (`reading`). Weight moved from a daily figure to a reading.
 INSERT INTO health_metric (code, cadence, has_value2, unit) VALUES
@@ -1353,22 +1410,22 @@ INSERT INTO health_metric (code, cadence, has_value2, unit) VALUES
 -- A7, A14, G3, K1: the pruned relation vocabulary. Gone: `links` (A4), `attendee` (A6), the flag
 -- tag (A14), `about event *` (G3, anniversaries were its only use), the per-kind Locker rows (a Locker
 -- item is `about` anything like a note or a task, and `with` a person like a workout or a txn).
-INSERT INTO edge_shape (rel, from_kind, to_kind, label_kind, ordered) VALUES
-  ('contains', 'album',       'photo',    NULL,       1),
-  ('contains', 'list',        'person',   NULL,       1),
-  ('tagged',   '*',           'tag',      NULL,       0),
-  ('about',    'note',        '*',        NULL,       0),
-  ('about',    'task',        '*',        NULL,       0),
-  ('about',    'document',    'person',   NULL,       0),
-  ('about',    'locker_item', '*',        NULL,       0),
-  ('attached', '*',           'document', NULL,       0),
-  ('attached', '*',           'photo',    NULL,       0),
-  ('with',     'workout',     'person',   NULL,       0),
-  ('with',     'touch',       'person',   NULL,       0),
-  ('with',     'txn',         'person',   NULL,       0),
-  ('with',     'locker_item', 'person',   NULL,       0),
-  ('related',  'person',      'person',   'relation', 0),
-  ('depicts',  'photo',       'person',   NULL,       0);
+INSERT INTO edge_shape (rel, from_kind, to_kind, label_kind, ordered, anchored) VALUES
+  ('contains', 'album',       'photo',    NULL,       1, 0),
+  ('contains', 'list',        'person',   NULL,       1, 0),
+  ('tagged',   '*',           'tag',      NULL,       0, 0),
+  ('about',    'note',        '*',        NULL,       0, 1),
+  ('about',    'task',        '*',        NULL,       0, 0),
+  ('about',    'document',    'person',   NULL,       0, 0),
+  ('about',    'locker_item', '*',        NULL,       0, 0),
+  ('attached', '*',           'document', NULL,       0, 0),
+  ('attached', '*',           'photo',    NULL,       0, 0),
+  ('with',     'workout',     'person',   NULL,       0, 0),
+  ('with',     'touch',       'person',   NULL,       0, 0),
+  ('with',     'txn',         'person',   NULL,       0, 0),
+  ('with',     'locker_item', 'person',   NULL,       0, 0),
+  ('related',  'person',      'person',   'relation', 0, 0),
+  ('depicts',  'photo',       'person',   NULL,       0, 0);
 
 -- The seeded entities, parents first within one statement (a foreign key is checked when the
 -- statement ends). A seed with a parent is of its parent's kind.
