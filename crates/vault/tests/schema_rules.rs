@@ -867,6 +867,139 @@ fn a_split_goes_to_a_category_and_a_reading_is_one_of_its_metric() {
 }
 
 #[test]
+fn an_account_a_line_a_transfer_a_budget_and_a_rule_hold_the_rules_money_states() {
+    let w = World::new("rules_money");
+    let (a1, a2) = (w.entity(40, "account", "A"), w.entity(41, "account", "B"));
+    let acct = |a: &str, extra: &str| {
+        format!(
+            "INSERT INTO account (id, type, currency{extra}) VALUES ('{a}', 'checking', 'USD'{})",
+            if extra.is_empty() {
+                ""
+            } else {
+                ", 5, '2026-01-01'"
+            }
+        )
+    };
+    // A type is a row of the lookup; an opening balance that is not nothing has its day; a currency is three capitals.
+    w.refuses_with(
+        &format!("INSERT INTO account (id, type, currency) VALUES ('{a1}', 'mortgage', 'USD')"),
+        "FOREIGN KEY",
+    );
+    w.refuses(&format!("INSERT INTO account (id, type, currency, opening_minor) VALUES ('{a1}', 'checking', 'USD', 5)"));
+    w.refuses(&format!(
+        "INSERT INTO account (id, type, currency) VALUES ('{a1}', 'checking', 'usd')"
+    ));
+    for kind in ["loan", "investment", "asset"] {
+        w.takes(&format!(
+            "INSERT INTO account (id, type, currency) VALUES ('{}', '{kind}', 'USD')",
+            w.entity(100 + kind.len() as u64, "account", kind)
+        ));
+    }
+    w.takes(&acct(&a1, ", opening_minor, opening_on"));
+    w.takes(&acct(&a2, ""));
+    // A line: a day, the closed sets of status and origin, both halves of what was charged or neither.
+    let line = |n: u64, a: &str, cols: &str, vals: &str| {
+        let t = w.entity(n, "txn", "T");
+        format!(
+            "INSERT INTO txn (id, account_id, posted_on, amount_minor{cols}) VALUES ('{t}', '{a}', '2026-03-01', -300{vals})"
+        )
+    };
+    w.refuses(&line(42, &a1, ", status", ", 'void'"));
+    w.refuses(&line(43, &a1, ", entered", ", 'robot'"));
+    w.refuses(&line(44, &a1, ", original_amount_minor", ", 5"));
+    w.refuses(&line(
+        45,
+        &a1,
+        ", original_amount_minor, original_currency",
+        ", 5, 'eur'",
+    ));
+    w.takes(&line(
+        46,
+        &a1,
+        ", original_amount_minor, original_currency, entered",
+        ", 5, 'EUR', 'hand'",
+    ));
+    let (h1, h2, h3) = (id(46), w.entity(47, "txn", "T2"), w.entity(48, "txn", "T3"));
+    w.takes(&format!("INSERT INTO txn (id, account_id, posted_on, amount_minor, entered) VALUES ('{h2}', '{a2}', '2026-03-01', 300, 'hand')"));
+    w.takes(&format!("INSERT INTO txn (id, account_id, posted_on, amount_minor, entered) VALUES ('{h3}', '{a2}', '2026-03-01', -9, 'hand')"));
+    // A hand line is edited and may become a statement line; nothing else ever changes `entered`, and
+    // a statement line's day, amount, account and what was charged never change.
+    w.takes(&format!("UPDATE txn SET amount_minor = -250, posted_on = '2026-03-02' WHERE id = '{h2}'; UPDATE txn SET amount_minor = 300 WHERE id = '{h2}'"));
+    w.refuses_with(&format!("UPDATE txn SET entered = 'statement' WHERE id = '{h3}'; UPDATE txn SET entered = 'hand' WHERE id = '{h3}'"), "origin never changes");
+    let stated = w.entity(49, "txn", "T4");
+    w.takes(&format!("INSERT INTO txn (id, account_id, posted_on, amount_minor) VALUES ('{stated}', '{a2}', '2026-03-01', -4)"));
+    w.refuses_with(
+        &format!("UPDATE txn SET amount_minor = 1 WHERE id = '{stated}'"),
+        "never edited",
+    );
+    // A transfer: two accounts, two directions, the lower id first, a line in one pair, and a paired
+    // line keeps its account and direction; the pair goes with either line.
+    let (lo, hi) = if h1 < h2 {
+        (h1.clone(), h2.clone())
+    } else {
+        (h2.clone(), h1.clone())
+    };
+    w.refuses(&format!(
+        "INSERT INTO transfer (a, b) VALUES ('{hi}', '{lo}')"
+    ));
+    w.refuses_with(
+        &format!("INSERT INTO transfer (a, b) VALUES ('{h2}', '{h3}')"),
+        "out of one account",
+    );
+    w.takes(&format!(
+        "INSERT INTO transfer (a, b) VALUES ('{lo}', '{hi}')"
+    ));
+    w.refuses_with(
+        &format!("UPDATE txn SET amount_minor = -5 WHERE id = '{h2}'"),
+        "keeps its account",
+    );
+    w.refuses_with(
+        &format!("UPDATE txn SET account_id = '{a1}' WHERE id = '{h2}'"),
+        "keeps its account",
+    );
+    w.takes(&format!(
+        "UPDATE txn SET amount_minor = 400 WHERE id = '{h2}'"
+    ));
+    // A budget has a real month and an amount that is not negative; no currency column.
+    w.refuses("INSERT INTO budget (category_id, month, amount_minor) VALUES ('category:food', '2026-13', 5)");
+    w.refuses("INSERT INTO budget (category_id, month, amount_minor) VALUES ('category:food', '2026-03', -5)");
+    w.takes("INSERT INTO budget (category_id, month, amount_minor) VALUES ('category:food', '2026-03', 5)");
+    // A rule's pattern is a JSON object with its version, a way to match, words, and a sane range.
+    let rule = |n: u64, pattern: &str, name: &str| {
+        format!(
+            "INSERT INTO rule (id, pattern, display_name, category_id, position, created_at) VALUES ('{}', '{pattern}', {name}, 'category:food', 1, '{AT}')",
+            id(n)
+        )
+    };
+    w.refuses(&rule(60, r#"{"match":"is","text":"x"}"#, "NULL"));
+    w.refuses(&rule(61, r#"{"v":1,"match":"fuzzy","text":"x"}"#, "NULL"));
+    w.refuses(&rule(62, r#"{"v":1,"match":"is","text":"  "}"#, "NULL"));
+    w.refuses(&rule(
+        63,
+        r#"{"v":1,"match":"is","text":"x","min":-1}"#,
+        "NULL",
+    ));
+    w.refuses(&rule(
+        64,
+        r#"{"v":1,"match":"is","text":"x","min":9,"max":3}"#,
+        "NULL",
+    ));
+    w.refuses(&rule(65, r#"{"v":1,"match":"is","text":"x"}"#, "' '"));
+    w.takes(&rule(
+        66,
+        r#"{"v":1,"match":"contains","text":"x","min":3,"max":9}"#,
+        "'Payee'",
+    ));
+    // A checkpoint is a real day.
+    w.refuses(&format!(
+        "INSERT INTO checkpoint (account_id, day, balance_minor) VALUES ('{a1}', '2026-02-30', 1)"
+    ));
+    w.takes(&format!(
+        "INSERT INTO checkpoint (account_id, day, balance_minor) VALUES ('{a1}', '2026-02-28', 1)"
+    ));
+}
+
+#[test]
 fn a_locker_field_holds_the_columns_its_kind_says() {
     let w = World::new("rules_locker");
     let item = w.entity(28, "locker_item", "Bank");
@@ -1338,4 +1471,120 @@ fn an_alert_row_is_a_key_in_a_timing_it_says() {
         id(70)
     ));
     w.takes(&row("floating", "2026-03-01T09:00"));
+}
+
+// ---------------------------------------------------------------------------------------------
+// People (G1-G3, L1): the sentences of `person.*`, `touch.*` are the database's too
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn a_person_needs_a_name_and_a_form_the_lookup_holds() {
+    let w = World::new("rules_person");
+    let blank = id(80);
+    w.refuses(&format!(
+        "INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES ('{blank}', 'person', '  ', '{AT}', '{AT}')"
+    ));
+    let ada = w.entity(81, "person", "Ada");
+    w.takes(&format!("INSERT INTO person (id, given, family, org, cadence_days) VALUES ('{ada}', 'Ada', 'L', 'Engines', 7)"));
+    let bob = w.entity(82, "person", "Bob");
+    w.refuses(&format!(
+        "INSERT INTO person (id, form) VALUES ('{bob}', 'robot')"
+    ));
+    w.refuses(&format!(
+        "INSERT INTO person (id, cadence_days) VALUES ('{bob}', 0)"
+    ));
+    w.takes(&format!(
+        "INSERT INTO person (id, form) VALUES ('{bob}', 'pet')"
+    ));
+}
+
+#[test]
+fn a_person_date_is_a_day_of_a_kind_the_lookup_holds_and_a_single_kind_is_held_once() {
+    let w = World::new("rules_person_date");
+    let ada = w.entity(83, "person", "Ada");
+    w.takes(&format!("INSERT INTO person (id) VALUES ('{ada}')"));
+    let row = |rid: &str, kind: &str, single: u8, date: &str| {
+        format!(
+            "INSERT INTO person_date (id, person_id, kind, single, date) VALUES ('{rid}', '{ada}', '{kind}', {single}, '{date}')"
+        )
+    };
+    w.takes(&row("a", "birthday", 1, "1990-03-14"));
+    // A second birthday, whatever its day.
+    w.refuses(&row("b", "birthday", 1, "--03-15"));
+    // A kind the lookup does not hold, and a `single` that is not the kind's own.
+    w.refuses(&row("c", "feast", 0, "--03-15"));
+    w.refuses(&row("d", "anniversary", 1, "--03-15"));
+    // A yearless day, a leap day with no year; and what is not a day.
+    w.takes(&row("e", "anniversary", 0, "--02-29"));
+    w.takes(&row("f", "other", 0, "2024-02-29"));
+    for bad in [
+        "soon",
+        "--02-30",
+        "2023-02-29",
+        "03-14",
+        "--13-01",
+        "1990-3-14",
+    ] {
+        w.refuses(&row("g", "other", 0, bad));
+    }
+    w.refuses(&format!(
+        "INSERT INTO person_date (id, person_id, kind, single, label, date) VALUES ('h', '{ada}', 'other', 0, '  ', '--01-01')"
+    ));
+}
+
+#[test]
+fn a_contact_point_is_one_per_spelling_and_one_is_preferred_per_kind() {
+    let w = World::new("rules_contact_point");
+    let ada = w.entity(84, "person", "Ada");
+    w.takes(&format!("INSERT INTO person (id) VALUES ('{ada}')"));
+    let row = |rid: &str, kind: &str, normalized: &str, preferred: u8| {
+        format!(
+            "INSERT INTO contact_point (id, person_id, kind, value, normalized, preferred, position)
+             VALUES ('{rid}', '{ada}', '{kind}', '{normalized}', '{normalized}', {preferred}, 1)"
+        )
+    };
+    w.takes(&row("a", "phone", "+15550100", 1));
+    w.refuses(&row("b", "phone", "+15550100", 0));
+    w.refuses(&row("c", "phone", "+15550101", 1));
+    w.takes(&row("d", "phone", "+15550101", 0));
+    w.takes(&row("e", "email", "a@b.c", 1));
+    w.refuses(&row("f", "fax", "1", 0));
+    w.refuses(&format!(
+        "INSERT INTO contact_point (id, person_id, kind, value, normalized, position) VALUES ('g', '{ada}', 'url', '  ', 'x', 1)"
+    ));
+}
+
+#[test]
+fn a_touch_has_a_touch_kind_and_does_not_end_before_it_starts() {
+    let w = World::new("rules_touch");
+    let kind = w.entity(85, "touch_kind", "Call");
+    w.takes(&format!(
+        "INSERT INTO concept (id, kind, key) VALUES ('{kind}', 'touch_kind', 'postcard')"
+    ));
+    let tag = w.entity(86, "tag", "Tag");
+    w.takes(&format!(
+        "INSERT INTO concept (id, kind, key) VALUES ('{tag}', 'tag', 'tag')"
+    ));
+    let touch = |n: u64, type_id: &str, starts: &str, ends: &str| {
+        let t = w.entity(n, "touch", "Call");
+        format!(
+            "INSERT INTO touch (id, type_id, starts, ends) VALUES ('{t}', '{type_id}', '{starts}', {ends})"
+        )
+    };
+    w.takes(&touch(
+        87,
+        &kind,
+        "2026-03-01T10:00:00.000Z",
+        "'2026-03-01T11:00:00.000Z'",
+    ));
+    w.takes(&touch(88, &kind, "2026-03-01T10:00:00.000Z", "NULL"));
+    w.refuses(&touch(
+        89,
+        &kind,
+        "2026-03-01T10:00:00.000Z",
+        "'2026-03-01T09:00:00.000Z'",
+    ));
+    // A tag is not a touch kind; a start that is not an instant is refused.
+    w.refuses(&touch(90, &tag, "2026-03-01T10:00:00.000Z", "NULL"));
+    w.refuses(&touch(91, &kind, "tomorrow", "NULL"));
 }

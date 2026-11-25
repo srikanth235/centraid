@@ -687,6 +687,8 @@ CREATE TABLE person (
 CREATE INDEX person_by_form ON person(form, id);
 -- Reader: the blob collector (an avatar is a rented blob).
 CREATE INDEX person_by_avatar ON person(avatar) WHERE avatar IS NOT NULL;
+-- Reader: People's "who is due" (the people who keep a cadence, `touch::due`).
+CREATE INDEX person_by_cadence ON person(cadence_days, id) WHERE cadence_days IS NOT NULL;
 
 -- G3: EVERY date of a person, the birthday included; anniversaries are no longer yearly events
 -- `about` the person. `date` is a full date or a yearless vCard `--MM-DD`. Each row has its own id
@@ -1089,7 +1091,9 @@ CREATE TABLE account (
   opening_minor INTEGER NOT NULL DEFAULT 0,
   opening_on    TEXT CHECK (date(opening_on) IS opening_on),
   on_budget     INTEGER NOT NULL DEFAULT 1 CHECK (on_budget IN (0,1)),
-  FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
+  FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
+  -- An opening balance that is not nothing is as of a day: without it no one can say which lines it already holds.
+  CHECK (opening_minor = 0 OR opening_on IS NOT NULL)
 ) STRICT;
 -- Reader: Money's accounts grouped by type; the child side of `type`.
 CREATE INDEX account_by_type ON account(type, id);
@@ -1121,6 +1125,8 @@ CREATE TABLE txn (
 -- Readers: an account's lines by day; a month's statement across accounts, newest first.
 CREATE INDEX txn_by_account_day ON txn(account_id, posted_on, id);
 CREATE INDEX txn_by_day         ON txn(posted_on, id);
+-- Reader: the hand lines an account holds, which a statement's lines may be proposed against (E2).
+CREATE INDEX txn_hand_by_account ON txn(account_id, posted_on, id) WHERE entered = 'hand';
 CREATE TRIGGER txn_statement_line_is_fixed
   BEFORE UPDATE OF account_id, posted_on, amount_minor, original_amount_minor, original_currency ON txn
   WHEN old.entered = 'statement'
@@ -1157,6 +1163,15 @@ CREATE TABLE transfer (
 CREATE TRIGGER transfer_halves_are_in_one_pair BEFORE INSERT ON transfer
   WHEN EXISTS (SELECT 1 FROM transfer WHERE b = new.a OR a = new.b)
   BEGIN SELECT RAISE(ABORT, 'a line is in at most one transfer'); END;
+CREATE TRIGGER transfer_halves_are_two_accounts_and_two_directions BEFORE INSERT ON transfer
+  WHEN (SELECT account_id FROM txn WHERE id = new.a) IS (SELECT account_id FROM txn WHERE id = new.b)
+    OR (SELECT amount_minor < 0 FROM txn WHERE id = new.a) IS (SELECT amount_minor < 0 FROM txn WHERE id = new.b)
+  BEGIN SELECT RAISE(ABORT, 'a transfer moves money out of one account and into another'); END;
+-- A line in a transfer keeps the account and the direction the pair was made with.
+CREATE TRIGGER txn_in_a_transfer_keeps_its_account_and_direction BEFORE UPDATE OF account_id, amount_minor ON txn
+  WHEN EXISTS (SELECT 1 FROM transfer WHERE a = old.id OR b = old.id)
+   AND (new.account_id IS NOT old.account_id OR (new.amount_minor < 0) IS NOT (old.amount_minor < 0))
+  BEGIN SELECT RAISE(ABORT, 'a line in a transfer keeps its account and its direction: unlink the transfer first'); END;
 CREATE TRIGGER transfer_halves_are_in_one_pair_on_update BEFORE UPDATE OF a, b ON transfer
   WHEN EXISTS (SELECT 1 FROM transfer WHERE rowid <> old.rowid AND (b = new.a OR a = new.b))
   BEGIN SELECT RAISE(ABORT, 'a line is in at most one transfer'); END;
@@ -1194,7 +1209,15 @@ CREATE TABLE rule (
   category_kind TEXT GENERATED ALWAYS AS ('category') VIRTUAL,
   position      REAL NOT NULL,
   created_at    TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
-  FOREIGN KEY (category_id, category_kind) REFERENCES entity(id, kind) ON DELETE CASCADE
+  FOREIGN KEY (category_id, category_kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
+  -- What a pattern says: how to match, the words to look for, and an optional range of the amount's
+  -- magnitude (never negative, the smallest never above the largest).
+  CHECK (json_extract(pattern, '$.match') IN ('is', 'contains', 'matches')
+     AND json_type(pattern, '$.text') = 'text' AND length(trim(json_extract(pattern, '$.text'))) > 0
+     AND (json_type(pattern, '$.min') IS NULL OR (json_type(pattern, '$.min') = 'integer' AND json_extract(pattern, '$.min') >= 0))
+     AND (json_type(pattern, '$.max') IS NULL OR (json_type(pattern, '$.max') = 'integer' AND json_extract(pattern, '$.max') >= 0))
+     AND (json_type(pattern, '$.min') IS NULL OR json_type(pattern, '$.max') IS NULL
+          OR json_extract(pattern, '$.min') <= json_extract(pattern, '$.max')))
 ) STRICT;
 -- Reader: a category's rules in order; the child side of `category_id`.
 CREATE INDEX rule_by_category ON rule(category_id);
@@ -1378,7 +1401,7 @@ CREATE TABLE locker_key (
 -- ---------------------------------------------------------------------------------------------
 
 INSERT INTO entity_kind (code, linkable, may_be_top, may_be_named, may_be_unnamed) VALUES
-  ('person',1,1,1,1), ('place',1,1,1,1), ('event',1,0,1,1), ('task',1,1,1,1), ('workout',1,1,1,1),
+  ('person',1,1,1,0), ('place',1,1,1,1), ('event',1,0,1,1), ('task',1,1,1,1), ('workout',1,1,1,1),
   ('touch',1,1,1,1), ('reading',0,1,0,1), ('note',1,1,1,0), ('document',1,1,1,1), ('photo',1,1,1,1),
   ('account',1,1,1,1), ('txn',1,1,1,1), ('thread',0,1,1,1), ('locker_item',1,1,1,1),
   ('tag',0,1,1,1), ('category',0,1,1,1), ('workout_kind',0,1,1,1), ('touch_kind',0,1,1,1), ('relation',0,1,1,1),

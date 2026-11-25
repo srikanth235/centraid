@@ -27,8 +27,10 @@ pub const SYSTEMS: &[(&str, Kind)] = &[
     ("vcard", Kind::Person),
     ("markdown", Kind::Note),
     ("csv", Kind::LockerItem),
+    ("csv", Kind::Person),
     ("scan", Kind::Document),
     ("upload", Kind::Document),
+    ("csv", Kind::Txn),
 ];
 
 /// The longest label kept, in characters.

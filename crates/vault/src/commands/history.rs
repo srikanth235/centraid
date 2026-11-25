@@ -47,7 +47,49 @@ fn pre_restore(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         rusqlite::params![ctx.required_str("id")?, ctx.input["seq"].as_i64()],
         |row| row.get(0),
     )?;
-    Ok((held == 0).then(|| "That version is not in this record's history.".to_owned()))
+    if held == 0 {
+        return Ok(Some(
+            "That version is not in this record's history.".to_owned(),
+        ));
+    }
+    let id = ctx.required_str("id")?;
+    let connection = ctx.connection();
+    let (Some(wanted), Some(now)) = (
+        history::version_state(
+            connection,
+            id,
+            ctx.input["seq"].as_i64().unwrap_or_default(),
+        )?,
+        history::current_state(connection, id)?,
+    ) else {
+        return Ok(None);
+    };
+    let fixed = STATEMENT_FIXED.iter().any(|column| {
+        wanted["txn"].get(column) != now["txn"].get(column) && now["txn"].get(column).is_some()
+    });
+    Ok((fixed && is_statement_line(connection, id)?).then(|| STATEMENT_LINE_SAYS.to_owned()))
+}
+
+/// The columns of a line the bank stated that are never edited.
+const STATEMENT_FIXED: [&str; 5] = [
+    "account_id",
+    "posted_on",
+    "amount_minor",
+    "original_amount_minor",
+    "original_currency",
+];
+
+/// What a restore or an undo says when it would put the bank's figures back to what a hand line
+/// said before a statement confirmed it.
+const STATEMENT_LINE_SAYS: &str =
+    "The bank stated this line, so its day, amount and account stay the bank's.";
+
+fn is_statement_line(connection: &rusqlite::Connection, id: &str) -> Result<bool> {
+    Ok(connection.query_row(
+        "SELECT EXISTS (SELECT 1 FROM txn WHERE id = ?1 AND entered = 'statement')",
+        [id],
+        |row| row.get(0),
+    )?)
 }
 
 /// What an undo that names its version says when the record has changed again since.
@@ -65,6 +107,17 @@ fn pre_undo(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let Some(seq) = ctx.input.get("seq").and_then(serde_json::Value::as_i64) else {
         return Ok(None);
     };
+    let id = ctx.required_str("id")?;
+    if let Some(changes) = history::changes_by(ctx.connection(), id, seq)?
+        && changes.iter().any(|change| {
+            STATEMENT_FIXED
+                .iter()
+                .any(|column| change.field == format!("txn.{column}"))
+        })
+        && is_statement_line(ctx.connection(), id)?
+    {
+        return Ok(Some(STATEMENT_LINE_SAYS.to_owned()));
+    }
     if seq == newest || changed_back_since(ctx, seq)? {
         return Ok(None);
     }

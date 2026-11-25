@@ -1353,11 +1353,78 @@ fn empty_trash_with_nested_holders_always_succeeds() {
     }
 }
 
-/// TODO(money lane, E3): a split line whose category is purged keeps its other parts, which then no
-/// longer sum to the line. Purge drops the parts that name the category (so it never refuses); what
-/// the line should become is the money lane's to define.
+/// A split line that loses one category keeps summing (E3, ruled by the owner): every part that
+/// named it is filed again under its group, two parts that then name one category become one, and
+/// a category with no group leaves the line uncategorised. A purge is never refused for it.
 #[test]
-#[ignore = "money lane: what a multi-part line becomes when one of its categories is purged"]
 fn a_line_split_across_categories_keeps_a_sum_when_one_is_purged() {
-    panic!("the money lane defines this (see UNPLUGGED.md)");
+    let w = World::new();
+    let id = w.ok(
+        "account.add",
+        json!({ "title": "A", "type": "checking", "currency": "USD" }),
+    )["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    let child = w.ok(
+        "category.add",
+        json!({ "title": "Beans", "parent_id": "category:food" }),
+    )["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    let top = w.ok("category.add", json!({ "title": "Pets" }))["id"]
+        .as_str()
+        .expect("an id")
+        .to_owned();
+    let line = |amount: i64, parts: serde_json::Value| {
+        w.ok(
+            "txn.add",
+            json!({ "account_id": id, "posted_on": "2026-03-01", "amount_minor": amount, "splits": parts }),
+        )["id"]
+            .as_str()
+            .expect("an id")
+            .to_owned()
+    };
+    let split = line(
+        -1_000,
+        json!([
+            { "category_id": child, "amount_minor": -600 },
+            { "category_id": "category:food", "amount_minor": -100 },
+            { "category_id": "category:health.care", "amount_minor": -300 } ]),
+    );
+    let pets = line(
+        -500,
+        json!([
+            { "category_id": top, "amount_minor": -200 },
+            { "category_id": "category:health.care", "amount_minor": -300 } ]),
+    );
+    let sums = |line: &str| {
+        (
+            w.one::<i64>("SELECT COUNT(*) FROM txn_split WHERE txn_id = ?1", &[line]),
+            w.one::<i64>(
+                "SELECT COALESCE(SUM(amount_minor), 0) FROM txn_split WHERE txn_id = ?1",
+                &[line],
+            ),
+        )
+    };
+    w.ok("entity.purge", json!({ "id": child }));
+    assert_eq!(
+        sums(&split),
+        (2, -1_000),
+        "the two food parts became one and kept the sum"
+    );
+    assert_eq!(
+        w.one::<String>(
+            "SELECT category_id || amount_minor FROM txn_split WHERE txn_id = ?1 ORDER BY position LIMIT 1",
+            &[&split]
+        ),
+        "category:food-700"
+    );
+    w.ok("entity.purge", json!({ "id": top }));
+    assert_eq!(sums(&pets), (0, 0), "no group: the line is uncategorised");
+    assert_eq!(
+        w.one::<i64>("SELECT amount_minor FROM txn WHERE id = ?1", &[&pets]),
+        -500
+    );
 }
