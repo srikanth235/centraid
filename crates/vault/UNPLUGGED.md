@@ -36,9 +36,10 @@ and make it pass. Tests of removed behaviour are deleted, not ported.
 | `commands/edge.rs` | `Rel::Links`/`Attendee`, `state` and the reverse-link dedupe removed; shape check reads `entity_kind.linkable` for `*`; `anchor` carries `"v":1` | K5 |
 | `links.rs` | compiles (`Kind::Workout`, no `Links` rel); **its SQL still reads the old `links` edges** and is wrong | K5 |
 | `commands/note.rs` | compiles; still writes the old columns (`notebook_id`, `wikilink` edges), so `note.create`, `note.edit` and the rest fail against the new tables until K11 rewrites it. A note is made in tests with `common::insert_note` | K11 |
-| `commands/history.rs` | the event overlay and a text document's words are removed from `history.keep_version`/`pre_keep` | K6 and the event/document lanes |
-| `history/shape.rs` | `TABLES`, `OMITTED`, `RELATIONS_OUTSIDE` rewritten for the new tables; B1 roles applied (budget, rule, occurrence outside) | K6 |
-| `history/mod.rs`, `history/read.rs` | the revision writes `actor` (member or assistant from the cause prefix; **a store's revision needs its origin, not carried yet, so it is written as the member's**), `shape = 1`, and the document's bytes as `revision_blob` slot `document.blob`; **no other blob slot** (avatar, cover, motion, sealed file, note asset) is recorded yet | K6 |
+| `commands/follow/` (the pass) | a follow pass commits through `Vault::commit` or `Command::as_actor`; it must say `Actor::Store { origin_id }` (`CommitTx::set_actor`) so its revisions carry `actor = 'store'` and the origin, which the table's CHECK demands of a store. `follow::system_of` (read only by the old cause parsing) is gone | K9 |
+| `history/write.rs`, `commands/event/times.rs` | `history.keep_version` keeps `table.column` fields only; the event overlay (`attendee`, `reminder` lists, the `occurrence`/`DAY` day) is gone: an occurrence is outside a series' snapshot (B1) and guests and reminders are rows with their own keys. `commands/event/times.rs` still names `history::DAY` | calendar lane |
+| `history/restore.rs` | a restore re-links a note only when its words came back different (`note::relink`), so restoring a note's words works once `commands/note.rs` is rewritten | K11 |
+| `index/past.rs` | `EARLIER_COLUMNS` still names `occurrence` (outside a snapshot since B1, so no version holds one); the Locker's earlier plain cells are in the history and `ix.search_past`'s own comment says they are searched | K7 |
 | `index.rs`, `index/text.rs`, `index/past.rs` | `DEPENDENTS` and `text_of` read the new tables; `search_owed` is keyed by `entity.n` and the label drain still works on it; **rows with `after IS NULL` (a whole entity owed after an index file is re-founded) are written by `Vault::open` and are not drained yet** | K7 |
 | `file.rs` | founds and attaches `<stem>.index.db` (schema `ix`); a missing or stale one is founded again and owes every entity | K7 |
 | `backup/files.rs` | `RENTERS` and the original-file read use `revision_blob`, `note_asset`, `locker_item_field.value_blob`, `photo.motion_blob`; **the index file is not yet kept out of a restore or rebuilt after one**, and the sealed-file hook is not written | K10 |
@@ -52,7 +53,6 @@ Each is the old test of a thing the new schema changed; the owner rewrites it ag
 and moves it back.
 
 - **K5 graph (edge.rs, links.rs, link and mention tables)**: `graph`, `links`, `shared_verbs_edges` (the edge half of the old `shared_verbs`; `edge.rs` still builds a relation's id with `model::concept_id`, which only a seeded concept has: a member's is minted, found by `concept(kind, key)`)
-- **K6 history (history/, revision, revision_blob)**: `history`, `revision_kept`, `earlier_versions_found`
 - **K7 index file (index/, writers, search_owed drain, geo)**: `index_owed`, `index_walks`, `page_source`
 - **K8 reminders and alerts (alerts.rs, reminder, alert)**: `alerts`
 - **K9 following (commands/follow/, arrival.rs, origin_cursor.rs)**: `arrival` (an arrival is two columns of `entity` now and makes no origin or source; `arrival::SYSTEMS` is read only by `follow/merge.rs`'s exclusion clause, now dead), `shared_verbs_people_follow`, `origin_cursor`, `follow_items`, `follow_reminders`, `follow_retire`, `follow_stated`, `follow_gaps`, `calendar_follow`

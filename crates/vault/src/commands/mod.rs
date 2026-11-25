@@ -130,8 +130,14 @@ pub struct CommandCtx<'tx, 'conn> {
 
 impl<'conn> CommandCtx<'_, 'conn> {
     /// The cause and quietness this commit's history will settle under.
-    pub(crate) fn settling_as(&self) -> (String, bool) {
+    pub(crate) fn settling_as(&self) -> crate::history::Settling {
         self.tx.settling_as()
+    }
+
+    /// Say this commit is not a quiet save, whatever the caller marked it: a version put back
+    /// (a restore, an undo) is a version of its own and never folds into a session.
+    pub(crate) fn end_quiet(&self) {
+        self.tx.set_quiet(false);
     }
 
     /// The connection this command writes through — the guard's, so the
@@ -446,10 +452,11 @@ pub struct Command {
     /// A QUIET save: an editor's autosave, which the caller says it is (never inferred from the
     /// name). Its history may fold into the session of the last one; see [`crate::history`].
     pub quiet: bool,
-    /// WHO ACTED when it is not the member acting by hand: the chat's door says `assist`. It is
-    /// said by the door, never inferred from the command's name or input, and it only changes the
-    /// commit's producer, so the history can say "Changed by Chat" ([`crate::history::Who`]).
-    pub actor: Option<&'static str>,
+    /// WHO ACTED (B4): the member by hand unless the door the command came through says otherwise
+    /// (the chat's door, a follow pass for its origin). It is said by the door, never inferred
+    /// from the command's name or input, and it is written to the revisions the commit keeps
+    /// ([`crate::history::Actor`]).
+    pub actor: crate::history::Actor,
 }
 
 impl Command {
@@ -459,14 +466,26 @@ impl Command {
             name: name.into(),
             input,
             quiet: false,
-            actor: None,
+            actor: crate::history::Actor::Member,
         }
     }
 
-    /// This command as made by `actor` (the chat's door), not by the member's own hand.
+    /// This command as made by the assistant (the chat's door: `by("assist")`), not by the
+    /// member's own hand.
     #[must_use]
-    pub const fn by(mut self, actor: &'static str) -> Self {
-        self.actor = Some(actor);
+    pub fn by(mut self, door: &'static str) -> Self {
+        debug_assert_eq!(
+            door, "assist",
+            "the chat's door is the only one that says `by`"
+        );
+        self.actor = crate::history::Actor::Assistant;
+        self
+    }
+
+    /// This command as made by `actor`.
+    #[must_use]
+    pub fn as_actor(mut self, actor: crate::history::Actor) -> Self {
+        self.actor = actor;
         self
     }
 
@@ -571,10 +590,8 @@ impl Vault {
         })?;
 
         let ran = self.commit(|tx| {
-            match command.actor {
-                Some(actor) => tx.set_producer(format!("{actor}.{}", command.name)),
-                None => tx.set_producer(&command.name),
-            }
+            tx.set_producer(&command.name);
+            tx.set_actor(command.actor.clone());
             tx.set_quiet(command.quiet);
             let connection = tx.connection();
             if let Some(mark) = keyed

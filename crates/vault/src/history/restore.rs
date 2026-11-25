@@ -12,13 +12,17 @@
 //!
 //! A column that points at something that is gone (a place that was purged, bytes that were
 //! collected) is left as it is and named in [`Restored::kept_current`]: the rest of the version
-//! comes back, and nothing is made to point at nothing.
+//! comes back, and nothing is made to point at nothing. The record's HOME (`entity.parent_id`) comes
+//! back the same way: it goes back through [`crate::commands::entity::move_home`], and when the
+//! home it had is no longer a live holder that may hold the record (it was trashed or purged, or
+//! the record's own descendants now hold it) the record stays where it is now and
+//! `entity.parent_id` is named in `kept_current`.
 
 use rusqlite::types::Value as Sql;
 use serde_json::Value as Json;
 
 use super::read::{current_state, key_of, version_state};
-use super::shape::{CONTENT, Part, shape};
+use super::shape::{BLOB_SLOTS, CONTENT, Part, shape};
 use crate::canonical::canonical_json;
 use crate::commands::CommandCtx;
 use crate::error::Result;
@@ -37,7 +41,7 @@ pub struct Restored {
 pub enum Scope {
     /// Everything the version captured.
     All,
-    /// Only the entity's content: a note's words, a document's bytes.
+    /// Only the entity's content: a note's words, the bytes a blob slot names.
     Content,
 }
 
@@ -87,29 +91,6 @@ pub fn restore_changes(ctx: &CommandCtx<'_, '_>, id: &str, seq: i64) -> Result<O
 /// Put one change's earlier value over `state`: a column, or a whole child row (`null` removes it).
 fn put_back(shape: &super::shape::Shape, state: &mut Json, change: &super::read::Change) {
     let field = change.field.as_str();
-    // `link[<other item>]`: a link has no direction a member can see; it sits under whichever end
-    // held it.
-    if let Some(other) = field
-        .strip_prefix("link[")
-        .and_then(|rest| rest.strip_suffix(']'))
-    {
-        for (alias, end) in [("link_out", "to_id"), ("link_in", "from_id")] {
-            if let Some(rows) = state.get_mut(alias).and_then(Json::as_array_mut) {
-                rows.retain(|row| row.get(end).and_then(Json::as_str) != Some(other));
-            }
-        }
-        if let Some(row) = change.before.as_object() {
-            let alias = if row.get("to_id").and_then(Json::as_str) == Some(other) {
-                "link_out"
-            } else {
-                "link_in"
-            };
-            if let Some(rows) = state.get_mut(alias).and_then(Json::as_array_mut) {
-                rows.push(change.before.clone());
-            }
-        }
-        return;
-    }
     // `alias[key]` or `alias[key].column`: a row of a child table.
     if let Some((alias, rest)) = field.split_once('[')
         && let Some((key, column)) = rest.rsplit_once(']')
@@ -155,6 +136,8 @@ fn restore_state(
     now: &Json,
     scope: Scope,
 ) -> Result<Restored> {
+    // A version put back is a version of its own, even when the caller marked the commit quiet.
+    ctx.end_quiet();
     let connection = ctx.connection();
     let shape = shape(connection)?;
     let mut writer = Writer {
@@ -163,15 +146,23 @@ fn restore_state(
         changed: false,
         kept: Vec::new(),
     };
-    if scope == Scope::All
-        && let (Some(was), Some(is)) = (
+    if scope == Scope::All {
+        if let (Some(was), Some(is)) = (
             wanted.pointer("/entity/title").and_then(Json::as_str),
             now.pointer("/entity/title").and_then(Json::as_str),
-        )
-        && was != is
-    {
-        connection.execute("UPDATE entity SET title = ?2 WHERE id = ?1", [id, was])?;
-        writer.changed = true;
+        ) && was != is
+        {
+            connection.execute("UPDATE entity SET title = ?2 WHERE id = ?1", [id, was])?;
+            writer.changed = true;
+        }
+        // A version from before the home was kept names none: it says nothing about it.
+        if let (Some(was), Some(is)) = (
+            wanted.pointer("/entity/parent_id"),
+            now.pointer("/entity/parent_id"),
+        ) && was != is
+        {
+            writer.home(was.as_str())?;
+        }
     }
     for part in shape.hosts() {
         let (Some(wanted_row), Some(held_row)) = (
@@ -181,11 +172,16 @@ fn restore_state(
             continue;
         };
         let only: Option<Vec<&str>> = (scope == Scope::Content).then(|| {
-            CONTENT
+            let mut columns: Vec<&str> = CONTENT
                 .iter()
-                .filter(|(table, _, _)| *table == part.name)
-                .map(|(_, column, _)| *column)
-                .collect()
+                .filter(|(table, _)| *table == part.name)
+                .map(|(_, column)| *column)
+                .collect();
+            for slot in BLOB_SLOTS.iter().filter(|slot| slot.table == part.name) {
+                columns.push(slot.column);
+                columns.extend(slot.media_type);
+            }
+            columns
         });
         writer.update(part, wanted_row, held_row, &[], only.as_deref())?;
     }
@@ -195,13 +191,8 @@ fn restore_state(
                 continue;
             }
             for child in shape.children_of(host.name) {
-                // A link has no direction a member can see: the two directions are restored as
-                // one set, below.
-                if LINKS.contains(&child.alias) {
-                    continue;
-                }
                 let (Some(wanted_rows), Some(held_rows)) =
-                    (wanted.get(child.alias), now.get(child.alias))
+                    (wanted.get(child.name), now.get(child.name))
                 else {
                     continue;
                 };
@@ -209,13 +200,12 @@ fn restore_state(
             }
         }
     }
-    if scope == Scope::All {
-        writer.links(shape, wanted, now)?;
-    }
     if writer.changed {
         ctx.touch(id)?;
-        // What an ordinary edit of the kind derives from what it wrote.
-        if wanted.get("note").is_some() {
+        // What an ordinary edit of the kind derives from what it wrote: a note's links are read
+        // from its words, so they are compiled again when the words came back different.
+        let words = |state: &Json| state.pointer("/note/body").cloned();
+        if words(wanted).is_some() && words(wanted) != words(now) {
             crate::commands::note::relink(ctx, id)?;
         }
     }
@@ -223,27 +213,6 @@ fn restore_state(
         restored: writer.changed,
         kept_current: writer.kept,
     })
-}
-
-/// The aliases of the two directions of a link set by hand.
-const LINKS: [&str; 2] = ["link_out", "link_in"];
-
-/// The items a state's links join, by id, with the row and the direction that holds each.
-fn linked_ends(state: &Json) -> std::collections::BTreeMap<String, (&Json, &'static str)> {
-    let mut found = std::collections::BTreeMap::new();
-    for (alias, end) in [("link_out", "to_id"), ("link_in", "from_id")] {
-        for row in state
-            .get(alias)
-            .and_then(Json::as_array)
-            .into_iter()
-            .flatten()
-        {
-            if let Some(other) = row.get(end).and_then(Json::as_str) {
-                found.entry(other.to_owned()).or_insert((row, alias));
-            }
-        }
-    }
-    found
 }
 
 struct Writer<'a, 'tx, 'conn> {
@@ -278,6 +247,26 @@ fn same(left: Option<&Json>, right: Option<&Json>) -> bool {
 }
 
 impl Writer<'_, '_, '_> {
+    /// Put the record back in the home it had (`None`: the top level), when it may go there
+    /// still: a live holder that may hold it, that is not inside the record. Otherwise the record
+    /// stays where it is and `entity.parent_id` is named as kept.
+    fn home(&mut self, wanted: Option<&str>) -> Result<()> {
+        let connection = self.ctx.connection();
+        let Some(found) = crate::commands::entity::find(connection, self.id)? else {
+            return Ok(());
+        };
+        if crate::commands::entity::home_refusal(connection, found.kind, Some(self.id), wanted)?
+            .is_some()
+        {
+            self.kept.push("entity.parent_id".to_owned());
+            return Ok(());
+        }
+        if crate::commands::entity::move_home(self.ctx, self.id, wanted)? {
+            self.changed = true;
+        }
+        Ok(())
+    }
+
     /// Whether what `column` of `part` points at (in `value`) still exists.
     fn target_exists(&self, part: &Part, column: &str, value: &Json) -> Result<bool> {
         let Some((table, to)) = part.references.get(column) else {
@@ -321,7 +310,7 @@ impl Writer<'_, '_, '_> {
                 continue;
             }
             if !self.target_exists(part, column, value)? {
-                self.kept.push(format!("{}.{column}", part.alias));
+                self.kept.push(format!("{}.{column}", part.name));
                 continue;
             }
             values.push(sql_of(value));
@@ -348,9 +337,6 @@ impl Writer<'_, '_, '_> {
                 values.len()
             ));
         }
-        if let Some(filter) = part.filter() {
-            wheres.push(format!("({filter})"));
-        }
         self.ctx.connection().execute(
             &format!(
                 "UPDATE {} SET {} WHERE {}",
@@ -361,36 +347,6 @@ impl Writer<'_, '_, '_> {
             rusqlite::params_from_iter(values),
         )?;
         self.changed = true;
-        Ok(())
-    }
-
-    /// Put the links back as a set of items joined, whichever end each was made from: a link the
-    /// version did not have is taken off (from whichever end holds it), one it had is made again
-    /// the way it was made. A version from before links were kept has no say.
-    fn links(&mut self, shape: &super::shape::Shape, wanted: &Json, now: &Json) -> Result<()> {
-        if LINKS.iter().all(|alias| wanted.get(alias).is_none()) {
-            return Ok(());
-        }
-        let (wanted_ends, held_ends) = (linked_ends(wanted), linked_ends(now));
-        for other in held_ends
-            .keys()
-            .filter(|other| !wanted_ends.contains_key(*other))
-        {
-            self.ctx.connection().execute(
-                "DELETE FROM edge WHERE rel = 'links' AND anchor IS NULL
-                   AND ((from_id = ?1 AND to_id = ?2) OR (from_id = ?2 AND to_id = ?1))",
-                [self.id, other.as_str()],
-            )?;
-            self.changed = true;
-        }
-        for (other, (row, alias)) in &wanted_ends {
-            if held_ends.contains_key(other) {
-                continue;
-            }
-            if let Some(part) = shape.part(alias) {
-                self.insert(part, row)?;
-            }
-        }
         Ok(())
     }
 
@@ -449,9 +405,6 @@ impl Writer<'_, '_, '_> {
                 values.len()
             ));
         }
-        if let Some(filter) = part.filter() {
-            wheres.push(format!("({filter})"));
-        }
         self.ctx.connection().execute(
             &format!(
                 "DELETE FROM {} WHERE {}",
@@ -464,39 +417,7 @@ impl Writer<'_, '_, '_> {
         Ok(())
     }
 
-    /// Whether a link `row` of this entity would be a second edge between the same two items: the
-    /// other direction is held already (`edge.add` never puts both in place, and a restore does
-    /// not either).
-    fn reverse_link_held(&self, part: &Part, row: &Json) -> Result<bool> {
-        if part.name != "edge" || row.get("rel").and_then(Json::as_str) != Some("links") {
-            return Ok(false);
-        }
-        let (other, from_here) = if part.via() == "from_id" {
-            (row.get("to_id"), true)
-        } else {
-            (row.get("from_id"), false)
-        };
-        let Some(other) = other.and_then(Json::as_str) else {
-            return Ok(false);
-        };
-        // The edge this row would be is `id -> other` (from_here) or `other -> id`; the one to
-        // look for is its reverse.
-        let (from, to) = if from_here {
-            (other, self.id)
-        } else {
-            (self.id, other)
-        };
-        Ok(self.ctx.connection().query_row(
-            "SELECT EXISTS (SELECT 1 FROM edge WHERE from_id = ?1 AND rel = 'links' AND to_id = ?2)",
-            [from, to],
-            |held| held.get(0),
-        )?)
-    }
-
     fn insert(&mut self, part: &Part, row: &Json) -> Result<()> {
-        if self.reverse_link_held(part, row)? {
-            return Ok(());
-        }
         let mut names = vec![crate::log::quoted(part.via())];
         let mut values: Vec<Sql> = vec![Sql::Text(self.id.to_owned())];
         for column in &part.columns {
@@ -506,24 +427,11 @@ impl Writer<'_, '_, '_> {
             if !self.target_exists(part, column, value)? {
                 // A row that points at something gone cannot come back; the rest can.
                 self.kept
-                    .push(format!("{}[{}]", part.alias, key_of(part, row)));
+                    .push(format!("{}[{}]", part.name, key_of(part, row)));
                 return Ok(());
             }
             names.push(crate::log::quoted(column));
             values.push(sql_of(value));
-        }
-        // A record put back in a list or an album goes to the END of it: where a member sits is
-        // the container's, a version does not keep it, and a missing position would sort first.
-        if part.alias == "membership"
-            && let Some(container) = row.get("from_id").and_then(Json::as_str)
-        {
-            let end: f64 = self.ctx.connection().query_row(
-                crate::commands::edge::NEXT_POSITION,
-                [container],
-                |found| found.get(0),
-            )?;
-            names.push(crate::log::quoted("position"));
-            values.push(Sql::Real(end));
         }
         // A stamp a state does not keep (`OMITTED`: a child's `updated_at`) is the time of the
         // restore, from the vault's clock; the schema has no default for it.

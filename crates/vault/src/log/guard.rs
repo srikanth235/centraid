@@ -86,6 +86,23 @@ pub struct Pending {
     producer: String,
     /// Whether the commit is a quiet save (an editor's autosave): see [`CommitTx::set_quiet`].
     quiet: bool,
+    /// Who made the commit: see [`CommitTx::set_actor`].
+    actor: crate::history::Actor,
+}
+
+impl Pending {
+    /// What the history is told when the commit settles.
+    fn settling(&self) -> crate::history::Settling {
+        crate::history::Settling {
+            cause: if self.producer.is_empty() {
+                "unnamed".to_owned()
+            } else {
+                self.producer.clone()
+            },
+            actor: self.actor.clone(),
+            quiet: self.quiet,
+        }
+    }
 }
 
 impl<'conn> CommitTx<'conn> {
@@ -112,17 +129,18 @@ impl<'conn> CommitTx<'conn> {
         self.pending.borrow_mut().quiet = quiet;
     }
 
-    /// What the history will be told when this commit settles: the cause it is kept under and
-    /// whether the commit is a quiet save. A handler that answers the revision its save leaves
-    /// asks the history with the same two facts ([`crate::history::head_after`]).
-    pub(crate) fn settling_as(&self) -> (String, bool) {
-        let pending = self.pending.borrow();
-        let cause = if pending.producer.is_empty() {
-            "unnamed".to_owned()
-        } else {
-            pending.producer.clone()
-        };
-        (cause, pending.quiet)
+    /// Say WHO made this commit (B4): the door a command came through, a follow pass for the
+    /// origin it follows. It is written to every revision the commit keeps and is never inferred
+    /// from the producer's name; a commit that says nothing is the member's.
+    pub fn set_actor(&self, actor: crate::history::Actor) {
+        self.pending.borrow_mut().actor = actor;
+    }
+
+    /// What the history will be told when this commit settles: the cause it is kept under, who
+    /// made it, and whether it is a quiet save. A handler that answers the revision its save
+    /// leaves asks the history with the same facts ([`crate::history::head_after`]).
+    pub(crate) fn settling_as(&self) -> crate::history::Settling {
+        self.pending.borrow().settling()
     }
 
     /// Stamp an entity as changed: `updated_at`, and a place on the
@@ -337,18 +355,8 @@ impl Vault {
             // (`crates/vault/UNPLUGGED.md`), keyed by the reminder's id in the index file.
             // The history is part of the commit too: the states it replaced are kept with the
             // change that replaced them, or neither lands.
-            let producer = std::mem::take(&mut self.pending.borrow_mut().producer);
-            let quiet = self.pending.borrow().quiet;
-            crate::history::settle(
-                &connection,
-                &now,
-                if producer.is_empty() {
-                    "unnamed"
-                } else {
-                    &producer
-                },
-                quiet,
-            )?;
+            let settling = self.pending.borrow().settling();
+            crate::history::settle(&connection, &now, &settling)?;
             bump_writes(&connection, &census, &now)?;
             Ok(value)
         })();

@@ -6,12 +6,11 @@
 //! could not):
 //!
 //! - `history.restore_version`: the record goes back to what version `seq` held, field by field
-//!   and row by row.
+//!   and row by row, its home included when that home is still a live holder that may hold it
+//!   (else the record stays where it is and `entity.parent_id` is named in `kept_current`).
 //! - `history.keep_version`: the words a refused stale save held, kept as the newest earlier version beside
-//!   the record as it is (the record is not changed). Each kept field is `table.column`; an event's
-//!   times and alerts are stated as a member types them (a wall clock and its zone, minutes before)
-//!   and kept as the vault holds them, `attendee` is the list of the guests by person id, and `occurrence` is what one day of a series
-//!   changes, stated as `event.edit_occurrence` states it.
+//!   the record as it is (the record is not changed). Each kept field is `table.column`; a sealed cell
+//!   and a column that names bytes are refused.
 //! - `history.undo`: the record goes back to its newest earlier version, "undo the last change".
 //!   It is the generic inverse of every edit; it is not idempotent (twice undoes then redoes).
 //!   Given `seq` it undoes THAT change and nothing else: the version is the newest, or the record is
@@ -162,14 +161,7 @@ fn fields(ctx: &CommandCtx<'_, '_>) -> serde_json::Map<String, serde_json::Value
 /// item is never one: the vault holds no key, so a secret the member typed is not kept this way (the
 /// overlay refuses it), and a Locker item's plain fields are kept like any other record's.
 fn pre_keep(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    let id = ctx.required_str("id")?;
-    let Some(found) = crate::commands::entity::find(ctx.connection(), id)? else {
-        return Ok(Some(format!("there is nothing with the id `{id}`")));
-    };
-    let overlay = fields(ctx);
-    // UNPLUGGED (#1214): the event overlay and a text document's words come back with their app lanes.
-    let _ = &found;
-    history::overlay_refusal(ctx.connection(), id, &overlay)
+    history::overlay_refusal(ctx.connection(), ctx.required_str("id")?, &fields(ctx))
 }
 
 #[derive(serde::Deserialize)]
@@ -181,7 +173,13 @@ struct KeepVersionInput {
 fn keep_version(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let input: KeepVersionInput = ctx.parse_input()?;
     let overlay = input.fields;
-    let kept = history::keep_overlay(ctx.connection(), &input.id, &overlay, &ctx.now, ctx.command)?;
+    let kept = history::keep_overlay(
+        ctx.connection(),
+        &input.id,
+        &overlay,
+        &ctx.now,
+        &ctx.settling_as(),
+    )?;
     Ok(match kept {
         history::Kept::Version(seq) => {
             serde_json::json!({ "id": input.id, "kept": true, "seq": seq })

@@ -69,7 +69,6 @@ use crate::commands::CommandCtx;
 use crate::error::Result;
 use crate::model::Kind;
 
-pub(crate) use commands::system_of;
 pub use commands::{Difference, ItemDifference, definitions, differences};
 pub use merge::apply;
 pub use systems::SYSTEMS;

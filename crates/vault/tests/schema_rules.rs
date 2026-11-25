@@ -558,3 +558,90 @@ fn nothing_live_is_made_moved_or_restored_inside_a_trash() {
         "UPDATE entity SET deleted_at = '{AT}', purge_at = '{AT}', trashed_by = '{note}' WHERE id = '{note}'"
     ));
 }
+
+// ---------------------------------------------------------------------------------------------
+// B2-B4: a version says who made it, which grammar it is in, and which blobs it names (K6)
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn a_revision_names_its_actor_and_only_a_store_names_an_origin() {
+    let w = World::new("rules_k6_actor");
+    let note = w.entity(40, "note", "n");
+    w.takes(&format!(
+        "INSERT INTO origin (id, system, ref, label, created_at)
+         VALUES ('o1', 'contacts', 'r1', 'Phone', '{AT}')"
+    ));
+    let row = |seq: u32, actor: &str, origin: &str, shape: u32, state: &str| {
+        format!(
+            "INSERT INTO revision (entity_id, seq, at, actor, origin_id, shape, state)
+             VALUES ('{note}', {seq}, '{AT}', '{actor}', {origin}, {shape}, '{state}')"
+        )
+    };
+    w.takes(&row(1, "member", "NULL", 1, "{}"));
+    w.takes(&row(2, "assistant", "NULL", 1, "{}"));
+    w.takes(&row(3, "store", "'o1'", 1, "{}"));
+    // The actor is one of three, and only a store has an origin; a store always does.
+    w.refuses(&row(4, "robot", "NULL", 1, "{}"));
+    w.refuses(&row(4, "member", "'o1'", 1, "{}"));
+    w.refuses(&row(4, "assistant", "'o1'", 1, "{}"));
+    w.refuses(&row(4, "store", "NULL", 1, "{}"));
+    // The origin is a real one.
+    w.refuses_with(&row(4, "store", "'nowhere'", 1, "{}"), "FOREIGN KEY");
+    // The grammar is a version, the state is JSON, the number counts from one.
+    w.refuses(&row(4, "member", "NULL", 0, "{}"));
+    w.refuses(&row(4, "member", "NULL", 1, "not json"));
+    w.refuses(&row(0, "member", "NULL", 1, "{}"));
+    w.refuses(&row(2, "member", "NULL", 1, "{}"));
+    // An origin that a version names is not dropped from under it.
+    w.refuses_with("DELETE FROM origin WHERE id = 'o1'", "FOREIGN KEY");
+}
+
+#[test]
+fn a_revision_is_history_and_a_version_names_only_blobs_the_vault_holds() {
+    let w = World::new("rules_k6_blob");
+    let note = w.entity(41, "note", "n");
+    let hash = "a".repeat(64);
+    w.takes(&format!(
+        "INSERT INTO blob (hash, size) VALUES ('{hash}', 3)"
+    ));
+    w.takes(&format!(
+        "INSERT INTO revision (entity_id, seq, at, actor, shape) VALUES ('{note}', 1, '{AT}', 'member', 1)"
+    ));
+    let claim = |seq: u32, slot: &str, blob: &str, media: &str| {
+        format!(
+            "INSERT INTO revision_blob (entity_id, seq, slot, blob, media_type)
+             VALUES ('{note}', {seq}, '{slot}', '{blob}', {media})"
+        )
+    };
+    w.takes(&claim(1, "blob", &hash, "'text/plain'"));
+    // One claim per slot of a version, on a version that exists, of bytes that exist.
+    w.refuses(&claim(1, "blob", &hash, "NULL"));
+    w.refuses_with(&claim(2, "avatar", &hash, "NULL"), "FOREIGN KEY");
+    w.refuses_with(&claim(1, "avatar", &"b".repeat(64), "NULL"), "FOREIGN KEY");
+    w.refuses(&claim(1, " ", &hash, "NULL"));
+    w.refuses(&claim(1, "cover", &hash, "' '"));
+    // The bytes a version names are not dropped from under it.
+    w.refuses_with(
+        &format!("DELETE FROM blob WHERE hash = '{hash}'"),
+        "FOREIGN KEY",
+    );
+    // A version never changes, but for the instant its session last folded another save in.
+    w.refuses_with(
+        &format!("UPDATE revision SET state = '{{\"x\":1}}' WHERE entity_id = '{note}'"),
+        "a revision is history",
+    );
+    w.refuses_with(
+        &format!("UPDATE revision SET actor = 'assistant' WHERE entity_id = '{note}'"),
+        "a revision is history",
+    );
+    w.refuses_with(
+        &format!("UPDATE revision_blob SET slot = 'cover' WHERE entity_id = '{note}'"),
+        "a revision is history",
+    );
+    w.takes(&format!(
+        "UPDATE revision SET touched_at = '{AT}' WHERE entity_id = '{note}'"
+    ));
+    // It goes with its entity, and its claims with it.
+    w.takes(&format!("DELETE FROM entity WHERE id = '{note}'"));
+    w.takes(&format!("DELETE FROM blob WHERE hash = '{hash}'"));
+}

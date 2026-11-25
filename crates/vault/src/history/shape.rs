@@ -1,9 +1,16 @@
 //! What an entity's state is: the classification of every table, and the SQL derived from it.
 //!
 //! [`TABLES`] is the one place that says which tables make up an entity's state; [`OMITTED`] the
-//! one place that says which columns of those tables are not kept, each with its reason. Every
-//! other column is kept automatically, read from the file's own `table_xinfo`. A test fails when
-//! a table the baseline makes, or a kind the model names, is not classified here.
+//! one place that says which columns of those tables are not kept, each with its reason;
+//! [`BLOB_SLOTS`] the one place that says which columns name bytes. Every other column is kept
+//! automatically, read from the file's own `table_xinfo`. A test fails when a table the baseline
+//! makes, a kind the model names, or a column that references `blob(hash)` is not classified here.
+//!
+//! THE SNAPSHOT GRAMMAR (B1, version [`SHAPE_VERSION`]): a host's state is its entity's `title` and
+//! home (`parent_id`), its kind row, and the rows it OWNS (a person's contact points, an event's
+//! guests and reminders, a note's assets, a Locker item's fields). Edges, links, `budget`, `rule`,
+//! `occurrence` and `transfer` belong to a relationship or a series, not to one record, and are
+//! outside: setting a budget writes no copy of the category's other budgets or rules.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
@@ -14,33 +21,30 @@ use super::{SEEN, STATE_VIEW};
 use crate::error::Result;
 use crate::model::Kind;
 
-/// The `host` of a child that hangs from every kind's row (a tag, a flag, a link).
-pub const EVERY_KIND: &str = "*";
+/// The grammar version a `revision` is written in (`revision.shape`). A reader refuses a version
+/// written by a newer grammar rather than read it as this one.
+pub const SHAPE_VERSION: i64 = 1;
 
 /// What a table is to the history.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
-    /// The entity row: only its `title` is a member's state.
+    /// The entity row: its `title` and its home (`parent_id`) are a member's state.
     Entity,
     /// A kind's own row, keyed by the entity's id (`concept` and `container` host several kinds).
     Host,
     /// Rows that belong to one entity, a part of its state: `via` is the column that holds the
-    /// entity's id, `host` the kind row they hang from, `filter` a predicate (over the child's own
-    /// columns) saying which of its rows are state at all.
+    /// entity's id, `hosts` the kind rows they hang from. A row goes by the primary key's other
+    /// columns.
     Child {
-        host: &'static str,
+        hosts: &'static [&'static str],
         via: &'static str,
-        filter: Option<&'static str>,
-        /// The name the rows go by in a state (the table's, unless one table holds several
-        /// kinds of child, as `edge` does).
-        alias: &'static str,
-        /// The columns that name one row among the entity's, when the table's primary key does
-        /// not (a table with none). Empty: the primary key, less `via`.
-        key: &'static [&'static str],
     },
     /// Not an entity's state, with the reason.
     Outside(&'static str),
 }
+
+/// A lookup table: seeded and written only by a migration rung.
+const LOOKUP: Role = Role::Outside("a lookup: written only by a migration rung");
 
 /// Every table of the vault, classified. A table not named here fails
 /// `every_table_is_classified`.
@@ -63,185 +67,98 @@ pub const TABLES: &[(&str, Role)] = &[
     ("locker_item", Role::Host),
     ("concept", Role::Host),
     ("container", Role::Host),
-    // Rows that hang off a kind row.
+    // The rows a kind row owns. Order matters to a restore: a row is written after the rows it
+    // points at (a reminder after the date or field it names).
     (
         "contact_point",
         Role::Child {
-            host: "person",
+            hosts: &["person"],
             via: "person_id",
-            filter: None,
-            alias: "contact_point",
-            key: &[],
         },
     ),
     (
         "person_date",
         Role::Child {
-            host: "person",
+            hosts: &["person"],
             via: "person_id",
-            filter: None,
-            alias: "person_date",
-            key: &[],
-        },
-    ),
-    (
-        "reminder",
-        Role::Child {
-            host: "event",
-            via: "entity_id",
-            filter: None,
-            alias: "reminder",
-            key: &[],
-        },
-    ),
-    (
-        "reminder",
-        Role::Child {
-            host: "task",
-            via: "entity_id",
-            filter: None,
-            alias: "reminder_task",
-            key: &[],
         },
     ),
     (
         "event_guest",
         Role::Child {
-            host: "event",
+            hosts: &["event"],
             via: "event_id",
-            filter: None,
-            alias: "event_guest",
-            key: &[],
         },
     ),
     (
         "txn_split",
         Role::Child {
-            host: "txn",
+            hosts: &["txn"],
             via: "txn_id",
-            filter: None,
-            alias: "txn_split",
-            key: &[],
         },
     ),
     (
         "note_asset",
         Role::Child {
-            host: "note",
+            hosts: &["note"],
             via: "note_id",
-            filter: None,
-            alias: "note_asset",
-            key: &[],
         },
     ),
     (
         "locker_item_field",
         Role::Child {
-            host: "locker_item",
+            hosts: &["locker_item"],
             via: "item_id",
-            filter: None,
-            alias: "locker_item_field",
-            key: &[],
         },
     ),
     (
         "locker_item_passkey",
         Role::Child {
-            host: "locker_item",
+            hosts: &["locker_item"],
             via: "item_id",
-            filter: None,
-            alias: "locker_item_passkey",
-            key: &[],
-        },
-    ),
-    // WHAT DECORATES A RECORD IS PART OF ITS STATE (#1185): its tags, the list or album it is in, and
-    // the links a member made by hand. Each goes by an alias in a state, so a change to one is an
-    // earlier version like a change to a field, and a restore puts it back.
-    (
-        "edge",
-        Role::Child {
-            host: "*",
-            via: "from_id",
-            filter: Some("rel = 'tagged' AND to_id LIKE 'tag:%'"),
-            alias: "tag",
-            key: &["to_id"],
         },
     ),
     (
-        "edge",
+        "reminder",
         Role::Child {
-            host: "*",
-            via: "to_id",
-            filter: Some("rel = 'contains'"),
-            alias: "membership",
-            key: &["from_id"],
-        },
-    ),
-    (
-        "edge",
-        Role::Child {
-            host: "*",
-            via: "from_id",
-            filter: Some("rel = 'about'"),
-            alias: "about",
-            key: &["to_id"],
-        },
-    ),
-    (
-        "edge",
-        Role::Child {
-            host: "*",
-            via: "from_id",
-            filter: Some("rel = 'depicts'"),
-            alias: "depicts",
-            key: &["to_id"],
-        },
-    ),
-    // A hand-made link has no direction (A4): it is part of either end's state.
-    (
-        "link",
-        Role::Child {
-            host: "*",
-            via: "a",
-            filter: None,
-            alias: "link_a",
-            key: &["b"],
-        },
-    ),
-    (
-        "link",
-        Role::Child {
-            host: "*",
-            via: "b",
-            filter: None,
-            alias: "link_b",
-            key: &["a"],
-        },
-    ),
-    (
-        "transfer",
-        Role::Child {
-            host: "txn",
-            via: "a",
-            filter: None,
-            alias: "transfer_low",
-            key: &["b"],
-        },
-    ),
-    (
-        "transfer",
-        Role::Child {
-            host: "txn",
-            via: "b",
-            filter: None,
-            alias: "transfer_high",
-            key: &["a"],
+            hosts: &["event", "task", "person", "locker_item"],
+            via: "entity_id",
         },
     ),
     // Not an entity's state.
     (
         "vault",
         Role::Outside("the vault's own row and write counter"),
+    ),
+    (
+        "edge",
+        Role::Outside(
+            "B1: a relation between two records is neither one's snapshot; it has its own verbs and Undo",
+        ),
+    ),
+    (
+        "link",
+        Role::Outside("B1: a hand-made link joins two records and belongs to neither"),
+    ),
+    (
+        "mention",
+        Role::Outside("rebuilt from the note's words on every save"),
+    ),
+    (
+        "transfer",
+        Role::Outside("B1: a transfer pairs two lines and belongs to neither"),
+    ),
+    (
+        "budget",
+        Role::Outside("B1: a budget is not part of its category's snapshot"),
+    ),
+    (
+        "rule",
+        Role::Outside("B1: a rule is not part of its category's snapshot"),
+    ),
+    (
+        "occurrence",
+        Role::Outside("B1: a one-day override is not part of its series' snapshot"),
     ),
     (
         "blob",
@@ -267,6 +184,7 @@ pub const TABLES: &[(&str, Role)] = &[
         Role::Outside("the history's own blob claims"),
     ),
     ("action_key", Role::Outside("the keys of acts already run")),
+    ("search_owed", Role::Outside("the index file's queue")),
     (
         "measurement",
         Role::Outside("a day's total, not an edit; a correction overwrites it"),
@@ -274,22 +192,6 @@ pub const TABLES: &[(&str, Role)] = &[
     (
         "checkpoint",
         Role::Outside("a balance the bank stated; never edited"),
-    ),
-    (
-        "budget",
-        Role::Outside("B1: a budget is not part of its category's snapshot"),
-    ),
-    (
-        "rule",
-        Role::Outside("B1: a rule is not part of its category's snapshot"),
-    ),
-    (
-        "occurrence",
-        Role::Outside("B1: a one-day override is not part of its series' snapshot"),
-    ),
-    (
-        "mention",
-        Role::Outside("rebuilt from the note's words on every save"),
     ),
     (
         "message",
@@ -300,110 +202,26 @@ pub const TABLES: &[(&str, Role)] = &[
         Role::Outside("a chat's transcript is appended, never edited"),
     ),
     ("locker_key", Role::Outside("custody's own bookkeeping")),
-    ("search_word", Role::Outside("the search index")),
-    ("search_owed", Role::Outside("the search index's queue")),
-    (
-        "alert",
-        Role::Outside("derived from the reminder it belongs to"),
-    ),
-    (
-        "entity_kind",
-        Role::Outside("a lookup: written only by a migration rung"),
-    ),
-    (
-        "home_shape",
-        Role::Outside("a lookup: written only by a migration rung"),
-    ),
-    (
-        "concept_kind",
-        Role::Outside("a lookup: written only by a migration rung"),
-    ),
-    (
-        "container_kind",
-        Role::Outside("a lookup: written only by a migration rung"),
-    ),
-    (
-        "palette",
-        Role::Outside("a lookup: written only by a migration rung"),
-    ),
-    (
-        "arrival_via",
-        Role::Outside("a lookup: written only by a migration rung"),
-    ),
-    (
-        "origin_system",
-        Role::Outside("a lookup: written only by a migration rung"),
-    ),
-    (
-        "source_shape",
-        Role::Outside("a lookup: written only by a migration rung"),
-    ),
-    (
-        "derivative_variant",
-        Role::Outside("a lookup: written only by a migration rung"),
-    ),
-    (
-        "contact_point_kind",
-        Role::Outside("a lookup: written only by a migration rung"),
-    ),
-    (
-        "photo_form",
-        Role::Outside("a lookup: written only by a migration rung"),
-    ),
-    (
-        "account_type",
-        Role::Outside("a lookup: written only by a migration rung"),
-    ),
-    (
-        "locker_type",
-        Role::Outside("a lookup: written only by a migration rung"),
-    ),
-    (
-        "message_refusal",
-        Role::Outside("a lookup: written only by a migration rung"),
-    ),
-    (
-        "message_notice",
-        Role::Outside("a lookup: written only by a migration rung"),
-    ),
-    (
-        "person_form",
-        Role::Outside("a lookup: written only by a migration rung"),
-    ),
-    (
-        "person_date_kind",
-        Role::Outside("a lookup: written only by a migration rung"),
-    ),
-    (
-        "reminder_target",
-        Role::Outside("a lookup: written only by a migration rung"),
-    ),
-    (
-        "health_metric",
-        Role::Outside("a lookup: written only by a migration rung"),
-    ),
-    (
-        "edge_shape",
-        Role::Outside("a lookup: written only by a migration rung"),
-    ),
-];
-
-/// The relations (`edge.rel`) that are not part of an entity's state, with the reason. Every
-/// relation the baseline allows is either here or a [`Role::Child`] of `edge`; a test fails on one
-/// that is neither.
-pub const RELATIONS_OUTSIDE: &[(&str, &str)] = &[
-    (
-        "attached",
-        "an attachment is a record of its own, with its own verbs (attach, detach) and its own Undo",
-    ),
-    (
-        "with",
-        "who took part in a workout, a touch or a line: part of that record, with its own verbs",
-    ),
-    (
-        "related",
-        "a relationship between two people, with its own verbs",
-    ),
+    ("entity_kind", LOOKUP),
+    ("home_shape", LOOKUP),
+    ("concept_kind", LOOKUP),
+    ("container_kind", LOOKUP),
+    ("palette", LOOKUP),
+    ("arrival_via", LOOKUP),
+    ("origin_system", LOOKUP),
+    ("source_shape", LOOKUP),
+    ("derivative_variant", LOOKUP),
+    ("contact_point_kind", LOOKUP),
+    ("photo_form", LOOKUP),
+    ("account_type", LOOKUP),
+    ("locker_type", LOOKUP),
+    ("message_refusal", LOOKUP),
+    ("message_notice", LOOKUP),
+    ("person_form", LOOKUP),
+    ("person_date_kind", LOOKUP),
+    ("reminder_target", LOOKUP),
+    ("health_metric", LOOKUP),
+    ("edge_shape", LOOKUP),
 ];
 
 /// The columns of the tables above that are not kept, with the reason. Everything else is.
@@ -441,31 +259,23 @@ pub const OMITTED: &[(&str, &str, &str)] = &[
     ),
     ("entity", "arrived_via", "provenance, never edited"),
     ("entity", "arrived_label", "provenance, never edited"),
-    (
-        "edge",
-        "position",
-        "the order of a list or album is the container's: reordering is not a change to a record, and a restore puts a member back unordered",
-    ),
     ("concept", "kind", "identity: the entity's kind"),
     ("container", "kind", "identity: the entity's kind"),
-    // The file a photograph is does not change; an edit makes another photograph.
+    // The file a photograph is does not change; an edit makes another photograph. Its motion clip
+    // is named like any blob ([`BLOB_SLOTS`]).
     ("photo", "blob", "immutable: the file"),
     ("photo", "media_type", "immutable: the file"),
     ("photo", "form", "immutable: the file"),
     ("photo", "width", "immutable: the file"),
     ("photo", "height", "immutable: the file"),
     ("photo", "duration_s", "immutable: the file"),
-    ("photo", "motion_blob", "immutable: the file"),
     ("photo", "motion_duration_s", "immutable: the file"),
     ("photo", "exif", "immutable: the file"),
     ("photo", "burst", "immutable: the camera's"),
     ("photo", "edited_from", "immutable: how it was made"),
-    // A statement line's own words are the bank's; only what the member sets is state.
-    ("txn", "account_id", "bank-stated, never edited"),
-    ("txn", "posted_on", "bank-stated, never edited"),
-    ("txn", "amount_minor", "bank-stated, never edited"),
-    ("txn", "original_amount_minor", "bank-stated, never edited"),
-    ("txn", "original_currency", "bank-stated, never edited"),
+    // A line's origin is not an edit: the one change it ever makes (a hand line confirmed as a
+    // statement line) is the command's, and a restore must not undo it (the table refuses it).
+    ("txn", "entered", "a line's origin is not an edit"),
     // Locker: the sealed cells are kept as the ciphertext they are, never a plaintext. What is only
     // a use of the item is not an edit.
     ("locker_item", "last_used_at", "a use is not an edit"),
@@ -480,6 +290,80 @@ pub const OMITTED: &[(&str, &str, &str)] = &[
         "a stamp, set by the command from the vault's clock; every save moves it",
     ),
 ];
+
+/// Where a column's bytes are named by a version (B3): not inside the state, which holds no hash,
+/// but as a `revision_blob` row. One row here is all an app lane writes to keep a new blob
+/// column's earlier values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BlobSlot {
+    /// The kind row or child table that holds the column.
+    pub table: &'static str,
+    /// The column that references `blob(hash)`.
+    pub column: &'static str,
+    /// The `revision_blob.slot` it is kept under.
+    pub slot: SlotName,
+    /// A column of the same row kept beside the bytes as `revision_blob.media_type`, so the state
+    /// holds neither.
+    pub media_type: Option<&'static str>,
+}
+
+/// How a [`BlobSlot`] is named.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SlotName {
+    /// One slot for the entity's one row (`avatar`).
+    One(&'static str),
+    /// One slot per row of a child table: `<prefix>:<the row's id column>` (`asset:<id>`).
+    PerRow(&'static str),
+}
+
+/// Every column that names bytes and is part of a state. A column that references `blob(hash)` and
+/// is neither here nor in [`OMITTED`] fails `every_blob_column_is_a_slot_or_omitted`.
+pub const BLOB_SLOTS: &[BlobSlot] = &[
+    BlobSlot {
+        table: "document",
+        column: "blob",
+        slot: SlotName::One("blob"),
+        media_type: Some("media_type"),
+    },
+    BlobSlot {
+        table: "person",
+        column: "avatar",
+        slot: SlotName::One("avatar"),
+        media_type: None,
+    },
+    BlobSlot {
+        table: "container",
+        column: "cover",
+        slot: SlotName::One("cover"),
+        media_type: None,
+    },
+    BlobSlot {
+        table: "photo",
+        column: "motion_blob",
+        slot: SlotName::One("motion"),
+        media_type: None,
+    },
+    BlobSlot {
+        table: "note_asset",
+        column: "blob",
+        slot: SlotName::PerRow("asset"),
+        media_type: Some("media_type"),
+    },
+    BlobSlot {
+        table: "locker_item_field",
+        column: "value_blob",
+        slot: SlotName::PerRow("field"),
+        media_type: None,
+    },
+];
+
+/// The slot of `table`'s blob column, if it is one.
+#[must_use]
+pub fn blob_slot(table: &str, column: &str) -> Option<&'static BlobSlot> {
+    BLOB_SLOTS
+        .iter()
+        .find(|slot| slot.table == table && slot.column == column)
+}
 
 /// The columns whose change is NOT a change to the entity a member sees: an update that moves only
 /// these neither stamps `updated_at` nor re-indexes. This is the commit triggers' own notion, apart
@@ -505,38 +389,15 @@ pub fn is_sealed(table: &str, column: &str) -> bool {
         .any(|(name, _, columns)| *name == table && columns.contains(&column))
 }
 
-/// The values kept in a cell of their own on `revision`, not inline in `state`.
-pub const CONTENT: &[(&str, &str, Cell)] = &[
-    ("note", "body", Cell::Body),
-    ("document", "blob", Cell::Blob),
-    ("document", "media_type", Cell::MediaType),
-];
-
-/// A content cell of `revision`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Cell {
-    Body,
-    Blob,
-    MediaType,
-}
-
-impl Cell {
-    pub(super) const fn index(self) -> usize {
-        match self {
-            Self::Body => 0,
-            Self::Blob => 1,
-            Self::MediaType => 2,
-        }
-    }
-}
+/// The values kept in a cell of their own on `revision`, not inline in `state`: a note's words,
+/// the one value large enough to deserve a cell (`fill_body` reads it).
+pub const CONTENT: &[(&str, &str)] = &[("note", "body")];
 
 /// One table of the state, as the file has it.
 #[derive(Debug, Clone)]
 pub struct Part {
     /// The table.
     pub name: &'static str,
-    /// What its rows are called in a state.
-    pub alias: &'static str,
     pub role: Role,
     /// The columns kept, in table order.
     pub columns: Vec<String>,
@@ -555,15 +416,6 @@ impl Part {
     #[must_use]
     pub fn is_one(&self) -> bool {
         self.key.is_empty()
-    }
-
-    /// The predicate saying which of the table's rows are state, when not all.
-    #[must_use]
-    pub const fn filter(&self) -> Option<&'static str> {
-        match self.role {
-            Role::Child { filter, .. } => filter,
-            _ => None,
-        }
     }
 
     /// The column holding the entity's id.
@@ -619,11 +471,9 @@ impl Shape {
             if matches!(role, Role::Outside(_) | Role::Entity) {
                 continue;
             }
-            let (via, alias, key_override) = match role {
-                Role::Child {
-                    via, alias, key, ..
-                } => (*via, *alias, *key),
-                _ => ("id", *name, &[][..]),
+            let via = match role {
+                Role::Child { via, .. } => *via,
+                _ => "id",
             };
             let mut statement =
                 connection.prepare(&format!("PRAGMA table_xinfo({})", quoted(name)))?;
@@ -653,14 +503,7 @@ impl Shape {
                 .filter(|row| row.1 > 0 && row.0 != via)
                 .collect();
             keyed.sort_by_key(|row| row.1);
-            let key = if key_override.is_empty() {
-                keyed.into_iter().map(|row| row.0.clone()).collect()
-            } else {
-                key_override
-                    .iter()
-                    .map(|column| (*column).to_owned())
-                    .collect()
-            };
+            let key = keyed.into_iter().map(|row| row.0.clone()).collect();
             let mut references = BTreeMap::new();
             let mut fks =
                 connection.prepare(&format!("PRAGMA foreign_key_list({})", quoted(name)))?;
@@ -676,7 +519,6 @@ impl Shape {
             }
             parts.push(Part {
                 name,
-                alias,
                 role: *role,
                 columns,
                 touch_columns,
@@ -689,15 +531,15 @@ impl Shape {
 
     /// The part for a table.
     #[must_use]
-    pub fn part(&self, alias: &str) -> Option<&Part> {
-        self.parts.iter().find(|part| part.alias == alias)
+    pub fn part(&self, name: &str) -> Option<&Part> {
+        self.parts.iter().find(|part| part.name == name)
     }
 
     /// The children that hang from a kind row.
     pub fn children_of<'a>(&'a self, host: &'a str) -> impl Iterator<Item = &'a Part> {
-        self.parts
-            .iter()
-            .filter(move |part| matches!(part.role, Role::Child { host: of, .. } if of == host || of == EVERY_KIND))
+        self.parts.iter().filter(
+            move |part| matches!(part.role, Role::Child { hosts, .. } if hosts.contains(&host)),
+        )
     }
 
     /// The kind rows.
@@ -725,7 +567,7 @@ impl Shape {
                 .map(|kind| format!("'{}'", kind.as_str()))
                 .collect();
             let mut members = vec![
-                "'entity', json_object('title', e.title)".to_owned(),
+                "'entity', json_object('title', e.title, 'parent_id', e.parent_id)".to_owned(),
                 format!(
                     "'{host_name}', json((SELECT {obj} FROM {table} t WHERE t.id = e.id))",
                     host_name = host.name,
@@ -734,13 +576,12 @@ impl Shape {
                 ),
             ];
             for child in self.children_of(host.name) {
-                let Role::Child { via, filter, .. } = child.role else {
+                let Role::Child { via, .. } = child.role else {
                     continue;
                 };
-                let scope = filter.map_or_else(String::new, |filter| format!(" AND ({filter})"));
                 let rows = if child.is_one() {
                     format!(
-                        "(SELECT {obj} FROM {table} c WHERE c.{via} = e.id{scope})",
+                        "(SELECT {obj} FROM {table} c WHERE c.{via} = e.id)",
                         obj = Self::object(child, "c"),
                         table = quoted(child.name),
                         via = quoted(via),
@@ -753,14 +594,14 @@ impl Shape {
                         .collect();
                     format!(
                         "(SELECT json_group_array({obj} ORDER BY {order}) FROM {table} c
-                           WHERE c.{via} = e.id{scope})",
+                           WHERE c.{via} = e.id)",
                         obj = Self::object(child, "c"),
                         order = order.join(", "),
                         table = quoted(child.name),
                         via = quoted(via),
                     )
                 };
-                members.push(format!("'{}', json({rows})", child.alias));
+                members.push(format!("'{}', json({rows})", child.name));
             }
             branches.push(format!(
                 "WHEN e.kind IN ({}) THEN json_object({})",
@@ -782,26 +623,12 @@ impl Shape {
             self.state_expression()
         );
         // The entity's state, recorded once per commit, the first time a row of it is about to
-        // change. A table that holds other things than state (`edge`) wakes it only for a row
-        // that is state: the filter reads the row through a one-row subquery of `old` or `new`.
-        let seen = |id: &str, part: Option<(&Part, &str)>, extra: &str| {
-            let (from, scope) = match part {
-                Some((part, row)) if part.filter().is_some() => {
-                    let columns: Vec<String> = std::iter::once(part.via().to_owned())
-                        .chain(part.columns.iter().cloned())
-                        .map(|column| format!("{row}.{0} AS {0}", quoted(&column)))
-                        .collect();
-                    (
-                        format!(" FROM (SELECT {}) AS r", columns.join(", ")),
-                        format!("({}) AND ", part.filter().unwrap_or("1")),
-                    )
-                }
-                _ => (String::new(), String::new()),
-            };
+        // change.
+        let seen = |id: &str| {
             format!(
                 "INSERT INTO temp.{SEEN} (entity_id, state)
-                   SELECT {id}, (SELECT state FROM temp.{STATE_VIEW} WHERE entity_id = {id}){from}
-                    WHERE {scope}{extra}NOT EXISTS (SELECT 1 FROM temp.{SEEN} WHERE entity_id = {id});"
+                   SELECT {id}, (SELECT state FROM temp.{STATE_VIEW} WHERE entity_id = {id})
+                    WHERE NOT EXISTS (SELECT 1 FROM temp.{SEEN} WHERE entity_id = {id});"
             )
         };
         let mut trigger = |name: &str, when: &str, table: &str, body: String| {
@@ -826,47 +653,31 @@ impl Shape {
         );
         trigger(
             "entity_title",
-            "BEFORE UPDATE OF title",
+            "BEFORE UPDATE OF title, parent_id",
             "entity",
-            seen("old.id", None, ""),
+            seen("old.id"),
         );
         for part in &self.parts {
             let via = quoted(part.via());
-            let alias = part.alias;
-            // An edge that goes because its OTHER end is being deleted (a tag or a list purged)
-            // is not a change to the record that carried it: the end is marked as it is deleted
-            // (`entity_gone`), before the cascade reaches the edge.
-            let far = if part.name == "edge" {
-                let other = if part.via() == "from_id" {
-                    "to_id"
-                } else {
-                    "from_id"
-                };
-                format!(
-                    "NOT EXISTS (SELECT 1 FROM temp.{SEEN} gone
-                                  WHERE gone.entity_id = old.{other} AND gone.state IS NULL) AND "
-                )
-            } else {
-                String::new()
-            };
+            let alias = part.name;
             trigger(
                 &format!("{alias}_update"),
                 "BEFORE UPDATE",
                 part.name,
-                seen(&format!("old.{via}"), Some((part, "old")), ""),
+                seen(&format!("old.{via}")),
             );
             trigger(
                 &format!("{alias}_delete"),
                 "BEFORE DELETE",
                 part.name,
-                seen(&format!("old.{via}"), Some((part, "old")), &far),
+                seen(&format!("old.{via}")),
             );
             if matches!(part.role, Role::Child { .. }) {
                 trigger(
                     &format!("{alias}_insert"),
                     "BEFORE INSERT",
                     part.name,
-                    seen(&format!("new.{via}"), Some((part, "new")), ""),
+                    seen(&format!("new.{via}")),
                 );
             }
         }
@@ -928,87 +739,81 @@ impl Shape {
         );
         touch_trigger(
             "entity_update",
-            "AFTER UPDATE OF title, deleted_at, purge_at",
+            "AFTER UPDATE OF title, parent_id, deleted_at, purge_at",
             "entity",
             Some(
-                "old.title IS NOT new.title OR old.deleted_at IS NOT new.deleted_at
-                 OR old.purge_at IS NOT new.purge_at",
+                "old.title IS NOT new.title OR old.parent_id IS NOT new.parent_id
+                 OR old.deleted_at IS NOT new.deleted_at OR old.purge_at IS NOT new.purge_at",
             ),
             mark_stamp("new.id"),
         );
-        let mut edge_installed = false;
+        // An edge is no part of a state (B1) but it still moves what the index file reads.
+        // Re-index only the endpoint whose `index::text_of` actually reads this
+        // relation — never the container or tag end, because adding one member to a
+        // large list/tag must not expand all of the label's other dependents into
+        // `search_owed`. Reordering (`position`) fires nothing.
+        touch_trigger(
+            "edge_to_insert",
+            "AFTER INSERT",
+            "edge",
+            Some("new.rel IN ('contains', 'about', 'with')"),
+            mark_reindex("new.to_id"),
+        );
+        touch_trigger(
+            "edge_to_delete",
+            "AFTER DELETE",
+            "edge",
+            Some("old.rel IN ('contains', 'about', 'with')"),
+            mark_reindex("old.to_id"),
+        );
+        touch_trigger(
+            "edge_from_insert",
+            "AFTER INSERT",
+            "edge",
+            Some("new.rel = 'tagged'"),
+            mark_reindex("new.from_id"),
+        );
+        touch_trigger(
+            "edge_from_delete",
+            "AFTER DELETE",
+            "edge",
+            Some("old.rel = 'tagged'"),
+            mark_reindex("old.from_id"),
+        );
+        touch_trigger(
+            "edge_related_insert",
+            "AFTER INSERT",
+            "edge",
+            Some("new.rel = 'related'"),
+            format!(
+                "{} {}",
+                mark_reindex("new.from_id"),
+                mark_reindex("new.to_id")
+            ),
+        );
+        touch_trigger(
+            "edge_related_update",
+            "AFTER UPDATE OF \"label_id\"",
+            "edge",
+            Some("new.rel = 'related' AND old.label_id IS NOT new.label_id"),
+            format!(
+                "{} {}",
+                mark_reindex("new.from_id"),
+                mark_reindex("new.to_id")
+            ),
+        );
+        touch_trigger(
+            "edge_related_delete",
+            "AFTER DELETE",
+            "edge",
+            Some("old.rel = 'related'"),
+            format!(
+                "{} {}",
+                mark_reindex("old.from_id"),
+                mark_reindex("old.to_id")
+            ),
+        );
         for part in &self.parts {
-            if part.name == "edge" {
-                if !edge_installed {
-                    edge_installed = true;
-                    // Re-index only the endpoint whose `index::text_of` actually reads this
-                    // relation — never the container or tag end, because adding one member to a
-                    // large list/tag must not expand all of the label's other dependents into
-                    // `search_owed`. Reordering (`position`) fires nothing.
-                    touch_trigger(
-                        "edge_to_insert",
-                        "AFTER INSERT",
-                        "edge",
-                        Some("new.rel IN ('contains', 'about', 'with')"),
-                        mark_reindex("new.to_id"),
-                    );
-                    touch_trigger(
-                        "edge_to_delete",
-                        "AFTER DELETE",
-                        "edge",
-                        Some("old.rel IN ('contains', 'about', 'with')"),
-                        mark_reindex("old.to_id"),
-                    );
-                    touch_trigger(
-                        "edge_from_insert",
-                        "AFTER INSERT",
-                        "edge",
-                        Some("new.rel = 'tagged'"),
-                        mark_reindex("new.from_id"),
-                    );
-                    touch_trigger(
-                        "edge_from_delete",
-                        "AFTER DELETE",
-                        "edge",
-                        Some("old.rel = 'tagged'"),
-                        mark_reindex("old.from_id"),
-                    );
-                    touch_trigger(
-                        "edge_related_insert",
-                        "AFTER INSERT",
-                        "edge",
-                        Some("new.rel = 'related'"),
-                        format!(
-                            "{} {}",
-                            mark_reindex("new.from_id"),
-                            mark_reindex("new.to_id")
-                        ),
-                    );
-                    touch_trigger(
-                        "edge_related_update",
-                        "AFTER UPDATE OF \"label_id\"",
-                        "edge",
-                        Some("new.rel = 'related' AND old.label_id IS NOT new.label_id"),
-                        format!(
-                            "{} {}",
-                            mark_reindex("new.from_id"),
-                            mark_reindex("new.to_id")
-                        ),
-                    );
-                    touch_trigger(
-                        "edge_related_delete",
-                        "AFTER DELETE",
-                        "edge",
-                        Some("old.rel = 'related'"),
-                        format!(
-                            "{} {}",
-                            mark_reindex("old.from_id"),
-                            mark_reindex("old.to_id")
-                        ),
-                    );
-                }
-                continue;
-            }
             match part.role {
                 Role::Host => {
                     // Only a column that really changed fires it (`WHEN`), so an upsert that
@@ -1019,7 +824,7 @@ impl Shape {
                         let cols: Vec<String> =
                             part.touch_columns.iter().map(|c| quoted(c)).collect();
                         touch_trigger(
-                            &format!("{}_update", part.alias),
+                            &format!("{}_update", part.name),
                             &format!("AFTER UPDATE OF {}", cols.join(", ")),
                             part.name,
                             Some(&changed(&part.touch_columns)),
@@ -1030,21 +835,21 @@ impl Shape {
                 Role::Child { .. } => {
                     let via = quoted(part.via());
                     touch_trigger(
-                        &format!("{}_insert", part.alias),
+                        &format!("{}_insert", part.name),
                         "AFTER INSERT",
                         part.name,
                         None,
                         mark_stamp(&format!("new.{via}")),
                     );
                     touch_trigger(
-                        &format!("{}_update", part.alias),
+                        &format!("{}_update", part.name),
                         "AFTER UPDATE",
                         part.name,
                         Some(&changed(&part.touch_columns)),
                         mark_stamp(&format!("new.{via}")),
                     );
                     touch_trigger(
-                        &format!("{}_delete", part.alias),
+                        &format!("{}_delete", part.name),
                         "AFTER DELETE",
                         part.name,
                         None,

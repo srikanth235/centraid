@@ -174,13 +174,11 @@ pub(crate) fn rev_after(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Option<i64
     if expected_rev(ctx).is_none() {
         return Ok(None);
     }
-    let (cause, quiet) = ctx.settling_as();
     Ok(Some(crate::history::head_after(
         ctx.connection(),
         id,
         &ctx.now,
-        &cause,
-        quiet,
+        &ctx.settling_as(),
     )?))
 }
 

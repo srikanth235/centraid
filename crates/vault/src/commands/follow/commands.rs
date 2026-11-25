@@ -43,15 +43,6 @@ pub struct Difference {
     pub items: Vec<ItemDifference>,
 }
 
-/// The system a `follow.<system>` pass command is for, `None` for any other command: what the
-/// history reads to say a change came from a phone's store and not from the member.
-pub(crate) fn system_of(command: &str) -> Option<&'static str> {
-    SYSTEMS
-        .iter()
-        .find(|map| map.command == command)
-        .map(|map| map.system)
-}
-
 /// The system and statement of the live source link of an entity: the entity is live (not in the
 /// trash), its source link is still there, and it names a system the vault follows.
 pub(crate) fn live_link(

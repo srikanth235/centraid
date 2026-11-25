@@ -10,18 +10,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Map, Value as Json};
 
-use super::shape::{CONTENT, Part, Shape, shape};
-use super::{SEEN, STATE_VIEW};
+use super::shape::{BLOB_SLOTS, Part, SHAPE_VERSION, Shape, SlotName, shape};
+use super::{SEEN, STATE_VIEW, Settling};
 use crate::canonical::canonical_json;
-use crate::commands::follow;
 use crate::error::{Result, VaultError};
 
 /// The most versions one page returns.
 pub const MAX_PAGE: usize = 100;
-
-/// A commit the chat's door made carries `assist.` before the command's name as its cause
-/// ([`crate::commands::Command::by`]); the vault keeps no other producer by that prefix.
-pub const ASSISTANT_PREFIX: &str = "assist.";
 
 /// Who made the change that replaced a version.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,18 +26,17 @@ pub enum Who {
     /// A phone store the vault follows (`contacts`, `calendar`, `files`, `health`, `statement`):
     /// the change is what the store said, not something the member did.
     Store(String),
-    /// The chat acted on the member's word (`assist.<command>`): the member confirmed it, and
-    /// the history says who made it.
+    /// The assistant acted on the member's word: the member confirmed it, and the history says
+    /// who made it.
     Assistant,
 }
 
 impl Who {
-    fn of(cause: &str) -> Self {
-        if let Some(system) = follow::system_of(cause) {
-            return Self::Store(system.to_owned());
-        }
-        match cause.strip_prefix(ASSISTANT_PREFIX) {
-            Some(command) if !command.is_empty() => Self::Assistant,
+    /// Who a revision's `actor` column says made it; a store's `system` is its origin's.
+    fn of(actor: &str, system: Option<String>) -> Self {
+        match (actor, system) {
+            ("store", Some(system)) => Self::Store(system),
+            ("assistant", _) => Self::Assistant,
             _ => Self::Member,
         }
     }
@@ -127,47 +121,88 @@ struct Row {
     seq: i64,
     at: String,
     cause: String,
+    actor: String,
+    /// The `system` of the origin a store's revision names.
+    system: Option<String>,
+    shape: i64,
     state: String,
     body: Option<String>,
-    blob: Option<String>,
-    media_type: Option<String>,
+    /// `(slot, blob, media_type)` of every `revision_blob` row of the version.
+    blobs: Vec<(String, String, Option<String>)>,
 }
 
-const ROW: &str = "seq, at, cause, state, body,
-    (SELECT blob FROM revision_blob rb WHERE rb.entity_id = revision.entity_id
-        AND rb.seq = revision.seq AND rb.slot = 'document.blob'),
-    (SELECT media_type FROM revision_blob rb WHERE rb.entity_id = revision.entity_id
-        AND rb.seq = revision.seq AND rb.slot = 'document.blob')";
+const ROW: &str = "seq, at, cause, actor,
+    (SELECT o.system FROM origin o WHERE o.id = revision.origin_id), shape, state, body,
+    (SELECT json_group_array(json_array(rb.slot, rb.blob, rb.media_type)) FROM revision_blob rb
+      WHERE rb.entity_id = revision.entity_id AND rb.seq = revision.seq)";
 
 fn row_of(row: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
+    let blobs: String = row.get(8)?;
+    let blobs: Vec<(String, String, Option<String>)> =
+        serde_json::from_str(&blobs).unwrap_or_default();
     Ok(Row {
         seq: row.get(0)?,
         at: row.get(1)?,
         cause: row.get(2)?,
-        state: row.get(3)?,
-        body: row.get(4)?,
-        blob: row.get(5)?,
-        media_type: row.get(6)?,
+        actor: row.get(3)?,
+        system: row.get(4)?,
+        shape: row.get(5)?,
+        state: row.get(6)?,
+        body: row.get(7)?,
+        blobs,
     })
 }
 
-/// A version's whole state: the stored state with the content cells put back.
+/// A version's whole state: the stored state with the content cell and every blob put back.
 fn assemble(row: &Row) -> Result<Json> {
+    if row.shape > SHAPE_VERSION {
+        return Err(VaultError::Invariant {
+            context: format!(
+                "version {} was written in snapshot grammar {}, newer than this build's {SHAPE_VERSION}",
+                row.seq, row.shape
+            ),
+        });
+    }
     let mut state: Json = serde_json::from_str(&row.state).map_err(|source| VaultError::Json {
         context: "a version's state".to_owned(),
         source,
     })?;
-    for (table, column, cell) in CONTENT {
-        let value = match cell {
-            super::shape::Cell::Body => &row.body,
-            super::shape::Cell::Blob => &row.blob,
-            super::shape::Cell::MediaType => &row.media_type,
-        };
-        if let (Some(value), Some(root)) = (value, state.as_object_mut()) {
-            root.entry((*table).to_owned())
-                .or_insert_with(|| Json::Object(Map::new()))
-                .as_object_mut()
-                .map(|object| object.insert((*column).to_owned(), Json::String(value.clone())));
+    if let Some(words) = &row.body
+        && let Some(root) = state.as_object_mut()
+    {
+        root.entry("note".to_owned())
+            .or_insert_with(|| Json::Object(Map::new()))
+            .as_object_mut()
+            .map(|note| note.insert("body".to_owned(), Json::String(words.clone())));
+    }
+    let named = |name: &str| row.blobs.iter().find(|(slot, _, _)| slot == name);
+    let put = |object: &mut Map<String, Json>,
+               slot: &super::shape::BlobSlot,
+               held: &(String, String, Option<String>)| {
+        object.insert(slot.column.to_owned(), Json::String(held.1.clone()));
+        if let (Some(column), Some(media_type)) = (slot.media_type, &held.2) {
+            object.insert(column.to_owned(), Json::String(media_type.clone()));
+        }
+    };
+    for slot in BLOB_SLOTS {
+        match (slot.slot, state.get_mut(slot.table)) {
+            (SlotName::One(name), Some(Json::Object(object))) => {
+                if let Some(held) = named(name) {
+                    put(object, slot, held);
+                }
+            }
+            (SlotName::PerRow(prefix), Some(Json::Array(rows))) => {
+                for object in rows.iter_mut().filter_map(Json::as_object_mut) {
+                    let Some(row_id) = object.get("id").and_then(Json::as_str).map(str::to_owned)
+                    else {
+                        continue;
+                    };
+                    if let Some(held) = named(&format!("{prefix}:{row_id}")) {
+                        put(object, slot, held);
+                    }
+                }
+            }
+            _ => {}
         }
     }
     Ok(state)
@@ -262,7 +297,7 @@ pub fn head(connection: &Connection, id: &str) -> Result<i64> {
 /// commit has changed what a member can see of the entity (the same test [`super::settle`] makes
 /// at the door) and keeps a version for it. A QUIET save that folds into the session of the
 /// newest version keeps none, so the head does not move: the same decision `settle` makes
-/// ([`super::folds`]) is made here with the same facts (`now`, `cause`, `quiet`). A handler
+/// ([`super::folds`]) is made here with the same facts (`now`, the commit's [`Settling`]). A handler
 /// answers it as the new revision, and the next save names it.
 ///
 /// # Errors
@@ -271,8 +306,7 @@ pub fn head_after(
     connection: &Connection,
     id: &str,
     now: &str,
-    cause: &str,
-    quiet: bool,
+    settling: &Settling,
 ) -> Result<i64> {
     let head_now = head(connection, id)?;
     let changed: Option<(String, String)> = connection
@@ -289,7 +323,7 @@ pub fn head_after(
     let Some((before, after)) = changed else {
         return Ok(head_now);
     };
-    if quiet && super::folds(connection, id, &before, &after, now, cause)? {
+    if settling.quiet && super::folds(connection, id, &before, &after, now, settling)? {
         return Ok(head_now);
     }
     Ok(head_now + 1)
@@ -372,7 +406,10 @@ pub fn earlier_versions(
     };
     // The version below the last one shown dates it: the extra row read, else the record's birth.
     let birth: (String, Who) = match rows.get(shown.len()) {
-        Some(below) => (below.at.clone(), Who::of(&below.cause)),
+        Some(below) => (
+            below.at.clone(),
+            Who::of(&below.actor, below.system.clone()),
+        ),
         None => (
             connection
                 .query_row("SELECT created_at FROM entity WHERE id = ?1", [id], |row| {
@@ -399,10 +436,11 @@ pub fn earlier_versions(
             since: shown
                 .get(index + 1)
                 .map_or_else(|| birth.0.clone(), |below| below.at.clone()),
-            since_by: shown
-                .get(index + 1)
-                .map_or_else(|| birth.1.clone(), |below| Who::of(&below.cause)),
-            by: Who::of(&row.cause),
+            since_by: shown.get(index + 1).map_or_else(
+                || birth.1.clone(),
+                |below| Who::of(&below.actor, below.system.clone()),
+            ),
+            by: Who::of(&row.actor, row.system.clone()),
             cause: row.cause.clone(),
             changes,
         });
@@ -583,15 +621,12 @@ fn fields_of(shape: &Shape, state: &Json) -> Vec<(String, Json)> {
         if part.is_one() {
             for (column, cell) in value.as_object().into_iter().flatten() {
                 if part.columns.contains(column) {
-                    fields.push((format!("{}.{column}", part.alias), cell.clone()));
+                    fields.push((format!("{}.{column}", part.name), cell.clone()));
                 }
             }
         } else {
             for row in value.as_array().into_iter().flatten() {
-                fields.push((
-                    format!("{}[{}]", part.alias, key_of(part, row)),
-                    row.clone(),
-                ));
+                fields.push((format!("{}[{}]", part.name, key_of(part, row)), row.clone()));
             }
         }
     }
@@ -622,10 +657,6 @@ fn diff(shape: &Shape, before: &Json, after: &Json) -> Vec<Change> {
             columns(&mut changes, "entity", left, right, None);
             continue;
         }
-        // The two directions of a link are one fact, read below.
-        if LINK_DIRECTIONS.contains(&table.as_str()) {
-            continue;
-        }
         let Some(part) = shape.part(table) else {
             continue;
         };
@@ -635,53 +666,7 @@ fn diff(shape: &Shape, before: &Json, after: &Json) -> Vec<Change> {
             many(&mut changes, part, left, right);
         }
     }
-    links(&mut changes, before, after);
     changes
-}
-
-/// The aliases of a link set by hand, made from either end.
-const LINK_DIRECTIONS: [&str; 2] = ["link_out", "link_in"];
-
-/// The links of a state as the items it joins, by id: the row that holds each (the one made from
-/// this record's end when both ends hold one).
-fn linked(state: &Map<String, Json>) -> BTreeMap<String, Json> {
-    let mut found = BTreeMap::new();
-    for (alias, end) in [("link_out", "to_id"), ("link_in", "from_id")] {
-        for row in state
-            .get(alias)
-            .and_then(Json::as_array)
-            .into_iter()
-            .flatten()
-        {
-            if let Some(other) = row.get(end).and_then(Json::as_str) {
-                found.entry(other.to_owned()).or_insert_with(|| row.clone());
-            }
-        }
-    }
-    found
-}
-
-/// What the links changed, as `link[<other item>]`: a link has no direction a member can see, so a
-/// link made from the other end since is not a change, and neither is the stamp of one.
-fn links(changes: &mut Vec<Change>, before: &Map<String, Json>, after: &Map<String, Json>) {
-    let captured =
-        |state: &Map<String, Json>| LINK_DIRECTIONS.iter().any(|a| state.contains_key(*a));
-    if !captured(before) || !captured(after) {
-        return;
-    }
-    let (was, is) = (linked(before), linked(after));
-    let others: BTreeSet<&String> = was.keys().chain(is.keys()).collect();
-    for other in others {
-        let (left, right) = (was.get(other), is.get(other));
-        if left.is_some() && right.is_some() {
-            continue;
-        }
-        changes.push(Change {
-            field: format!("link[{other}]"),
-            before: left.cloned().unwrap_or(Json::Null),
-            after: right.cloned().unwrap_or(Json::Null),
-        });
-    }
 }
 
 fn columns(
@@ -698,9 +683,7 @@ fn columns(
         let Some(is) = right.get(column) else {
             continue;
         };
-        // The stamp of an edge is when it was made, not something a member edits.
-        let stamp = only.is_some_and(|part| part.name == "edge") && column == "created_at";
-        if stamp || only.is_some_and(|part| !part.columns.contains(column)) || same(was, is) {
+        if only.is_some_and(|part| !part.columns.contains(column)) || same(was, is) {
             continue;
         }
         changes.push(Change {
@@ -714,9 +697,9 @@ fn columns(
 fn one(changes: &mut Vec<Change>, part: &Part, left: &Json, right: &Json) {
     match (left.is_null(), right.is_null()) {
         (true, true) => {}
-        (false, false) => columns(changes, part.alias, left, right, Some(part)),
+        (false, false) => columns(changes, part.name, left, right, Some(part)),
         _ => changes.push(Change {
-            field: part.alias.to_owned(),
+            field: part.name.to_owned(),
             before: left.clone(),
             after: right.clone(),
         }),
@@ -751,14 +734,14 @@ fn many(changes: &mut Vec<Change>, part: &Part, left: &Json, right: &Json) {
             (Some(left), Some(right)) => {
                 columns(
                     changes,
-                    &format!("{}[{key}]", part.alias),
+                    &format!("{}[{key}]", part.name),
                     left,
                     right,
                     Some(part),
                 );
             }
             (left, right) => changes.push(Change {
-                field: format!("{}[{key}]", part.alias),
+                field: format!("{}[{key}]", part.name),
                 before: left.cloned().unwrap_or(Json::Null),
                 after: right.cloned().unwrap_or(Json::Null),
             }),
