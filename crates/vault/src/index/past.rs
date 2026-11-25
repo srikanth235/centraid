@@ -49,7 +49,13 @@ use crate::model::Kind;
 /// The typed text of an earlier state, by table: a kind's own columns and its children's. Each
 /// is a column of the live census (`Reach::Own`), which a test holds.
 pub const EARLIER_COLUMNS: &[(&str, &[&str])] = &[
-    ("person", &["nickname", "role", "met"]),
+    (
+        "person",
+        &[
+            "given", "family", "phonetic", "nickname", "role", "org", "met",
+        ],
+    ),
+    ("person_date", &["label"]),
     ("contact_point", &["value", "label"]),
     ("place", &["address", "locality"]),
     ("event", &["description", "url"]),

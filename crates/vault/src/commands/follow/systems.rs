@@ -55,8 +55,10 @@ impl SystemMap {
     }
 }
 
-/// The maps the vault follows: each app lane's map is a `const` of its own module, one line here.
+/// The maps the vault follows, one per app lane that has plugged its own in: the phone's contacts
+/// (People), a picked folder's files and the camera roll (Docs and Photos).
 pub const SYSTEMS: &[SystemMap] = &[
+    crate::commands::person::CONTACTS,
     crate::commands::document::FILES,
     crate::commands::photo::ROLL,
 ];
