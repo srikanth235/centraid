@@ -1,21 +1,20 @@
 //! Preconditions, handlers, schemas, and definitions for `event.*` commands.
 
-use std::collections::BTreeSet;
-
 use serde_json::{Value as Json, json};
 
-use crate::commands::edge::{self, Extras};
-use crate::commands::entity::{STALE_GUARD, lookup_live, with_rev};
+use crate::commands::entity::{self, STALE_GUARD, lookup_live, with_rev};
+use crate::commands::reminder::{self, MAX_OFFSET_MIN};
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
 use crate::error::{Result, VaultError};
-use crate::model::{Kind, Rel};
-use crate::time::recurrence::Semantics;
+use crate::model::{DEFAULT_CALENDAR_ID, Kind};
 use crate::time::rrule;
 
+use super::guests::{self, GuestIn};
+use super::split;
 use super::times::{
-    DayTimes, Times, day_times, occurrence_at, row_of, rule_refusal, stranded, times,
+    DayTimes, Times, day_times, occurrence_at, rekey_stranded, row_of, rule_refusal, times,
 };
-use super::{NewEvent, found, set_reminders};
+use super::{NewEvent, found};
 
 // ---------------------------------------------------------------------------
 // Preconditions
@@ -35,72 +34,65 @@ fn live_event(ctx: &CommandCtx<'_, '_>, key: &str) -> Result<std::result::Result
     )
 }
 
-/// A live entity of one kind a command points at (a calendar, a place, a guest).
-fn points_at(ctx: &CommandCtx<'_, '_>, id: &str, kind: Kind) -> Result<Option<String>> {
+/// A live place a command points at.
+fn place_refusal(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Option<String>> {
     Ok(match lookup_live(ctx.connection(), id)? {
         Err(sentence) => Some(sentence),
-        Ok(found) if found.kind != kind => Some(format!(
-            "“{}” is a {}, not a {}",
+        Ok(found) if found.kind != Kind::Place => Some(format!(
+            "“{}” is a {}, not a place",
             found.title,
-            found.kind.noun(),
-            kind.noun()
+            found.kind.noun()
         )),
         Ok(_) => None,
     })
 }
 
-/// What the references an event command carries point at: the calendar, the
-/// place and every guest.
+/// What a command's words about where and about whom point at: the place it names, the words it
+/// gives for where, the guests it lists and the alerts it sets.
 fn references_refusal(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    for (key, kind) in [("calendar_id", Kind::Calendar), ("place_id", Kind::Place)] {
-        if let Some(id) = ctx.optional_str(key)
-            && let Some(sentence) = points_at(ctx, id, kind)?
-        {
-            return Ok(Some(sentence));
-        }
+    if let Some(id) = ctx.optional_str("place_id")
+        && let Some(sentence) = place_refusal(ctx, id)?
+    {
+        return Ok(Some(sentence));
     }
-    for guest in guests(ctx) {
-        if let Some(sentence) = points_at(ctx, guest, Kind::Person)? {
-            return Ok(Some(sentence));
-        }
+    if let Some(words) = ctx.optional_str("location")
+        && words.trim().is_empty()
+    {
+        return Ok(Some(
+            "where it is says something; clear it instead of leaving it blank".to_owned(),
+        ));
+    }
+    if let Some(guests) = guests_stated(ctx)?
+        && let Some(sentence) = guests::refusal(ctx.connection(), &guests)?
+    {
+        return Ok(Some(sentence));
+    }
+    if let Some(leads) = ctx.input.get("reminders").and_then(Json::as_array)
+        && leads
+            .iter()
+            .any(|lead| !lead.as_i64().is_some_and(|m| (0..=MAX_OFFSET_MIN).contains(&m)))
+    {
+        return Ok(Some(
+            "a reminder comes 0 minutes to a year before, not after".to_owned(),
+        ));
     }
     Ok(None)
 }
 
+fn guests_stated(ctx: &CommandCtx<'_, '_>) -> Result<Option<Vec<GuestIn>>> {
+    match ctx.input.get("guests") {
+        None | Some(Json::Null) => Ok(None),
+        Some(list) => serde_json::from_value(list.clone())
+            .map(Some)
+            .map_err(|error| VaultError::InvalidInput {
+                name: "guests".to_owned(),
+                detail: error.to_string(),
+            }),
+    }
+}
+
 fn rule_stated_refusal(ctx: &CommandCtx<'_, '_>) -> Option<String> {
     ctx.optional_str("rule").and_then(rule_refusal)
-}
-
-fn guests<'a>(ctx: &'a CommandCtx<'_, '_>) -> Vec<&'a str> {
-    ctx.input
-        .get("attendees")
-        .and_then(Json::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Json::as_str)
-        .collect()
-}
-
-/// A busy event does not land on another busy one: a timed pair that overlaps
-/// is refused. A free event blocks nothing, so it conflicts with nothing; an
-/// imported calendar's overlaps already happened and are not asked.
-fn conflict_refusal(ctx: &CommandCtx<'_, '_>, times: &Times) -> Result<Option<String>> {
-    let busy = ctx
-        .input
-        .get("busy")
-        .and_then(Json::as_bool)
-        .unwrap_or(true);
-    let (Some(ends), true) = (&times.ends, busy && times.timing != Semantics::AllDay) else {
-        return Ok(None);
-    };
-    let held: i64 = ctx.connection().query_row(
-        "SELECT COUNT(*) FROM event v JOIN entity e ON e.id = v.id
-          WHERE v.busy = 1 AND v.status <> 'cancelled' AND e.deleted_at IS NULL
-            AND v.timing <> 'all-day' AND v.starts < ?1 AND v.ends > ?2",
-        [ends, &times.starts],
-        |row| row.get(0),
-    )?;
-    Ok((held > 0).then(|| "This time conflicts with another event on your calendar.".to_owned()))
 }
 
 fn pre_propose(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -108,28 +100,25 @@ fn pre_propose(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         return Ok(Some("an event needs a title".to_owned()));
     }
     if let Some(id) = ctx.optional_str("id")
-        && crate::commands::entity::find(ctx.connection(), id)?.is_some()
+        && entity::find(ctx.connection(), id)?.is_some()
     {
         return Ok(Some("an event with that id already exists".to_owned()));
     }
     if let Some(sentence) = rule_stated_refusal(ctx) {
         return Ok(Some(sentence));
     }
+    if let Some(sentence) = entity::home_refusal(
+        ctx.connection(),
+        Kind::Event,
+        None,
+        Some(ctx.optional_str("calendar_id").unwrap_or(DEFAULT_CALENDAR_ID)),
+    )? {
+        return Ok(Some(sentence));
+    }
     if let Some(sentence) = references_refusal(ctx)? {
         return Ok(Some(sentence));
     }
     Ok(times(ctx, None).err())
-}
-
-/// A busy event does not land on another busy one: its own condition, so a caller that can lift
-/// the refusal by choosing another time (the on-device assistant asks) tells it from every other
-/// by the id and not by the sentence.
-fn pre_free_slot(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    match times(ctx, None) {
-        // the title-and-time condition has already said so
-        Err(_) => Ok(None),
-        Ok(times) => conflict_refusal(ctx, &times),
-    }
 }
 
 fn pre_edit(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -145,28 +134,28 @@ fn pre_edit(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if let Some(sentence) = references_refusal(ctx)? {
         return Ok(Some(sentence));
     }
-    let id = ctx.required_str("id")?;
-    let row = row_of(ctx.connection(), id)?;
-    let after = match times(ctx, Some(&row.times)) {
-        Ok(after) => after,
-        Err(sentence) => return Ok(Some(sentence)),
+    let row = row_of(ctx.connection(), ctx.required_str("id")?)?;
+    Ok(times(ctx, Some(&row.times)).err())
+}
+
+fn pre_split(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    if let Some(sentence) = pre_edit(ctx)? {
+        return Ok(Some(sentence));
+    }
+    let row = row_of(ctx.connection(), ctx.required_str("id")?)?;
+    let Some(rule) = row.rule.as_deref() else {
+        return Ok(Some("That event does not repeat.".to_owned()));
     };
-    let rule = match ctx.input.get("rule") {
-        Some(Json::String(rule)) => Some(rule.as_str()),
-        Some(_) => None,
-        None => row.rule.as_deref(),
-    };
-    let n = stranded(ctx.connection(), id, &after, rule)?;
-    Ok(
-        (n > 0 && (after != row.times || rule != row.rule.as_deref())).then(|| {
-            format!(
-                "This change to the series leaves {n} changed or skipped day{} matching nothing: \
-             put {} back first.",
-                if n == 1 { "" } else { "s" },
-                if n == 1 { "it" } else { "them" }
-            )
-        }),
-    )
+    if rrule::inspect(rule).is_err() {
+        return Ok(Some(
+            "That series repeats by a rule this vault cannot read, so it cannot be split."
+                .to_owned(),
+        ));
+    }
+    if occurrence_at(&row.times, rule, ctx.required_str("original_start")?).is_none() {
+        return Ok(Some("That day is not one the event lands on.".to_owned()));
+    }
+    Ok(None)
 }
 
 fn pre_cancel(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -181,12 +170,12 @@ fn pre_respond(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if row_of(ctx.connection(), id)?.status == "cancelled" {
         return Ok(Some("That event is cancelled.".to_owned()));
     }
-    let invited: i64 = ctx.connection().query_row(
-        "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'attendee' AND to_id = ?2",
-        [id, ctx.required_str("person_id")?],
+    let invited: bool = ctx.connection().query_row(
+        "SELECT EXISTS (SELECT 1 FROM event_guest WHERE event_id = ?1 AND address = ?2)",
+        [id, &guests::address_key(ctx.required_str("address")?)],
         |row| row.get(0),
     )?;
-    Ok((invited == 0).then(|| "That person is not invited to this event.".to_owned()))
+    Ok((!invited).then(|| "That address is not invited to this event.".to_owned()))
 }
 
 fn pre_occurrence(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -195,36 +184,37 @@ fn pre_occurrence(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     }
     let id = ctx.required_str("id")?;
     let row = row_of(ctx.connection(), id)?;
-    let (scope, action) = (ctx.required_str("scope")?, ctx.required_str("action")?);
-    if scope == "series" {
-        return Ok((action == "restore").then(|| "Only a skipped or moved day is put back.".into()));
-    }
     let Some(rule) = row.rule.as_deref() else {
         return Ok(Some("That event does not repeat.".to_owned()));
     };
+    let (key, action) = (
+        ctx.required_str("original_start")?,
+        ctx.required_str("action")?,
+    );
     if action == "restore" {
         return Ok(None);
     }
-    if occurrence_at(&row.times, rule, ctx.required_str("original_start")?).is_none() {
+    if occurrence_at(&row.times, rule, key).is_none() {
         return Ok(Some("That day is not one the event lands on.".to_owned()));
     }
     if action != "override" {
         return Ok(None);
     }
-    let day = match day_times(
+    if let Err(sentence) = day_times(
         ctx.input.as_object().unwrap_or(&serde_json::Map::new()),
         &row.times,
     ) {
-        Ok(day) => day,
-        Err(sentence) => return Ok(Some(sentence)),
-    };
-    if scope == "future" && day.own.is_some() {
+        return Ok(Some(sentence));
+    }
+    if let Some(words) = ctx.optional_str("location")
+        && words.trim().is_empty()
+    {
         return Ok(Some(
-            "A change of timing is for one day, not for every day after.".to_owned(),
+            "where it is says something; clear it instead of leaving it blank".to_owned(),
         ));
     }
     if let Some(place) = ctx.optional_str("place_id") {
-        return points_at(ctx, place, Kind::Place);
+        return place_refusal(ctx, place);
     }
     Ok(None)
 }
@@ -240,40 +230,6 @@ fn invalid(name: &str, detail: String) -> VaultError {
     }
 }
 
-/// Make the event's guests exactly `wanted`: a guest already invited keeps their
-/// answer, a new one has not answered, one left out is taken off the list.
-fn set_guests(ctx: &CommandCtx<'_, '_>, id: &str, wanted: &[&str]) -> Result<()> {
-    let kept: BTreeSet<&str> = wanted.iter().copied().collect();
-    let held: Vec<String> = ctx
-        .connection()
-        .prepare("SELECT to_id FROM edge WHERE from_id = ?1 AND rel = 'attendee'")?
-        .query_map([id], |row| row.get(0))?
-        .collect::<rusqlite::Result<_>>()?;
-    for guest in held.iter().filter(|guest| !kept.contains(guest.as_str())) {
-        ctx.connection().execute(
-            "DELETE FROM edge WHERE from_id = ?1 AND rel = 'attendee' AND to_id = ?2",
-            [id, guest],
-        )?;
-    }
-    for guest in kept
-        .iter()
-        .filter(|guest| !held.iter().any(|held| held == *guest))
-    {
-        edge::put(
-            ctx,
-            id,
-            Rel::Attendee,
-            guest,
-            None,
-            &Extras {
-                state: Some("needs-action"),
-                ..Extras::default()
-            },
-        )?;
-    }
-    Ok(())
-}
-
 #[derive(serde::Deserialize)]
 struct ProposeInput {
     id: Option<String>,
@@ -281,13 +237,14 @@ struct ProposeInput {
     rule: Option<String>,
     calendar_id: Option<String>,
     description: Option<String>,
+    location: Option<String>,
     place_id: Option<String>,
     url: Option<String>,
     travel_min: Option<i64>,
     status: Option<String>,
     busy: Option<bool>,
     reminders: Option<Vec<i64>>,
-    attendees: Option<Vec<String>>,
+    guests: Option<Vec<GuestIn>>,
 }
 
 fn propose(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
@@ -308,6 +265,7 @@ fn propose(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             calendar_id: input.calendar_id.as_deref(),
             reminders: &reminders,
             description: input.description.as_deref(),
+            location: input.location.as_deref().map(str::trim),
             place_id: input.place_id.as_deref(),
             url: input.url.as_deref(),
             travel_min: input.travel_min,
@@ -315,43 +273,62 @@ fn propose(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             busy: input.busy,
         },
     )?;
-    let attendees = input.attendees.unwrap_or_default();
-    let invited: Vec<&str> = attendees.iter().map(String::as_str).collect();
-    set_guests(ctx, &id, &invited)?;
-    Ok(json!({ "id": id, "attendees": invited.len() }))
+    let invited = input.guests.unwrap_or_default();
+    guests::set_guests(ctx, &id, &invited)?;
+    Ok(json!({ "id": id, "guests": invited.len() }))
 }
 
+/// What an edit (or a split) states: a key that is present is set (`null` clears it), one that is
+/// absent is left alone. `original_start` names the day a split begins at.
 #[derive(serde::Deserialize)]
-struct EditEventInput {
-    id: String,
-    title: Option<String>,
+pub(super) struct EditInput {
+    pub(super) id: String,
+    pub(super) original_start: Option<String>,
+    pub(super) title: Option<String>,
     #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
-    description: Option<Option<String>>,
+    pub(super) description: Option<Option<String>>,
     #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
-    place_id: Option<Option<String>>,
+    pub(super) location: Option<Option<String>>,
     #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
-    url: Option<Option<String>>,
+    pub(super) place_id: Option<Option<String>>,
     #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
-    calendar_id: Option<Option<String>>,
+    pub(super) url: Option<Option<String>>,
+    pub(super) status: Option<String>,
+    pub(super) busy: Option<bool>,
     #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
-    status: Option<Option<String>>,
+    pub(super) travel_min: Option<Option<i64>>,
     #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
-    busy: Option<Option<bool>>,
+    pub(super) reminders: Option<Option<Vec<i64>>>,
     #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
-    travel_min: Option<Option<i64>>,
+    pub(super) rule: Option<Option<String>>,
     #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
-    reminders: Option<Option<Vec<i64>>>,
-    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
-    rule: Option<Option<String>>,
-    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
-    attendees: Option<Option<Vec<String>>>,
+    pub(super) guests: Option<Option<Vec<GuestIn>>>,
 }
 
-/// Set the event's own columns from what a command states: a key that is
-/// present is set (`null` clears it), one that is absent is left alone.
-fn write_event(ctx: &CommandCtx<'_, '_>, input: &EditEventInput, after: &Times) -> Result<()> {
+impl EditInput {
+    /// Whether the command states a time or a rule: what a split must move the days for.
+    pub(super) fn states_when(&self, ctx: &CommandCtx<'_, '_>) -> bool {
+        self.rule.is_some()
+            || ["starts", "ends", "timing", "zone"]
+                .iter()
+                .any(|key| ctx.input.get(key).is_some())
+    }
+}
+
+/// Set the event's own columns from what a command states, and its guests and alerts.
+fn write_event(ctx: &CommandCtx<'_, '_>, input: &EditInput, after: &Times) -> Result<()> {
     let connection = ctx.connection();
     let id = input.id.as_str();
+    let before = row_of(connection, id)?;
+    let rule_after = match &input.rule {
+        Some(rule) => rule.as_deref().map(rrule::canonicalize),
+        None => before.rule.clone(),
+    };
+    // A day override is keyed by the series' own form of time and held to its timing by a key:
+    // when the series changes form, or stops repeating, its days have nothing to name.
+    if after.timing != before.times.timing || rule_after.is_none() {
+        connection.execute("DELETE FROM occurrence WHERE series_id = ?1", [id])?;
+    }
     connection.execute(
         "UPDATE event SET starts = ?2, ends = ?3, timing = ?4, zone = ?5 WHERE id = ?1",
         rusqlite::params![
@@ -362,10 +339,26 @@ fn write_event(ctx: &CommandCtx<'_, '_>, input: &EditEventInput, after: &Times) 
             after.zone
         ],
     )?;
+    if let Some(rule) = &input.rule {
+        let rule = rule.as_deref().map(rrule::canonicalize);
+        connection.execute(
+            "UPDATE event SET rule = ?2, rule_supported = 1 WHERE id = ?1",
+            rusqlite::params![id, rule],
+        )?;
+    }
+    if rule_after.is_some() && (after != &before.times || rule_after != before.rule) {
+        rekey_stranded(connection, id)?;
+    }
     if let Some(description) = &input.description {
         connection.execute(
             "UPDATE event SET description = ?2 WHERE id = ?1",
             rusqlite::params![id, description],
+        )?;
+    }
+    if let Some(location) = &input.location {
+        connection.execute(
+            "UPDATE event SET location = ?2 WHERE id = ?1",
+            rusqlite::params![id, location.as_deref().map(str::trim)],
         )?;
     }
     if let Some(place_id) = &input.place_id {
@@ -380,12 +373,6 @@ fn write_event(ctx: &CommandCtx<'_, '_>, input: &EditEventInput, after: &Times) 
             rusqlite::params![id, url],
         )?;
     }
-    if let Some(calendar_id) = &input.calendar_id {
-        connection.execute(
-            "UPDATE event SET calendar_id = ?2 WHERE id = ?1",
-            rusqlite::params![id, calendar_id],
-        )?;
-    }
     if let Some(status) = &input.status {
         connection.execute(
             "UPDATE event SET status = ?2 WHERE id = ?1",
@@ -395,7 +382,7 @@ fn write_event(ctx: &CommandCtx<'_, '_>, input: &EditEventInput, after: &Times) 
     if let Some(busy) = input.busy {
         connection.execute(
             "UPDATE event SET busy = ?2 WHERE id = ?1",
-            rusqlite::params![id, busy.map(i64::from)],
+            rusqlite::params![id, busy],
         )?;
     }
     if let Some(travel_min) = input.travel_min {
@@ -405,39 +392,34 @@ fn write_event(ctx: &CommandCtx<'_, '_>, input: &EditEventInput, after: &Times) 
         )?;
     }
     if let Some(reminders) = &input.reminders {
-        set_reminders(connection, id, reminders.as_deref().unwrap_or_default())?;
-    }
-    if let Some(rule) = &input.rule {
-        let rule = rule.as_deref().map(rrule::canonicalize);
-        connection.execute(
-            "UPDATE event SET rule = ?2, rule_supported = 1 WHERE id = ?1",
-            rusqlite::params![id, rule],
-        )?;
+        reminder::set_leads(ctx, id, reminders.as_deref().unwrap_or_default())?;
     }
     if let Some(title) = input.title.as_deref() {
-        connection.execute(
-            "UPDATE entity SET title = ?2 WHERE id = ?1",
-            [id, title.trim()],
-        )?;
+        entity::rename(ctx, id, title.trim())?;
     }
-    if let Some(attendees) = &input.attendees {
-        let invited: Vec<&str> = attendees
-            .as_deref()
-            .unwrap_or_default()
-            .iter()
-            .map(String::as_str)
-            .collect();
-        set_guests(ctx, id, &invited)?;
+    if let Some(guests) = &input.guests {
+        guests::set_guests(ctx, id, guests.as_deref().unwrap_or_default())?;
     }
     ctx.touch(id)
 }
 
-fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let input: EditEventInput = ctx.parse_input()?;
+/// The edit of a whole event, or of a whole series.
+pub(super) fn apply_edit(ctx: &CommandCtx<'_, '_>, input: &EditInput) -> Result<()> {
     let row = row_of(ctx.connection(), &input.id)?;
     let after = times(ctx, Some(&row.times)).map_err(|sentence| invalid("starts", sentence))?;
-    write_event(ctx, &input, &after)?;
+    write_event(ctx, input, &after)
+}
+
+fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let input: EditInput = ctx.parse_input()?;
+    apply_edit(ctx, &input)?;
     with_rev(ctx, &input.id, json!({ "id": input.id }))
+}
+
+fn split_command(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
+    let input: EditInput = ctx.parse_input()?;
+    let answer = split::split(ctx, &input)?;
+    with_rev(ctx, &input.id, answer)
 }
 
 #[derive(serde::Deserialize)]
@@ -455,71 +437,40 @@ fn cancel(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
 }
 
 #[derive(serde::Deserialize)]
-struct RespondEventInput {
+struct RespondInput {
     id: String,
-    person_id: String,
-    state: String,
+    address: String,
+    status: String,
 }
 
 fn respond(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let input: RespondEventInput = ctx.parse_input()?;
-    edge::put(
-        ctx,
-        &input.id,
-        Rel::Attendee,
-        &input.person_id,
-        None,
-        &Extras {
-            state: Some(&input.state),
-            ..Extras::default()
-        },
-    )?;
-    ctx.touch(&input.id)?;
-    Ok(json!({ "id": input.id, "state": input.state }))
+    let input: RespondInput = ctx.parse_input()?;
+    guests::respond(ctx, &input.id, &input.address, &input.status)?;
+    Ok(json!({ "id": input.id, "status": input.status }))
 }
 
 #[derive(serde::Deserialize)]
 struct EditOccurrenceInput {
     id: String,
     original_start: String,
-    scope: String,
     action: String,
     title: Option<String>,
     description: Option<String>,
     url: Option<String>,
+    location: Option<String>,
     place_id: Option<String>,
 }
 
-/// What happened to one day of a series, or to the series as a whole; with the event's revision
-/// when the change named the one it replaces.
+/// What happened to one day of a series: skipped, moved or renamed, or put back.
 fn edit_occurrence(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let input: EditOccurrenceInput = ctx.parse_input()?;
-    with_rev(ctx, &input.id, change_occurrence(ctx, &input)?)
-}
-
-fn change_occurrence(ctx: &CommandCtx<'_, '_>, input: &EditOccurrenceInput) -> Result<Json> {
     let id = input.id.as_str();
-    let answer = json!({ "id": id, "scope": input.scope });
-    if input.scope == "series" {
-        // The whole series: skipping it is cancelling it, and a change to it is
-        // an edit of the event's own times and words.
-        if input.action == "skip" {
-            ctx.connection()
-                .execute("UPDATE event SET status = 'cancelled' WHERE id = ?1", [id])?;
-        } else {
-            let edit_input: EditEventInput = ctx.parse_input()?;
-            let row = row_of(ctx.connection(), id)?;
-            let after = times(ctx, Some(&row.times)).map_err(|s| invalid("starts", s))?;
-            write_event(ctx, &edit_input, &after)?;
-        }
-        return Ok(answer);
-    }
     let key = input.original_start.as_str();
     let connection = ctx.connection();
     if input.action == "restore" {
         connection.execute(
-            "DELETE FROM occurrence WHERE series_id = ?1 AND original_start = ?2 AND scope = ?3",
-            [id, key, input.scope.as_str()],
+            "DELETE FROM occurrence WHERE series_id = ?1 AND original_start = ?2",
+            [id, key],
         )?;
     } else {
         let skipped = input.action == "skip";
@@ -537,16 +488,17 @@ fn change_occurrence(ctx: &CommandCtx<'_, '_>, input: &EditOccurrenceInput) -> R
             (!skipped).then_some(value.as_deref()).flatten()
         }
         connection.execute(
-            "INSERT INTO occurrence (series_id, original_start, scope, cancelled, starts, ends,
-                                     timing, zone, title, description, url, place_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
-             ON CONFLICT (series_id, original_start, scope)
-             DO UPDATE SET cancelled = ?4, starts = ?5, ends = ?6, timing = ?7, zone = ?8,
-                           title = ?9, description = ?10, url = ?11, place_id = ?12",
+            "INSERT INTO occurrence (series_id, series_timing, original_start, cancelled, starts,
+                                     ends, timing, zone, title, description, url, location,
+                                     place_id)
+             SELECT ?1, timing, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12
+               FROM event WHERE id = ?1
+             ON CONFLICT (series_id, original_start)
+             DO UPDATE SET cancelled = ?3, starts = ?4, ends = ?5, timing = ?6, zone = ?7,
+                           title = ?8, description = ?9, url = ?10, location = ?11, place_id = ?12",
             rusqlite::params![
                 id,
                 key,
-                input.scope,
                 skipped,
                 day.starts,
                 day.ends,
@@ -555,47 +507,77 @@ fn change_occurrence(ctx: &CommandCtx<'_, '_>, input: &EditOccurrenceInput) -> R
                 said(skipped, &input.title),
                 said(skipped, &input.description),
                 said(skipped, &input.url),
+                said(skipped, &input.location).map(str::trim),
                 said(skipped, &input.place_id),
             ],
         )?;
     }
-    Ok(answer)
+    ctx.touch(id)?;
+    with_rev(ctx, id, json!({ "id": id, "original_start": key }))
 }
 
 // ---------------------------------------------------------------------------
 // The catalogue
 // ---------------------------------------------------------------------------
 
-const PROPOSE_SCHEMA: &str = r#"{
+macro_rules! guests_schema {
+    () => {
+        r#"{ "type": ["array", "null"],
+      "description": "The whole list: a guest left out is taken off, one already invited keeps their answer unless this states it.",
+      "items": { "type": "object", "required": ["address"], "additionalProperties": false,
+        "properties": {
+          "address": { "type": "string", "minLength": 1, "description": "An email address: a guest's identity on the event, in People or not." },
+          "name": { "type": ["string", "null"] },
+          "role": { "type": "string", "enum": ["required", "optional", "non-participant"] },
+          "status": { "type": "string", "enum": ["needs-action", "accepted", "declined", "tentative"] },
+          "organizer": { "type": "boolean" },
+          "person_id": { "type": "string", "minLength": 1 } } } }"#
+    };
+}
+
+const PROPOSE_SCHEMA: &str = concat!(
+    r#"{
   "type": "object", "required": ["title", "starts"], "additionalProperties": false,
   "properties": {
     "id": { "type": "string", "minLength": 1 },
     "title": { "type": "string", "maxLength": 1000 },
     "description": { "type": ["string", "null"] },
     "starts": { "type": "string", "minLength": 1,
-      "description": "An instant (...Z), a wall clock in `zone`, a floating wall clock, or a date for an all-day event." },
+      "description": "An instant (...Z), a wall clock in `zone`, a floating wall clock to the minute, or a date for an all-day event." },
     "ends": { "type": ["string", "null"],
       "description": "Exclusive for a timed event; the LAST day, inclusive, for an all-day one." },
     "timing": { "type": "string", "enum": ["zoned", "floating", "all-day"] },
     "zone": { "type": ["string", "null"], "description": "An IANA zone; with it a wall clock is that zone's." },
     "rule": { "type": ["string", "null"], "description": "An RFC 5545 recurrence rule." },
-    "calendar_id": { "type": "string", "minLength": 1 },
-    "place_id": { "type": ["string", "null"] },
+    "calendar_id": { "type": "string", "minLength": 1, "description": "The calendar it is on (its home); the vault's own when none." },
+    "location": { "type": ["string", "null"], "description": "Free text for where; it never becomes a place." },
+    "place_id": { "type": ["string", "null"], "description": "A place the member has." },
     "url": { "type": ["string", "null"] },
     "travel_min": { "type": ["integer", "null"], "minimum": 0,
       "description": "Minutes of travel to allow before it starts." },
-    "reminders": { "type": ["array", "null"], "items": { "type": "integer", "minimum": 0 },
-      "description": "Minutes before it starts, one per alert (at most two in the editor). Held as a set and read longest lead first." },
-    "attendees": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "reminders": { "type": ["array", "null"], "items": { "type": "integer", "minimum": 0, "maximum": 525600 },
+      "description": "Minutes before it starts, one per alert. An event has no alert unless it is given one." },
+    "guests": "#,
+    guests_schema!(),
+    r#",
     "status": { "type": "string", "enum": ["confirmed", "tentative", "cancelled"] },
     "busy": { "type": "boolean" }
   }
-}"#;
+}"#
+);
 
-const EDIT_SCHEMA: &str = r#"{
-  "type": "object", "required": ["id"], "additionalProperties": false,
+macro_rules! edit_schema {
+    ($required:literal, $key:literal) => {
+        concat!(
+            r#"{
+  "type": "object", "required": "#,
+            $required,
+            r#", "additionalProperties": false,
   "properties": {
     "id": { "type": "string", "minLength": 1 },
+    "#,
+            $key,
+            r#"
     "title": { "type": "string", "maxLength": 1000 },
     "description": { "type": ["string", "null"] },
     "starts": { "type": "string", "minLength": 1 },
@@ -603,25 +585,37 @@ const EDIT_SCHEMA: &str = r#"{
     "timing": { "type": "string", "enum": ["zoned", "floating", "all-day"] },
     "zone": { "type": ["string", "null"] },
     "rule": { "type": ["string", "null"] },
-    "calendar_id": { "type": "string", "minLength": 1 },
+    "location": { "type": ["string", "null"] },
     "place_id": { "type": ["string", "null"] },
     "url": { "type": ["string", "null"] },
     "travel_min": { "type": ["integer", "null"], "minimum": 0 },
-    "reminders": { "type": ["array", "null"], "items": { "type": "integer", "minimum": 0 } },
-    "attendees": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "reminders": { "type": ["array", "null"], "items": { "type": "integer", "minimum": 0, "maximum": 525600 } },
+    "guests": "#,
+            guests_schema!(),
+            r#",
     "status": { "type": "string", "enum": ["confirmed", "tentative", "cancelled"] },
     "busy": { "type": "boolean" },
     "expected_rev": { "type": "integer", "minimum": 0 }
   }
-}"#;
+}"#
+        )
+    };
+}
+
+const EDIT_SCHEMA: &str = edit_schema!(r#"["id"]"#, "");
+
+const SPLIT_SCHEMA: &str = edit_schema!(
+    r#"["id", "original_start"]"#,
+    r#""original_start": { "type": "string", "minLength": 1,
+      "description": "The series-local wall clock of the first day the change is for." },"#
+);
 
 const OCCURRENCE_SCHEMA: &str = r#"{
-  "type": "object", "required": ["id", "original_start", "scope", "action"], "additionalProperties": false,
+  "type": "object", "required": ["id", "original_start", "action"], "additionalProperties": false,
   "properties": {
     "id": { "type": "string", "minLength": 1 },
     "original_start": { "type": "string", "minLength": 1,
       "description": "The series-local wall clock the rule produced for the day." },
-    "scope": { "type": "string", "enum": ["occurrence", "future", "series"] },
     "action": { "type": "string", "enum": ["skip", "override", "restore"] },
     "title": { "type": "string" },
     "description": { "type": "string" },
@@ -630,30 +624,33 @@ const OCCURRENCE_SCHEMA: &str = r#"{
     "timing": { "type": "string", "enum": ["zoned", "floating", "all-day"],
       "description": "How this one day reads, when not as its series does." },
     "zone": { "type": ["string", "null"] },
-    "url": { "type": ["string", "null"], "description": "This day's own link; the series' when none." },
-    "place_id": { "type": ["string", "null"], "description": "This day's own place; the series' when none." },
+    "url": { "type": "string", "description": "This day's own link; the series' when none." },
+    "location": { "type": "string", "description": "This day's own words for where; the series' when none." },
+    "place_id": { "type": "string", "description": "This day's own place; the series' when none." },
     "expected_rev": { "type": "integer", "minimum": 0 }
   }
 }"#;
 
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
-    const PROPOSE: &[CommandCondition] = &[
-        CommandCondition {
-            predicate: "event_has_a_title_and_a_time",
-            check: pre_propose,
-        },
-        CommandCondition {
-            predicate: "no_busy_conflict",
-            check: pre_free_slot,
-        },
-    ];
+    const PROPOSE: &[CommandCondition] = &[CommandCondition {
+        predicate: "event_has_a_title_a_calendar_and_a_time",
+        check: pre_propose,
+    }];
     const EDIT: &[CommandCondition] = &[
         STALE_GUARD[0],
         STALE_GUARD[1],
         CommandCondition {
             predicate: "event_is_live_and_its_change_resolves",
             check: pre_edit,
+        },
+    ];
+    const SPLIT: &[CommandCondition] = &[
+        STALE_GUARD[0],
+        STALE_GUARD[1],
+        CommandCondition {
+            predicate: "series_has_that_day_and_the_change_resolves",
+            check: pre_split,
         },
     ];
     const CANCEL: &[CommandCondition] = &[CommandCondition {
@@ -672,8 +669,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
             check: pre_occurrence,
         },
     ];
-    // An edit, a cancellation and a change to one day each restate a commitment
-    // other people may hold: they are medium risk.
+    // An edit, a cancellation, a split and a change to one day each restate a commitment other
+    // people may hold: they are medium risk.
     let medium = |definition: CommandDefinition| CommandDefinition {
         risk: Risk::Medium,
         ..definition
@@ -696,6 +693,14 @@ pub fn definitions() -> Vec<CommandDefinition> {
             edit,
         )),
         medium(CommandDefinition::plain(
+            "event.split",
+            "event",
+            SPLIT_SCHEMA,
+            Idempotency::Once,
+            SPLIT,
+            split_command,
+        )),
+        medium(CommandDefinition::plain(
             "event.cancel",
             "event",
             r#"{ "type": "object", "required": ["id"], "additionalProperties": false,
@@ -707,11 +712,11 @@ pub fn definitions() -> Vec<CommandDefinition> {
         CommandDefinition::plain(
             "event.respond",
             "event",
-            r#"{ "type": "object", "required": ["id", "person_id", "state"], "additionalProperties": false,
+            r#"{ "type": "object", "required": ["id", "address", "status"], "additionalProperties": false,
                  "properties": {
                    "id": { "type": "string", "minLength": 1 },
-                   "person_id": { "type": "string", "minLength": 1 },
-                   "state": { "type": "string", "enum": ["accepted", "declined", "tentative"] } } }"#,
+                   "address": { "type": "string", "minLength": 1 },
+                   "status": { "type": "string", "enum": ["accepted", "declined", "tentative"] } } }"#,
             Idempotency::Idempotent,
             RESPOND,
             respond,

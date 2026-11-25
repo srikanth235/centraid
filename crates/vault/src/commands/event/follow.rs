@@ -1,17 +1,22 @@
-//! Follower settle and recurring-series day override callbacks for events.
+//! What a followed calendar's events add to the engine: how a record reads (`shape`), what a row
+//! derives from it (`settle`), and the fields that are rows of their own: a series' one-day
+//! overrides (`overrides`) and an event's alerts (`reminders`). The guests are `guests.rs`.
 
 use std::collections::BTreeSet;
 
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Value as Json, json};
 
-use crate::commands::CommandCtx;
+use crate::commands::{CommandCtx, reminder};
 use crate::error::Result;
 use crate::time::recurrence::Semantics;
 use crate::time::rrule;
 use crate::time::zone::FireZone;
 
-use super::times::{Times, expand_series, parse_timing, rekey_stranded, resolve_one, row_of};
+use super::reminders_held;
+use super::times::{
+    Times, day_key, expand_series, parse_timing, rekey_stranded, resolve_one, resolve_times, row_of,
+};
 
 // ---------------------------------------------------------------------------
 // The follower's `settle`, and its `overrides`
@@ -48,14 +53,13 @@ struct Day {
     title: Option<String>,
     description: Option<String>,
     url: Option<String>,
-    /// The NAME of the day's own place: a phone states a place by its words, and the vault finds
-    /// or founds the place only when it writes the day.
-    place: Option<String>,
+    /// The day's own words for where (free text: a phone's location never becomes a place, D5).
+    location: Option<String>,
 }
 
 impl PartialEq for Day {
     fn eq(&self, other: &Self) -> bool {
-        let place = |day: &Self| day.place.as_deref().map(|name| name.trim().to_lowercase());
+        let place = |day: &Self| day.location.as_deref().map(|name| name.trim().to_lowercase());
         (
             self.cancelled,
             &self.starts,
@@ -89,6 +93,12 @@ struct Observed {
     moved: Vec<Json>,
 }
 
+/// A day the phone names, by its wall clock to the minute (a phone says `…T09:00:00`; a day is
+/// found by what it says to the minute) or its date.
+fn phone_key(key: &str) -> String {
+    key.chars().take(16).collect()
+}
+
 fn observed(statement: &Json) -> Option<Observed> {
     let text = |key: &str| statement.get(key)?.as_str().map(str::to_owned);
     let list = |key: &str| statement.get(key).and_then(Json::as_array).cloned();
@@ -97,7 +107,7 @@ fn observed(statement: &Json) -> Option<Observed> {
         to: text("to")?,
         shown: list("shown")?
             .iter()
-            .filter_map(|key| key.as_str().map(str::to_owned))
+            .filter_map(|key| key.as_str().map(phone_key))
             .collect(),
         moved: list("moved").unwrap_or_default(),
     })
@@ -111,21 +121,22 @@ struct Derived {
 }
 
 fn derive(connection: &Connection, id: &str, said: &Observed) -> Result<Derived> {
-    let (times, rule, title, description, url): (
+    let (times, rule, title, description, url, location): (
         Times,
         Option<String>,
         String,
         Option<String>,
         Option<String>,
+        Option<String>,
     ) = {
         let row = row_of(connection, id)?;
-        let (title, description, url) = connection.query_row(
-            "SELECT e.title, v.description, v.url FROM event v JOIN entity e ON e.id = v.id
+        let (title, description, url, location) = connection.query_row(
+            "SELECT e.title, v.description, v.url, v.location FROM event v JOIN entity e ON e.id = v.id
               WHERE v.id = ?1",
             [id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )?;
-        (row.times, row.rule, title, description, url)
+        (row.times, row.rule, title, description, url, location)
     };
     let mut derived = Derived {
         window: BTreeSet::new(),
@@ -134,15 +145,17 @@ fn derive(connection: &Connection, id: &str, said: &Observed) -> Result<Derived>
     let Some(rule) = rule.filter(|rule| rrule::inspect(rule).is_ok()) else {
         return Ok(derived);
     };
-    let moved: std::collections::BTreeMap<&str, &Json> = said
+    let moved: std::collections::BTreeMap<String, &Json> = said
         .moved
         .iter()
-        .filter_map(|day| Some((day.get("original_start")?.as_str()?, day)))
+        .filter_map(|day| Some((phone_key(day.get("original_start")?.as_str()?), day)))
         .collect();
     for occurrence in expand_series(&times, &rule, &said.from, &said.to, 2_000) {
-        let key = occurrence.wall_start;
+        // The phone names a day by the series' wall clock; the vault keys it as its timing says.
+        let wall = phone_key(&occurrence.wall_start);
+        let key = day_key(times.timing, &occurrence);
         derived.window.insert(key.clone());
-        let day = if let Some(day) = moved.get(key.as_str()) {
+        let day = if let Some(day) = moved.get(&wall) {
             let text = |name: &str, own: Option<&str>| {
                 let said = day
                     .get(name)
@@ -180,9 +193,9 @@ fn derive(connection: &Connection, id: &str, said: &Observed) -> Result<Derived>
                 title: text("title", Some(&title)),
                 description: text("description", description.as_deref()),
                 url: text("url", url.as_deref()),
-                place: text("location", None),
+                location: text("location", location.as_deref()),
             }
-        } else if said.shown.contains(&key) {
+        } else if said.shown.contains(&wall) {
             continue;
         } else {
             Day {
@@ -194,7 +207,7 @@ fn derive(connection: &Connection, id: &str, said: &Observed) -> Result<Derived>
                 title: None,
                 description: None,
                 url: None,
-                place: None,
+                location: None,
             }
         };
         // A day the phone calls moved and says nothing different of is the series' own.
@@ -203,7 +216,7 @@ fn derive(connection: &Connection, id: &str, said: &Observed) -> Result<Derived>
             || day.title.is_some()
             || day.description.is_some()
             || day.url.is_some()
-            || day.place.is_some()
+            || day.location.is_some()
         {
             derived.rows.insert(key, day);
         }
@@ -215,10 +228,9 @@ fn derive(connection: &Connection, id: &str, said: &Observed) -> Result<Derived>
 fn held(connection: &Connection, id: &str) -> Result<std::collections::BTreeMap<String, Day>> {
     connection
         .prepare(
-            "SELECT o.original_start, o.cancelled, o.starts, o.ends, o.timing, o.zone, o.title,
-                    o.description, o.url, p.title
-               FROM occurrence o LEFT JOIN entity p ON p.id = o.place_id
-              WHERE o.series_id = ?1 AND o.scope = 'occurrence'",
+            "SELECT original_start, cancelled, starts, ends, timing, zone, title, description, url,
+                    location
+               FROM occurrence WHERE series_id = ?1",
         )?
         .query_map([id], |row| {
             Ok((
@@ -232,7 +244,7 @@ fn held(connection: &Connection, id: &str) -> Result<std::collections::BTreeMap<
                     title: row.get(6)?,
                     description: row.get(7)?,
                     url: row.get(8)?,
-                    place: row.get(9)?,
+                    location: row.get(9)?,
                 },
             ))
         })?
@@ -271,7 +283,7 @@ pub(crate) fn overrides_read(connection: &Connection, id: &str) -> Result<Json> 
     Ok(if inside(&derived.rows) == inside(&rows) {
         said
     } else {
-        json!({ "held": inside(&rows).iter().map(|(key, day)| json!([key, day.cancelled, day.starts, day.title, day.timing, day.url, day.place])).collect::<Vec<_>>() })
+        json!({ "held": inside(&rows).iter().map(|(key, day)| json!([key, day.cancelled, day.starts, day.title, day.timing, day.url, day.location])).collect::<Vec<_>>() })
     })
 }
 
@@ -285,24 +297,20 @@ fn write_day(ctx: &CommandCtx<'_, '_>, id: &str, key: &str, wanted: Option<&Day>
     match wanted {
         None => {
             connection.execute(
-                "DELETE FROM occurrence WHERE series_id = ?1 AND original_start = ?2
-                                          AND scope = 'occurrence'",
+                "DELETE FROM occurrence WHERE series_id = ?1 AND original_start = ?2",
                 [id, key],
             )?;
         }
         Some(day) => {
-            let place = day
-                .place
-                .as_deref()
-                .map(|name| crate::commands::place::find_or_found_named(ctx, name))
-                .transpose()?;
             connection.execute(
-                "INSERT INTO occurrence (series_id, original_start, scope, cancelled, starts,
-                                         ends, timing, zone, title, description, url, place_id)
-                 VALUES (?1, ?2, 'occurrence', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
-                 ON CONFLICT (series_id, original_start, scope)
+                "INSERT INTO occurrence (series_id, series_timing, original_start, cancelled,
+                                         starts, ends, timing, zone, title, description, url,
+                                         location)
+                 SELECT ?1, timing, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11
+                   FROM event WHERE id = ?1
+                 ON CONFLICT (series_id, original_start)
                  DO UPDATE SET cancelled = ?3, starts = ?4, ends = ?5, timing = ?6, zone = ?7,
-                               title = ?8, description = ?9, url = ?10, place_id = ?11",
+                               title = ?8, description = ?9, url = ?10, location = ?11",
                 rusqlite::params![
                     id,
                     key,
@@ -314,7 +322,7 @@ fn write_day(ctx: &CommandCtx<'_, '_>, id: &str, key: &str, wanted: Option<&Day>
                     day.title,
                     day.description,
                     day.url,
-                    place
+                    day.location
                 ],
             )?;
         }
@@ -385,4 +393,127 @@ pub(crate) fn overrides_merge(
         changed = true;
     }
     Ok(changed)
+}
+
+// ---------------------------------------------------------------------------
+// How a record reads, and the alerts
+// ---------------------------------------------------------------------------
+
+/// What a followed calendar states of an event, in the form the vault holds it: a wall clock and
+/// its zone become the instant, a floating time loses a zero second, so the statement a source
+/// makes and the row it leaves compare equal. The alerts it states are minutes before, one form.
+/// The keys `starts` and `reminders` stay what `alerts.rs` reads to alert once per real thing.
+pub(crate) fn shape(
+    _: &CommandCtx<'_, '_>,
+    fields: &mut serde_json::Map<String, Json>,
+) -> std::result::Result<(), String> {
+    if let Some(alerts) = fields.get("reminders") {
+        let alerts = alerts_canon(alerts)?;
+        fields.insert("reminders".to_owned(), alerts);
+    }
+    // A phone has no place of the member's: what it writes for where is words.
+    if let Some(Json::String(words)) = fields.get("location")
+        && words.trim().is_empty()
+    {
+        fields.insert("location".to_owned(), Json::Null);
+    }
+    if !["starts", "ends", "timing", "zone"]
+        .iter()
+        .any(|key| fields.contains_key(*key))
+    {
+        return Ok(());
+    }
+    let at = resolve_times(fields, None)?;
+    fields.insert("starts".to_owned(), at.starts.into());
+    if fields.contains_key("ends") {
+        fields.insert("ends".to_owned(), at.ends.into());
+    }
+    fields.insert("timing".to_owned(), at.timing.as_str().into());
+    fields.insert("zone".to_owned(), at.zone.into());
+    Ok(())
+}
+
+/// The alerts a source states (minutes before it starts) in the one form the statement keeps: a
+/// JSON array, each minute once, smallest first. No alert is `null`.
+fn alerts_canon(alerts: &Json) -> std::result::Result<Json, String> {
+    let list = alerts_of(alerts)?;
+    Ok(if list.is_empty() {
+        Json::Null
+    } else {
+        json!(list)
+    })
+}
+
+/// The minutes a statement of alerts names, each once, smallest first.
+fn alerts_of(alerts: &Json) -> std::result::Result<Vec<i64>, String> {
+    let list: Vec<i64> = match alerts {
+        Json::Null => Vec::new(),
+        // A statement read back from text.
+        Json::String(text) => match serde_json::from_str::<Json>(text) {
+            Ok(Json::Array(list)) => list.iter().filter_map(Json::as_i64).collect(),
+            _ => return Err("reminders are minutes before the start".to_owned()),
+        },
+        Json::Array(list) => list
+            .iter()
+            .map(|minutes| {
+                minutes
+                    .as_i64()
+                    .filter(|minutes| *minutes >= 0)
+                    .ok_or_else(|| "reminders are minutes before the start".to_owned())
+            })
+            .collect::<std::result::Result<_, _>>()?,
+        _ => return Err("reminders are minutes before the start".to_owned()),
+    };
+    Ok(list
+        .into_iter()
+        .collect::<BTreeSet<i64>>()
+        .into_iter()
+        .collect())
+}
+
+/// The alerts the vault holds, in the form a source states them (`null` for none).
+pub(crate) fn reminders_read(connection: &Connection, id: &str) -> Result<Json> {
+    let held = reminders_held(connection, id)?;
+    Ok(if held.is_empty() {
+        Json::Null
+    } else {
+        json!(held)
+    })
+}
+
+pub(crate) fn reminders_canon(statement: &Json) -> Json {
+    alerts_canon(statement).unwrap_or_else(|_| statement.clone())
+}
+
+/// A three-way merge of the alerts, judged whole: the source's new word replaces the vault's when
+/// the member never changed them (they are what its last word implied).
+pub(crate) fn reminders_merge(
+    ctx: &CommandCtx<'_, '_>,
+    id: &str,
+    stated: Option<&Json>,
+    new: &Json,
+) -> Result<bool> {
+    let held = reminders_held(ctx.connection(), id)?;
+    let wanted = alerts_of(new).unwrap_or_default();
+    if wanted == held {
+        return Ok(false);
+    }
+    let ours = match stated {
+        Some(said) => alerts_of(said).unwrap_or_default() == held,
+        None => held.is_empty(),
+    };
+    if !ours {
+        return Ok(false);
+    }
+    reminder::set_leads(ctx, id, &wanted)
+}
+
+/// Put the alerts back to what the source last stated.
+pub(crate) fn reminders_take(
+    ctx: &CommandCtx<'_, '_>,
+    id: &str,
+    _item: Option<&str>,
+    stated: &Json,
+) -> Result<bool> {
+    reminder::set_leads(ctx, id, &alerts_of(stated).unwrap_or_default())
 }

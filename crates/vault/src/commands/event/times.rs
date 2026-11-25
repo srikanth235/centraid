@@ -1,18 +1,18 @@
-//! Event timing, wall-clock resolution, recurrence expansion, and reminder child callbacks.
+//! Event timing, wall-clock resolution and recurrence expansion.
 
 use std::collections::BTreeSet;
 
 use rusqlite::Connection;
-use serde_json::{Value as Json, json};
+use serde_json::Value as Json;
 
 use crate::commands::CommandCtx;
 use crate::error::{Result, VaultError};
 use crate::time::occurrence::{SEARCH_WINDOW_DAYS, search_window};
 use crate::time::recurrence::{ExpandInput, Occurrence, Semantics, expand, parse_instant_ms};
-use crate::time::zone::{FireZone, parse_wall_iso};
+use crate::time::zone::{FireZone, parse_wall_iso, wall_epoch};
 use crate::time::{rrule, temporal};
 
-use super::{TIMINGS, reminders_held, set_reminders};
+use super::TIMINGS;
 
 pub(super) fn parse_timing(word: &str) -> Option<Semantics> {
     TIMINGS.into_iter().find(|timing| timing.as_str() == word)
@@ -73,9 +73,8 @@ pub(super) fn resolve_one(
         Semantics::AllDay => (kind == Some(temporal::Kind::LocalDate))
             .then(|| value.to_owned())
             .ok_or_else(|| shape("a date, YYYY-MM-DD")),
-        Semantics::Floating => (kind == Some(temporal::Kind::FloatingDateTime))
-            .then(|| value.to_owned())
-            .ok_or_else(|| shape("a wall clock, YYYY-MM-DDTHH:MM[:SS]")),
+        Semantics::Floating => temporal::floating_minute(value)
+            .ok_or_else(|| shape("a wall clock to the minute, YYYY-MM-DDTHH:MM")),
         Semantics::Zoned => match kind {
             Some(temporal::Kind::Instant) => parse_instant_ms(value)
                 .map(crate::clock::format_iso_ms)
@@ -150,10 +149,18 @@ pub(super) fn resolve_times(
     let ends = match ends {
         Some(Json::String(value)) => Some(resolve_one("ends", value, timing, zone.as_ref())?),
         Some(_) => None,
-        None => base
-            .and_then(|base| base.ends.clone())
-            .map(|value| resolve_one("ends", &value, timing, zone.as_ref()))
-            .transpose()?,
+        // A start moved with no end said keeps the length it had.
+        None => match base {
+            Some(base) if base.timing == timing && base.zone == zone.as_ref().map(|z| z.name().to_owned()) && base.starts != starts => {
+                base.ends.as_deref().map(|ends| moved_end(timing, &base.starts, ends, &starts))
+            }
+            Some(base) => base
+                .ends
+                .clone()
+                .map(|value| resolve_one("ends", &value, timing, zone.as_ref()))
+                .transpose()?,
+            None => None,
+        },
     };
     if let Some(ends) = &ends {
         let (before, after) = (&starts, ends);
@@ -238,181 +245,6 @@ pub(super) fn day_times(
     })
 }
 
-/// What a followed calendar states of an event, in the form the vault holds it:
-/// a wall clock and its zone become the instant, so the statement a source makes
-/// and the row it leaves compare equal.
-pub(crate) fn shape(fields: &mut serde_json::Map<String, Json>) -> std::result::Result<(), String> {
-    if let Some(alerts) = fields.get("reminders") {
-        let alerts = alerts_canon(alerts)?;
-        fields.insert("reminders".to_owned(), alerts);
-    }
-    if !["starts", "ends", "timing", "zone"]
-        .iter()
-        .any(|key| fields.contains_key(*key))
-    {
-        return Ok(());
-    }
-    let at = resolve_times(fields, None)?;
-    fields.insert("starts".to_owned(), at.starts.into());
-    if fields.contains_key("ends") {
-        fields.insert("ends".to_owned(), at.ends.into());
-    }
-    fields.insert("timing".to_owned(), at.timing.as_str().into());
-    fields.insert("zone".to_owned(), at.zone.into());
-    Ok(())
-}
-
-/// What a refused save of an event keeps, in the form the vault holds it (`history.keep_version`):
-/// the overlay's times (`event.starts`, `event.ends`, `event.timing`, `event.zone`) and alerts
-/// (`event.reminders`) are stated as a source states them, so a wall clock and its zone become the
-/// instant the row would hold and the alerts the one text of the column. A refused change to one day
-/// is `occurrence`, an object stated as `event.edit_occurrence` states it (`original_start`, `scope`
-/// and what the day changes), which becomes the row that command would have written. `Err` is a
-/// sentence.
-pub(crate) fn shape_overlay(
-    connection: &rusqlite::Connection,
-    id: &str,
-    overlay: &mut serde_json::Map<String, Json>,
-) -> std::result::Result<(), String> {
-    const OWN: [&str; 4] = ["starts", "ends", "timing", "zone"];
-    let mut stated = serde_json::Map::new();
-    for name in OWN {
-        if let Some(value) = overlay.remove(&format!("event.{name}")) {
-            stated.insert(name.to_owned(), value);
-        }
-    }
-    shape(&mut stated)?;
-    for (name, value) in stated {
-        overlay.insert(format!("event.{name}"), value);
-    }
-    if let Some(day) = overlay.get(crate::history::DAY).and_then(Json::as_object) {
-        let row = day_row(connection, id, day)?;
-        overlay.insert(crate::history::DAY.to_owned(), row);
-    }
-    Ok(())
-}
-
-/// The `occurrence` row `event.edit_occurrence` (`override`) writes for what `day` states: only
-/// what was stated is the day's own, the rest is the series'.
-pub(super) fn day_row(
-    connection: &rusqlite::Connection,
-    id: &str,
-    day: &serde_json::Map<String, Json>,
-) -> std::result::Result<Json, String> {
-    let (Some(key), Some(scope)) = (
-        day.get("original_start").and_then(Json::as_str),
-        day.get("scope").and_then(Json::as_str),
-    ) else {
-        return Err(
-            "`occurrence` names the day and whether it is the day or the days from it".into(),
-        );
-    };
-    if !["occurrence", "future"].contains(&scope) {
-        return Err("`occurrence` is one day or the days from it".to_owned());
-    }
-    let series =
-        row_of(connection, id).map_err(|_| format!("there is nothing with the id `{id}`"))?;
-    if series.rule.is_none() {
-        return Err("That event does not repeat.".to_owned());
-    }
-    let times = day_times(day, &series.times)?;
-    let said = |name: &str| day.get(name).and_then(Json::as_str);
-    Ok(json!({
-        "original_start": key, "scope": scope, "cancelled": 0,
-        "starts": times.starts, "ends": times.ends,
-        "timing": times.own.as_ref().map(|(timing, _)| timing.as_str()),
-        "zone": times.own.as_ref().and_then(|(_, zone)| zone.as_deref()),
-        "title": said("title"), "description": said("description"),
-        "url": said("url"), "place_id": said("place_id"),
-    }))
-}
-
-/// The alerts a source states (minutes before it starts) in the one form the statement keeps: a
-/// JSON array, each minute once, smallest first. No alert is `null`.
-fn alerts_canon(alerts: &Json) -> std::result::Result<Json, String> {
-    let list = alerts_of(alerts)?;
-    Ok(if list.is_empty() {
-        Json::Null
-    } else {
-        json!(list)
-    })
-}
-
-/// The minutes a statement of alerts names, each once, smallest first.
-fn alerts_of(alerts: &Json) -> std::result::Result<Vec<i64>, String> {
-    let list: Vec<i64> = match alerts {
-        Json::Null => Vec::new(),
-        // A statement read back from text.
-        Json::String(text) => match serde_json::from_str::<Json>(text) {
-            Ok(Json::Array(list)) => list.iter().filter_map(Json::as_i64).collect(),
-            _ => return Err("reminders are minutes before the start".to_owned()),
-        },
-        Json::Array(list) => list
-            .iter()
-            .map(|minutes| {
-                minutes
-                    .as_i64()
-                    .filter(|minutes| *minutes >= 0)
-                    .ok_or_else(|| "reminders are minutes before the start".to_owned())
-            })
-            .collect::<std::result::Result<_, _>>()?,
-        _ => return Err("reminders are minutes before the start".to_owned()),
-    };
-    Ok(list
-        .into_iter()
-        .collect::<BTreeSet<i64>>()
-        .into_iter()
-        .collect())
-}
-
-/// The alerts the vault holds, in the form a source states them (`null` for none).
-pub(crate) fn reminders_read(connection: &Connection, id: &str) -> Result<Json> {
-    let held = reminders_held(connection, id)?;
-    Ok(if held.is_empty() {
-        Json::Null
-    } else {
-        json!(held)
-    })
-}
-
-pub(crate) fn reminders_canon(statement: &Json) -> Json {
-    alerts_canon(statement).unwrap_or_else(|_| statement.clone())
-}
-
-/// A three-way merge of the alerts, judged whole: the source's new word replaces the vault's when
-/// the member never changed them (they are what its last word implied).
-pub(crate) fn reminders_merge(
-    ctx: &CommandCtx<'_, '_>,
-    id: &str,
-    stated: Option<&Json>,
-    new: &Json,
-) -> Result<bool> {
-    let connection = ctx.connection();
-    let held = reminders_held(connection, id)?;
-    let wanted = alerts_of(new).unwrap_or_default();
-    if wanted == held {
-        return Ok(false);
-    }
-    let ours = match stated {
-        Some(said) => alerts_of(said).unwrap_or_default() == held,
-        None => held.is_empty(),
-    };
-    if !ours {
-        return Ok(false);
-    }
-    set_reminders(connection, id, &wanted)
-}
-
-/// Put the alerts back to what the source last stated.
-pub(crate) fn reminders_take(
-    ctx: &CommandCtx<'_, '_>,
-    id: &str,
-    _item: Option<&str>,
-    stated: &Json,
-) -> Result<bool> {
-    set_reminders(ctx.connection(), id, &alerts_of(stated).unwrap_or_default())
-}
-
 // ---------------------------------------------------------------------------
 // A series
 // ---------------------------------------------------------------------------
@@ -437,14 +269,35 @@ pub(super) fn expand_series(
     expand(&input)
 }
 
-/// The occurrence of the series the wall clock `original_start` names, or
-/// `None` when the rule does not land there. The key is NOT an instant, so the
-/// window comes from the shared adapter and the match is on `wall_start`.
+/// The key a day of a series has in `occurrence.original_start`, in the form the series' timing
+/// holds (the table checks it): the resolved instant of a zoned series' day, the wall clock to the
+/// minute of a floating one's, the date of an all-day one's. It names the DAY the rule produced,
+/// never where a change moved it.
+pub(super) fn day_key(timing: Semantics, day: &Occurrence) -> String {
+    match timing {
+        Semantics::Zoned => day.original_start.clone(),
+        Semantics::Floating => day.wall_start.chars().take(16).collect(),
+        Semantics::AllDay => day.wall_start.chars().take(10).collect(),
+    }
+}
+
+/// Where a day of the series starts, in the form its timing holds (a floating clock to the minute).
+pub(super) fn day_start(timing: Semantics, day: &Occurrence) -> String {
+    match timing {
+        Semantics::Zoned => day.start.clone(),
+        Semantics::Floating => day.start.chars().take(16).collect(),
+        Semantics::AllDay => day.start.chars().take(10).collect(),
+    }
+}
+
+/// The day of the series that `original_start` (a [`day_key`]) names, or `None` when the rule does
+/// not land there. The key is searched for in a window around it, the way an instant of another
+/// zone is.
 pub(super) fn occurrence_at(times: &Times, rule: &str, original_start: &str) -> Option<Occurrence> {
     let (from, to) = search_window(original_start, SEARCH_WINDOW_DAYS)?;
     expand_series(times, rule, &from, &to, 16)
         .into_iter()
-        .find(|occurrence| occurrence.wall_start == original_start)
+        .find(|occurrence| day_key(times.timing, occurrence) == original_start)
 }
 
 /// The distinct keys the series' occurrence rows carry, in order.
@@ -467,26 +320,9 @@ pub(super) fn live_days(times: &Times, rule: &str, keys: &[String]) -> Option<BT
     Some(
         expand_series(times, rule, &from, &to, 2_000)
             .into_iter()
-            .map(|occurrence| occurrence.wall_start)
+            .map(|occurrence| day_key(times.timing, &occurrence))
             .collect(),
     )
-}
-
-/// How many of the series' occurrence rows match no day of the series as it is.
-pub(super) fn stranded(
-    connection: &Connection,
-    id: &str,
-    times: &Times,
-    rule: Option<&str>,
-) -> Result<usize> {
-    let keys = override_keys(connection, id)?;
-    if keys.is_empty() {
-        return Ok(0);
-    }
-    let Some(live) = rule.and_then(|rule| live_days(times, rule, &keys)) else {
-        return Ok(keys.len());
-    };
-    Ok(keys.iter().filter(|key| !live.contains(*key)).count())
 }
 
 /// A followed series whose rule or start moved: every override that no day of the
@@ -540,4 +376,34 @@ pub(super) fn rule_refusal(rule: &str) -> Option<String> {
     rrule::inspect(rule)
         .err()
         .map(|refusal| format!("{rule}: {}", refusal.message()))
+}
+
+// ---------------------------------------------------------------------------
+// How long, and how far
+// ---------------------------------------------------------------------------
+
+/// A time of any of the three forms as milliseconds on one line: an instant as it is, a wall
+/// clock or a date as if it were UTC. Comparing two of the SAME form is exact; across forms it is
+/// the few hours' error a size bound can ignore.
+pub(super) fn epoch_ms(value: &str) -> Option<i64> {
+    if crate::time::has_zone_designator(value) {
+        return parse_instant_ms(value);
+    }
+    parse_wall_iso(value).map(wall_epoch)
+}
+
+/// `ends` carried to a start that moved: the same length after the new start, in the form the
+/// timing keeps (a floating clock to the minute).
+pub(super) fn moved_end(timing: Semantics, was_starts: &str, was_ends: &str, starts: &str) -> String {
+    let (Some(a), Some(b), Some(c)) = (epoch_ms(was_starts), epoch_ms(was_ends), epoch_ms(starts))
+    else {
+        return was_ends.to_owned();
+    };
+    let _ = c;
+    let moved = crate::time::recurrence::shift_temporal(starts, b - a);
+    if timing == Semantics::Floating {
+        moved.chars().take(16).collect()
+    } else {
+        moved
+    }
 }

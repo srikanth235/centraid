@@ -112,6 +112,9 @@ CREATE INDEX event_guest_by_person ON event_guest(person_id, event_id) WHERE per
 -- index event_guest_one_organizer on event_guest
 CREATE UNIQUE INDEX event_guest_one_organizer ON event_guest(event_id) WHERE organizer = 1;
 
+-- index event_long on event
+CREATE INDEX event_long     ON event(starts, id) WHERE long = 1;
+
 -- index home_shape_by_home on home_shape
 CREATE INDEX home_shape_by_home ON home_shape(home_kind, kind);
 
@@ -180,6 +183,9 @@ CREATE INDEX note_asset_by_note ON note_asset(note_id, position, id);
 
 -- index note_by_journal on note
 CREATE INDEX note_by_journal ON note(journal_on, id) WHERE journal_on IS NOT NULL;
+
+-- index occurrence_by_moved on occurrence
+CREATE INDEX occurrence_by_moved ON occurrence(starts, series_id) WHERE starts IS NOT NULL;
 
 -- index occurrence_by_place on occurrence
 CREATE INDEX occurrence_by_place ON occurrence(place_id) WHERE place_id IS NOT NULL;
@@ -561,6 +567,10 @@ CREATE TABLE event (
   -- Minutes of travel the member allows before it starts.
   travel_min     INTEGER CHECK (travel_min IS NULL OR travel_min >= 0),
   description    TEXT,
+  -- 1 when the event runs past a week (any of the three timings parses in `date()`); a calendar read
+  -- looks for a long event on its own index and for a short one only a week back, so a day, a week or
+  -- a month is a bounded walk however long a trip or a semester runs. Plain date arithmetic, no clock.
+  long           INTEGER GENERATED ALWAYS AS (CASE WHEN ends IS NOT NULL AND date(ends) > date(starts, '+7 days') THEN 1 END) VIRTUAL,
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   UNIQUE (id, timing),
   CHECK ((timing = 'zoned') = (zone IS NOT NULL)),

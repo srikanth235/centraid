@@ -767,6 +767,10 @@ CREATE TABLE event (
   -- Minutes of travel the member allows before it starts.
   travel_min     INTEGER CHECK (travel_min IS NULL OR travel_min >= 0),
   description    TEXT,
+  -- 1 when the event runs past a week (any of the three timings parses in `date()`); a calendar read
+  -- looks for a long event on its own index and for a short one only a week back, so a day, a week or
+  -- a month is a bounded walk however long a trip or a semester runs. Plain date arithmetic, no clock.
+  long           INTEGER GENERATED ALWAYS AS (CASE WHEN ends IS NOT NULL AND date(ends) > date(starts, '+7 days') THEN 1 END) VIRTUAL,
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   UNIQUE (id, timing),
   CHECK ((timing = 'zoned') = (zone IS NOT NULL)),
@@ -778,6 +782,8 @@ CREATE TABLE event (
 CREATE INDEX event_by_start ON event(starts, id);
 -- Reader: the series, in start order: the expander's read of every repeating event.
 CREATE INDEX event_by_rule  ON event(starts, id) WHERE rule IS NOT NULL;
+-- Reader: the long events that may run into a window (a calendar read's second seek).
+CREATE INDEX event_long     ON event(starts, id) WHERE long = 1;
 -- Reader: "events at this place"; the child side of `place_id`.
 CREATE INDEX event_by_place ON event(place_id) WHERE place_id IS NOT NULL;
 
@@ -859,6 +865,8 @@ CREATE TABLE occurrence (
 ) STRICT;
 -- Reader: "this day's place"; the child side of `place_id`.
 CREATE INDEX occurrence_by_place ON occurrence(place_id) WHERE place_id IS NOT NULL;
+-- Reader: a day moved INTO a window from anywhere (a calendar read's seek for moved days).
+CREATE INDEX occurrence_by_moved ON occurrence(starts, series_id) WHERE starts IS NOT NULL;
 
 -- D1, D2, D3, D4, C1. A task's home (`entity.parent_id`) is a project, a section or its parent task.
 -- `due` is nullable, so its timing is too: `due_timing` is set exactly when `due` is and `zone`
