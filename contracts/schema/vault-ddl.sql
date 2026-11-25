@@ -298,6 +298,9 @@ CREATE INDEX txn_by_account_day ON txn(account_id, posted_on, id);
 -- index txn_by_day on txn
 CREATE INDEX txn_by_day         ON txn(posted_on, id);
 
+-- index txn_hand_by_account on txn
+CREATE INDEX txn_hand_by_account ON txn(account_id, posted_on, id) WHERE entered = 'hand';
+
 -- index txn_split_by_category on txn_split
 CREATE INDEX txn_split_by_category ON txn_split(category_id, txn_id);
 
@@ -321,7 +324,9 @@ CREATE TABLE account (
   opening_minor INTEGER NOT NULL DEFAULT 0,
   opening_on    TEXT CHECK (date(opening_on) IS opening_on),
   on_budget     INTEGER NOT NULL DEFAULT 1 CHECK (on_budget IN (0,1)),
-  FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
+  FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
+  -- An opening balance that is not nothing is as of a day: without it no one can say which lines it already holds.
+  CHECK (opening_minor = 0 OR opening_on IS NOT NULL)
 ) STRICT;
 
 -- table account_type on account_type
@@ -1032,7 +1037,15 @@ CREATE TABLE rule (
   category_kind TEXT GENERATED ALWAYS AS ('category') VIRTUAL,
   position      REAL NOT NULL,
   created_at    TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
-  FOREIGN KEY (category_id, category_kind) REFERENCES entity(id, kind) ON DELETE CASCADE
+  FOREIGN KEY (category_id, category_kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
+  -- What a pattern says: how to match, the words to look for, and an optional range of the amount's
+  -- magnitude (never negative, the smallest never above the largest).
+  CHECK (json_extract(pattern, '$.match') IN ('is', 'contains', 'matches')
+     AND json_type(pattern, '$.text') = 'text' AND length(trim(json_extract(pattern, '$.text'))) > 0
+     AND (json_type(pattern, '$.min') IS NULL OR (json_type(pattern, '$.min') = 'integer' AND json_extract(pattern, '$.min') >= 0))
+     AND (json_type(pattern, '$.max') IS NULL OR (json_type(pattern, '$.max') = 'integer' AND json_extract(pattern, '$.max') >= 0))
+     AND (json_type(pattern, '$.min') IS NULL OR json_type(pattern, '$.max') IS NULL
+          OR json_extract(pattern, '$.min') <= json_extract(pattern, '$.max')))
 ) STRICT;
 
 -- table search_owed on search_owed
@@ -1350,10 +1363,22 @@ CREATE TRIGGER transfer_halves_are_in_one_pair_on_update BEFORE UPDATE OF a, b O
   WHEN EXISTS (SELECT 1 FROM transfer WHERE rowid <> old.rowid AND (b = new.a OR a = new.b))
   BEGIN SELECT RAISE(ABORT, 'a line is in at most one transfer'); END;
 
+-- trigger transfer_halves_are_two_accounts_and_two_directions on transfer
+CREATE TRIGGER transfer_halves_are_two_accounts_and_two_directions BEFORE INSERT ON transfer
+  WHEN (SELECT account_id FROM txn WHERE id = new.a) IS (SELECT account_id FROM txn WHERE id = new.b)
+    OR (SELECT amount_minor < 0 FROM txn WHERE id = new.a) IS (SELECT amount_minor < 0 FROM txn WHERE id = new.b)
+  BEGIN SELECT RAISE(ABORT, 'a transfer moves money out of one account and into another'); END;
+
 -- trigger txn_entered_only_becomes_a_statement on txn
 CREATE TRIGGER txn_entered_only_becomes_a_statement BEFORE UPDATE OF entered ON txn
   WHEN new.entered <> old.entered AND NOT (old.entered = 'hand' AND new.entered = 'statement')
   BEGIN SELECT RAISE(ABORT, 'a line''s origin never changes but a hand line confirmed as a statement line'); END;
+
+-- trigger txn_in_a_transfer_keeps_its_account_and_direction on txn
+CREATE TRIGGER txn_in_a_transfer_keeps_its_account_and_direction BEFORE UPDATE OF account_id, amount_minor ON txn
+  WHEN EXISTS (SELECT 1 FROM transfer WHERE a = old.id OR b = old.id)
+   AND (new.account_id IS NOT old.account_id OR (new.amount_minor < 0) IS NOT (old.amount_minor < 0))
+  BEGIN SELECT RAISE(ABORT, 'a line in a transfer keeps its account and its direction: unlink the transfer first'); END;
 
 -- trigger txn_statement_line_is_fixed on txn
 CREATE TRIGGER txn_statement_line_is_fixed

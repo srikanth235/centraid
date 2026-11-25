@@ -47,12 +47,14 @@ pub mod arrival;
 pub mod blob;
 pub mod contact_point;
 pub mod container;
+pub mod csv;
 pub mod edge;
 pub mod entity;
 pub mod flag;
 pub mod follow;
 pub mod history;
 pub mod locker;
+pub mod money;
 pub mod note;
 pub mod note_portable;
 pub mod origin_cursor;
@@ -60,9 +62,12 @@ pub mod person;
 pub mod person_date;
 pub mod person_portable;
 pub mod reminder;
+pub mod rule;
 pub mod sealed;
 pub mod tag;
 pub mod touch;
+pub mod txn;
+pub mod txn_portable;
 pub mod vault;
 
 use std::collections::BTreeMap;
@@ -370,7 +375,7 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 15] = [
+        let modules: [fn() -> Vec<CommandDefinition>; 19] = [
             blob::definitions,
             contact_point::definitions,
             container::definitions,
@@ -379,12 +384,16 @@ impl Registry {
             flag::definitions,
             follow::definitions,
             history::definitions,
+            money::definitions,
             note::definitions,
             person::definitions,
             person_date::definitions,
             reminder::definitions,
+            rule::definitions,
             tag::definitions,
             touch::definitions,
+            txn::definitions,
+            txn_portable::definitions,
             vault::definitions,
         ];
         for definitions in modules {

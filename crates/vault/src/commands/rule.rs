@@ -20,6 +20,11 @@
 //! says to replace it. The bank's words are never touched: they stay in `source.stated`, and the
 //! match reads them.
 //!
+//! A rule is a row of its own (`rule`), not part of its category's snapshot (B1): adding or editing
+//! one writes no copy of the category's other rules or its budgets. Its pattern is a JSON object the
+//! vault defines, so it carries `"v":1`; the table refuses a pattern without a way to match, a
+//! look-for text, or an amount range that is negative or upside down.
+//!
 //! `apply` and `centraid_apps_money::rules` implement ONE spec, independently,
 //! and a test in the app crate runs both against the same fixture.
 
@@ -134,6 +139,7 @@ struct Draft {
 impl Draft {
     fn pattern(&self) -> String {
         let mut pattern = serde_json::Map::new();
+        pattern.insert("v".to_owned(), json!(1));
         pattern.insert("match".to_owned(), json!(self.kind));
         pattern.insert("text".to_owned(), json!(self.text));
         pattern.insert("min".to_owned(), json!(self.min));
@@ -474,22 +480,24 @@ struct ApplyRuleInput {
 }
 
 /// File the member's history by the rules: every line a rule matches that has no
-/// category (or, with `overwrite`, any category) takes the category the deciding
+/// category (or, with `overwrite`, one category; a split line is never refiled) takes the category the deciding
 /// rule names. With an `id`, only lines that rule matches are touched.
 fn apply(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let input: ApplyRuleInput = ctx.parse_input()?;
     let only = input.id.as_deref();
     let overwrite = input.overwrite.unwrap_or(false);
     let rules = load(ctx.connection())?;
-    type History = (String, String, i64, Option<String>, String, String);
+    type History = (String, String, i64, Option<String>, i64, String, String);
     let lines: Vec<History> = ctx
         .connection()
         .prepare(
-            "SELECT t.id, t.account_id, abs(t.amount_minor), t.category_id,
+            "SELECT t.id, t.account_id, abs(t.amount_minor),
+                    (SELECT p.category_id FROM txn_split p WHERE p.txn_id = t.id ORDER BY p.position LIMIT 1),
+                    (SELECT COUNT(*) FROM txn_split p WHERE p.txn_id = t.id),
                     COALESCE(s.stated_title, e.title), e.title
                FROM txn t JOIN entity e ON e.id = t.id
                LEFT JOIN source s ON s.entity_id = t.id
-              WHERE e.deleted_at IS NULL AND t.status <> 'void'
+              WHERE e.deleted_at IS NULL
               ORDER BY t.id",
         )?
         .query_map([], |row| {
@@ -500,11 +508,12 @@ fn apply(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
                 row.get(3)?,
                 row.get(4)?,
                 row.get(5)?,
+                row.get(6)?,
             ))
         })?
         .collect::<rusqlite::Result<_>>()?;
     let (mut matched, mut recategorised, mut renamed) = (0usize, 0usize, 0usize);
-    for (id, account, magnitude, held, words, title) in lines {
+    for (id, account, magnitude, held, parts, words, title) in lines {
         let text = normalise(&words);
         let mut decided: Option<&str> = None;
         let mut named: Option<&str> = None;
@@ -521,12 +530,11 @@ fn apply(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             continue;
         };
         matched += 1;
-        if (overwrite || held.is_none())
+        // A line the member split is theirs: a rule files only a line with one category or none.
+        if parts <= 1
+            && (overwrite || held.is_none())
             && held.as_deref() != Some(category)
-            && ctx.connection().execute(
-                "UPDATE txn SET category_id = ?2 WHERE id = ?1",
-                [&id, category],
-            )? > 0
+            && crate::commands::txn::file_whole(ctx.connection(), &id, category)?
         {
             recategorised += 1;
         }

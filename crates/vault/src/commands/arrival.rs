@@ -30,6 +30,7 @@ pub const SYSTEMS: &[(&str, Kind)] = &[
     ("csv", Kind::Person),
     ("scan", Kind::Document),
     ("upload", Kind::Document),
+    ("csv", Kind::Txn),
 ];
 
 /// The longest label kept, in characters.

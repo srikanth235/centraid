@@ -6,15 +6,19 @@
 //! `origin_system` and `source_shape`, so a map says only which fields its kind has and how a
 //! record reads.
 //!
-//! The table is empty until each app lane re-plugs its own map (a map names the kind's columns,
-//! its children and its defaults, all of which moved with the v0 schema); the removed maps are in
-//! this file's history at `40b18d2c` and the engine is proved with maps of the tests' own
-//! (`tests/follow_*.rs`).
+//! The table holds the maps of the lanes that have re-plugged theirs (a map names the kind's
+//! columns, its children and its defaults, all of which moved with the v0 schema); the removed
+//! maps are in this file's history at `40b18d2c` and the engine is proved with maps of the tests'
+//! own (`tests/follow_*.rs`).
 
+use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Map, Value as Json};
 
 use super::merge::same;
-use super::{Child, Maps, SystemMap};
+use super::{Child, Gone, Maps, OriginRow, SystemMap};
+use crate::commands::CommandCtx;
+use crate::error::{Result, VaultError};
+use crate::model::Kind;
 
 /// The name a system gives a record: `stated.title`, kept in a column of its own so a read of it
 /// parses no JSON.
@@ -55,9 +59,110 @@ impl SystemMap {
     }
 }
 
+fn as_stated(_: &CommandCtx<'_, '_>, _: &mut Map<String, Json>) -> std::result::Result<(), String> {
+    Ok(())
+}
+
+fn nothing_to_settle(_: &CommandCtx<'_, '_>, _: &str) -> Result<()> {
+    Ok(())
+}
+
+/// A statement line is in the account its origin fills (the line's account stays `txn.account_id`,
+/// it is not a home). The line is entered from a statement, the column's default.
+fn statement_defaults(
+    _: &Connection,
+    origin: &OriginRow,
+) -> Result<Vec<(&'static str, rusqlite::types::Value)>> {
+    let Some(account) = origin.fills.clone() else {
+        return Err(VaultError::InvalidInput {
+            name: "origin".to_owned(),
+            detail: "a statement is imported into an account".to_owned(),
+        });
+    };
+    Ok(vec![("account_id", account.into())])
+}
+
+/// A child that is only ever stated, never a row of the vault's: what the source last said of it,
+/// read back from `source.stated`. The member cannot edit it, so the row always agrees with what
+/// was stated, and a changed statement is recorded by the engine and written nowhere else.
+fn stated_read(connection: &Connection, id: &str, name: &str) -> Result<Json> {
+    let stated: Option<String> = connection
+        .query_row(
+            "SELECT stated FROM source WHERE entity_id = ?1 AND origin_id IN
+               (SELECT id FROM origin WHERE retired_at IS NULL)",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(stated
+        .and_then(|text| serde_json::from_str::<Json>(&text).ok())
+        .and_then(|stated| stated.get(name).cloned())
+        .unwrap_or(Json::Null))
+}
+
+fn stated_take(_: &CommandCtx<'_, '_>, _: &str, _: Option<&str>, _: &Json) -> Result<bool> {
+    Ok(false)
+}
+
+fn stated_canon(value: &Json) -> Json {
+    value.clone()
+}
+
+fn stated_merge(_: &CommandCtx<'_, '_>, _: &str, _: Option<&Json>, _: &Json) -> Result<bool> {
+    Ok(false)
+}
+
+/// What a statement said of a line beyond what the model keeps: the bank's memo, its check number,
+/// the bank's own type and the file format it came in.
+const LINE: Child = Child {
+    name: "line",
+    read: |connection, id| stated_read(connection, id, "line"),
+    canon: stated_canon,
+    merge: stated_merge,
+    items: None,
+    take: stated_take,
+    stamp: None,
+};
+
+/// A bank's statement (Money): read line by line into an account (its one origin fills it; a statement is
+// not a phone's store and is never stopped): the vault adds a line once, a re-import writes
+// nothing, a line's day, amount and what was charged are the bank's and never edited, and the
+// payee a rule names is given to a line when it is added, never after. A pending line the bank
+// later posts is the bank's word (`status`). The member's categories are `txn_split` and their
+// memo is `txn.memo`: neither is stated, so neither is ever overwritten.
+pub const STATEMENT: SystemMap = SystemMap {
+    system: "statement",
+    command: "follow.statement",
+    kind: Kind::Txn,
+    claims: None,
+    fields: &[
+        "posted_on",
+        "amount_minor",
+        "status",
+        "original_amount_minor",
+        "original_currency",
+    ],
+    fixed: &[
+        "title",
+        "posted_on",
+        "amount_minor",
+        "original_amount_minor",
+        "original_currency",
+    ],
+    children: &[LINE],
+    match_on: &[],
+    gone: Gone::Keep,
+    window: None,
+    defaults: statement_defaults,
+    founds: None,
+    shape: as_stated,
+    settle: nothing_to_settle,
+    named: crate::commands::rule::name_new_line,
+};
+
 /// The maps the vault follows, one per app lane that has plugged its own in: the phone's contacts
-/// (People).
-pub const SYSTEMS: &[SystemMap] = &[crate::commands::person::CONTACTS];
+/// (People) and a bank's statement (Money).
+pub const SYSTEMS: &[SystemMap] = &[crate::commands::person::CONTACTS, STATEMENT];
 
 /// The product's maps, [`SYSTEMS`], as the type the follow commands are built from.
 pub struct Systems;
