@@ -1323,6 +1323,11 @@ CREATE TRIGGER message_outcome_settles_once BEFORE UPDATE OF outcome ON message
      WHERE new.outcome NOT IN ('applied','dismissed','stale','failed');
   END;
 
+-- trigger reminder_needs_a_due on reminder
+CREATE TRIGGER reminder_needs_a_due BEFORE INSERT ON reminder
+  WHEN EXISTS (SELECT 1 FROM task WHERE id = new.entity_id AND due IS NULL)
+  BEGIN SELECT RAISE(ABORT, 'a reminder counts back from a due date: this task has none'); END;
+
 -- trigger revision_blob_is_history on revision_blob
 CREATE TRIGGER revision_blob_is_history BEFORE UPDATE ON revision_blob
   BEGIN SELECT RAISE(ABORT, 'a revision is history'); END;
@@ -1346,6 +1351,11 @@ CREATE TRIGGER source_never_names_the_owner BEFORE INSERT ON source
 CREATE TRIGGER source_tombstone_is_final BEFORE UPDATE OF entity_id ON source
   WHEN old.entity_id IS NULL AND new.entity_id IS NOT NULL
   BEGIN SELECT RAISE(ABORT, 'a purged row''s source never takes a row again'); END;
+
+-- trigger task_without_a_due_has_no_reminders on task
+CREATE TRIGGER task_without_a_due_has_no_reminders AFTER UPDATE OF due ON task
+  WHEN new.due IS NULL
+  BEGIN DELETE FROM reminder WHERE entity_id = new.id; END;
 
 -- trigger transfer_halves_are_in_one_pair on transfer
 CREATE TRIGGER transfer_halves_are_in_one_pair BEFORE INSERT ON transfer

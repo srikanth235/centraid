@@ -138,6 +138,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         settle: event::settle,
         named: nothing_to_settle,
     },
+    crate::commands::task::PHONE_REMINDERS,
 ];
 
 /// The product's maps, [`SYSTEMS`], as the type the follow commands are built from.

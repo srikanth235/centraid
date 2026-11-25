@@ -1516,3 +1516,121 @@ fn a_one_day_override_is_keyed_in_its_series_form_and_belongs_to_its_timing() {
         0
     );
 }
+
+// ---------------------------------------------------------------------------------------------
+// Tasks lane (#1214): a task's due, its day, its series and its alerts
+// ---------------------------------------------------------------------------------------------
+
+fn task_row(w: &World, n: u64, title: &str) -> String {
+    let t = id(n);
+    w.takes(&format!(
+        "INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES ('{t}', 'task', '{title}', '{AT}', '{AT}')"
+    ));
+    t
+}
+
+#[test]
+fn a_task_has_a_title_a_due_in_the_form_its_timing_says_and_a_day_of_its_own() {
+    let w = World::new("rules_task");
+    // A task is named: a blank title is refused.
+    w.refuses(&format!(
+        "INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES ('{}', 'task', ' ', '{AT}', '{AT}')",
+        id(130)
+    ));
+    let t = task_row(&w, 131, "Call");
+    let ins = |columns: &str, values: &str| format!("INSERT INTO task (id, {columns}) VALUES ('{t}', {values})");
+    // The due and its timing are set together, the zone exactly when zoned.
+    w.refuses(&ins("due", "'2026-03-02'"));
+    w.refuses(&ins("due_timing", "'all-day'"));
+    w.refuses(&ins("due, due_timing", "'2026-03-02T09:00', 'all-day'"));
+    w.refuses(&ins("due, due_timing", "'2026-03-02', 'floating'"));
+    w.refuses(&ins("due, due_timing", "'2026-03-02T09:00:30', 'floating'"));
+    w.refuses(&ins("due, due_timing", "'2026-03-02T09:00:00Z', 'zoned'"));
+    w.refuses(&ins("due, due_timing, zone", "'2026-03-02T09:00:00.000Z', 'zoned', NULL"));
+    w.refuses(&ins("due, due_timing, zone", "'2026-03-02T09:00', 'floating', 'UTC'"));
+    w.refuses(&ins("due, due_timing", "'2026-03-02', 'noon'"));
+    // The planned day is a date, and not the due.
+    w.refuses(&ins("scheduled_on", "'2026-03-02T09:00'"));
+    w.refuses(&ins("scheduled_on", "'2026-02-30'"));
+    // The columns say what they hold: a priority of 0 to 9, an effort of minutes, a link with an
+    // address, a closed status and anchor.
+    for (column, value) in [
+        ("priority", "10"),
+        ("effort_min", "0"),
+        ("url", "' '"),
+        ("status", "'later'"),
+        ("anchor", "'whenever'"),
+    ] {
+        w.refuses(&ins(column, value));
+    }
+    w.takes(&ins(
+        "due, due_timing, zone, scheduled_on, priority, effort_min, url",
+        "'2026-03-02T08:00:00.000Z', 'zoned', 'Europe/Paris', '2026-03-01', 9, 30, 'https://example.com'",
+    ));
+    // Done is exactly when it says when, in the clock's one form; a snooze belongs to an open task.
+    w.refuses(&format!("UPDATE task SET status = 'done' WHERE id = '{t}'"));
+    w.refuses(&format!("UPDATE task SET done_at = '{AT}' WHERE id = '{t}'"));
+    w.refuses(&format!("UPDATE task SET status = 'done', done_at = '2026-03-01' WHERE id = '{t}'"));
+    w.takes(&format!("UPDATE task SET snoozed_until = '{AT}' WHERE id = '{t}'"));
+    w.refuses(&format!("UPDATE task SET snoozed_until = '2026-03-01T09:00' WHERE id = '{t}'"));
+    w.refuses(&format!("UPDATE task SET status = 'done', done_at = '{AT}' WHERE id = '{t}'"));
+    w.takes(&format!("UPDATE task SET snoozed_until = NULL WHERE id = '{t}'"));
+    w.takes(&format!("UPDATE task SET status = 'done', done_at = '{AT}' WHERE id = '{t}'"));
+    w.refuses(&format!("UPDATE task SET snoozed_until = '{AT}' WHERE id = '{t}'"));
+}
+
+#[test]
+fn a_repeat_needs_a_due_and_its_series_is_a_minted_id_that_points_at_no_row() {
+    let w = World::new("rules_task_series");
+    let t = task_row(&w, 140, "Water");
+    let ins = |columns: &str, values: &str| format!("INSERT INTO task (id, {columns}) VALUES ('{t}', {values})");
+    w.refuses(&ins("rule", "'FREQ=DAILY'"));
+    w.refuses(&ins("series_id", "'not-an-id'"));
+    w.refuses(&ins("series_id", "'01900000-0000-4000-8000-000000000001'"));
+    // A series id names no entity: purging whatever it was minted beside cuts nothing.
+    w.takes(&ins(
+        "due, due_timing, rule, series_id",
+        "'2026-03-02', 'all-day', 'FREQ=DAILY', '01900000-0000-7000-8000-0000000000aa'",
+    ));
+    let next = task_row(&w, 141, "Water");
+    w.takes(&format!(
+        "INSERT INTO task (id, due, due_timing, rule, series_id)
+         VALUES ('{next}', '2026-03-03', 'all-day', 'FREQ=DAILY', '01900000-0000-7000-8000-0000000000aa')"
+    ));
+    w.takes(&format!("DELETE FROM entity WHERE id = '{t}'"));
+    let held: i64 = w
+        .scratch
+        .vault
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT COUNT(*) FROM task WHERE series_id = '01900000-0000-7000-8000-0000000000aa'",
+                [],
+                |r| r.get(0),
+            )?)
+        })
+        .expect("a count");
+    assert_eq!(held, 1, "the series outlives its first task");
+    // A task that repeats keeps a due: it cannot lose it and keep the rule.
+    w.refuses(&format!("UPDATE task SET due = NULL, due_timing = NULL WHERE id = '{next}'"));
+}
+
+#[test]
+fn a_reminder_counts_back_from_a_due_so_a_task_without_one_holds_none() {
+    let w = World::new("rules_task_reminder");
+    let t = task_row(&w, 150, "Call");
+    w.takes(&format!("INSERT INTO task (id) VALUES ('{t}')"));
+    let remind = |rid: &str| {
+        format!("INSERT INTO reminder (id, entity_id, entity_kind, offset_min) VALUES ('{rid}', '{t}', 'task', 10)")
+    };
+    w.refuses_with(&remind("r1"), "counts back from a due date");
+    w.takes(&format!("UPDATE task SET due = '2026-03-02', due_timing = 'all-day' WHERE id = '{t}'"));
+    w.takes(&remind("r1"));
+    // Clearing the due takes the task's reminders with it.
+    w.takes(&format!("UPDATE task SET due = NULL, due_timing = NULL WHERE id = '{t}'"));
+    let held: i64 = w
+        .scratch
+        .vault
+        .read(|c| Ok(c.query_row("SELECT COUNT(*) FROM reminder WHERE entity_id = ?1", [&t], |r| r.get(0))?))
+        .expect("a count");
+    assert_eq!(held, 0);
+}
