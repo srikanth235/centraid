@@ -352,6 +352,9 @@ impl Vault {
             let mut owed = std::mem::take(&mut self.pending.borrow_mut().reindex);
             owed.extend(auto.reindex);
             crate::index::reindex(&connection, &owed)?;
+            // A line's parts add up to its amount (E3): the one place that rule is held, for every
+            // line this commit touched, whatever wrote it.
+            crate::commands::txn::check_split_sums(&connection, &owed)?;
             // The alerts are written with the search rows, after the commit: the entity a reminder,
             // a date, a field or an override changed is in `owed` already (the touch triggers).
             // The history is part of the commit too: the states it replaced are kept with the

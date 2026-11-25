@@ -53,6 +53,7 @@ pub mod plans;
 pub mod portable;
 pub mod roster;
 pub mod stage;
+pub mod task_counts;
 #[cfg(test)]
 pub(crate) mod test_ids;
 pub mod testdoor;

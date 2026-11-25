@@ -169,11 +169,14 @@ fn a_header_then_one_row_per_transaction_with_plain_decimal_amounts() {
             "Currency",
             "Status",
             "Memo",
-            "Check number"
+            "Check number",
+            "Original amount",
+            "Original currency",
+            "Entered"
         ]
     );
     assert_eq!(rows.len(), 5);
-    assert!(rows.iter().all(|r| r.len() == 10));
+    assert!(rows.iter().all(|r| r.len() == 13));
     let by_payee = |payee: &str| rows.iter().find(|r| r[2] == payee).expect("a row").clone();
     assert_eq!(by_payee("COFFEE")[5], "-12.34");
     assert_eq!(by_payee("COFFEE")[6], "USD");
@@ -248,36 +251,36 @@ fn a_trashed_transaction_is_not_in_the_file_and_the_count_says_so() {
 }
 
 #[test]
-fn a_voided_line_is_kept_with_its_status_and_a_trashed_one_is_dropped() {
+fn a_hand_line_a_split_and_a_foreign_purchase_are_written_with_where_they_came_from() {
     let w = World::new();
     let account = w.account("Everyday", "USD");
-    w.line(&account, "k", "2026-06-01", -100, "KEEP");
-    let voided = w.line(&account, "v", "2026-06-02", -200, "VOIDED");
-    let gone = w.line(&account, "g", "2026-06-03", -300, "GONE");
-    w.ok("entity.trash", json!({ "id": gone }));
-    w.scratch
-        .vault
-        .commit(|tx| {
-            tx.set_producer("test.void");
-            tx.connection()
-                .execute("UPDATE txn SET status = 'void' WHERE id = ?1", [&voided])?;
-            Ok(())
-        })
-        .expect("a voided line");
-    let (out, text) = w.file(json!({}));
-    assert_eq!(out["count"], 2);
-    assert!(!text.contains("GONE"));
+    w.line(&account, "k", "2026-06-01", -100, "BANK LINE");
+    let split = w.id(
+        "txn.add",
+        json!({ "account_id": account, "posted_on": "2026-06-02", "amount_minor": -1_000,
+                "title": "Costco", "memo": "big shop, \"bulk\"",
+                "splits": [
+                    { "category_id": "category:food.groceries", "amount_minor": -700 },
+                    { "category_id": "category:shopping.general", "amount_minor": -300 } ],
+                "original_amount_minor": -900, "original_currency": "EUR" }),
+    );
+    let (_, text) = w.file(json!({}));
     let rows = records(&text);
-    let void_row = rows
-        .iter()
-        .find(|r| r[2] == "VOIDED")
-        .expect("the voided line");
-    assert_eq!(void_row[7], "void");
-    let kept = rows
-        .iter()
-        .find(|r| r[2] == "KEEP")
-        .expect("the other line");
-    assert_ne!(kept[7], "void");
+    let bank = rows.iter().find(|r| r[2] == "BANK LINE").expect("a row");
+    assert_eq!(bank[12], "statement");
+    let row = rows.iter().find(|r| r[2] == "Costco").expect("a row");
+    assert_eq!(row[4], "Groceries; Clothes and household");
+    assert_eq!(row[5], "-10.00");
+    assert_eq!(row[8], "big shop, \"bulk\"");
+    assert_eq!(
+        (row[10].as_str(), row[11].as_str(), row[12].as_str()),
+        ("-9.00", "EUR", "hand")
+    );
+    // A trashed line is not in the file, a restored one is again.
+    w.ok("entity.trash", json!({ "id": split }));
+    assert_eq!(w.file(json!({})).0["count"], 1);
+    w.ok("entity.restore", json!({ "id": split }));
+    assert_eq!(w.file(json!({})).0["count"], 2);
 }
 
 #[test]

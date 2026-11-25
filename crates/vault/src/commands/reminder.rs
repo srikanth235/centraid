@@ -130,6 +130,20 @@ pub fn refusal(
         }
         _ => {}
     }
+    // A task counts its lead back from a due; the database refuses one on a task with none
+    // (`reminder_needs_a_due`).
+    if found.kind == Kind::Task {
+        let dated: bool = connection.query_row(
+            "SELECT due IS NOT NULL FROM task WHERE id = ?1",
+            [entity_id],
+            |row| row.get(0),
+        )?;
+        if !dated {
+            return Ok(Some(format!(
+                "“{title}” has no due date: a reminder counts back from one"
+            )));
+        }
+    }
     let held: bool = connection.query_row(
         "SELECT EXISTS (SELECT 1 FROM reminder WHERE entity_id = ?1
             AND ifnull(date_id, '') = ifnull(?2, '') AND ifnull(field_id, '') = ifnull(?3, '')

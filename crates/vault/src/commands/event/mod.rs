@@ -1,74 +1,74 @@
 //! `event.*`: an event's own verbs, and the one place an event row is founded.
 //!
-//! An event is an entity of kind `event` whose time lives on its kind row; the
-//! calendar it is on is a column, its guests are `attendee` edges to people (the
-//! guest's answer is the edge's `state`), a file attached to it is an `attached`
-//! edge, and a person a yearly date is about is an `about` edge. What a member
-//! does to an event that is not about its time is a shared verb: the trash
-//! (`entity.trash`, `entity.restore`), a tag, an attachment (`edge.add`), a
-//! calendar's name (`entity.retitle`). What is here is what only an event has.
+//! An event is an entity of kind `event` whose time lives on its kind row. **The calendar it is on
+//! is its home** (`entity.parent_id`, A19: a calendar is a holder, and an event needs one), so a
+//! move to another calendar is the shared `entity.move`; its guests are `event_guest` rows (A6);
+//! its alerts are `reminder` rows (D2); a file attached to it is an `attached` edge. What a member
+//! does to an event that is not about its time is a shared verb: the trash (`entity.trash`,
+//! `entity.restore`), a tag, an attachment (`edge.add`), a move (`entity.move`), a calendar's name
+//! (`entity.retitle`). What is here is what only an event has.
 //!
-//! ## When an event is
+//! ## When an event is (A2, D1)
 //!
-//! `timing` says which of three readings `starts` is under: **zoned**, a real
-//! instant (`…Z`) expanded in the event's own `zone`; **floating**, a wall clock
-//! that is 09:00 wherever the member is; **all-day**, a date, whose `ends` is the
-//! LAST day, inclusive. A command states its times as an instant, or as a wall
-//! clock in `zone` (the phone has no zone engine: it knows the member's wall
-//! clock and the device's zone, and this module is the one place that turns the
-//! pair into an instant). A wall clock the zone skips is refused rather than
-//! nudged; one it repeats takes the earlier instant.
+//! `timing` says which of three readings `starts` is under: **zoned**, a real instant
+//! (`YYYY-MM-DDTHH:MM:SS.fffZ`) expanded in the event's own `zone`; **floating**, a wall clock to
+//! the minute (`YYYY-MM-DDTHH:MM`) that is 09:00 wherever the member is; **all-day**, a date, whose
+//! `ends` is the LAST day, inclusive. A command states its times as an instant, or as a wall clock
+//! in `zone` (the phone has no zone engine: it knows the member's wall clock and the device's zone,
+//! and this module is the one place that turns the pair into an instant). A wall clock the zone
+//! skips is refused rather than nudged; one it repeats takes the earlier instant. The database
+//! refuses a time of the wrong form for its timing.
 //!
-//! ## A series and what happened to one of its days
+//! ## Where it is (D5)
 //!
-//! `rule` makes an event a series, expanded by [`crate::time`] and never stored.
-//! What happened to one day of it is an `occurrence` row keyed by the
-//! SERIES-LOCAL wall clock the rule produced (`original_start`, never the
-//! resolved instant): `cancelled`, or moved and renamed. A row of `scope =
-//! 'future'` reaches that day and every one after it, moving them by the same
-//! amount. A change to the series that would leave a row matching nothing is
-//! refused, because a skip that matches no day is a skip that silently comes
-//! back.
+//! `location` is the free text a member or a phone wrote ("Room 4", "the usual café"): it never
+//! becomes a place. `place_id` is only a place the member already has.
+//!
+//! ## Busy time may overlap (L3)
+//!
+//! Nothing refuses an event for landing on another: an overlap is a thing the calendar reads and
+//! says ([`reads::overlaps`]), not a refusal.
+//!
+//! ## A series and what happened to one of its days (L4)
+//!
+//! `rule` makes an event a series, expanded by [`crate::time`] and never stored. What happened to
+//! ONE day of it is an `occurrence` row keyed by the SERIES-LOCAL wall clock the rule produced
+//! (`original_start`, never the resolved instant): `cancelled`, or moved and renamed. There is no
+//! scope: **"this and following" splits the series** the RFC 5545 way ([`split`]): the old series'
+//! `rule` ends at the day before the split and a new `event` starts at the split day, with whatever
+//! the member changed, a change of timing included. The two halves keep no link.
 //!
 //! ## Rules the member writes are refused, not kept
 //!
-//! A repeat rule outside the expander's subset is refused where it is written;
-//! a followed calendar's rule is kept verbatim and flagged (`rule_supported`),
-//! because a calendar's rule must neither be thrown away nor expanded to the
-//! wrong dates.
+//! A repeat rule outside the expander's subset is refused where it is written; a followed
+//! calendar's rule is kept verbatim and flagged (`rule_supported`), because a calendar's rule must
+//! neither be thrown away nor expanded to the wrong dates.
 
 mod commands;
 mod follow;
 mod guests;
+pub mod reads;
+mod split;
 mod times;
-
-use std::collections::BTreeSet;
 
 use rusqlite::Connection;
 
-use crate::commands::CommandCtx;
+use crate::commands::{CommandCtx, reminder};
 use crate::error::Result;
 use crate::model::{DEFAULT_CALENDAR_ID, Kind};
 use crate::time::recurrence::Semantics;
 use crate::time::rrule;
 
 pub use commands::definitions;
-pub(crate) use follow::{overrides_canon, overrides_merge, overrides_read, overrides_take, settle};
-pub use guests::PERSON_OF_EMAIL;
-pub(crate) use guests::{
-    attendees_canon, attendees_items, attendees_merge, attendees_read, attendees_stamp,
-    attendees_take,
+pub(crate) use follow::{
+    follow_home, overrides_canon, overrides_merge, overrides_read, overrides_take, reminders_canon,
+    reminders_merge, reminders_read, reminders_take, settle, shape,
 };
-pub(crate) use times::{
-    reminders_canon, reminders_merge, reminders_read, reminders_take, shape, shape_overlay,
-};
+pub use guests::{GUEST_ADDRESS_KIND, GUESTS, GuestIn, address_key, guests_of, person_of_address};
+pub(crate) use guests::{guests_canon, guests_items, guests_merge, guests_read, guests_take};
 
-// ---------------------------------------------------------------------------
-// When
-// ---------------------------------------------------------------------------
-
-/// What a new event is told. `timing` is the reading `starts` is under; a zoned
-/// event carries its zone and a UTC `starts`.
+/// What a new event is told. `timing` is the reading `starts` is under; a zoned event carries its
+/// zone and a UTC `starts`.
 #[derive(Default)]
 pub struct NewEvent<'a> {
     pub id: Option<&'a str>,
@@ -81,9 +81,12 @@ pub struct NewEvent<'a> {
     pub rule: Option<&'a str>,
     /// The calendar it is on; the vault's own when none is named.
     pub calendar_id: Option<&'a str>,
-    /// Minutes before it starts; a minute once.
+    /// Minutes before it starts; a minute once. An event has no default alert.
     pub reminders: &'a [i64],
     pub description: Option<&'a str>,
+    /// What a person wrote for where (free text, D5).
+    pub location: Option<&'a str>,
+    /// A place the member has.
     pub place_id: Option<&'a str>,
     pub url: Option<&'a str>,
     /// Minutes of travel to allow before it starts.
@@ -94,19 +97,21 @@ pub struct NewEvent<'a> {
     pub busy: Option<bool>,
 }
 
-/// Found an event: the entity and the kind row. Returns its id.
+/// Found an event: the entity (born in its calendar) and the kind row. Returns its id.
+///
+/// # Errors
+/// SQLite's refusal, or a sentence for a calendar that cannot hold it.
 pub fn found(ctx: &CommandCtx<'_, '_>, event: &NewEvent<'_>) -> Result<String> {
     let title = event.title.trim();
+    let calendar = event.calendar_id.unwrap_or(DEFAULT_CALENDAR_ID);
     let id = match event.id {
-        Some(id) => {
-            ctx.insert_entity_as(id, Kind::Event, title)?;
-            id.to_owned()
-        }
-        None => ctx.insert_entity(Kind::Event, title)?,
+        Some(id) => id.to_owned(),
+        None => ctx.next_id(),
     };
+    ctx.insert_entity_in(&id, Kind::Event, title, Some(calendar))?;
     ctx.connection().execute(
         "INSERT INTO event (id, starts, ends, timing, zone, rule, rule_supported, status, busy,
-                            calendar_id, place_id, url, description, travel_min)
+                            location, place_id, url, description, travel_min)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
         rusqlite::params![
             id,
@@ -118,44 +123,31 @@ pub fn found(ctx: &CommandCtx<'_, '_>, event: &NewEvent<'_>) -> Result<String> {
             event.rule.is_none_or(|rule| rrule::inspect(rule).is_ok()),
             event.status.unwrap_or("confirmed"),
             event.busy.unwrap_or(true),
-            event.calendar_id.unwrap_or(DEFAULT_CALENDAR_ID),
+            event.location,
             event.place_id,
             event.url,
             event.description,
             event.travel_min,
         ],
     )?;
-    set_reminders(ctx.connection(), &id, event.reminders)?;
+    reminder::set_leads(ctx, &id, event.reminders)?;
     Ok(id)
 }
 
 /// The alerts an event holds, minutes before it starts, smallest first: the set the vault compares
 /// and merges on. A reader that shows them goes through `alerts::longest_first`.
-pub(crate) fn reminders_held(connection: &Connection, id: &str) -> Result<Vec<i64>> {
+///
+/// # Errors
+/// SQLite's refusal.
+pub fn reminders_held(connection: &Connection, id: &str) -> Result<Vec<i64>> {
     connection
-        .prepare_cached("SELECT offset_min FROM reminder WHERE entity_id = ?1 ORDER BY offset_min")?
+        .prepare_cached(
+            "SELECT offset_min FROM reminder
+              WHERE entity_id = ?1 AND date_id IS NULL AND field_id IS NULL ORDER BY offset_min",
+        )?
         .query_map([id], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()
         .map_err(Into::into)
-}
-
-/// Make the event's alerts exactly `wanted` (a minute once). Returns whether anything changed.
-pub(crate) fn set_reminders(connection: &Connection, id: &str, wanted: &[i64]) -> Result<bool> {
-    let wanted: BTreeSet<i64> = wanted.iter().copied().collect();
-    let held: BTreeSet<i64> = reminders_held(connection, id)?.into_iter().collect();
-    for gone in held.difference(&wanted) {
-        connection.execute(
-            "DELETE FROM reminder WHERE entity_id = ?1 AND offset_min = ?2",
-            rusqlite::params![id, gone],
-        )?;
-    }
-    for added in wanted.difference(&held) {
-        connection.execute(
-            "INSERT INTO reminder (entity_id, offset_min) VALUES (?1, ?2)",
-            rusqlite::params![id, added],
-        )?;
-    }
-    Ok(wanted != held)
 }
 
 /// The vocabulary of `event.timing`, held equal to the CHECK by a test.
@@ -164,5 +156,8 @@ pub const TIMINGS: [Semantics; 3] = [Semantics::Zoned, Semantics::Floating, Sema
 /// The vocabulary of `event.status`, held equal to the CHECK by a test.
 pub const STATUSES: [&str; 3] = ["confirmed", "tentative", "cancelled"];
 
-/// The vocabulary of `edge.state` on an invitee, held equal to the CHECK by a test.
+/// The vocabulary of `event_guest.status`, held equal to the CHECK by a test.
 pub const ANSWERS: [&str; 4] = ["needs-action", "accepted", "declined", "tentative"];
+
+/// The vocabulary of `event_guest.role`, held equal to the CHECK by a test.
+pub const ROLES: [&str; 3] = ["required", "optional", "non-participant"];
