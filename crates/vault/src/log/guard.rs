@@ -352,8 +352,8 @@ impl Vault {
             let mut owed = std::mem::take(&mut self.pending.borrow_mut().reindex);
             owed.extend(auto.reindex);
             crate::index::reindex(&connection, &owed)?;
-            // UNPLUGGED (#1214, K8): the alert writer comes back with the reminder lane
-            // (`crates/vault/UNPLUGGED.md`), keyed by the reminder's id in the index file.
+            // The alerts are written with the search rows, after the commit: the entity a reminder,
+            // a date, a field or an override changed is in `owed` already (the touch triggers).
             // The history is part of the commit too: the states it replaced are kept with the
             // change that replaced them, or neither lands.
             let settling = self.pending.borrow().settling();
@@ -390,7 +390,7 @@ impl Vault {
                 let tally = hook.take(&census)?;
                 // The index file is written from what the commit queued. The hook is off, so
                 // none of it is a screen's change, and it never fails a commit that is durable.
-                crate::index::after_commit(&self.connection());
+                crate::index::after_commit(&self.connection(), self.clock().now_ms());
                 let rows = tally.rows;
                 let tables: Vec<String> = tally.tables.into_iter().collect();
                 tracing::debug!(rows, tables = tables.len(), "commit");

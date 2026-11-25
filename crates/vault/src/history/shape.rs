@@ -813,6 +813,29 @@ impl Shape {
                 mark_reindex("old.to_id")
             ),
         );
+        // A one-day override (B1: outside its series' snapshot) moves the series' alerts: the
+        // series is queued for the index file, and nothing is stamped or versioned.
+        touch_trigger(
+            "occurrence_insert",
+            "AFTER INSERT",
+            "occurrence",
+            None,
+            mark_reindex("new.series_id"),
+        );
+        touch_trigger(
+            "occurrence_update",
+            "AFTER UPDATE",
+            "occurrence",
+            None,
+            mark_reindex("new.series_id"),
+        );
+        touch_trigger(
+            "occurrence_delete",
+            "AFTER DELETE",
+            "occurrence",
+            None,
+            mark_reindex("old.series_id"),
+        );
         for part in &self.parts {
             match part.role {
                 Role::Host => {

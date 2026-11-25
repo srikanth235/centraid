@@ -200,7 +200,7 @@ impl Vault {
             return Ok(0);
         }
         let connection = self.connection();
-        crate::index::drain_batch(&connection, crate::index::OWED_BATCH)
+        crate::index::drain_batch(&connection, crate::index::OWED_BATCH, self.clock().now_ms())
     }
 
     /// Throw the index file's contents away and write them again from the rows, to the end (what the
@@ -209,19 +209,25 @@ impl Vault {
     /// # Errors
     /// SQLite's refusal.
     pub fn rebuild_index(&self) -> Result<()> {
-        crate::index::rebuild(&self.connection())
+        crate::index::rebuild(&self.connection(), self.clock().now_ms())
     }
 
-    /// Move the repeating alerts whose firing has passed on to their next, in a commit of its own
-    /// (a commit that wrote nothing reports nothing, so no screen re-reads for it); returns how
-    /// many items were moved. A caller about to read the next alerts runs this first.
+    /// Move the repeating alerts whose firing has passed on to their next, and drop the one-off
+    /// alerts that came due long ago; returns how many items were moved. The alerts are derived data
+    /// in the index file, so this is a transaction on that file and no commit of the vault's. A
+    /// caller about to read the next alerts runs this first. Does nothing inside a commit.
     ///
     /// # Errors
     /// SQLite's refusal.
     pub fn advance_alerts(&self) -> Result<usize> {
-        // UNPLUGGED (#1214, K8): the alert writer is rewritten against `reminder` and the index
-        // file's `alert` (keyed by the reminder's id), so there is nothing to move on yet.
-        Ok(0)
+        if self.in_commit() {
+            return Ok(0);
+        }
+        let now = self.clock().now_ms();
+        let connection = self.connection();
+        crate::index::in_tx(&connection, |connection| {
+            crate::alerts::advance(connection, now)
+        })
     }
 
     /// Whether any search row is owed.

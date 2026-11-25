@@ -32,6 +32,8 @@ note.edit
 note.export
 note.import
 note.restore_version
+reminder.add
+reminder.remove
 tag.add
 tag.color
 tag.remove

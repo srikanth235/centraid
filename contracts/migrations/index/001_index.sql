@@ -37,12 +37,16 @@ CREATE TABLE search_word (
 -- its NEXT firing and the launch and idle passes move it on. A snoozed task's one alert is its snooze.
 CREATE TABLE alert (
   reminder_id TEXT NOT NULL PRIMARY KEY,
+  -- The owning entity's `n` (never reused, A18): a purge leaves no reminder to name, only the number.
+  n           INTEGER NOT NULL,
   timing      TEXT NOT NULL CHECK (timing IN ('fixed','floating')),
   fire_key    TEXT NOT NULL CHECK (CASE timing WHEN 'fixed' THEN strftime('%Y-%m-%dT%H:%M:%fZ', fire_key) IS fire_key ELSE strftime('%Y-%m-%dT%H:%M', fire_key) IS fire_key END),
   repeats     INTEGER NOT NULL DEFAULT 0 CHECK (repeats IN (0,1))
 ) STRICT, WITHOUT ROWID;
 -- Reader: the notification service's "next firings".
 CREATE INDEX alert_by_fire ON alert(timing, fire_key, reminder_id);
+-- Reader: rewriting or removing one entity's alerts (the writer's side).
+CREATE INDEX alert_by_entity ON alert(n, reminder_id);
 
 -- A16, H3: the spatial index over PHOTOS and PLACES: one point each, `n` is the entity's `n`. The map
 -- reads a viewport as one R-tree query and joins `entity` for the kind.

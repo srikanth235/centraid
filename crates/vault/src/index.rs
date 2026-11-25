@@ -1,4 +1,4 @@
-//! The index file: the search indexes, the spatial index and (K8) the alerts, kept by the writer.
+//! The index file: the search indexes, the spatial index and the alerts, kept by the writer.
 //!
 //! `search` is a contentless FTS5 table whose rowid is `entity.n`, in the attached
 //! `<stem>.index.db` (schema `ix`, A15). It is DERIVED DATA: nothing in it was made by a member, and
@@ -147,7 +147,8 @@ fn queue_id(connection: &Connection, id: &str) -> Result<()> {
         .query_row([id], |row| Ok((row.get(0)?, row.get(1)?)))
         .optional()?;
     if let Some((n, kind)) = row
-        && Kind::parse(&kind).is_some_and(|kind| SEARCHABLE.contains(&kind))
+        && (crate::alerts::TARGET_KINDS.contains(&kind.as_str())
+            || Kind::parse(&kind).is_some_and(|kind| SEARCHABLE.contains(&kind)))
     {
         queue(connection, n)?;
     }
@@ -259,7 +260,7 @@ const DEPENDENTS: &str = "\
     UNION ALL SELECT to_id FROM edge WHERE label_id = ?1";
 
 /// Throw the index file's contents away and write them again from the rows: every table in it
-/// except `alert` (the alerts lane's, which rebuilds its own) is emptied, every searchable entity
+/// (the alerts included: `alerts::sync` writes them from the reminder rows) is emptied, every searchable entity
 /// is owed, and the queue is drained to the end.
 ///
 /// What a restored vault runs (through the idle pass, a bounded batch at a time, not through this
@@ -268,20 +269,20 @@ const DEPENDENTS: &str = "\
 ///
 /// # Errors
 /// SQLite's refusal.
-pub fn rebuild(connection: &Connection) -> Result<()> {
+pub fn rebuild(connection: &Connection, now: i64) -> Result<()> {
     in_tx(connection, |connection| {
         // The word list is rewritten from the rows too: this is where a word an edit dropped
         // finally goes.
         connection.execute_batch(
             "DELETE FROM search; DELETE FROM search_past; DELETE FROM search_word;
-             DELETE FROM geo; DELETE FROM ix.index_state;",
+             DELETE FROM geo; DELETE FROM alert; DELETE FROM ix.index_state;",
         )?;
         Ok(())
     })?;
     connection.execute("DELETE FROM search_owed", [])?;
     owe_everything(connection)?;
     while owed_count(connection)? > 0 {
-        drain_batch(connection, usize::MAX >> 16)?;
+        drain_batch(connection, usize::MAX >> 16, now)?;
     }
     // A rebuilt index is a new one, and the planner has statistics of the old.
     optimize(connection);
@@ -314,7 +315,10 @@ pub(crate) fn optimize(connection: &Connection) {
 }
 
 /// Run `body` as one transaction, unless the caller already holds one (then it is the caller's).
-fn in_tx<T>(connection: &Connection, body: impl FnOnce(&Connection) -> Result<T>) -> Result<T> {
+pub(crate) fn in_tx<T>(
+    connection: &Connection,
+    body: impl FnOnce(&Connection) -> Result<T>,
+) -> Result<T> {
     if !connection.is_autocommit() {
         return body(connection);
     }
@@ -353,7 +357,7 @@ enum Settled {
 ///
 /// # Errors
 /// SQLite's refusal. Nothing is cleared that was not written.
-pub fn drain_batch(connection: &Connection, limit: usize) -> Result<usize> {
+pub fn drain_batch(connection: &Connection, limit: usize, now: i64) -> Result<usize> {
     let limit = limit.max(1);
     let sql_limit = i64::try_from(limit).unwrap_or(i64::MAX);
     let whole: Vec<i64> = connection
@@ -374,7 +378,7 @@ pub fn drain_batch(connection: &Connection, limit: usize) -> Result<usize> {
         return Ok(0);
     }
     let settled = in_tx(connection, |connection| {
-        write_rows(connection, &whole, members.as_ref(), limit)
+        write_rows(connection, &whole, members.as_ref(), limit, now)
     })?;
     crate::stage::reached(crate::stage::Stage::IndexWritten)?;
     in_tx(connection, |connection| settle(connection, &settled))?;
@@ -386,13 +390,13 @@ pub fn drain_batch(connection: &Connection, limit: usize) -> Result<usize> {
 /// to [`INLINE_COMMIT`] entities; the rest is owed for the idle pass), so a screen that reads
 /// after its write reads its own change. **It never fails the commit**: the commit is durable,
 /// and a pass that could not finish leaves its rows owed.
-pub(crate) fn after_commit(connection: &Connection) {
-    if let Err(error) = catch_up(connection) {
+pub(crate) fn after_commit(connection: &Connection, now: i64) {
+    if let Err(error) = catch_up(connection, now) {
         tracing::warn!(%error, "the index file is behind; the idle pass writes it");
     }
 }
 
-fn catch_up(connection: &Connection) -> Result<()> {
+fn catch_up(connection: &Connection, now: i64) -> Result<()> {
     let busy: bool = connection.query_row(
         "SELECT EXISTS (SELECT 1 FROM temp.centraid_index_recent)
              OR EXISTS (SELECT 1 FROM temp.centraid_index_forget)
@@ -411,7 +415,7 @@ fn catch_up(connection: &Connection) -> Result<()> {
     // only this pass's.
     connection.execute("DELETE FROM temp.centraid_index_recent", [])?;
     let settled = in_tx(connection, |connection| {
-        write_rows(connection, &whole, None, 0)
+        write_rows(connection, &whole, None, 0, now)
     })?;
     crate::stage::reached(crate::stage::Stage::IndexWritten)?;
     in_tx(connection, |connection| settle(connection, &settled))?;
@@ -424,17 +428,18 @@ fn write_rows(
     whole: &[i64],
     members: Option<&(i64, String)>,
     limit: usize,
+    now: i64,
 ) -> Result<Vec<Settled>> {
     ensure_state(connection)?;
     let mut settled = Vec::with_capacity(whole.len() + 1);
     for &n in whole {
-        apply_n(connection, n)?;
+        apply_n(connection, n, now)?;
         settled.push(Settled::Whole(n));
     }
     if let Some((n, after)) = members {
         // The label itself is written too: an owed row is one row per entity, so a label that is
         // both owed whole and owed its members is one row, and this is where its own half is paid.
-        apply_n(connection, *n)?;
+        apply_n(connection, *n, now)?;
         let id: Option<String> = connection
             .prepare_cached("SELECT id FROM entity WHERE n = ?1")?
             .query_row([n], |row| row.get(0))
@@ -448,7 +453,7 @@ fn write_rows(
                 let finished = piece.len() <= limit;
                 piece.truncate(limit);
                 for member in &piece {
-                    apply_id(connection, member)?;
+                    apply_id(connection, member, now)?;
                 }
                 if finished {
                     None
@@ -657,6 +662,7 @@ fn forget_all(connection: &Connection, n: i64) -> Result<()> {
         .prepare_cached("DELETE FROM search WHERE rowid = ?1")?
         .execute([n])?;
     past::forget_entity(connection, n)?;
+    crate::alerts::forget(connection, n)?;
     geo::forget(connection, n)
 }
 
@@ -688,22 +694,25 @@ fn row_by(connection: &Connection, column: &str, key: impl rusqlite::ToSql) -> R
 
 /// Write the index file's rows of the entity numbered `n`: what it says now, or nothing when it is
 /// gone (a purge: its row is not there to name, but its number is never reused).
-fn apply_n(connection: &Connection, n: i64) -> Result<()> {
+fn apply_n(connection: &Connection, n: i64, now: i64) -> Result<()> {
     match row_by(connection, "n", n)? {
         None => forget_all(connection, n),
-        Some(row) => apply(connection, &row),
+        Some(row) => apply(connection, &row, now),
     }
 }
 
-fn apply_id(connection: &Connection, id: &str) -> Result<()> {
+fn apply_id(connection: &Connection, id: &str, now: i64) -> Result<()> {
     match row_by(connection, "id", id)? {
         None => Ok(()),
-        Some(row) => apply(connection, &row),
+        Some(row) => apply(connection, &row, now),
     }
 }
 
-fn apply(connection: &Connection, row: &Row) -> Result<()> {
+fn apply(connection: &Connection, row: &Row, now: i64) -> Result<()> {
     let n = row.n;
+    // The alerts of a reminder's holder: written by the same pass, from the same rows, and gone with
+    // a trash (they come back with a restore).
+    crate::alerts::sync(connection, n, now)?;
     connection
         .prepare_cached("DELETE FROM search WHERE rowid = ?1")?
         .execute([n])?;

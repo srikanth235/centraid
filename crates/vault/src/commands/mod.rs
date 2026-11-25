@@ -55,6 +55,7 @@ pub mod locker;
 pub mod note;
 pub mod note_portable;
 pub mod origin_cursor;
+pub mod reminder;
 pub mod sealed;
 pub mod tag;
 pub mod vault;
@@ -364,7 +365,7 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 10] = [
+        let modules: [fn() -> Vec<CommandDefinition>; 11] = [
             blob::definitions,
             container::definitions,
             edge::definitions,
@@ -373,6 +374,7 @@ impl Registry {
             follow::definitions,
             history::definitions,
             note::definitions,
+            reminder::definitions,
             tag::definitions,
             vault::definitions,
         ];

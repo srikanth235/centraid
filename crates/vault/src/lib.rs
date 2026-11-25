@@ -23,6 +23,7 @@
 
 pub mod access;
 pub mod action_key;
+pub mod alerts;
 pub mod backup;
 pub mod blob;
 pub mod bootstrap;

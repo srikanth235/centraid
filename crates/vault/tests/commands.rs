@@ -64,6 +64,8 @@ fn the_registry_carries_the_shared_verbs_and_the_plugged_modules_and_nothing_els
         "note.create",
         "note.edit",
         "vault.rename",
+        "reminder.add",
+        "reminder.remove",
     ] {
         assert!(names.contains(&expected), "`{expected}` is not registered");
     }
@@ -85,6 +87,7 @@ fn the_registry_carries_the_shared_verbs_and_the_plugged_modules_and_nothing_els
                 "follow",
                 "vault",
                 "note",
+                "reminder",
             ]
             .contains(&schema),
             "`{name}` is not a shared verb or Locker's"

@@ -419,7 +419,7 @@ impl Vault {
         vault.attach_index()?;
         // What founding seeded (the seeded containers) is in the new index file now, and nothing is
         // owed: a fresh file is the whole of a fresh vault, small by construction.
-        crate::index::rebuild(&vault.connection())?;
+        crate::index::rebuild(&vault.connection(), vault.clock().now_ms())?;
         Ok(vault)
     }
 

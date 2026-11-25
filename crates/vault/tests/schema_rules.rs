@@ -1072,4 +1072,95 @@ fn a_mention_is_one_row_of_its_note_by_ordinal_and_goes_with_it() {
         0,
         "a note's mentions go with it"
     );
+
+// K8: THE ONE NOTIFICATION RULE (D2): the sentences of `reminder.add` are the database's too
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn a_reminder_goes_only_where_there_is_a_time_to_fire_at() {
+    let w = World::new("rules_reminder");
+    let ev = id(60);
+    w.takes(&format!(
+        "INSERT INTO entity (id, kind, title, parent_id, parent_kind, created_at, updated_at)
+         VALUES ('{ev}', 'event', 'E', 'calendar:default', 'calendar', '{AT}', '{AT}');
+         INSERT INTO event (id, starts, timing) VALUES ('{ev}', '2030-03-02T09:00', 'floating');"
+    ));
+    let note = w.entity(61, "note", "N");
+    let ada = w.entity(62, "person", "Ada");
+    let bob = w.entity(63, "person", "Bob");
+    w.takes(&format!(
+        "INSERT INTO person (id) VALUES ('{ada}'); INSERT INTO person (id) VALUES ('{bob}');
+         INSERT INTO person_date (id, person_id, kind, single, date) VALUES ('d1', '{ada}', 'birthday', 1, '1990-03-14');
+         INSERT INTO person_date (id, person_id, kind, single, date) VALUES ('d2', '{ada}', 'anniversary', 0, '--06-01');"
+    ));
+    let rem = |rid: &str, entity: &str, kind: &str, date: &str, offset: &str| {
+        format!(
+            "INSERT INTO reminder (id, entity_id, entity_kind, date_id, offset_min)
+             VALUES ('{rid}', '{entity}', '{kind}', {date}, {offset})"
+        )
+    };
+    // An event takes one directly; a lead is never negative.
+    w.takes(&rem("e1", &ev, "event", "NULL", "10"));
+    w.refuses(&rem("e2", &ev, "event", "NULL", "-1"));
+    // The same lead twice on one target is one reminder.
+    w.refuses(&rem("e3", &ev, "event", "NULL", "10"));
+    // A kind with no time to fire at has none.
+    w.refuses(&rem("n1", &note, "note", "NULL", "10"));
+    // An event names no child; a person must name a date, and one of their own.
+    w.refuses(&rem("e4", &ev, "event", "'d1'", "10"));
+    w.refuses(&rem("p1", &ada, "person", "NULL", "10"));
+    w.refuses(&rem("p2", &bob, "person", "'d1'", "10"));
+    w.takes(&rem("p3", &ada, "person", "'d1'", "1440"));
+    // The same lead on two dates of one person is two reminders.
+    w.takes(&rem("p4", &ada, "person", "'d2'", "1440"));
+    // A reminder names a date or a field, never both, and carries its entity's real kind.
+    w.refuses_with(
+        &format!(
+            "INSERT INTO reminder (id, entity_id, entity_kind, date_id, field_id, offset_min)
+             VALUES ('b1', '{ada}', 'person', 'd1', 'f1', 5)"
+        ),
+        "CHECK",
+    );
+    w.refuses(&rem("k1", &ada, "task", "NULL", "10"));
+    // A Locker reminder names a date field of its own item, not another's or a text one.
+    let item = w.entity(64, "locker_item", "Bank");
+    let other = w.entity(65, "locker_item", "Other");
+    w.takes(&format!(
+        "INSERT INTO locker_item (id, type) VALUES ('{item}', 'login'); INSERT INTO locker_item (id, type) VALUES ('{other}', 'login');
+         INSERT INTO locker_item_field (id, item_id, label, kind, value_text, created_at, updated_at)
+           VALUES ('fd', '{item}', 'Expiry', 'date', '2030-01-31', '{AT}', '{AT}');
+         INSERT INTO locker_item_field (id, item_id, label, kind, value_text, created_at, updated_at)
+           VALUES ('ft', '{item}', 'Note', 'text', 'x', '{AT}', '{AT}');"
+    ));
+    let field = |rid: &str, entity: &str, field: &str| {
+        format!(
+            "INSERT INTO reminder (id, entity_id, entity_kind, field_id, offset_min)
+             VALUES ('{rid}', '{entity}', 'locker_item', {field}, 0)"
+        )
+    };
+    w.refuses(&field("l1", &item, "NULL"));
+    w.refuses(&field("l2", &item, "'ft'"));
+    w.refuses(&field("l3", &other, "'fd'"));
+    w.takes(&field("l4", &item, "'fd'"));
+}
+
+#[test]
+fn an_alert_row_is_a_key_in_a_timing_it_says() {
+    let w = World::new("rules_alert");
+    let row = |timing: &str, key: &str| {
+        format!(
+            "INSERT INTO alert (reminder_id, n, timing, fire_key, repeats) VALUES ('{}', 1, '{timing}', '{key}', 0)",
+            id(70)
+        )
+    };
+    w.refuses(&row("fixed", "2026-03-01T09:00"));
+    w.refuses(&row("floating", "2026-03-01T09:00:00.000Z"));
+    w.refuses(&row("local", "2026-03-01T09:00"));
+    w.takes(&row("fixed", "2026-03-01T09:00:00.000Z"));
+    w.refuses(&row("floating", "2026-03-01T09:00"));
+    w.takes(&format!(
+        "DELETE FROM alert WHERE reminder_id = '{}'",
+        id(70)
+    ));
+    w.takes(&row("floating", "2026-03-01T09:00"));
 }
