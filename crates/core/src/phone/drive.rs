@@ -389,6 +389,7 @@ pub(crate) fn run_cancellable(
         let due = handle
             .with_vault(|vault| snapshot_due(plane, &state, vault, keyring, request, phone_ms))?;
         if due || restage {
+            let _snap_guard = plane.begin_snapshot();
             let directory = directory_of(&state)?;
             let take_snapshot = || -> Result<std::result::Result<snapshot::Taken, PlaneError>> {
                 let mut core_err: Option<CoreError> = None;

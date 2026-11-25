@@ -43,7 +43,7 @@ object       = "CSB4" ‖ u8(4) ‖ nonce ‖ XChaCha20-Poly1305(K_obj, nonce, a
 digest       = blake3(object)                                                  32 bytes
 ```
 
-Where `padme_len(L)` (Padmé length padding, ≤ 3% max overhead, 0% overhead at full `CHUNK_BYTES`):
+Where `padme_len(L)` (Padmé length padding, ≤ 12% overhead on small objects above `MIN_INNER_BYTES = 64`, ≤ 3% on multi-kilobyte objects, and 0% at full `CHUNK_BYTES`):
 
 - If `L <= 64`: `64`.
 - Else: `e = ilog2(L)`, `s = ilog2(e) + 1`, `last_bits = e - s`, `mask = (1 << last_bits) - 1`, `((L + mask) & !mask).min(6 + CHUNK_BYTES)`.
@@ -51,7 +51,7 @@ Where `padme_len(L)` (Padmé length padding, ≤ 3% max overhead, 0% overhead at
 Properties and strict verification:
 
 - Outer wire header is `"CSB4" (4) ‖ u8(4) (1) ‖ nonce (24)` = 29 clear bytes (`OUTER_HEADER_BYTES = 29`, `TAG_BYTES = 16`). Neither `flags` nor `class` appears in clear on the wire; exact file lengths are hidden in Padmé buckets.
-- Minimum object length is `MIN_OBJECT_BYTES = 29 + 64 + 16 = 109` bytes; maximum object length is `MAX_OBJECT_BYTES = CHUNK_BYTES + 51 = 4,194,355` bytes (`SEAL_OVERHEAD_BYTES = 51`).
+- Minimum object length is `MIN_OBJECT_BYTES = 29 + 64 + 16 = 109` bytes; maximum object length is `MAX_OBJECT_BYTES = CHUNK_BYTES + 51 = 4,194,355` bytes (`OVERHEAD_BYTES = 51` in `centraid_media::sealed`, mirrored as `SEAL_OVERHEAD_BYTES = 51` in `centraid_gateway::rules::limits`).
 - Class-aware compression: `Class::Thumbnails` and `Class::Originals` (already entropy-coded JPEG/HEIC/WebP/MP4/PDF) never run `zstd` (`flags` must be `0x00`). `Class::Records` uses `zstd` level 3 when strictly shorter (`flags = 0x01`).
 - Same `p` and `c` in the same vault always give the same `name`, `object` and `digest`.
 - `contracts/crypto/sealed4-vectors.json` and `contracts/crypto/chunk-digest-vectors.json` pin derived keys, Padmé lengths, names, nonces, objects and digests.
@@ -80,7 +80,7 @@ Entry       h (content hash, 32B), kind: EntryKind (u8: 1=Original, 2=Thumbnail,
 Directory   as the skill's E8 (phone.md, "Restore"; gateways, addresses, pins, labels; never a token)
 ```
 
-- Every `BlobsNode` carries rolled-up `BlobsStats` equal to the exact sum of its children's or entries' stats; `Node::decode` verifies leaf stats against its entries so counts are structural.
+- Every `BlobsNode` carries rolled-up `BlobsStats` equal to the exact sum of its children's or entries' stats; `Node::decode` verifies leaf `BlobsStats` against its entries, and full tree traversal (`entries_of`) verifies internal branch `BlobsStats` against their children so counts are structural.
 - Sublinear Merkle operations over `NodeSource`:
   - `stats_of(source, blobs_ref) -> BlobsStats`: `O(1)` (1 node read).
   - `lookup_entry(source, blobs_ref, h) -> Option<Entry>`: `O(depth)` radix walk by bytes of `h` (1–3 node reads at 90,000 photos).
@@ -116,7 +116,7 @@ Routes stay under `/v1/`; `info` answers `protocol: 1` and includes `label: Stri
 
 ## 6. The phone engine & mobile driver
 
-- **Split-brain guard (`pair::head_is_ahead`):** Compares `(head.epoch, head.writes)` directly against local vault history; a local timestamp `last_write_ms >= head.taken_at_ms` never masks a remote head with higher `writes` or higher `epoch`.
+- **Split-brain guard (`pair::head_is_ahead`):** `pair::head_is_ahead` compares `root.writes > own.writes` directly against local vault history (while `pair::take_over` separately compares `epoch > held`); a local timestamp `last_write_ms >= head.taken_at_ms` never masks a remote head with higher `writes`.
 - **Unheld media guard:** `enter_media` adds `unheld_orig_files` (for `Originals`) or `unheld_thumb_files` (for `Thumbnails`) to `phase.skipped`, preventing `oroot`/`troot` confirmation until every in-scope file has sealed refs and every ref is confirmed on the gateway.
 - **Persistent `GatewayNotes`:** `collected_ms`, `held_count`, `held_purge_at_ms`, `refusal`, `damaged`, `sample_checked`, and `manifest_unreadable` live as typed columns on `gateway` in `state.db` (`CBS2`) so `retention::collect` (every 6 hours) and status notes survive mobile process suspension/termination, and `held_count` pages through all held rows without truncating at 200.
 - **Concurrent multi-gateway pass & batch loops:** Reachable gateways run upload bundles concurrently in `drive::run_pass`; `"Back up now"` loops until debt is cleared or a gateway refuses/stalls (no 8-round cliff); `bring_originals` loops batches until all due originals are fetched or the pass budget/cancellation triggers; iOS `VaultFileProtection` applies `completeUntilFirstUserAuthentication` on top-level vault directories rather than walking every file in `vault.bytes/` on launch.

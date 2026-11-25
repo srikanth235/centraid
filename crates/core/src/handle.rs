@@ -1136,6 +1136,9 @@ impl HandleState {
     }
 
     fn fold_wal_if_oversized(&self, vault: &Vault) {
+        if self.plane.snapshot_in_flight() {
+            return;
+        }
         if centraid_vault::backup::wal::frame_pages(vault.path())
             .is_ok_and(|f| f.len() >= centraid_vault::backup::snapshot::WAL_FOLD_FRAMES)
             && let Ok(state) = self.plane.state()

@@ -31,31 +31,55 @@ pub fn wal_path(db: &Path) -> PathBuf {
     PathBuf::from(name)
 }
 
-/// The page numbers of every valid frame, in frame order.
+/// The WAL header salts and valid frame page numbers read together.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WalSnapshot {
+    pub salts: Option<[u8; 8]>,
+    pub pages: Vec<u32>,
+}
+
+/// Read the WAL header salts and valid frame page numbers in order.
 ///
 /// # Errors
-/// An unreadable `-wal`. A missing or empty one is no frames.
-pub fn frame_pages(db: &Path) -> Result<Vec<u32>> {
+/// An unreadable `-wal`. A missing, empty, or invalid one yields `salts: None` and empty `pages`.
+pub fn inspect(db: &Path) -> Result<WalSnapshot> {
     let mut file = match File::open(wal_path(db)) {
         Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(WalSnapshot {
+                salts: None,
+                pages: Vec::new(),
+            });
+        }
         Err(error) => return Err(error.into()),
     };
     let mut header = [0_u8; WAL_HEADER as usize];
     if file.read_exact(&mut header).is_err() {
-        return Ok(Vec::new());
+        return Ok(WalSnapshot {
+            salts: None,
+            pages: Vec::new(),
+        });
     }
     let magic = u32::from_be_bytes([header[0], header[1], header[2], header[3]]);
     if magic != MAGIC_LE && magic != MAGIC_BE {
-        return Ok(Vec::new());
+        return Ok(WalSnapshot {
+            salts: None,
+            pages: Vec::new(),
+        });
     }
     let page_size = u64::from(u32::from_be_bytes([
         header[8], header[9], header[10], header[11],
     ]));
     if page_size == 0 {
-        return Ok(Vec::new());
+        return Ok(WalSnapshot {
+            salts: None,
+            pages: Vec::new(),
+        });
     }
-    let salts = (header[16..20].to_vec(), header[20..24].to_vec());
+    let salts: [u8; 8] = [
+        header[16], header[17], header[18], header[19], header[20], header[21], header[22],
+        header[23],
+    ];
     let length = file.metadata()?.len();
     let stride = FRAME_HEADER + page_size;
     let mut pages = Vec::new();
@@ -66,7 +90,7 @@ pub fn frame_pages(db: &Path) -> Result<Vec<u32>> {
         if file.read_exact(&mut frame).is_err() {
             break;
         }
-        if frame[8..12] != salts.0[..] || frame[12..16] != salts.1[..] {
+        if frame[8..16] != salts[..] {
             break;
         }
         let page = u32::from_be_bytes([frame[0], frame[1], frame[2], frame[3]]);
@@ -76,7 +100,18 @@ pub fn frame_pages(db: &Path) -> Result<Vec<u32>> {
         pages.push(page);
         at += stride;
     }
-    Ok(pages)
+    Ok(WalSnapshot {
+        salts: Some(salts),
+        pages,
+    })
+}
+
+/// The page numbers of every valid frame, in frame order.
+///
+/// # Errors
+/// An unreadable `-wal`. A missing or empty one is no frames.
+pub fn frame_pages(db: &Path) -> Result<Vec<u32>> {
+    Ok(inspect(db)?.pages)
 }
 
 /// The 64 KiB ranges the pages fall in.

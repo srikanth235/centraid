@@ -251,6 +251,24 @@ fn open(data_dir: &Path) -> anyhow::Result<Shared> {
 /// The exit code of a data folder this gateway will not open.
 const EXIT_REFUSED: i32 = 2;
 
+fn resolve_serve_config(
+    data_dir: &Path,
+    default_port: u16,
+    name: Option<&str>,
+    announce: &[String],
+) -> anyhow::Result<(String, Vec<String>)> {
+    let persisted = last_served(data_dir);
+    let resolved_name = addrs::clean_gateway_name(
+        name.or_else(|| persisted.as_ref().and_then(|record| record.name.as_deref())),
+    );
+    let normalized_announce = if announce.is_empty() {
+        persisted.map(|record| record.announce).unwrap_or_default()
+    } else {
+        parse_announced(announce, default_port)?
+    };
+    Ok((resolved_name, normalized_announce))
+}
+
 /// `serve`.
 async fn run(
     data_dir: &Path,
@@ -268,7 +286,10 @@ async fn run(
     let opened = open(data_dir)?;
     let pin = opened.identity().pin();
     let gateway_id = opened.identity().gateway_id();
-    let resolved_name = addrs::clean_gateway_name(name);
+    let listener = serve::bind(bind).await?;
+    let bound = listener.local_addr()?;
+    let (resolved_name, normalized_announce) =
+        resolve_serve_config(data_dir, bound.port(), name, announce)?;
     opened.set_label(resolved_name.clone());
     // THE TERMINAL HEARS EACH PAIRING AS IT LANDS, with the safety number a
     // member may compare against the phone's.
@@ -281,9 +302,6 @@ async fn run(
     if cleared > 0 {
         tracing::info!(cleared, "removed uploads a stop left staged");
     }
-    let listener = serve::bind(bind).await?;
-    let bound = listener.local_addr()?;
-    let normalized_announce = parse_announced(announce, bound.port())?;
     let config = shared.identity().server_config()?;
     let listener = TlsListener::new(listener, config)?;
     record_served(data_dir, bound, Some(&resolved_name), &normalized_announce)?;
@@ -712,5 +730,37 @@ mod cli_tests {
         };
         assert_eq!(name.as_deref(), Some("Studio Mac"));
         assert_eq!(announce, vec!["studio.ts.net:9443"]);
+    }
+
+    #[test]
+    fn serve_restart_without_flags_preserves_persisted_name_and_announce() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let bound: std::net::SocketAddr = "0.0.0.0:8443".parse().expect("socket addr");
+        centraid_gateway::server::record_served(
+            dir.path(),
+            bound,
+            Some("Persisted NAS"),
+            &["nas.tail1234.ts.net:8443".to_owned()],
+        )
+        .expect("writes serve.json");
+
+        let (resolved_name, resolved_announce) =
+            super::resolve_serve_config(dir.path(), bound.port(), None, &[])
+                .expect("resolves persisted config");
+        assert_eq!(resolved_name, "Persisted NAS");
+        assert_eq!(
+            resolved_announce,
+            vec!["nas.tail1234.ts.net:8443".to_owned()]
+        );
+
+        let (override_name, override_announce) = super::resolve_serve_config(
+            dir.path(),
+            9443,
+            Some("New Name"),
+            &["new.ts.net".to_owned()],
+        )
+        .expect("overrides persisted config");
+        assert_eq!(override_name, "New Name");
+        assert_eq!(override_announce, vec!["new.ts.net:9443".to_owned()]);
     }
 }

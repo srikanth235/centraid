@@ -1098,3 +1098,178 @@ fn hydrate_blob_chunks_from_root_recovers_cloud_only_originals_across_lose_state
         .expect("orig after");
     assert_eq!(after_orig.original, expected_orig_refs);
 }
+
+#[test]
+fn concurrent_wal_fold_during_unlocked_snapshot_never_loses_post_pin_writes() {
+    use centraid_vault::Vault;
+    use centraid_vault::backup::drill::dump;
+    use centraid_vault::backup::engine::{Env, GatewayPass, Policy, Scheduler};
+    use centraid_vault::backup::restore::Restore;
+    use centraid_vault::backup::snapshot;
+    use centraid_vault::backup::store::{MemoryStore, Store};
+
+    let rig = Rig::new("foldrace");
+    rig.grow(25, "foldrace");
+    let store = MemoryStore::new("desk");
+    store.set_clock_ms(T0 * 2);
+    rig.pair(&store);
+
+    // Baseline full snapshot so `since_full == 0`, `disk_mark` is set, and the next snapshot is
+    // incremental (`force_full: false`).
+    let first = rig.snapshot(T0);
+    assert!(first.full);
+    let env = rig.env(T0);
+    Scheduler::new(vec![GatewayPass::new(&env, &store).expect("pass")], 8)
+        .run(10_000)
+        .expect("runs");
+
+    // Pre-pin write so the snapshot has real work and reads `dirty_range` / WAL before pin.
+    backup_support::common::insert_note(rig.vault(), "before-pin note").expect("commits");
+
+    // Run `take_with_vault_slot`: between phase 1 (metadata read) and phase 2 (`commit_step`
+    // checkpoint, after `PinnedPages` has dropped), commit a write on a second `Vault` handle and
+    // run `fold_wal_if_needed(..., threshold_frames = 1)` so `-wal` is truncated and `dirty_range`
+    // is populated concurrently!
+    let vault_path = rig.vault().path().to_owned();
+    let second_handle = Vault::open(&vault_path).expect("second handle opens");
+    let mut lock_calls = 0_u32;
+    let taken_race = snapshot::take_with_vault_slot(
+        rig.vault()
+            .blobs()
+            .map(|s| s as &dyn centraid_vault::bytes::BlobStore),
+        &rig.keys,
+        &rig.state,
+        &rig.staging,
+        &rig.directory,
+        Options::at(T0 + 1_000),
+        |step| {
+            lock_calls += 1;
+            if lock_calls == 2 {
+                backup_support::common::insert_note(
+                    &second_handle,
+                    "post-pin-concurrent-fold-note",
+                )
+                .expect("post-pin write lands on second handle");
+                let folded =
+                    snapshot::fold_wal_if_needed(&second_handle, &rig.state, T0 + 1_000, 1)
+                        .expect("concurrent WAL fold succeeds");
+                assert!(
+                    folded,
+                    "concurrent fold truncated -wal and recorded dirty_range"
+                );
+            }
+            step(rig.vault())
+        },
+    )
+    .expect("unlocked snapshot finishes");
+
+    // The concurrent fold's `dirty_range` must NOT have been wiped by `commit_step`, and the
+    // second snapshot (incremental, `force_full: false`) must capture the post-pin write.
+    assert!(
+        !rig.state.dirty_ranges().expect("dirty_ranges").is_empty(),
+        "concurrently folded dirty_range entries are preserved after commit_step"
+    );
+    assert!(
+        rig.state.disk_mark().expect("disk_mark").is_none(),
+        "wal_reset leaves disk_mark = None until the next snapshot"
+    );
+    let _ = taken_race;
+
+    let live = dump(rig.vault()).expect("dumps live");
+    let second = rig.snapshot_with(Options::at(T0 + 2_000));
+    let env = Env::new(
+        rig.vault(),
+        &rig.keys,
+        &rig.state,
+        &rig.staging,
+        Policy::WIFI,
+        T0 + 2_000,
+    );
+    Scheduler::new(vec![GatewayPass::new(&env, &store).expect("pass")], 8)
+        .run(10_000)
+        .expect("runs");
+
+    let dir = tempfile::tempdir().expect("dir");
+    let out = dir.path().join("restored.db");
+    Restore::open(&rig.keys, &[&store as &dyn Store], &second.root.name)
+        .expect("opens")
+        .records(&out)
+        .expect("restores");
+    let restored = dump(&Vault::open(&out).expect("opens restored")).expect("dumps");
+    assert_eq!(
+        restored, live,
+        "post-pin write folded by concurrent fold_wal_if_needed is present in restored vault"
+    );
+}
+
+#[test]
+fn reusing_unchanged_blob_updates_taken_at_metadata() {
+    let rig = Rig::new("reusemeta");
+    let photo_bytes = b"unchanged photo bytes ".repeat(200);
+    let blob_id = rig
+        .vault()
+        .blobs()
+        .expect("blobs")
+        .put(&photo_bytes)
+        .expect("puts");
+    let photo_hash = centraid_media::sealed::PlaintextHash::from_hex(&blob_id).expect("hash");
+    let entity_id = rig.vault().ids().next();
+    let now = rig.vault().clock().now_text();
+    let initial_taken_at = "2024-05-01T10:00:00.000Z";
+    let updated_taken_at = "2020-01-15T08:30:00.000Z";
+
+    rig.vault()
+        .commit(|tx| {
+            let c = tx.connection();
+            centraid_vault::blob::stage(c, &blob_id, photo_bytes.len() as i64)?;
+            tx.insert_entity(&entity_id, centraid_vault::model::Kind::Photo, "", &now)?;
+            c.execute(
+                "INSERT INTO photo (id, blob, media_type, form, taken_at) VALUES (?1, ?2, 'image/jpeg', 'photo', ?3)",
+                rusqlite::params![entity_id, blob_id, initial_taken_at],
+            )?;
+            Ok(())
+        })
+        .expect("commits photo");
+
+    let first = rig.snapshot(T0);
+    assert_eq!(first.entries_new, 1);
+    let first_entries =
+        tree::entries_of(&rig.state, &root_of(&rig, &first).blobs).expect("entries");
+    let first_entry = first_entries
+        .iter()
+        .find(|e| e.h == photo_hash)
+        .expect("first entry");
+    assert_eq!(
+        first_entry.taken_at_ms,
+        centraid_vault::clock::parse_iso_ms(initial_taken_at).expect("parses")
+    );
+
+    // Update `photo.taken_at` and `media_type` in SQLite without changing the blob bytes.
+    rig.vault()
+        .commit(|tx| {
+            tx.connection().execute(
+                "UPDATE photo SET taken_at = ?1, media_type = 'image/heic' WHERE id = ?2",
+                rusqlite::params![updated_taken_at, entity_id],
+            )?;
+            Ok(())
+        })
+        .expect("updates taken_at");
+
+    let second = rig.snapshot(T0 + 1_000);
+    assert_eq!(
+        second.entries_new, 0,
+        "blob bytes did not change so chunks are reused"
+    );
+    let second_entries =
+        tree::entries_of(&rig.state, &root_of(&rig, &second).blobs).expect("entries");
+    let second_entry = second_entries
+        .iter()
+        .find(|e| e.h == photo_hash)
+        .expect("second entry");
+    assert_eq!(
+        second_entry.taken_at_ms,
+        centraid_vault::clock::parse_iso_ms(updated_taken_at).expect("parses")
+    );
+    assert_eq!(second_entry.media_type, "image/heic");
+    assert_eq!(second_entry.original, first_entry.original);
+}

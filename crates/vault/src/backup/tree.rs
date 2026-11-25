@@ -23,7 +23,8 @@
 //! then its items, and the first two fields are the node-kind tag and
 //! `u8(6)`. A decoder refuses anything the encoder would not have written:
 //! trailing bytes, an unsorted or oversized list, a ref of the wrong class,
-//! mismatched `EntryKind`/refs, or mismatched leaf `BlobsStats`.
+//! mismatched `EntryKind`/refs, or mismatched leaf `BlobsStats`; internal
+//! branch `BlobsStats` rollups are verified on full traversal ([`entries_of`]).
 //!
 //! ## WHERE A BLOB GOES
 //!
@@ -820,6 +821,9 @@ pub fn root_of(source: &dyn NodeSource, reference: &Ref) -> Result<Root> {
 
 /// The rolled-up [`BlobsStats`] of the blobs subtree at `blobs`, in `O(1)` (1 node read).
 ///
+/// Leaf rollups are verified on [`Node::decode`]; internal branch rollups are verified on full
+/// traversal ([`entries_of`]).
+///
 /// # Errors
 /// A missing or malformed node.
 pub fn stats_of(source: &dyn NodeSource, blobs: &Ref) -> Result<BlobsStats> {
@@ -971,26 +975,42 @@ fn entries_from_children(source: &dyn NodeSource, children: Vec<(u8, Ref)>) -> R
     Ok(out)
 }
 
-/// Every blobs entry of the tree whose blobs ref is `blobs`, sorted by `h`.
-///
-/// # Errors
-/// A missing or malformed node.
-pub fn entries_of(source: &dyn NodeSource, blobs: &Ref) -> Result<Vec<Entry>> {
-    let mut out = Vec::new();
-    let mut stack = vec![*blobs];
-    // Depth-first in key order: children are pushed reversed.
-    while let Some(reference) = stack.pop() {
-        match blobs_node_of(source, &reference)? {
-            BlobsNode {
-                body: BlobsBody::Entries(entries),
-                ..
-            } => out.extend(entries),
-            BlobsNode {
-                body: BlobsBody::Children(children),
-                ..
-            } => stack.extend(children.into_iter().rev().map(|(_, child)| child)),
+fn collect_blobs_entries(
+    source: &dyn NodeSource,
+    reference: &Ref,
+    out: &mut Vec<Entry>,
+) -> Result<BlobsStats> {
+    let node = blobs_node_of(source, reference)?;
+    match node.body {
+        BlobsBody::Entries(entries) => {
+            out.extend(entries);
+            Ok(node.stats)
+        }
+        BlobsBody::Children(children) => {
+            let mut computed = BlobsStats::default();
+            for (_, child) in children {
+                computed.add_assign(collect_blobs_entries(source, &child, out)?);
+            }
+            if computed != node.stats {
+                return Err(invariant(
+                    "a blobs branch's stats do not match its children",
+                ));
+            }
+            Ok(node.stats)
         }
     }
+}
+
+/// Every blobs entry of the tree whose blobs ref is `blobs`, sorted by `h`.
+///
+/// Verifies every internal branch node's rolled-up [`BlobsStats`] against the sum of its
+/// children's stats (leaf rollups are verified by [`Node::decode`]).
+///
+/// # Errors
+/// A missing or malformed node, or a blobs branch whose stats do not match its children.
+pub fn entries_of(source: &dyn NodeSource, blobs: &Ref) -> Result<Vec<Entry>> {
+    let mut out = Vec::new();
+    collect_blobs_entries(source, blobs, &mut out)?;
     Ok(out)
 }
 

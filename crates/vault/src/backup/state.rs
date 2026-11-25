@@ -1132,6 +1132,23 @@ impl DeviceState {
         Ok(rows.into_iter().map(unsigned).collect())
     }
 
+    /// Every 64 KiB range index folded from an oversized WAL, paired with its `noted_ms` stamp.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn dirty_ranges_with_stamp(&self) -> Result<Vec<(u64, u64)>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT range_index, noted_ms FROM dirty_range ORDER BY range_index")?;
+        let rows = statement
+            .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows
+            .into_iter()
+            .map(|(range, noted_ms)| (unsigned(range), unsigned(noted_ms)))
+            .collect())
+    }
+
     /// Persist `ranges` folded from the WAL at `now_ms` so the next snapshot still reads them.
     ///
     /// # Errors
@@ -1145,7 +1162,7 @@ impl DeviceState {
         for range in ranges {
             transaction.execute(
                 "INSERT INTO dirty_range (range_index, noted_ms) VALUES (?1, ?2)
-                 ON CONFLICT (range_index) DO UPDATE SET noted_ms = excluded.noted_ms",
+                 ON CONFLICT (range_index) DO UPDATE SET noted_ms = MAX(dirty_range.noted_ms + 1, excluded.noted_ms)",
                 params![signed(range), signed(now_ms)],
             )?;
         }
@@ -1159,6 +1176,26 @@ impl DeviceState {
     /// SQLite's refusal.
     pub fn clear_dirty_ranges(&self) -> Result<()> {
         self.connection.execute("DELETE FROM dirty_range", [])?;
+        Ok(())
+    }
+
+    /// Clear only the folded dirty ranges whose `(range_index, noted_ms)` stamp matches what a
+    /// snapshot read, preserving rows added or updated concurrently afterwards.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn clear_dirty_ranges_matching(&self, consumed: &[(u64, u64)]) -> Result<()> {
+        if consumed.is_empty() {
+            return Ok(());
+        }
+        let transaction = self.connection.unchecked_transaction()?;
+        for &(range_index, noted_ms) in consumed {
+            transaction.execute(
+                "DELETE FROM dirty_range WHERE range_index = ?1 AND noted_ms = ?2",
+                params![signed(range_index), signed(noted_ms)],
+            )?;
+        }
+        transaction.commit()?;
         Ok(())
     }
 

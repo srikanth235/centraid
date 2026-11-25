@@ -390,6 +390,7 @@ struct Cur {
     asked: BTreeSet<Vec<u8>>,
     rounds: u32,
     same_ask_rounds: u32,
+    no_progress_rounds: u32,
     stage: Stage,
     /// The latest outcome of this vault's run: the one that is reported.
     outcome: Option<Pass>,
@@ -1029,6 +1030,7 @@ impl Inner {
                                 asked: BTreeSet::new(),
                                 rounds: 0,
                                 same_ask_rounds: 0,
+                                no_progress_rounds: 0,
                                 stage: Stage::Start,
                                 outcome: None,
                             });
@@ -1106,6 +1108,11 @@ impl Inner {
             .iter()
             .map(|need| need.content_hash.clone())
             .collect();
+        if answer.confirmed_parts == 0 {
+            cur.no_progress_rounds += 1;
+        } else {
+            cur.no_progress_rounds = 0;
+        }
         // THE SAME ASK TWICE IS NO PROGRESS: the library would not produce those
         // bytes, and asking again would spin the window away, unless the round
         // moved parts. An original larger than the spool is asked for again, for
@@ -1120,9 +1127,13 @@ impl Inner {
             cur.same_ask_rounds = 1;
         }
         let rounds_left = if reason == Reason::BackUpNow {
-            cur.same_ask_rounds < MAX_ROUNDS && cur.rounds < MAX_BACK_UP_NOW_ROUNDS
+            cur.same_ask_rounds < MAX_ROUNDS
+                && cur.no_progress_rounds < MAX_ROUNDS
+                && cur.rounds < MAX_BACK_UP_NOW_ROUNDS
         } else {
-            cur.rounds < MAX_ROUNDS && cur.same_ask_rounds < MAX_ROUNDS
+            cur.rounds < MAX_ROUNDS
+                && cur.same_ask_rounds < MAX_ROUNDS
+                && cur.no_progress_rounds < MAX_ROUNDS
         };
         if !rounds_left {
             self.finish_cur(id, out);

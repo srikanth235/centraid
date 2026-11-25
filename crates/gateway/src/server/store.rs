@@ -356,6 +356,7 @@ impl ObjectStore {
         std::fs::rename(&staged.staged_path, &target).map_err(StageError::from)?;
         staged.promoted = true;
         sync_dir(&vault_dir).map_err(StageError::from)?;
+        sync_dir(&self.packs).map_err(StageError::from)?;
         #[cfg(feature = "test-harness")]
         self.knobs.renamed();
         Ok(staged.pack_id)
@@ -378,6 +379,7 @@ impl ObjectStore {
         std::fs::rename(&staged.staged_path, &target).map_err(StageError::from)?;
         staged.promoted = true;
         sync_dir(&vault_dir).map_err(StageError::from)?;
+        sync_dir(&self.packs).map_err(StageError::from)?;
         Ok(staged.pack_id)
     }
 
@@ -439,7 +441,32 @@ impl ObjectStore {
             use std::os::unix::fs::FileExt as _;
             file.read_exact_at(buf, offset)
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::FileExt as _;
+            let mut done = 0_usize;
+            while done < buf.len() {
+                let Some(pos) = offset.checked_add(done as u64) else {
+                    return Err(std::io::Error::new(
+                        ErrorKind::InvalidInput,
+                        "read offset overflow",
+                    ));
+                };
+                match file.seek_read(&mut buf[done..], pos) {
+                    Ok(0) => {
+                        return Err(std::io::Error::new(
+                            ErrorKind::UnexpectedEof,
+                            "failed to fill whole buffer",
+                        ));
+                    }
+                    Ok(n) => done += n,
+                    Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                    Err(error) => return Err(error),
+                }
+            }
+            Ok(())
+        }
+        #[cfg(not(any(unix, windows)))]
         {
             use std::io::{Read as _, Seek as _, SeekFrom};
             let mut reader = file.try_clone()?;
@@ -556,7 +583,26 @@ impl ObjectStore {
             use std::os::unix::fs::FileExt as _;
             file.write_all_at(&byte, loc.pack_offset)
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::FileExt as _;
+            let mut done = 0_usize;
+            while done < byte.len() {
+                match file.seek_write(&byte[done..], loc.pack_offset + done as u64) {
+                    Ok(0) => {
+                        return Err(std::io::Error::new(
+                            ErrorKind::WriteZero,
+                            "failed to write whole buffer",
+                        ));
+                    }
+                    Ok(n) => done += n,
+                    Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                    Err(error) => return Err(error),
+                }
+            }
+            Ok(())
+        }
+        #[cfg(not(any(unix, windows)))]
         {
             use std::io::{Seek as _, SeekFrom, Write as _};
             let mut writer = file;
@@ -695,15 +741,19 @@ impl PackStaging {
         };
         // `into_inner` drops any unflushed bytes in memory without writing them.
         let mut file = writer.into_inner();
-        file.set_len(self.committed_len).await?;
-        file.seek(std::io::SeekFrom::Start(self.committed_len))
-            .await?;
+        let outcome = match file.set_len(self.committed_len).await {
+            Ok(()) => file
+                .seek(std::io::SeekFrom::Start(self.committed_len))
+                .await
+                .map(|_| ()),
+            Err(error) => Err(error),
+        };
         self.pack = Some((
             pack_id,
             path,
             tokio::io::BufWriter::with_capacity(IO_BUF_BYTES, file),
         ));
-        Ok(())
+        outcome.map_err(StageError::from)
     }
 
     /// Finalize the staged packfile when the bundle stream ends (both on clean

@@ -496,6 +496,22 @@ fn blobs_stats_roll_up_across_splits_and_tampered_leaf_stats_fail_decode() {
     })
     .encode();
     assert!(Node::decode(&encoded).is_err());
+
+    // Tampered branch stats decode as a node (since children are only Refs), but entries_of
+    // verifies child rollups across the full traversal and refuses the mismatch.
+    let Node::Blobs(mut top_branch) =
+        Node::decode(&source[&root.blobs.name]).expect("decodes top branch")
+    else {
+        panic!("600 entries split into an internal branch");
+    };
+    top_branch.stats.orig_bytes += 1;
+    let tampered_bytes = Node::Blobs(top_branch).encode();
+    let tampered_ref = sealed::seal(&keys(), Class::Records, &tampered_bytes)
+        .expect("seals validly")
+        .reference();
+    let mut tampered_source = source;
+    tampered_source.insert(tampered_ref.name, tampered_bytes);
+    assert!(tree::entries_of(&tampered_source, &tampered_ref).is_err());
 }
 
 #[test]

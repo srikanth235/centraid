@@ -9,7 +9,8 @@
 //! `GET`, ranged `GET`, `POST /fetch`, and `scrub`.
 
 use centraid_gateway::client::Client;
-use centraid_gateway::rules::bundle::Frame;
+use centraid_gateway::rules::bundle::{Frame, HEADER_LEN};
+use centraid_gateway::rules::engine::Finding;
 use centraid_gateway::rules::ids::{Digest, Name, VaultId};
 use centraid_gateway::rules::limits::GRACE_MS;
 use centraid_gateway::rules::range::ByteRange;
@@ -267,6 +268,253 @@ async fn small_pack_coalescing_merges_multiple_small_packs_and_preserves_bytes()
         (scrub.read, scrub.corrupt, scrub.missing),
         (all_frames.len() as u64, 0, 0)
     );
+
+    gateway.shutdown().await;
+}
+
+/// Important #2: `GET` and `POST /fetch` open packfile handles inside the
+/// blocking read-planning lock, so deleting/compacting the old packfile once
+/// the response stream has started never causes a mid-body error or false
+/// `NOT_FOUND`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn get_and_fetch_complete_cleanly_when_compaction_unlinks_old_packfile_mid_stream() {
+    use http_body_util::BodyExt as _;
+    use hyper_util::rt::TokioIo;
+    use tokio_rustls::TlsConnector;
+    use tokio_rustls::rustls::pki_types::ServerName;
+
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let gateway = spawn(dir.path()).await.expect("spawned");
+
+    // Upload two separate small bundles so `compact_packs_once` will coalesce
+    // them into a new packfile and unlink the originals. Use > 256 KiB per
+    // object so streaming takes multiple chunks after the response headers.
+    let f0 = make_frame("stream-0", 512 * 1024);
+    let f1 = make_frame("stream-1", 512 * 1024);
+
+    let raw_key = ed25519_dalek::SigningKey::from_bytes(&[55; 32]);
+    let raw_vault = VaultId::from_bytes(raw_key.verifying_key().to_bytes());
+    let raw_paired = pair_secret(
+        &gateway.first_contact(),
+        &raw_key,
+        "raw-phone",
+        gateway.mint_pairing_secret(),
+    )
+    .await
+    .expect("pairs raw vault");
+    let raw_client = gateway.client(raw_paired.token);
+    assert_eq!(
+        raw_client
+            .bundle(&raw_vault, std::slice::from_ref(&f0))
+            .await
+            .expect("stores f0")
+            .stored(),
+        1
+    );
+    assert_eq!(
+        raw_client
+            .bundle(&raw_vault, std::slice::from_ref(&f1))
+            .await
+            .expect("stores f1")
+            .stored(),
+        1
+    );
+    let raw_old_packs = gateway
+        .shared()
+        .store()
+        .vault_pack_files(&raw_vault)
+        .expect("lists raw vault packs");
+    assert_eq!(raw_old_packs.len(), 2);
+
+    let tls_config = centraid_gateway::client::tls::client_config(
+        centraid_gateway::client::tls::Trust::Certificate(gateway.cert_der.clone()),
+    );
+
+    // 1. Start GET /o/<f0.name>, read headers (200 OK), then run compaction so
+    //    both old packfiles are unlinked while GET body is still unread.
+    let get_socket = tokio::net::TcpStream::connect(gateway.addr)
+        .await
+        .expect("connects");
+    let get_tls = TlsConnector::from(tls_config.clone())
+        .connect(ServerName::try_from("localhost").expect("name"), get_socket)
+        .await
+        .expect("handshakes");
+    let (mut get_sender, get_conn) = hyper::client::conn::http1::handshake(TokioIo::new(get_tls))
+        .await
+        .expect("http1");
+    tokio::spawn(get_conn);
+    let get_req = hyper::Request::builder()
+        .method("GET")
+        .uri(format!("/v1/v/{raw_vault}/o/{}", f0.name))
+        .header("host", gateway.addr.to_string())
+        .header("authorization", format!("Bearer {}", raw_paired.token))
+        .body(http_body_util::Empty::<bytes::Bytes>::new())
+        .expect("request");
+    let get_resp = get_sender.send_request(get_req).await.expect("GET headers");
+    assert_eq!(get_resp.status(), 200);
+
+    // 2. Also start POST /fetch for both f0 and f1, receive headers (200 OK)
+    //    before reading the body.
+    let fetch_socket = tokio::net::TcpStream::connect(gateway.addr)
+        .await
+        .expect("connects");
+    let fetch_tls = TlsConnector::from(tls_config)
+        .connect(
+            ServerName::try_from("localhost").expect("name"),
+            fetch_socket,
+        )
+        .await
+        .expect("handshakes");
+    let (mut fetch_sender, fetch_conn) =
+        hyper::client::conn::http1::handshake(TokioIo::new(fetch_tls))
+            .await
+            .expect("http1");
+    tokio::spawn(fetch_conn);
+    let fetch_body = serde_json::to_vec(&serde_json::json!({
+        "names": [f0.name.to_string(), f1.name.to_string()],
+    }))
+    .expect("json");
+    let fetch_req = hyper::Request::builder()
+        .method("POST")
+        .uri(format!("/v1/v/{raw_vault}/fetch"))
+        .header("host", gateway.addr.to_string())
+        .header("authorization", format!("Bearer {}", raw_paired.token))
+        .header("content-type", "application/json")
+        .header("content-length", fetch_body.len())
+        .body(http_body_util::Full::new(bytes::Bytes::from(fetch_body)))
+        .expect("request");
+    let fetch_resp = fetch_sender
+        .send_request(fetch_req)
+        .await
+        .expect("POST fetch headers");
+    assert_eq!(fetch_resp.status(), 200);
+
+    // Compact while both response streams are open; old packfiles are unlinked.
+    let shared_for_compact = gateway.shared().clone();
+    let compacted = tokio::task::spawn_blocking(move || compact_packs_once(&shared_for_compact))
+        .await
+        .expect("joins")
+        .expect("compacts");
+    assert!(compacted >= 2, "coalesced at least the 2 old packfiles");
+    for old in &raw_old_packs {
+        assert!(
+            !gateway
+                .shared()
+                .store()
+                .pack_path(&raw_vault, &old.pack_id)
+                .exists(),
+            "old packfile {} unlinked while GET and fetch streams are in flight",
+            old.pack_id
+        );
+    }
+
+    // Both GET and POST /fetch finish streaming every byte intact.
+    let get_bytes = get_resp
+        .into_body()
+        .collect()
+        .await
+        .expect("GET body")
+        .to_bytes();
+    assert_eq!(get_bytes.as_ref(), f0.bytes.as_slice());
+
+    let fetch_bytes = fetch_resp
+        .into_body()
+        .collect()
+        .await
+        .expect("fetch body")
+        .to_bytes();
+    let expected_fetch_len = (HEADER_LEN + f0.bytes.len()) + (HEADER_LEN + f1.bytes.len());
+    assert_eq!(fetch_bytes.len(), expected_fetch_len);
+    assert_eq!(
+        &fetch_bytes[HEADER_LEN..HEADER_LEN + f0.bytes.len()],
+        f0.bytes.as_slice()
+    );
+    assert_eq!(
+        &fetch_bytes[HEADER_LEN + f0.bytes.len() + HEADER_LEN..],
+        f1.bytes.as_slice()
+    );
+
+    gateway.shutdown().await;
+}
+
+/// Important #3: recording a `Finding::Missing` against a stale pre-compaction
+/// `PackLocation` after `compact_packs_once` leaves `damaged_at_ms == None`
+/// and the object still serves cleanly.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn stale_pre_compaction_scrub_finding_does_not_mark_relocated_object_damaged() {
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let gateway = spawn(dir.path()).await.expect("spawned");
+    let member = setup_paired(&gateway, 56).await;
+
+    let f0 = make_frame("stale-0", 16 * 1024);
+    let f1 = make_frame("stale-1", 16 * 1024);
+    assert_eq!(
+        member
+            .phone
+            .bundle(&member.vault, std::slice::from_ref(&f0))
+            .await
+            .expect("stores f0")
+            .stored(),
+        1
+    );
+    assert_eq!(
+        member
+            .phone
+            .bundle(&member.vault, std::slice::from_ref(&f1))
+            .await
+            .expect("stores f1")
+            .stored(),
+        1
+    );
+
+    let (record_before, stale_loc) = gateway
+        .shared()
+        .rules(|gw| Ok(gw.state.object_with_location(&member.vault, &f1.name)?))
+        .expect("reads")
+        .expect("present");
+
+    // Compaction relocates `f1` into a new coalesced packfile and unlinks the old one.
+    let compacted = compact_packs_once(gateway.shared()).expect("compacts");
+    assert_eq!(compacted, 2);
+
+    let (record_after, new_loc) = gateway
+        .shared()
+        .rules(|gw| Ok(gw.state.object_with_location(&member.vault, &f1.name)?))
+        .expect("reads")
+        .expect("still present");
+    assert_ne!(new_loc.pack_id, stale_loc.pack_id);
+    assert_eq!(record_after.damaged_at_ms, None);
+
+    // Simulating `scrub_once` racing with compaction: recording `Finding::Missing`
+    // at `stale_loc` must return `false` and leave `damaged_at_ms == None`.
+    let recorded = gateway
+        .shared()
+        .rules(|gw| {
+            gw.state.record_scrub_at_location(
+                &member.vault,
+                &record_before,
+                stale_loc,
+                Finding::Missing,
+                123_456,
+            )
+        })
+        .expect("location-checked scrub");
+    assert!(!recorded, "stale pre-compaction location must be ignored");
+
+    let (record_checked, _) = gateway
+        .shared()
+        .rules(|gw| Ok(gw.state.object_with_location(&member.vault, &f1.name)?))
+        .expect("reads")
+        .expect("still present");
+    assert_eq!(record_checked.damaged_at_ms, None);
+
+    // Object still serves cleanly over GET.
+    let got = member
+        .phone
+        .get(&member.vault, &f1.name, None)
+        .await
+        .expect("serves cleanly");
+    assert_eq!(got, f1.bytes);
 
     gateway.shutdown().await;
 }

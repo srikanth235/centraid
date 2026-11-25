@@ -21,6 +21,7 @@ use std::path::Path;
 
 use rusqlite::{Connection, Row, params};
 
+use crate::rules::engine::Finding;
 use crate::rules::ids::{Digest, Name, Nonce, SecretHash, Signature, TokenHash, VaultId};
 use crate::rules::state::{
     ClaimRecord, Fault, HeadRecord, Hold, ObjectRecord, RevokedToken, SecretRecord, SnapshotRecord,
@@ -638,6 +639,47 @@ impl SqliteState {
                 signed(old.pack_offset)?,
             ],
         )? > 0)
+    }
+
+    /// Record a scrub finding for `scrubbed` only if the object row is still
+    /// at `loc` with matching `(digest, stored_at_ms)`. Returns `Ok(false)` if
+    /// the object was removed, replaced, or relocated by compaction.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    pub fn record_scrub_at_location(
+        &mut self,
+        vault: &VaultId,
+        scrubbed: &ObjectRecord,
+        loc: PackLocation,
+        finding: Finding,
+        now_ms: i64,
+    ) -> Result<bool, Fault> {
+        self.atomically(|state| {
+            let Some((mut current, current_loc)) =
+                state.object_with_location(vault, &scrubbed.name)?
+            else {
+                return Ok(false);
+            };
+            if current_loc != loc
+                || current.digest != scrubbed.digest
+                || current.stored_at_ms != scrubbed.stored_at_ms
+            {
+                return Ok(false);
+            }
+            let damaged = match finding {
+                Finding::Intact => None,
+                Finding::Corrupt | Finding::Missing => {
+                    Some(current.damaged_at_ms.unwrap_or(now_ms))
+                }
+            };
+            if damaged != current.damaged_at_ms {
+                current.damaged_at_ms = damaged;
+                state.put_object(vault, &current)?;
+            }
+            Ok(true)
+        })
     }
 }
 

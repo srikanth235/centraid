@@ -94,7 +94,6 @@ pub fn registration_args_with_label(
     if let Some(label) = label
         && !label.is_empty()
         && label.len() <= 128
-        && !label.contains('=')
     {
         args.push(format!("label={label}"));
     }
@@ -302,6 +301,19 @@ mod tests {
                 "8443",
                 "gw=0123456789abcdef0123456789abcdef",
                 "v=1"
+            ]
+        );
+        assert_eq!(
+            registration_args_with_label(&id(), 8443, Some("a=b")),
+            vec![
+                "-R",
+                "centraid-gateway-01234567",
+                "_centraid-gateway._tcp",
+                "local",
+                "8443",
+                "gw=0123456789abcdef0123456789abcdef",
+                "v=1",
+                "label=a=b"
             ]
         );
     }

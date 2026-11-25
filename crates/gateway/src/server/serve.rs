@@ -513,11 +513,7 @@ impl Advertisement {
         let id = gateway_id.hex();
         let protocol = crate::rules::limits::PROTOCOL.to_string();
         let mut properties = vec![("gw", id.as_str()), ("v", protocol.as_str())];
-        if let Some(label) = label
-            && !label.is_empty()
-            && label.len() <= 128
-            && !label.contains('=')
-        {
+        if let Some(label) = valid_txt_label(label) {
             properties.push(("label", label));
         }
         let service = mdns_sd::ServiceInfo::new(
@@ -534,8 +530,24 @@ impl Advertisement {
     }
 }
 
+fn valid_txt_label(label: Option<&str>) -> Option<&str> {
+    label.filter(|label| !label.is_empty() && label.len() <= 128)
+}
+
 impl Drop for Advertisement {
     fn drop(&mut self) {
         let _ = self.daemon.shutdown();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn txt_label_preserves_equals_signs() {
+        assert_eq!(valid_txt_label(Some("a=b")), Some("a=b"));
+        assert_eq!(valid_txt_label(Some("")), None);
+        assert_eq!(valid_txt_label(None), None);
     }
 }

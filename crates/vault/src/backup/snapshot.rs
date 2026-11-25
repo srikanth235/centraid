@@ -117,6 +117,10 @@ fn previous(state: &DeviceState, keys: &BackupKeys, device: &Device) -> Option<(
     Some((reference, root))
 }
 
+fn taken_at_ms_of(file: &files::ContentFile) -> i64 {
+    crate::clock::parse_iso_ms(&file.created_at).unwrap_or(0)
+}
+
 fn entry_of(
     blobs: Option<&dyn BlobStore>,
     keys: &BackupKeys,
@@ -125,7 +129,7 @@ fn entry_of(
     size: u64,
     exclude_videos: bool,
 ) -> Result<Entry> {
-    let taken_at_ms = crate::clock::parse_iso_ms(&file.created_at).unwrap_or(0);
+    let taken_at_ms = taken_at_ms_of(file);
     let excluded = exclude_videos && file.is_original() && file.video;
     if excluded {
         return Ok(Entry {
@@ -372,7 +376,7 @@ pub fn take_unlocked(
         None => BTreeMap::new(),
     };
 
-    let before = crate::backup::wal::frame_pages(vault_path)?;
+    let before = crate::backup::wal::inspect(vault_path)?;
     let mut pinned = PinnedPages::begin(vault_path)?;
     let during = crate::backup::wal::frame_pages(vault_path)?;
     if let Some(on_pin) = options.on_pin {
@@ -402,7 +406,8 @@ pub fn take_unlocked(
         device.carry.iter().copied().chain(during.iter().copied()),
         page_size,
     );
-    dirty.extend(state.dirty_ranges()?);
+    let consumed_dirty = state.dirty_ranges_with_stamp()?;
+    dirty.extend(consumed_dirty.iter().map(|(range, _)| *range));
     // The vault grew or shrank: the range that held the old last page changed length, and every
     // range past it is new.
     if prior
@@ -481,13 +486,21 @@ pub fn take_unlocked(
     for (h, size) in claims {
         let Some(file) = live.get(&h) else { continue };
         let excluded = options.exclude_videos && file.is_original() && file.video;
+        let expected_kind = if file.is_original() {
+            EntryKind::Original
+        } else {
+            EntryKind::Thumbnail
+        };
         if !excluded
             && let Some(known) = prior_entries.get(&h)
-            && known.kind != EntryKind::ExcludedOriginal
+            && known.kind == expected_kind
             && known.has_bytes()
             && known.size == size
         {
-            entries.push(known.clone());
+            let mut reused = known.clone();
+            reused.media_type.clone_from(&file.media_type);
+            reused.taken_at_ms = taken_at_ms_of(file);
+            entries.push(reused);
             continue;
         }
         let had_prior_bytes = prior_entries
@@ -529,14 +542,20 @@ pub fn take_unlocked(
     // checkpoint finishes: a crash anywhere in between leaves `disk_mark = None` and only makes
     // the next snapshot read more. All of it happens while nothing can commit.
     let mut failure = None;
-    let kept = before.len();
+    let kept = before.pages.len();
     let mut commit_step = |connection: &rusqlite::Connection| -> crate::error::Result<()> {
+        let mut wal_reset = false;
         let step = (|| -> Result<()> {
-            let after = crate::backup::wal::frame_pages(vault_path)?;
-            let carry = if after.len() >= kept {
-                after[kept..].to_vec()
+            let after = crate::backup::wal::inspect(vault_path)?;
+            let pre_ckpt_mark = disk_mark(vault_path, page_size, vault_root_page)?;
+            wal_reset = (before.salts.is_some() && after.salts != before.salts)
+                || after.pages.len() < kept
+                || after.pages[..kept] != before.pages[..]
+                || pre_ckpt_mark != live_disk_mark;
+            let carry = if wal_reset {
+                after.pages
             } else {
-                after
+                after.pages[kept..].to_vec()
             };
             state.set_device(&Device {
                 newest: Some((assembled.root.name, options.now_ms)),
@@ -548,7 +567,7 @@ pub fn take_unlocked(
                 },
                 carry,
             })?;
-            state.clear_dirty_ranges()?;
+            state.clear_dirty_ranges_matching(&consumed_dirty)?;
             state.set_exclude_videos(options.exclude_videos)?;
             Ok(())
         })();
@@ -563,7 +582,8 @@ pub fn take_unlocked(
                 row.get::<_, i64>(0)
             })
             .is_ok_and(|busy| busy == 0);
-        if checkpointed
+        if !wal_reset
+            && checkpointed
             && let Ok(mark @ Some(_)) = disk_mark(vault_path, page_size, vault_root_page)
         {
             let _ = state.set_disk_mark(mark.as_ref());

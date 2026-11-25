@@ -557,6 +557,21 @@ fn back_up_now_streams_all_batches_past_max_rounds_while_asks_advance() {
 }
 
 #[test]
+fn back_up_now_stops_at_max_rounds_on_alternating_asks_without_progress() {
+    let mut sim = Sim::new(vec![held("a", true)]);
+    let mut round = 0u32;
+    sim.answer = Box::new(move |_| {
+        round += 1;
+        let which = if round % 2 == 1 { 1 } else { 2 };
+        with_needs(vec![need(which)], 0)
+    });
+    let actions = sim.conductor.trigger(Reason::BackUpNow, 0);
+    sim.run(actions);
+    assert_eq!(sim.seen.len(), MAX_ROUNDS as usize);
+    assert!(!sim.conductor.facts().backing_up);
+}
+
+#[test]
 fn a_round_stops_when_too_little_of_the_budget_is_left() {
     let mut sim = Sim::new(vec![held("a", true)]);
     sim.answer = Box::new(|_| with_needs(vec![need(4)], 0));

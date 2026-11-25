@@ -424,13 +424,19 @@ fn compact_bucket(
         }
     };
 
-    if !new_has_rows {
-        store.remove_pack(vault, &promoted_id)?;
+    if !new_has_rows && let Err(error) = store.remove_pack(vault, &promoted_id) {
+        tracing::warn!(%error, "could not unlink compacted packfile; orphan sweep will reap it");
     }
+    let mut removed = 0_u64;
     for old_id in &empty_old {
-        store.remove_pack(vault, old_id)?;
+        match store.remove_pack(vault, old_id) {
+            Ok(()) => removed += 1,
+            Err(error) => {
+                tracing::warn!(%error, "could not unlink compacted packfile; orphan sweep will reap it");
+            }
+        }
     }
-    Ok(empty_old.len() as u64)
+    Ok(removed)
 }
 
 /// Remove old staged files in `staging/` and any `.pack` file under
@@ -573,14 +579,20 @@ pub fn scrub_once(shared: &Shared) -> Result<ScrubCounts, Fault> {
             };
 
             counts.read += 1;
-            match finding {
-                Finding::Intact => {}
-                Finding::Corrupt => counts.corrupt += 1,
-                Finding::Missing => counts.missing += 1,
-            }
             if finding != Finding::Intact || record.damaged_at_ms.is_some() {
                 let now = shared.now();
-                shared.rules(|gateway| gateway.record_scrub(&vault, &record, finding, now))?;
+                let recorded = shared.rules(|gateway| {
+                    gateway
+                        .state
+                        .record_scrub_at_location(&vault, &record, loc, finding, now)
+                })?;
+                if recorded {
+                    match finding {
+                        Finding::Intact => {}
+                        Finding::Corrupt => counts.corrupt += 1,
+                        Finding::Missing => counts.missing += 1,
+                    }
+                }
             }
         }
     }

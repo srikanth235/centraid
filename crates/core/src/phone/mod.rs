@@ -177,6 +177,9 @@ pub struct Plane {
     notes: std::sync::Mutex<BTreeMap<String, GatewayNotes>>,
     /// The last snapshot or OS bundle could not be staged for want of room.
     no_room: std::sync::atomic::AtomicBool,
+    /// Whether an unlocked snapshot is actively running in this process, so in-process writes
+    /// skip `fold_wal_if_oversized` while the snapshot pins the WAL.
+    snapshot_in_flight: std::sync::atomic::AtomicBool,
 }
 
 impl Plane {
@@ -194,6 +197,7 @@ impl Plane {
             snapshot_owed: std::sync::atomic::AtomicBool::new(false),
             notes: std::sync::Mutex::new(BTreeMap::new()),
             no_room: std::sync::atomic::AtomicBool::new(false),
+            snapshot_in_flight: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -285,6 +289,20 @@ impl Plane {
     pub(crate) fn set_no_room(&self, no_room: bool) {
         self.no_room
             .store(no_room, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Whether an unlocked snapshot is currently in flight in this process.
+    pub(crate) fn snapshot_in_flight(&self) -> bool {
+        self.snapshot_in_flight
+            .load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Mark an unlocked snapshot as in flight until the returned guard drops.
+    #[must_use]
+    pub(crate) fn begin_snapshot(&self) -> SnapshotGuard<'_> {
+        self.snapshot_in_flight
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        SnapshotGuard(self)
     }
 
     /// Replace the gateway tokens held in memory (#1191, E12).
@@ -446,6 +464,19 @@ impl Drop for Asked<'_> {
     fn drop(&mut self) {
         self.0
             .asked
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// An unlocked snapshot running in this process ([`Plane::begin_snapshot`]).
+/// Dropping it on any exit path clears `snapshot_in_flight`.
+#[derive(Debug)]
+pub(crate) struct SnapshotGuard<'plane>(&'plane Plane);
+
+impl Drop for SnapshotGuard<'_> {
+    fn drop(&mut self) {
+        self.0
+            .snapshot_in_flight
             .store(false, std::sync::atomic::Ordering::SeqCst);
     }
 }

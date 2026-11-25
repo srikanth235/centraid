@@ -680,4 +680,28 @@ fn gateway_notes_blob_chunks_and_dirty_ranges_round_trip() {
     );
     state.clear_dirty_ranges().expect("clears");
     assert!(state.dirty_ranges().expect("cleared").is_empty());
+
+    // dirty_ranges_with_stamp + clear_dirty_ranges_matching preserve concurrent additions and
+    // same-millisecond updates made after the snapshot read them.
+    state.add_dirty_ranges([2_u64, 4], 5_000).expect("adds");
+    let consumed = state.dirty_ranges_with_stamp().expect("stamps");
+    assert_eq!(consumed, vec![(2, 5_000), (4, 5_000)]);
+
+    // Concurrent fold adds range 6 and bumps range 4 using the SAME timestamp `5_000`.
+    state
+        .add_dirty_ranges([4_u64, 6], 5_000)
+        .expect("concurrent fold bumps 4 and adds 6");
+    assert_eq!(
+        state.dirty_ranges_with_stamp().expect("after bump"),
+        vec![(2, 5_000), (4, 5_001), (6, 5_000)]
+    );
+
+    // Clearing what the snapshot read deletes only range 2, preserving bumped 4 and new 6.
+    state
+        .clear_dirty_ranges_matching(&consumed)
+        .expect("clears matching");
+    assert_eq!(
+        state.dirty_ranges_with_stamp().expect("preserved"),
+        vec![(4, 5_001), (6, 5_000)]
+    );
 }

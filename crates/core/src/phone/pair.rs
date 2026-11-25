@@ -76,11 +76,14 @@ use crate::error::{CoreError, Result};
 
 /// How far a vault copy has run: `vault.writes` and `vault.written_at`, so a phone can tell
 /// whether a head holds writes its own copy never made (#1080, the sweep's F4) without opening it.
+/// `head_is_ahead` compares `writes` only; `last_write_ms` records `vault.written_at` on the
+/// vault's clock without masking higher `writes`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct History {
     /// `vault.writes`.
     pub writes: u64,
-    /// `vault.written_at`, on the vault's clock; `None` for a vault nothing has been written to.
+    /// `vault.written_at`, on the vault's clock; `None` for a vault nothing has been written to
+    /// (recorded for diagnostics/history without masking higher `writes` in `head_is_ahead`).
     pub last_write_ms: Option<u64>,
 }
 

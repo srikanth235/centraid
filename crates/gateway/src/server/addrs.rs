@@ -84,8 +84,26 @@ pub fn clean_hostname(raw: &str) -> String {
     sanitize_label(trimmed).unwrap_or_else(|| DEFAULT_GATEWAY_NAME.to_owned())
 }
 
+fn is_invisible_or_bidi(c: char) -> bool {
+    c.is_control()
+        || matches!(
+            c,
+            '\u{00AD}'
+                | '\u{061C}'
+                | '\u{200B}'..='\u{200F}'
+                | '\u{202A}'..='\u{202E}'
+                | '\u{2060}'
+                | '\u{2066}'..='\u{2069}'
+                | '\u{FEFF}'
+        )
+}
+
 fn sanitize_label(raw: &str) -> Option<String> {
-    let cleaned: String = raw.trim().chars().filter(|c| !c.is_control()).collect();
+    let cleaned: String = raw
+        .trim()
+        .chars()
+        .filter(|c| !is_invisible_or_bidi(*c))
+        .collect();
     let trimmed = cleaned.trim();
     if trimmed.is_empty() {
         return None;
@@ -434,5 +452,17 @@ mod tests {
         assert_eq!(clean_hostname("vps-01"), "vps-01");
         assert_eq!(clean_hostname("   "), "gateway");
         assert_eq!(clean_gateway_name(Some("  Studio NAS  ")), "Studio NAS");
+    }
+
+    #[test]
+    fn sanitize_label_strips_bidi_and_zero_width_characters() {
+        assert_eq!(
+            sanitize_label("My\u{202E}NAS\u{200B}\u{FEFF}\u{2066}1\u{2069}\u{061C}\u{00AD}"),
+            Some("MyNAS1".to_owned())
+        );
+        assert_eq!(
+            sanitize_label("\u{200E}\u{200F}\u{200C}\u{200D}\u{2060}"),
+            None
+        );
     }
 }
