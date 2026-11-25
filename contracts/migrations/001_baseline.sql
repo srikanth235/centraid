@@ -1232,6 +1232,9 @@ CREATE TABLE message (
 -- Readers: the assistant's failure notes by reason; the child sides of `refusal` and `notice`.
 CREATE INDEX message_by_refusal ON message(refusal, thread_id) WHERE refusal IS NOT NULL;
 CREATE INDEX message_by_notice  ON message(notice, thread_id)  WHERE notice  IS NOT NULL;
+-- L5, A1: a chat holds at most one proposal waiting on a tap: a new message dismisses the one before it.
+-- Reader: `chat_proposal_waiting` and the dismissal `thread.save_turn` makes before it writes.
+CREATE UNIQUE INDEX message_one_proposal_waiting ON message(thread_id) WHERE outcome = 'proposed';
 CREATE TRIGGER message_is_not_born_settled BEFORE INSERT ON message
   WHEN new.outcome IN ('applied','dismissed','stale','failed')
   BEGIN SELECT RAISE(ABORT, 'a message is proposed before it is settled: it is not born applied, dismissed, stale or failed'); END;
@@ -1380,7 +1383,7 @@ CREATE TABLE locker_key (
 INSERT INTO entity_kind (code, linkable, may_be_top, may_be_named, may_be_unnamed) VALUES
   ('person',1,1,1,1), ('place',1,1,1,1), ('event',1,0,1,1), ('task',1,1,1,1), ('workout',1,1,1,1),
   ('touch',1,1,1,1), ('reading',0,1,0,1), ('note',1,1,1,0), ('document',1,1,1,1), ('photo',1,1,1,1),
-  ('account',1,1,1,1), ('txn',1,1,1,1), ('thread',0,1,1,1), ('locker_item',1,1,1,1),
+  ('account',1,1,1,1), ('txn',1,1,1,1), ('thread',0,1,1,0), ('locker_item',1,1,1,1),
   ('tag',0,1,1,1), ('category',0,1,1,1), ('workout_kind',0,1,1,1), ('touch_kind',0,1,1,1), ('relation',0,1,1,1),
   ('notebook',0,1,1,1), ('folder',0,1,1,1), ('album',0,1,1,1), ('list',0,1,1,1), ('project',0,1,1,1),
   ('section',0,0,1,1), ('area',0,1,1,1), ('calendar',0,1,1,1);

@@ -172,6 +172,9 @@ CREATE INDEX message_by_notice  ON message(notice, thread_id)  WHERE notice  IS 
 -- index message_by_refusal on message
 CREATE INDEX message_by_refusal ON message(refusal, thread_id) WHERE refusal IS NOT NULL;
 
+-- index message_one_proposal_waiting on message
+CREATE UNIQUE INDEX message_one_proposal_waiting ON message(thread_id) WHERE outcome = 'proposed';
+
 -- index note_asset_by_blob on note_asset
 CREATE INDEX note_asset_by_blob ON note_asset(blob);
 

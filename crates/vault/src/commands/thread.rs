@@ -6,10 +6,16 @@
 //! message ([#1135](https://github.com/srikanth235/centraid/issues/1135)). Nothing writes them but
 //! these commands, so a chat is backed up and indexed exactly as a note is.
 //!
-//! What the shared verbs already do is not written again: **deleting a chat is `entity.purge`**
-//! (a chat has no trash, R-CHAT-8, so `Kind::has_trash` is false for it and the purge needs no
-//! trashing first), and the thumbnails nothing rents then are collected in the same commit.
-//! A chat is retitled by `entity.retitle` like any entity (R-1146-0-3): this module has no rename.
+//! What the shared verbs already do is not written again (L5: a chat is an ordinary trashable
+//! entity): **a chat is trashed, restored and deleted forever by `entity.trash`, `entity.restore`
+//! and `entity.purge`**, and a purge removes its messages and attachments in the same commit and
+//! releases the thumbnails nothing rents then. A chat is retitled by `entity.retitle` like any
+//! entity: this module has no rename. A chat in the trash is out of every list and out of search,
+//! and nothing is saved into it until it is restored.
+//!
+//! A chat is not a link end, not a `[[title]]` target and takes no tag (`entity_kind.linkable` is
+//! 0): `link.add`, `edge.add` and `tag.add` refuse it with a sentence, and the database refuses it
+//! as well.
 //!
 //! ## A proposal has a life, and the vault keeps its end (#1088)
 //!
@@ -19,8 +25,16 @@
 //! its thread is reopened (R-1088-10); the vault stores only the outcome and the line the member
 //! was told. A `proposed` message nobody settled is dismissed by the next turn saved into its
 //! thread, as a new message dismisses the card in a live session, so a thread holds at most one
-//! and it is its last. The `message` table's two triggers hold the rest: a message is never born
-//! settled, and only a proposal settles, once.
+//! and it is its last (a unique index holds the one). The `message` table's two triggers hold the
+//! rest: a message is never born settled, and only a proposal settles, once.
+//!
+//! ## What the vault defines, and what a lookup says
+//!
+//! A refusal's reason and a notice are rows of `message_refusal` and `message_notice` (A1): this
+//! module names none of them, it asks the table. `message.outcome` is the one closed state machine
+//! and keeps its CHECK and triggers. The assistant's routing record is a JSON object the vault
+//! defines (A3): the command stamps `"v":1` on it, and a card list is a plain array with no
+//! version.
 //!
 //! ## One turn is one commit
 //!
@@ -56,18 +70,12 @@ use crate::error::{Result, VaultError};
 use crate::model::Kind;
 use crate::roster;
 
+/// How an answer may end: the outcomes a turn is saved with (a closed state machine, A1; the
+/// question is `sent` and a proposal settles later, by `thread.settle_proposal`).
 const OUTCOMES: [&str; 4] = ["answered", "stopped", "refused", "proposed"];
-const REFUSALS: [&str; 9] = [
-    "no_tool_fits",
-    "query_failed",
-    "unparsable",
-    "model_absent",
-    "model_failed",
-    "vision_absent",
-    "attachment_unsupported",
-    "attachment_unreadable",
-    "attachment_too_large",
-];
+
+/// The version the vault stamps on the assistant's routing record (A3).
+const RECORD_VERSION: i64 = 1;
 
 /// One card a message snapshots. `app` is the roster's.
 fn card_schema() -> Value {
@@ -121,8 +129,8 @@ fn answer_schema() -> Value {
       "properties": {
         "outcome": { "enum": OUTCOMES },
         "text": { "type": "string", "maxLength": 20_000 },
-        "refusal": { "enum": REFUSALS },
-        "notice": { "enum": ["doc_truncated"] },
+        "refusal": { "type": "string", "minLength": 1 },
+        "notice": { "type": "string", "minLength": 1 },
         "record_json": { "type": "string", "maxLength": 20_000 },
         "cards": { "type": "array", "maxItems": 50, "items": card_schema() }
       }
@@ -168,12 +176,14 @@ const SETTLE_SCHEMA: &str = r#"{
 const EMPTY_SCHEMA: &str =
     r#"{ "type": "object", "additionalProperties": false, "properties": {} }"#;
 
-fn is_thread(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<bool> {
-    Ok(find(ctx.connection(), id)?.is_some_and(|found| found.kind == Kind::Thread))
-}
-
-fn gone() -> Option<String> {
-    Some("This chat is gone.".to_owned())
+/// Why this id is no chat to write into, as a sentence: there is none, or it is in the trash.
+fn unusable(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Option<String>> {
+    Ok(match find(ctx.connection(), id)? {
+        Some(found) if found.kind == Kind::Thread => found
+            .deleted_at
+            .map(|_| "This chat is in the trash; restore it first.".to_owned()),
+        _ => Some("This chat is gone.".to_owned()),
+    })
 }
 
 fn str_of<'a>(value: &'a Value, key: &str) -> &'a str {
@@ -217,7 +227,7 @@ fn last_answer(ctx: &CommandCtx<'_, '_>, thread_id: &str) -> Result<Option<(i64,
 
 fn pre_thread_named(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     match ctx.optional_str("thread_id") {
-        Some(id) => Ok((!is_thread(ctx, id)?).then(gone).flatten()),
+        Some(id) => unusable(ctx, id),
         None => Ok(None),
     }
 }
@@ -240,6 +250,56 @@ fn pre_refusal(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         .then(|| "A refused turn names its reason, and no other does.".to_owned()))
 }
 
+/// A reason and a notice are rows of their lookups: an unknown one is refused with a sentence that
+/// quotes neither (the turn is sealed).
+fn pre_lookups(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let answer = &turn(ctx)["answer"];
+    for (key, table, sentence) in [
+        (
+            "refusal",
+            "message_refusal",
+            "That is not a reason a reply is refused for.",
+        ),
+        (
+            "notice",
+            "message_notice",
+            "That is not a notice a reply carries.",
+        ),
+    ] {
+        let Some(code) = answer.get(key).and_then(Value::as_str) else {
+            continue;
+        };
+        let known: bool = ctx.connection().query_row(
+            &format!("SELECT EXISTS (SELECT 1 FROM {table} WHERE code = ?1)"),
+            [code],
+            |row| row.get(0),
+        )?;
+        if !known {
+            return Ok(Some(sentence.to_owned()));
+        }
+    }
+    Ok(None)
+}
+
+/// The routing record is a JSON object, and the vault's own version is the only one it carries.
+fn pre_record(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let Some(text) = turn(ctx)["answer"]
+        .get("record_json")
+        .and_then(Value::as_str)
+    else {
+        return Ok(None);
+    };
+    let sentence = || Some("A turn's record is a JSON object of this vault's version.".to_owned());
+    Ok(match serde_json::from_str::<Value>(text) {
+        Ok(Value::Object(record)) => record
+            .get("v")
+            .is_some_and(|v| v.as_i64() != Some(RECORD_VERSION))
+            .then(sentence)
+            .flatten(),
+        _ => sentence(),
+    })
+}
+
 fn pre_title(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok((ctx.optional_str("thread_id").is_none()
         && title_of(str_of(&turn(ctx)["question"], "text")).is_empty())
@@ -250,8 +310,10 @@ fn pre_attachments(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     for attachment in attachments(ctx) {
         let form = str_of(&attachment, "form");
         let has = |key: &str| attachment.get(key).is_some();
+        // An image is its thumbnail and no vault item; a photo or a document is a vault item and
+        // no thumbnail (the table's CHECKs say the same).
         let names_itself = if form == "image" {
-            !has("entity_id")
+            has("thumbnail_data_uri") && !has("entity_id")
         } else {
             has("entity_id") && !has("thumbnail_data_uri")
         };
@@ -380,6 +442,17 @@ struct SaveTurnInput {
     turn: TurnInput,
 }
 
+/// The routing record as the vault stores it: the assistant's object with the vault's `"v":1`
+/// (A3). A precondition said it parses as an object.
+fn record_of(answer: &AnswerInput) -> Option<String> {
+    let text = answer.record_json.as_deref()?;
+    let Ok(Value::Object(mut record)) = serde_json::from_str::<Value>(text) else {
+        return None;
+    };
+    record.insert("v".to_owned(), json!(RECORD_VERSION));
+    Some(Value::Object(record).to_string())
+}
+
 fn insert_message(
     ctx: &CommandCtx<'_, '_>,
     thread_id: &str,
@@ -412,7 +485,7 @@ fn insert_message(
             outcome,
             answer.refusal,
             answer.notice,
-            answer.record_json,
+            record_of(answer),
             Value::Array(snapshot).to_string(),
             ctx.now,
         ],
@@ -533,8 +606,8 @@ fn save_turn(ctx: &CommandCtx<'_, '_>) -> Result<Value> {
 
 fn pre_settle(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let thread_id = ctx.required_str("thread_id")?;
-    if !is_thread(ctx, thread_id)? {
-        return Ok(gone());
+    if let Some(sentence) = unusable(ctx, thread_id)? {
+        return Ok(Some(sentence));
     }
     // ONLY THE LAST ANSWER CAN BE WAITING: `save_turn` dismisses the one before it.
     let asked = ctx.required_str("outcome")?;
@@ -610,6 +683,14 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 CommandCondition {
                     predicate: "a_refusal_names_its_reason",
                     check: pre_refusal,
+                },
+                CommandCondition {
+                    predicate: "a_reason_and_a_notice_are_lookup_rows",
+                    check: pre_lookups,
+                },
+                CommandCondition {
+                    predicate: "a_record_is_an_object_of_this_version",
+                    check: pre_record,
                 },
                 CommandCondition {
                     predicate: "a_new_chat_is_titled_by_words",

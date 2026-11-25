@@ -168,7 +168,15 @@ fn card_kind(entity: &str) -> Option<Kind> {
 }
 
 const THREAD_COLUMNS: &str = "e.id, e.title, t.scope, e.created_at, e.updated_at";
-const THREAD_FROM: &str = "FROM thread t JOIN entity e ON e.id = t.id";
+/// A chat in the trash is out of every read here (L5): it is the trash's to list and restore. Driven
+/// from `entity` so the list walks `entity_by_updated` (kind, live, newest) and sorts nothing.
+const THREAD_FROM: &str = "FROM entity e JOIN thread t ON t.id = e.id
+      WHERE e.kind = 'thread' AND e.deleted_at IS NULL";
+/// The list's statement, as the plan test reads it.
+pub const THREAD_LIST_SQL: &str = "SELECT e.id, e.title, t.scope, e.created_at, e.updated_at
+       FROM entity e JOIN thread t ON t.id = e.id
+      WHERE e.kind = 'thread' AND e.deleted_at IS NULL
+      ORDER BY e.updated_at DESC, e.id DESC LIMIT ?1";
 
 fn thread_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ThreadRow> {
     let updated_at: String = row.get(4)?;
@@ -230,15 +238,13 @@ fn cards_of(json: &str) -> Vec<StoredCard> {
 }
 
 impl Vault {
-    /// Every thread, newest activity first, at most `limit`.
+    /// Every chat that is not in the trash, newest activity first, at most `limit`.
     ///
     /// # Errors
     /// [`crate::error::VaultError`] when the vault itself is unreadable.
     pub fn chat_threads(&self, limit: usize) -> Result<Vec<ThreadRow>> {
         self.read(|connection| {
-            let mut statement = connection.prepare(&format!(
-                "SELECT {THREAD_COLUMNS} {THREAD_FROM} ORDER BY e.updated_at DESC, e.n DESC LIMIT ?1"
-            ))?;
+            let mut statement = connection.prepare(THREAD_LIST_SQL)?;
             let rows = statement
                 .query_map([i64::try_from(limit).unwrap_or(i64::MAX)], thread_row)?
                 .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -246,8 +252,9 @@ impl Vault {
         })
     }
 
-    /// The threads `ids` name, IN THE ORDER OF `ids` (the order a search ranked them). An id with no
-    /// thread is skipped: a thread deleted between the search and this read is not an error.
+    /// The chats `ids` name, IN THE ORDER OF `ids` (the order a search ranked them). An id with no
+    /// live chat is skipped: a chat deleted or trashed between the search and this read is not an
+    /// error.
     ///
     /// # Errors
     /// [`crate::error::VaultError`] when the vault itself is unreadable.
@@ -258,7 +265,7 @@ impl Vault {
         let mut rows = self.read(|connection| {
             let placeholders = vec!["?"; ids.len()].join(", ");
             let mut statement = connection.prepare(&format!(
-                "SELECT {THREAD_COLUMNS} {THREAD_FROM} WHERE e.id IN ({placeholders})"
+                "SELECT {THREAD_COLUMNS} {THREAD_FROM} AND e.id IN ({placeholders})"
             ))?;
             let rows = statement
                 .query_map(rusqlite::params_from_iter(ids), thread_row)?
@@ -289,7 +296,7 @@ impl Vault {
         })
     }
 
-    /// One thread and its messages, or `None` when there is no such thread.
+    /// One chat and its messages, or `None` when there is no such chat or it is in the trash.
     ///
     /// # Errors
     /// [`crate::error::VaultError`] when the vault itself is unreadable.
@@ -297,7 +304,7 @@ impl Vault {
         let found = self.read(|connection| {
             let thread = connection
                 .query_row(
-                    &format!("SELECT {THREAD_COLUMNS} {THREAD_FROM} WHERE e.id = ?1"),
+                    &format!("SELECT {THREAD_COLUMNS} {THREAD_FROM} AND e.id = ?1"),
                     [thread_id],
                     thread_row,
                 )

@@ -58,6 +58,7 @@ pub mod origin_cursor;
 pub mod reminder;
 pub mod sealed;
 pub mod tag;
+pub mod thread;
 pub mod vault;
 
 use std::collections::BTreeMap;
@@ -365,7 +366,7 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 11] = [
+        let modules: [fn() -> Vec<CommandDefinition>; 12] = [
             blob::definitions,
             container::definitions,
             edge::definitions,
@@ -376,6 +377,7 @@ impl Registry {
             note::definitions,
             reminder::definitions,
             tag::definitions,
+            thread::definitions,
             vault::definitions,
         ];
         for definitions in modules {

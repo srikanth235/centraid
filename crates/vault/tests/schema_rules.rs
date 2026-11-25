@@ -1339,3 +1339,127 @@ fn an_alert_row_is_a_key_in_a_timing_it_says() {
     ));
     w.takes(&row("floating", "2026-03-01T09:00"));
 }
+
+// ---------------------------------------------------------------------------------------------
+// Chat (L5, A1, A3): a chat is an ordinary entity; a message is a closed state machine
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn a_chat_needs_a_title_and_a_message_is_a_state_machine_with_lookup_reasons() {
+    let w = World::new("rules_chat");
+    // A chat's kind says it needs a title (the command says so in a sentence).
+    w.refuses(&format!(
+        "INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES ('{}', 'thread', '', '{AT}', '{AT}')",
+        id(200)
+    ));
+    let chat = w.entity(201, "thread", "Chat");
+    w.takes(&format!("INSERT INTO thread (id) VALUES ('{chat}')"));
+    let message = |ordinal: i64, role: &str, outcome: &str, cols: &str, vals: &str| {
+        format!(
+            "INSERT INTO message (thread_id, ordinal, role, text, outcome, created_at, updated_at{cols})
+             VALUES ('{chat}', {ordinal}, '{role}', 't', '{outcome}', '{AT}', '{AT}'{vals})"
+        )
+    };
+    w.takes(&message(0, "user", "sent", "", ""));
+    // The question is `sent` and only the question is; an answer is none of `sent`.
+    w.refuses(&message(1, "user", "answered", "", ""));
+    w.refuses(&message(1, "assistant", "sent", "", ""));
+    w.refuses(&message(1, "assistant", "bogus", "", ""));
+    // A refusal names a reason of the lookup and no other outcome does.
+    w.refuses(&message(1, "assistant", "refused", "", ""));
+    w.refuses(&message(1, "assistant", "answered", ", refusal", ", 'no_tool_fits'"));
+    w.refuses(&message(1, "assistant", "refused", ", refusal", ", 'no_such_reason'"));
+    w.takes(&message(1, "assistant", "refused", ", refusal", ", 'no_tool_fits'"));
+    // A notice is a row of its lookup and rides an assistant's message only.
+    w.refuses(&message(2, "assistant", "answered", ", notice", ", 'no_such_notice'"));
+    w.refuses(&message(2, "user", "sent", ", notice", ", 'doc_truncated'"));
+    w.takes(&message(2, "assistant", "answered", ", notice", ", 'doc_truncated'"));
+    // A lookup row a message uses is not taken away.
+    w.refuses("DELETE FROM message_refusal WHERE code = 'no_tool_fits'");
+    // The record is the vault's object and carries "v":1; the cards are an array and carry none.
+    for bad in ["[1]", "'x'", "'{\"a\":1}'", "'{\"v\":2}'", "'{\"v\":\"1\"}'", "'{bad'"] {
+        let bad = bad.trim_matches('\'');
+        w.refuses(&message(3, "assistant", "answered", ", record", &format!(", '{bad}'")));
+    }
+    w.refuses(&message(3, "user", "sent", ", record", ", '{\"v\":1}'"));
+    w.takes(&message(3, "assistant", "answered", ", record", ", '{\"v\":1,\"read\":[]}'"));
+    w.refuses(&message(4, "assistant", "answered", ", cards", ", '{}'"));
+    w.refuses(&message(4, "assistant", "answered", ", cards", ", 'nope'"));
+    w.takes(&message(4, "assistant", "answered", ", cards", ", '[{\"app\":\"notes\"}]'"));
+    // A message is never born settled, and a thread holds one proposal waiting.
+    for settled in ["applied", "dismissed", "stale", "failed"] {
+        w.refuses_with(&message(5, "assistant", settled, "", ""), "proposed before it is settled");
+    }
+    w.takes(&message(5, "assistant", "proposed", "", ""));
+    w.refuses(&message(6, "assistant", "proposed", "", ""));
+    // A proposal settles once; a told answer never changes.
+    let set = |ordinal: i64, to: &str| {
+        format!("UPDATE message SET outcome = '{to}' WHERE thread_id = '{chat}' AND ordinal = {ordinal}")
+    };
+    w.refuses_with(&set(2, "dismissed"), "only a proposal settles");
+    w.refuses_with(&set(5, "answered"), "settles as applied");
+    w.takes(&set(5, "stale"));
+    w.refuses_with(&set(5, "applied"), "only a proposal settles");
+    // With the first settled another may wait.
+    w.takes(&message(6, "assistant", "proposed", "", ""));
+    // The same ordinal is one message.
+    w.refuses(&message(6, "assistant", "answered", "", ""));
+    // Deleting the chat takes its messages.
+    w.takes(&format!("DELETE FROM entity WHERE id = '{chat}'"));
+    assert_eq!(
+        w.scratch
+            .vault
+            .read(|c| Ok(c.query_row("SELECT count(*) FROM message", [], |r| r.get::<_, i64>(0))?))
+            .unwrap(),
+        0
+    );
+}
+
+#[test]
+fn an_attachment_is_a_photo_a_document_or_an_image_and_a_purged_item_leaves_its_label() {
+    let w = World::new("rules_attachment");
+    let chat = w.entity(210, "thread", "Chat");
+    let photo = w.entity(211, "photo", "");
+    let doc = w.entity(212, "document", "d");
+    let hash = "ab".repeat(32);
+    w.takes(&format!(
+        "INSERT INTO thread (id) VALUES ('{chat}');
+         INSERT INTO blob (hash, size) VALUES ('{hash}', 4);
+         INSERT INTO message (thread_id, ordinal, role, text, outcome, created_at, updated_at)
+           VALUES ('{chat}', 0, 'user', 'q', 'sent', '{AT}', '{AT}');"
+    ));
+    let attach = |position: i64, form: &str, entity: &str, thumb: &str| {
+        format!(
+            "INSERT INTO message_attachment (thread_id, ordinal, position, form, label, entity_id, thumb)
+             VALUES ('{chat}', 0, {position}, '{form}', 'l', {entity}, {thumb})"
+        )
+    };
+    let quoted = |value: &str| format!("'{value}'");
+    // An image is its thumbnail and no vault item; a photo or a document holds no thumbnail.
+    w.refuses(&attach(0, "image", "NULL", "NULL"));
+    w.refuses(&attach(0, "image", &quoted(&photo), &quoted(&hash)));
+    w.refuses(&attach(0, "photo", "NULL", &quoted(&hash)));
+    w.refuses(&attach(0, "document", &quoted(&doc), &quoted(&hash)));
+    w.refuses(&attach(0, "video", &quoted(&doc), "NULL"));
+    w.refuses(&attach(0, "image", "NULL", &quoted(&"cd".repeat(32))));
+    w.refuses(&attach(-1, "photo", &quoted(&photo), "NULL"));
+    w.takes(&attach(0, "image", "NULL", &quoted(&hash)));
+    w.takes(&attach(1, "photo", &quoted(&photo), "NULL"));
+    w.takes(&attach(2, "document", &quoted(&doc), "NULL"));
+    w.refuses(&attach(2, "document", &quoted(&doc), "NULL"));
+    // A thumbnail is rented: the blob is not deleted from under it.
+    w.refuses(&format!("DELETE FROM blob WHERE hash = '{hash}'"));
+    // The item is purged and the label stays, pointing at nothing.
+    w.takes(&format!("DELETE FROM entity WHERE id = '{doc}'"));
+    assert_eq!(
+        w.scratch
+            .vault
+            .read(|c| Ok(c.query_row(
+                "SELECT count(*) FROM message_attachment WHERE form = 'document' AND label = 'l' AND entity_id IS NULL",
+                [],
+                |r| r.get::<_, i64>(0)
+            )?))
+            .unwrap(),
+        1
+    );
+}

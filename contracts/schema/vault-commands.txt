@@ -37,4 +37,7 @@ reminder.remove
 tag.add
 tag.color
 tag.remove
+thread.clear
+thread.save_turn
+thread.settle_proposal
 vault.rename
