@@ -146,11 +146,14 @@ fn a_migration_leaves_no_plaintext_copy_of_the_vault() {
         .commit(|tx| {
             tx.connection().execute(
                 "INSERT INTO entity (id, kind, title, created_at, updated_at)
-                 VALUES ('n1', 'note', 'quokka-title', '2026-03-01T09:00:00.000Z', '2026-03-01T09:00:00.000Z')",
+                 VALUES ('01900000-0000-7000-8000-000000000001', 'note', 'quokka-title', '2026-03-01T09:00:00.000Z', '2026-03-01T09:00:00.000Z')",
                 [],
             )?;
             tx.connection()
-                .execute("INSERT INTO note (id, body) VALUES ('n1', 'quokka-body')", [])?;
+                .execute(
+                "INSERT INTO note (id, body) VALUES ('01900000-0000-7000-8000-000000000001', 'quokka-body')",
+                [],
+            )?;
             Ok(())
         })
         .expect("a note");
@@ -166,7 +169,7 @@ fn a_migration_leaves_no_plaintext_copy_of_the_vault() {
             .to_string_lossy()
             .into_owned();
         assert!(!name.ends_with(".gz"), "a compressed copy: {name}");
-        if name.starts_with("vault.db") {
+        if name.starts_with("vault.db") || name.starts_with("vault.index.db") {
             continue;
         }
         others.push(name.clone());
@@ -222,7 +225,7 @@ fn open_of_a_damaged_vault_is_a_typed_error() {
 /// The v0 baseline schema digest at `user_version = 1` (matches `format::SCHEMA_DIGEST` while
 /// the ladder head is rung 1; once released and a rung 2 is appended, this climbs from rung 1).
 const RELEASE_99CC70D8F_SCHEMA_DIGEST: &str =
-    "3503c6f7788fb7059e49f212402e07a56d2a93a7d9eafa9a5f1bda3d2be0ba81";
+    "c1928f085372f73b9f0f360f3c07867e5fcfb2253cd81b9744d41d5a5bf6e9c0";
 
 #[test]
 fn a_vault_the_release_wrote_opens_on_this_code_and_keeps_what_it_held() {

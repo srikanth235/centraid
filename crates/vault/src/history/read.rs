@@ -133,7 +133,11 @@ struct Row {
     media_type: Option<String>,
 }
 
-const ROW: &str = "seq, at, cause, state, body, blob, media_type";
+const ROW: &str = "seq, at, cause, state, body,
+    (SELECT blob FROM revision_blob rb WHERE rb.entity_id = revision.entity_id
+        AND rb.seq = revision.seq AND rb.slot = 'document.blob'),
+    (SELECT media_type FROM revision_blob rb WHERE rb.entity_id = revision.entity_id
+        AND rb.seq = revision.seq AND rb.slot = 'document.blob')";
 
 fn row_of(row: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
     Ok(Row {

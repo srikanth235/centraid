@@ -68,7 +68,9 @@ fn the_ddl_fixture_is_not_vacuous() {
     for object in [
         "CREATE TABLE entity ",
         "CREATE TABLE edge ",
-        "CREATE VIRTUAL TABLE search ",
+        "CREATE TABLE entity_kind ",
+        "CREATE TABLE link ",
+        "CREATE TABLE mention ",
         "entity_kind_is_fixed",
         "edge_has_a_shape",
         "revision_is_history",
@@ -76,6 +78,10 @@ fn the_ddl_fixture_is_not_vacuous() {
         "CREATE TABLE locker_key ",
     ] {
         assert!(fixture.contains(object), "`{object}` is not in the fixture");
+    }
+    // The derived tables are the index file's own ladder (A15), never the vault's.
+    for derived in ["CREATE VIRTUAL TABLE search ", "CREATE TABLE alert ", "geo USING rtree"] {
+        assert!(!fixture.contains(derived), "`{derived}` is in the vault's fixture");
     }
 }
 

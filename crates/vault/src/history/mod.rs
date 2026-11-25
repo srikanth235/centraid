@@ -399,22 +399,40 @@ fn keep_as(
     let seq: i64 = connection
         .prepare_cached("SELECT COALESCE(MAX(seq), 0) + 1 FROM revision WHERE entity_id = ?1")?
         .query_row([id], |row| row.get(0))?;
+    // WHO MADE THE CHANGE (B4). `cause` stays a diagnostic and is no longer parsed for anything
+    // else. UNPLUGGED (#1214, K6/K9): a store's revision needs the origin it followed, which the
+    // commit does not carry yet; until the follow lane hands it over, a store's commit is written
+    // as the member's (no system is plugged, so none arises).
+    let actor = if cause.starts_with("assist.") {
+        "assistant"
+    } else {
+        "member"
+    };
     connection
         .prepare_cached(
-            "INSERT INTO revision (entity_id, seq, at, cause, state, body, blob, media_type, autosave)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO revision (entity_id, seq, at, actor, cause, shape, state, body, autosave)
+             VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?7, ?8)",
         )?
         .execute(rusqlite::params![
             id,
             seq,
             now,
+            actor,
             cause,
             canonical_json(&parsed)?,
             text(0),
-            text(1),
-            text(2),
             quiet,
         ])?;
+    // Every blob this version names is a `revision_blob` row (B3), never text in the state: a
+    // document's bytes are the slot `document.blob`, kept with their media type.
+    if let Some(hash) = text(1) {
+        connection
+            .prepare_cached(
+                "INSERT INTO revision_blob (entity_id, seq, slot, blob, media_type)
+                 VALUES (?1, ?2, 'document.blob', ?3, ?4)",
+            )?
+            .execute(rusqlite::params![id, seq, hash, text(2)])?;
+    }
     // The words this version replaced are findable, in the same commit that replaced them.
     crate::index::version_kept(connection, id, seq, &parsed, text(0))?;
     Ok(())
