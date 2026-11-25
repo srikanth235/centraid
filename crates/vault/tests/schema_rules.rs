@@ -650,6 +650,181 @@ fn an_origin_fills_the_kind_its_system_says_and_only_a_phone_store_retires_or_na
 }
 
 // ---------------------------------------------------------------------------------------------
+// K9: following. What the engine says of a store, the database refuses of any writer
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn a_source_is_of_a_kind_its_system_yields_and_names_a_device_only_where_its_system_does() {
+    let w = World::new("rules_sources");
+    let person = w.entity(30, "person", "Ada");
+    let event_home = w.entity(31, "calendar", "C");
+    let reading = w.entity(32, "reading", "");
+    w.takes(&format!(
+        "INSERT INTO origin (id, system, ref, label, device_id, created_at)
+         VALUES ('o-contacts', 'contacts', 'icloud', 'iCloud', 'phone-1', '{AT}'),
+                ('o-health', 'health', 'Health', 'Health', 'phone-1', '{AT}')"
+    ));
+    w.takes(&format!(
+        "INSERT INTO origin (id, system, ref, label, created_at, fills, fills_kind)
+         VALUES ('o-bank', 'statement', 'bank', 'Bank', '{AT}', '{}', 'account')",
+        w.entity(33, "account", "A")
+    ));
+    let source = |id: &str, origin: &str, system: &str, device: &str, entity: &str, kind: &str| {
+        format!(
+            "INSERT INTO source (id, origin_id, system, external_id, device_id, entity_id, entity_kind, stated, seen_at)
+             VALUES ('{id}', '{origin}', '{system}', '{id}', {device}, '{entity}', '{kind}', '{{}}', '{AT}')"
+        )
+    };
+    // `source_shape` says which kinds a system yields: contacts yield a person, not an event.
+    w.refuses(&source(
+        "s1",
+        "o-contacts",
+        "contacts",
+        "'phone-1'",
+        &event_home,
+        "calendar",
+    ));
+    w.refuses(&source(
+        "s2",
+        "o-contacts",
+        "contacts",
+        "'phone-1'",
+        &reading,
+        "reading",
+    ));
+    w.takes(&source(
+        "s3",
+        "o-contacts",
+        "contacts",
+        "'phone-1'",
+        &person,
+        "person",
+    ));
+    // `health` yields a reading (and a workout): both rows are in the shape table.
+    w.takes(&source(
+        "s4",
+        "o-health",
+        "health",
+        "'phone-1'",
+        &reading,
+        "reading",
+    ));
+    // A source's system is its origin's.
+    w.refuses(&source(
+        "s5",
+        "o-health",
+        "contacts",
+        "'phone-1'",
+        &person,
+        "person",
+    ));
+    // Only a system that names a device may name one on a source.
+    let txn = w.entity(34, "txn", "T");
+    w.refuses(&source(
+        "s6",
+        "o-bank",
+        "statement",
+        "'phone-1'",
+        &txn,
+        "txn",
+    ));
+    w.takes(&source("s6", "o-bank", "statement", "NULL", &txn, "txn"));
+    // A record is one source of an origin: the key is the record's id and the install.
+    w.refuses(&source(
+        "s3",
+        "o-contacts",
+        "contacts",
+        "'phone-1'",
+        &person,
+        "person",
+    ));
+}
+
+#[test]
+fn a_cursor_is_one_installs_and_a_retired_origin_holds_none() {
+    let w = World::new("rules_cursors");
+    let origin = |id: &str, system: &str, extra_columns: &str, extra_values: &str| {
+        format!(
+            "INSERT INTO origin (id, system, ref, label, created_at {extra_columns})
+             VALUES ('{id}', '{system}', '{id}', 'l', '{AT}' {extra_values})"
+        )
+    };
+    // A cursor without the install that read it, or on a store that names no device.
+    w.refuses(&origin("c1", "health", ", cursor", ", 'token'"));
+    w.refuses(&origin("c2", "statement", ", cursor", ", 'token'"));
+    w.takes(&origin(
+        "c3",
+        "health",
+        ", cursor, device_id",
+        ", 'token', 'phone-1'",
+    ));
+    // A retired origin keeps its row but not its position.
+    w.refuses(&origin(
+        "c4",
+        "health",
+        ", cursor, device_id, retired_at",
+        &format!(", 'token', 'phone-1', '{AT}'"),
+    ));
+    w.takes(&origin(
+        "c5",
+        "health",
+        ", device_id, retired_at",
+        &format!(", 'phone-1', '{AT}'"),
+    ));
+    w.refuses("UPDATE origin SET cursor = 'token' WHERE id = 'c5'");
+    w.takes(&format!(
+        "UPDATE origin SET retired_at = '{AT}', cursor = NULL WHERE id = 'c3'"
+    ));
+    w.refuses("UPDATE origin SET cursor = 'token' WHERE id = 'c3'");
+    w.takes("UPDATE origin SET retired_at = NULL, cursor = 'token' WHERE id = 'c3'");
+}
+
+#[test]
+fn the_owner_is_nobodys_record_and_a_purged_rows_source_never_takes_a_row_again() {
+    let w = World::new("rules_owner_tombstone");
+    let owner = w
+        .scratch
+        .vault
+        .self_id()
+        .expect("a read")
+        .expect("an owner");
+    let ada = w.entity(40, "person", "Ada");
+    let grace = w.entity(41, "person", "Grace");
+    w.takes(&format!(
+        "INSERT INTO origin (id, system, ref, label, device_id, created_at)
+         VALUES ('o', 'contacts', 'icloud', 'iCloud', 'phone-1', '{AT}')"
+    ));
+    let source = |id: &str, entity: &str| {
+        format!(
+            "INSERT INTO source (id, origin_id, system, external_id, device_id, entity_id, entity_kind, stated, seen_at)
+             VALUES ('{id}', 'o', 'contacts', '{id}', 'phone-1', {entity}, 'person', '{{}}', '{AT}')"
+        )
+    };
+    w.refuses_with(
+        &source("s0", &format!("'{owner}'")),
+        "never names the vault's owner",
+    );
+    w.takes(&source("s1", &format!("'{ada}'")));
+    w.refuses_with(
+        &format!("UPDATE source SET entity_id = '{owner}' WHERE id = 's1'"),
+        "never names the vault's owner",
+    );
+    // Purging the row leaves the source behind with no row: a tombstone. It never takes one again.
+    w.takes(&format!("DELETE FROM entity WHERE id = '{ada}'"));
+    w.takes("UPDATE source SET stated = '{\"title\":\"Ada\"}' WHERE id = 's1'");
+    w.refuses_with(
+        &format!("UPDATE source SET entity_id = '{grace}', entity_kind = 'person' WHERE id = 's1'"),
+        "never takes a row again",
+    );
+    // A source that still has a row is another matter: a merge moves it to another row.
+    w.takes(&source("s2", &format!("'{grace}'")));
+    let alan = w.entity(42, "person", "Alan");
+    w.takes(&format!(
+        "UPDATE source SET entity_id = '{alan}' WHERE id = 's2'"
+    ));
+}
+
+// ---------------------------------------------------------------------------------------------
 // E3, F1, I2: money, readings and Locker fields are held by their own rules
 // ---------------------------------------------------------------------------------------------
 

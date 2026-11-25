@@ -13,11 +13,17 @@
 //! [`advance`] before it does anything else, so the records and the cursor are one commit: a batch
 //! the vault refuses leaves the cursor where it was. `follow.advance_cursor` moves a cursor that
 //! no record rides with (an asset with nothing to bring in, the end of a page).
+//!
+//! **What the file holds about a cursor, the database refuses too** (`origin`'s checks and key): only
+//! an origin that names a device holds one, a retired origin holds none, and only a system that
+//! names a device may (the key from `origin.bound` to `origin_system.on_device`). The commands
+//! say the same in a sentence.
 
 use rusqlite::{Connection, OptionalExtension};
 
 use super::CommandCtx;
-use crate::error::Result;
+use super::follow::system_row;
+use crate::error::{Result, VaultError};
 
 /// The camera roll's one origin: its `ref` and its label.
 pub const CAMERA_ROLL_REF: &str = "Camera roll";
@@ -65,6 +71,26 @@ pub fn advance(
     cursor: &str,
 ) -> Result<()> {
     let connection = ctx.connection();
+    let invalid = |name: &str, detail: &str| VaultError::InvalidInput {
+        name: name.to_owned(),
+        detail: detail.to_owned(),
+    };
+    if device.trim().is_empty() {
+        return Err(invalid(
+            "device_id",
+            "a cursor is the word of the install that read it",
+        ));
+    }
+    match system_row(connection, system)? {
+        None => return Err(invalid("system", "that is not a store this vault follows")),
+        Some(row) if !row.on_device => {
+            return Err(invalid(
+                "system",
+                "a cursor is a phone store's, with the install that read it",
+            ));
+        }
+        Some(_) => {}
+    }
     // A RETIRED ORIGIN HOLDS NO CURSOR: Stop cleared it, and a stray batch still in flight must not
     // write one back, or the store followed again would resume from a position nobody read to.
     let retired: bool = connection
@@ -90,6 +116,21 @@ pub fn advance(
             rusqlite::params![ctx.next_id(), system, reference, device, cursor, ctx.now],
         )?;
     }
+    Ok(())
+}
+
+/// Move the cursor of the origin `origin` to `cursor`, in the commit that brings in the records it
+/// covers. The origin's device is already the install that read (a pass names it when it finds or
+/// makes the origin).
+///
+/// # Errors
+///
+/// A write the file refuses (an origin with no device holds no cursor).
+pub(crate) fn move_to(connection: &rusqlite::Connection, origin: &str, cursor: &str) -> Result<()> {
+    connection.execute(
+        "UPDATE origin SET cursor = ?2 WHERE id = ?1",
+        [origin, cursor],
+    )?;
     Ok(())
 }
 
@@ -120,7 +161,7 @@ pub(crate) const SCHEMA: &str = r#"{
   "required": ["system", "ref", "device_id", "cursor"],
   "additionalProperties": false,
   "properties": {
-    "system": { "type": "string", "enum": ["camera_roll", "health"] },
+    "system": { "type": "string", "minLength": 1 },
     "ref": { "type": "string", "minLength": 1 },
     "device_id": { "type": "string", "minLength": 1 },
     "cursor": { "type": "string", "minLength": 1, "maxLength": 4096 }

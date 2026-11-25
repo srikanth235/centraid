@@ -824,6 +824,9 @@ CREATE TABLE origin (
   UNIQUE (system, ref),
   UNIQUE (id, system),
   CHECK ((fills IS NULL) = (fills_kind IS NULL)),
+  -- K9: a cursor is the word of the install that read (`device_id`), and a retired origin holds none.
+  CHECK (cursor IS NULL OR device_id IS NOT NULL),
+  CHECK (cursor IS NULL OR retired_at IS NULL),
   FOREIGN KEY (system, fills_kind) REFERENCES origin_system(code, fills_kind) ON DELETE NO ACTION,
   FOREIGN KEY (system, retired)    REFERENCES origin_system(code, can_retire) ON DELETE NO ACTION,
   FOREIGN KEY (system, bound)      REFERENCES origin_system(code, on_device)  ON DELETE NO ACTION,
@@ -1318,6 +1321,16 @@ CREATE TRIGGER revision_blob_is_history BEFORE UPDATE ON revision_blob
 CREATE TRIGGER revision_is_history
   BEFORE UPDATE OF entity_id, seq, at, actor, origin_id, cause, shape, state, body, autosave ON revision
   BEGIN SELECT RAISE(ABORT, 'a revision is history'); END;
+
+-- trigger source_never_moves_to_the_owner on source
+CREATE TRIGGER source_never_moves_to_the_owner BEFORE UPDATE OF entity_id ON source
+  WHEN new.entity_id IS NOT NULL AND new.entity_id IS (SELECT self_id FROM vault)
+  BEGIN SELECT RAISE(ABORT, 'a source never names the vault''s owner'); END;
+
+-- trigger source_never_names_the_owner on source
+CREATE TRIGGER source_never_names_the_owner BEFORE INSERT ON source
+  WHEN new.entity_id IS NOT NULL AND new.entity_id IS (SELECT self_id FROM vault)
+  BEGIN SELECT RAISE(ABORT, 'a source never names the vault''s owner'); END;
 
 -- trigger source_tombstone_is_final on source
 CREATE TRIGGER source_tombstone_is_final BEFORE UPDATE OF entity_id ON source

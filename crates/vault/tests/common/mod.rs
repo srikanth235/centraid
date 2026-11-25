@@ -7,6 +7,7 @@
 #![allow(dead_code)]
 
 pub mod edge_shapes;
+pub mod follow;
 pub mod index;
 pub mod world;
 

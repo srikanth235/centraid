@@ -1,20 +1,36 @@
 //! The per-system follow maps (`SYSTEMS`) and their defaults/shape callbacks.
 //!
-//! UNPLUGGED (#1214, checkpoint 1, `crates/vault/UNPLUGGED.md`): every system's map belongs to the
-//! app lane that owns its kind (a map names the kind's columns, its children and its homes, all of
-//! which moved), so the table is empty until each lane re-plugs its own. The engine in `merge.rs`
-//! and `commands.rs` is the kernel's and stays; the removed maps are in this file's history at
-//! `40b18d2c`.
+//! **Registering a system's map is one step: a row in [`SYSTEMS`].** The command (`follow.<…>`),
+//! its schema and its preconditions are built from the rows; the engine in `merge.rs` reads what a
+//! system fills, whether it retires, whether it names a device and which kinds it yields from
+//! `origin_system` and `source_shape`, so a map says only which fields its kind has and how a
+//! record reads.
+//!
+//! The table is empty until each app lane re-plugs its own map (a map names the kind's columns,
+//! its children and its defaults, all of which moved with the v0 schema); the removed maps are in
+//! this file's history at `40b18d2c` and the engine is proved with maps of the tests' own
+//! (`tests/follow_*.rs`).
 
-use serde_json::Value as Json;
+use serde_json::{Map, Value as Json};
 
 use super::merge::same;
-use super::{Child, SystemMap};
+use super::{Child, Maps, SystemMap};
 
 /// The name a system gives a record: `stated.title`, kept in a column of its own so a read of it
 /// parses no JSON.
 pub(super) fn stated_title(stated: &Json) -> Option<&str> {
     stated.get("title").and_then(Json::as_str)
+}
+
+/// Put the instants a record states, the fields named, in the clock's one form whatever the phone
+/// spelled, so what the row holds and what the source stated stay equal: the helper a map's
+/// `shape` calls for each field it holds as an instant.
+pub fn canonical_instants(fields: &mut Map<String, Json>, names: &[&str]) {
+    for name in names {
+        if let Some(Json::String(text)) = fields.get_mut(*name) {
+            *text = crate::time::temporal::canonical(text);
+        }
+    }
 }
 
 impl SystemMap {
@@ -39,5 +55,12 @@ impl SystemMap {
     }
 }
 
-/// The systems the vault follows: none plugged in yet (see the module comment).
+/// The maps the vault follows: none plugged in yet (see the module comment).
 pub const SYSTEMS: &[SystemMap] = &[];
+
+/// The product's maps, [`SYSTEMS`], as the type the follow commands are built from.
+pub struct Systems;
+
+impl Maps for Systems {
+    const MAPS: &'static [SystemMap] = SYSTEMS;
+}
