@@ -54,10 +54,9 @@ and make it pass. Tests of removed behaviour are deleted, not ported.
 
 | Module | Owner | Why it cannot compile or run yet |
 |---|---|---|
-| `document`, `document_portable`, `photo`, `photo_portable`, `place` | docs/photos lane | folder is the home; photo lat/lon, motion, no `blob UNIQUE`; no place from coordinates |
 | `thread` (chat) | chat lane | chats are ordinary trashable entities (L5); refusals/notices are lookups |
 | `vault_export` | export | reads every kind |
-| `locker` is **compiled, not registered** | locker lane | its SQL is the old Locker (memo, alias, address tables); its constants are read by `custody/` and `history/read.rs` |
+| `task_counts.rs` (out of `lib.rs`) | tasks lane | read flag edges |
 
 ## Kernel code that is a stub or a minimal patch (compiled; each lane finishes its own)
 
@@ -77,8 +76,6 @@ and moves it back.
 - **K5 graph, also**: `edge_walks` (the `edge_order` plan, moved out of `index_walks`; its fixture writes the old ids)
 - **people parts of `lane_follow_*`** (contacts' points, owner, doubt, return, tombstones) are ported to `tests/lane_follow_people.rs`; what stays in those files is the other lanes'
 - **K12 commitments and generated pages**: `commitments`, `stored_rules`, `ontology_page`, `ontology_widen`
-- **app lane: documents and photos**: `docs_photos`, `document_portable`, `photo_portable`, `store_health`, `lane_follow_stated` (a followed document), `lane_follow_gaps` (a followed file claims its bytes in its command), `lane_origin_cursor` (`photo.add`'s `roll_cursor` and `roll_device`; the engine's own cursor tests are `tests/origin_cursor.rs`), `arrival` was deleted (below)
-- **app lane: locker**: `locker_clock`, `locker_commands`, `locker_plaintext_gate`, `locker_wall`
 - **app lane: chat (thread)**: `chat`
 - **export (vault_export, every kind)**: `vault_export`, `unusual_input` (every app's export of unusual text; none of it the kernel)
 - **deleted by K9, with the reason**: `arrival` (an arrival is two columns of `entity` and makes no origin or source; the both-or-neither rule is `tests/schema_rules.rs` `a_trashed_by_names_a_trash_and_an_arrival_has_both_its_words`, and each lane proves the arrival its own command takes). The old `follow_*` and `origin_cursor` files were rewritten as engine tests (`tests/follow_retire.rs`, `follow_stated.rs`, `follow_items.rs`, `follow_gaps.rs`, `origin_cursor.rs`, `follow_totals.rs`, over the maps in `tests/common/follow.rs`); what they said of a named app kind stays aside as `lane_follow_*` and `lane_origin_cursor`, listed under its lane, for the lane to port or delete where an engine file already holds the case
@@ -87,7 +84,7 @@ and moves it back.
   kernel's.
 
 Unit tests inside `src/` that read the old model were fixed where they were cheap (ids are minted
-UUIDv7: `src/test_ids.rs`; `commands/locker/mod.rs`'s type list now reads `locker_type`).
+UUIDv7: `src/test_ids.rs`; `commands/locker/schema.rs`'s type list is held equal to `locker_type`).
 `tests/format_identity.rs` carries the new schema digest as the "release" digest: no release has
 shipped, so the baseline was replaced in place (#1214, Scope).
 

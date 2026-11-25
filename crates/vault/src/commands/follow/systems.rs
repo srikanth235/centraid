@@ -244,6 +244,9 @@ pub const SYSTEMS: &[SystemMap] = &[
     // The health store: a workout and a reading (the system yields both, so a map for each).
     workout::MAP,
     reading::MAP,
+    // The phone's picked folders and its camera roll (Docs and Photos).
+    crate::commands::document::FILES,
+    crate::commands::photo::ROLL,
 ];
 
 /// The product's maps, [`SYSTEMS`], as the type the follow commands are built from.

@@ -48,6 +48,8 @@ pub mod blob;
 pub mod contact_point;
 pub mod container;
 pub mod csv;
+pub mod document;
+pub mod document_portable;
 pub mod edge;
 pub mod entity;
 pub mod event;
@@ -66,6 +68,9 @@ pub mod origin_cursor;
 pub mod person;
 pub mod person_date;
 pub mod person_portable;
+pub mod photo;
+pub mod photo_portable;
+pub mod place;
 pub mod reading;
 pub mod reminder;
 pub mod rule;
@@ -384,10 +389,12 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 27] = [
+        let modules: &[fn() -> Vec<CommandDefinition>] = &[
             blob::definitions,
             contact_point::definitions,
             container::definitions,
+            document::definitions,
+            document_portable::definitions,
             edge::definitions,
             entity::definitions,
             event::definitions,
@@ -397,11 +404,15 @@ impl Registry {
             health_portable::definitions,
             history::definitions,
             measurement::definitions,
+            locker::definitions,
             money::definitions,
             note::definitions,
             person::definitions,
             reading::definitions,
             person_date::definitions,
+            photo::definitions,
+            photo_portable::definitions,
+            place::definitions,
             reminder::definitions,
             rule::definitions,
             tag::definitions,
@@ -413,7 +424,7 @@ impl Registry {
             vault::definitions,
             workout::definitions,
         ];
-        for definitions in modules {
+        for definitions in modules.iter().copied() {
             for definition in definitions() {
                 registry.register(definition)?;
             }

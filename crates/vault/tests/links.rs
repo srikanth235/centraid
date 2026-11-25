@@ -202,8 +202,8 @@ fn the_picker_lists_one_kind_by_typed_term_bounded_and_offers_nothing_that_is_no
     assert!(pick("reading", "", 10).is_empty(), "a reading is no end");
     assert!(pick("no_such_kind", "", 10).is_empty());
     // An item with no title to pick it by is not offered.
-    w.bare(Kind::Place, "", None);
-    assert!(pick("place", "", 10).is_empty());
+    w.bare(Kind::Photo, "", None);
+    assert!(pick("photo", "", 10).is_empty());
     // The owner leads the people, whatever the order of names.
     w.person("Aaron");
     let people = pick("person", "", 10);

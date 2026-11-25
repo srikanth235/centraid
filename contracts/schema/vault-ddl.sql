@@ -918,7 +918,8 @@ CREATE TABLE photo (
   id          TEXT PRIMARY KEY,
   kind        TEXT GENERATED ALWAYS AS ('photo') VIRTUAL,
   blob        TEXT NOT NULL REFERENCES blob(hash) ON DELETE NO ACTION,
-  media_type  TEXT NOT NULL CHECK (length(trim(media_type)) > 0),
+  -- Sound is kept in Docs: Photos holds pictures, film and scans.
+  media_type  TEXT NOT NULL CHECK (length(trim(media_type)) > 0 AND lower(media_type) NOT GLOB 'audio/*'),
   form        TEXT NOT NULL REFERENCES photo_form(code) ON DELETE NO ACTION,   -- A1
   taken_at    TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', taken_at) IS taken_at),
   offset_min  INTEGER CHECK (offset_min IS NULL OR offset_min BETWEEN -1080 AND 1080),
@@ -1337,6 +1338,19 @@ CREATE TRIGGER message_outcome_settles_once BEFORE UPDATE OF outcome ON message
      WHERE old.outcome <> 'proposed';
     SELECT RAISE(ABORT, 'a proposal settles as applied, dismissed, stale or failed')
      WHERE new.outcome NOT IN ('applied','dismissed','stale','failed');
+  END;
+
+-- trigger photo_lineage_is_acyclic on photo
+CREATE TRIGGER photo_lineage_is_acyclic BEFORE UPDATE OF edited_from ON photo
+  WHEN new.edited_from IS NOT NULL
+  BEGIN
+    SELECT RAISE(ABORT, 'that photograph is already an edit of this one: lineage has no loops')
+     WHERE EXISTS (
+       WITH RECURSIVE ancestors(id) AS (
+         SELECT new.edited_from
+         UNION
+         SELECT p.edited_from FROM photo p JOIN ancestors a ON p.id = a.id WHERE p.edited_from IS NOT NULL)
+       SELECT 1 FROM ancestors WHERE id = new.id);
   END;
 
 -- trigger reminder_needs_a_due on reminder

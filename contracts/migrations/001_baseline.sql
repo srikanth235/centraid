@@ -37,7 +37,7 @@
 -- A1: every kind of entity, and what the kind lets a row do.
 --   linkable      the kind may be an end of a hand-made `link` and the target of a `[[title]]` (F1: a reading is neither).
 --   may_be_top    a row of the kind may sit at the top level; 0 means it must have a home (A19: an event needs a calendar, a section a project).
---   may_be_unnamed  a row of the kind may have an empty (or blank) title; 0 means it needs one (K11: a note). A kind starts at 1 and
+--   may_be_unnamed  a row of the kind may have an empty (or blank) title; 0 means it needs one (K11: a note; a document, a place, a folder and an album the same). A kind starts at 1 and
 --                 its app lane sets 0 when its command says the kind needs a title.
 --   may_be_named  a row of the kind may carry a non-empty title; 0 means the title must be empty (F1: a reading's is empty, the screen formats the figure).
 CREATE TABLE entity_kind (
@@ -1065,7 +1065,8 @@ CREATE TABLE photo (
   id          TEXT PRIMARY KEY,
   kind        TEXT GENERATED ALWAYS AS ('photo') VIRTUAL,
   blob        TEXT NOT NULL REFERENCES blob(hash) ON DELETE NO ACTION,
-  media_type  TEXT NOT NULL CHECK (length(trim(media_type)) > 0),
+  -- Sound is kept in Docs: Photos holds pictures, film and scans.
+  media_type  TEXT NOT NULL CHECK (length(trim(media_type)) > 0 AND lower(media_type) NOT GLOB 'audio/*'),
   form        TEXT NOT NULL REFERENCES photo_form(code) ON DELETE NO ACTION,   -- A1
   taken_at    TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', taken_at) IS taken_at),
   offset_min  INTEGER CHECK (offset_min IS NULL OR offset_min BETWEEN -1080 AND 1080),
@@ -1096,6 +1097,19 @@ CREATE INDEX photo_by_motion      ON photo(motion_blob) WHERE motion_blob IS NOT
 CREATE INDEX photo_by_place       ON photo(place_id) WHERE place_id IS NOT NULL;
 CREATE INDEX photo_by_edited_from ON photo(edited_from) WHERE edited_from IS NOT NULL;
 CREATE INDEX photo_by_burst       ON photo(burst) WHERE burst IS NOT NULL;
+-- A photograph is never an edit of its own edit: lineage has no loops, as a home has none
+-- (`entity_home_is_acyclic`). A new row cannot close a loop (nothing names it yet).
+CREATE TRIGGER photo_lineage_is_acyclic BEFORE UPDATE OF edited_from ON photo
+  WHEN new.edited_from IS NOT NULL
+  BEGIN
+    SELECT RAISE(ABORT, 'that photograph is already an edit of this one: lineage has no loops')
+     WHERE EXISTS (
+       WITH RECURSIVE ancestors(id) AS (
+         SELECT new.edited_from
+         UNION
+         SELECT p.edited_from FROM photo p JOIN ancestors a ON p.id = a.id WHERE p.edited_from IS NOT NULL)
+       SELECT 1 FROM ancestors WHERE id = new.id);
+  END;
 
 -- E4, E5: an account; `type` is a lookup. `currency` is fixed once the account has lines (below).
 CREATE TABLE account (
@@ -1418,11 +1432,11 @@ CREATE TABLE locker_key (
 -- ---------------------------------------------------------------------------------------------
 
 INSERT INTO entity_kind (code, linkable, may_be_top, may_be_named, may_be_unnamed) VALUES
-  ('person',1,1,1,0), ('place',1,1,1,1), ('event',1,0,1,1), ('task',1,1,1,0), ('workout',1,1,1,1),
-  ('touch',1,1,1,1), ('reading',0,1,0,1), ('note',1,1,1,0), ('document',1,1,1,1), ('photo',1,1,1,1),
+  ('person',1,1,1,0), ('place',1,1,1,0), ('event',1,0,1,1), ('task',1,1,1,0), ('workout',1,1,1,1),
+  ('touch',1,1,1,1), ('reading',0,1,0,1), ('note',1,1,1,0), ('document',1,1,1,0), ('photo',1,1,1,1),
   ('account',1,1,1,1), ('txn',1,1,1,1), ('thread',0,1,1,1), ('locker_item',1,1,1,1),
   ('tag',0,1,1,1), ('category',0,1,1,1), ('workout_kind',0,1,1,1), ('touch_kind',0,1,1,1), ('relation',0,1,1,1),
-  ('notebook',0,1,1,1), ('folder',0,1,1,1), ('album',0,1,1,1), ('list',0,1,1,1), ('project',0,1,1,1),
+  ('notebook',0,1,1,1), ('folder',0,1,1,0), ('album',0,1,1,0), ('list',0,1,1,1), ('project',0,1,1,1),
   ('section',0,0,1,1), ('area',0,1,1,1), ('calendar',0,1,1,1);
 
 -- A19, C1, C2: where each kind may sit. A concept's parent is of its own kind.
