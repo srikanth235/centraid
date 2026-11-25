@@ -55,8 +55,9 @@ impl SystemMap {
     }
 }
 
-/// The maps the vault follows: none plugged in yet (see the module comment).
-pub const SYSTEMS: &[SystemMap] = &[];
+/// The maps the vault follows, one per app lane that has plugged its own in: the phone's contacts
+/// (People).
+pub const SYSTEMS: &[SystemMap] = &[crate::commands::person::CONTACTS];
 
 /// The product's maps, [`SYSTEMS`], as the type the follow commands are built from.
 pub struct Systems;

@@ -9,6 +9,11 @@
 //! The follower of the phone's contacts keeps a person's points in step through
 //! the same rows: [`read`] and [`merge`] are its `points` field, so a point the
 //! member added or took away is not undone by the next read of the address book.
+//!
+//! What kinds of point there are is the `contact_point_kind` lookup, read when a point is saved;
+//! no list of them is kept here. The member adds, edits, prefers and reorders points, and
+//! [`people_with`] finds who is reached at a number or an address (what a guest's address, an
+//! import and a merge ask).
 
 use std::collections::BTreeMap;
 
@@ -252,6 +257,14 @@ fn pre_save(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         return Ok(Some(sentence));
     }
     let (kind, value) = (ctx.required_str("kind")?, ctx.required_str("value")?);
+    let known: bool = ctx.connection().query_row(
+        "SELECT EXISTS (SELECT 1 FROM contact_point_kind WHERE code = ?1)",
+        [kind],
+        |row| row.get(0),
+    )?;
+    if !known {
+        return Ok(Some(format!("“{kind}” is not a way to reach someone")));
+    }
     let key = reach_key(kind, value);
     if let Some(sentence) = invalid(kind, &key) {
         return Ok(Some(sentence.to_owned()));
@@ -302,31 +315,40 @@ fn save(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let (kind, value) = (input.kind.as_str(), input.value.trim());
     let key = reach_key(kind, value);
     let label = input.label.as_deref().filter(|l| !l.trim().is_empty());
-    let preferred = input.preferred.unwrap_or(false);
+    // An edit that does not say keeps the point as preferred or not as it was.
+    let preferred = input.preferred;
     // An edit names the point it changes (the precondition has seen it is this
     // person's); anything else is a new one.
     let point = input.point_id.as_deref();
     let id = point.map_or_else(|| ctx.next_id(), str::to_owned);
-    if preferred {
+    if preferred == Some(true) {
         connection.execute(
             "UPDATE contact_point SET preferred = 0 WHERE person_id = ?1 AND kind = ?2 AND id <> ?3",
             [person, kind, &id],
         )?;
     }
     if point.is_some() {
+        // Another kind than the point had: it is no longer preferred among the first kind's.
         connection.execute(
-            "UPDATE contact_point SET kind = ?2, value = ?3, normalized = ?4, label = ?5, preferred = ?6
+            "UPDATE contact_point SET preferred = CASE WHEN kind <> ?2 THEN 0 ELSE preferred END
               WHERE id = ?1",
-            rusqlite::params![id, kind, value, key, label, i64::from(preferred)],
+            [id.as_str(), kind],
+        )?;
+        connection.execute(
+            "UPDATE contact_point SET kind = ?2, value = ?3, normalized = ?4, label = ?5,
+                    preferred = COALESCE(?6, preferred)
+              WHERE id = ?1",
+            rusqlite::params![id, kind, value, key, label, preferred.map(i64::from)],
         )?;
     } else {
         connection.execute(
             "INSERT INTO contact_point (id, person_id, kind, value, normalized, label, preferred, position)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7,
                      (SELECT COALESCE(MAX(position), 0) + 1 FROM contact_point WHERE person_id = ?2))",
-            rusqlite::params![id, person, kind, value, key, label, i64::from(preferred)],
+            rusqlite::params![id, person, kind, value, key, label, i64::from(preferred.unwrap_or(false))],
         )?;
     }
+    ctx.touch(person)?;
     Ok(json!({ "point_id": id }))
 }
 
@@ -355,6 +377,116 @@ fn remove(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         "DELETE FROM contact_point WHERE id = ?1",
         [input.point_id.as_str()],
     )?;
+    ctx.touch(&person)?;
+    Ok(json!({ "id": person }))
+}
+
+/// The people reached at this number, address or handle (spellings folded by [`reach_key`]), the
+/// ones in the trash left out, in the order they were made: what a guest's address, an import and
+/// a merge ask.
+///
+/// # Errors
+/// SQLite's refusal.
+pub fn people_with(connection: &Connection, kind: &str, value: &str) -> Result<Vec<String>> {
+    let mut statement = connection.prepare_cached(
+        "SELECT c.person_id FROM contact_point c JOIN entity e ON e.id = c.person_id
+          WHERE c.kind = ?1 AND c.normalized = ?2 AND e.deleted_at IS NULL
+          ORDER BY e.created_at, e.id",
+    )?;
+    Ok(statement
+        .query_map([kind, reach_key(kind, value).as_str()], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// The first person reached at an email address.
+///
+/// # Errors
+/// SQLite's refusal.
+pub fn person_of_email(connection: &Connection, address: &str) -> Result<Option<String>> {
+    Ok(people_with(connection, "email", address)?
+        .into_iter()
+        .next())
+}
+
+fn pre_prefer(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let owner: Option<String> = ctx
+        .connection()
+        .query_row(
+            "SELECT person_id FROM contact_point WHERE id = ?1",
+            [ctx.required_str("point_id")?],
+            |row| row.get(0),
+        )
+        .ok();
+    match owner {
+        None => Ok(Some("there is no contact point with that id".to_owned())),
+        Some(person) => refusal_unless_live_person(ctx.connection(), &person),
+    }
+}
+
+/// Make this the one preferred point of its kind (or, with `preferred: false`, none).
+fn prefer(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let point = ctx.required_str("point_id")?;
+    let on = ctx
+        .input
+        .get("preferred")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true);
+    let (person, kind): (String, String) = ctx.connection().query_row(
+        "SELECT person_id, kind FROM contact_point WHERE id = ?1",
+        [point],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    if on {
+        ctx.connection().execute(
+            "UPDATE contact_point SET preferred = 0 WHERE person_id = ?1 AND kind = ?2 AND id <> ?3",
+            [&person, &kind, point],
+        )?;
+    }
+    ctx.connection().execute(
+        "UPDATE contact_point SET preferred = ?2 WHERE id = ?1",
+        rusqlite::params![point, i64::from(on)],
+    )?;
+    ctx.touch(&person)?;
+    Ok(json!({ "id": person, "point_id": point }))
+}
+
+fn pre_reorder(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let person = ctx.required_str("id")?;
+    if let Some(sentence) = refusal_unless_live_person(ctx.connection(), person)? {
+        return Ok(Some(sentence));
+    }
+    let listed: Vec<&str> = ctx.input["order"]
+        .as_array()
+        .map(|items| items.iter().filter_map(serde_json::Value::as_str).collect())
+        .unwrap_or_default();
+    let held: std::collections::BTreeSet<String> = ctx
+        .connection()
+        .prepare_cached("SELECT id FROM contact_point WHERE person_id = ?1")?
+        .query_map([person], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    let once: std::collections::BTreeSet<&str> = listed.iter().copied().collect();
+    Ok((once.len() != listed.len()
+        || once.len() != held.len()
+        || !listed.iter().all(|id| held.contains(*id)))
+    .then(|| "name each of this person's contact points once".to_owned()))
+}
+
+/// Put the points in the member's order.
+fn reorder(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let person = ctx.required_str("id")?;
+    for (place, id) in ctx.input["order"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(serde_json::Value::as_str)
+        .enumerate()
+    {
+        ctx.connection().execute(
+            "UPDATE contact_point SET position = ?2 WHERE id = ?1",
+            rusqlite::params![id, place as f64 + 1.0],
+        )?;
+    }
+    ctx.touch(person)?;
     Ok(json!({ "id": person }))
 }
 
@@ -371,7 +503,7 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "properties": {
                 "id": { "type": "string", "minLength": 1 },
                 "point_id": { "type": "string", "minLength": 1 },
-                "kind": { "type": "string", "enum": ["phone", "email", "address", "url", "handle"] },
+                "kind": { "type": "string", "minLength": 1 },
                 "value": { "type": "string", "minLength": 1, "maxLength": 500 },
                 "label": { "type": ["string", "null"], "maxLength": 100 },
                 "preferred": { "type": "boolean" }
@@ -399,6 +531,44 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 check: pre_remove,
             }],
             remove,
+        ),
+        CommandDefinition::plain(
+            "person.prefer_contact_point",
+            "person",
+            r#"{
+              "type": "object",
+              "required": ["point_id"],
+              "additionalProperties": false,
+              "properties": {
+                "point_id": { "type": "string", "minLength": 1 },
+                "preferred": { "type": "boolean" }
+              }
+            }"#,
+            Idempotency::Idempotent,
+            &[CommandCondition {
+                predicate: "point_is_a_live_persons",
+                check: pre_prefer,
+            }],
+            prefer,
+        ),
+        CommandDefinition::plain(
+            "person.reorder_contact_points",
+            "person",
+            r#"{
+              "type": "object",
+              "required": ["id", "order"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "order": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+              }
+            }"#,
+            Idempotency::Idempotent,
+            &[CommandCondition {
+                predicate: "order_names_each_point_once",
+                check: pre_reorder,
+            }],
+            reorder,
         ),
     ]
 }

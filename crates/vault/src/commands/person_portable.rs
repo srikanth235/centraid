@@ -3,10 +3,13 @@
 //!
 //! Pure functions. `person.import_vcf` and `person.export_vcf` own what reaches the vault.
 //!
-//! A card becomes the fields People keeps: a name (FN, else N), a nickname, a role (TITLE,
-//! else ORG), a birthday (BDAY, with or without a year) and contact points (TEL, EMAIL, ADR,
-//! URL). Everything else a card carries (photos, notes, X- properties) is left where it was:
-//! this is an import of people, not a copy of an address book.
+//! A card becomes the fields People keeps: a name (FN, else N) with its given and family parts (N),
+//! a phonetic name, a nickname, an organisation (ORG) and a role (TITLE), dates (BDAY and
+//! ANNIVERSARY, with or without a year, and the member's other dates as `X-ABDATE`) and contact
+//! points (TEL, EMAIL, ADR, URL). Everything else a card carries (photos, notes, X- properties) is
+//! left where it was: this is an import of people, not a copy of an address book. **A file of
+//! people as a spreadsheet** (CSV) reads and writes the same [`Card`]s, so the two doors share one
+//! import and one export.
 //!
 //! **Version 2.1's QUOTED-PRINTABLE is read** (#1202): the phones and old books that write
 //! `FN;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:=E3=81=82` and wrap a long value with a trailing
@@ -26,15 +29,32 @@ pub struct Point {
     pub label: Option<String>,
 }
 
+/// One date of a card: its kind (`birthday`, `anniversary`, `other`: the words an app gives a
+/// card's properties, which the lookup `person_date_kind` holds), a day (`YYYY-MM-DD`, or
+/// `--MM-DD` with no year) and, for an `other`, the words the card gave it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CardDate {
+    pub kind: &'static str,
+    pub date: String,
+    pub label: Option<String>,
+}
+
 /// One card, read.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Card {
     pub name: String,
+    pub given: Option<String>,
+    pub family: Option<String>,
+    pub phonetic: Option<String>,
     pub nickname: Option<String>,
+    pub org: Option<String>,
     pub role: Option<String>,
-    pub birthday: Option<String>,
+    pub dates: Vec<CardDate>,
     pub points: Vec<Point>,
 }
+
+/// The most dates one card keeps.
+pub const MAX_DATES: usize = 20;
 
 /// Whether a line's property carries `ENCODING=QUOTED-PRINTABLE` (or the 2.1 bare form).
 fn is_quoted_printable(line: &str) -> bool {
@@ -158,9 +178,9 @@ fn split_unescaped(value: &str, sep: char) -> Vec<String> {
     parts.iter().map(|part| unescape(part)).collect()
 }
 
-/// `1990-05-17`, `19900517` and `--0517` / `--05-17` as the vault's `YYYY-MM-DD` and `MM-DD`.
+/// `1990-05-17`, `19900517` and `--0517` / `--05-17` as the vault's `YYYY-MM-DD` and `--MM-DD`.
 #[must_use]
-pub fn birthday_of(raw: &str) -> Option<String> {
+pub fn day_of(raw: &str) -> Option<String> {
     let raw = raw.trim();
     let digits: String = raw.chars().filter(char::is_ascii_digit).collect();
     let (year, month, day) = match (raw.starts_with("--"), digits.len()) {
@@ -168,15 +188,23 @@ pub fn birthday_of(raw: &str) -> Option<String> {
         (false, n) if n >= 8 => (Some(&digits[..4]), &digits[4..6], &digits[6..8]),
         _ => return None,
     };
-    let (m, d): (u32, u32) = (month.parse().ok()?, day.parse().ok()?);
-    if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
-        return None;
-    }
     // A year of 1604 is the placeholder some books write for "no year".
-    match year {
-        Some(year) if year != "1604" && year != "0000" => Some(format!("{year}-{month}-{day}")),
-        _ => Some(format!("{month}-{day}")),
-    }
+    let year = year.filter(|year| *year != "1604" && *year != "0000");
+    crate::commands::person_date::normalize(&match year {
+        Some(year) => format!("{year}-{month}-{day}"),
+        None => format!("--{month}-{day}"),
+    })
+}
+
+/// The member's own words for a date: a `LABEL=` parameter, as written.
+fn date_label(params: &[String]) -> Option<String> {
+    params.iter().find_map(|param| {
+        let (name, value) = param.split_once('=')?;
+        name.trim()
+            .eq_ignore_ascii_case("LABEL")
+            .then(|| value.trim().to_owned())
+            .filter(|label| !label.is_empty())
+    })
 }
 
 fn label_of(params: &[String]) -> Option<String> {
@@ -216,36 +244,49 @@ pub fn parse(text: &str) -> Vec<Card> {
     let mut cards = Vec::new();
     let mut current: Option<Card> = None;
     let mut structured: Option<Vec<String>> = None;
-    let mut title: Option<String> = None;
-    let mut org: Option<String> = None;
+    let mut sound: (Option<String>, Option<String>) = (None, None);
     for line in unfold(text.strip_prefix('\u{feff}').unwrap_or(text)) {
         let upper = line.trim().to_ascii_uppercase();
         if upper == "BEGIN:VCARD" {
             current = Some(Card::default());
             structured = None;
-            title = None;
-            org = None;
+            sound = (None, None);
             continue;
         }
         if upper == "END:VCARD" {
             if let Some(mut card) = current.take() {
-                if card.name.trim().is_empty() {
+                let parts = structured.take();
+                if let Some(n) = &parts {
                     // N is family;given;additional;prefix;suffix.
-                    card.name = structured
-                        .take()
-                        .map(|n| {
-                            [n.get(3), n.get(1), n.get(2), n.first(), n.get(4)]
-                                .into_iter()
-                                .flatten()
-                                .map(|part| part.trim())
-                                .filter(|part| !part.is_empty())
-                                .collect::<Vec<_>>()
-                                .join(" ")
-                        })
-                        .unwrap_or_default();
+                    let part = |at: usize| {
+                        n.get(at)
+                            .map(|part| part.trim().to_owned())
+                            .filter(|part| !part.is_empty())
+                    };
+                    card.family = part(0);
+                    card.given = part(1);
+                    // `N:Full Name;;;;` is how a card with one name and no parts is written.
+                    if card.given.is_none() && card.family.as_deref() == Some(card.name.trim()) {
+                        card.family = None;
+                    }
+                    if card.name.trim().is_empty() {
+                        card.name = [n.get(3), n.get(1), n.get(2), n.first(), n.get(4)]
+                            .into_iter()
+                            .flatten()
+                            .map(|part| part.trim())
+                            .filter(|part| !part.is_empty())
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                    }
                 }
-                card.role = title.take().or(org.take()).filter(|r| !r.trim().is_empty());
+                let phonetic = [sound.0.take(), sound.1.take()]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                card.phonetic = Some(phonetic).filter(|phonetic| !phonetic.is_empty());
                 card.points.truncate(MAX_POINTS);
+                card.dates.truncate(MAX_DATES);
                 if !card.name.trim().is_empty() {
                     cards.push(card);
                 }
@@ -278,18 +319,30 @@ pub fn parse(text: &str) -> Vec<Card> {
             "NICKNAME" => {
                 card.nickname = Some(unescape(value).trim().to_owned()).filter(|n| !n.is_empty());
             }
-            "TITLE" => title = Some(unescape(value).trim().to_owned()),
-            "ORG" => {
-                org = Some(
-                    split_unescaped(value, ';')
-                        .into_iter()
-                        .find(|part| !part.trim().is_empty())
-                        .unwrap_or_default()
-                        .trim()
-                        .to_owned(),
-                );
+            "TITLE" => {
+                card.role = Some(unescape(value).trim().to_owned()).filter(|role| !role.is_empty());
             }
-            "BDAY" => card.birthday = birthday_of(value),
+            "ORG" => {
+                card.org = split_unescaped(value, ';')
+                    .into_iter()
+                    .find(|part| !part.trim().is_empty())
+                    .map(|part| part.trim().to_owned());
+            }
+            "X-PHONETIC-FIRST-NAME" => sound.0 = Some(unescape(value).trim().to_owned()),
+            "X-PHONETIC-LAST-NAME" => sound.1 = Some(unescape(value).trim().to_owned()),
+            "BDAY" | "ANNIVERSARY" | "X-ABDATE" => {
+                if let Some(date) = day_of(value) {
+                    let (kind, label) = match property.as_str() {
+                        "BDAY" => ("birthday", None),
+                        "ANNIVERSARY" => ("anniversary", None),
+                        _ => ("other", date_label(&params)),
+                    };
+                    // A card with two birthdays says the first.
+                    if kind != "birthday" || !card.dates.iter().any(|d| d.kind == "birthday") {
+                        card.dates.push(CardDate { kind, date, label });
+                    }
+                }
+            }
             "TEL" => card.points.push(Point {
                 kind: "phone",
                 value: unescape(value.strip_prefix("tel:").unwrap_or(value))
@@ -363,22 +416,42 @@ fn fold(line: &str) -> String {
 pub fn write(card: &Card) -> String {
     let mut out = String::from("BEGIN:VCARD\r\nVERSION:3.0\r\n");
     out.push_str(&fold(&format!("FN:{}", escape(&card.name))));
-    out.push_str(&fold(&format!("N:{};;;;", escape(&card.name))));
+    if card.given.is_some() || card.family.is_some() {
+        out.push_str(&fold(&format!(
+            "N:{};{};;;",
+            escape(card.family.as_deref().unwrap_or_default()),
+            escape(card.given.as_deref().unwrap_or_default())
+        )));
+    } else {
+        out.push_str(&fold(&format!("N:{};;;;", escape(&card.name))));
+    }
+    if let Some(phonetic) = &card.phonetic {
+        out.push_str(&fold(&format!(
+            "X-PHONETIC-FIRST-NAME:{}",
+            escape(phonetic)
+        )));
+    }
     if let Some(nick) = &card.nickname {
         out.push_str(&fold(&format!("NICKNAME:{}", escape(nick))));
+    }
+    if let Some(org) = &card.org {
+        out.push_str(&fold(&format!("ORG:{}", escape(org))));
     }
     if let Some(role) = &card.role {
         out.push_str(&fold(&format!("TITLE:{}", escape(role))));
     }
-    if let Some(birthday) = &card.birthday {
-        out.push_str(&fold(&format!(
-            "BDAY:{}",
-            if birthday.len() == 5 {
-                format!("--{birthday}")
-            } else {
-                birthday.clone()
-            }
-        )));
+    for date in &card.dates {
+        let property = match date.kind {
+            "birthday" => "BDAY".to_owned(),
+            "anniversary" => "ANNIVERSARY".to_owned(),
+            _ => match &date.label {
+                Some(label) => {
+                    format!("X-ABDATE;LABEL={}", label.replace([';', ':', ',', '"'], ""))
+                }
+                None => "X-ABDATE".to_owned(),
+            },
+        };
+        out.push_str(&fold(&format!("{property}:{}", date.date)));
     }
     for point in &card.points {
         let property = match point.kind {
@@ -404,11 +477,284 @@ pub fn write(card: &Card) -> String {
     out
 }
 
+// ---------------------------------------------------------------------------
+// A spreadsheet of people
+// ---------------------------------------------------------------------------
+
+/// The columns an export writes, in order. A header the importer does not know is left alone.
+pub const CSV_HEADER: [&str; 14] = [
+    "Name",
+    "Given name",
+    "Family name",
+    "Phonetic name",
+    "Nickname",
+    "Organization",
+    "Title",
+    "Birthday",
+    "Anniversary",
+    "Other dates",
+    "Phone",
+    "Email",
+    "Address",
+    "URL",
+];
+
+/// What a cell holding several values is split at.
+const MANY: &str = " | ";
+
+fn csv_cell(value: &str) -> String {
+    if value.contains([',', '"', '\n', '\r']) {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_owned()
+    }
+}
+
+fn csv_row(cells: &[String]) -> String {
+    let mut row = cells
+        .iter()
+        .map(|cell| csv_cell(cell))
+        .collect::<Vec<_>>()
+        .join(",");
+    row.push_str("\r\n");
+    row
+}
+
+/// People as a spreadsheet: a header, then a row each, RFC 4180. A column that holds several
+/// values (a person's two phones, an anniversary and another) joins them with ` | `.
+#[must_use]
+pub fn csv_write(cards: &[Card]) -> String {
+    let mut out = csv_row(&CSV_HEADER.map(str::to_owned));
+    for card in cards {
+        let dates = |kind: &str| {
+            card.dates
+                .iter()
+                .filter(|date| date.kind == kind)
+                .map(|date| date.date.clone())
+                .collect::<Vec<_>>()
+                .join(MANY)
+        };
+        let points = |kind: &str| {
+            card.points
+                .iter()
+                .filter(|point| point.kind == kind)
+                .map(|point| point.value.clone())
+                .collect::<Vec<_>>()
+                .join(MANY)
+        };
+        let other = card
+            .dates
+            .iter()
+            .filter(|date| date.kind != "birthday" && date.kind != "anniversary")
+            .map(|date| match &date.label {
+                Some(label) => format!("{label}={}", date.date),
+                None => date.date.clone(),
+            })
+            .collect::<Vec<_>>()
+            .join(MANY);
+        out.push_str(&csv_row(&[
+            card.name.clone(),
+            card.given.clone().unwrap_or_default(),
+            card.family.clone().unwrap_or_default(),
+            card.phonetic.clone().unwrap_or_default(),
+            card.nickname.clone().unwrap_or_default(),
+            card.org.clone().unwrap_or_default(),
+            card.role.clone().unwrap_or_default(),
+            dates("birthday"),
+            dates("anniversary"),
+            other,
+            points("phone"),
+            points("email"),
+            points("address"),
+            points("url"),
+        ]));
+    }
+    out
+}
+
+/// The rows of a CSV text: quoted cells, doubled quotes and line breaks inside quotes are read as
+/// RFC 4180 says; a blank line is no row.
+fn csv_rows(text: &str) -> Vec<Vec<String>> {
+    let mut rows: Vec<Vec<String>> = Vec::new();
+    let (mut row, mut cell) = (Vec::new(), String::new());
+    let (mut quoted, mut started) = (false, false);
+    let mut chars = text
+        .strip_prefix('\u{feff}')
+        .unwrap_or(text)
+        .chars()
+        .peekable();
+    while let Some(c) = chars.next() {
+        if quoted {
+            match c {
+                '"' if chars.peek() == Some(&'"') => {
+                    cell.push('"');
+                    chars.next();
+                }
+                '"' => quoted = false,
+                other => cell.push(other),
+            }
+            continue;
+        }
+        match c {
+            '"' if cell.is_empty() => {
+                quoted = true;
+                started = true;
+            }
+            ',' => {
+                row.push(std::mem::take(&mut cell));
+                started = true;
+            }
+            '\r' => {}
+            '\n' => {
+                if started || !cell.is_empty() {
+                    row.push(std::mem::take(&mut cell));
+                    rows.push(std::mem::take(&mut row));
+                }
+                started = false;
+            }
+            other => {
+                cell.push(other);
+                started = true;
+            }
+        }
+    }
+    if started || !cell.is_empty() {
+        row.push(cell);
+        rows.push(row);
+    }
+    rows
+}
+
+/// The field a header names, in the words an export writes and a few that address books use.
+fn csv_field(header: &str) -> Option<&'static str> {
+    Some(match header.trim().to_lowercase().as_str() {
+        "name" | "full name" | "display name" => "name",
+        "given name" | "first name" => "given",
+        "family name" | "last name" | "surname" => "family",
+        "phonetic name" => "phonetic",
+        "nickname" => "nickname",
+        "organization" | "organisation" | "company" | "organization name" => "org",
+        "title" | "job title" | "organization title" => "role",
+        "birthday" | "birthdate" => "birthday",
+        "anniversary" => "anniversary",
+        "other dates" => "other",
+        "phone" | "mobile phone" | "phone 1 - value" => "phone",
+        "email" | "e-mail" | "e-mail address" | "e-mail 1 - value" => "email",
+        "address" => "address",
+        "url" | "website" => "url",
+        _ => return None,
+    })
+}
+
+/// People from a spreadsheet's text: the first row names the columns. A row with no name (and no
+/// given or family name to make one) is no person.
+#[must_use]
+pub fn csv_parse(text: &str) -> Vec<Card> {
+    let mut rows = csv_rows(text).into_iter();
+    let Some(header) = rows.next() else {
+        return Vec::new();
+    };
+    let columns: Vec<Option<&'static str>> = header.iter().map(|h| csv_field(h)).collect();
+    let mut cards = Vec::new();
+    for row in rows {
+        let mut card = Card::default();
+        for (cell, field) in row.iter().zip(&columns) {
+            let (cell, Some(field)) = (cell.trim(), field) else {
+                continue;
+            };
+            if cell.is_empty() {
+                continue;
+            }
+            let many = || {
+                cell.split(MANY.trim())
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty())
+            };
+            match *field {
+                "name" => card.name = cell.to_owned(),
+                "given" => card.given = Some(cell.to_owned()),
+                "family" => card.family = Some(cell.to_owned()),
+                "phonetic" => card.phonetic = Some(cell.to_owned()),
+                "nickname" => card.nickname = Some(cell.to_owned()),
+                "org" => card.org = Some(cell.to_owned()),
+                "role" => card.role = Some(cell.to_owned()),
+                "birthday" => {
+                    if let Some(date) =
+                        day_of(cell).or_else(|| crate::commands::person_date::normalize(cell))
+                        && !card.dates.iter().any(|d| d.kind == "birthday")
+                    {
+                        card.dates.push(CardDate {
+                            kind: "birthday",
+                            date,
+                            label: None,
+                        });
+                    }
+                }
+                "anniversary" => {
+                    for value in many() {
+                        if let Some(date) =
+                            day_of(value).or_else(|| crate::commands::person_date::normalize(value))
+                        {
+                            card.dates.push(CardDate {
+                                kind: "anniversary",
+                                date,
+                                label: None,
+                            });
+                        }
+                    }
+                }
+                "other" => {
+                    for value in many() {
+                        let (label, day) = value.rsplit_once('=').unwrap_or(("", value));
+                        if let Some(date) =
+                            day_of(day).or_else(|| crate::commands::person_date::normalize(day))
+                        {
+                            card.dates.push(CardDate {
+                                kind: "other",
+                                date,
+                                label: Some(label.trim().to_owned()).filter(|l| !l.is_empty()),
+                            });
+                        }
+                    }
+                }
+                point => {
+                    let kind = match point {
+                        "phone" => "phone",
+                        "email" => "email",
+                        "address" => "address",
+                        _ => "url",
+                    };
+                    for value in many() {
+                        card.points.push(Point {
+                            kind,
+                            value: value.to_owned(),
+                            label: None,
+                        });
+                    }
+                }
+            }
+        }
+        if card.name.trim().is_empty() {
+            card.name = [card.given.as_deref(), card.family.as_deref()]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join(" ");
+        }
+        card.points.truncate(MAX_POINTS);
+        card.dates.truncate(MAX_DATES);
+        if !card.name.trim().is_empty() {
+            cards.push(card);
+        }
+    }
+    cards
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const SAMPLE: &str = "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Maya Rao\r\nN:Rao;Maya;;;\r\nNICKNAME:May\r\nORG:Acme;Sales\r\nTITLE:Designer\r\nBDAY:1990-05-17\r\nTEL;TYPE=CELL,VOICE:+1 (555) 010-0100\r\nEMAIL;TYPE=INTERNET,WORK:maya@example.com\r\nADR;TYPE=HOME:;;1 Main St;Springfield;;12345;US\r\nNOTE:long note that\r\n  continues\r\nEND:VCARD\r\nBEGIN:VCARD\r\nVERSION:2.1\r\nN:Doe;Jo;;Dr.;\r\nBDAY:--0301\r\nEND:VCARD\r\nBEGIN:VCARD\r\nVERSION:3.0\r\nEND:VCARD\r\n";
+    const SAMPLE: &str = "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Maya Rao\r\nN:Rao;Maya;;;\r\nNICKNAME:May\r\nORG:Acme;Sales\r\nTITLE:Designer\r\nBDAY:1990-05-17\r\nANNIVERSARY:--06-01\r\nTEL;TYPE=CELL,VOICE:+1 (555) 010-0100\r\nEMAIL;TYPE=INTERNET,WORK:maya@example.com\r\nADR;TYPE=HOME:;;1 Main St;Springfield;;12345;US\r\nNOTE:long note that\r\n  continues\r\nEND:VCARD\r\nBEGIN:VCARD\r\nVERSION:2.1\r\nN:Doe;Jo;;Dr.;\r\nBDAY:--0301\r\nEND:VCARD\r\nBEGIN:VCARD\r\nVERSION:3.0\r\nEND:VCARD\r\n";
 
     #[test]
     fn two_cards_are_read_and_a_nameless_one_is_not() {
@@ -416,9 +762,18 @@ mod tests {
         assert_eq!(cards.len(), 2);
         let maya = &cards[0];
         assert_eq!(maya.name, "Maya Rao");
+        assert_eq!(maya.given.as_deref(), Some("Maya"));
+        assert_eq!(maya.family.as_deref(), Some("Rao"));
         assert_eq!(maya.nickname.as_deref(), Some("May"));
-        assert_eq!(maya.role.as_deref(), Some("Designer"));
-        assert_eq!(maya.birthday.as_deref(), Some("1990-05-17"));
+        assert_eq!(maya.org.as_deref(), Some("Acme"), "ORG is the organisation");
+        assert_eq!(maya.role.as_deref(), Some("Designer"), "TITLE is the role");
+        assert_eq!(
+            maya.dates
+                .iter()
+                .map(|d| (d.kind, d.date.as_str()))
+                .collect::<Vec<_>>(),
+            [("birthday", "1990-05-17"), ("anniversary", "--06-01")]
+        );
         assert_eq!(
             maya.points
                 .iter()
@@ -431,7 +786,8 @@ mod tests {
             ]
         );
         assert_eq!(cards[1].name, "Dr. Jo Doe");
-        assert_eq!(cards[1].birthday.as_deref(), Some("03-01"));
+        assert_eq!(cards[1].given.as_deref(), Some("Jo"));
+        assert_eq!(cards[1].dates[0].date, "--03-01");
     }
 
     #[test]
@@ -440,15 +796,32 @@ mod tests {
         let text: String = cards.iter().map(write).collect();
         assert_eq!(parse(&text), cards);
         assert!(text.contains("BDAY:--03-01"), "{text}");
+        assert!(
+            text.contains("ORG:Acme") && text.contains("TITLE:Designer"),
+            "{text}"
+        );
+        assert!(text.contains("N:Rao;Maya;;;"), "{text}");
     }
 
     #[test]
-    fn birthdays_with_and_without_a_year() {
-        assert_eq!(birthday_of("19900517").as_deref(), Some("1990-05-17"));
-        assert_eq!(birthday_of("1604-05-17").as_deref(), Some("05-17"));
-        assert_eq!(birthday_of("--0517").as_deref(), Some("05-17"));
-        assert_eq!(birthday_of("1990-13-01"), None);
-        assert_eq!(birthday_of("soon"), None);
+    fn days_with_and_without_a_year() {
+        assert_eq!(day_of("19900517").as_deref(), Some("1990-05-17"));
+        assert_eq!(day_of("1604-05-17").as_deref(), Some("--05-17"));
+        assert_eq!(day_of("--0517").as_deref(), Some("--05-17"));
+        assert_eq!(day_of("--05-17").as_deref(), Some("--05-17"));
+        assert_eq!(day_of("--0230"), None);
+        assert_eq!(day_of("1990-13-01"), None);
+        assert_eq!(day_of("soon"), None);
+    }
+
+    #[test]
+    fn a_member_s_other_date_keeps_its_words_and_a_second_birthday_is_dropped() {
+        let text = "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Ed\r\nBDAY:1980-01-02\r\nBDAY:1981-01-02\r\nX-ABDATE;LABEL=Graduation Day:2005-07-07\r\nEND:VCARD\r\n";
+        let cards = parse(text);
+        assert_eq!(cards[0].dates.len(), 2);
+        assert_eq!(cards[0].dates[1].kind, "other");
+        assert_eq!(cards[0].dates[1].label.as_deref(), Some("Graduation Day"));
+        assert_eq!(parse(&write(&cards[0])), cards);
     }
 
     #[test]
@@ -495,5 +868,44 @@ mod tests {
         }
         text.push_str("END:VCARD\r\n");
         assert_eq!(parse(&text)[0].points.len(), MAX_POINTS);
+    }
+
+    #[test]
+    fn a_spreadsheet_is_read_and_written_in_the_same_cards() {
+        let cards = parse(SAMPLE);
+        let text = csv_write(&cards);
+        assert!(text.starts_with("Name,Given name,Family name,"), "{text}");
+        assert!(
+            text.contains("\"1 Main St, Springfield, 12345, US\""),
+            "{text}"
+        );
+        let back = csv_parse(&text);
+        assert_eq!(back.len(), 2);
+        // Labels of points are a vCard's; everything else comes back.
+        assert_eq!(back[0].given, cards[0].given);
+        assert_eq!(back[0].family, cards[0].family);
+        assert_eq!(back[0].org, cards[0].org);
+        assert_eq!(back[0].role, cards[0].role);
+        assert_eq!(back[0].dates, cards[0].dates);
+        assert_eq!(
+            back[0]
+                .points
+                .iter()
+                .map(|p| (p.kind, p.value.clone()))
+                .collect::<Vec<_>>(),
+            cards[0]
+                .points
+                .iter()
+                .map(|p| (p.kind, p.value.clone()))
+                .collect::<Vec<_>>()
+        );
+        // An address book's own headers are read, a quote inside a cell is doubled, and a blank
+        // line is no row.
+        let theirs = "\u{feff}First Name,Last Name,E-mail 1 - Value,Phone 1 - Value,Company\n\"Al\"\"ex\",Lee,al@example.com,+1 555 010 0100,\"Acme, Inc\"\n\n,,,,\n";
+        let people = csv_parse(theirs);
+        assert_eq!(people.len(), 1);
+        assert_eq!(people[0].name, "Al\"ex Lee");
+        assert_eq!(people[0].org.as_deref(), Some("Acme, Inc"));
+        assert_eq!(people[0].points.len(), 2);
     }
 }
