@@ -836,6 +836,42 @@ impl Shape {
             None,
             mark_reindex("old.series_id"),
         );
+        // What a phone store states decides whether the phone or the vault alerts for a record
+        // (`alerts::phone_holds`): a source written, changed or gone, and an origin retired (or taken
+        // up again), queue the records they name for the index file. Nothing is stamped.
+        touch_trigger(
+            "source_insert",
+            "AFTER INSERT",
+            "source",
+            Some("new.entity_id IS NOT NULL"),
+            mark_reindex("new.entity_id"),
+        );
+        touch_trigger(
+            "source_update",
+            "AFTER UPDATE OF stated, gone_at, entity_id",
+            "source",
+            Some("new.entity_id IS NOT NULL"),
+            mark_reindex("new.entity_id"),
+        );
+        touch_trigger(
+            "source_delete",
+            "AFTER DELETE",
+            "source",
+            Some("old.entity_id IS NOT NULL"),
+            mark_reindex("old.entity_id"),
+        );
+        touch_trigger(
+            "origin_retired",
+            "AFTER UPDATE OF retired_at",
+            "origin",
+            Some("old.retired_at IS NOT new.retired_at"),
+            format!(
+                "INSERT OR IGNORE INTO temp.{t} (entity_id, stamp, born)
+                   SELECT entity_id, 0, 0 FROM main.source
+                    WHERE origin_id = new.id AND entity_id IS NOT NULL;",
+                t = super::COMMIT_TOUCHED,
+            ),
+        );
         for part in &self.parts {
             match part.role {
                 Role::Host => {

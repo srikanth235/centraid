@@ -868,3 +868,119 @@ fn a_trashed_item_or_one_in_a_trashed_holder_has_no_alert_restore_brings_it_back
     w.ok("entity.trash", json!({ "id": item }));
     assert!(w.key(&rl).is_none());
 }
+
+// ---------------------------------------------------------------------------------------------
+// One alert per real thing (#1188, NA2): what the phone's own app holds, the phone alerts
+// ---------------------------------------------------------------------------------------------
+
+impl World {
+    fn origin(&self, name: &str, system: &str) -> String {
+        let o = format!("origin-{name}");
+        self.sql(&format!(
+            "INSERT INTO origin (id, system, ref, label, created_at) VALUES ('{o}', '{system}', '{name}', '{name}', '{AT}')"
+        ));
+        o
+    }
+
+    fn source(
+        &self,
+        n: u64,
+        origin: &str,
+        system: &str,
+        entity: &str,
+        kind: &str,
+        stated: &str,
+    ) -> String {
+        let s = format!("source-{n}");
+        self.sql(&format!(
+            "INSERT INTO source (id, origin_id, system, external_id, entity_id, entity_kind, stated, seen_at)
+               VALUES ('{s}', '{origin}', '{system}', 'x{n}', '{entity}', '{kind}', '{stated}', '{AT}')"
+        ));
+        s
+    }
+}
+
+#[test]
+fn what_the_phone_holds_the_phone_alerts_until_the_member_changes_it_or_the_follow_stops() {
+    let w = World::new("alerts_na2");
+    let e = w.event(1, "2026-03-02T09:00", "floating", None, None);
+    let r10 = w.remind(&e, 10);
+    assert!(w.key(&r10).is_some(), "no source: Centraid's own");
+    let live = w.origin("work", "calendar");
+    let stated = r#"{"starts":"2026-03-02T09:00","reminders":[10]}"#;
+    let source = w.source(1, &live, "calendar", &e, "event", stated);
+    assert!(w.key(&r10).is_none(), "the phone alerts for it");
+    // The member adds a lead: the alert is Centraid's own now, all of it.
+    let r60 = w.remind(&e, 60);
+    assert!(w.key(&r10).is_some() && w.key(&r60).is_some());
+    w.ok("reminder.remove", json!({ "id": r60 }));
+    assert!(
+        w.key(&r10).is_none(),
+        "back to what the phone stated, silent again"
+    );
+    // A moved start is Centraid's.
+    w.sql(&format!(
+        "UPDATE event SET starts = '2026-03-02T10:00' WHERE id = '{e}'"
+    ));
+    assert!(w.key(&r10).is_some());
+    w.sql(&format!(
+        "UPDATE event SET starts = '2026-03-02T09:00' WHERE id = '{e}'"
+    ));
+    assert!(w.key(&r10).is_none());
+    // Stopping the follow retires the origin: nobody follows it, the vault alerts again; following
+    // it again hands the alert back to the phone.
+    w.sql(&format!(
+        "UPDATE origin SET retired_at = '{AT}' WHERE id = '{live}'"
+    ));
+    assert!(
+        w.key(&r10).is_some(),
+        "a retired origin's record alerts in Centraid"
+    );
+    w.sql(&format!(
+        "UPDATE origin SET retired_at = NULL WHERE id = '{live}'"
+    ));
+    assert!(w.key(&r10).is_none());
+    // A record the phone no longer has (gone) is not the phone's to alert.
+    w.sql(&format!(
+        "UPDATE source SET gone_at = '{AT}' WHERE id = '{source}'"
+    ));
+    assert!(w.key(&r10).is_some());
+    w.sql(&format!(
+        "UPDATE source SET gone_at = NULL WHERE id = '{source}'"
+    ));
+    assert!(w.key(&r10).is_none());
+
+    // TWO SOURCES (a merged record keeps both): one live source is enough.
+    let old = w.origin("old", "calendar");
+    w.source(2, &old, "calendar", &e, "event", stated);
+    w.sql(&format!(
+        "UPDATE origin SET retired_at = '{AT}' WHERE id = '{old}'"
+    ));
+    assert!(w.key(&r10).is_none(), "the live one still holds it");
+    w.sql(&format!(
+        "UPDATE origin SET retired_at = '{AT}' WHERE id = '{live}'"
+    ));
+    assert!(w.key(&r10).is_some(), "both origins retired: Centraid's");
+
+    // A phone reminder (a task), a day as a day and one `remind_before_min`.
+    let list = w.origin("list", "phone_reminders");
+    let t = w.task(5, "2026-03-02", "all-day", None, None);
+    let rt = w.remind(&t, 10);
+    w.source(
+        3,
+        &list,
+        "phone_reminders",
+        &t,
+        "task",
+        r#"{"due":"2026-03-02","remind_before_min":10}"#,
+    );
+    assert!(w.key(&rt).is_none());
+    w.sql(&format!(
+        "UPDATE origin SET retired_at = '{AT}' WHERE id = '{list}'"
+    ));
+    assert!(w.key(&rt).is_some());
+    // The index equals a rebuild with all of this in place.
+    let before = w.dump();
+    w.scratch.vault.rebuild_index().expect("rebuilds");
+    assert_eq!(before, w.dump());
+}

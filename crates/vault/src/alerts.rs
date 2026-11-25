@@ -246,6 +246,10 @@ pub fn sync(connection: &Connection, n: i64, now: i64) -> Result<()> {
     if reminders.is_empty() {
         return Ok(());
     }
+    // ONE ALERT PER REAL THING (#1188, NA2): the phone's own app alerts for what it holds.
+    if phone_holds(connection, &id, &kind, &reminders)? {
+        return Ok(());
+    }
     let refs = Refs::read(connection, now);
     let fires = match kind.as_str() {
         "event" => event_fires(connection, &id, &reminders, refs)?,
@@ -356,6 +360,109 @@ fn expand_series(
             ))
         })
         .collect()
+}
+
+// ---------------------------------------------------------------------------------------------
+// One alert per real thing
+// ---------------------------------------------------------------------------------------------
+
+/// Whether the phone's own calendar or reminders app alerts for this event or task (#1188, NA2): a
+/// source of the record comes from a phone store (`origin_system.on_device`) whose origin is not
+/// retired, the source is not gone, AND the record's alert is still what that source stated. A
+/// record has several sources (A9): any one that holds it is enough. An alert the member set or
+/// changed in Centraid is Centraid's own and notifies, because a control that never fires would
+/// lie; a retired origin is followed by nobody, so the vault alerts again. Decided by comparing
+/// with `source.stated` (the follower's three-way rule), never by a stored flag.
+///
+/// What is compared is what the old rule compared: the moment (`starts` or `due`, a day as a day)
+/// and the leads (`reminders`, minutes, or a single `remind_before_min`).
+fn phone_holds(
+    connection: &Connection,
+    id: &str,
+    kind: &str,
+    reminders: &[ReminderRow],
+) -> Result<bool> {
+    if kind != "event" && kind != "task" {
+        return Ok(false);
+    }
+    let stated = connection
+        .prepare_cached(
+            "SELECT s.stated FROM source s
+               JOIN origin o ON o.id = s.origin_id
+               JOIN origin_system y ON y.code = o.system
+              WHERE s.entity_id = ?1 AND y.on_device = 1
+                AND o.retired_at IS NULL AND s.gone_at IS NULL",
+        )?
+        .query_map([id], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    if stated.is_empty() {
+        return Ok(false);
+    }
+    let sql = if kind == "event" {
+        "SELECT starts FROM event WHERE id = ?1"
+    } else {
+        "SELECT due FROM task WHERE id = ?1"
+    };
+    let moment: Option<String> = connection
+        .prepare_cached(sql)?
+        .query_row([id], |row| row.get(0))
+        .optional()?
+        .flatten();
+    let mut leads: Vec<i64> = reminders
+        .iter()
+        .filter(|r| r.date_id.is_none())
+        .map(|r| r.offset_min)
+        .collect();
+    leads.sort_unstable();
+    leads.dedup();
+    Ok(stated.iter().any(|text| {
+        let json: serde_json::Value = serde_json::from_str(text).unwrap_or_default();
+        let said_moment = json
+            .get("starts")
+            .or_else(|| json.get("due"))
+            .and_then(|v| v.as_str());
+        same_moment(moment.as_deref(), said_moment) && said_leads(&json) == leads
+    }))
+}
+
+/// The leads a source stated: `reminders` (an array, or JSON text of one) or one `remind_before_min`.
+fn said_leads(json: &serde_json::Value) -> Vec<i64> {
+    let list: Vec<serde_json::Value> = match json.get("reminders") {
+        Some(serde_json::Value::Array(items)) => items.clone(),
+        Some(serde_json::Value::String(text)) => serde_json::from_str(text).unwrap_or_default(),
+        _ => json
+            .get("remind_before_min")
+            .filter(|v| !v.is_null())
+            .map(|v| vec![v.clone()])
+            .unwrap_or_default(),
+    };
+    let mut found: Vec<i64> = list
+        .iter()
+        .filter_map(serde_json::Value::as_i64)
+        .filter(|minutes| *minutes >= 0)
+        .collect();
+    found.sort_unstable();
+    found.dedup();
+    found
+}
+
+/// Whether two moments are the same one: a day is compared as a day, an instant as an instant, a
+/// wall clock to the minute.
+fn same_moment(ours: Option<&str>, stated: Option<&str>) -> bool {
+    fn key(value: &str) -> String {
+        if value.len() == 10 {
+            return value.to_owned();
+        }
+        if let Some(ms) = parse_instant_ms(value).filter(|_| value.ends_with('Z')) {
+            return format!("@{ms}");
+        }
+        value.chars().take(16).collect()
+    }
+    match (ours, stated) {
+        (Some(ours), Some(stated)) => key(ours) == key(stated),
+        (None, None) => true,
+        _ => false,
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
