@@ -1,5 +1,31 @@
 # UNPLUGGED (#1214, checkpoint 1)
 
+## Rules for every app lane (from the orchestrator, #1214)
+
+An orchestrator session reviews your work. Whenever you need an input (a product call, a ruling this brief does not settle, a check you think must change, a blocker), message the orchestrator with the claude-code-remote `send_message` tool to session "@parent" and keep going on whatever does not depend on the answer. Replies can arrive while you work: before your final push, re-read any message from the orchestrator and apply it. Never guess, and never stop and wait in silence.
+
+### Context
+The v0 vault schema was redesigned from first principles. `contracts/migrations/001_baseline.sql` was replaced whole; its comments carry tags like `-- A13` naming the design item each statement carries out, and its header states the doctrine. Derived data (search, alerts, the spatial index) lives in an attached index file with its own ladder, `contracts/migrations/index/001_index.sql`. The whole kernel has landed and is green (660 vault tests): the entity kernel (one home in `entity.parent_id`, trash with `trashed_by`, flags as columns, minted UUIDv7 ids, `entity.move`, `entity::rename`), edges by `edge_shape` and hand-made links (`link.add`, `links::repoint`), history (`history::Actor`, `BLOB_SLOTS`, snapshot roles), the index file (search and `geo` maintained from `search_owed`), reminders and alerts (`commands::reminder::add`, `set_leads`, `alerts::notice`), the follow engine (`follow::SYSTEMS` maps, `follow::move_sources`, `follow::write_day_totals`), blobs and the phone's side of backup, and Notes as the pattern app (`commands/note.rs`, `tests/notes.rs`).
+
+`crates/vault/UNPLUGGED.md` starts with "The pattern": the eight steps to re-plug a module. Read all of that file; it lists the modules and test files that are yours, and notes left for your lane by the kernel lanes. Six other app lanes (People; Calendar and Tasks; Docs, Photos and Places; Money; Health; Locker; Chat) run in parallel with you on the same branch, each in its own files.
+
+Read first: `AGENTS.md`; the baseline header and the sections for your tables; `crates/vault/UNPLUGGED.md`; `commands/note.rs` and `tests/notes.rs`; `.claude/skills/change` (all), `.claude/skills/product` (`SKILL.md`, `promises.md`, `home.md` and the page for your domain), `.claude/skills/stack` (Rust, SQL), `.claude/skills/land/git.md`, `.claude/skills/land/gate.md`.
+
+### Rulings that bind every lane
+- v0: the existing implementation is not a constraint. Rewrite the module against the new tables; no compatibility path, no second migration rung. Tests of removed behaviour are deleted with a one-line reason, not ported; coverage of behaviour that still exists is never dropped (rebuild it on the new commands).
+- Fix the code, not the check. Loosen no lint, test, budget or allowlist. If you think a check must change, message the orchestrator first. Assert on counts and index names, never on durations.
+- No CHECK, trigger or Rust code names a value of a lookup table where a lookup row's attribute can be read. A Rust enum that mirrors a lookup is held equal to its table by `tests/lookups.rs`. A new value is a seed row in the baseline.
+- Every rule a command states in a sentence is also refused by the database (a CHECK, a key or a trigger that names no lookup value), and a test writes the bad row with raw SQL in `crates/vault/tests/schema_rules.rs`. A tunable size budget stays in the command. If the schema lacks a rule, edit the baseline, regenerate `SCHEMA_DIGEST` (`format.rs`, `tests/format_identity.rs`) and `contracts/schema/vault-ddl.sql`, and list the change in your report.
+- If your command says your kind needs a title, set its `entity_kind.may_be_unnamed` to 0 in the seed.
+- Every new column and table has a writer (a command) and a reader (a read function a screen will call) in your lane. A mechanism with no producer and no consumer leaves the schema: tell the orchestrator.
+- Every alert comes from a `reminder` row. Every change a followed store makes commits as `Actor::Store{origin_id}`; a followed record is editable field by field and the stated value stays readable ("Phone says X").
+- A blob column needs a `history::BLOB_SLOTS` row if a version keeps it and a `backup::files::RENTERS` row naming its owner; tests fail until both exist.
+- Touch only `crates/vault` and `crates/xtask`, and in them only your files plus the shared registration points (`commands/mod.rs`, `model.rs`, `history/shape.rs` tables, `index/text.rs` arm, `follow/systems.rs` row, `tests/schema_rules.rs`, `tests/commands.rs`, the baseline, `UNPLUGGED.md`), with the smallest possible edits. Nothing under `crates/gateway`, `crates/protocol`, `contracts/backup`. The app crates, core and assist stay red until later checkpoints; the `data-pin` line of `cargo xtask rules` is the one accepted red.
+- Git per `.claude/skills/land/git.md`: fetch and rebase-push to the one branch, never force-push, never rewrite pushed history, configured identity, subject `type(scope): subject (#1214)` with a type the `commit-msg` hook accepts, no trailers, no model names, one cargo at a time, no pull request. Other lanes push constantly: when a rebase conflicts in a GENERATED file (`SCHEMA_DIGEST`, `format_identity.rs`, `vault-ddl.sql`, `vault-commands.txt`), take either side and rerun the generator, never merge by hand; in a shared list, keep both sides' rows. Push only when green AFTER the rebase: `cargo test -p centraid-vault`, `cargo fmt --check`, clippy `-D warnings` on the crate, `cargo xtask rules` read in full.
+
+### Report (your final message, also sent to "@parent")
+Per row: done or not done, the commit, the test names, and the summary line of the test run on your final rebased commit. Then: every schema change with its reason; every shared file you touched and why; every check you wanted to loosen and did not; behaviour you changed that a member would notice, each with its reason; what later checkpoints (app crates, the wire, screens) must know; plainly what you did not run. Short and factual.
+
 ## The pattern (notes, K11: copy `commands/note.rs`, `tests/notes.rs`)
 
 Re-plugging a module, in order:
