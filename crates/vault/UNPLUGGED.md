@@ -54,9 +54,6 @@ and make it pass. Tests of removed behaviour are deleted, not ported.
 
 | Module | Owner | Why it cannot compile or run yet |
 |---|---|---|
-| `event` (`event/`), `event_portable`, `ical` | calendar lane | `Rel::Attendee` is `event_guest`; calendar is the home (`parent_id`); `location`; series split; `reminder` rows |
-| `task`, `task_portable` | tasks lane | home is `parent_id`; `due_timing`, `scheduled_on`, `series_id`; reminders are rows |
-| `document`, `document_portable`, `photo`, `photo_portable`, `place` | docs/photos lane | folder is the home; photo lat/lon, motion, no `blob UNIQUE`; no place from coordinates |
 | `workout`, `measurement`, `health_portable` | health lane | `workout`, `touch` and `reading` are kinds; `measurement.origin_id`; `reading` |
 | `thread` (chat) | chat lane | chats are ordinary trashable entities (L5); refusals/notices are lookups |
 | `vault_export` | export | reads every kind |
@@ -68,7 +65,7 @@ and make it pass. Tests of removed behaviour are deleted, not ported.
 |---|---|---|
 | `commands/follow/systems.rs` | `SYSTEMS` holds Money's statement map only: the engine (K9, done) reads what a system fills, retires, names and yields from `origin_system` and `source_shape`, so a map says only the kind's fields and how a record reads. **An app lane registers its system's map in one step, a `SystemMap` row in `SYSTEMS`** (the pass command `follow.<…>`, its schema and its preconditions are built from the rows by `follow::definitions`); the per-system maps of the old engine are in this file's history at `40b18d2c`. A map's `defaults` return only the kind's own columns the origin decides (the home is `entity.parent_id`, set by the engine when `home_shape` allows it); a map's `shape` puts instants in the clock's one form with `follow::canonical_instants`. Prove the map with `tests/common/follow.rs`'s pattern: `follow::definitions_for::<YourMaps>()` registered beside `entity::definitions()` | each app lane |
 | `commands/note.rs` | compiles; still writes the old columns (`notebook_id`, `wikilink` edges), so `note.create`, `note.edit` and the rest fail against the new tables until K11 rewrites it. A note is made in tests with `common::insert_note` | K11 |
-| `history/write.rs`, `commands/event/times.rs` | `history.keep_version` keeps `table.column` fields only; the event overlay (`attendee`, `reminder` lists, the `occurrence`/`DAY` day) is gone: an occurrence is outside a series' snapshot (B1) and guests and reminders are rows with their own keys. `commands/event/times.rs` still names `history::DAY` | calendar lane |
+| `history/write.rs` | `history.keep_version` keeps `table.column` fields only; the event overlay (`attendee`, `reminder` lists, the `occurrence`/`DAY` day) is gone: an occurrence is outside a series' snapshot (B1) and guests and reminders are rows with their own keys (the calendar lane no longer names `history::DAY`) | kernel |
 | `history/restore.rs` | a restore re-links a note only when its words came back different (`note::relink`), so restoring a note's words works once `commands/note.rs` is rewritten | K11 |
 
 ## Test files under `tests/unplugged/`
@@ -80,8 +77,6 @@ and moves it back.
 - **K5 graph, also**: `edge_walks` (the `edge_order` plan, moved out of `index_walks`; its fixture writes the old ids)
 - **people parts of `lane_follow_*`** (contacts' points, owner, doubt, return, tombstones) are ported to `tests/lane_follow_people.rs`; what stays in those files is the other lanes'
 - **K12 commitments and generated pages**: `commitments`, `stored_rules`, `ontology_page`, `ontology_widen`
-- **app lane: calendar/tasks (event, ical, task, occurrence, reminders UI reads)**: `agenda`, `agenda_days`, `agenda_portable`, `agenda_wave2`, `calendar_follow`, `follow_reminders` (the phone Reminders' tasks), `lane_follow_items` (an event's guests), `lane_follow_stated` (an event's fields, a followed series' days), `lane_follow_gaps` (a series' overrides, a followed calendar the member trashed), `lane_follow_retire` (a calendar and the Reminders followed again)
-- **app lane: documents and photos**: `docs_photos`, `document_portable`, `photo_portable`, `store_health`, `lane_follow_stated` (a followed document), `lane_follow_gaps` (a followed file claims its bytes in its command), `lane_origin_cursor` (`photo.add`'s `roll_cursor` and `roll_device`; the engine's own cursor tests are `tests/origin_cursor.rs`), `arrival` was deleted (below)
 - **app lane: health (workout, measurement, reading)**: `health_portable`, `workout_whole`, `lane_follow_stated` (a followed workout's measures), `lane_follow_retire` (Health followed again), `lane_origin_cursor` (health days and a delta's deleted workouts; `follow::write_day_totals` is the one writer of `measurement.origin_id`)
 - **app lane: chat (thread)**: `chat`
 - **export (vault_export, every kind)**: `vault_export`, `unusual_input` (every app's export of unusual text; none of it the kernel)

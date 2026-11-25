@@ -139,6 +139,15 @@ fn rel_is_the_set_of_relations_edge_shape_holds() {
 }
 
 #[test]
+fn a_photo_form_is_the_photo_form_lookup() {
+    let scratch = common::Scratch::empty("lookups_photo_form").expect("a vault");
+    assert_eq!(
+        words(&scratch, "SELECT code FROM photo_form"),
+        rust_words(centraid_vault::commands::photo::Form::ALL.map(|form| form.code()))
+    );
+}
+
+#[test]
 fn a_label_colour_is_a_palette_key() {
     let scratch = common::Scratch::empty("lookups_palette").expect("a vault");
     let palette = words(&scratch, "SELECT key FROM palette");

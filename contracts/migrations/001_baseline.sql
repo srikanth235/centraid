@@ -37,7 +37,7 @@
 -- A1: every kind of entity, and what the kind lets a row do.
 --   linkable      the kind may be an end of a hand-made `link` and the target of a `[[title]]` (F1: a reading is neither).
 --   may_be_top    a row of the kind may sit at the top level; 0 means it must have a home (A19: an event needs a calendar, a section a project).
---   may_be_unnamed  a row of the kind may have an empty (or blank) title; 0 means it needs one (K11: a note). A kind starts at 1 and
+--   may_be_unnamed  a row of the kind may have an empty (or blank) title; 0 means it needs one (K11: a note; a document, a place, a folder and an album the same). A kind starts at 1 and
 --                 its app lane sets 0 when its command says the kind needs a title.
 --   may_be_named  a row of the kind may carry a non-empty title; 0 means the title must be empty (F1: a reading's is empty, the screen formats the figure).
 CREATE TABLE entity_kind (
@@ -769,6 +769,10 @@ CREATE TABLE event (
   -- Minutes of travel the member allows before it starts.
   travel_min     INTEGER CHECK (travel_min IS NULL OR travel_min >= 0),
   description    TEXT,
+  -- 1 when the event runs past a week (any of the three timings parses in `date()`); a calendar read
+  -- looks for a long event on its own index and for a short one only a week back, so a day, a week or
+  -- a month is a bounded walk however long a trip or a semester runs. Plain date arithmetic, no clock.
+  long           INTEGER GENERATED ALWAYS AS (CASE WHEN ends IS NOT NULL AND date(ends) > date(starts, '+7 days') THEN 1 END) VIRTUAL,
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   UNIQUE (id, timing),
   CHECK ((timing = 'zoned') = (zone IS NOT NULL)),
@@ -780,6 +784,8 @@ CREATE TABLE event (
 CREATE INDEX event_by_start ON event(starts, id);
 -- Reader: the series, in start order: the expander's read of every repeating event.
 CREATE INDEX event_by_rule  ON event(starts, id) WHERE rule IS NOT NULL;
+-- Reader: the long events that may run into a window (a calendar read's second seek).
+CREATE INDEX event_long     ON event(starts, id) WHERE long = 1;
 -- Reader: "events at this place"; the child side of `place_id`.
 CREATE INDEX event_by_place ON event(place_id) WHERE place_id IS NOT NULL;
 
@@ -861,6 +867,8 @@ CREATE TABLE occurrence (
 ) STRICT;
 -- Reader: "this day's place"; the child side of `place_id`.
 CREATE INDEX occurrence_by_place ON occurrence(place_id) WHERE place_id IS NOT NULL;
+-- Reader: a day moved INTO a window from anywhere (a calendar read's seek for moved days).
+CREATE INDEX occurrence_by_moved ON occurrence(starts, series_id) WHERE starts IS NOT NULL;
 
 -- D1, D2, D3, D4, C1. A task's home (`entity.parent_id`) is a project, a section or its parent task.
 -- `due` is nullable, so its timing is too: `due_timing` is set exactly when `due` is and `zone`
@@ -899,6 +907,15 @@ CREATE INDEX task_by_due       ON task(status, due, id);
 CREATE INDEX task_by_done      ON task(status, done_at, id);
 CREATE INDEX task_by_scheduled ON task(scheduled_on, id) WHERE scheduled_on IS NOT NULL;
 CREATE INDEX task_by_series    ON task(series_id, due, id) WHERE series_id IS NOT NULL;
+-- D2: a reminder counts back from a due, so a task with none holds none: one is not made on a task
+-- without a due, and clearing the due takes the task's reminders with it. (Neither names a kind: the
+-- row is the task's own, found by its key.)
+CREATE TRIGGER reminder_needs_a_due BEFORE INSERT ON reminder
+  WHEN EXISTS (SELECT 1 FROM task WHERE id = new.entity_id AND due IS NULL)
+  BEGIN SELECT RAISE(ABORT, 'a reminder counts back from a due date: this task has none'); END;
+CREATE TRIGGER task_without_a_due_has_no_reminders AFTER UPDATE OF due ON task
+  WHEN new.due IS NULL
+  BEGIN DELETE FROM reminder WHERE entity_id = new.id; END;
 
 -- L1: a workout is its own kind (no longer an `activity` with a `type_kind`): its figures and its
 -- notes. L6: a followed workout can be edited field by field (the follower's three-way merge keeps
@@ -1048,7 +1065,8 @@ CREATE TABLE photo (
   id          TEXT PRIMARY KEY,
   kind        TEXT GENERATED ALWAYS AS ('photo') VIRTUAL,
   blob        TEXT NOT NULL REFERENCES blob(hash) ON DELETE NO ACTION,
-  media_type  TEXT NOT NULL CHECK (length(trim(media_type)) > 0),
+  -- Sound is kept in Docs: Photos holds pictures, film and scans.
+  media_type  TEXT NOT NULL CHECK (length(trim(media_type)) > 0 AND lower(media_type) NOT GLOB 'audio/*'),
   form        TEXT NOT NULL REFERENCES photo_form(code) ON DELETE NO ACTION,   -- A1
   taken_at    TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', taken_at) IS taken_at),
   offset_min  INTEGER CHECK (offset_min IS NULL OR offset_min BETWEEN -1080 AND 1080),
@@ -1079,6 +1097,19 @@ CREATE INDEX photo_by_motion      ON photo(motion_blob) WHERE motion_blob IS NOT
 CREATE INDEX photo_by_place       ON photo(place_id) WHERE place_id IS NOT NULL;
 CREATE INDEX photo_by_edited_from ON photo(edited_from) WHERE edited_from IS NOT NULL;
 CREATE INDEX photo_by_burst       ON photo(burst) WHERE burst IS NOT NULL;
+-- A photograph is never an edit of its own edit: lineage has no loops, as a home has none
+-- (`entity_home_is_acyclic`). A new row cannot close a loop (nothing names it yet).
+CREATE TRIGGER photo_lineage_is_acyclic BEFORE UPDATE OF edited_from ON photo
+  WHEN new.edited_from IS NOT NULL
+  BEGIN
+    SELECT RAISE(ABORT, 'that photograph is already an edit of this one: lineage has no loops')
+     WHERE EXISTS (
+       WITH RECURSIVE ancestors(id) AS (
+         SELECT new.edited_from
+         UNION
+         SELECT p.edited_from FROM photo p JOIN ancestors a ON p.id = a.id WHERE p.edited_from IS NOT NULL)
+       SELECT 1 FROM ancestors WHERE id = new.id);
+  END;
 
 -- E4, E5: an account; `type` is a lookup. `currency` is fixed once the account has lines (below).
 CREATE TABLE account (
@@ -1401,11 +1432,11 @@ CREATE TABLE locker_key (
 -- ---------------------------------------------------------------------------------------------
 
 INSERT INTO entity_kind (code, linkable, may_be_top, may_be_named, may_be_unnamed) VALUES
-  ('person',1,1,1,0), ('place',1,1,1,1), ('event',1,0,1,1), ('task',1,1,1,1), ('workout',1,1,1,1),
-  ('touch',1,1,1,1), ('reading',0,1,0,1), ('note',1,1,1,0), ('document',1,1,1,1), ('photo',1,1,1,1),
+  ('person',1,1,1,0), ('place',1,1,1,0), ('event',1,0,1,1), ('task',1,1,1,0), ('workout',1,1,1,1),
+  ('touch',1,1,1,1), ('reading',0,1,0,1), ('note',1,1,1,0), ('document',1,1,1,0), ('photo',1,1,1,1),
   ('account',1,1,1,1), ('txn',1,1,1,1), ('thread',0,1,1,1), ('locker_item',1,1,1,1),
   ('tag',0,1,1,1), ('category',0,1,1,1), ('workout_kind',0,1,1,1), ('touch_kind',0,1,1,1), ('relation',0,1,1,1),
-  ('notebook',0,1,1,1), ('folder',0,1,1,1), ('album',0,1,1,1), ('list',0,1,1,1), ('project',0,1,1,1),
+  ('notebook',0,1,1,1), ('folder',0,1,1,0), ('album',0,1,1,0), ('list',0,1,1,1), ('project',0,1,1,1),
   ('section',0,0,1,1), ('area',0,1,1,1), ('calendar',0,1,1,1);
 
 -- A19, C1, C2: where each kind may sit. A concept's parent is of its own kind.

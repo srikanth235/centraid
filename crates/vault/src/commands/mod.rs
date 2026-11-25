@@ -48,11 +48,16 @@ pub mod blob;
 pub mod contact_point;
 pub mod container;
 pub mod csv;
+pub mod document;
+pub mod document_portable;
 pub mod edge;
 pub mod entity;
+pub mod event;
+pub mod event_portable;
 pub mod flag;
 pub mod follow;
 pub mod history;
+pub mod ical;
 pub mod locker;
 pub mod money;
 pub mod note;
@@ -61,10 +66,15 @@ pub mod origin_cursor;
 pub mod person;
 pub mod person_date;
 pub mod person_portable;
+pub mod photo;
+pub mod photo_portable;
+pub mod place;
 pub mod reminder;
 pub mod rule;
 pub mod sealed;
 pub mod tag;
+pub mod task;
+pub mod task_portable;
 pub mod touch;
 pub mod txn;
 pub mod txn_portable;
@@ -375,12 +385,16 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 20] = [
+        let modules: &[fn() -> Vec<CommandDefinition>] = &[
             blob::definitions,
             contact_point::definitions,
             container::definitions,
+            document::definitions,
+            document_portable::definitions,
             edge::definitions,
             entity::definitions,
+            event::definitions,
+            event_portable::definitions,
             flag::definitions,
             follow::definitions,
             history::definitions,
@@ -389,15 +403,20 @@ impl Registry {
             note::definitions,
             person::definitions,
             person_date::definitions,
+            photo::definitions,
+            photo_portable::definitions,
+            place::definitions,
             reminder::definitions,
             rule::definitions,
             tag::definitions,
+            task::definitions,
+            task_portable::definitions,
             touch::definitions,
             txn::definitions,
             txn_portable::definitions,
             vault::definitions,
         ];
-        for definitions in modules {
+        for definitions in modules.iter().copied() {
             for definition in definitions() {
                 registry.register(definition)?;
             }

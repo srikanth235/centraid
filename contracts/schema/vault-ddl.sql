@@ -112,6 +112,9 @@ CREATE INDEX event_guest_by_person ON event_guest(person_id, event_id) WHERE per
 -- index event_guest_one_organizer on event_guest
 CREATE UNIQUE INDEX event_guest_one_organizer ON event_guest(event_id) WHERE organizer = 1;
 
+-- index event_long on event
+CREATE INDEX event_long     ON event(starts, id) WHERE long = 1;
+
 -- index home_shape_by_home on home_shape
 CREATE INDEX home_shape_by_home ON home_shape(home_kind, kind);
 
@@ -180,6 +183,9 @@ CREATE INDEX note_asset_by_note ON note_asset(note_id, position, id);
 
 -- index note_by_journal on note
 CREATE INDEX note_by_journal ON note(journal_on, id) WHERE journal_on IS NOT NULL;
+
+-- index occurrence_by_moved on occurrence
+CREATE INDEX occurrence_by_moved ON occurrence(starts, series_id) WHERE starts IS NOT NULL;
 
 -- index occurrence_by_place on occurrence
 CREATE INDEX occurrence_by_place ON occurrence(place_id) WHERE place_id IS NOT NULL;
@@ -569,6 +575,10 @@ CREATE TABLE event (
   -- Minutes of travel the member allows before it starts.
   travel_min     INTEGER CHECK (travel_min IS NULL OR travel_min >= 0),
   description    TEXT,
+  -- 1 when the event runs past a week (any of the three timings parses in `date()`); a calendar read
+  -- looks for a long event on its own index and for a short one only a week back, so a day, a week or
+  -- a month is a bounded walk however long a trip or a semester runs. Plain date arithmetic, no clock.
+  long           INTEGER GENERATED ALWAYS AS (CASE WHEN ends IS NOT NULL AND date(ends) > date(starts, '+7 days') THEN 1 END) VIRTUAL,
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   UNIQUE (id, timing),
   CHECK ((timing = 'zoned') = (zone IS NOT NULL)),
@@ -908,7 +918,8 @@ CREATE TABLE photo (
   id          TEXT PRIMARY KEY,
   kind        TEXT GENERATED ALWAYS AS ('photo') VIRTUAL,
   blob        TEXT NOT NULL REFERENCES blob(hash) ON DELETE NO ACTION,
-  media_type  TEXT NOT NULL CHECK (length(trim(media_type)) > 0),
+  -- Sound is kept in Docs: Photos holds pictures, film and scans.
+  media_type  TEXT NOT NULL CHECK (length(trim(media_type)) > 0 AND lower(media_type) NOT GLOB 'audio/*'),
   form        TEXT NOT NULL REFERENCES photo_form(code) ON DELETE NO ACTION,   -- A1
   taken_at    TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', taken_at) IS taken_at),
   offset_min  INTEGER CHECK (offset_min IS NULL OR offset_min BETWEEN -1080 AND 1080),
@@ -1329,6 +1340,24 @@ CREATE TRIGGER message_outcome_settles_once BEFORE UPDATE OF outcome ON message
      WHERE new.outcome NOT IN ('applied','dismissed','stale','failed');
   END;
 
+-- trigger photo_lineage_is_acyclic on photo
+CREATE TRIGGER photo_lineage_is_acyclic BEFORE UPDATE OF edited_from ON photo
+  WHEN new.edited_from IS NOT NULL
+  BEGIN
+    SELECT RAISE(ABORT, 'that photograph is already an edit of this one: lineage has no loops')
+     WHERE EXISTS (
+       WITH RECURSIVE ancestors(id) AS (
+         SELECT new.edited_from
+         UNION
+         SELECT p.edited_from FROM photo p JOIN ancestors a ON p.id = a.id WHERE p.edited_from IS NOT NULL)
+       SELECT 1 FROM ancestors WHERE id = new.id);
+  END;
+
+-- trigger reminder_needs_a_due on reminder
+CREATE TRIGGER reminder_needs_a_due BEFORE INSERT ON reminder
+  WHEN EXISTS (SELECT 1 FROM task WHERE id = new.entity_id AND due IS NULL)
+  BEGIN SELECT RAISE(ABORT, 'a reminder counts back from a due date: this task has none'); END;
+
 -- trigger revision_blob_is_history on revision_blob
 CREATE TRIGGER revision_blob_is_history BEFORE UPDATE ON revision_blob
   BEGIN SELECT RAISE(ABORT, 'a revision is history'); END;
@@ -1352,6 +1381,11 @@ CREATE TRIGGER source_never_names_the_owner BEFORE INSERT ON source
 CREATE TRIGGER source_tombstone_is_final BEFORE UPDATE OF entity_id ON source
   WHEN old.entity_id IS NULL AND new.entity_id IS NOT NULL
   BEGIN SELECT RAISE(ABORT, 'a purged row''s source never takes a row again'); END;
+
+-- trigger task_without_a_due_has_no_reminders on task
+CREATE TRIGGER task_without_a_due_has_no_reminders AFTER UPDATE OF due ON task
+  WHEN new.due IS NULL
+  BEGIN DELETE FROM reminder WHERE entity_id = new.id; END;
 
 -- trigger transfer_halves_are_in_one_pair on transfer
 CREATE TRIGGER transfer_halves_are_in_one_pair BEFORE INSERT ON transfer

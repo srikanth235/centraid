@@ -207,27 +207,6 @@ fn a_read_that_lost_most_of_what_the_vault_follows_trashes_nothing_for_every_sys
         (Some(0), Some(5)),
         "calendar: {tally}"
     );
-
-    let folder = w.folder("Taxes");
-    let file = |i: usize| {
-        json!({ "external_id": format!("/{i}.pdf"), "fields": {
-            "title": format!("{i}.pdf"), "blob": w.bytes(&format!("file {i}")),
-            "media_type": "application/pdf" } })
-    };
-    let files = |complete: bool, records: Vec<Value>| {
-        w.ok(
-            "follow.files",
-            json!({ "origin": { "ref": "/Taxes", "label": "Taxes", "fills": folder },
-                     "complete": complete, "records": records }),
-        )
-    };
-    files(false, (0..6).map(file).collect());
-    let tally = files(true, vec![file(0)]);
-    assert_eq!(
-        (tally["trashed"].as_i64(), tally["doubted"].as_i64()),
-        (Some(0), Some(5)),
-        "files: {tally}"
-    );
 }
 
 // ---------------------------------------------------------------------------
@@ -417,100 +396,8 @@ fn a_merge_re_points_every_foreign_key_into_an_entity_not_a_hand_list() {
 }
 
 // ---------------------------------------------------------------------------
-// Bytes, in the command
-// ---------------------------------------------------------------------------
-
-#[test]
-fn a_followed_file_claims_its_bytes_in_the_command_that_names_them() {
-    let w = World::new();
-    let folder = w.folder("Taxes");
-    let hash = centraid_vault::blob::content_digest(b"never staged by a command");
-    let origin = json!({ "ref": "/Taxes", "label": "Taxes", "fills": folder });
-    let record = |size: Option<i64>| {
-        let mut record = json!({ "external_id": "/a.pdf", "fields": {
-            "title": "a.pdf", "blob": hash, "media_type": "application/pdf" } });
-        if let Some(size) = size {
-            record["size"] = json!(size);
-        }
-        record
-    };
-    let sentence = w.refused(
-        "follow.files",
-        json!({ "origin": origin, "records": [record(None)], "complete": true }),
-    );
-    assert!(sentence.contains("how large"), "{sentence}");
-    let told = w.ok(
-        "follow.files",
-        json!({ "origin": origin, "records": [record(Some(25))], "complete": true }),
-    );
-    assert_eq!(told["added"].as_i64(), Some(1), "{told}");
-    assert_eq!(
-        w.one::<i64>("SELECT size FROM blob WHERE hash = ?1", &[&hash]),
-        25
-    );
-}
-
-// ---------------------------------------------------------------------------
 // A series' days
 // ---------------------------------------------------------------------------
-
-fn series(starts: &str, rule: &str) -> Value {
-    json!({ "external_id": "uid:standup", "fields": {
-        "title": "Standup", "starts": starts, "zone": "Europe/Paris", "rule": rule } })
-}
-
-fn days(w: &World, id: &str) -> Vec<(String, i64)> {
-    w.scratch
-        .vault
-        .read(|c| {
-            let mut statement = c.prepare(
-                "SELECT original_start, cancelled FROM occurrence WHERE series_id = ?1 ORDER BY 1",
-            )?;
-            let rows = statement
-                .query_map([id], |row| Ok((row.get(0)?, row.get(1)?)))?
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(rows)
-        })
-        .expect("days")
-}
-
-#[test]
-fn a_series_that_moves_in_the_day_takes_its_overrides_with_it() {
-    let w = World::new();
-    calendar(&w, true, vec![series("2026-03-02T09:00:00", "FREQ=WEEKLY")]);
-    let id = w.one::<String>("SELECT entity_id FROM source", &[]);
-    w.ok(
-        "event.edit_occurrence",
-        json!({ "id": id, "original_start": "2026-03-09T09:00:00", "scope": "occurrence", "action": "skip" }),
-    );
-    calendar(&w, true, vec![series("2026-03-02T10:00:00", "FREQ=WEEKLY")]);
-    assert_eq!(
-        days(&w, &id),
-        [("2026-03-09T10:00:00".to_owned(), 1)],
-        "the skipped week is still skipped, at the hour the series keeps now"
-    );
-}
-
-#[test]
-fn a_series_that_no_longer_lands_on_an_override_s_day_drops_it() {
-    let w = World::new();
-    calendar(&w, true, vec![series("2026-03-02T09:00:00", "FREQ=WEEKLY")]);
-    let id = w.one::<String>("SELECT entity_id FROM source", &[]);
-    w.ok(
-        "event.edit_occurrence",
-        json!({ "id": id, "original_start": "2026-03-09T09:00:00", "scope": "occurrence", "action": "skip" }),
-    );
-    calendar(
-        &w,
-        true,
-        vec![series("2026-03-02T09:00:00", "FREQ=MONTHLY")],
-    );
-    assert_eq!(
-        days(&w, &id),
-        Vec::<(String, i64)>::new(),
-        "a day nothing will read is not kept"
-    );
-}
 
 // ---------------------------------------------------------------------------
 // Statements
