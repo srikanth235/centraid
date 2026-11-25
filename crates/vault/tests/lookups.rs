@@ -177,14 +177,21 @@ fn a_founded_vault_has_its_index_file_attached_and_its_tables_are_not_the_vaults
     assert_eq!(rung, centraid_vault::migrations::index_head_version());
 }
 
+/// A founded vault's file, closed so its index file is on disk too, in a scratch directory of its own.
+fn closed_vault() -> (std::path::PathBuf, std::path::PathBuf, std::path::PathBuf) {
+    let dir = centraid_ontology::scratch::scratch_dir();
+    std::fs::create_dir_all(&dir).expect("a directory");
+    let file = dir.join("vault.db");
+    let vault = centraid_vault::Vault::create(&file).expect("a vault");
+    vault.found("Test", "Owner").expect("founded");
+    vault.finish().expect("closes");
+    let index = dir.join("vault.index.db");
+    (dir, file, index)
+}
+
 #[test]
 fn a_missing_index_file_is_founded_again_and_owes_every_entity() {
-    let scratch = common::Scratch::founded("lookups_refound").expect("a vault");
-    let file = scratch.dir().join("vault.db");
-    let index = scratch.dir().join("vault.index.db");
-    let Scratch = scratch;
-    // Close the vault, lose the derived file, open again.
-    drop(Scratch.vault);
+    let (dir, file, index) = closed_vault();
     for suffix in ["", "-wal", "-shm"] {
         let _ = std::fs::remove_file(format!("{}{suffix}", index.display()));
     }
@@ -197,18 +204,21 @@ fn a_missing_index_file_is_founded_again_and_owes_every_entity() {
         .read(|c| Ok(c.query_row("SELECT COUNT(*) FROM entity", [], |r| r.get(0))?))
         .expect("a count");
     assert_eq!(owed, entities, "a new index file owes every entity");
+    drop(vault);
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn a_database_that_is_not_ours_at_the_index_path_is_refused_and_left_alone() {
-    let scratch = common::Scratch::founded("lookups_foreign").expect("a vault");
-    let file = scratch.dir().join("vault.db");
-    let index = scratch.dir().join("vault.index.db");
-    drop(scratch.vault);
-    let _ = std::fs::remove_file(&index);
+    let (dir, file, index) = closed_vault();
+    for suffix in ["", "-wal", "-shm"] {
+        let _ = std::fs::remove_file(format!("{}{suffix}", index.display()));
+    }
     {
         let plain = rusqlite::Connection::open(&index).expect("a plain file");
-        plain.pragma_update(None, "application_id", 0x5a5a_5a5a_i64).expect("a tag");
+        plain
+            .pragma_update(None, "application_id", 0x5a5a_5a5a_i64)
+            .expect("a tag");
         plain.execute_batch("CREATE TABLE theirs (x TEXT)").expect("a table");
     }
     let before = std::fs::read(&index).expect("bytes");
@@ -218,4 +228,5 @@ fn a_database_that_is_not_ours_at_the_index_path_is_refused_and_left_alone() {
     };
     assert!(refused.contains("is not a Centraid vault"), "{refused}");
     assert_eq!(std::fs::read(&index).expect("bytes"), before, "left byte-identical");
+    let _ = std::fs::remove_dir_all(&dir);
 }
