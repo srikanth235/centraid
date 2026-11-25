@@ -51,16 +51,18 @@ pub const TABLES: &[(&str, Role)] = &[
     ("place", Role::Host),
     ("event", Role::Host),
     ("task", Role::Host),
-    ("activity", Role::Host),
+    ("workout", Role::Host),
+    ("touch", Role::Host),
+    ("reading", Role::Host),
     ("note", Role::Host),
     ("document", Role::Host),
     ("photo", Role::Host),
     ("account", Role::Host),
     ("txn", Role::Host),
     ("thread", Role::Host),
+    ("locker_item", Role::Host),
     ("concept", Role::Host),
     ("container", Role::Host),
-    ("locker_item", Role::Host),
     // Rows that hang off a kind row.
     (
         "contact_point",
@@ -69,6 +71,16 @@ pub const TABLES: &[(&str, Role)] = &[
             via: "person_id",
             filter: None,
             alias: "contact_point",
+            key: &[],
+        },
+    ),
+    (
+        "person_date",
+        Role::Child {
+            host: "person",
+            via: "person_id",
+            filter: None,
+            alias: "person_date",
             key: &[],
         },
     ),
@@ -83,80 +95,68 @@ pub const TABLES: &[(&str, Role)] = &[
         },
     ),
     (
-        "occurrence",
+        "reminder",
+        Role::Child {
+            host: "task",
+            via: "entity_id",
+            filter: None,
+            alias: "reminder_task",
+            key: &[],
+        },
+    ),
+    (
+        "event_guest",
         Role::Child {
             host: "event",
-            via: "series_id",
+            via: "event_id",
             filter: None,
-            alias: "occurrence",
+            alias: "event_guest",
             key: &[],
         },
     ),
     (
-        "workout",
+        "txn_split",
         Role::Child {
-            host: "activity",
-            via: "id",
+            host: "txn",
+            via: "txn_id",
             filter: None,
-            alias: "workout",
+            alias: "txn_split",
             key: &[],
         },
     ),
     (
-        "budget",
+        "note_asset",
         Role::Child {
-            host: "concept",
-            via: "category_id",
+            host: "note",
+            via: "note_id",
             filter: None,
-            alias: "budget",
+            alias: "note_asset",
             key: &[],
         },
     ),
     (
-        "rule",
-        Role::Child {
-            host: "concept",
-            via: "category_id",
-            filter: None,
-            alias: "rule",
-            key: &[],
-        },
-    ),
-    (
-        "locker_item_address",
+        "locker_item_field",
         Role::Child {
             host: "locker_item",
             via: "item_id",
             filter: None,
-            alias: "locker_item_address",
+            alias: "locker_item_field",
             key: &[],
         },
     ),
     (
-        "locker_item_alias",
+        "locker_item_passkey",
         Role::Child {
             host: "locker_item",
             via: "item_id",
             filter: None,
-            alias: "locker_item_alias",
+            alias: "locker_item_passkey",
             key: &[],
         },
     ),
-    // A guest is part of the event: the person and their answer.
-    (
-        "edge",
-        Role::Child {
-            host: "event",
-            via: "from_id",
-            filter: Some("rel = 'attendee'"),
-            alias: "attendee",
-            key: &["to_id"],
-        },
-    ),
-    // WHAT DECORATES A RECORD IS PART OF ITS STATE (#1185): its tags and flags, the list or album
-    // it is in, and the links a member made by hand. They are `edge` rows of every kind (`host`
-    // `*`), each named by the alias it goes by in a state, so a change to one is an earlier
-    // version like a change to a field, and a restore puts it back.
+    // WHAT DECORATES A RECORD IS PART OF ITS STATE (#1185): its tags, the list or album it is in, and
+    // the links a member made by hand. Each goes by an alias in a state, so a change to one is an
+    // earlier version like a change to a field, and a restore puts it back.
     (
         "edge",
         Role::Child {
@@ -167,19 +167,6 @@ pub const TABLES: &[(&str, Role)] = &[
             key: &["to_id"],
         },
     ),
-    // A star, a pin and an archive: the seeded flag entities.
-    (
-        "edge",
-        Role::Child {
-            host: "*",
-            via: "from_id",
-            filter: Some("rel = 'tagged' AND to_id LIKE 'flag:%'"),
-            alias: "flag",
-            key: &["to_id"],
-        },
-    ),
-    // A list or an album holds the record: the membership is the RECORD's (the entity is the
-    // edge's `to_id`), never the container's, which holds thousands.
     (
         "edge",
         Role::Child {
@@ -190,40 +177,12 @@ pub const TABLES: &[(&str, Role)] = &[
             key: &["from_id"],
         },
     ),
-    // A link set by hand, from either end. A link compiled from a note's words carries an anchor
-    // and is not state: the words are, and a restore recompiles it.
     (
         "edge",
         Role::Child {
             host: "*",
             via: "from_id",
-            filter: Some("rel = 'links' AND wikilink IS NULL AND anchor IS NULL"),
-            alias: "link_out",
-            key: &["to_id"],
-        },
-    ),
-    // A link a Locker item started is Locker's alone and never named in another record's history
-    // (owner ruling D11).
-    (
-        "edge",
-        Role::Child {
-            host: "*",
-            via: "to_id",
-            filter: Some(
-                "rel = 'links' AND wikilink IS NULL AND anchor IS NULL AND NOT EXISTS \
-                 (SELECT 1 FROM entity f WHERE f.id = from_id AND f.kind = 'locker_item')",
-            ),
-            alias: "link_in",
-            key: &["from_id"],
-        },
-    ),
-    // What a note, a task or an event is about, and who a photograph shows.
-    (
-        "edge",
-        Role::Child {
-            host: "*",
-            via: "from_id",
-            filter: Some("rel = 'about' AND anchor IS NULL"),
+            filter: Some("rel = 'about'"),
             alias: "about",
             key: &["to_id"],
         },
@@ -238,8 +197,27 @@ pub const TABLES: &[(&str, Role)] = &[
             key: &["to_id"],
         },
     ),
-    // The two halves of a transfer are each other's state: a line's pair is a row of `transfer`
-    // whichever side it is on, so a change to the pair is an earlier version of both lines.
+    // A hand-made link has no direction (A4): it is part of either end's state.
+    (
+        "link",
+        Role::Child {
+            host: "*",
+            via: "a",
+            filter: None,
+            alias: "link_a",
+            key: &["b"],
+        },
+    ),
+    (
+        "link",
+        Role::Child {
+            host: "*",
+            via: "b",
+            filter: None,
+            alias: "link_b",
+            key: &["a"],
+        },
+    ),
     (
         "transfer",
         Role::Child {
@@ -260,44 +238,14 @@ pub const TABLES: &[(&str, Role)] = &[
             key: &["a"],
         },
     ),
-    // A custom field's sealed value (a `sealed` or `otp` kind) is kept like any other column, as
-    // the ciphertext it is: sealed under the same key and bound to the same field id, so a restore
-    // puts back a value the live reveal opens.
-    (
-        "locker_item_field",
-        Role::Child {
-            host: "locker_item",
-            via: "item_id",
-            filter: None,
-            alias: "locker_item_field",
-            key: &[],
-        },
-    ),
-    // A passkey is part of the item: its relying party, names and algorithm, and its private key as
-    // the ciphertext it is, so removing or replacing one is taken back like any other change. The
-    // key is masked on read and never revealed, as it never is live.
-    (
-        "locker_item_passkey",
-        Role::Child {
-            host: "locker_item",
-            via: "item_id",
-            filter: None,
-            alias: "locker_item_passkey",
-            key: &[],
-        },
-    ),
     // Not an entity's state.
     (
         "vault",
         Role::Outside("the vault's own row and write counter"),
     ),
     (
-        "edge_shape",
-        Role::Outside("the model's own rules, founded with the file"),
-    ),
-    (
         "blob",
-        Role::Outside("bytes, by hash; a version names one and copies none"),
+        Role::Outside("bytes, by hash; a version names one through `revision_blob` and copies none"),
     ),
     (
         "derivative",
@@ -311,15 +259,41 @@ pub const TABLES: &[(&str, Role)] = &[
         "source",
         Role::Outside("what the phone last said; `follow::differences` reads it"),
     ),
-    ("revision", Role::Outside("the history itself")),
-    ("action_key", Role::Outside("the keys of acts already run")),
+    (
+        "revision",
+        Role::Outside("the history itself"),
+    ),
+    (
+        "revision_blob",
+        Role::Outside("the history's own blob claims"),
+    ),
+    (
+        "action_key",
+        Role::Outside("the keys of acts already run"),
+    ),
     (
         "measurement",
-        Role::Outside("a reading of a day, not an edit; a series of its own"),
+        Role::Outside("a day's total, not an edit; a correction overwrites it"),
     ),
     (
         "checkpoint",
         Role::Outside("a balance the bank stated; never edited"),
+    ),
+    (
+        "budget",
+        Role::Outside("B1: a budget is not part of its category's snapshot"),
+    ),
+    (
+        "rule",
+        Role::Outside("B1: a rule is not part of its category's snapshot"),
+    ),
+    (
+        "occurrence",
+        Role::Outside("B1: a one-day override is not part of its series' snapshot"),
+    ),
+    (
+        "mention",
+        Role::Outside("rebuilt from the note's words on every save"),
     ),
     (
         "message",
@@ -329,12 +303,101 @@ pub const TABLES: &[(&str, Role)] = &[
         "message_attachment",
         Role::Outside("a chat's transcript is appended, never edited"),
     ),
-    ("locker_key", Role::Outside("custody's own bookkeeping")),
-    ("search_word", Role::Outside("the search index")),
-    ("search_owed", Role::Outside("the search index")),
+    (
+        "locker_key",
+        Role::Outside("custody's own bookkeeping"),
+    ),
+    (
+        "search_word",
+        Role::Outside("the search index"),
+    ),
+    (
+        "search_owed",
+        Role::Outside("the search index's queue"),
+    ),
     (
         "alert",
-        Role::Outside("derived from the event or task it belongs to"),
+        Role::Outside("derived from the reminder it belongs to"),
+    ),
+    (
+        "entity_kind",
+        Role::Outside("a lookup: written only by a migration rung"),
+    ),
+    (
+        "home_shape",
+        Role::Outside("a lookup: written only by a migration rung"),
+    ),
+    (
+        "concept_kind",
+        Role::Outside("a lookup: written only by a migration rung"),
+    ),
+    (
+        "container_kind",
+        Role::Outside("a lookup: written only by a migration rung"),
+    ),
+    (
+        "palette",
+        Role::Outside("a lookup: written only by a migration rung"),
+    ),
+    (
+        "arrival_via",
+        Role::Outside("a lookup: written only by a migration rung"),
+    ),
+    (
+        "origin_system",
+        Role::Outside("a lookup: written only by a migration rung"),
+    ),
+    (
+        "source_shape",
+        Role::Outside("a lookup: written only by a migration rung"),
+    ),
+    (
+        "derivative_variant",
+        Role::Outside("a lookup: written only by a migration rung"),
+    ),
+    (
+        "contact_point_kind",
+        Role::Outside("a lookup: written only by a migration rung"),
+    ),
+    (
+        "photo_form",
+        Role::Outside("a lookup: written only by a migration rung"),
+    ),
+    (
+        "account_type",
+        Role::Outside("a lookup: written only by a migration rung"),
+    ),
+    (
+        "locker_type",
+        Role::Outside("a lookup: written only by a migration rung"),
+    ),
+    (
+        "message_refusal",
+        Role::Outside("a lookup: written only by a migration rung"),
+    ),
+    (
+        "message_notice",
+        Role::Outside("a lookup: written only by a migration rung"),
+    ),
+    (
+        "person_form",
+        Role::Outside("a lookup: written only by a migration rung"),
+    ),
+    (
+        "person_date_kind",
+        Role::Outside("a lookup: written only by a migration rung"),
+    ),
+    (
+        "reminder_target",
+        Role::Outside("a lookup: written only by a migration rung"),
+    ),
+    (
+        "health_metric",
+        Role::Outside("a lookup: written only by a migration rung"),
+    ),
+    (
+        "edge_shape",
+        Role::Outside("a lookup: written only by a migration rung"),
     ),
 ];
 
@@ -348,7 +411,7 @@ pub const RELATIONS_OUTSIDE: &[(&str, &str)] = &[
     ),
     (
         "with",
-        "a Locker item's link; never state, and hidden from every door but Locker's",
+        "who took part in a workout, a touch or a line: part of that record, with its own verbs",
     ),
     (
         "related",
@@ -364,19 +427,22 @@ pub const OMITTED: &[(&str, &str, &str)] = &[
     ("entity", "n", "row order"),
     ("entity", "id", "identity"),
     ("entity", "kind", "identity"),
+    ("entity", "parent_kind", "identity: the home's kind"),
     ("entity", "created_at", "stamp, never edited"),
     ("entity", "updated_at", "stamp; every commit moves it"),
+    ("entity", "deleted_at", "trash is not state: a trashed record is the same record"),
+    ("entity", "purge_at", "trash is not state"),
+    ("entity", "trashed_by", "trash is not state"),
+    ("entity", "starred_at", "A14: a star is not an edit; it stamps no revision"),
+    ("entity", "pinned_at", "A14: a pin is not an edit; it stamps no revision"),
+    ("entity", "archived_at", "A14: an archive is not an edit; it stamps no revision"),
+    ("entity", "arrived_via", "provenance, never edited"),
+    ("entity", "arrived_label", "provenance, never edited"),
     (
         "edge",
         "position",
         "the order of a list or album is the container's: reordering is not a change to a record, and a restore puts a member back unordered",
     ),
-    (
-        "entity",
-        "deleted_at",
-        "trash is not state: a trashed record is the same record",
-    ),
-    ("entity", "purge_at", "trash is not state"),
     ("concept", "kind", "identity: the entity's kind"),
     ("container", "kind", "identity: the entity's kind"),
     // The file a photograph is does not change; an edit makes another photograph.
@@ -386,17 +452,19 @@ pub const OMITTED: &[(&str, &str, &str)] = &[
     ("photo", "width", "immutable: the file"),
     ("photo", "height", "immutable: the file"),
     ("photo", "duration_s", "immutable: the file"),
+    ("photo", "motion_blob", "immutable: the file"),
+    ("photo", "motion_duration_s", "immutable: the file"),
     ("photo", "exif", "immutable: the file"),
     ("photo", "burst", "immutable: the camera's"),
     ("photo", "edited_from", "immutable: how it was made"),
     // A statement line's own words are the bank's; only what the member sets is state.
     ("txn", "account_id", "bank-stated, never edited"),
-    ("txn", "currency", "bank-stated, never edited"),
     ("txn", "posted_on", "bank-stated, never edited"),
     ("txn", "amount_minor", "bank-stated, never edited"),
-    // Locker: the five sealed cells, the stamp of the last change to one and the key generation
-    // they were sealed under are all kept (the ciphertext, never a plaintext), so a changed
-    // password comes back with its age. What is only a use of the item is not.
+    ("txn", "original_amount_minor", "bank-stated, never edited"),
+    ("txn", "original_currency", "bank-stated, never edited"),
+    // Locker: the sealed cells are kept as the ciphertext they are, never a plaintext. What is only
+    // a use of the item is not an edit.
     ("locker_item", "last_used_at", "a use is not an edit"),
     (
         "locker_item_field",

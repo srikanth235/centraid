@@ -162,7 +162,7 @@ fn card_kind(entity: &str) -> Option<Kind> {
     match entity {
         "transaction" => Some(Kind::Txn),
         "project" => Some(Kind::Project),
-        "workout" => Some(Kind::Activity),
+        "workout" => Some(Kind::Workout),
         other => Kind::parse(other),
     }
 }

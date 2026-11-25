@@ -85,7 +85,7 @@ pub fn content_files_on(
                     COALESCE((SELECT media_type FROM derivative WHERE out = b.hash LIMIT 1),
                              (SELECT media_type FROM photo WHERE blob = b.hash),
                              (SELECT media_type FROM document WHERE blob = b.hash LIMIT 1),
-                             (SELECT media_type FROM revision WHERE blob = b.hash LIMIT 1)),
+                             (SELECT media_type FROM revision_blob WHERE blob = b.hash AND media_type IS NOT NULL LIMIT 1)),
                     COALESCE((SELECT p.taken_at FROM derivative dv JOIN photo p ON p.blob = dv.blob
                                WHERE dv.out = b.hash LIMIT 1),
                              (SELECT created_at FROM derivative WHERE out = b.hash LIMIT 1),
@@ -93,7 +93,8 @@ pub fn content_files_on(
                                WHERE p.blob = b.hash),
                              (SELECT e.created_at FROM document d JOIN entity e ON e.id = d.id
                                WHERE d.blob = b.hash LIMIT 1),
-                             (SELECT at FROM revision WHERE blob = b.hash LIMIT 1),
+                             (SELECT r.at FROM revision_blob rb JOIN revision r ON r.entity_id = rb.entity_id AND r.seq = rb.seq
+                               WHERE rb.blob = b.hash LIMIT 1),
                              '')
                FROM blob b
               ORDER BY 5 DESC, variant IS NOT NULL, 1",
@@ -162,7 +163,7 @@ pub fn content_files_for(
                     COALESCE((SELECT media_type FROM derivative WHERE out = b.hash LIMIT 1),
                              (SELECT media_type FROM photo WHERE blob = b.hash),
                              (SELECT media_type FROM document WHERE blob = b.hash LIMIT 1),
-                             (SELECT media_type FROM revision WHERE blob = b.hash LIMIT 1)),
+                             (SELECT media_type FROM revision_blob WHERE blob = b.hash AND media_type IS NOT NULL LIMIT 1)),
                     COALESCE((SELECT p.taken_at FROM derivative dv JOIN photo p ON p.blob = dv.blob
                                WHERE dv.out = b.hash LIMIT 1),
                              (SELECT created_at FROM derivative WHERE out = b.hash LIMIT 1),
@@ -170,7 +171,8 @@ pub fn content_files_for(
                                WHERE p.blob = b.hash),
                              (SELECT e.created_at FROM document d JOIN entity e ON e.id = d.id
                                WHERE d.blob = b.hash LIMIT 1),
-                             (SELECT at FROM revision WHERE blob = b.hash LIMIT 1),
+                             (SELECT r.at FROM revision_blob rb JOIN revision r ON r.entity_id = rb.entity_id AND r.seq = rb.seq
+                               WHERE rb.blob = b.hash LIMIT 1),
                              '')
                FROM blob b WHERE b.hash = ?1",
         )?;
@@ -227,10 +229,15 @@ pub fn content_files_for(
 pub const RENTERS: &[(&str, &str, &str)] = &[
     ("container", "cover", "id"),
     ("document", "blob", "id"),
+    // A sealed file is a field of its item (I7); an earlier version names every blob it held
+    // through `revision_blob` (B3).
+    ("locker_item_field", "value_blob", "item_id"),
     ("message_attachment", "thumb", "thread_id"),
+    ("note_asset", "blob", "note_id"),
     ("person", "avatar", "id"),
     ("photo", "blob", "id"),
-    ("revision", "blob", "entity_id"),
+    ("photo", "motion_blob", "id"),
+    ("revision_blob", "blob", "entity_id"),
 ];
 
 /// The hashes only lapsed entities rent: every renter of each is an entity

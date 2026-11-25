@@ -42,7 +42,7 @@ use crate::model::Kind;
 /// its title is part of the text of what it labels, so a member finds a
 /// transaction by its category and an event by its calendar. A Locker item is
 /// found by its plain fields only ([`text_of`]); a sealed cell is never text.
-pub const SEARCHABLE: [Kind; 15] = Kind::SEARCHABLE;
+pub const SEARCHABLE: [Kind; 16] = Kind::SEARCHABLE;
 
 /// The text a kind is found by, beside its title: its own row and children, the
 /// words that label it, and the live notes `about` it. `None` is a kind nobody
@@ -59,6 +59,11 @@ pub fn text_of(connection: &Connection, id: &str, kind: Kind) -> Result<Option<S
         Kind::Person => joined(
             connection,
             "SELECT nickname FROM person WHERE id = ?1
+             UNION ALL SELECT given FROM person WHERE id = ?1
+             UNION ALL SELECT family FROM person WHERE id = ?1
+             UNION ALL SELECT phonetic FROM person WHERE id = ?1
+             UNION ALL SELECT org FROM person WHERE id = ?1
+             UNION ALL SELECT label FROM person_date WHERE person_id = ?1
              UNION ALL SELECT role FROM person WHERE id = ?1
              UNION ALL SELECT met FROM person WHERE id = ?1
              UNION ALL SELECT value FROM contact_point WHERE person_id = ?1
@@ -82,47 +87,56 @@ pub fn text_of(connection: &Connection, id: &str, kind: Kind) -> Result<Option<S
              UNION ALL SELECT p.title FROM event v JOIN entity p ON p.id = v.place_id AND p.deleted_at IS NULL WHERE v.id = ?1
              UNION ALL SELECT pl.address FROM event v JOIN place pl ON pl.id = v.place_id
                JOIN entity pe ON pe.id = pl.id AND pe.deleted_at IS NULL WHERE v.id = ?1
-             UNION ALL SELECT c.title FROM event v JOIN entity c ON c.id = v.calendar_id AND c.deleted_at IS NULL WHERE v.id = ?1
+             UNION ALL SELECT c.title FROM event v JOIN entity ev ON ev.id = v.id JOIN entity c ON c.id = ev.parent_id AND c.deleted_at IS NULL WHERE v.id = ?1
+             UNION ALL SELECT location FROM event WHERE id = ?1
              UNION ALL SELECT title FROM (
                  SELECT title FROM occurrence WHERE series_id = ?1 AND title IS NOT NULL
-                  ORDER BY original_start, scope)
+                  ORDER BY original_start)
              UNION ALL SELECT description FROM (
                  SELECT description FROM occurrence WHERE series_id = ?1 AND description IS NOT NULL
-                  ORDER BY original_start, scope)
+                  ORDER BY original_start)
              UNION ALL SELECT url FROM (
                  SELECT url FROM occurrence WHERE series_id = ?1 AND url IS NOT NULL
-                  ORDER BY original_start, scope)",
+                  ORDER BY original_start)",
             id,
         )?,
         Kind::Task => joined(
             connection,
             "SELECT description FROM task WHERE id = ?1
              UNION ALL SELECT url FROM task WHERE id = ?1
-             UNION ALL SELECT p.title FROM task t JOIN entity p ON p.id = t.project_id AND p.deleted_at IS NULL WHERE t.id = ?1
-             UNION ALL SELECT s.title FROM task t JOIN entity s ON s.id = t.section_id AND s.deleted_at IS NULL WHERE t.id = ?1",
+             UNION ALL SELECT p.title FROM entity t JOIN entity p ON p.id = t.parent_id AND p.deleted_at IS NULL WHERE t.id = ?1",
             id,
         )?,
-        Kind::Activity => joined(
+        // A workout and a touch are found by their kind, their place and their own words (L1).
+        Kind::Workout => joined(
             connection,
-            "SELECT k.title FROM activity a JOIN entity k ON k.id = a.type_id AND k.deleted_at IS NULL WHERE a.id = ?1
-             UNION ALL SELECT p.title FROM activity a JOIN entity p ON p.id = a.place_id AND p.deleted_at IS NULL WHERE a.id = ?1
-             UNION ALL SELECT pl.address FROM activity a JOIN place pl ON pl.id = a.place_id
+            "SELECT k.title FROM workout a JOIN entity k ON k.id = a.type_id AND k.deleted_at IS NULL WHERE a.id = ?1
+             UNION ALL SELECT notes FROM workout WHERE id = ?1
+             UNION ALL SELECT p.title FROM workout a JOIN entity p ON p.id = a.place_id AND p.deleted_at IS NULL WHERE a.id = ?1
+             UNION ALL SELECT pl.address FROM workout a JOIN place pl ON pl.id = a.place_id
                JOIN entity pe ON pe.id = pl.id AND pe.deleted_at IS NULL WHERE a.id = ?1
-             UNION ALL SELECT pl.locality FROM activity a JOIN place pl ON pl.id = a.place_id
+             UNION ALL SELECT pl.locality FROM workout a JOIN place pl ON pl.id = a.place_id
                JOIN entity pe ON pe.id = pl.id AND pe.deleted_at IS NULL WHERE a.id = ?1",
+            id,
+        )?,
+        Kind::Touch => joined(
+            connection,
+            "SELECT k.title FROM touch a JOIN entity k ON k.id = a.type_id AND k.deleted_at IS NULL WHERE a.id = ?1
+             UNION ALL SELECT notes FROM touch WHERE id = ?1
+             UNION ALL SELECT p.title FROM touch a JOIN entity p ON p.id = a.place_id AND p.deleted_at IS NULL WHERE a.id = ?1",
             id,
         )?,
         Kind::Note => joined(
             connection,
             "SELECT body FROM note WHERE id = ?1
-             UNION ALL SELECT b.title FROM note n JOIN entity b ON b.id = n.notebook_id AND b.deleted_at IS NULL WHERE n.id = ?1",
+             UNION ALL SELECT b.title FROM note n JOIN entity ne ON ne.id = n.id JOIN entity b ON b.id = ne.parent_id AND b.deleted_at IS NULL WHERE n.id = ?1",
             id,
         )?,
         Kind::Document => joined(
             connection,
             "SELECT d.text FROM document c JOIN derivative d ON d.blob = c.blob
               WHERE c.id = ?1 AND d.variant = 'text'
-             UNION ALL SELECT f.title FROM document c JOIN entity f ON f.id = c.folder_id AND f.deleted_at IS NULL
+             UNION ALL SELECT f.title FROM document c JOIN entity ce ON ce.id = c.id JOIN entity f ON f.id = ce.parent_id AND f.deleted_at IS NULL
               WHERE c.id = ?1",
             id,
         )?,
@@ -139,7 +153,9 @@ pub fn text_of(connection: &Connection, id: &str, kind: Kind) -> Result<Option<S
         )?,
         Kind::Txn => joined(
             connection,
-            "SELECT c.title FROM txn t JOIN entity c ON c.id = t.category_id AND c.deleted_at IS NULL WHERE t.id = ?1
+            "SELECT c.title FROM txn_split s JOIN entity c ON c.id = s.category_id AND c.deleted_at IS NULL WHERE s.txn_id = ?1
+             UNION ALL SELECT memo FROM txn WHERE id = ?1
+             UNION ALL SELECT memo FROM txn_split WHERE txn_id = ?1
              UNION ALL SELECT a.title FROM txn t JOIN entity a ON a.id = t.account_id AND a.deleted_at IS NULL WHERE t.id = ?1",
             id,
         )?,
@@ -152,7 +168,7 @@ pub fn text_of(connection: &Connection, id: &str, kind: Kind) -> Result<Option<S
         // area, a folder or notebook by the one above it.
         Kind::Notebook | Kind::Folder | Kind::Project => joined(
             connection,
-            "SELECT p.title FROM container c JOIN entity p ON p.id = c.parent_id AND p.deleted_at IS NULL WHERE c.id = ?1",
+            "SELECT p.title FROM entity c JOIN entity p ON p.id = c.parent_id AND p.deleted_at IS NULL WHERE c.id = ?1",
             id,
         )?,
         Kind::Album => String::new(),
@@ -164,18 +180,12 @@ pub fn text_of(connection: &Connection, id: &str, kind: Kind) -> Result<Option<S
         // each in the index and its word list.
         Kind::LockerItem => joined(
             connection,
-            "SELECT memo FROM locker_item WHERE id = ?1
-             UNION ALL SELECT value_text FROM (
+            "SELECT value_text FROM (
                  SELECT value_text FROM locker_item_field
-                  WHERE item_id = ?1
-                    AND field_key IN ('username', 'url', 'notes', 'fullname', 'email', 'phone', 'brand')
-                    AND value_text IS NOT NULL
-                  ORDER BY field_key)
-             UNION ALL SELECT id FROM (
-                 SELECT id FROM locker_item_alias WHERE item_id = ?1 ORDER BY id)
-             UNION ALL SELECT url FROM (
-                 SELECT url FROM locker_item_address WHERE item_id = ?1
-                  ORDER BY position, id)",
+                  WHERE item_id = ?1 AND value_text IS NOT NULL
+                  ORDER BY position, id)
+             UNION ALL SELECT rp_id FROM (
+                 SELECT rp_id FROM locker_item_passkey WHERE item_id = ?1 ORDER BY id)",
             id,
         )?,
         _ => return Ok(None),
@@ -214,13 +224,11 @@ pub fn text_of(connection: &Connection, id: &str, kind: Kind) -> Result<Option<S
     let touches = if kind == Kind::Person {
         joined(
             connection,
-            "SELECT n.body FROM edge w
-               JOIN edge e ON e.to_id = w.from_id AND e.rel = 'about'
-               JOIN entity ne ON ne.id = e.from_id AND ne.deleted_at IS NULL
-               JOIN entity wa ON wa.id = w.from_id AND wa.kind = 'activity'
-               JOIN note n ON n.id = e.from_id
-              WHERE w.rel = 'with' AND w.to_id = ?1
-              ORDER BY ne.created_at, ne.id",
+            "SELECT t.notes FROM edge w
+               JOIN touch t ON t.id = w.from_id
+               JOIN entity te ON te.id = t.id AND te.deleted_at IS NULL
+              WHERE w.rel = 'with' AND w.to_id = ?1 AND t.notes IS NOT NULL
+              ORDER BY te.created_at, te.id",
             id,
         )?
     } else {

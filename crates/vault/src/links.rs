@@ -56,7 +56,7 @@ pub fn key_of(kind: Kind, is_workout: bool) -> Option<&'static str> {
         Kind::Photo => "photo",
         Kind::Account => "account",
         Kind::Txn => "transaction",
-        Kind::Activity if is_workout => "workout",
+        Kind::Workout => "workout",
         Kind::LockerItem => "locker_item",
         _ => return None,
     })
@@ -97,7 +97,7 @@ fn kind_of_key(key: &str) -> Option<(Kind, bool)> {
         "photo" => (Kind::Photo, false),
         "account" => (Kind::Account, false),
         "transaction" => (Kind::Txn, false),
-        "workout" => (Kind::Activity, true),
+        "workout" => (Kind::Workout, false),
         _ => return None,
     })
 }

@@ -64,6 +64,31 @@ pub const LADDER: &[Migration] = &[Migration {
     sql: BASELINE_SQL,
 }];
 
+/// The index file's baseline (#1214, A15): the derived tables (`search`, `search_past`, the word
+/// list, `alert`, the spatial index) and its one state row. Its own ladder, with its own
+/// `application_id` ([`crate::format::INDEX_APPLICATION_ID`]); founded beside the vault and
+/// attached to its connection ([`crate::file`]).
+pub const INDEX_BASELINE_SQL: &str =
+    include_str!("../../../contracts/migrations/index/001_index.sql");
+
+/// The index ladder, in order. Rung one is its baseline; it is appended to like the vault's.
+pub const INDEX_LADDER: &[Migration] = &[Migration {
+    version: 1,
+    name: "index baseline",
+    sql: INDEX_BASELINE_SQL,
+}];
+
+/// The `user_version` an index file this build wrote carries.
+#[must_use]
+pub fn index_head_version() -> i64 {
+    INDEX_LADDER.last().map_or(0, |rung| rung.version)
+}
+
+/// Run every index rung above `from` on a connection to the index file itself.
+pub fn run_index_from(connection: &Connection, from: i64) -> Result<i64> {
+    run_rungs(connection, INDEX_LADDER, from)
+}
+
 /// The `user_version` a file this build wrote carries.
 #[must_use]
 pub fn head_version() -> i64 {
@@ -234,7 +259,10 @@ mod tests {
                 "`{table}` is missing from the baseline"
             );
         }
-        assert!(BASELINE_SQL.contains("CREATE VIRTUAL TABLE search "));
+        // The derived tables are not the vault's: they are the index file's own ladder.
+        assert!(!BASELINE_SQL.contains("CREATE VIRTUAL TABLE search "));
+        assert!(INDEX_BASELINE_SQL.contains("CREATE VIRTUAL TABLE search "));
+        assert!(INDEX_BASELINE_SQL.contains("CREATE TABLE alert "));
     }
 
     #[test]

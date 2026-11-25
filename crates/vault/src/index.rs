@@ -64,7 +64,7 @@ pub fn reindex(connection: &Connection, touched: &BTreeSet<String>) -> Result<()
     // that is `with` someone is not part of their text.
     let mut with = connection.prepare_cached(
         "SELECT w.to_id FROM edge w JOIN entity a ON a.id = w.from_id
-          WHERE w.from_id = ?1 AND w.rel = 'with' AND a.kind = 'activity'",
+          WHERE w.from_id = ?1 AND w.rel = 'with' AND a.kind = 'touch'",
     )?;
     for id in touched {
         let targets = about
@@ -89,8 +89,8 @@ pub fn reindex(connection: &Connection, touched: &BTreeSet<String>) -> Result<()
         if piece.len() > INLINE_DEPENDENTS {
             piece.truncate(INLINE_DEPENDENTS);
             connection.execute(
-                "INSERT INTO search_owed (id, after) VALUES (?1, ?2)
-                 ON CONFLICT (id) DO UPDATE SET after = excluded.after",
+                "INSERT INTO search_owed (n, after) SELECT n, ?2 FROM entity WHERE id = ?1
+                 ON CONFLICT (n) DO UPDATE SET after = excluded.after",
                 rusqlite::params![id, piece.last().map_or("", String::as_str)],
             )?;
         }
@@ -136,7 +136,8 @@ fn dependents_after(
 pub fn reindex_owed(connection: &Connection, limit: usize) -> Result<usize> {
     let next: Option<(String, String)> = connection
         .query_row(
-            "SELECT id, after FROM search_owed ORDER BY id LIMIT 1",
+            "SELECT e.id, o.after FROM search_owed o JOIN entity e ON e.n = o.n
+              WHERE o.after IS NOT NULL ORDER BY o.n LIMIT 1",
             [],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
@@ -151,17 +152,17 @@ pub fn reindex_owed(connection: &Connection, limit: usize) -> Result<usize> {
         match (finished, piece.last()) {
             (false, Some(last)) => {
                 connection.execute(
-                    "UPDATE search_owed SET after = ?2 WHERE id = ?1",
+                    "UPDATE search_owed SET after = ?2 WHERE n = (SELECT n FROM entity WHERE id = ?1)",
                     rusqlite::params![id, last],
                 )?;
             }
             _ => {
-                connection.execute("DELETE FROM search_owed WHERE id = ?1", [&id])?;
+                connection.execute("DELETE FROM search_owed WHERE n = (SELECT n FROM entity WHERE id = ?1)", [&id])?;
             }
         }
     }
     Ok(
-        connection.query_row("SELECT count(*) FROM search_owed", [], |row| {
+        connection.query_row("SELECT count(*) FROM search_owed WHERE after IS NOT NULL", [], |row| {
             row.get::<_, i64>(0)
         })? as usize,
     )
@@ -173,7 +174,7 @@ pub fn reindex_owed(connection: &Connection, limit: usize) -> Result<usize> {
 /// SQLite's refusal.
 pub fn owed(connection: &Connection) -> Result<usize> {
     Ok(
-        connection.query_row("SELECT EXISTS (SELECT 1 FROM search_owed)", [], |row| {
+        connection.query_row("SELECT EXISTS (SELECT 1 FROM search_owed WHERE after IS NOT NULL)", [], |row| {
             row.get::<_, i64>(0)
         })? as usize,
     )
@@ -188,17 +189,14 @@ pub fn owed(connection: &Connection) -> Result<usize> {
 /// is not a touch of the label, so the command that writes the link marks the
 /// labelled end for the index itself.
 const DEPENDENTS: &str = "\
-    SELECT id AS dep FROM task WHERE project_id = ?1
-    UNION ALL SELECT id FROM task WHERE section_id = ?1
+    SELECT id AS dep FROM entity WHERE parent_id = ?1
     UNION ALL SELECT id FROM event WHERE place_id = ?1
-    UNION ALL SELECT id FROM event WHERE calendar_id = ?1
     UNION ALL SELECT id FROM photo WHERE place_id = ?1
-    UNION ALL SELECT id FROM activity WHERE place_id = ?1
-    UNION ALL SELECT id FROM activity WHERE type_id = ?1
-    UNION ALL SELECT id FROM note WHERE notebook_id = ?1
-    UNION ALL SELECT id FROM document WHERE folder_id = ?1
-    UNION ALL SELECT id FROM container WHERE parent_id = ?1
-    UNION ALL SELECT id FROM txn WHERE category_id = ?1
+    UNION ALL SELECT id FROM workout WHERE place_id = ?1
+    UNION ALL SELECT id FROM workout WHERE type_id = ?1
+    UNION ALL SELECT id FROM touch WHERE place_id = ?1
+    UNION ALL SELECT id FROM touch WHERE type_id = ?1
+    UNION ALL SELECT txn_id FROM txn_split WHERE category_id = ?1
     UNION ALL SELECT id FROM txn WHERE account_id = ?1
     UNION ALL SELECT from_id FROM edge WHERE to_id = ?1 AND rel = 'tagged'
     UNION ALL SELECT to_id FROM edge WHERE from_id = ?1 AND rel = 'contains'

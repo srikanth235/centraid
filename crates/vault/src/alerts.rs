@@ -226,7 +226,7 @@ fn phone_holds(connection: &Connection, id: &str, kind: &str) -> Result<bool> {
                 })
                 .optional()?
                 .flatten(),
-            crate::commands::event::reminders_held(connection, id)?,
+            reminders_held(connection, id)?,
         )
     } else {
         AlertNow::Task(
@@ -350,7 +350,7 @@ fn event_alerts(connection: &Connection, id: &str, now: i64) -> Result<Vec<Alert
     if status == "cancelled" {
         return Ok(Vec::new());
     }
-    let mut offsets = longest_first(crate::commands::event::reminders_held(connection, id)?);
+    let mut offsets = longest_first(reminders_held(connection, id)?);
     if all_day {
         offsets.truncate(1);
     }
@@ -772,4 +772,17 @@ mod order_tests {
         assert_eq!(longest_first(vec![60, 1440]), vec![1440, 60]);
         assert!(longest_first(Vec::new()).is_empty());
     }
+}
+
+/// The lead times an event or a task holds, minutes before it starts, smallest first: the
+/// `reminder` rows that name no dated child (a person's date or a Locker date field has its own).
+fn reminders_held(connection: &Connection, id: &str) -> Result<Vec<i64>> {
+    connection
+        .prepare_cached(
+            "SELECT offset_min FROM reminder
+              WHERE entity_id = ?1 AND date_id IS NULL AND field_id IS NULL ORDER BY offset_min",
+        )?
+        .query_map([id], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()
+        .map_err(Into::into)
 }

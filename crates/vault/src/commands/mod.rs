@@ -45,41 +45,18 @@
 
 pub mod arrival;
 pub mod blob;
-pub mod contact_point;
 pub mod container;
-mod csv;
-pub mod document;
-pub mod document_portable;
 pub mod edge;
 pub mod entity;
-pub mod event;
-pub mod event_portable;
-pub mod flag;
 pub mod follow;
-pub mod health_portable;
 pub mod history;
-pub mod ical;
 pub mod locker;
-pub mod measurement;
-pub mod money;
 pub mod note;
 pub mod note_portable;
 pub mod origin_cursor;
-pub mod person;
-pub mod person_portable;
-pub mod photo;
-pub mod photo_portable;
-pub mod place;
-pub mod rule;
 pub mod sealed;
 pub mod tag;
-pub mod task;
-pub mod task_portable;
-pub mod thread;
-pub mod txn_portable;
 pub mod vault;
-pub mod vault_export;
-pub mod workout;
 
 use std::collections::BTreeMap;
 
@@ -344,37 +321,16 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 30] = [
+        let modules: [fn() -> Vec<CommandDefinition>; 9] = [
             blob::definitions,
-            contact_point::definitions,
             container::definitions,
-            document::definitions,
             edge::definitions,
             entity::definitions,
-            event::definitions,
-            event_portable::definitions,
-            flag::definitions,
             follow::definitions,
             history::definitions,
-            locker::definitions,
-            measurement::definitions,
-            money::definitions,
             note::definitions,
-            person::definitions,
-            photo::definitions,
-            place::definitions,
-            rule::definitions,
             tag::definitions,
-            task::definitions,
-            task_portable::definitions,
-            thread::definitions,
-            txn_portable::definitions,
-            health_portable::definitions,
-            document_portable::definitions,
-            photo_portable::definitions,
             vault::definitions,
-            vault_export::definitions,
-            workout::definitions,
         ];
         for definitions in modules {
             for definition in definitions() {

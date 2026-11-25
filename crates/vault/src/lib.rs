@@ -23,7 +23,6 @@
 
 pub mod access;
 pub mod action_key;
-pub mod alerts;
 pub mod backup;
 pub mod blob;
 pub mod bootstrap;
@@ -42,6 +41,7 @@ pub mod history;
 pub mod index;
 pub mod links;
 pub mod log;
+pub mod lookups;
 pub mod migrations;
 pub mod model;
 pub mod ontology_doc;
@@ -52,8 +52,9 @@ pub mod plans;
 pub mod portable;
 pub mod roster;
 pub mod stage;
-pub mod task_counts;
 pub mod testdoor;
+#[cfg(test)]
+pub(crate) mod test_ids;
 pub mod tidy;
 pub mod time;
 pub mod value;

@@ -29,7 +29,9 @@ use rusqlite::Connection;
 
 use crate::clock::{Clock, ClockIds, Ids, SystemClock};
 use crate::error::{Result, VaultError};
-use crate::format::{APPLICATION_ID, EARLIER_APPLICATION_ID, SCHEMA_DIGEST};
+use crate::format::{
+    APPLICATION_ID, EARLIER_APPLICATION_ID, INDEX_APPLICATION_ID, SCHEMA_DIGEST,
+};
 use crate::migrations::head_version;
 
 /// THE PAGE SIZE, PINNED (#1029 §1).
@@ -71,6 +73,77 @@ pub fn durability_pragmas(apple: bool) -> Vec<(&'static str, &'static str)> {
         list.push(("checkpoint_fullfsync", "ON"));
     }
     list
+}
+
+/// Where the attached index file lives: `<stem>.index.db` beside the vault (#1214, A15).
+fn index_file_path(path: &Path) -> PathBuf {
+    path.with_extension("index.db")
+}
+
+/// What is at the index path.
+enum IndexFile {
+    /// Nothing is there: founded now, and everything is owed to it.
+    Missing,
+    /// This build's index file, whole.
+    Current,
+    /// Blank, damaged or from an older rung: derived data, so it is founded again.
+    Stale,
+    /// A database that is not ours: refused, never overwritten.
+    Foreign(i64),
+}
+
+fn inspect_index(index: &Path) -> Result<IndexFile> {
+    if !index.exists() {
+        return Ok(IndexFile::Missing);
+    }
+    let Ok(connection) = Connection::open(index) else {
+        return Ok(IndexFile::Stale);
+    };
+    let Ok(application_id) =
+        connection.query_row("PRAGMA application_id", [], |row| row.get::<_, i64>(0))
+    else {
+        return Ok(IndexFile::Stale);
+    };
+    if application_id == 0 {
+        return Ok(IndexFile::Stale);
+    }
+    if application_id != INDEX_APPLICATION_ID {
+        return Ok(IndexFile::Foreign(application_id));
+    }
+    let version: i64 = connection
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .unwrap_or(-1);
+    if version != crate::migrations::index_head_version() || quick_check(&connection).is_err() {
+        return Ok(IndexFile::Stale);
+    }
+    Ok(IndexFile::Current)
+}
+
+/// Found the index file beside a vault from its own ladder, atomically (a side file, flushed,
+/// renamed), replacing whatever derived file was there.
+fn found_index_file(vault_path: &Path) -> Result<()> {
+    let index = index_file_path(vault_path);
+    remove_founding_leftovers(&index);
+    let side = founding_path(&index);
+    remove_founding_leftovers(&side);
+    {
+        let connection = Connection::open(&side)?;
+        connection.pragma_update(None, "page_size", PAGE_SIZE)?;
+        connection.pragma_update(None, "auto_vacuum", "NONE")?;
+        for (name, value) in durability_pragmas(cfg!(target_vendor = "apple")) {
+            connection.pragma_update(None, name, value)?;
+        }
+        connection.pragma_update(None, "application_id", INDEX_APPLICATION_ID)?;
+        crate::migrations::run_index_from(&connection, 0)?;
+        connection.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))?;
+        connection
+            .close()
+            .map_err(|(_, error)| VaultError::from(error))?;
+    }
+    sync_file(&side)?;
+    std::fs::rename(&side, &index)?;
+    sync_directory(&index)?;
+    Ok(())
 }
 
 /// Where a founding is built before it takes its name.
@@ -326,10 +399,15 @@ impl Vault {
             }
             return Err(error);
         }
+        // The derived index file is founded after the vault has its name: a founding killed between
+        // the two leaves a vault with no index, which the next open founds again and owes everything.
+        found_index_file(&path)?;
         let connection = Connection::open(&path)?;
         Self::apply_pragmas(&connection)?;
         connection.pragma_update(None, "foreign_keys", "ON")?;
-        Self::wrap(connection, path, head_version(), clock, ids)
+        let vault = Self::wrap(connection, path, head_version(), clock, ids)?;
+        vault.attach_index()?;
+        Ok(vault)
     }
 
     /// Open an existing v1 vault, migrating it forward if it is behind.
@@ -411,12 +489,55 @@ impl Vault {
             connection.pragma_update(None, "foreign_keys", "ON")?;
             let vault = Self::wrap(connection, path, reached, clock, ids)?;
             vault.check_schema()?;
+            vault.attach_index()?;
             return Ok(vault);
         }
 
         let vault = Self::wrap(connection, path, found, clock, ids)?;
         vault.check_schema()?;
+        vault.attach_index()?;
         Ok(vault)
+    }
+
+    /// ATTACH THE INDEX FILE (#1214, A15), `<stem>.index.db`, as schema `ix`: the search indexes, the
+    /// alerts and the spatial index live there, and their names resolve unqualified because the vault
+    /// holds none of them.
+    ///
+    /// It is derived data. One that is missing, blank, damaged or from an older rung is founded
+    /// again (a foreign database at that path is refused, never overwritten), and a vault that
+    /// had data owes the new file every entity: `search_owed` is written in the vault's own file
+    /// and the idle pass drains it, so a restore (which brings back only `vault.db`) rebuilds
+    /// the index the same way. Done AFTER the schema check, so a file this build refuses gains no
+    /// sibling.
+    fn attach_index(&self) -> Result<()> {
+        let index = index_file_path(&self.path);
+        let mut refounded = false;
+        match inspect_index(&index)? {
+            IndexFile::Current => {}
+            IndexFile::Missing | IndexFile::Stale => {
+                found_index_file(&self.path)?;
+                refounded = true;
+            }
+            IndexFile::Foreign(found) => {
+                return Err(VaultError::NotAVault {
+                    path: index,
+                    found,
+                    expected: INDEX_APPLICATION_ID,
+                });
+            }
+        }
+        let connection = self.connection();
+        connection.execute(
+            "ATTACH DATABASE ?1 AS ix",
+            [index.to_string_lossy().as_ref()],
+        )?;
+        if refounded {
+            connection.execute(
+                "INSERT INTO search_owed (n) SELECT n FROM entity WHERE true ON CONFLICT (n) DO NOTHING",
+                [],
+            )?;
+        }
+        Ok(())
     }
 
     /// THE FILE'S TABLES ARE THIS BUILD'S ([`crate::format`], #1146). A file at the head of the
@@ -506,6 +627,9 @@ impl Vault {
         Self::apply_pragmas(&connection)?;
         crate::log::guard::install_without_rowid_census(&connection)?;
         crate::history::install(&connection)?;
+        // The lookup tables are fixed from here on: a migration ran on this connection before it
+        // was wrapped, and nothing after it may write one (K2).
+        crate::lookups::install(&connection)?;
         Ok(Self {
             connection: Held(RefCell::new(Some(connection))),
             path,
@@ -1200,8 +1324,10 @@ mod tests {
             .collect();
         names.sort();
         assert!(
-            names.iter().all(|name| name.starts_with("vault.db")),
-            "no file other than the vault and its sidecars: {names:?}"
+            names
+                .iter()
+                .all(|name| name.starts_with("vault.db") || name.starts_with("vault.index.db")),
+            "no file other than the vault, its index file and their sidecars: {names:?}"
         );
         assert!(!old.exists(), "the earlier build's copies are gone");
         let _ = std::fs::remove_dir_all(&dir);

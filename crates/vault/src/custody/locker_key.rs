@@ -604,9 +604,10 @@ mod tests {
             .execute(
                 "INSERT INTO locker_item_field \
                    (id, item_id, field_key, section, label, kind, value_sealed, \
-                    created_at, updated_at, key_id) \
+                    created_at, updated_at, key_id, value_set_at) \
                  VALUES (?1, ?2, 'password', '', 'Password', 'sealed', ?3, \
-                         '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', ?4)",
+                         '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', ?4, \
+                         '2026-01-01T00:00:00.000Z')",
                 (&field_id, item_id, password, key_id),
             )
             .unwrap();
@@ -722,7 +723,7 @@ mod tests {
         let key = [0x5a_u8; LOCKER_KEY_BYTES];
         let secrets = ["s3cret", "otp-seed-bytes", "4111111111111111"];
         for (index, plaintext) in secrets.iter().enumerate() {
-            let item = format!("item-{index}");
+            let item = crate::test_ids::uuid(index as u64 + 1);
             let field_id = crate::commands::locker::built_in_field_id(&item, "password");
             let sealed = encrypt_under_locker_key(&key, "k-1", &field_id, plaintext).unwrap();
             insert_item(&fixture.connection, &item, &sealed, "k-1");

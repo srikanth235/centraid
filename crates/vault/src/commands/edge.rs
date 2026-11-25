@@ -48,18 +48,15 @@ fn pre_add(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if from.id == to.id {
         return Ok(Some("a thing cannot be joined to itself".to_owned()));
     }
+    // A `*` in a shape is any LINKABLE kind (`entity_kind.linkable`), as the shape trigger reads it.
     let allowed: i64 = ctx.connection().query_row(
-        "SELECT COUNT(*) FROM edge_shape
-          WHERE rel = ?1 AND from_kind IN (?2, '*') AND to_kind IN (?3, '*')",
+        "SELECT COUNT(*) FROM edge_shape s, entity_kind fk, entity_kind tk
+          WHERE s.rel = ?1 AND fk.code = ?2 AND tk.code = ?3
+            AND (s.from_kind = fk.code OR (s.from_kind = '*' AND fk.linkable = 1))
+            AND (s.to_kind = tk.code OR (s.to_kind = '*' AND tk.linkable = 1))",
         [rel.as_str(), from.kind.as_str(), to.kind.as_str()],
         |row| row.get(0),
     )?;
-    if allowed == 0 && rel == Rel::Links && to.kind == Kind::LockerItem {
-        return Ok(Some(
-            "a Locker item cannot be the target of a link: link from the Locker item instead"
-                .to_owned(),
-        ));
-    }
     if allowed == 0 {
         return Ok(Some(format!(
             "“{}” cannot be `{}` “{}”: nothing joins a {} to a {} that way",
@@ -85,8 +82,6 @@ fn pre_add(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         })
     } else if given("position") && rel != Rel::Contains {
         Some("only what a list or album holds has a place in it".to_owned())
-    } else if given("state") && rel != Rel::Attendee {
-        Some("only an invitee has an answer".to_owned())
     } else if given("anchor") && !(rel.belongs_to_note() && from.kind == Kind::Note) {
         Some("only a note's own words point at a place in the text".to_owned())
     } else if related && fold_label(ctx.required_str("label")?).is_empty() {
@@ -120,9 +115,8 @@ fn carries_a_sealed_value(ctx: &CommandCtx<'_, '_>) -> bool {
 
 /// What an edge may carry beyond its two ends and its label.
 #[derive(Default)]
-pub(crate) struct Extras<'a> {
+pub(crate) struct Extras {
     pub position: Option<f64>,
-    pub state: Option<&'a str>,
     pub anchor: Option<String>,
 }
 
@@ -137,20 +131,8 @@ pub(crate) fn put(
     rel: Rel,
     to: &str,
     label_id: Option<&str>,
-    extras: &Extras<'_>,
+    extras: &Extras,
 ) -> Result<()> {
-    // A link has no direction a member can see (#1185): when the other way is there already,
-    // there is nothing to add. An anchor is a note's own words, so it is always written.
-    if rel == Rel::Links && extras.anchor.is_none() {
-        let reverse: i64 = ctx.connection().query_row(
-            "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'links' AND to_id = ?2",
-            [to, from],
-            |row| row.get(0),
-        )?;
-        if reverse > 0 {
-            return Ok(());
-        }
-    }
     let next = if rel == Rel::Contains {
         Some(
             ctx.connection()
@@ -159,13 +141,28 @@ pub(crate) fn put(
     } else {
         None
     };
+    // An anchor is a JSON object the vault defines, so it carries "v":1 (A3).
+    let anchor = match &extras.anchor {
+        Some(text) => {
+            let mut value: serde_json::Value = serde_json::from_str(text).map_err(|_| {
+                crate::error::VaultError::InvalidInput {
+                    name: "anchor".to_owned(),
+                    detail: "an anchor is an object".to_owned(),
+                }
+            })?;
+            if let Some(object) = value.as_object_mut() {
+                object.insert("v".to_owned(), serde_json::json!(1));
+            }
+            Some(value.to_string())
+        }
+        None => None,
+    };
     ctx.connection().execute(
-        "INSERT INTO edge (from_id, rel, to_id, label_id, position, state, anchor, created_at)
-         VALUES (?1, ?2, ?3, ?4, COALESCE(?5, ?6), ?7, ?8, ?9)
+        "INSERT INTO edge (from_id, rel, to_id, label_id, position, anchor, created_at)
+         VALUES (?1, ?2, ?3, ?4, COALESCE(?5, ?6), ?7, ?8)
          ON CONFLICT (from_id, rel, to_id, ifnull(label_id, ''))
          DO UPDATE SET position = COALESCE(?5, position),
-                       state = COALESCE(?7, state),
-                       anchor = COALESCE(?8, anchor)",
+                       anchor = COALESCE(?7, anchor)",
         rusqlite::params![
             from,
             rel.as_str(),
@@ -173,8 +170,7 @@ pub(crate) fn put(
             label_id,
             extras.position,
             next,
-            extras.state,
-            extras.anchor,
+            anchor,
             ctx.now
         ],
     )?;
@@ -204,7 +200,6 @@ struct AddEdgeInput {
     to: String,
     label: Option<String>,
     position: Option<f64>,
-    state: Option<String>,
     anchor: Option<serde_json::Value>,
 }
 
@@ -239,7 +234,6 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         label_id.as_deref(),
         &Extras {
             position: input.position,
-            state: input.state.as_deref(),
             anchor: input
                 .anchor
                 .filter(|value| !value.is_null())
@@ -280,19 +274,6 @@ fn remove(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     )?;
     if removed > 0 && rel.belongs_to_note() && is_note(ctx, &input.from)? {
         ctx.touch(&input.from)?;
-    }
-    // A link is taken off from either end (#1185): the edge the other way, if that is how it was
-    // made, goes too.
-    let mut removed = removed;
-    if rel == Rel::Links {
-        let back = ctx.connection().execute(
-            "DELETE FROM edge WHERE from_id = ?1 AND rel = 'links' AND to_id = ?2",
-            [input.to.as_str(), input.from.as_str()],
-        )?;
-        if back > 0 && is_note(ctx, &input.to)? {
-            ctx.touch(&input.to)?;
-        }
-        removed += back;
     }
     Ok(serde_json::json!({ "removed": removed > 0 }))
 }
@@ -338,12 +319,10 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "properties": {
                 "from": { "type": "string", "minLength": 1 },
                 "rel": { "type": "string",
-                         "enum": ["contains", "about", "links", "attached", "attendee", "with", "related", "depicts"] },
+                         "enum": ["contains", "tagged", "about", "attached", "with", "related", "depicts"] },
                 "to": { "type": "string", "minLength": 1 },
                 "label": { "type": ["string", "null"], "maxLength": 200 },
                 "position": { "type": ["number", "null"] },
-                "state": { "type": ["string", "null"],
-                           "enum": ["needs-action", "accepted", "declined", "tentative", null] },
                 "anchor": { "type": ["object", "null"] }
               }
             }"#,
@@ -364,7 +343,7 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "properties": {
                 "from": { "type": "string", "minLength": 1 },
                 "rel": { "type": "string",
-                         "enum": ["contains", "about", "links", "attached", "attendee", "with", "related", "depicts"] },
+                         "enum": ["contains", "tagged", "about", "attached", "with", "related", "depicts"] },
                 "to": { "type": "string", "minLength": 1 },
                 "label": { "type": ["string", "null"], "maxLength": 200 }
               }

@@ -5,6 +5,8 @@
 //! [`crate::Vault::stage_bytes`]; a command is for a caller that wants the
 //! gate.
 
+use rusqlite::OptionalExtension;
+
 use crate::blob;
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
 use crate::error::Result;
@@ -75,7 +77,19 @@ fn pre_variant(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let variant = ctx.required_str("variant")?;
     let has_file = ctx.input.get("out").is_some_and(|out| !out.is_null());
     let has_text = ctx.input.get("text").is_some_and(|text| !text.is_null());
-    let files = matches!(variant, "thumb" | "preview" | "poster");
+    // Whether a variant is a file is the lookup row's attribute (`derivative_variant.has_out`), not a
+    // list kept here; an unknown variant is no row.
+    let files: Option<bool> = ctx
+        .connection()
+        .query_row(
+            "SELECT has_out FROM derivative_variant WHERE code = ?1",
+            [variant],
+            |row| row.get::<_, i64>(0).map(|has_out| has_out == 1),
+        )
+        .optional()?;
+    let Some(files) = files else {
+        return Ok(Some(format!("`{variant}` is not a kind of derivative")));
+    };
     Ok(if files && !has_file {
         Some(format!("a {variant} is a picture and needs its bytes"))
     } else if !files && has_file {
@@ -179,7 +193,7 @@ const WRITE_SCHEMA: &str = r#"{
   "properties": {
     "blob": { "type": "string", "minLength": 64, "maxLength": 64 },
     "variant": { "type": "string",
-                 "enum": ["thumb", "preview", "poster", "text", "caption", "phash", "thumbhash"] },
+                 "minLength": 1 },
     "out": { "type": ["string", "null"], "minLength": 64, "maxLength": 64 },
     "out_size": { "type": "integer", "minimum": 0 },
     "media_type": { "type": ["string", "null"] },

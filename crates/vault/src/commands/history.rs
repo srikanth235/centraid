@@ -171,22 +171,8 @@ fn pre_keep(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         return Ok(Some(format!("there is nothing with the id `{id}`")));
     };
     let mut overlay = fields(ctx);
-    if let Err(sentence) = crate::commands::event::shape_overlay(ctx.connection(), id, &mut overlay)
-    {
-        return Ok(Some(sentence));
-    }
-    if let Some(words) = overlay.remove(DOCUMENT_TEXT) {
-        let text_document = found.kind == crate::model::Kind::Document
-            && words.is_string()
-            && ctx.blobs().is_some()
-            && crate::commands::document::media_type_of(ctx, id)?
-                .is_some_and(|media_type| media_type.starts_with("text/"));
-        if !text_document {
-            return Ok(Some(format!(
-                "`{DOCUMENT_TEXT}` is the words of a text document"
-            )));
-        }
-    }
+    // UNPLUGGED (#1214): the event overlay and a text document's words come back with their app lanes.
+    let _ = &found;
     history::overlay_refusal(ctx.connection(), id, &overlay)
 }
 
@@ -198,13 +184,7 @@ struct KeepVersionInput {
 
 fn keep_version(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let input: KeepVersionInput = ctx.parse_input()?;
-    let mut overlay = input.fields;
-    crate::commands::event::shape_overlay(ctx.connection(), &input.id, &mut overlay)
-        .map_err(|sentence| crate::error::VaultError::Invariant { context: sentence })?;
-    if let Some(words) = overlay.remove(DOCUMENT_TEXT) {
-        let hash = crate::commands::document::write_words(ctx, words.as_str().unwrap_or_default())?;
-        overlay.insert("document.blob".to_owned(), hash.into());
-    }
+    let overlay = input.fields;
     let kept = history::keep_overlay(ctx.connection(), &input.id, &overlay, &ctx.now, ctx.command)?;
     Ok(match kept {
         history::Kept::Version(seq) => {

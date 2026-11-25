@@ -316,8 +316,8 @@ impl Vault {
             let mut owed = std::mem::take(&mut self.pending.borrow_mut().reindex);
             owed.extend(auto.reindex);
             crate::index::reindex(&connection, &owed)?;
-            // The alerts are part of the commit too: what an item fires next lands with it.
-            crate::alerts::refresh(&connection, &owed, crate::alerts::now_ms(&now))?;
+            // UNPLUGGED (#1214, K8): the alert writer comes back with the reminder lane
+            // (`crates/vault/UNPLUGGED.md`), keyed by the reminder's id in the index file.
             // The history is part of the commit too: the states it replaced are kept with the
             // change that replaced them, or neither lands.
             let producer = std::mem::take(&mut self.pending.borrow_mut().producer);
@@ -405,6 +405,9 @@ pub(crate) fn is_index(table: &str) -> bool {
         || table == "search_word"
         || table == "search_owed"
         || table == "alert"
+        || table == "geo"
+        || table == "index_state"
+        || matches!(table, "geo_node" | "geo_rowid" | "geo_parent")
         || is_fts_shadow(table)
 }
 
@@ -614,6 +617,11 @@ mod tests {
             "search_word",
             "search_owed",
             "alert",
+            "geo",
+            "geo_node",
+            "geo_rowid",
+            "geo_parent",
+            "index_state",
             "search_past",
             "search_past_data",
             "search_past_docsize",

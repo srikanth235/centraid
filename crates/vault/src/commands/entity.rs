@@ -247,14 +247,14 @@ fn members(connection: &Connection, holder: &Found) -> Result<Vec<String>> {
         Kind::Person => {
             "SELECT e.from_id FROM edge e JOIN entity f ON f.id = e.from_id
               WHERE e.to_id = ?1 AND e.rel IN ('about', 'with')
-                AND f.kind IN ('note', 'event', 'activity')
+                AND f.kind IN ('note', 'event', 'touch', 'workout')
                 AND NOT EXISTS (SELECT 1 FROM edge o WHERE o.from_id = e.from_id
                                    AND o.rel IN ('about', 'with') AND o.to_id <> ?1)"
         }
         // A subtask follows its parent.
-        Kind::Task => "SELECT id FROM task WHERE parent_id = ?1",
+        Kind::Task => "SELECT id FROM entity WHERE parent_id = ?1",
         // The words kept of a touch or a workout belong to it.
-        Kind::Activity => "SELECT from_id FROM edge WHERE to_id = ?1 AND rel = 'about'",
+        Kind::Workout | Kind::Touch => "SELECT from_id FROM edge WHERE to_id = ?1 AND rel = 'about'",
         _ => return Ok(Vec::new()),
     };
     ids(connection, sql, &holder.id)
@@ -341,7 +341,6 @@ fn purge_refusal(connection: &Connection, found: &Found) -> Result<Option<String
         ));
     }
     let refusal = match found.kind {
-        Kind::Flag => Some("a flag is built in and cannot be removed".to_owned()),
         Kind::Calendar => {
             if found.id == DEFAULT_CALENDAR_ID {
                 return Ok(Some(
@@ -353,8 +352,8 @@ fn purge_refusal(connection: &Connection, found: &Found) -> Result<Option<String
             // still the member's.
             let events = count(
                 connection,
-                "SELECT COUNT(*) FROM event ev JOIN entity en ON en.id = ev.id
-                  WHERE ev.calendar_id = ?1
+                "SELECT COUNT(*) FROM entity en
+                  WHERE en.parent_id = ?1 AND en.kind = 'event'
                     AND en.deleted_at IS NOT (SELECT deleted_at FROM entity WHERE id = ?1)",
                 &found.id,
             )?;
@@ -367,10 +366,11 @@ fn purge_refusal(connection: &Connection, found: &Found) -> Result<Option<String
                 )
             })
         }
-        Kind::WorkoutKind | Kind::ActivityKind => {
+        Kind::WorkoutKind | Kind::TouchKind => {
             let used = count(
                 connection,
-                "SELECT COUNT(*) FROM activity WHERE type_id = ?1",
+                "SELECT (SELECT COUNT(*) FROM workout WHERE type_id = ?1)
+                      + (SELECT COUNT(*) FROM touch WHERE type_id = ?1)",
                 &found.id,
             )?;
             (used > 0).then(|| {
@@ -543,9 +543,6 @@ fn pre_retitle(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         Ok(found) => found,
         Err(sentence) => return Ok(Some(sentence)),
     };
-    if found.kind == Kind::Flag {
-        return Ok(Some("a flag is built in and keeps its name".to_owned()));
-    }
     // A photograph may have no title at all; nothing else may.
     if found.kind != Kind::Photo && ctx.required_str("title")?.trim().is_empty() {
         return Ok(Some(format!("a {} needs a name", found.kind.noun())));

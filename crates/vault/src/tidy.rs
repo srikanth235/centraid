@@ -211,17 +211,9 @@ impl Vault {
     /// # Errors
     /// SQLite's refusal.
     pub fn advance_alerts(&self) -> Result<usize> {
-        let now = crate::alerts::now_ms(&self.clock().now_text());
-        let stale = self.read(|connection| crate::alerts::has_stale(connection, now))?;
-        if !stale {
-            return Ok(0);
-        }
-        Ok(self
-            .commit(|tx| {
-                tx.set_producer("alert.advance");
-                crate::alerts::advance(tx.connection(), now)
-            })?
-            .value)
+        // UNPLUGGED (#1214, K8): the alert writer is rewritten against `reminder` and the index
+        // file's `alert` (keyed by the reminder's id), so there is nothing to move on yet.
+        Ok(0)
     }
 
     /// Whether any search row is owed.

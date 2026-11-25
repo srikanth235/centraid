@@ -24,11 +24,17 @@ const LADDER_DIRS: [&str; 3] = [
 /// Where each ladder's file is founded, and the constant that stamps its `application_id`: a
 /// database the code opens says which program's file it is and how far up the ladder it stands
 /// (#1191, L2).
-const LADDERS: [(&str, &[&str], &str); 3] = [
+const LADDERS: [(&str, &[&str], &str); 4] = [
     (
         "contracts/migrations",
         &["crates/vault/src/format.rs", "crates/vault/src/file.rs"],
         "APPLICATION_ID",
+    ),
+    // The attached `<stem>.index.db` (#1214, A15): derived data, founded from its own ladder.
+    (
+        "contracts/migrations/index",
+        &["crates/vault/src/format.rs", "crates/vault/src/file.rs"],
+        "INDEX_APPLICATION_ID",
     ),
     (
         "crates/vault/src/backup/state_ladder",

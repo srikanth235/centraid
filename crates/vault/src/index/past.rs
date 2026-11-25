@@ -79,7 +79,7 @@ pub fn past_rowid(n: i64, seq: i64) -> Option<i64> {
 /// An activity has no typed text column of its own (its kind, its place and its times are
 /// concepts, links and instants, and a workout's measures are numbers), so its past row holds
 /// the title the member gave it, and [`EARLIER_COLUMNS`] has no line for it.
-pub const EARLIER_KINDS: [Kind; 8] = [
+pub const EARLIER_KINDS: [Kind; 9] = [
     Kind::Note,
     Kind::Event,
     Kind::Task,
@@ -87,7 +87,8 @@ pub const EARLIER_KINDS: [Kind; 8] = [
     Kind::Document,
     Kind::Photo,
     Kind::Txn,
-    Kind::Activity,
+    Kind::Workout,
+    Kind::Touch,
 ];
 
 fn has_past(kind: Kind) -> bool {

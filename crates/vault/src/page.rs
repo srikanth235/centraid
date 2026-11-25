@@ -1336,7 +1336,7 @@ mod keyset_tests {
 
         photograph(
             &vault,
-            "p1",
+            &crate::test_ids::uuid(1),
             "2026-01-01T00:00:00.000Z",
             &original,
             17,
@@ -1390,7 +1390,7 @@ mod keyset_tests {
             let vault = founded(&dir);
             photograph(
                 &vault,
-                "p1",
+                &crate::test_ids::uuid(1),
                 "2026-01-01T00:00:00.000Z",
                 &hash,
                 29,
@@ -1464,7 +1464,7 @@ mod keyset_tests {
         let vault = founded(&dir);
         photograph(
             &vault,
-            "c1",
+            &crate::test_ids::uuid(11),
             "2026-01-01T00:00:00.000Z",
             &in_library,
             17,
@@ -1473,7 +1473,7 @@ mod keyset_tests {
         );
         photograph(
             &vault,
-            "c2",
+            &crate::test_ids::uuid(12),
             "2026-01-02T00:00:00.000Z",
             &elsewhere,
             17,
@@ -1587,14 +1587,14 @@ mod keyset_tests {
             .commit(|tx| {
                 for index in 0..4 {
                     tx.insert_entity(
-                        &format!("t{index}"),
+                        &crate::test_ids::uuid(100 + index),
                         crate::model::Kind::Tag,
                         &format!("tag {index}"),
                         &now,
                     )?;
                     tx.connection().execute(
                         "INSERT INTO concept (id, kind, key) VALUES (?1, 'tag', ?2)",
-                        rusqlite::params![format!("t{index}"), format!("k{index}")],
+                        rusqlite::params![crate::test_ids::uuid(100 + index), format!("k{index}")],
                     )?;
                 }
                 Ok(())
@@ -1632,10 +1632,10 @@ mod keyset_tests {
         vault
             .commit(|tx| {
                 for index in 0..rows {
-                    tx.insert_entity(&format!("n{index:05}"), crate::model::Kind::Tag, "t", &now)?;
+                    tx.insert_entity(&crate::test_ids::uuid(1000 + index as u64), crate::model::Kind::Tag, "t", &now)?;
                     tx.connection().execute(
                         "INSERT INTO concept (id, kind, key) VALUES (?1, 'tag', ?1)",
-                        [format!("n{index:05}")],
+                        [crate::test_ids::uuid(1000 + index as u64)],
                     )?;
                 }
                 Ok(())
@@ -1733,10 +1733,11 @@ mod keyset_tests {
         vault
             .commit(|tx| {
                 crate::blob::stage(tx.connection(), &hash, 880_000)?;
-                tx.insert_entity("d1", crate::model::Kind::Document, "Report", &now)?;
+                let document = crate::test_ids::uuid(1);
+                tx.insert_entity(&document, crate::model::Kind::Document, "Report", &now)?;
                 tx.connection().execute(
-                    "INSERT INTO document (id, blob, media_type) VALUES ('d1', ?1, 'application/pdf')",
-                    [&hash],
+                    "INSERT INTO document (id, blob, media_type) VALUES (?1, ?2, 'application/pdf')",
+                    [&document, &hash],
                 )?;
                 Ok(())
             })
@@ -1829,7 +1830,7 @@ mod keyset_tests {
         let vault = founded(&dir);
         photograph(
             &vault,
-            "p1",
+            &crate::test_ids::uuid(1),
             "2026-01-01T00:00:00.000Z",
             &crate::blob::content_digest(b"x"),
             1,
