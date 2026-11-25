@@ -1339,3 +1339,111 @@ fn an_alert_row_is_a_key_in_a_timing_it_says() {
     ));
     w.takes(&row("floating", "2026-03-01T09:00"));
 }
+
+// ---------------------------------------------------------------------------------------------
+// F1, L1, L6: a workout, a day's total and a reading are held by their own rules
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn a_workout_is_of_a_workout_kind_in_a_span_and_a_place_that_is_one() {
+    let w = World::new("rules_workout");
+    let person = w.entity(130, "person", "P");
+    w.takes(&format!("INSERT INTO person (id) VALUES ('{person}')"));
+    let note = w.entity(131, "note", "N");
+    let place = w.entity(132, "place", "Park");
+    w.takes(&format!("INSERT INTO place (id) VALUES ('{place}')"));
+    let workout = |n: u64, columns: &str, values: &str| {
+        let wid = id(n);
+        format!(
+            "INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES ('{wid}', 'workout', 'Run', '{AT}', '{AT}');
+             INSERT INTO workout (id, starts{columns}) VALUES ('{wid}', '{AT}'{values});"
+        )
+    };
+    let with = |n: u64, columns: &str, values: &str| {
+        workout(n, &format!(", type_id{columns}"), &format!(", 'workout_kind:run'{values}"))
+    };
+    // the kind of workout is a workout kind, not any entity; the row has one
+    w.refuses(&workout(133, "", ""));
+    w.refuses(&workout(134, ", type_id", &format!(", '{person}'")));
+    w.refuses(&workout(135, ", type_id", &format!(", '{note}'")));
+    w.takes(&with(136, "", ""));
+    // a span ends at or after its start; the figures are not negative or empty
+    w.refuses_with(&with(137, ", ends", ", '2026-03-01T08:00:00.000Z'"), "CHECK");
+    w.takes(&with(138, ", ends", &format!(", '{AT}'")));
+    w.refuses(&with(139, ", distance_m", ", -1"));
+    w.refuses(&with(140, ", moving_s", ", 0"));
+    w.refuses(&with(141, ", heart_bpm", ", 0"));
+    w.takes(&with(142, ", distance_m, moving_s, heart_bpm, energy_kcal, climb_m", ", 5000, 1800, 140, 300, 10"));
+    // a place is a place
+    w.refuses(&with(143, ", place_id", &format!(", '{note}'")));
+    w.takes(&with(144, ", place_id, notes", &format!(", '{place}', 'felt good'")));
+    // a workout is `with` people and nothing else
+    let wid = id(138);
+    w.refuses(&format!(
+        "INSERT INTO edge (from_id, rel, to_id, created_at) VALUES ('{wid}', 'with', '{note}', '{AT}')"
+    ));
+    w.takes(&format!(
+        "INSERT INTO edge (from_id, rel, to_id, created_at) VALUES ('{wid}', 'with', '{person}', '{AT}')"
+    ));
+}
+
+#[test]
+fn a_day_has_one_total_of_a_daily_metric_and_never_a_negative_one() {
+    let w = World::new("rules_measurement");
+    let person = w.entity(150, "person", "P");
+    w.takes(&format!("INSERT INTO person (id) VALUES ('{person}')"));
+    let total = |day: &str, metric: &str, value: &str| {
+        format!(
+            "INSERT INTO measurement (person_id, day, metric, value) VALUES ('{person}', '{day}', '{metric}', {value})"
+        )
+    };
+    w.takes(&total("2026-03-01", "steps", "8000"));
+    // one figure per person, day and metric
+    w.refuses(&total("2026-03-01", "steps", "9000"));
+    w.takes(&total("2026-03-02", "steps", "9000"));
+    // a day is a date; a total is not negative; a reading's metric is not a total's
+    w.refuses(&total("2026-02-30", "steps", "1"));
+    w.refuses(&total("2026-03-03", "steps", "-1"));
+    w.refuses(&total("2026-03-03", "weight_kg", "70"));
+    w.refuses(&total("2026-03-03", "blood_pressure", "120"));
+    w.refuses(&total("2026-03-03", "mood", "1"));
+    // the store it came from is an origin
+    w.refuses(&format!(
+        "INSERT INTO measurement (person_id, day, metric, value, origin_id) VALUES ('{person}', '2026-03-04', 'steps', 1, 'nobody')"
+    ));
+}
+
+#[test]
+fn a_reading_may_be_negative_has_a_context_when_it_says_so_and_is_a_person_s() {
+    let w = World::new("rules_reading_more");
+    let person = w.entity(160, "person", "P");
+    w.takes(&format!("INSERT INTO person (id) VALUES ('{person}')"));
+    let note = w.entity(161, "note", "N");
+    let reading = |n: u64, extra_columns: &str, extra_values: &str, holder: &str, at: &str| {
+        let rid = id(n);
+        format!(
+            "INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES ('{rid}', 'reading', '', '{AT}', '{AT}');
+             INSERT INTO reading (id, person_id, metric, at, value{extra_columns}) VALUES ('{rid}', '{holder}', 'glucose_mmol', '{at}', -1.5{extra_values});"
+        )
+    };
+    // a difference can be negative; its moment is an instant in the clock's one form
+    w.takes(&reading(162, "", "", &person, AT));
+    w.refuses(&reading(163, "", "", &person, "yesterday"));
+    w.refuses(&reading(164, "", "", &person, "2026-03-01"));
+    // a context is words or absent, never blank
+    w.takes(&reading(165, ", context", ", 'fasting'", &person, AT));
+    w.refuses(&reading(166, ", context", ", '  '", &person, AT));
+    // a reading is a person's, not any entity's
+    w.refuses(&reading(167, "", "", &note, AT));
+    // not a `[[title]]` target and not a link end
+    let rid = id(162);
+    w.refuses_with(
+        &format!("INSERT INTO mention (note_id, ordinal, wikilink, to_id) VALUES ('{note}', 0, 'x', '{rid}')"),
+        "cannot mention",
+    );
+    // takes no tag
+    let tag = w.entity(168, "tag", "walk");
+    w.refuses(&format!(
+        "INSERT INTO edge (from_id, rel, to_id, created_at) VALUES ('{rid}', 'tagged', '{tag}', '{AT}')"
+    ));
+}

@@ -46,19 +46,24 @@
 pub mod arrival;
 pub mod blob;
 pub mod container;
+pub mod csv;
 pub mod edge;
 pub mod entity;
 pub mod flag;
 pub mod follow;
+pub mod health_portable;
 pub mod history;
 pub mod locker;
+pub mod measurement;
 pub mod note;
 pub mod note_portable;
 pub mod origin_cursor;
+pub mod reading;
 pub mod reminder;
 pub mod sealed;
 pub mod tag;
 pub mod vault;
+pub mod workout;
 
 use std::collections::BTreeMap;
 
@@ -365,18 +370,22 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 11] = [
+        let modules: [fn() -> Vec<CommandDefinition>; 15] = [
             blob::definitions,
             container::definitions,
             edge::definitions,
             entity::definitions,
             flag::definitions,
             follow::definitions,
+            health_portable::definitions,
             history::definitions,
+            measurement::definitions,
             note::definitions,
+            reading::definitions,
             reminder::definitions,
             tag::definitions,
             vault::definitions,
+            workout::definitions,
         ];
         for definitions in modules {
             for definition in definitions() {

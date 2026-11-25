@@ -1,32 +1,44 @@
-//! A workout: what the health store measured of an activity of a workout kind.
+//! `workout.*`: a workout is its own kind (L1): an entity of kind `workout` whose kind row holds its
+//! span, its place, its figures and its own `notes`, and whose kind of workout (`type_id`) is a
+//! `workout_kind` concept. The people it was done with are `with` edges.
 //!
-//! A workout is an `activity` (its kind, its span) with a `workout` row beside
-//! it for the figures; the store's own id is the `source` that follows it
-//! (`follow.health`). This module is what [`crate::commands::follow`] needs to
-//! follow one: the **kind** a store's word becomes ([`shape`]) and the
-//! **measures** that hang off the activity ([`MEASURES`]). A measure of a
-//! followed workout is written as the store states it.
+//! A member logs one by hand (`workout.log`) and changes it (`workout.edit`); the trash, a star,
+//! a tag and a rename of the shared kind are the shared verbs. A workout the health store follows
+//! is the same row with a `source`: **`workout.edit` does not refuse it** (L6, A12). The follower's
+//! three-way merge ([`crate::commands::follow`]) keeps the figure the member set and shows the
+//! store's as "Phone says X", field by field, so the member's edit and the store's next read no
+//! longer contradict each other.
 //!
-//! **A member can log a workout by hand** (`workout.log`) and change one they
-//! logged (`workout.edit`, [#1166](https://github.com/srikanth235/centraid/issues/1166)).
-//! It is the same two rows with no `source`. A workout the health store follows
-//! is refused by `workout.edit` with a sentence naming the store, because the
-//! next read would state it again. The follower's merge keeps a figure the member set (one they logged on a row the store is only now matching, or changed since the store last stated it).
-
-use std::collections::BTreeMap;
+//! What a record of the `health` store says of a workout becomes a row through [`MAP`] (the
+//! engine reads the columns named in `fields`; there is no child: a figure is a column).
+//!
+//! **One read, "what happened on this day"** ([`on_day`]): the workouts that started in a span of
+//! instants, an index walk of `workout_by_start`. People's `touch` is the other half of the same
+//! read; Calendar's day view calls both.
 
 use rusqlite::OptionalExtension;
 use rusqlite::types::Value as Sql;
 use serde_json::{Map, Value as Json};
 
-use crate::commands::follow::Child;
+use crate::commands::edge::{self, Extras};
+use crate::commands::entity::{
+    self, STALE_GUARD, lookup_live, require, with_rev,
+};
+use crate::commands::follow::{Gone, Match, OriginRow, SystemMap, canonical_instants};
 use crate::commands::tag::ensure_concept;
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
 use crate::error::{Result, VaultError};
-use crate::model::Kind;
+use crate::model::{Kind, Rel};
 
-/// The columns of `workout`, in the form a record states them.
-const COLUMNS: [&str; 6] = [
+/// The most a workout's own words may weigh: a size budget, the command's on purpose (a column's
+/// CHECK would have to be migrated to tune it).
+pub const NOTES_BUDGET_BYTES: usize = 16 * 1024;
+
+/// The most people one workout may be logged `with`.
+pub const MAX_WITH: usize = 50;
+
+/// The columns of `workout` a health store states, besides its kind and span: the figures.
+pub const MEASURES: [&str; 6] = [
     "recorded_by",
     "moving_s",
     "distance_m",
@@ -35,178 +47,56 @@ const COLUMNS: [&str; 6] = [
     "climb_m",
 ];
 
-/// The columns that hold whole numbers; the rest are reals.
-const WHOLE: [&str; 2] = ["moving_s", "heart_bpm"];
+// ---------------------------------------------------------------------------------------------
+// following the health store: the map
+// ---------------------------------------------------------------------------------------------
 
-/// The measures a workout carries, as the follow engine's child of an activity.
-pub const MEASURES: Child = Child {
-    name: "workout",
-    read,
-    canon,
-    merge,
-    items: Some(items),
-    take,
-    stamp: None,
+/// What the health store states of a workout: its kind (the store's word, placed by [`shape`]),
+/// its span and its figures. A workout the store no longer holds stays, as the vault is the copy
+/// that outlives the phone's store; a new phone finds it again by kind and minute.
+pub const MAP: SystemMap = SystemMap {
+    system: "health",
+    command: "follow.health",
+    kind: Kind::Workout,
+    claims: None,
+    fields: &[
+        "type_id",
+        "starts",
+        "ends",
+        "recorded_by",
+        "moving_s",
+        "distance_m",
+        "energy_kcal",
+        "heart_bpm",
+        "climb_m",
+    ],
+    fixed: &[],
+    children: &[],
+    match_on: &[Match::Column("type_id"), Match::Minute("starts")],
+    gone: Gone::Forget,
+    window: Some("starts"),
+    defaults: no_defaults,
+    founds: None,
+    shape,
+    settle: nothing_to_settle,
+    named: nothing_to_settle,
 };
 
-/// The measures by column.
-fn items(value: &Json) -> BTreeMap<String, Json> {
-    value
-        .as_object()
-        .into_iter()
-        .flatten()
-        .map(|(column, figure)| (column.clone(), figure.clone()))
-        .collect()
+fn no_defaults(
+    _: &rusqlite::Connection,
+    _: &OriginRow,
+) -> Result<Vec<(&'static str, rusqlite::types::Value)>> {
+    Ok(Vec::new())
 }
 
-/// The measures a record states in the one form the engine compares: only what
-/// is stated, numbers as reals, words squashed.
-fn canon(value: &Json) -> Json {
-    let mut out = Map::new();
-    for column in COLUMNS {
-        match value.get(column) {
-            Some(Json::Number(number)) => {
-                if let Some(real) = number.as_f64().and_then(serde_json::Number::from_f64) {
-                    out.insert(column.to_owned(), Json::Number(real));
-                }
-            }
-            Some(Json::String(text)) => {
-                let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
-                if !text.is_empty() {
-                    out.insert(column.to_owned(), Json::String(text));
-                }
-            }
-            _ => {}
-        }
-    }
-    Json::Object(out)
-}
-
-fn read(connection: &rusqlite::Connection, id: &str) -> Result<Json> {
-    let row: Option<Vec<Sql>> = connection
-        .query_row(
-            &format!("SELECT {} FROM workout WHERE id = ?1", COLUMNS.join(", ")),
-            [id],
-            |row| {
-                (0..COLUMNS.len())
-                    .map(|index| row.get::<_, Sql>(index))
-                    .collect::<rusqlite::Result<Vec<_>>>()
-            },
-        )
-        .optional()?;
-    let mut out = Map::new();
-    for (column, value) in COLUMNS.iter().zip(row.into_iter().flatten()) {
-        let json = match value {
-            Sql::Integer(number) => Json::from(number as f64),
-            Sql::Real(number) => Json::from(number),
-            Sql::Text(text) => Json::String(text),
-            Sql::Null | Sql::Blob(_) => continue,
-        };
-        out.insert((*column).to_owned(), json);
-    }
-    Ok(Json::Object(out))
-}
-
-/// Write what the store stated of the activity's figures: the row is added or
-/// brought level, and a figure the store no longer states is cleared.
-fn merge(ctx: &CommandCtx<'_, '_>, id: &str, before: Option<&Json>, new: &Json) -> Result<bool> {
-    // THE MEMBER'S FIGURE STANDS: a measure the member has set since the store last stated it, or
-    // one they logged on a row the store is only now matching, is theirs; the store writes the
-    // rest (the three-way merge of the module doc, per column).
-    let held = canon(&read(ctx.connection(), id)?);
-    let was = before.map(canon);
-    let mut stated = canon(new);
-    for column in COLUMNS.iter().skip(1) {
-        let current = held.get(*column);
-        let mine = match &was {
-            Some(last) => last.get(*column) != current,
-            // a row the store stated has its `recorded_by`; one the member logged has none
-            None => current.is_some() && held.get("recorded_by").is_none(),
-        };
-        if mine {
-            match current {
-                Some(value) => stated[*column] = value.clone(),
-                None => {
-                    stated.as_object_mut().map(|map| map.remove(*column));
-                }
-            }
-        }
-    }
-    store(ctx, id, &stated)
-}
-
-/// Make the measures what the store last stated (one column, or all): a figure the member changed
-/// is put back, one they cleared comes back and one they added is cleared.
-fn take(ctx: &CommandCtx<'_, '_>, id: &str, item: Option<&str>, stated: &Json) -> Result<bool> {
-    let (said, mut target) = (canon(stated), canon(&read(ctx.connection(), id)?));
-    for column in COLUMNS
-        .iter()
-        .filter(|column| item.is_none_or(|item| item == **column))
-    {
-        match said.get(*column) {
-            Some(value) => target[*column] = value.clone(),
-            None => {
-                target.as_object_mut().map(|map| map.remove(*column));
-            }
-        }
-    }
-    store(ctx, id, &target)
-}
-
-/// Write the measures (in [`canon`]'s form) as the activity's row, adding it if it has none.
-fn store(ctx: &CommandCtx<'_, '_>, id: &str, new: &Json) -> Result<bool> {
-    let bind = |column: &str| -> Sql {
-        match new.get(column) {
-            Some(Json::Number(number)) if WHOLE.contains(&column) => {
-                Sql::Integer(number.as_f64().unwrap_or_default().round() as i64)
-            }
-            Some(Json::Number(number)) => Sql::Real(number.as_f64().unwrap_or_default()),
-            Some(Json::String(text)) => Sql::Text(text.clone()),
-            _ => Sql::Null,
-        }
-    };
-    let names = COLUMNS.join(", ");
-    let marks = (2..=COLUMNS.len() + 1)
-        .map(|index| format!("?{index}"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let sets = COLUMNS
-        .iter()
-        .map(|column| format!("{column} = excluded.{column}"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let excluded = COLUMNS
-        .iter()
-        .map(|column| format!("excluded.{column}"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let mut values = vec![Sql::Text(id.to_owned())];
-    values.extend(COLUMNS.iter().map(|column| bind(column)));
-    let changed = ctx.connection().execute(
-        &format!(
-            "INSERT INTO workout (id, {names}) VALUES (?1, {marks})
-             ON CONFLICT (id) DO UPDATE SET {sets}
-              WHERE ({names}) IS NOT ({excluded})"
-        ),
-        rusqlite::params_from_iter(values),
-    )?;
-    Ok(changed > 0)
-}
-
-/// Every workout has its `workout` row, however little the store measured: a
-/// walk with no figures is still a workout, and an activity of a workout kind
-/// without the row is not one.
-pub fn settle(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<()> {
-    ctx.connection()
-        .execute("INSERT OR IGNORE INTO workout (id) VALUES (?1)", [id])?;
+fn nothing_to_settle(_: &CommandCtx<'_, '_>, _: &str) -> Result<()> {
     Ok(())
 }
 
-/// Read a store's record into the form the vault holds: the store's word for the
-/// kind becomes the workout kind it names (minted when this vault has not met the
-/// word), the instants become the one spelling the vault writes, and an
-/// untitled workout is titled by its kind.
-pub fn shape(
+/// Read a store's record into the form the vault holds: the store's word for the kind becomes the
+/// workout kind it names (minted when this vault has not met the word), the instants become the
+/// one spelling the vault writes, and an untitled workout is titled by its kind.
+fn shape(
     ctx: &CommandCtx<'_, '_>,
     fields: &mut Map<String, Json>,
 ) -> std::result::Result<(), String> {
@@ -223,30 +113,28 @@ pub fn shape(
         .map_err(|error| error.to_string())?;
     fields.entry("title").or_insert_with(|| Json::String(named));
     fields.insert("type_id".to_owned(), Json::String(kind));
-    fields.insert(
-        "type_kind".to_owned(),
-        Json::String("workout_kind".to_owned()),
-    );
-    let mut span = Vec::new();
+    if !fields.contains_key("starts") {
+        return Err("a workout states when it started".to_owned());
+    }
+    canonical_instants(fields, &["starts", "ends"]);
     for name in ["starts", "ends"] {
         let Some(text) = fields.get(name).and_then(Json::as_str) else {
-            if name == "starts" {
-                return Err("a workout states when it started".to_owned());
-            }
-            span.push(None);
             continue;
         };
-        let instant: Option<String> = connection
+        // The one form the column holds: anything else is a record the vault cannot keep.
+        let held: Option<String> = connection
             .query_row("SELECT strftime('%Y-%m-%dT%H:%M:%fZ', ?1)", [text], |row| {
                 row.get(0)
             })
             .map_err(|error| error.to_string())?;
-        let instant = instant.ok_or_else(|| format!("`{text}` is not an instant"))?;
-        fields.insert(name.to_owned(), Json::String(instant.clone()));
-        span.push(Some(instant));
+        if held.as_deref() != Some(text) {
+            return Err(format!("`{text}` is not an instant"));
+        }
     }
-    if let [Some(starts), Some(ends)] = span.as_slice()
-        && ends < starts
+    if let (Some(starts), Some(ends)) = (
+        fields.get("starts").and_then(Json::as_str),
+        fields.get("ends").and_then(Json::as_str),
+    ) && ends < starts
     {
         return Err("a workout cannot end before it starts".to_owned());
     }
@@ -256,18 +144,6 @@ pub fn shape(
 // ---------------------------------------------------------------------------------------------
 // a workout a member logs by hand
 // ---------------------------------------------------------------------------------------------
-
-/// `where` a workout of `id` is a live one, and the health origin that follows it if one does.
-fn followed_by(connection: &rusqlite::Connection, id: &str) -> Result<Option<String>> {
-    Ok(connection
-        .query_row(
-            "SELECT o.label FROM source s JOIN origin o ON o.id = s.origin_id
-              WHERE s.entity_id = ?1 AND s.system = 'health' AND o.retired_at IS NULL",
-            [id],
-            |row| row.get(0),
-        )
-        .optional()?)
-}
 
 /// An instant as the vault writes it, or the sentence that says it is not one.
 fn instant(
@@ -279,24 +155,6 @@ fn instant(
             row.get(0)
         })?;
     Ok(found.ok_or_else(|| format!("`{text}` is not a day or an instant.")))
-}
-
-fn pre_log(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    let connection = ctx.connection();
-    let starts = match instant(connection, ctx.required_str("starts")?)? {
-        Ok(starts) => starts,
-        Err(sentence) => return Ok(Some(sentence)),
-    };
-    if let Some(ends) = ctx.optional_str("ends") {
-        match instant(connection, ends)? {
-            Ok(ends) if ends < starts => {
-                return Ok(Some("A workout cannot end before it starts.".to_owned()));
-            }
-            Ok(_) => {}
-            Err(sentence) => return Ok(Some(sentence)),
-        }
-    }
-    Ok(None)
 }
 
 /// A whole-number measure read from any JSON number, rounded (`142.0` is a valid integer).
@@ -314,6 +172,79 @@ fn whole_patch<'de, D: serde::Deserializer<'de>>(
     whole(deserializer).map(Some)
 }
 
+/// A sentence when the place is not a live place.
+fn place_refusal(connection: &rusqlite::Connection, place: &str) -> Result<Option<String>> {
+    Ok(match lookup_live(connection, place)? {
+        Err(sentence) => Some(sentence),
+        Ok(found) if found.kind != Kind::Place => {
+            Some(format!("“{}” is a {}, not a place", found.title, found.kind.noun()))
+        }
+        Ok(_) => None,
+    })
+}
+
+/// A sentence when the people a workout is `with` are not live people.
+fn with_refusal(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let Some(people) = ctx.input.get("with").and_then(Json::as_array) else {
+        return Ok(None);
+    };
+    if people.len() > MAX_WITH {
+        return Ok(Some(format!(
+            "a workout is with at most {MAX_WITH} people"
+        )));
+    }
+    for person in people.iter().filter_map(Json::as_str) {
+        match lookup_live(ctx.connection(), person)? {
+            Err(sentence) => return Ok(Some(sentence)),
+            Ok(found) if found.kind != Kind::Person => {
+                return Ok(Some(format!(
+                    "“{}” is a {}, not a person",
+                    found.title,
+                    found.kind.noun()
+                )));
+            }
+            Ok(_) => {}
+        }
+    }
+    Ok(None)
+}
+
+fn notes_refusal(ctx: &CommandCtx<'_, '_>) -> Option<String> {
+    let notes = ctx.optional_str("notes")?;
+    (notes.len() > NOTES_BUDGET_BYTES).then(|| {
+        format!(
+            "Those notes are {} bytes, over the {NOTES_BUDGET_BYTES}-byte budget for a workout.",
+            notes.len()
+        )
+    })
+}
+
+fn pre_log(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let connection = ctx.connection();
+    let starts = match instant(connection, ctx.required_str("starts")?)? {
+        Ok(starts) => starts,
+        Err(sentence) => return Ok(Some(sentence)),
+    };
+    if let Some(ends) = ctx.optional_str("ends") {
+        match instant(connection, ends)? {
+            Ok(ends) if ends < starts => {
+                return Ok(Some("A workout cannot end before it starts.".to_owned()));
+            }
+            Ok(_) => {}
+            Err(sentence) => return Ok(Some(sentence)),
+        }
+    }
+    if let Some(place) = ctx.optional_str("place_id")
+        && let Some(sentence) = place_refusal(connection, place)?
+    {
+        return Ok(Some(sentence));
+    }
+    if let Some(sentence) = notes_refusal(ctx) {
+        return Ok(Some(sentence));
+    }
+    with_refusal(ctx)
+}
+
 #[derive(serde::Deserialize)]
 struct LogWorkoutInput {
     id: Option<String>,
@@ -322,6 +253,11 @@ struct LogWorkoutInput {
     title: Option<String>,
     starts: String,
     ends: Option<String>,
+    place_id: Option<String>,
+    notes: Option<String>,
+    #[serde(default)]
+    with: Vec<String>,
+    recorded_by: Option<String>,
     #[serde(default, deserialize_with = "whole")]
     moving_s: Option<i64>,
     distance_m: Option<f64>,
@@ -329,6 +265,25 @@ struct LogWorkoutInput {
     #[serde(default, deserialize_with = "whole")]
     heart_bpm: Option<i64>,
     climb_m: Option<f64>,
+}
+
+/// Make the people a workout is `with` exactly `people`: the others are joined, the rest let go.
+fn set_with(ctx: &CommandCtx<'_, '_>, id: &str, people: &[String]) -> Result<()> {
+    let connection = ctx.connection();
+    let held = connection
+        .prepare_cached("SELECT to_id FROM edge WHERE from_id = ?1 AND rel = 'with'")?
+        .query_map([id], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for gone in held.iter().filter(|held| !people.contains(held)) {
+        connection.execute(
+            "DELETE FROM edge WHERE from_id = ?1 AND rel = 'with' AND to_id = ?2",
+            [id, gone.as_str()],
+        )?;
+    }
+    for person in people.iter().filter(|person| !held.contains(person)) {
+        edge::put(ctx, id, Rel::With, person, None, &Extras::default())?;
+    }
+    Ok(())
 }
 
 fn log(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
@@ -349,95 +304,68 @@ fn log(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     // the id the phone minted first when it named one (a card shows it before the tap)
     let id = match input.id.as_deref() {
         Some(id) => {
-            ctx.insert_entity_as(id, Kind::Activity, title)?;
+            ctx.insert_entity_as(id, Kind::Workout, title)?;
             id.to_owned()
         }
-        None => ctx.insert_entity(Kind::Activity, title)?,
+        None => ctx.insert_entity(Kind::Workout, title)?,
     };
-    let starts =
-        instant(connection, &input.starts)?.map_err(|detail| VaultError::InvalidInput {
-            name: "starts".to_owned(),
-            detail,
-        })?;
+    let invalid = |name: &str, detail: String| VaultError::InvalidInput {
+        name: name.to_owned(),
+        detail,
+    };
+    let starts = instant(connection, &input.starts)?.map_err(|detail| invalid("starts", detail))?;
     let ends = match input.ends.as_deref() {
-        Some(ends) => {
-            Some(
-                instant(connection, ends)?.map_err(|detail| VaultError::InvalidInput {
-                    name: "ends".to_owned(),
-                    detail,
-                })?,
-            )
-        }
+        Some(ends) => Some(instant(connection, ends)?.map_err(|detail| invalid("ends", detail))?),
         None => None,
     };
     connection.execute(
-        "INSERT INTO activity (id, type_id, type_kind, starts, ends)
-         VALUES (?1, ?2, 'workout_kind', ?3, ?4)",
-        rusqlite::params![id, kind, starts, ends],
+        "INSERT INTO workout (id, type_id, starts, ends, place_id, recorded_by, moving_s,
+                              distance_m, energy_kcal, heart_bpm, climb_m, notes)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        rusqlite::params![
+            id,
+            kind,
+            starts,
+            ends,
+            input.place_id,
+            input.recorded_by,
+            input.moving_s,
+            input.distance_m,
+            input.energy_kcal,
+            input.heart_bpm,
+            input.climb_m,
+            input.notes.as_deref().filter(|notes| !notes.trim().is_empty()),
+        ],
     )?;
-    settle(ctx, &id)?;
-    let mut measures = Vec::new();
-    if let Some(v) = input.moving_s {
-        measures.push(("moving_s", Sql::Integer(v)));
-    }
-    if let Some(v) = input.distance_m {
-        measures.push(("distance_m", Sql::Real(v)));
-    }
-    if let Some(v) = input.energy_kcal {
-        measures.push(("energy_kcal", Sql::Real(v)));
-    }
-    if let Some(v) = input.heart_bpm {
-        measures.push(("heart_bpm", Sql::Integer(v)));
-    }
-    if let Some(v) = input.climb_m {
-        measures.push(("climb_m", Sql::Real(v)));
-    }
-    write_measures(ctx, &id, measures)?;
+    set_with(ctx, &id, &input.with)?;
     Ok(serde_json::json!({ "id": id, "workout_id": id }))
-}
-
-fn write_measures(
-    ctx: &CommandCtx<'_, '_>,
-    id: &str,
-    measures: Vec<(&'static str, Sql)>,
-) -> Result<()> {
-    if measures.is_empty() {
-        return Ok(());
-    }
-    let sets = measures
-        .iter()
-        .enumerate()
-        .map(|(at, (column, _))| format!("{column} = ?{}", at + 2))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let mut values = vec![Sql::Text(id.to_owned())];
-    values.extend(measures.into_iter().map(|(_, value)| value));
-    ctx.connection().execute(
-        &format!("UPDATE workout SET {sets} WHERE id = ?1"),
-        rusqlite::params_from_iter(values),
-    )?;
-    Ok(())
 }
 
 fn pre_edit(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let connection = ctx.connection();
     let id = ctx.required_str("id")?;
-    let live: bool = connection.query_row(
-        "SELECT EXISTS (SELECT 1 FROM entity e JOIN activity a ON a.id = e.id
-                         WHERE e.id = ?1 AND e.deleted_at IS NULL AND a.type_kind = 'workout_kind')",
-        [id],
-        |row| row.get(0),
-    )?;
-    if !live {
-        return Ok(Some("There is no such workout.".to_owned()));
+    match lookup_live(connection, id)? {
+        Err(sentence) => return Ok(Some(sentence)),
+        Ok(found) if found.kind != Kind::Workout => {
+            return Ok(Some(format!(
+                "“{}” is a {}, not a workout",
+                found.title,
+                found.kind.noun()
+            )));
+        }
+        Ok(_) => {}
     }
-    if let Some(store) = followed_by(connection, id)? {
-        return Ok(Some(format!(
-            "This workout comes from {store}; change it there, not here."
-        )));
+    if ctx
+        .input
+        .get("title")
+        .and_then(Json::as_str)
+        .is_some_and(|title| title.trim().is_empty())
+    {
+        return Ok(Some("A workout's title cannot be blank.".to_owned()));
     }
+    // NOTHING HERE REFUSES A FOLLOWED WORKOUT (L6): the merge keeps the member's figure.
     let (starts, ends): (String, Option<String>) = connection.query_row(
-        "SELECT starts, ends FROM activity WHERE id = ?1",
+        "SELECT starts, ends FROM workout WHERE id = ?1",
         [id],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
@@ -448,16 +376,26 @@ fn pre_edit(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         },
         None => starts,
     };
-    let ends = match ctx.optional_str("ends") {
-        Some(text) => match instant(connection, text)? {
+    let ends = match ctx.input.get("ends") {
+        Some(Json::String(text)) => match instant(connection, text)? {
             Ok(ends) => Some(ends),
             Err(sentence) => return Ok(Some(sentence)),
         },
+        Some(_) => None,
         None => ends,
     };
-    Ok(ends
-        .filter(|ends| *ends < starts)
-        .map(|_| "A workout cannot end before it starts.".to_owned()))
+    if ends.is_some_and(|ends| ends < starts) {
+        return Ok(Some("A workout cannot end before it starts.".to_owned()));
+    }
+    if let Some(place) = ctx.optional_str("place_id")
+        && let Some(sentence) = place_refusal(connection, place)?
+    {
+        return Ok(Some(sentence));
+    }
+    if let Some(sentence) = notes_refusal(ctx) {
+        return Ok(Some(sentence));
+    }
+    with_refusal(ctx)
 }
 
 #[derive(serde::Deserialize)]
@@ -467,7 +405,15 @@ struct EditWorkoutInput {
     workout_type: Option<String>,
     title: Option<String>,
     starts: Option<String>,
-    ends: Option<String>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    ends: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    place_id: Option<Option<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    notes: Option<Option<String>>,
+    with: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
+    recorded_by: Option<Option<String>>,
     #[serde(default, deserialize_with = "whole_patch")]
     moving_s: Option<Option<i64>>,
     #[serde(default, deserialize_with = "crate::commands::deserialize_patch")]
@@ -483,71 +429,212 @@ struct EditWorkoutInput {
 fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let input: EditWorkoutInput = ctx.parse_input()?;
     let connection = ctx.connection();
-    if let Some(title) = input
-        .title
-        .as_deref()
-        .map(str::trim)
-        .filter(|t| !t.is_empty())
-    {
-        connection.execute(
-            "UPDATE entity SET title = ?2 WHERE id = ?1",
-            [input.id.as_str(), title],
-        )?;
+    if let Some(title) = input.title.as_deref().map(str::trim) {
+        entity::rename(ctx, &input.id, title)?;
     }
+    let mut sets: Vec<(&str, Sql)> = Vec::new();
     if let Some(word) = input.workout_type.as_deref() {
-        let kind = ensure_concept(ctx, Kind::WorkoutKind, word)?;
-        connection.execute(
-            "UPDATE activity SET type_id = ?2 WHERE id = ?1",
-            [input.id.as_str(), &kind],
-        )?;
+        sets.push(("type_id", Sql::Text(ensure_concept(ctx, Kind::WorkoutKind, word)?)));
     }
-    for (column, value) in [
-        ("starts", input.starts.as_deref()),
-        ("ends", input.ends.as_deref()),
-    ] {
+    for (column, value) in [("starts", input.starts.as_deref())] {
         if let Some(text) = value {
-            let instant =
-                instant(connection, text)?.map_err(|detail| VaultError::InvalidInput {
-                    name: column.to_owned(),
-                    detail,
-                })?;
-            connection.execute(
-                &format!("UPDATE activity SET {column} = ?2 WHERE id = ?1"),
-                [input.id.as_str(), &instant],
-            )?;
+            let held = instant(connection, text)?.map_err(|detail| VaultError::InvalidInput {
+                name: column.to_owned(),
+                detail,
+            })?;
+            sets.push((column, Sql::Text(held)));
         }
     }
-    let mut measures = Vec::new();
-    if let Some(v) = input.moving_s {
-        measures.push(("moving_s", v.map_or(Sql::Null, Sql::Integer)));
+    if let Some(ends) = &input.ends {
+        let held = match ends {
+            Some(text) => Sql::Text(instant(connection, text)?.map_err(|detail| {
+                VaultError::InvalidInput {
+                    name: "ends".to_owned(),
+                    detail,
+                }
+            })?),
+            None => Sql::Null,
+        };
+        sets.push(("ends", held));
     }
-    if let Some(v) = input.distance_m {
-        measures.push(("distance_m", v.map_or(Sql::Null, Sql::Real)));
+    let text = |value: &Option<Option<String>>| {
+        value.as_ref().map(|value| match value.as_deref().map(str::trim) {
+            Some(text) if !text.is_empty() => Sql::Text(text.to_owned()),
+            _ => Sql::Null,
+        })
+    };
+    if let Some(value) = text(&input.place_id) {
+        sets.push(("place_id", value));
     }
-    if let Some(v) = input.energy_kcal {
-        measures.push(("energy_kcal", v.map_or(Sql::Null, Sql::Real)));
+    if let Some(value) = text(&input.notes) {
+        sets.push(("notes", value));
     }
-    if let Some(v) = input.heart_bpm {
-        measures.push(("heart_bpm", v.map_or(Sql::Null, Sql::Integer)));
+    if let Some(value) = text(&input.recorded_by) {
+        sets.push(("recorded_by", value));
     }
-    if let Some(v) = input.climb_m {
-        measures.push(("climb_m", v.map_or(Sql::Null, Sql::Real)));
+    for (column, value) in [
+        ("moving_s", input.moving_s.map(|v| v.map_or(Sql::Null, Sql::Integer))),
+        ("heart_bpm", input.heart_bpm.map(|v| v.map_or(Sql::Null, Sql::Integer))),
+        ("distance_m", input.distance_m.map(|v| v.map_or(Sql::Null, Sql::Real))),
+        ("energy_kcal", input.energy_kcal.map(|v| v.map_or(Sql::Null, Sql::Real))),
+        ("climb_m", input.climb_m.map(|v| v.map_or(Sql::Null, Sql::Real))),
+    ] {
+        if let Some(value) = value {
+            sets.push((column, value));
+        }
     }
-    write_measures(ctx, &input.id, measures)?;
+    if !sets.is_empty() {
+        let assignments = sets
+            .iter()
+            .enumerate()
+            .map(|(at, (column, _))| format!("{column} = ?{}", at + 2))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let mut values = vec![Sql::Text(input.id.clone())];
+        values.extend(sets.into_iter().map(|(_, value)| value));
+        // One statement: the table's checks judge the row after it (a span moved whole).
+        connection.execute(
+            &format!("UPDATE workout SET {assignments} WHERE id = ?1"),
+            rusqlite::params_from_iter(values),
+        )?;
+    }
+    if let Some(people) = &input.with {
+        set_with(ctx, &input.id, people)?;
+    }
     ctx.touch(&input.id)?;
-    Ok(serde_json::json!({ "workout_id": input.id }))
+    require(connection, &input.id)?;
+    with_rev(
+        ctx,
+        &input.id,
+        serde_json::json!({ "id": input.id, "workout_id": input.id }),
+    )
+}
+
+// ---------------------------------------------------------------------------------------------
+// what happened on a day
+// ---------------------------------------------------------------------------------------------
+
+/// The most workouts a day's read holds: a day has a handful, and a store that states a thousand
+/// in one is read in pages by [`on_day`]'s caller moving `from`.
+pub const DAY_LIMIT: i64 = 200;
+
+/// The workouts that started in `[from, to)`, in the order they started: a walk of
+/// `workout_by_start` that stops at [`DAY_LIMIT`]. Calendar's day view calls it with the day's two
+/// instants (it owns the member's zone), and joins People's touches to the same day.
+pub const ON_DAY_SQL: &str = "SELECT w.id, e.title, k.title, w.starts, w.ends, w.place_id,
+            w.moving_s, w.distance_m, w.energy_kcal, w.heart_bpm, w.climb_m, w.recorded_by,
+            w.notes
+       FROM workout w
+       JOIN entity e ON e.id = w.id
+       JOIN entity k ON k.id = w.type_id
+      WHERE w.starts >= ?1 AND w.starts < ?2 AND e.deleted_at IS NULL
+      ORDER BY w.starts, w.id
+      LIMIT 200";
+
+/// One workout of a day, as the day's list shows it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DayWorkout {
+    pub id: String,
+    pub title: String,
+    /// The kind of workout, as its concept is titled ("Run").
+    pub kind: String,
+    pub starts: String,
+    pub ends: Option<String>,
+    pub place_id: Option<String>,
+    pub moving_s: Option<i64>,
+    /// The distance as the member reads it, in their units.
+    pub distance: Option<String>,
+    pub energy_kcal: Option<f64>,
+    pub heart_bpm: Option<i64>,
+    pub climb_m: Option<f64>,
+    pub recorded_by: Option<String>,
+    pub notes: Option<String>,
+}
+
+/// What happened between two instants, of the workouts half: see [`ON_DAY_SQL`].
+///
+/// # Errors
+///
+/// A read the file refuses.
+pub fn on_day(
+    connection: &rusqlite::Connection,
+    from: &str,
+    to: &str,
+    units: crate::commands::measurement::Units,
+) -> Result<Vec<DayWorkout>> {
+    let mut statement = connection.prepare_cached(ON_DAY_SQL)?;
+    let rows = statement
+        .query_map([from, to], |row| {
+            Ok(DayWorkout {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                kind: row.get(2)?,
+                starts: row.get(3)?,
+                ends: row.get(4)?,
+                place_id: row.get(5)?,
+                moving_s: row.get(6)?,
+                distance: row
+                    .get::<_, Option<f64>>(7)?
+                    .map(|metres| units.distance(metres)),
+                energy_kcal: row.get(8)?,
+                heart_bpm: row.get(9)?,
+                climb_m: row.get(10)?,
+                recorded_by: row.get(11)?,
+                notes: row.get(12)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(rows)
+}
+
+/// The people a workout was done with, by the order they were joined.
+///
+/// # Errors
+///
+/// A read the file refuses.
+pub fn people_with(connection: &rusqlite::Connection, id: &str) -> Result<Vec<String>> {
+    Ok(connection
+        .prepare_cached(
+            "SELECT e.to_id FROM edge e JOIN entity p ON p.id = e.to_id
+              WHERE e.from_id = ?1 AND e.rel = 'with' AND p.deleted_at IS NULL
+              ORDER BY e.created_at, e.to_id",
+        )?
+        .query_map([id], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// Whether a workout of `id` is followed by a live store, and which: what "Phone says X" reads
+/// beside.
+///
+/// # Errors
+///
+/// A read the file refuses.
+pub fn followed_by(connection: &rusqlite::Connection, id: &str) -> Result<Option<String>> {
+    Ok(connection
+        .query_row(
+            "SELECT o.label FROM source s JOIN origin o ON o.id = s.origin_id
+              WHERE s.entity_id = ?1 AND o.retired_at IS NULL
+              ORDER BY o.created_at LIMIT 1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?)
 }
 
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
     const LOG: &[CommandCondition] = &[CommandCondition {
-        predicate: "a_workout_starts_on_a_day_and_does_not_end_before",
+        predicate: "a_workout_starts_on_a_day_and_does_not_end_before_in_a_place_with_people",
         check: pre_log,
     }];
-    const EDIT: &[CommandCondition] = &[CommandCondition {
-        predicate: "a_workout_the_member_logged_and_does_not_end_before",
-        check: pre_edit,
-    }];
+    const EDIT: &[CommandCondition] = &[
+        STALE_GUARD[0],
+        STALE_GUARD[1],
+        CommandCondition {
+            predicate: "a_live_workout_that_does_not_end_before_it_starts",
+            check: pre_edit,
+        },
+    ];
     vec![
         CommandDefinition::plain(
             "workout.log",
@@ -562,6 +649,10 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 "title": { "type": "string", "minLength": 1, "maxLength": 200 },
                 "starts": { "type": "string", "minLength": 1 },
                 "ends": { "type": "string", "minLength": 1 },
+                "place_id": { "type": "string", "minLength": 1 },
+                "notes": { "type": "string" },
+                "with": { "type": "array", "items": { "type": "string", "minLength": 1 }, "maxItems": 50 },
+                "recorded_by": { "type": "string", "minLength": 1 },
                 "moving_s": { "type": "integer", "minimum": 1 },
                 "distance_m": { "type": "number", "minimum": 0 },
                 "energy_kcal": { "type": "number", "minimum": 0 },
@@ -583,14 +674,19 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "properties": {
                 "id": { "type": "string", "minLength": 1 },
                 "type": { "type": "string", "minLength": 1, "maxLength": 40 },
-                "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+                "title": { "type": "string", "maxLength": 200 },
                 "starts": { "type": "string", "minLength": 1 },
-                "ends": { "type": "string", "minLength": 1 },
+                "ends": { "type": ["string", "null"], "minLength": 1 },
+                "place_id": { "type": ["string", "null"], "minLength": 1 },
+                "notes": { "type": ["string", "null"] },
+                "with": { "type": "array", "items": { "type": "string", "minLength": 1 }, "maxItems": 50 },
+                "recorded_by": { "type": ["string", "null"] },
                 "moving_s": { "type": ["integer", "null"], "minimum": 1 },
                 "distance_m": { "type": ["number", "null"], "minimum": 0 },
                 "energy_kcal": { "type": ["number", "null"], "minimum": 0 },
                 "heart_bpm": { "type": ["integer", "null"], "minimum": 1 },
-                "climb_m": { "type": ["number", "null"], "minimum": 0 }
+                "climb_m": { "type": ["number", "null"], "minimum": 0 },
+                "expected_rev": { "type": "integer", "minimum": 0 }
               }
             }"#,
             Idempotency::Idempotent,

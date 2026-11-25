@@ -14,6 +14,7 @@
 use serde_json::{Map, Value as Json};
 
 use super::merge::same;
+use crate::commands::{reading, workout};
 use super::{Child, Maps, SystemMap};
 
 /// The name a system gives a record: `stated.title`, kept in a column of its own so a read of it
@@ -55,8 +56,9 @@ impl SystemMap {
     }
 }
 
-/// The maps the vault follows: none plugged in yet (see the module comment).
-pub const SYSTEMS: &[SystemMap] = &[];
+/// The maps the vault follows: the health store's two (a workout and a reading, one map each, as
+/// the system yields two kinds); the other lanes add theirs here.
+pub const SYSTEMS: &[SystemMap] = &[workout::MAP, reading::MAP];
 
 /// The product's maps, [`SYSTEMS`], as the type the follow commands are built from.
 pub struct Systems;
