@@ -14,7 +14,7 @@
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Map, Value as Json};
 
-use crate::commands::{CommandCtx, event};
+use crate::commands::{CommandCtx, event, reading, workout};
 use crate::error::Result;
 use crate::model::Kind;
 
@@ -241,6 +241,9 @@ pub const SYSTEMS: &[SystemMap] = &[
     crate::commands::task::PHONE_REMINDERS,
     crate::commands::person::CONTACTS,
     STATEMENT,
+    // The health store: a workout and a reading (the system yields both, so a map for each).
+    workout::MAP,
+    reading::MAP,
     // The phone's picked folders and its camera roll (Docs and Photos).
     crate::commands::document::FILES,
     crate::commands::photo::ROLL,

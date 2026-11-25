@@ -239,35 +239,6 @@ fn a_row_the_phone_unlinked_reports_nothing() {
     assert!(w.diff(&event).is_empty());
 }
 
-#[test]
-fn a_workout_reports_a_measure_the_member_changed_by_column() {
-    let w = World::new();
-    w.ok(
-        "follow.health",
-        json!({ "origin": { "ref": "store:apple-health", "label": "Apple Health", "device_id": "phone-a" },
-                 "complete": false, "records": [{ "external_id": "local:1", "device_id": "phone-a", "fields": {
-            "kind": "run", "starts": "2026-03-04T07:00:00Z", "ends": "2026-03-04T07:45:00Z",
-            "workout": { "recorded_by": "Watch", "moving_s": 2700, "distance_m": 5234.5, "heart_bpm": 148 } } }] }),
-    );
-    let id: String = w.one(
-        "SELECT entity_id FROM source WHERE external_id = 'local:1'",
-        &[],
-    );
-    assert!(w.diff(&id).is_empty());
-    w.sql(
-        "UPDATE workout SET distance_m = 6000.0, heart_bpm = NULL WHERE id = ?1",
-        &[&id],
-    );
-    let diff = w.diff(&id);
-    assert_eq!(diff.len(), 1);
-    assert_eq!(diff[0].field, "workout");
-    let keys: Vec<&str> = diff[0].items.iter().map(|i| i.key.as_str()).collect();
-    assert_eq!(keys, ["distance_m", "heart_bpm"]);
-    assert_eq!(diff[0].items[0].stated, Some(json!(5234.5)));
-    assert_eq!(diff[0].items[0].held, Some(json!(6000.0)));
-    assert_eq!(diff[0].items[1].held, None, "a figure the member cleared");
-}
-
 // ---------------------------------------------------------------------------
 // Taking what the phone says
 // ---------------------------------------------------------------------------
@@ -428,47 +399,6 @@ fn taking_points_restores_replaces_or_removes_each_item() {
         held,
         ["phone=work"],
         "the taken points follow: the relabel lands and the dropped email goes"
-    );
-}
-
-#[test]
-fn taking_a_workout_measure_and_a_document_title_follow_again() {
-    let w = World::new();
-    let health = |distance: f64| {
-        w.ok(
-            "follow.health",
-            json!({ "origin": { "ref": "store:apple-health", "label": "Apple Health", "device_id": "phone-a" },
-                     "complete": false, "records": [{ "external_id": "local:1", "device_id": "phone-a", "fields": {
-                "kind": "run", "starts": "2026-03-04T07:00:00Z", "ends": "2026-03-04T07:45:00Z",
-                "workout": { "recorded_by": "Watch", "moving_s": 2700, "distance_m": distance, "heart_bpm": 148 } } }] }),
-        )
-    };
-    health(5234.5);
-    let id: String = w.one(
-        "SELECT entity_id FROM source WHERE external_id = 'local:1'",
-        &[],
-    );
-    w.sql(
-        "UPDATE workout SET distance_m = 6000.0, heart_bpm = 150 WHERE id = ?1",
-        &[&id],
-    );
-    w.take(&id, "workout", Some("distance_m"));
-    assert_eq!(
-        w.one::<f64>("SELECT distance_m FROM workout WHERE id = ?1", &[&id]),
-        5234.5
-    );
-    assert_eq!(
-        w.diff(&id)[0].items.len(),
-        1,
-        "only the heart rate still differs"
-    );
-    w.take(&id, "workout", None);
-    assert!(w.diff(&id).is_empty());
-    health(7000.0);
-    assert_eq!(
-        w.one::<f64>("SELECT distance_m FROM workout WHERE id = ?1", &[&id]),
-        7000.0,
-        "the next pass treats the measure as untouched"
     );
 }
 

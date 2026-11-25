@@ -1,29 +1,38 @@
 //! HEALTH AS A SPREADSHEET FILE (#1185): `health.export_csv`, the daily totals (every one or one
-//! metric's) or the workouts (every one, or one: what a workout page shares) as one CSV file
-//! (RFC 4180, see [`csv`](super::csv)). Writes nothing.
+//! metric's), the readings (every one or one metric's) or the workouts (every one, or one: what a
+//! workout page shares) as one CSV file (RFC 4180, see [`csv`](super::csv)). Writes nothing.
 //!
-//! Every value is the vault's own, as the store stated it: a daily total in the unit its metric
-//! is kept in (named in the next column), a workout's start and end as the moment it is kept as
-//! but written in the member's own time (the vault's zone) with its offset, like
-//! `2026-11-11T07:30:00+05:30`, its distance in metres, its energy in kilocalories, its time in seconds. Nothing is
-//! converted to the member's units or derived. Workouts in the trash are not in it.
+//! Every value is the vault's own, as the store stated it: a daily total or a reading in the unit
+//! its metric is kept in (named in its own column, from `health_metric`), a workout's or a
+//! reading's moment as the instant it is kept as but written in the member's own time (the
+//! vault's zone) with its offset, like `2026-11-11T07:30:00+05:30`, a workout's distance in
+//! metres, its energy in kilocalories, its time in seconds. Nothing is converted to the member's
+//! units or derived. What is in the trash is not in it.
+//!
+//! The earlier versions of a workout or a reading are the shared history's (`history.*`), not a
+//! file of this module's.
 
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::Value as Json;
 
 use crate::commands::csv::{self, row, text_row, words};
-use crate::commands::{CommandCtx, CommandDefinition, Idempotency, note};
+use crate::commands::note_portable::file_stem;
+use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
 use crate::error::Result;
 use crate::time::recurrence::parse_instant_ms;
 use crate::time::zone::{FireZone, wall_iso};
 
 const WORKOUTS: &str = "workouts";
+const READINGS: &str = "readings";
 
 /// A daily total's header row.
 const MEASUREMENT_HEADER: [&str; 4] = ["Date", "Metric", "Value", "Unit"];
 
+/// A reading's header row.
+const READING_HEADER: [&str; 6] = ["Time", "Metric", "Value", "Second value", "Unit", "Context"];
+
 /// A workout's header row.
-const WORKOUT_HEADER: [&str; 10] = [
+const WORKOUT_HEADER: [&str; 13] = [
     "Start",
     "End",
     "Type",
@@ -34,18 +43,18 @@ const WORKOUT_HEADER: [&str; 10] = [
     "Heart rate (bpm)",
     "Climb (m)",
     "Recorded by",
+    "Place",
+    "With",
+    "Notes",
 ];
 
-/// A metric's name in a file's name and the unit its value is kept in.
-fn metric(key: &str) -> (&'static str, &'static str) {
-    match key {
-        "steps" => ("Steps", "count"),
-        "active_energy_kcal" => ("Active energy", "kcal"),
-        "exercise_min" => ("Exercise", "min"),
-        "sleep_min" => ("Sleep", "min"),
-        "resting_hr_bpm" => ("Resting heart rate", "bpm"),
-        _ => ("Weight", "kg"),
+/// A metric's name for a file: the code's words ("resting_hr_bpm" reads "Resting hr bpm").
+fn metric_name(code: &str) -> String {
+    let mut name = code.replace('_', " ");
+    if let Some(first) = name.get_mut(0..1) {
+        first.make_ascii_uppercase();
     }
+    name
 }
 
 /// The zone the member's times are written in: the vault's own, else UTC (as a task's repeat
@@ -100,8 +109,9 @@ pub(crate) fn measurements(connection: &Connection, only: Option<&str>) -> Resul
         .query_map([], |row| row.get::<_, String>(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut statement = connection.prepare_cached(
-        "SELECT day, metric, value FROM measurement
-          WHERE person_id = ?1 AND (?2 IS NULL OR metric = ?2)",
+        "SELECT m.day, m.metric, m.value, h.unit FROM measurement m
+           JOIN health_metric h ON h.code = m.metric
+          WHERE m.person_id = ?1 AND (?2 IS NULL OR m.metric = ?2)",
     )?;
     let mut rows = Vec::new();
     for person in &people {
@@ -110,6 +120,7 @@ pub(crate) fn measurements(connection: &Connection, only: Option<&str>) -> Resul
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, f64>(2)?,
+                row.get::<_, String>(3)?,
             ))
         })? {
             rows.push((person.as_str(), found?));
@@ -117,14 +128,52 @@ pub(crate) fn measurements(connection: &Connection, only: Option<&str>) -> Resul
     }
     // The file reads by day, then metric, then person.
     rows.sort_by(|a, b| (&a.1.0, &a.1.1, a.0).cmp(&(&b.1.0, &b.1.1, b.0)));
-    let rows: Vec<(String, String, f64)> = rows.into_iter().map(|(_, found)| found).collect();
+    let rows: Vec<(String, String, f64, String)> =
+        rows.into_iter().map(|(_, found)| found).collect();
     let mut text = text_row(&MEASUREMENT_HEADER);
-    for (day, key, value) in &rows {
+    for (day, key, value, unit) in &rows {
         text.push_str(&row(&[
             words(day),
-            words(key),
+            words(&metric_name(key)),
             csv::number(&number(*value)),
-            words(metric(key).1),
+            words(unit),
+        ]));
+    }
+    Ok((text, i64::try_from(rows.len()).unwrap_or(i64::MAX)))
+}
+
+/// The live readings, oldest first (every metric, or one).
+pub(crate) fn readings(connection: &Connection, only: Option<&str>) -> Result<(String, i64)> {
+    let mut statement = connection.prepare_cached(
+        "SELECT r.at, r.metric, r.value, r.value2, h.unit, r.context
+           FROM reading r
+           JOIN entity e ON e.id = r.id
+           JOIN health_metric h ON h.code = r.metric
+          WHERE e.deleted_at IS NULL AND (?1 IS NULL OR r.metric = ?1)
+          ORDER BY r.at, r.id",
+    )?;
+    let rows = statement
+        .query_map([only], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, f64>(2)?,
+                row.get::<_, Option<f64>>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, Option<String>>(5)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let zone = member_zone(connection);
+    let mut text = text_row(&READING_HEADER);
+    for (at, metric, value, second, unit, context) in &rows {
+        text.push_str(&row(&[
+            words(&local_time(zone.as_ref(), at)),
+            words(&metric_name(metric)),
+            csv::number(&number(*value)),
+            csv::number(&optional(*second, number)),
+            words(unit),
+            words(context.as_deref().unwrap_or_default()),
         ]));
     }
     Ok((text, i64::try_from(rows.len()).unwrap_or(i64::MAX)))
@@ -136,14 +185,17 @@ type Workouts = (String, i64, Option<(String, String)>);
 
 pub(crate) fn workouts(connection: &Connection, one: Option<&str>) -> Result<Workouts> {
     let mut statement = connection.prepare_cached(
-        "SELECT a.starts, a.ends, t.title, e.title, w.moving_s, w.distance_m, w.energy_kcal,
-                w.heart_bpm, w.climb_m, w.recorded_by
-           FROM activity a
-           JOIN workout w ON w.id = a.id
-           JOIN entity e ON e.id = a.id
-           JOIN entity t ON t.id = a.type_id
-          WHERE e.deleted_at IS NULL AND (?1 IS NULL OR a.id = ?1)
-          ORDER BY a.starts, a.id",
+        "SELECT w.starts, w.ends, t.title, e.title, w.moving_s, w.distance_m, w.energy_kcal,
+                w.heart_bpm, w.climb_m, w.recorded_by,
+                (SELECT p.title FROM entity p WHERE p.id = w.place_id),
+                (SELECT group_concat(q.title, '; ') FROM edge ed JOIN entity q ON q.id = ed.to_id
+                  WHERE ed.from_id = w.id AND ed.rel = 'with'),
+                w.notes
+           FROM workout w
+           JOIN entity e ON e.id = w.id
+           JOIN entity t ON t.id = w.type_id
+          WHERE e.deleted_at IS NULL AND (?1 IS NULL OR w.id = ?1)
+          ORDER BY w.starts, w.id",
     )?;
     let rows = statement
         .query_map([one], |row| {
@@ -152,18 +204,26 @@ pub(crate) fn workouts(connection: &Connection, one: Option<&str>) -> Result<Wor
                 row.get::<_, Option<String>>(1)?,
                 row.get::<_, String>(2)?,
                 row.get::<_, String>(3)?,
-                row.get::<_, Option<i64>>(4)?,
-                row.get::<_, Option<f64>>(5)?,
-                row.get::<_, Option<f64>>(6)?,
-                row.get::<_, Option<i64>>(7)?,
-                row.get::<_, Option<f64>>(8)?,
-                row.get::<_, Option<String>>(9)?,
+                (
+                    row.get::<_, Option<i64>>(4)?,
+                    row.get::<_, Option<f64>>(5)?,
+                    row.get::<_, Option<f64>>(6)?,
+                    row.get::<_, Option<i64>>(7)?,
+                    row.get::<_, Option<f64>>(8)?,
+                ),
+                (
+                    row.get::<_, Option<String>>(9)?,
+                    row.get::<_, Option<String>>(10)?,
+                    row.get::<_, Option<String>>(11)?,
+                    row.get::<_, Option<String>>(12)?,
+                ),
             ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let zone = member_zone(connection);
     let mut text = text_row(&WORKOUT_HEADER);
-    for (starts, ends, kind, title, moving, distance, energy, heart, climb, by) in &rows {
+    for (starts, ends, kind, title, (moving, distance, energy, heart, climb), words_of) in &rows {
+        let (by, place, with, notes) = words_of;
         text.push_str(&row(&[
             words(&local_time(zone.as_ref(), starts)),
             words(&local_time(
@@ -178,6 +238,9 @@ pub(crate) fn workouts(connection: &Connection, one: Option<&str>) -> Result<Wor
             csv::number(&optional(*heart, |n| n.to_string())),
             csv::number(&optional(*climb, number)),
             words(by.as_deref().unwrap_or_default()),
+            words(place.as_deref().unwrap_or_default()),
+            words(with.as_deref().unwrap_or_default()),
+            words(notes.as_deref().unwrap_or_default()),
         ]));
     }
     let first = rows
@@ -186,25 +249,71 @@ pub(crate) fn workouts(connection: &Connection, one: Option<&str>) -> Result<Wor
     Ok((text, i64::try_from(rows.len()).unwrap_or(i64::MAX), first))
 }
 
-/// `health.export_csv`: the daily totals (`what` = `measurements`, every metric or one `metric`)
-/// or the workouts (`what` = `workouts`, every one or one `id`) as a spreadsheet file. Writes
-/// nothing.
+/// A sentence when `metric` is not one the file knows, or not of the cadence `what` holds.
+fn pre_export(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let Some(metric) = ctx.optional_str("metric") else {
+        return Ok(None);
+    };
+    let what = ctx.required_str("what")?;
+    if what == WORKOUTS {
+        return Ok(Some("A workouts file has no metric to pick.".to_owned()));
+    }
+    let wanted = if what == READINGS { "reading" } else { "total" };
+    let cadence: Option<String> = ctx
+        .connection()
+        .query_row(
+            "SELECT cadence FROM health_metric WHERE code = ?1",
+            [metric],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(match cadence {
+        None => Some(format!("`{metric}` is not a figure Health keeps.")),
+        Some(found) if found != wanted => Some(format!(
+            "`{metric}` is a {}, not a {}.",
+            if found == "reading" {
+                "reading"
+            } else {
+                "daily total"
+            },
+            if wanted == "reading" {
+                "reading"
+            } else {
+                "daily total"
+            },
+        )),
+        Some(_) => None,
+    })
+}
+
+/// `health.export_csv`: the daily totals (`what` = `measurements`, every metric or one `metric`),
+/// the readings (`what` = `readings`, the same) or the workouts (`what` = `workouts`, every one or
+/// one `id`) as a spreadsheet file. Writes nothing.
 fn export_csv(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let connection = ctx.connection();
-    let (name, text, count) = if ctx.required_str("what")? == WORKOUTS {
+    let what = ctx.required_str("what")?;
+    let (name, text, count) = if what == WORKOUTS {
         let one = ctx.optional_str("id");
         let (text, count, first) = workouts(connection, one)?;
         let name = match (one, first) {
-            (Some(_), Some((title, day))) => format!("{} {day}", note::portable_stem(&title)),
+            (Some(_), Some((title, day))) => format!("{} {day}", file_stem(&title)),
             _ => "Workouts".to_owned(),
         };
+        (name, text, count)
+    } else if what == READINGS {
+        let only = ctx.optional_str("metric");
+        let (text, count) = readings(connection, only)?;
+        let name = only.map_or_else(
+            || "Readings".to_owned(),
+            |key| format!("{} readings", metric_name(key)),
+        );
         (name, text, count)
     } else {
         let only = ctx.optional_str("metric");
         let (text, count) = measurements(connection, only)?;
         let name = only.map_or_else(
             || "Daily totals".to_owned(),
-            |key| format!("{} by day", metric(key).0),
+            |key| format!("{} by day", metric_name(key)),
         );
         (name, text, count)
     };
@@ -216,49 +325,43 @@ fn export_csv(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     }))
 }
 
-/// The command's input; its `metric` list is held equal to [`METRICS`] by a test.
+/// The command's input. A metric is a row of `health_metric`, so the schema lists none: the
+/// precondition asks the file.
 const SCHEMA: &str = r#"{
   "type": "object",
   "required": ["what"],
   "additionalProperties": false,
   "properties": {
-    "what": { "enum": ["measurements", "workouts"] },
-    "metric": { "enum": ["steps", "active_energy_kcal", "exercise_min", "sleep_min", "resting_hr_bpm", "weight_kg", null] },
+    "what": { "enum": ["measurements", "readings", "workouts"] },
+    "metric": { "type": ["string", "null"] },
     "id": { "type": ["string", "null"] }
   }
 }"#;
 
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
+    const EXPORT: &[CommandCondition] = &[CommandCondition {
+        predicate: "a_metric_is_one_the_file_knows_of_the_kind_the_file_holds",
+        check: pre_export,
+    }];
     vec![CommandDefinition::plain(
         "health.export_csv",
         "health",
         SCHEMA,
         Idempotency::Idempotent,
-        &[],
+        EXPORT,
         export_csv,
     )]
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{SCHEMA, metric, number};
-    use crate::commands::measurement::METRICS;
+    use super::{metric_name, number};
 
     #[test]
-    fn every_metric_has_a_name_and_a_unit_and_numbers_read_back_as_stored() {
-        for key in METRICS {
-            let (name, unit) = metric(key);
-            assert!(!name.is_empty() && !unit.is_empty(), "{key}");
-        }
-        let schema: serde_json::Value = serde_json::from_str(SCHEMA).expect("json");
-        let listed: Vec<&str> = schema["properties"]["metric"]["enum"]
-            .as_array()
-            .expect("a list")
-            .iter()
-            .filter_map(serde_json::Value::as_str)
-            .collect();
-        assert_eq!(listed, METRICS, "the schema lists the vault's metrics");
+    fn names_and_numbers_read_back_as_stored() {
+        assert_eq!(metric_name("steps"), "Steps");
+        assert_eq!(metric_name("resting_hr_bpm"), "Resting hr bpm");
         assert_eq!(number(7500.0), "7500");
         assert_eq!(number(72.45), "72.45");
     }

@@ -44,10 +44,13 @@ follow.calendar
 follow.camera_roll
 follow.contacts
 follow.files
+follow.health
+follow.health_readings
 follow.reminders
 follow.statement
 follow.stop
 follow.take_stated
+health.export_csv
 history.keep_version
 history.restore_version
 history.undo
@@ -66,6 +69,9 @@ locker.remove_passkey
 locker.set_field
 locker.set_passkey
 locker.totp_code
+measurement.clear
+measurement.log
+measurement.record
 note.asset_add
 note.asset_remove
 note.asset_reorder
@@ -99,6 +105,8 @@ photo.set_place
 place.add
 place.edit
 place.locate
+reading.add
+reading.edit
 reminder.add
 reminder.remove
 rule.add
@@ -129,3 +137,5 @@ txn.link_transfer
 txn.split
 txn.unlink_transfer
 vault.rename
+workout.edit
+workout.log

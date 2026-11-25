@@ -56,9 +56,11 @@ pub mod event;
 pub mod event_portable;
 pub mod flag;
 pub mod follow;
+pub mod health_portable;
 pub mod history;
 pub mod ical;
 pub mod locker;
+pub mod measurement;
 pub mod money;
 pub mod note;
 pub mod note_portable;
@@ -69,6 +71,7 @@ pub mod person_portable;
 pub mod photo;
 pub mod photo_portable;
 pub mod place;
+pub mod reading;
 pub mod reminder;
 pub mod rule;
 pub mod sealed;
@@ -80,6 +83,7 @@ pub mod touch;
 pub mod txn;
 pub mod txn_portable;
 pub mod vault;
+pub mod workout;
 
 use std::collections::BTreeMap;
 
@@ -398,11 +402,14 @@ impl Registry {
             event_portable::definitions,
             flag::definitions,
             follow::definitions,
+            health_portable::definitions,
             history::definitions,
+            measurement::definitions,
             locker::definitions,
             money::definitions,
             note::definitions,
             person::definitions,
+            reading::definitions,
             person_date::definitions,
             photo::definitions,
             photo_portable::definitions,
@@ -417,6 +424,7 @@ impl Registry {
             txn::definitions,
             txn_portable::definitions,
             vault::definitions,
+            workout::definitions,
         ];
         for definitions in modules.iter().copied() {
             for definition in definitions() {
