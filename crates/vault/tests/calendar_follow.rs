@@ -859,3 +859,54 @@ fn a_series_that_moves_in_the_day_takes_its_overrides_with_it_and_one_that_stops
         "a day nothing will read is not kept"
     );
 }
+
+#[test]
+fn a_second_identical_read_writes_no_source_row_and_makes_no_revision() {
+    let w = World::new("cal_follow_quiet");
+    let events: Vec<Value> = (0..12).map(|i| dated(i, "work")).collect();
+    read(&w, events.clone());
+    let mut sql = String::from("CREATE TEMP TABLE probe (what TEXT NOT NULL);");
+    for table in ["source", "revision"] {
+        for event in ["INSERT", "UPDATE", "DELETE"] {
+            sql.push_str(&format!(
+                "CREATE TEMP TRIGGER probe_{table}_{event} AFTER {event} ON main.{table}
+                 BEGIN INSERT INTO probe VALUES ('{table}'); END;"
+            ));
+        }
+    }
+    w.commit(|tx| Ok(tx.connection().execute_batch(&sql)?));
+    let again = read(&w, events);
+    assert_eq!(again["unchanged"], 12, "{again}");
+    let mut written = Vec::new();
+    w.commit(|tx| {
+        for table in ["source", "revision"] {
+            written.push(tx.connection().query_row(
+                "SELECT count(*) FROM temp.probe WHERE what = ?1",
+                [table],
+                |row| row.get::<_, i64>(0),
+            )?);
+        }
+        Ok(())
+    });
+    assert_eq!(
+        written,
+        [0, 0],
+        "an unchanged record writes no source row and no revision"
+    );
+}
+
+#[test]
+fn a_row_the_phone_unlinked_reports_nothing() {
+    let w = World::new("cal_follow_unlinked");
+    read(&w, vec![meeting("uid:1", "Sync")]);
+    let event = event_of(&w, "uid:1");
+    w.ok("event.edit", json!({ "id": event, "description": "mine" }));
+    let held: Vec<String> = differences(&w, &event)
+        .into_iter()
+        .map(|d| d.field)
+        .collect();
+    assert_eq!(held, ["description"]);
+    // The phone deletes it; the member's edit keeps the row, marked unlinked.
+    read(&w, vec![]);
+    assert!(differences(&w, &event).is_empty());
+}

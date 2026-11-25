@@ -756,3 +756,47 @@ fn an_avatar_the_survivor_lacks_is_the_one_who_went() {
         hash
     );
 }
+
+#[test]
+fn a_merge_is_confirmed_like_every_destructive_command() {
+    let definitions = centraid_vault::commands::person::definitions();
+    let merge = definitions
+        .iter()
+        .find(|definition| definition.name == "person.merge")
+        .expect("a merge");
+    assert!(
+        merge.confirm,
+        "person.merge purges a person and is not confirmed"
+    );
+}
+
+/// A merge names each table that points at a person (`merge` moves what is the survivor's to
+/// keep); a table that comes to point at one must be named there, so the list is red here first.
+/// (What points at an entity at large is `purge_rules.rs`; edges, links and mentions go through
+/// `links::repoint`, and followed sources through `follow::move_sources`.) The old test of a chat
+/// attachment naming a person is gone: an attachment names a photograph or a document.
+#[test]
+fn every_table_that_points_at_a_person_is_one_the_merge_moves() {
+    let w = World::new("merge_pointers");
+    let pointing: std::collections::BTreeSet<String> = w
+        .strings(
+            "SELECT m.name FROM sqlite_master m, pragma_foreign_key_list(m.name) f
+              WHERE m.type = 'table' AND f.\"table\" = 'person' ORDER BY m.name",
+            &[],
+        )
+        .into_iter()
+        .collect();
+    let moved: std::collections::BTreeSet<String> = [
+        "contact_point",
+        "event_guest",
+        "measurement",
+        "person_date",
+        "reading",
+    ]
+    .map(str::to_owned)
+    .into();
+    assert_eq!(
+        pointing, moved,
+        "a table that points at a person, and the tables `person.merge` moves"
+    );
+}

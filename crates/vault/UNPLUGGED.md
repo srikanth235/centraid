@@ -55,16 +55,12 @@ and make it pass. Tests of removed behaviour are deleted, not ported.
 | Module | Owner | Why it cannot compile or run yet |
 |---|---|---|
 | `vault_export` | export | reads every kind |
-| `task_counts.rs` (out of `lib.rs`) | tasks lane | read flag edges |
 
 ## Kernel code that is a stub or a minimal patch (compiled; each lane finishes its own)
 
 | Where | What was done | Owner |
 |---|---|---|
 | `commands/follow/systems.rs` | `SYSTEMS` holds Money's statement map only: the engine (K9, done) reads what a system fills, retires, names and yields from `origin_system` and `source_shape`, so a map says only the kind's fields and how a record reads. **An app lane registers its system's map in one step, a `SystemMap` row in `SYSTEMS`** (the pass command `follow.<…>`, its schema and its preconditions are built from the rows by `follow::definitions`); the per-system maps of the old engine are in this file's history at `40b18d2c`. A map's `defaults` return only the kind's own columns the origin decides (the home is `entity.parent_id`, set by the engine when `home_shape` allows it); a map's `shape` puts instants in the clock's one form with `follow::canonical_instants`. Prove the map with `tests/common/follow.rs`'s pattern: `follow::definitions_for::<YourMaps>()` registered beside `entity::definitions()` | each app lane |
-| `commands/note.rs` | compiles; still writes the old columns (`notebook_id`, `wikilink` edges), so `note.create`, `note.edit` and the rest fail against the new tables until K11 rewrites it. A note is made in tests with `common::insert_note` | K11 |
-| `history/write.rs` | `history.keep_version` keeps `table.column` fields only; the event overlay (`attendee`, `reminder` lists, the `occurrence`/`DAY` day) is gone: an occurrence is outside a series' snapshot (B1) and guests and reminders are rows with their own keys (the calendar lane no longer names `history::DAY`) | kernel |
-| `history/restore.rs` | a restore re-links a note only when its words came back different (`note::relink`), so restoring a note's words works once `commands/note.rs` is rewritten | K11 |
 
 ## Test files under `tests/unplugged/`
 
@@ -73,13 +69,9 @@ and moves it back.
 
 - **checkpoint 2/3: crates/ontology**: `ontology_graph` (was `graph`): tests `centraid_ontology::graph`'s catalogue of edge relations and column links and its Locker-wall reads. It waits because `crates/ontology` is rewritten in a later checkpoint (its list still names `links` and `attendee`, and there is no Locker wall now); the vault-only edge tests are `tests/graph.rs`
 - **K5 graph, also**: `edge_walks` (the `edge_order` plan, moved out of `index_walks`; its fixture writes the old ids)
-- **people parts of `lane_follow_*`** (contacts' points, owner, doubt, return, tombstones) are ported to `tests/lane_follow_people.rs`; what stays in those files is the other lanes'
-- **K12 commitments and generated pages**: `commitments`, `stored_rules`, `ontology_page`, `ontology_widen`
 - **export (vault_export, every kind)**: `vault_export`, `unusual_input` (every app's export of unusual text; none of it the kernel)
-- **deleted by K9, with the reason**: `arrival` (an arrival is two columns of `entity` and makes no origin or source; the both-or-neither rule is `tests/schema_rules.rs` `a_trashed_by_names_a_trash_and_an_arrival_has_both_its_words`, and each lane proves the arrival its own command takes). The old `follow_*` and `origin_cursor` files were rewritten as engine tests (`tests/follow_retire.rs`, `follow_stated.rs`, `follow_items.rs`, `follow_gaps.rs`, `origin_cursor.rs`, `follow_totals.rs`, over the maps in `tests/common/follow.rs`); what they said of a named app kind stays aside as `lane_follow_*` and `lane_origin_cursor`, listed under its lane, for the lane to port or delete where an engine file already holds the case
-- `schema_rules` (the earlier proof of the app tables' rules, written against the model before
-  #1214): the lanes re-prove their own rules in the new `tests/schema_rules.rs`, which holds the
-  kernel's.
+- **follow leftovers, closed by lane B**: the `lane_follow_*` and `lane_origin_cursor` files are gone. Contacts' cases are `tests/lane_follow_people.rs` (points, owner, doubt, return, tombstones, and what the phone says that differs and taking it); the engine holds the rest (`follow_gaps`, `follow_items`, `follow_retire`, `follow_stated`, `origin_cursor`, `follow_totals`); the doubted read of every system that trashes is `follow_gaps::every_system_that_trashes_what_a_read_loses_has_a_doubted_read_proved`; a re-read that writes nothing is `follow_gaps` and `calendar_follow`; a merge's pointers are `people_merge`.
+- `schema_rules` (the earlier proof of the app tables' rules) is deleted: every rule in it is re-proved in `tests/schema_rules.rs`, but a budget's own currency (the budget is in the vault's currency now), a workout being an activity of a workout kind, and a task following its section to another project (a home is `entity.parent_id` now), which are removed behaviour; the instants test is `every_instant_column_carries_the_clocks_form_and_the_database_refuses_the_rest`.
 
 Unit tests inside `src/` that read the old model were fixed where they were cheap (ids are minted
 UUIDv7: `src/test_ids.rs`; `commands/locker/schema.rs`'s type list is held equal to `locker_type`).
@@ -90,5 +82,4 @@ shipped, so the baseline was replaced in place (#1214, Scope).
 
 K5 to K12 as listed in the issue. `contracts/schema/vault-ddl.sql` and `contracts/schema/vault-commands.txt`
 are regenerated by whoever changes the schema or the registry (`tests/command_list.rs` is plugged: a lane that
-re-plugs a module regenerates the list in the same commit). The ontology page is regenerated at the end of the
-checkpoint; `tests/ontology_page.rs` is aside until then. The index file's DDL has no generated fixture yet.
+re-plugs a module regenerates the list in the same commit). The ontology page is regenerated with `export-ontology-page` (`tests/ontology_page.rs` holds it). The index file's DDL has no generated fixture yet.

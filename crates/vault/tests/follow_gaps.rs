@@ -356,3 +356,105 @@ fn a_trashed_photo_stays_trashed_after_a_rescan_and_a_purged_one_is_never_added_
         "every link and tombstone is gone"
     );
 }
+
+/// The guard is one rule of the engine (`merge.rs`), applied to a system whose map trashes what a
+/// read no longer holds. Each such system proves it on its own records; a system that comes to
+/// trash and has no proof is red here until it has one.
+#[test]
+fn every_system_that_trashes_what_a_read_loses_has_a_doubted_read_proved() {
+    use centraid_vault::commands::follow::{Gone, SYSTEMS};
+    const PROVED: [(&str, &str); 4] = [
+        ("contacts", "lane_follow_people.rs"),
+        ("calendar", "calendar_follow.rs"),
+        ("files", "docs_photos_follow.rs"),
+        ("phone_reminders", "follow_reminders.rs"),
+    ];
+    let trashing: std::collections::BTreeSet<&str> = SYSTEMS
+        .iter()
+        .filter(|map| map.gone == Gone::Trash)
+        .map(|map| map.system)
+        .collect();
+    let proved: std::collections::BTreeSet<&str> =
+        PROVED.iter().map(|(system, _)| *system).collect();
+    assert_eq!(
+        trashing, proved,
+        "a followed system that trashes what a read loses, and the file that proves its doubted read"
+    );
+    for (system, file) in PROVED {
+        let source = std::fs::read_to_string(std::path::Path::new("tests").join(file))
+            .unwrap_or_else(|error| panic!("{file}: {error}"));
+        assert!(
+            source.contains("\"doubted\""),
+            "{file} no longer asserts a doubted read for `{system}`"
+        );
+    }
+}
+
+/// Count every row written to `source` or `revision` from now on, on the writer's own connection
+/// (a TEMP trigger lives and dies with it, so the file's schema is untouched).
+fn count_writes(f: &Follow) {
+    let mut sql = String::from("CREATE TEMP TABLE probe (what TEXT NOT NULL);");
+    for table in ["source", "revision"] {
+        for event in ["INSERT", "UPDATE", "DELETE"] {
+            sql.push_str(&format!(
+                "CREATE TEMP TRIGGER probe_{table}_{event} AFTER {event} ON main.{table}
+                 BEGIN INSERT INTO probe VALUES ('{table}'); END;"
+            ));
+        }
+    }
+    f.raw(&sql);
+}
+
+fn written(f: &Follow, table: &str) -> i64 {
+    f.vault()
+        .commit(|tx| {
+            Ok(tx.connection().query_row(
+                "SELECT count(*) FROM temp.probe WHERE what = ?1",
+                [table],
+                |row| row.get::<_, i64>(0),
+            )?)
+        })
+        .expect("a count")
+        .value
+}
+
+#[test]
+fn a_second_identical_pass_writes_no_source_row_and_makes_no_revision() {
+    let f = Follow::new("gaps_quiet");
+    let origin = contacts_origin("icloud", "phone-1");
+    let names: Vec<String> = (0..12).map(|i| format!("Person {i}")).collect();
+    let all = people(&names.iter().map(String::as_str).collect::<Vec<_>>());
+    f.pass(CONTACTS, origin.clone(), &read(&all, &[]), true);
+    count_writes(&f);
+    let again = f.pass(CONTACTS, origin, &read(&all, &[]), true);
+    assert_eq!(again["unchanged"], 12, "{again}");
+    assert_eq!(
+        written(&f, "source"),
+        0,
+        "an unchanged record writes no source row"
+    );
+    assert_eq!(
+        written(&f, "revision"),
+        0,
+        "an unchanged record makes no revision"
+    );
+}
+
+#[test]
+fn a_changed_record_still_writes_its_source_and_a_returned_one_clears_gone() {
+    let f = Follow::new("gaps_changed");
+    let origin = contacts_origin("icloud", "phone-1");
+    let two = people(&["Ada", "Bo"]);
+    f.pass(CONTACTS, origin.clone(), &read(&two, &[]), true);
+    count_writes(&f);
+    let changed = people(&["Ada L", "Bo"]);
+    f.pass(CONTACTS, origin.clone(), &read(&changed, &[]), true);
+    assert_eq!(written(&f, "source"), 1, "only the record that changed");
+    // Bo leaves a complete read (trashed, marked gone), then returns: the link is written once.
+    f.pass(CONTACTS, origin.clone(), &read(&changed, &["c1"]), true);
+    let gone: Option<String> = f.one("SELECT gone_at FROM source WHERE external_id = 'c1'", &[]);
+    assert!(gone.is_some());
+    f.pass(CONTACTS, origin, &read(&changed, &[]), true);
+    let gone: Option<String> = f.one("SELECT gone_at FROM source WHERE external_id = 'c1'", &[]);
+    assert!(gone.is_none());
+}
