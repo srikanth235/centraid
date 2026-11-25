@@ -66,6 +66,8 @@ fn the_registry_carries_the_shared_verbs_and_the_plugged_modules_and_nothing_els
         "vault.rename",
         "reminder.add",
         "reminder.remove",
+        "locker.add_item",
+        "locker.set_field",
     ] {
         assert!(names.contains(&expected), "`{expected}` is not registered");
     }
@@ -87,7 +89,23 @@ fn the_registry_carries_the_shared_verbs_and_the_plugged_modules_and_nothing_els
                 "follow",
                 "vault",
                 "note",
+                "thread",
                 "reminder",
+                "event",
+                "task",
+                "person",
+                "touch",
+                "account",
+                "txn",
+                "category",
+                "budget",
+                "checkpoint",
+                "rule",
+                "locker",
+                "document",
+                "photo",
+                "album",
+                "place",
             ]
             .contains(&schema),
             "`{name}` is not a shared verb or Locker's"

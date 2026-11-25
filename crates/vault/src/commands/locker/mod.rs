@@ -1,138 +1,56 @@
-//! The `locker.*` commands — what involves a secret or Locker's own structure,
-//! plus the three stamps the core's session writes (#1020, D-1020-L1…L7; #1047;
-//! #1146).
+//! The `locker.*` commands: Locker is an app like every other, and what differs is sealing
+//! (#1214, K).
 //!
-//! ## The one sentence this whole file follows from
+//! A Locker item is an entity of kind `locker_item`: its title, stamps, trash, star, archive,
+//! tags, links, `[[title]]` and attachments are the vault's shared verbs and rows, with no Locker
+//! branch anywhere (an attached scan or photo is an ordinary document or photo). Exactly four
+//! tables hold the rest: `locker_item` (the type, the compromised flag, the last use),
+//! `locker_item_field` (every value: built-in, template and custom, addresses, aliases and the
+//! memo included), `locker_item_passkey` and `locker_key`.
 //!
-//! *Locker secret cells are sealed under a key `K` this crate never holds.*
-//! `K` is the 24 words' own leaf, derived by the core and kept in its memory
-//! (#1047, D-6); the command plane sees only ciphertext and the generation id
-//! it was sealed under. So every command below **cannot read a secret and
-//! cannot write one in the clear either**, and the shape that falls out is not
-//! a detail:
+//! ## The one sentence the differences follow from
 //!
-//! ### 1. A secret arrives as CIPHERTEXT, and plaintext is a typed refusal
+//! *A sealed value is ciphertext under a key `K` this crate never holds.* `K` is the 24 words' own
+//! leaf, derived by the core and kept in its memory; the command plane sees only `lk1:` ciphertext
+//! and the generation id it was sealed under. So no command here can read a secret, and none can
+//! write one in the clear: [`custody::assert_sealed_cell`] refuses anything else, and a refusal's
+//! sentence never quotes the value. Sealed values (a secret, a one-time-code seed, a file's bytes
+//! and its sealed name, a passkey's private key) are never indexed, never turned into derived
+//! data, never written in plaintext, and are kept sealed in every earlier version; the core opens
+//! them only behind the member's unlock. A secret's age is its field's `value_set_at`, which moves
+//! only when the value changes (the vault cannot compare ciphertexts, so the caller says whether
+//! it did).
 //!
-//! In v0 `locker.add_item` took a plaintext `password` and a seal sweep
-//! encrypted it. There is no sweep here, because there is no `K` here. The
-//! core's Locker session (`crates/core/src/locker/phone.rs`, `seal_command`)
-//! encrypts the member's input under `K` before the command runs, so what
-//! reaches this file is `lk1:<base64>` plus the `key_id` it was sealed under;
-//! [`assert_sealed_cell`] refuses anything else **by construction rather than
-//! by policy** — a plaintext password reaching this file would be a secret in
-//! the vault's file, its WAL, and the backup ranges
-//! the laptop's gateway stores, which is the property
-//! `tests/locker_plaintext_gate.rs` searches for. The refusal is
-//! [`crate::error::VaultError::InvalidInput`] naming the cell, and the value
-//! never reaches a message.
+//! The caller mints the id a sealed value is bound to (`AAD = row id ‖ key id`): a single-instance
+//! built-in field's is `<item id>:<field key>` ([`schema::field_id_of`]), so the core can seal
+//! against it before the row exists.
 //!
-//! `assert_live_locker_key_id` is the second half: a write sealed under a
-//! generation that is not the vault's one is refused with *"re-enter this
-//! secret"*, because the command plane **cannot** decrypt the intent in order
-//! to re-encrypt it.
+//! ## The reads and the stamps
 //!
-//! ### 2. The caller mints the id of any row that carries a secret (D-1020-L9)
-//!
-//! `AAD = rowId ‖ keyId`. That is what stops a ciphertext being moved between
-//! rows — and it means whoever encrypts must already know the row's id. The
-//! command plane mints ids for other new rows; for a secret-bearing row it
-//! cannot, because the core seals against the id before the row exists.
-//!
-//! Three options were weighed (D-1020-L9):
-//!
-//! - **(a) two commands**: the vault mints the row, the caller fills the
-//!   secret with a second call. Rejected: an interrupted duplicate leaves a
-//!   copy of a login with no password, which is a locker item that looks
-//!   complete and is not.
-//! - **(b) the vault mints the id and returns it, the caller seals, the vault
-//!   rewrites.** Same window, one more round trip.
-//! - **(c) the caller mints the id** and sends it with the ciphertext.
-//!   Adopted. `seal_command` refuses a secret with no `item_id` to seal
-//!   against, and [`assert_fresh_id`] refuses one that is taken or malformed —
-//!   so the vault keeps the property that matters (no id collision, no id reuse
-//!   across kinds: the id is an `entity` id, and `entity.id` is unique).
-//!
-//! ### 3. A derivation over secrets leaves the command plane; its STAMP does not
-//!
-//! `locker.totp_code` unsealed the seed inside v0's server. Here it stamps the
-//! item as used and answers the item and the period; the digits are
-//! `crates/core::locker::phone`'s, over a seed only a core holding `K` can
-//! open, computed after this stamp lands (D-1020-L6, Q-1047-16). v0's `locker.watchtower`, which unsealed every password to
-//! score weak and reused, is deleted rather than moved (Q-1047-16): nothing
-//! on the phone scores them.
-//!
-//! `locker.export` moves the same way and for the same reason — and keeps
-//! `confirm: true` and `risk: high`, because what it authorises is still the
-//! mass unseal of everything the locker holds. It stamps no item: a file is not
-//! a use of any one of them.
-//!
-//! ### 4. Three commands are the core's, because the reveal and the unlock are
-//!
-//! The Locker keeps no access log (#1146): what remains of one is a stamp on
-//! the item and a count on the key, each written by a command the core runs
-//! BEFORE it opens a cell or loads `K`, so a stamp that did not land is an
-//! error and no plaintext exists (D-1020-L3).
-//!
-//! - [`mark_used`]: a reveal in the core stamps `locker_item.last_used_at`.
-//!   A use is not an edit — the entity's `updated_at` stays,
-//!   no version is kept, and nothing re-indexes.
-//! - [`mark_unlocked`] and [`mark_unlock_failed`]: the unlock's two outcomes,
-//!   on `locker_key`. A failure is its own command because the unlock it
-//!   describes was refused, and a refusal writes nothing; a success resets the
-//!   count and answers what it cleared.
-//!
-//! #1020's second add, `locker.rotate_key` (rotation's step 2 across seats,
-//! D-1020-L4), is deleted (#1047 slice D1): `K` is the seed's single leaf, so
-//! there is no `K′` for a rotation to move to.
-//!
-//! ## A Locker item is an entity of its own kind (#1135)
-//!
-//! `entity.id` is the item's id; its title, stamps and trash window are the
-//! entity's, and its kind row `locker_item` holds the typed columns and the
-//! five sealed cells. So the lifecycle is the vault's, one implementation for
-//! every kind: **trash, restore, purge, empty trash** are `entity.*`, the
-//! **star and the archive** are `flag.*`, and an item's **tags** are vault
-//! tags (`tag.*`, `tagged` edges). This file keeps only what involves a secret
-//! or Locker's own structure: the item's fields, sealed fields, passkeys,
-//! aliases, addresses, one-time codes, import, export, duplicate, counts and
-//! the three stamps.
-//!
-//! What follows from that, and is worth saying:
-//!
-//! - Trash wins over archive, as for every kind. An archived item can be
-//!   trashed, and a restore returns it to the archive.
-//! - A restore refuses a **lapsed** window (#916 review 1.5), in `entity.restore`.
-//! - `entity.purge` deletes an item's sidecars **explicitly** rather than
-//!   trusting `ON DELETE CASCADE`, because a cascade fires no `AFTER DELETE`
-//!   trigger unless `recursive_triggers` is on, so an offline phone would keep
-//!   rows whose item is gone. A purge confirms and presents the same for every
-//!   kind (`Risk::Medium`, `confirm`).
-//! - **No entity-wide reader carries a sealed cell**: no command's input is
-//!   stored, and a message scrubs the five cells (and a duplicate's `fields[].value`) out; a Locker item's
-//!   history keeps a sealed cell only as the `lk1:` ciphertext it is, masked on read (`crate::history`), `text_of` indexes the plain fields only, a page over `entity`
-//!   or `edge` serves the item's plain rows and no sealed column. The chat's
-//!   assistant is the member's principal and meets the same wall: a sealed
-//!   value is a channel its door and runtime keep closed, not an authority
-//!   the vault withholds.
+//! The core's session runs three stamps BEFORE it opens a cell or loads `K`, so a stamp that did
+//! not land is an error and no plaintext exists: [`mark_used`] (a use is not an edit: no revision,
+//! no `updated_at`), and the two outcomes of an unlock on `locker_key`. `locker.totp_code` is the
+//! stamp of a code the core computes. [`reads`] holds what the autofill and passkey sign-in ask.
 
 mod custody;
+mod fields;
 mod items;
+mod passkeys;
+pub mod reads;
 pub mod schema;
-mod sidecars;
 
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
 use crate::error::Result;
 
 pub use schema::{
-    ALL_FIELDS, BuiltInField, FIELD_KINDS, ITEM_TYPES, SEALED_ITEM_CELLS, SEALED_PLACEHOLDER,
-    built_in_field, built_in_field_id, is_sealed_kind, secret_cells, type_fields,
+    BuiltIn, FIELD_KINDS, ITEM_TYPES, SEALED_PLACEHOLDER, built_in, built_ins, expiry_display,
+    field_id_of, is_sealed_kind, normalise_date, secret_keys, secret_keys_of,
 };
 
 use custody::{invalid, mark_unlock_failed, mark_unlocked, mark_used, totp_code};
+use fields::{remove_field, set_field};
 use items::{add_item, counts, duplicate_item, edit_item, export};
-use sidecars::{
-    clear_passkey, remove_field, set_addresses_command, set_field, set_memo, set_passkey,
-};
+use passkeys::{remove_passkey, set_passkey};
 
 // ---------------------------------------------------------------------------
 // Small helpers over the file.
@@ -158,30 +76,22 @@ fn item_type_of(ctx: &CommandCtx<'_, '_>, item_id: &str) -> Result<String> {
         .map_err(|_| invalid("item_id", "there is no locker item with that id"))
 }
 
-// ---------------------------------------------------------------------------
-// The catalogue.
-// ---------------------------------------------------------------------------
-
-/// Every `locker.*` command this build carries: what involves a secret or
-/// Locker's own structure, plus the three stamps the core's session writes.
-/// Trash, restore, purge, star, archive and tags are the vault's shared verbs
-/// (`entity.*`, `flag.*`, `tag.*`).
+/// Every `locker.*` command this build carries. Trash, restore, purge, star, archive, tags,
+/// links and reminders on a date field are the vault's shared verbs (`entity.*`, `tag.*`,
+/// `link.add`, `edge.add`, `reminder.add`).
 #[must_use]
 pub fn definitions() -> Vec<CommandDefinition> {
     vec![
         add_item(),
         edit_item(),
-        totp_code(),
-        set_memo(),
         duplicate_item(),
         set_field(),
         remove_field(),
-        set_addresses_command(),
         set_passkey(),
-        clear_passkey(),
+        remove_passkey(),
+        totp_code(),
         counts(),
         export(),
-        // The three the core's session needs (#1146).
         mark_used(),
         mark_unlocked(),
         mark_unlock_failed(),
@@ -210,41 +120,14 @@ fn definition(
     }
 }
 
-fn item_id_output(item_id: &str) -> serde_json::Value {
-    serde_json::json!({ "item_id": item_id })
-}
-
 #[cfg(test)]
 mod tests {
     use super::custody::assert_sealed_cell;
-    use super::schema::template_for;
     use super::*;
 
-    /// THE THREE LISTS THAT MUST AGREE, and the one that is the schema's.
-    ///
-    /// `ITEM_TYPES` is the `locker_type` lookup's rows (#1214, A1: a 16th type is a row in a later
-    /// rung, never a rebuild); the `add_item` schema's enum is the door's; `type_fields` decides
-    /// which columns each type owns.
+    /// The door's own type enum is the lookup's set.
     #[test]
-    fn the_type_list_is_the_lookup_and_the_doors() {
-        let dir = centraid_ontology::scratch::scratch_dir();
-        std::fs::create_dir_all(&dir).expect("a directory");
-        let vault = crate::Vault::create(dir.join("vault.db")).expect("a vault");
-        let declared: Vec<String> = vault
-            .read(|connection| {
-                Ok(connection
-                    .prepare("SELECT code FROM locker_type ORDER BY code")?
-                    .query_map([], |row| row.get::<_, String>(0))?
-                    .collect::<rusqlite::Result<_>>()?)
-            })
-            .expect("the lookup reads");
-        let mut held = ITEM_TYPES.map(str::to_owned).to_vec();
-        held.sort();
-        assert_eq!(declared, held);
-        drop(vault);
-        let _ = std::fs::remove_dir_all(&dir);
-
-        // And the door's own enum is the same set.
+    fn the_doors_type_enum_is_the_type_list() {
         let schema: serde_json::Value =
             serde_json::from_str(add_item().input_schema).expect("the schema is JSON");
         let door: Vec<String> = schema["properties"]["type"]["enum"]
@@ -254,30 +137,9 @@ mod tests {
             .map(|value| value.as_str().expect("a string").to_owned())
             .collect();
         assert_eq!(door, ITEM_TYPES.map(str::to_owned).to_vec());
-
-        // Every type owns only columns that exist, and the nine own exactly
-        // the memo.
-        for item_type in ITEM_TYPES {
-            for column in type_fields(item_type) {
-                assert!(
-                    ALL_FIELDS.contains(column),
-                    "{item_type} claims the column {column}, which is not one"
-                );
-            }
-        }
-        for item_type in &ITEM_TYPES[6..] {
-            assert_eq!(type_fields(item_type), ["notes"], "{item_type}");
-            assert!(
-                !template_for(item_type).is_empty(),
-                "{item_type} owns no columns and has no template either"
-            );
-        }
     }
 
-    /// Every command's input schema is valid JSON and refuses an unlisted
-    /// property. `additionalProperties: false` is what stops a caller
-    /// inventing a column, and a schema that forgot it is a door that takes
-    /// anything.
+    /// Every command's input schema is valid JSON and refuses an unlisted property.
     #[test]
     fn every_input_schema_is_closed() {
         for definition in definitions() {
@@ -294,59 +156,17 @@ mod tests {
         }
     }
 
-    /// THE STRUCTURAL GUARD, at the boundary. A plaintext that merely begins
-    /// `lk1:` is not ciphertext, which is why the predicate is structural and
-    /// not a `starts_with`.
+    /// A plaintext that merely begins `lk1:` is not ciphertext.
     #[test]
     fn only_real_ciphertext_and_the_placeholder_pass_the_cell_guard() {
         assert!(assert_sealed_cell("password", None).is_ok());
         assert!(assert_sealed_cell("password", Some("")).is_ok());
         assert!(assert_sealed_cell("password", Some(SEALED_PLACEHOLDER)).is_ok());
         assert!(assert_sealed_cell("password", Some("correct-horse")).is_err());
-        // The bare prefix is the attack the structural predicate exists for: a
-        // member password beginning `lk1:` must be SEALED, not stored verbatim
-        // as "already sealed".
         assert!(assert_sealed_cell("password", Some("lk1:hunter2")).is_err());
 
         use base64::Engine as _;
         let body = base64::engine::general_purpose::STANDARD.encode([0_u8; 36]);
         assert!(assert_sealed_cell("password", Some(&format!("lk1:{body}"))).is_ok());
-    }
-
-    #[test]
-    fn the_template_types_seal_only_the_value_that_is_the_credential() {
-        // A passport's number is sealed; the holder's name is not, because
-        // sealing metadata costs the browsable half for nothing.
-        let passport = template_for("passport");
-        let sealed: Vec<&str> = passport
-            .iter()
-            .filter(|(_, _, kind)| *kind == "sealed")
-            .map(|(_, label, _)| *label)
-            .collect();
-        assert_eq!(sealed, ["Passport number"]);
-        // A crypto wallet is the other end: three of six are the credential.
-        assert_eq!(
-            template_for("crypto_wallet")
-                .iter()
-                .filter(|(_, _, kind)| *kind == "sealed")
-                .count(),
-            3
-        );
-        // A type this build does not know has no template, which is what lets
-        // it degrade to a note rather than to nothing.
-        assert!(template_for("quantum_key").is_empty());
-    }
-
-    #[test]
-    fn secret_cells_are_exactly_the_sealed_columns_each_type_owns() {
-        for item_type in ITEM_TYPES {
-            let expected: Vec<&str> = type_fields(item_type)
-                .iter()
-                .copied()
-                .filter(|col| SEALED_ITEM_CELLS.contains(col))
-                .collect();
-            assert_eq!(secret_cells(item_type), expected.as_slice(), "{item_type}");
-        }
-        assert!(secret_cells("quantum_key").is_empty());
     }
 }

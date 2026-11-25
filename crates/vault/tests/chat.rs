@@ -73,11 +73,7 @@ fn listed(w: &World) -> Vec<String> {
 }
 
 fn on_disk(w: &World, hash: &str) -> bool {
-    w.vault()
-        .blobs()
-        .expect("a store")
-        .has(hash)
-        .expect("asks")
+    w.vault().blobs().expect("a store").has(hash).expect("asks")
 }
 
 fn hashes(value: &Value) -> Vec<String> {
@@ -187,12 +183,7 @@ fn threads_list_newest_activity_first_and_the_list_walks_an_index() {
 fn a_chat_is_renamed_trashed_restored_and_deleted_forever_like_every_kind() {
     let w = world("chat_trash");
     let keep = chat(&w, "keep this");
-    let thread = turn(
-        &w,
-        None,
-        "invoices from the plumber",
-        answered("zanzibar"),
-    )["thread_id"]
+    let thread = turn(&w, None, "invoices from the plumber", answered("zanzibar"))["thread_id"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -223,7 +214,7 @@ fn a_chat_is_renamed_trashed_restored_and_deleted_forever_like_every_kind() {
         1,
         "the trash stamps a chat like every kind"
     );
-    assert_eq!(listed(&w), [keep.clone()]);
+    assert_eq!(listed(&w), std::slice::from_ref(&keep));
     assert!(w.vault().chat_thread(&thread).unwrap().is_none());
     assert!(
         w.vault()
@@ -232,11 +223,17 @@ fn a_chat_is_renamed_trashed_restored_and_deleted_forever_like_every_kind() {
             .iter()
             .all(|row| row.thread_id == keep)
     );
-    assert!(!finds(&w, "repairs", &thread), "a trashed chat is not found by its title");
+    assert!(
+        !finds(&w, "repairs", &thread),
+        "a trashed chat is not found by its title"
+    );
     assert!(!finds(&w, "plumber", &thread), "nor by what was asked");
     assert!(
-        w.refused("thread.save_turn", turn_input(Some(&thread), "more", answered("a")))
-            .contains("in the trash")
+        w.refused(
+            "thread.save_turn",
+            turn_input(Some(&thread), "more", answered("a"))
+        )
+        .contains("in the trash")
     );
     assert!(
         w.refused(
@@ -251,7 +248,12 @@ fn a_chat_is_renamed_trashed_restored_and_deleted_forever_like_every_kind() {
     assert_eq!(listed(&w).len(), 2);
     assert!(finds(&w, "repairs", &thread) && finds(&w, "plumber", &thread));
     assert_eq!(
-        w.vault().chat_thread(&thread).unwrap().unwrap().messages.len(),
+        w.vault()
+            .chat_thread(&thread)
+            .unwrap()
+            .unwrap()
+            .messages
+            .len(),
         2
     );
 
@@ -292,21 +294,30 @@ fn clear_deletes_every_chat_live_or_trashed() {
     assert_eq!(w.ok("thread.clear", json!({}))["deleted"], 2);
     assert_eq!(count(&w, "SELECT count(*) FROM thread", &[]), 0);
     assert_eq!(count(&w, "SELECT count(*) FROM message", &[]), 0);
-    assert_eq!(count(&w, "SELECT count(*) FROM entity WHERE kind = 'thread'", &[]), 0);
+    assert_eq!(
+        count(&w, "SELECT count(*) FROM entity WHERE kind = 'thread'", &[]),
+        0
+    );
 }
 
 #[test]
 fn a_chat_is_titled_by_words_and_the_kind_says_it_needs_one() {
     let w = world("chat_title");
     assert_eq!(
-        w.one::<i64>("SELECT may_be_unnamed FROM entity_kind WHERE code = 'thread'", &[]),
+        w.one::<i64>(
+            "SELECT may_be_unnamed FROM entity_kind WHERE code = 'thread'",
+            &[]
+        ),
         0
     );
     assert!(
         w.refused("thread.save_turn", turn_input(None, "  \n ", answered("a")))
             .contains("titled by a question with words")
     );
-    assert_eq!(count(&w, "SELECT count(*) FROM entity WHERE kind = 'thread'", &[]), 0);
+    assert_eq!(
+        count(&w, "SELECT count(*) FROM entity WHERE kind = 'thread'", &[]),
+        0
+    );
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -318,10 +329,16 @@ fn a_chat_is_no_link_end_no_title_target_and_takes_no_tag() {
     let w = world("chat_linkable");
     let thread = chat(&w, "Weekend plans");
     assert_eq!(
-        w.one::<i64>("SELECT linkable FROM entity_kind WHERE code = 'thread'", &[]),
+        w.one::<i64>(
+            "SELECT linkable FROM entity_kind WHERE code = 'thread'",
+            &[]
+        ),
         0
     );
-    let note = w.ok("note.create", json!({ "title": "N", "body": "see [[Weekend plans]]" }))["id"]
+    let note = w.ok(
+        "note.create",
+        json!({ "title": "N", "body": "see [[Weekend plans]]" }),
+    )["id"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -353,38 +370,58 @@ fn a_chat_is_no_link_end_no_title_target_and_takes_no_tag() {
 fn messages_are_appended_in_order_and_each_outcome_is_kept() {
     let w = world("chat_messages");
     let thread = chat(&w, "first");
-    turn(&w, Some(&thread), "second", json!({ "outcome": "stopped", "text": "par" }));
+    turn(
+        &w,
+        Some(&thread),
+        "second",
+        json!({ "outcome": "stopped", "text": "par" }),
+    );
     turn(
         &w,
         Some(&thread),
         "third",
         json!({ "outcome": "refused", "refusal": "no_tool_fits", "text": "" }),
     );
-    turn(&w, Some(&thread), "fourth", json!({ "outcome": "proposed", "text": "Mark it done?" }));
-    let rows = w
-        .vault()
-        .read(|c| {
-            Ok(c.prepare(
+    turn(
+        &w,
+        Some(&thread),
+        "fourth",
+        json!({ "outcome": "proposed", "text": "Mark it done?" }),
+    );
+    let rows =
+        w.vault()
+            .read(|c| {
+                Ok(c.prepare(
                 "SELECT ordinal, role, outcome FROM message WHERE thread_id = ?1 ORDER BY ordinal",
             )?
             .query_map([&thread], |row| {
                 Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?)
-        })
-        .unwrap();
-    let outcomes: Vec<&str> = rows.iter().map(|(_, _, outcome)| outcome.as_str()).collect();
+            })
+            .unwrap();
+    let outcomes: Vec<&str> = rows
+        .iter()
+        .map(|(_, _, outcome)| outcome.as_str())
+        .collect();
     assert_eq!(
         outcomes,
-        ["sent", "answered", "sent", "stopped", "sent", "refused", "sent", "proposed"]
+        [
+            "sent", "answered", "sent", "stopped", "sent", "refused", "sent", "proposed"
+        ]
     );
     assert!(rows.iter().enumerate().all(|(i, (ordinal, role, _))| {
-        *ordinal == i64::try_from(i).unwrap() && role == if i % 2 == 0 { "user" } else { "assistant" }
+        *ordinal == i64::try_from(i).unwrap()
+            && role == if i % 2 == 0 { "user" } else { "assistant" }
     }));
     // The reader gives them in the same order.
     let stored = w.vault().chat_thread(&thread).unwrap().unwrap();
     assert_eq!(
-        stored.messages.iter().map(|m| m.ordinal).collect::<Vec<_>>(),
+        stored
+            .messages
+            .iter()
+            .map(|m| m.ordinal)
+            .collect::<Vec<_>>(),
         (0..8).collect::<Vec<_>>()
     );
     assert_eq!(stored.messages[5].refusal.as_deref(), Some("no_tool_fits"));
@@ -404,14 +441,22 @@ fn a_refusal_names_a_seeded_reason_and_a_notice_a_seeded_notice() {
         );
     }
     assert_eq!(
-        count(&w, "SELECT count(DISTINCT refusal) FROM message WHERE outcome = 'refused'", &[]),
+        count(
+            &w,
+            "SELECT count(DISTINCT refusal) FROM message WHERE outcome = 'refused'",
+            &[]
+        ),
         9
     );
     // A reason no row of the lookup names is refused in a sentence that does not quote it, and so
     // is a refused turn with no reason and a reason on a turn that was not refused.
     let sentence = w.refused(
         "thread.save_turn",
-        turn_input(None, "q", json!({ "outcome": "refused", "refusal": "zebra_secret" })),
+        turn_input(
+            None,
+            "q",
+            json!({ "outcome": "refused", "refusal": "zebra_secret" }),
+        ),
     );
     assert!(sentence.contains("not a reason"), "{sentence}");
     assert!(!sentence.contains("zebra_secret"), "{sentence}");
@@ -425,7 +470,11 @@ fn a_refusal_names_a_seeded_reason_and_a_notice_a_seeded_notice() {
     assert!(
         w.refused(
             "thread.save_turn",
-            turn_input(None, "q", json!({ "outcome": "answered", "refusal": "no_tool_fits" }))
+            turn_input(
+                None,
+                "q",
+                json!({ "outcome": "answered", "refusal": "no_tool_fits" })
+            )
         )
         .contains("names its reason")
     );
@@ -442,12 +491,18 @@ fn a_refusal_names_a_seeded_reason_and_a_notice_a_seeded_notice() {
         .unwrap()
         .to_owned();
     assert_eq!(
-        w.vault().chat_thread(&thread).unwrap().unwrap().messages[1].notice.as_deref(),
+        w.vault().chat_thread(&thread).unwrap().unwrap().messages[1]
+            .notice
+            .as_deref(),
         Some("doc_truncated")
     );
     let sentence = w.refused(
         "thread.save_turn",
-        turn_input(None, "q", json!({ "outcome": "answered", "notice": "zebra_secret" })),
+        turn_input(
+            None,
+            "q",
+            json!({ "outcome": "answered", "notice": "zebra_secret" }),
+        ),
     );
     assert!(sentence.contains("not a notice"), "{sentence}");
     assert!(!sentence.contains("zebra_secret"), "{sentence}");
@@ -456,8 +511,10 @@ fn a_refusal_names_a_seeded_reason_and_a_notice_a_seeded_notice() {
     assert!(
         w.vault()
             .commit(|tx| {
-                tx.connection()
-                    .execute("INSERT INTO message_refusal (code) VALUES ('brand_new')", [])?;
+                tx.connection().execute(
+                    "INSERT INTO message_refusal (code) VALUES ('brand_new')",
+                    [],
+                )?;
                 Ok(())
             })
             .is_err()
@@ -490,7 +547,11 @@ fn a_retry_replaces_the_last_turn_and_only_that_one() {
         json!([{ "form": "image", "label": "x", "thumbnail_data_uri": PIXEL_A }]);
     w.ok("thread.save_turn", again);
     assert_eq!(
-        count(&w, "SELECT count(*) FROM message WHERE thread_id = ?1", &[&thread]),
+        count(
+            &w,
+            "SELECT count(*) FROM message WHERE thread_id = ?1",
+            &[&thread]
+        ),
         4
     );
     assert_eq!(
@@ -586,8 +647,18 @@ fn a_proposal_settles_once_as_each_of_its_four_outcomes() {
         );
         assert_eq!(settled["settled"], true, "{outcome}");
         assert!(!w.vault().chat_proposal_waiting(thread).unwrap());
-        let last = w.vault().chat_thread(thread).unwrap().unwrap().messages.pop().unwrap();
-        assert_eq!((last.outcome.as_str(), last.text.as_str()), (outcome, "The line it was told."));
+        let last = w
+            .vault()
+            .chat_thread(thread)
+            .unwrap()
+            .unwrap()
+            .messages
+            .pop()
+            .unwrap();
+        assert_eq!(
+            (last.outcome.as_str(), last.text.as_str()),
+            (outcome, "The line it was told.")
+        );
         // A tap delivered twice settles once.
         assert_eq!(
             w.ok(
@@ -597,7 +668,11 @@ fn a_proposal_settles_once_as_each_of_its_four_outcomes() {
             false
         );
         // A settled proposal does not settle another way.
-        let other = if outcome == "applied" { "failed" } else { "applied" };
+        let other = if outcome == "applied" {
+            "failed"
+        } else {
+            "applied"
+        };
         assert!(
             w.refused(
                 "thread.settle_proposal",
@@ -664,14 +739,25 @@ fn the_record_is_the_vaults_object_with_its_version_and_cards_are_a_plain_array(
     ))
     .unwrap();
     assert_eq!(record["v"], 1, "the vault stamps its version");
-    assert_eq!(record["read"], json!(["tasks"]), "and keeps the assistant's words");
+    assert_eq!(
+        record["read"],
+        json!(["tasks"]),
+        "and keeps the assistant's words"
+    );
     // The user's own message has none; a card carries none and the list is an array.
     assert_eq!(
-        count(&w, "SELECT count(*) FROM message WHERE thread_id = ?1 AND record IS NOT NULL", &[thread]),
+        count(
+            &w,
+            "SELECT count(*) FROM message WHERE thread_id = ?1 AND record IS NOT NULL",
+            &[thread]
+        ),
         1
     );
     assert_eq!(
-        w.one::<String>("SELECT json_type(cards) FROM message WHERE thread_id = ?1 AND ordinal = 1", &[thread]),
+        w.one::<String>(
+            "SELECT json_type(cards) FROM message WHERE thread_id = ?1 AND ordinal = 1",
+            &[thread]
+        ),
         "array"
     );
     assert_eq!(
@@ -691,12 +777,24 @@ fn the_record_is_the_vaults_object_with_its_version_and_cards_are_a_plain_array(
     for bad in ["[1]", "\"x\"", "not json", "{\"v\":2}", "{\"v\":\"1\"}"] {
         let sentence = w.refused(
             "thread.save_turn",
-            turn_input(None, "q", json!({ "outcome": "answered", "record_json": bad })),
+            turn_input(
+                None,
+                "q",
+                json!({ "outcome": "answered", "record_json": bad }),
+            ),
         );
-        assert!(sentence.contains("JSON object of this vault's version"), "{bad}: {sentence}");
+        assert!(
+            sentence.contains("JSON object of this vault's version"),
+            "{bad}: {sentence}"
+        );
     }
     // A record already at the vault's version is taken.
-    turn(&w, None, "q", json!({ "outcome": "answered", "record_json": "{\"v\":1,\"a\":2}" }));
+    turn(
+        &w,
+        None,
+        "q",
+        json!({ "outcome": "answered", "record_json": "{\"v\":1,\"a\":2}" }),
+    );
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -706,7 +804,10 @@ fn the_record_is_the_vaults_object_with_its_version_and_cards_are_a_plain_array(
 /// A document row the way its lane will write it: an entity, its bytes and the words read from them.
 fn document(w: &World, title: &str, media_type: &str, text: &str) -> String {
     let id = w.bare(Kind::Document, title, None);
-    let hash = format!("{:0>64}", format!("{:x}", id.len() + title.len() + text.len()));
+    let hash = format!(
+        "{:0>64}",
+        format!("{:x}", id.len() + title.len() + text.len())
+    );
     w.commit(|tx| {
         let c = tx.connection();
         c.execute("INSERT OR IGNORE INTO blob (hash, size) VALUES (?1, 10)", [&hash])?;
@@ -750,9 +851,15 @@ fn an_attachment_is_a_photo_a_document_or_an_image_and_names_only_its_own() {
     );
     assert_eq!(forms, ["photo:1:0", "document:1:0", "image:0:1"]);
     // The thumbnail is a rented blob: a row, a file, and a renter.
-    let thumb: String = w.one("SELECT thumb FROM message_attachment WHERE form = 'image'", &[]);
+    let thumb: String = w.one(
+        "SELECT thumb FROM message_attachment WHERE form = 'image'",
+        &[],
+    );
     assert!(on_disk(&w, &thumb));
-    assert_eq!(count(&w, "SELECT count(*) FROM blob WHERE hash = ?1", &[&thumb]), 1);
+    assert_eq!(
+        count(&w, "SELECT count(*) FROM blob WHERE hash = ?1", &[&thumb]),
+        1
+    );
 
     let attach = |attachment: Value| {
         w.refused(
@@ -762,8 +869,13 @@ fn an_attachment_is_a_photo_a_document_or_an_image_and_names_only_its_own() {
         )
     };
     // A photo's id is not a document and the reverse; each names only its own.
-    assert!(attach(json!({ "form": "photo", "label": "n", "entity_id": doc })).contains("not a photo"));
-    assert!(attach(json!({ "form": "document", "label": "n", "entity_id": photo })).contains("not a document"));
+    assert!(
+        attach(json!({ "form": "photo", "label": "n", "entity_id": doc })).contains("not a photo")
+    );
+    assert!(
+        attach(json!({ "form": "document", "label": "n", "entity_id": photo }))
+            .contains("not a document")
+    );
     for bad in [
         json!({ "form": "image", "label": "n" }),
         json!({ "form": "image", "label": "n", "entity_id": photo, "thumbnail_data_uri": PIXEL_A }),
@@ -771,7 +883,11 @@ fn an_attachment_is_a_photo_a_document_or_an_image_and_names_only_its_own() {
         json!({ "form": "photo", "label": "n", "entity_id": photo, "thumbnail_data_uri": PIXEL_A }),
         json!({ "form": "image", "label": "n", "thumbnail_data_uri": "data:text/plain;base64,AAAA" }),
     ] {
-        assert!(attach(bad.clone()).contains("An attachment") || attach(bad.clone()).contains("data URI"), "{bad}");
+        assert!(
+            attach(bad.clone()).contains("An attachment")
+                || attach(bad.clone()).contains("data URI"),
+            "{bad}"
+        );
     }
 }
 
@@ -787,7 +903,10 @@ fn an_attached_item_purged_leaves_the_label_and_a_trashed_one_reads_as_lost() {
     );
     let thread = saved["thread_id"].as_str().unwrap();
     let stored = w.vault().chat_thread(thread).unwrap().unwrap();
-    assert_eq!(stored.messages[0].attachments[0].entity_id.as_deref(), Some(doc.as_str()));
+    assert_eq!(
+        stored.messages[0].attachments[0].entity_id.as_deref(),
+        Some(doc.as_str())
+    );
     // The chat may read the document it was handed.
     assert!(matches!(
         w.vault().attachment_document(&doc).unwrap(),
@@ -800,7 +919,11 @@ fn an_attached_item_purged_leaves_the_label_and_a_trashed_one_reads_as_lost() {
     let stored = w.vault().chat_thread(thread).unwrap().unwrap();
     assert_eq!(stored.messages[0].attachments[0].entity_id, None);
     assert_eq!(
-        count(&w, "SELECT count(*) FROM message_attachment WHERE entity_id = ?1", &[&doc]),
+        count(
+            &w,
+            "SELECT count(*) FROM message_attachment WHERE entity_id = ?1",
+            &[&doc]
+        ),
         1
     );
     assert!(matches!(
@@ -809,7 +932,10 @@ fn an_attached_item_purged_leaves_the_label_and_a_trashed_one_reads_as_lost() {
     ));
     w.ok("entity.purge", json!({ "id": doc }));
     assert_eq!(
-        w.one::<String>("SELECT label FROM message_attachment WHERE thread_id = ?1", &[thread]),
+        w.one::<String>(
+            "SELECT label FROM message_attachment WHERE thread_id = ?1",
+            &[thread]
+        ),
         "Notes"
     );
     assert_eq!(
@@ -820,7 +946,10 @@ fn an_attached_item_purged_leaves_the_label_and_a_trashed_one_reads_as_lost() {
         ),
         1
     );
-    assert_eq!(count(&w, "SELECT count(*) FROM thread WHERE id = ?1", &[thread]), 1);
+    assert_eq!(
+        count(&w, "SELECT count(*) FROM thread WHERE id = ?1", &[thread]),
+        1
+    );
 }
 
 #[test]
@@ -839,7 +968,10 @@ fn a_thumbnail_is_kept_while_its_chat_lives_and_released_when_it_is_purged() {
     assert!(hashes(&w.ok("blob.collect", json!({}))["released"]).is_empty());
     w.ok("entity.trash", json!({ "id": thread }));
     assert!(hashes(&w.ok("blob.collect", json!({}))["released"]).is_empty());
-    assert!(on_disk(&w, &thumb), "a chat in the trash keeps its thumbnail");
+    assert!(
+        on_disk(&w, &thumb),
+        "a chat in the trash keeps its thumbnail"
+    );
     w.ok("entity.restore", json!({ "id": thread }));
     assert!(on_disk(&w, &thumb));
     assert_eq!(count(&w, "SELECT count(*) FROM blob", &[]), 1);
@@ -867,7 +999,10 @@ fn a_regenerated_turn_releases_the_thumbnail_it_replaced_as_hashes() {
     again["replace_last"] = json!(true);
     let saved = w.ok("thread.save_turn", again);
     assert_eq!(hashes(&saved["released"]), vec![old.clone()]);
-    assert!(!on_disk(&w, &old), "the replaced turn's thumbnail file went");
+    assert!(
+        !on_disk(&w, &old),
+        "the replaced turn's thumbnail file went"
+    );
     let kept: String = w.one("SELECT thumb FROM message_attachment", &[]);
     assert!(on_disk(&w, &kept), "the new one is kept");
 }
@@ -909,7 +1044,12 @@ fn a_change_the_assistant_makes_is_the_assistants_in_history() {
             .vault()
             .execute(&w.registry, &Principal::owner("phone"), &command)
             .expect("runs");
-        assert_eq!(outcome.status, CommandStatus::Executed, "{:?}", outcome.reason);
+        assert_eq!(
+            outcome.status,
+            CommandStatus::Executed,
+            "{:?}",
+            outcome.reason
+        );
     };
     retitle("Two", false);
     retitle("Three", true);
@@ -923,10 +1063,18 @@ fn a_change_the_assistant_makes_is_the_assistants_in_history() {
         1,
         "{actors:?}"
     );
-    assert_eq!(actors.last().map(String::as_str), Some("member"), "{actors:?}");
+    assert_eq!(
+        actors.last().map(String::as_str),
+        Some("member"),
+        "{actors:?}"
+    );
     // `cause` is a diagnostic: nothing reads whose change it was from a prefix of it.
     assert_eq!(
-        count(&w, "SELECT count(*) FROM revision WHERE cause LIKE 'assist%'", &[]),
+        count(
+            &w,
+            "SELECT count(*) FROM revision WHERE cause LIKE 'assist%'",
+            &[]
+        ),
         0
     );
 }
@@ -951,7 +1099,10 @@ fn search_finds_a_chat_by_its_title_and_the_members_words_never_the_assistants()
     // A later turn is found, and a rename moves the hit.
     turn(&w, Some(&thread), "and the electrician", answered("ok"));
     assert!(finds(&w, "electrician", &thread));
-    w.ok("entity.retitle", json!({ "id": thread, "title": "Home repairs" }));
+    w.ok(
+        "entity.retitle",
+        json!({ "id": thread, "title": "Home repairs" }),
+    );
     assert!(finds(&w, "repairs", &thread));
     // A chat in the trash is found by nothing; purged, by nothing either.
     w.ok("entity.trash", json!({ "id": thread }));
@@ -960,7 +1111,11 @@ fn search_finds_a_chat_by_its_title_and_the_members_words_never_the_assistants()
     }
     w.ok("entity.purge", json!({ "id": thread }));
     assert_eq!(
-        count(&w, "SELECT count(*) FROM search WHERE search MATCH '\"electrician\"'", &[]),
+        count(
+            &w,
+            "SELECT count(*) FROM search WHERE search MATCH '\"electrician\"'",
+            &[]
+        ),
         0
     );
 }
@@ -974,19 +1129,34 @@ fn a_card_is_live_while_its_row_is_and_an_unknown_word_is_not_evidence_of_a_hole
         .to_owned();
     let vault = w.vault();
     assert!(vault.chat_card_row_exists("notes", "note", &note).unwrap());
-    assert!(!vault.chat_card_row_exists("notes", "task", &note).unwrap(), "a note is no task");
-    assert!(!vault.chat_card_row_exists("weather", "note", &note).unwrap());
+    assert!(
+        !vault.chat_card_row_exists("notes", "task", &note).unwrap(),
+        "a note is no task"
+    );
+    assert!(
+        !vault
+            .chat_card_row_exists("weather", "note", &note)
+            .unwrap()
+    );
     // A card an older build stored as `agenda` is read as the app of its kind.
     let task = w.bare(Kind::Task, "T", None);
     assert!(vault.chat_card_row_exists("agenda", "task", &task).unwrap());
-    assert!(vault.chat_card_row_exists("reminders", "task", &task).unwrap());
+    assert!(
+        vault
+            .chat_card_row_exists("reminders", "task", &task)
+            .unwrap()
+    );
     assert!(
         !vault
             .chat_card_row_exists("locker", "locker_item", "no-such-item")
             .unwrap(),
         "a Locker card is live only while its item is"
     );
-    assert!(vault.chat_card_row_exists("notes", "somethingnew", "x").unwrap());
+    assert!(
+        vault
+            .chat_card_row_exists("notes", "somethingnew", "x")
+            .unwrap()
+    );
     w.ok("entity.trash", json!({ "id": note }));
     assert!(!vault.chat_card_row_exists("notes", "note", &note).unwrap());
 }

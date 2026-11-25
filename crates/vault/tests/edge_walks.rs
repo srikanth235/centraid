@@ -1,6 +1,5 @@
 //! V6, moved out of `index_walks` by K7 (it is the edge lane's statement): `edge_order` has a
-//! reader. Its fixture still writes the old ids (`list-1`, `p1`), which the grammar of an id now
-//! refuses; K5 rewrites it with minted ids and moves it back to `tests/`.
+//! reader. The fixture writes minted ids (the grammar of an id refuses the old `list-1`, `p1`).
 
 mod common;
 
@@ -32,14 +31,14 @@ fn the_edge_order_index_has_a_reader_and_is_kept() {
             let c = tx.connection();
             c.execute_batch(
                 "INSERT INTO entity (id, kind, title, created_at, updated_at)
-                   VALUES ('list-1', 'list', 'Big list', '2026-03-01T09:00:00.000Z', '2026-03-01T09:00:00.000Z');
-                 INSERT INTO container (id, kind) VALUES ('list-1', 'list');
+                   VALUES ('01900000-0000-7000-8000-ffffffffff01', 'list', 'Big list', '2026-03-01T09:00:00.000Z', '2026-03-01T09:00:00.000Z');
+                 INSERT INTO container (id, kind) VALUES ('01900000-0000-7000-8000-ffffffffff01', 'list');
                  WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 3000)
                    INSERT INTO entity (id, kind, title, created_at, updated_at)
-                   SELECT 'p' || i, 'person', 'P' || i, '2026-03-01T09:00:00.000Z', '2026-03-01T09:00:00.000Z' FROM n;
-                 INSERT INTO person (id) SELECT id FROM entity WHERE kind = 'person' AND id LIKE 'p%';
+                   SELECT printf('01900000-0000-7000-8000-%012x', i), 'person', 'P' || i, '2026-03-01T09:00:00.000Z', '2026-03-01T09:00:00.000Z' FROM n;
+                 INSERT INTO person (id) SELECT id FROM entity WHERE kind = 'person' AND id LIKE '01900000-%';
                  INSERT INTO edge (from_id, rel, to_id, position, created_at)
-                   SELECT 'list-1', 'contains', id, rowid, '2026-03-01T09:00:00.000Z' FROM entity WHERE id LIKE 'p%';
+                   SELECT '01900000-0000-7000-8000-ffffffffff01', 'contains', id, n, '2026-03-01T09:00:00.000Z' FROM entity WHERE kind = 'person' AND id LIKE '01900000-%';
                  ANALYZE;",
             )?;
             Ok(())
@@ -47,7 +46,11 @@ fn the_edge_order_index_has_a_reader_and_is_kept() {
         .expect("a big list");
     // The statement `edge.add` and a restore run for the next position.
     let read = centraid_vault::commands::edge::NEXT_POSITION;
-    let with = plan(&scratch, read, &["list-1"]);
+    let with = plan(
+        &scratch,
+        read,
+        &["01900000-0000-7000-8000-ffffffffff01", "contains"],
+    );
     assert!(
         with.contains("INDEX edge_order"),
         "the next position reads the ordered index: {with}"
@@ -59,7 +62,11 @@ fn the_edge_order_index_has_a_reader_and_is_kept() {
             Ok(())
         })
         .expect("drops");
-    let without = plan(&scratch, read, &["list-1"]);
+    let without = plan(
+        &scratch,
+        read,
+        &["01900000-0000-7000-8000-ffffffffff01", "contains"],
+    );
     assert!(
         !without.contains("edge_order")
             && (without.contains("TEMP B-TREE") || without.contains("SCAN")),

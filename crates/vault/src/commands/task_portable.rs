@@ -2,22 +2,26 @@
 //! list, or one reminder (what a reminder page shares) as VTODOs in one RFC 5545 file, the form
 //! other task apps read. Writes nothing.
 //!
-//! A task is a VTODO with its UID, DTSTAMP, title, notes, due (a date, or a wall clock in the
-//! task's zone, or a floating one), status (done carries COMPLETED), priority, link, alert
-//! (VALARM, minutes before it is due) and RRULE when it repeats. A sub-task names its parent
-//! (`RELATED-TO;RELTYPE=PARENT`), tags are CATEGORIES, the effort estimate is ESTIMATED-DURATION,
-//! and the list, the section and the star, which RFC 5545 has no property for, are
-//! `X-CENTRAID-LIST`, `X-CENTRAID-SECTION` and `X-CENTRAID-STARRED`.
+//! A task is a VTODO with its UID, DTSTAMP, title, notes, due (a date, a floating wall clock, or an
+//! instant written as the wall clock of the task's zone, by its `due_timing`), status (done
+//! carries COMPLETED), priority, link, one alert (VALARM, minutes before it is due) per reminder
+//! row, and RRULE when it repeats. A sub-task names its parent (`RELATED-TO;RELTYPE=PARENT`), tags
+//! are CATEGORIES, the effort estimate is ESTIMATED-DURATION, and what RFC 5545 has no property
+//! for is `X-CENTRAID-LIST` (the project it is in), `X-CENTRAID-SECTION`, `X-CENTRAID-STARRED`,
+//! `X-CENTRAID-SCHEDULED` (the day the member plans it) and `X-CENTRAID-SERIES` (the repeat's
+//! stable identity).
+//!
+//! There is no import here: a reminders file from another app arrives through `task.add` (the
+//! phone's own Reminders are followed, `task::PHONE_REMINDERS`).
 
 use rusqlite::Connection;
 use serde_json::Value as Json;
 
 use crate::commands::ical::{self, Writer};
-use crate::commands::{CommandCtx, CommandDefinition, Idempotency, note};
+use crate::commands::{CommandCtx, CommandDefinition, Idempotency, note_portable};
 use crate::error::Result;
 use crate::time::recurrence::parse_instant_ms;
 use crate::time::rrule;
-use crate::time::temporal::{self, Kind as Reading};
 use crate::time::zone::{FireZone, parse_wall_iso};
 
 struct Task {
@@ -27,35 +31,30 @@ struct Task {
     status: String,
     priority: i64,
     due: Option<String>,
+    due_timing: Option<String>,
+    zone: Option<String>,
+    scheduled_on: Option<String>,
     done_at: Option<String>,
     rule: Option<String>,
-    zone: Option<String>,
-    remind_before_min: Option<i64>,
+    series_id: Option<String>,
     url: Option<String>,
     description: Option<String>,
     effort_min: Option<i64>,
-    parent_id: Option<String>,
+    /// The task this one is a subtask of.
+    parent_task: Option<String>,
     list: Option<String>,
     section: Option<String>,
     tags: Vec<String>,
     starred: bool,
+    /// Minutes before the due, one alert each.
+    leads: Vec<i64>,
 }
 
 /// The due date as the property that carries it: `(parameters, value)`.
 fn due(task: &Task, value: &str) -> Option<(String, String)> {
-    match temporal::classify(value)? {
-        Reading::LocalDate => Some((";VALUE=DATE".to_owned(), ical::compact_date(value)?)),
-        Reading::FloatingDateTime => match task
-            .zone
-            .as_deref()
-            .and_then(|name| FireZone::named(name).ok())
-        {
-            Some(zone) => Some((
-                format!(";TZID={}", zone.name()),
-                ical::compact_wall(parse_wall_iso(value)?),
-            )),
-            None => Some((String::new(), ical::compact_wall(parse_wall_iso(value)?))),
-        },
+    match task.due_timing.as_deref()? {
+        "all-day" => Some((";VALUE=DATE".to_owned(), ical::compact_date(value)?)),
+        "floating" => Some((String::new(), ical::compact_wall(parse_wall_iso(value)?))),
         _ => {
             let millis = parse_instant_ms(value)?;
             match task
@@ -73,7 +72,8 @@ fn due(task: &Task, value: &str) -> Option<(String, String)> {
     }
 }
 
-/// The member's 1 (low) to 3 (high) marks as RFC 5545's 9, 5 and 1; none is not written.
+/// The member's 1 (low) to 3 (high) marks as RFC 5545's 9, 5 and 1 (a higher mark is as high as
+/// 3); none is not written.
 const fn priority_of(mark: i64) -> Option<u8> {
     match mark {
         i64::MIN..=0 => None,
@@ -83,67 +83,107 @@ const fn priority_of(mark: i64) -> Option<u8> {
     }
 }
 
+/// Where a task is filed, from its home up: `(the project, the section, the parent task)`. A
+/// subtask's list and section are the ones its parent is filed in.
+fn filed(
+    connection: &Connection,
+    mut home: Option<String>,
+) -> Result<(Option<String>, Option<String>, Option<String>)> {
+    let (mut list, mut section, mut parent) = (None, None, None);
+    // A home has no loops (a trigger) and a hierarchy is shallow; the bound is a belt.
+    for step in 0..64 {
+        let Some(id) = home.take() else { break };
+        let found: Option<(String, String, Option<String>)> = connection
+            .prepare_cached("SELECT kind, title, parent_id FROM entity WHERE id = ?1")?
+            .query_map([&id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+            .next()
+            .transpose()?;
+        let Some((kind, title, above)) = found else {
+            break;
+        };
+        if step == 0 && kind == "task" {
+            parent = Some(id.clone());
+        }
+        match kind.as_str() {
+            "project" => {
+                list.get_or_insert(title);
+                break;
+            }
+            "section" => {
+                section.get_or_insert(title);
+            }
+            _ => {}
+        }
+        home = above;
+    }
+    Ok((list, section, parent))
+}
+
+/// The tasks to write: every live task, or those under one holder (a project, its sections and
+/// their tasks and subtasks), or one.
 fn tasks(connection: &Connection, list: Option<&str>, one: Option<&str>) -> Result<Vec<Task>> {
     let mut statement = connection.prepare_cached(
-        "SELECT e.id, e.title, e.updated_at, t.status, t.priority, t.due, t.done_at, t.rule,
-                t.zone, t.remind_before_min, t.url, t.description, t.effort_min, t.parent_id,
-                (SELECT title FROM entity WHERE id = t.project_id),
-                (SELECT title FROM entity WHERE id = t.section_id)
+        "WITH RECURSIVE under(id) AS (
+           SELECT ?1 WHERE ?1 IS NOT NULL
+           UNION ALL SELECT e.id FROM entity e JOIN under u ON e.parent_id = u.id)
+         SELECT e.id, e.title, e.updated_at, t.status, t.priority, t.due, t.due_timing, t.zone,
+                t.scheduled_on, t.done_at, t.rule, t.series_id, t.url, t.description, t.effort_min,
+                e.parent_id, e.starred_at IS NOT NULL
            FROM task t JOIN entity e ON e.id = t.id
-          WHERE e.kind = 'task' AND e.deleted_at IS NULL
-            AND (?1 IS NULL OR t.project_id = ?1)
+          WHERE e.deleted_at IS NULL
+            AND (?1 IS NULL OR e.id IN (SELECT id FROM under))
             AND (?2 IS NULL OR e.id = ?2)
           ORDER BY t.due IS NULL, t.due, t.position, e.created_at, e.id",
     )?;
     let rows = statement
         .query_map(rusqlite::params![list, one], |row| {
-            Ok(Task {
-                id: row.get(0)?,
-                title: row.get(1)?,
-                stamp: row.get(2)?,
-                status: row.get(3)?,
-                priority: row.get(4)?,
-                due: row.get(5)?,
-                done_at: row.get(6)?,
-                rule: row.get(7)?,
-                zone: row.get(8)?,
-                remind_before_min: row.get(9)?,
-                url: row.get(10)?,
-                description: row.get(11)?,
-                effort_min: row.get(12)?,
-                parent_id: row.get(13)?,
-                list: row.get(14)?,
-                section: row.get(15)?,
-                tags: Vec::new(),
-                starred: false,
-            })
+            Ok((
+                Task {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    stamp: row.get(2)?,
+                    status: row.get(3)?,
+                    priority: row.get(4)?,
+                    due: row.get(5)?,
+                    due_timing: row.get(6)?,
+                    zone: row.get(7)?,
+                    scheduled_on: row.get(8)?,
+                    done_at: row.get(9)?,
+                    rule: row.get(10)?,
+                    series_id: row.get(11)?,
+                    url: row.get(12)?,
+                    description: row.get(13)?,
+                    effort_min: row.get(14)?,
+                    parent_task: None,
+                    list: None,
+                    section: None,
+                    tags: Vec::new(),
+                    starred: row.get(16)?,
+                    leads: Vec::new(),
+                },
+                row.get::<_, Option<String>>(15)?,
+            ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut labels = connection.prepare_cached(
-        "SELECT t.kind, t.id, t.title FROM edge a JOIN entity t ON t.id = a.to_id
-          WHERE a.from_id = ?1 AND a.rel = 'tagged' AND t.kind IN ('tag', 'flag')
+        "SELECT t.title FROM edge a JOIN entity t ON t.id = a.to_id
+          WHERE a.from_id = ?1 AND a.rel = 'tagged' AND t.deleted_at IS NULL
           ORDER BY t.title, t.id",
     )?;
-    let mut rows = rows;
-    for task in &mut rows {
-        let found = labels
-            .query_map([&task.id], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                ))
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        for (kind, id, title) in found {
-            if kind == "tag" {
-                task.tags.push(title);
-            } else if id == "flag:starred" {
-                task.starred = true;
-            }
-        }
+    let mut out = Vec::with_capacity(rows.len());
+    for (mut task, home) in rows {
+        (task.list, task.section, task.parent_task) = filed(connection, home)?;
+        task.tags = labels
+            .query_map([&task.id], |row| row.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        task.leads = crate::commands::reminder::list(connection, &task.id)?
+            .into_iter()
+            .filter(|row| row.date_id.is_none() && row.field_id.is_none())
+            .map(|row| row.offset_min)
+            .collect();
+        out.push(task);
     }
-    Ok(rows)
+    Ok(out)
 }
 
 fn file(tasks: &[Task]) -> String {
@@ -188,7 +228,7 @@ fn file(tasks: &[Task]) -> String {
         if let Some(url) = task.url.as_deref().filter(|u| !u.trim().is_empty()) {
             writer.line(&format!("URL:{url}"));
         }
-        if let Some(parent) = &task.parent_id {
+        if let Some(parent) = &task.parent_task {
             writer.line(&format!("RELATED-TO;RELTYPE=PARENT:{parent}@centraid"));
         }
         if !task.tags.is_empty() {
@@ -207,16 +247,24 @@ fn file(tasks: &[Task]) -> String {
         if task.starred {
             writer.line("X-CENTRAID-STARRED:TRUE");
         }
-        if let (Some(minutes), Some(_)) = (task.remind_before_min, &due) {
-            writer.line("BEGIN:VALARM");
-            writer.line("ACTION:DISPLAY");
-            writer.text("DESCRIPTION", &task.title);
-            writer.line(&if minutes == 0 {
-                "TRIGGER:PT0S".to_owned()
-            } else {
-                format!("TRIGGER:-PT{minutes}M")
-            });
-            writer.line("END:VALARM");
+        if let Some(day) = task.scheduled_on.as_deref().and_then(ical::compact_date) {
+            writer.line(&format!("X-CENTRAID-SCHEDULED:{day}"));
+        }
+        if let Some(series) = task.series_id.as_deref() {
+            writer.line(&format!("X-CENTRAID-SERIES:{series}"));
+        }
+        if due.is_some() {
+            for minutes in &task.leads {
+                writer.line("BEGIN:VALARM");
+                writer.line("ACTION:DISPLAY");
+                writer.text("DESCRIPTION", &task.title);
+                writer.line(&if *minutes == 0 {
+                    "TRIGGER:PT0S".to_owned()
+                } else {
+                    format!("TRIGGER:-PT{minutes}M")
+                });
+                writer.line("END:VALARM");
+            }
         }
         writer.line("END:VTODO");
     }
@@ -249,7 +297,10 @@ fn export_ics(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
                 row.get(0)
             })
             .ok();
-        file_name = title.map_or_else(|| "Reminders".to_owned(), |t| note::portable_stem(&t));
+        file_name = title.map_or_else(
+            || "Reminders".to_owned(),
+            |title| note_portable::file_stem(&title),
+        );
     }
     let (text, count) = reminders_text(ctx.connection(), list, one)?;
     Ok(serde_json::json!({

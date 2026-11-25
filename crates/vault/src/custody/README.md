@@ -12,24 +12,33 @@ AES-256-GCM with a **fresh random 96-bit nonce per value**. No nonce in this cod
 
 `is_locker_ciphertext` is **structural**, not a `starts_with`: prefix, then a strict-alphabet base64 body, a multiple of four long, decoding to at least `nonce + tag` bytes. A value that merely begins `lk1:` must be _sealed_, not stored verbatim as "already sealed" — a bare prefix test hands a caller a way to write plaintext into a sealed column by choosing its first four characters.
 
-## `locker_key` — the Locker cell format, and the phone's two doors
+## `locker_key` — the Locker cell format
 
 `K` is the 24 words' own leaf, `seed / vault'(i) / locker'` ([#1047](https://github.com/srikanth235/centraid/issues/1047)), derived by the core at open into its in-memory keyring. It is **never a file**: the vault stores only the generation's id in `locker_key`, and a restore from the 24 words re-derives the same `K` for the same id.
 
-| Question | Answer |
-| --- | --- |
-| Who holds `K` | the core, in memory, from open to close; a Locker session holds a copy between unlock and relock (D-7) |
-| What the vault stores | the generation's **id** only (`locker_key`, one row) |
-| What the laptop's gateway stores | sealed backup objects; the `lk1:` cells inside them stay ciphertext under `K` once an object is opened, and the gateway holds neither `K` nor an object key |
-| Who can reveal a cell | the core, behind the member's unlock |
-
-The phone's two doors are `Vault::locker_generation` (names the generation, writing the one `locker_key` row on a vault that has none; never inside a commit) and `Vault::locker_sealed_item_cell` (one sealed cell's ciphertext and generation, for a reveal). Neither returns plaintext.
+The phone names the generation with `Vault::locker_generation` (it writes the one `locker_key` row on a vault that has none; never inside a commit); the doors that return a sealed value's ciphertext are listed under "Who reveals" below. None returns plaintext.
 
 `locker_key(id, key_id, created_at, ..)` holds **at most one row**: its key is the singleton `id = 1` (a `CHECK`, like the `vault` row's), so a second generation is refused by the file (in `contracts/migrations/001_baseline.sql`). `K` is the seed's single leaf, so nothing ever retires a generation; `retired_at` and the predicate index that let one live row stand beside retired ones are gone.
 
-Only secret **values** are encrypted. Title, url and username stay plaintext, so a locked Locker can list and search — which is the whole reason Locker is usable on a phone in airplane mode. A Locker item is an entity of kind `locker_item`, so its title is its entity's; no entity-wide reader serves it or any cell (no command's input is stored and a refusal's sentence scrubs the five cells and a duplicate's `fields[].value`, a Locker item's history keeps a sealed cell or a sealed custom field only as the `lk1:` ciphertext it is and shows it masked (a passkey's key too), `text_of` indexes its plain fields only, a page over `entity` or `edge` serves one only to a read `page::reaches_locker` names (Locker's own, and the assistant's, which `page::withholds_sealed_value` holds to the plain columns), and the assistant's principal is refused any command that reveals or sets a sealed value).
+Locker is an app like every other: a Locker item is an entity with the vault's title, trash, tags, links, `[[title]]` and attachments, and the one thing that differs is that sensitive **values** are sealed under `K`. Four tables hold it (`locker_item`, `locker_item_field`, `locker_item_passkey`, `locker_key`). Title and every plain field (a username, an address, a Wi-Fi name, a cardholder, a date) stay plaintext, so a locked Locker can list and search, which is the whole reason Locker is usable on a phone in airplane mode.
 
-**The reveal door is absent from the access plane**, not refused: `crates/vault::access::Verb` is `read` and `act`, and there is no reveal judgement at all. A Locker write that carries plaintext is a refusal (`assert_sealed_cell` in `commands/locker/custody.rs`).
+What is sealed: a `sealed` field, a one-time-code (`otp`) seed, a `file` field's name and media type and bytes, and a passkey's private key. Each is `lk1:` ciphertext bound to its row's id (a single built-in field's id is `<item id>:<field key>`, so the core can seal before the row exists), never indexed, never turned into derived data, never written in plaintext, and kept sealed in every earlier version. A secret's age is its field's `value_set_at`, which moves only when the value changes (the vault cannot compare two ciphertexts, so the write says whether it did). The file knows a field's shape by `kind` only; which built-in key is which kind is `commands/locker/schema.rs`, and the plaintext gate plants every built-in secret key.
+
+## Sealed files: `lkf1`
+
+A `file` field's bytes are encrypted under `K` BEFORE they enter the blob store, so `blob.hash` is the hash of the ciphertext. The format is permanent once written (`sealed_file.rs`; vectors in `tests/vectors/lkf1.json`): an 8-byte header (`lkf1` and the plaintext chunk size, big-endian u32), then chunked AES-256-GCM with a fresh random nonce per chunk; each chunk's authenticated data is header ‖ field id ‖ 0x1F ‖ key id ‖ chunk index (big-endian u64) ‖ a final-chunk flag, so a tail cut off or two chunks swapped do not open. A file is sealed and opened as a stream (`SealReader`, `OpenReader`), never as one piece; the same file sealed twice has two hashes; nothing is derived from one and it is always sent with a backup and never freed from the phone. A replaced or removed file stays readable, sealed, through its history slot `field:<id>`.
+
+## Who reveals
+
+| Question | Answer |
+| --- | --- |
+| Who holds `K` | the core, in memory, from open to close; a Locker session holds a copy between unlock and relock |
+| What the vault stores | the generation's **id** only (`locker_key`, one row; rekeying is out of v0) |
+| What the laptop's gateway stores | sealed backup objects; the `lk1:` cells and `lkf1` files inside stay ciphertext under `K`, and the gateway holds neither `K` nor an object key |
+| Who can reveal a value | the core, behind the member's unlock: the doors `locker_sealed_item_cell`, `locker_sealed_field_cell` (a seed too), `locker_sealed_passkey_cell`, `locker_sealed_file`, `locker_sealed_earlier_cell` return ciphertext only |
+| What leaves the phone | an item's contents only through Locker's own export (`locker.export`: confirmed, high-risk, refused on a phone with no passcode); an item has no share and "Export everything" leaves Locker out |
+
+**The reveal door is absent from the access plane**, not refused: `crates/vault::access::Verb` is `read` and `act`, and there is no reveal judgement at all. A Locker write that carries plaintext is a refusal (`assert_sealed_cell` in `commands/locker/custody.rs`); a sealed value reaches no read but Locker's own (`page::withholds_sealed_value`); an edge's label or anchor never carries ciphertext.
 
 ## What these modules no longer hold
 
@@ -38,5 +47,6 @@ Only secret **values** are encrypted. Title, url and username stay plaintext, so
 ## The tests
 
 - `locker_key::tests::the_vault_file_does_not_reveal_a_cell_without_k` — a sealed cell depends on `K` and on nothing else in the file.
-- `crates/vault/tests/locker_plaintext_gate.rs` — every door that returns bytes, the snapshot, the backup base (sealed and opened) and the vault file with its WAL are searched for planted plaintext, with a falsification that proves the search fires.
+- `crates/vault/tests/locker_plaintext_gate.rs` — a planted plaintext in every built-in secret key of all fifteen types, a custom sealed and one-time-code field, a passkey's key and a sealed file; every door that returns bytes, the index and its word lists, the history, a notification, the backup (sealed and opened), the vault file with its WAL and the content store are searched for it, with a falsification that proves the search fires.
+- `crates/vault/tests/locker_commands.rs`, `locker_files.rs`, `locker_search.rs`, `locker_wall.rs`, `locker_clock.rs` — the commands, the `lkf1` format against committed vectors, search, Locker as an ordinary app and take-out, and the rules the file holds.
 - `crates/core/src/app_query/locker_tests.rs` — no `keys` directory is ever created, and a restore from the same 24 words reopens sealed secrets.

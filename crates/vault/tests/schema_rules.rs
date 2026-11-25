@@ -867,6 +867,139 @@ fn a_split_goes_to_a_category_and_a_reading_is_one_of_its_metric() {
 }
 
 #[test]
+fn an_account_a_line_a_transfer_a_budget_and_a_rule_hold_the_rules_money_states() {
+    let w = World::new("rules_money");
+    let (a1, a2) = (w.entity(40, "account", "A"), w.entity(41, "account", "B"));
+    let acct = |a: &str, extra: &str| {
+        format!(
+            "INSERT INTO account (id, type, currency{extra}) VALUES ('{a}', 'checking', 'USD'{})",
+            if extra.is_empty() {
+                ""
+            } else {
+                ", 5, '2026-01-01'"
+            }
+        )
+    };
+    // A type is a row of the lookup; an opening balance that is not nothing has its day; a currency is three capitals.
+    w.refuses_with(
+        &format!("INSERT INTO account (id, type, currency) VALUES ('{a1}', 'mortgage', 'USD')"),
+        "FOREIGN KEY",
+    );
+    w.refuses(&format!("INSERT INTO account (id, type, currency, opening_minor) VALUES ('{a1}', 'checking', 'USD', 5)"));
+    w.refuses(&format!(
+        "INSERT INTO account (id, type, currency) VALUES ('{a1}', 'checking', 'usd')"
+    ));
+    for kind in ["loan", "investment", "asset"] {
+        w.takes(&format!(
+            "INSERT INTO account (id, type, currency) VALUES ('{}', '{kind}', 'USD')",
+            w.entity(100 + kind.len() as u64, "account", kind)
+        ));
+    }
+    w.takes(&acct(&a1, ", opening_minor, opening_on"));
+    w.takes(&acct(&a2, ""));
+    // A line: a day, the closed sets of status and origin, both halves of what was charged or neither.
+    let line = |n: u64, a: &str, cols: &str, vals: &str| {
+        let t = w.entity(n, "txn", "T");
+        format!(
+            "INSERT INTO txn (id, account_id, posted_on, amount_minor{cols}) VALUES ('{t}', '{a}', '2026-03-01', -300{vals})"
+        )
+    };
+    w.refuses(&line(42, &a1, ", status", ", 'void'"));
+    w.refuses(&line(43, &a1, ", entered", ", 'robot'"));
+    w.refuses(&line(44, &a1, ", original_amount_minor", ", 5"));
+    w.refuses(&line(
+        45,
+        &a1,
+        ", original_amount_minor, original_currency",
+        ", 5, 'eur'",
+    ));
+    w.takes(&line(
+        46,
+        &a1,
+        ", original_amount_minor, original_currency, entered",
+        ", 5, 'EUR', 'hand'",
+    ));
+    let (h1, h2, h3) = (id(46), w.entity(47, "txn", "T2"), w.entity(48, "txn", "T3"));
+    w.takes(&format!("INSERT INTO txn (id, account_id, posted_on, amount_minor, entered) VALUES ('{h2}', '{a2}', '2026-03-01', 300, 'hand')"));
+    w.takes(&format!("INSERT INTO txn (id, account_id, posted_on, amount_minor, entered) VALUES ('{h3}', '{a2}', '2026-03-01', -9, 'hand')"));
+    // A hand line is edited and may become a statement line; nothing else ever changes `entered`, and
+    // a statement line's day, amount, account and what was charged never change.
+    w.takes(&format!("UPDATE txn SET amount_minor = -250, posted_on = '2026-03-02' WHERE id = '{h2}'; UPDATE txn SET amount_minor = 300 WHERE id = '{h2}'"));
+    w.refuses_with(&format!("UPDATE txn SET entered = 'statement' WHERE id = '{h3}'; UPDATE txn SET entered = 'hand' WHERE id = '{h3}'"), "origin never changes");
+    let stated = w.entity(49, "txn", "T4");
+    w.takes(&format!("INSERT INTO txn (id, account_id, posted_on, amount_minor) VALUES ('{stated}', '{a2}', '2026-03-01', -4)"));
+    w.refuses_with(
+        &format!("UPDATE txn SET amount_minor = 1 WHERE id = '{stated}'"),
+        "never edited",
+    );
+    // A transfer: two accounts, two directions, the lower id first, a line in one pair, and a paired
+    // line keeps its account and direction; the pair goes with either line.
+    let (lo, hi) = if h1 < h2 {
+        (h1.clone(), h2.clone())
+    } else {
+        (h2.clone(), h1.clone())
+    };
+    w.refuses(&format!(
+        "INSERT INTO transfer (a, b) VALUES ('{hi}', '{lo}')"
+    ));
+    w.refuses_with(
+        &format!("INSERT INTO transfer (a, b) VALUES ('{h2}', '{h3}')"),
+        "out of one account",
+    );
+    w.takes(&format!(
+        "INSERT INTO transfer (a, b) VALUES ('{lo}', '{hi}')"
+    ));
+    w.refuses_with(
+        &format!("UPDATE txn SET amount_minor = -5 WHERE id = '{h2}'"),
+        "keeps its account",
+    );
+    w.refuses_with(
+        &format!("UPDATE txn SET account_id = '{a1}' WHERE id = '{h2}'"),
+        "keeps its account",
+    );
+    w.takes(&format!(
+        "UPDATE txn SET amount_minor = 400 WHERE id = '{h2}'"
+    ));
+    // A budget has a real month and an amount that is not negative; no currency column.
+    w.refuses("INSERT INTO budget (category_id, month, amount_minor) VALUES ('category:food', '2026-13', 5)");
+    w.refuses("INSERT INTO budget (category_id, month, amount_minor) VALUES ('category:food', '2026-03', -5)");
+    w.takes("INSERT INTO budget (category_id, month, amount_minor) VALUES ('category:food', '2026-03', 5)");
+    // A rule's pattern is a JSON object with its version, a way to match, words, and a sane range.
+    let rule = |n: u64, pattern: &str, name: &str| {
+        format!(
+            "INSERT INTO rule (id, pattern, display_name, category_id, position, created_at) VALUES ('{}', '{pattern}', {name}, 'category:food', 1, '{AT}')",
+            id(n)
+        )
+    };
+    w.refuses(&rule(60, r#"{"match":"is","text":"x"}"#, "NULL"));
+    w.refuses(&rule(61, r#"{"v":1,"match":"fuzzy","text":"x"}"#, "NULL"));
+    w.refuses(&rule(62, r#"{"v":1,"match":"is","text":"  "}"#, "NULL"));
+    w.refuses(&rule(
+        63,
+        r#"{"v":1,"match":"is","text":"x","min":-1}"#,
+        "NULL",
+    ));
+    w.refuses(&rule(
+        64,
+        r#"{"v":1,"match":"is","text":"x","min":9,"max":3}"#,
+        "NULL",
+    ));
+    w.refuses(&rule(65, r#"{"v":1,"match":"is","text":"x"}"#, "' '"));
+    w.takes(&rule(
+        66,
+        r#"{"v":1,"match":"contains","text":"x","min":3,"max":9}"#,
+        "'Payee'",
+    ));
+    // A checkpoint is a real day.
+    w.refuses(&format!(
+        "INSERT INTO checkpoint (account_id, day, balance_minor) VALUES ('{a1}', '2026-02-30', 1)"
+    ));
+    w.takes(&format!(
+        "INSERT INTO checkpoint (account_id, day, balance_minor) VALUES ('{a1}', '2026-02-28', 1)"
+    ));
+}
+
+#[test]
 fn a_locker_field_holds_the_columns_its_kind_says() {
     let w = World::new("rules_locker");
     let item = w.entity(28, "locker_item", "Bank");
@@ -1341,6 +1474,692 @@ fn an_alert_row_is_a_key_in_a_timing_it_says() {
 }
 
 // ---------------------------------------------------------------------------------------------
+// People (G1-G3, L1): the sentences of `person.*`, `touch.*` are the database's too
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn a_person_needs_a_name_and_a_form_the_lookup_holds() {
+    let w = World::new("rules_person");
+    let blank = id(80);
+    w.refuses(&format!(
+        "INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES ('{blank}', 'person', '  ', '{AT}', '{AT}')"
+    ));
+    let ada = w.entity(81, "person", "Ada");
+    w.takes(&format!("INSERT INTO person (id, given, family, org, cadence_days) VALUES ('{ada}', 'Ada', 'L', 'Engines', 7)"));
+    let bob = w.entity(82, "person", "Bob");
+    w.refuses(&format!(
+        "INSERT INTO person (id, form) VALUES ('{bob}', 'robot')"
+    ));
+    w.refuses(&format!(
+        "INSERT INTO person (id, cadence_days) VALUES ('{bob}', 0)"
+    ));
+    w.takes(&format!(
+        "INSERT INTO person (id, form) VALUES ('{bob}', 'pet')"
+    ));
+}
+
+#[test]
+fn a_person_date_is_a_day_of_a_kind_the_lookup_holds_and_a_single_kind_is_held_once() {
+    let w = World::new("rules_person_date");
+    let ada = w.entity(83, "person", "Ada");
+    w.takes(&format!("INSERT INTO person (id) VALUES ('{ada}')"));
+    let row = |rid: &str, kind: &str, single: u8, date: &str| {
+        format!(
+            "INSERT INTO person_date (id, person_id, kind, single, date) VALUES ('{rid}', '{ada}', '{kind}', {single}, '{date}')"
+        )
+    };
+    w.takes(&row("a", "birthday", 1, "1990-03-14"));
+    // A second birthday, whatever its day.
+    w.refuses(&row("b", "birthday", 1, "--03-15"));
+    // A kind the lookup does not hold, and a `single` that is not the kind's own.
+    w.refuses(&row("c", "feast", 0, "--03-15"));
+    w.refuses(&row("d", "anniversary", 1, "--03-15"));
+    // A yearless day, a leap day with no year; and what is not a day.
+    w.takes(&row("e", "anniversary", 0, "--02-29"));
+    w.takes(&row("f", "other", 0, "2024-02-29"));
+    for bad in [
+        "soon",
+        "--02-30",
+        "2023-02-29",
+        "03-14",
+        "--13-01",
+        "1990-3-14",
+    ] {
+        w.refuses(&row("g", "other", 0, bad));
+    }
+    w.refuses(&format!(
+        "INSERT INTO person_date (id, person_id, kind, single, label, date) VALUES ('h', '{ada}', 'other', 0, '  ', '--01-01')"
+    ));
+}
+
+#[test]
+fn a_contact_point_is_one_per_spelling_and_one_is_preferred_per_kind() {
+    let w = World::new("rules_contact_point");
+    let ada = w.entity(84, "person", "Ada");
+    w.takes(&format!("INSERT INTO person (id) VALUES ('{ada}')"));
+    let row = |rid: &str, kind: &str, normalized: &str, preferred: u8| {
+        format!(
+            "INSERT INTO contact_point (id, person_id, kind, value, normalized, preferred, position)
+             VALUES ('{rid}', '{ada}', '{kind}', '{normalized}', '{normalized}', {preferred}, 1)"
+        )
+    };
+    w.takes(&row("a", "phone", "+15550100", 1));
+    w.refuses(&row("b", "phone", "+15550100", 0));
+    w.refuses(&row("c", "phone", "+15550101", 1));
+    w.takes(&row("d", "phone", "+15550101", 0));
+    w.takes(&row("e", "email", "a@b.c", 1));
+    w.refuses(&row("f", "fax", "1", 0));
+    w.refuses(&format!(
+        "INSERT INTO contact_point (id, person_id, kind, value, normalized, position) VALUES ('g', '{ada}', 'url', '  ', 'x', 1)"
+    ));
+}
+
+#[test]
+fn a_touch_has_a_touch_kind_and_does_not_end_before_it_starts() {
+    let w = World::new("rules_touch");
+    let kind = w.entity(85, "touch_kind", "Call");
+    w.takes(&format!(
+        "INSERT INTO concept (id, kind, key) VALUES ('{kind}', 'touch_kind', 'postcard')"
+    ));
+    let tag = w.entity(86, "tag", "Tag");
+    w.takes(&format!(
+        "INSERT INTO concept (id, kind, key) VALUES ('{tag}', 'tag', 'tag')"
+    ));
+    let touch = |n: u64, type_id: &str, starts: &str, ends: &str| {
+        let t = w.entity(n, "touch", "Call");
+        format!(
+            "INSERT INTO touch (id, type_id, starts, ends) VALUES ('{t}', '{type_id}', '{starts}', {ends})"
+        )
+    };
+    w.takes(&touch(
+        87,
+        &kind,
+        "2026-03-01T10:00:00.000Z",
+        "'2026-03-01T11:00:00.000Z'",
+    ));
+    w.takes(&touch(88, &kind, "2026-03-01T10:00:00.000Z", "NULL"));
+    w.refuses(&touch(
+        89,
+        &kind,
+        "2026-03-01T10:00:00.000Z",
+        "'2026-03-01T09:00:00.000Z'",
+    ));
+    // A tag is not a touch kind; a start that is not an instant is refused.
+    w.refuses(&touch(90, &tag, "2026-03-01T10:00:00.000Z", "NULL"));
+    w.refuses(&touch(91, &kind, "tomorrow", "NULL"));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Calendar lane (#1214): an event, its guests and the one-day overrides of a series
+// ---------------------------------------------------------------------------------------------
+
+fn event_in_default_calendar(w: &World, n: u64, title: &str) -> String {
+    let ev = id(n);
+    w.takes(&format!(
+        "INSERT INTO entity (id, kind, title, parent_id, parent_kind, created_at, updated_at)
+         VALUES ('{ev}', 'event', '{title}', 'calendar:default', 'calendar', '{AT}', '{AT}')"
+    ));
+    ev
+}
+
+#[test]
+fn an_event_reads_its_times_in_the_form_its_timing_says_and_needs_a_calendar() {
+    let w = World::new("rules_event");
+    let ev = event_in_default_calendar(&w, 100, "E");
+    let kind = |starts: &str, ends: &str, timing: &str, zone: &str| {
+        format!(
+            "INSERT INTO event (id, starts, ends, timing, zone) VALUES ('{ev}', '{starts}', {ends}, '{timing}', {zone})"
+        )
+    };
+    // All-day is a date, floating a wall clock to the minute, zoned an instant with its zone.
+    w.refuses(&kind("2026-03-02T09:00", "NULL", "all-day", "NULL"));
+    w.refuses(&kind("2026-03-02", "NULL", "floating", "NULL"));
+    w.refuses(&kind("2026-03-02T09:00:00Z", "NULL", "zoned", "'UTC'"));
+    w.refuses(&kind("2026-03-02T09:00:00.000Z", "NULL", "zoned", "NULL"));
+    w.refuses(&kind("2026-03-02T09:00", "NULL", "floating", "'UTC'"));
+    w.refuses(&kind("2026-03-02T09:00:00.000Z", "NULL", "zoned", "' '"));
+    // The end is in the same form and not before the start.
+    w.refuses(&kind(
+        "2026-03-02T09:00",
+        "'2026-03-02T08:00'",
+        "floating",
+        "NULL",
+    ));
+    w.refuses(&kind(
+        "2026-03-02T09:00",
+        "'2026-03-02'",
+        "floating",
+        "NULL",
+    ));
+    w.refuses(&kind("2026-03-02", "'2026-03-01'", "all-day", "NULL"));
+    w.takes(&kind("2026-03-02", "'2026-03-02'", "all-day", "NULL"));
+    // The other columns say what they hold: a closed status, busy as 0 or 1, a travel allowance of
+    // minutes, a location with something in it.
+    for (column, value) in [
+        ("status", "'maybe'"),
+        ("busy", "2"),
+        ("travel_min", "-5"),
+        ("location", "'  '"),
+        ("rule_supported", "3"),
+    ] {
+        w.refuses(&format!(
+            "UPDATE event SET {column} = {value} WHERE id = '{ev}'"
+        ));
+    }
+    w.takes(&format!(
+        "UPDATE event SET status = 'tentative', busy = 0, travel_min = 20, location = 'Room 4' WHERE id = '{ev}'"
+    ));
+    // `long` is 1 exactly when the event runs past a week, whichever form its times are in.
+    let long = |ev: &str| -> Option<i64> {
+        w.scratch
+            .vault
+            .read(|c| Ok(c.query_row("SELECT long FROM event WHERE id = ?1", [ev], |r| r.get(0))?))
+            .expect("a row")
+    };
+    assert_eq!(long(&ev), None);
+    w.takes(&format!(
+        "UPDATE event SET ends = '2026-03-10' WHERE id = '{ev}'"
+    ));
+    assert_eq!(long(&ev), Some(1));
+    let floating = event_in_default_calendar(&w, 101, "F");
+    w.takes(&format!(
+        "INSERT INTO event (id, starts, ends, timing) VALUES ('{floating}', '2026-03-02T09:00', '2026-03-09T09:00', 'floating')"
+    ));
+    assert_eq!(
+        long(&floating),
+        None,
+        "a week to the minute is not past a week"
+    );
+    let zoned = event_in_default_calendar(&w, 102, "Z");
+    w.takes(&format!(
+        "INSERT INTO event (id, starts, ends, timing, zone) VALUES ('{zoned}', '2026-03-02T09:00:00.000Z', '2026-03-12T09:00:00.000Z', 'zoned', 'UTC')"
+    ));
+    assert_eq!(long(&zoned), Some(1));
+    // An event has a calendar for a home, and no other kind of holder will do.
+    w.refuses(&format!(
+        "INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES ('{}', 'event', 'Homeless', '{AT}', '{AT}')",
+        id(103)
+    ));
+    let project = w.entity_in(104, "project");
+    w.refuses(&format!(
+        "INSERT INTO entity (id, kind, title, parent_id, parent_kind, created_at, updated_at)
+         VALUES ('{}', 'event', 'In a project', '{project}', 'project', '{AT}', '{AT}')",
+        id(105)
+    ));
+}
+
+#[test]
+fn a_guest_is_one_address_of_an_event_with_one_organizer_and_outlives_its_person() {
+    let w = World::new("rules_guest");
+    let ev = event_in_default_calendar(&w, 110, "E");
+    w.takes(&format!(
+        "INSERT INTO event (id, starts, timing) VALUES ('{ev}', '2026-03-02T09:00', 'floating')"
+    ));
+    let with = |address: &str, column: &str, value: &str| {
+        format!(
+            "INSERT INTO event_guest (event_id, address, {column}) VALUES ('{ev}', '{address}', {value})"
+        )
+    };
+    w.refuses(&with(" ", "role", "'required'"));
+    w.refuses(&with("a@example.com", "role", "'chair'"));
+    w.refuses(&with("a@example.com", "status", "'maybe'"));
+    w.refuses(&with("a@example.com", "name", "' '"));
+    w.refuses(&with("a@example.com", "organizer", "2"));
+    w.takes(&with("a@example.com", "organizer", "1"));
+    // An address is one guest, and an event has one organizer.
+    w.refuses(&with("a@example.com", "status", "'accepted'"));
+    w.refuses(&with("b@example.com", "organizer", "1"));
+    w.takes(&with("b@example.com", "status", "'declined'"));
+    // The person an address resolves to is a person; purging them leaves the guest.
+    let ada = w.entity(111, "person", "Ada");
+    w.takes(&format!("INSERT INTO person (id) VALUES ('{ada}')"));
+    w.refuses(&format!(
+        "UPDATE event_guest SET person_id = '{ev}' WHERE address = 'b@example.com'"
+    ));
+    w.takes(&format!(
+        "UPDATE event_guest SET person_id = '{ada}' WHERE address = 'b@example.com'"
+    ));
+    w.takes(&format!("DELETE FROM entity WHERE id = '{ada}'"));
+    let held: (i64, Option<String>) = w
+        .scratch
+        .vault
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT COUNT(*), max(person_id) FROM event_guest WHERE event_id = ?1 AND address = 'b@example.com'",
+                [&ev],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )?)
+        })
+        .expect("a row");
+    assert_eq!(
+        held,
+        (1, None),
+        "the guest is still there, with nobody behind the address"
+    );
+    // The guests go with their event.
+    w.takes(&format!("DELETE FROM entity WHERE id = '{ev}'"));
+    assert_eq!(
+        w.scratch
+            .vault
+            .read(
+                |c| Ok(c.query_row("SELECT COUNT(*) FROM event_guest", [], |r| r
+                    .get::<_, i64>(0))?)
+            )
+            .expect("a count"),
+        0
+    );
+}
+
+#[test]
+fn a_one_day_override_is_keyed_in_its_series_form_and_belongs_to_its_timing() {
+    let w = World::new("rules_occurrence");
+    let zoned = event_in_default_calendar(&w, 120, "Z");
+    let floating = event_in_default_calendar(&w, 121, "F");
+    let all_day = event_in_default_calendar(&w, 122, "A");
+    w.takes(&format!(
+        "INSERT INTO event (id, starts, timing, zone, rule) VALUES ('{zoned}', '2026-03-02T08:00:00.000Z', 'zoned', 'Europe/Paris', 'FREQ=WEEKLY');
+         INSERT INTO event (id, starts, timing, rule) VALUES ('{floating}', '2026-03-02T09:00', 'floating', 'FREQ=WEEKLY');
+         INSERT INTO event (id, starts, timing, rule) VALUES ('{all_day}', '2026-03-02', 'all-day', 'FREQ=WEEKLY');"
+    ));
+    let day = |series: &str, timing: &str, key: &str, _: &str| {
+        format!(
+            "INSERT INTO occurrence (series_id, series_timing, original_start) VALUES ('{series}', '{timing}', '{key}')"
+        )
+    };
+    let day2 = |series: &str, timing: &str, key: &str, columns: &str, values: &str| {
+        format!(
+            "INSERT INTO occurrence (series_id, series_timing, original_start, {columns}) VALUES ('{series}', '{timing}', '{key}', {values})"
+        )
+    };
+    // The key is in the form the series reads in.
+    w.refuses(&day(&zoned, "zoned", "2026-03-09T09:00", ""));
+    w.refuses(&day(&floating, "floating", "2026-03-09T09:00:00.000Z", ""));
+    w.refuses(&day(&all_day, "all-day", "2026-03-09T09:00", ""));
+    // It names the series' own timing: a key into the series says it.
+    w.refuses(&day(&zoned, "floating", "2026-03-09T09:00", ""));
+    w.takes(&day(&zoned, "zoned", "2026-03-09T08:00:00.000Z", ""));
+    w.takes(&day(&floating, "floating", "2026-03-09T09:00", ""));
+    w.takes(&day(&all_day, "all-day", "2026-03-09", ""));
+    // One row a day.
+    w.refuses(&day(&all_day, "all-day", "2026-03-09", ""));
+    // A moved day reads in the series' timing unless it names its own, and only a zoned one has a zone.
+    w.refuses(&day2(
+        &all_day,
+        "all-day",
+        "2026-03-16",
+        "starts",
+        "'2026-03-16T10:00'",
+    ));
+    w.takes(&day2(
+        &all_day,
+        "all-day",
+        "2026-03-16",
+        "starts, timing",
+        "'2026-03-16T10:00', 'floating'",
+    ));
+    w.refuses(&day2(
+        &all_day,
+        "all-day",
+        "2026-03-23",
+        "starts, timing, zone",
+        "'2026-03-23T10:00', 'floating', 'UTC'",
+    ));
+    w.refuses(&day2(
+        &all_day,
+        "all-day",
+        "2026-03-23",
+        "starts, timing",
+        "'2026-03-23T10:00:00.000Z', 'zoned'",
+    ));
+    w.takes(&day2(
+        &all_day,
+        "all-day",
+        "2026-03-23",
+        "starts, timing, zone",
+        "'2026-03-23T10:00:00.000Z', 'zoned', 'UTC'",
+    ));
+    w.refuses(&day2(
+        &floating,
+        "floating",
+        "2026-03-16T09:00",
+        "location",
+        "' '",
+    ));
+    // A series cannot change timing under its days; deleting it takes them.
+    w.refuses(&format!("UPDATE event SET timing = 'floating', zone = NULL, starts = '2026-03-02T09:00' WHERE id = '{zoned}'"));
+    w.takes(&format!("DELETE FROM entity WHERE id = '{zoned}'"));
+    assert_eq!(
+        w.scratch
+            .vault
+            .read(|c| Ok(c.query_row(
+                "SELECT COUNT(*) FROM occurrence WHERE series_id = ?1",
+                [&zoned],
+                |r| r.get::<_, i64>(0)
+            )?))
+            .expect("a count"),
+        0
+    );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Tasks lane (#1214): a task's due, its day, its series and its alerts
+// ---------------------------------------------------------------------------------------------
+
+fn task_row(w: &World, n: u64, title: &str) -> String {
+    let t = id(n);
+    w.takes(&format!(
+        "INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES ('{t}', 'task', '{title}', '{AT}', '{AT}')"
+    ));
+    t
+}
+
+#[test]
+fn a_task_has_a_title_a_due_in_the_form_its_timing_says_and_a_day_of_its_own() {
+    let w = World::new("rules_task");
+    // A task is named: a blank title is refused.
+    w.refuses(&format!(
+        "INSERT INTO entity (id, kind, title, created_at, updated_at) VALUES ('{}', 'task', ' ', '{AT}', '{AT}')",
+        id(130)
+    ));
+    let t = task_row(&w, 131, "Call");
+    let ins = |columns: &str, values: &str| {
+        format!("INSERT INTO task (id, {columns}) VALUES ('{t}', {values})")
+    };
+    // The due and its timing are set together, the zone exactly when zoned.
+    w.refuses(&ins("due", "'2026-03-02'"));
+    w.refuses(&ins("due_timing", "'all-day'"));
+    w.refuses(&ins("due, due_timing", "'2026-03-02T09:00', 'all-day'"));
+    w.refuses(&ins("due, due_timing", "'2026-03-02', 'floating'"));
+    w.refuses(&ins("due, due_timing", "'2026-03-02T09:00:30', 'floating'"));
+    w.refuses(&ins("due, due_timing", "'2026-03-02T09:00:00Z', 'zoned'"));
+    w.refuses(&ins(
+        "due, due_timing, zone",
+        "'2026-03-02T09:00:00.000Z', 'zoned', NULL",
+    ));
+    w.refuses(&ins(
+        "due, due_timing, zone",
+        "'2026-03-02T09:00', 'floating', 'UTC'",
+    ));
+    w.refuses(&ins("due, due_timing", "'2026-03-02', 'noon'"));
+    // The planned day is a date, and not the due.
+    w.refuses(&ins("scheduled_on", "'2026-03-02T09:00'"));
+    w.refuses(&ins("scheduled_on", "'2026-02-30'"));
+    // The columns say what they hold: a priority of 0 to 9, an effort of minutes, a link with an
+    // address, a closed status and anchor.
+    for (column, value) in [
+        ("priority", "10"),
+        ("effort_min", "0"),
+        ("url", "' '"),
+        ("status", "'later'"),
+        ("anchor", "'whenever'"),
+    ] {
+        w.refuses(&ins(column, value));
+    }
+    w.takes(&ins(
+        "due, due_timing, zone, scheduled_on, priority, effort_min, url",
+        "'2026-03-02T08:00:00.000Z', 'zoned', 'Europe/Paris', '2026-03-01', 9, 30, 'https://example.com'",
+    ));
+    // Done is exactly when it says when, in the clock's one form; a snooze belongs to an open task.
+    w.refuses(&format!("UPDATE task SET status = 'done' WHERE id = '{t}'"));
+    w.refuses(&format!(
+        "UPDATE task SET done_at = '{AT}' WHERE id = '{t}'"
+    ));
+    w.refuses(&format!(
+        "UPDATE task SET status = 'done', done_at = '2026-03-01' WHERE id = '{t}'"
+    ));
+    w.takes(&format!(
+        "UPDATE task SET snoozed_until = '{AT}' WHERE id = '{t}'"
+    ));
+    w.refuses(&format!(
+        "UPDATE task SET snoozed_until = '2026-03-01T09:00' WHERE id = '{t}'"
+    ));
+    w.refuses(&format!(
+        "UPDATE task SET status = 'done', done_at = '{AT}' WHERE id = '{t}'"
+    ));
+    w.takes(&format!(
+        "UPDATE task SET snoozed_until = NULL WHERE id = '{t}'"
+    ));
+    w.takes(&format!(
+        "UPDATE task SET status = 'done', done_at = '{AT}' WHERE id = '{t}'"
+    ));
+    w.refuses(&format!(
+        "UPDATE task SET snoozed_until = '{AT}' WHERE id = '{t}'"
+    ));
+}
+
+#[test]
+fn a_repeat_needs_a_due_and_its_series_is_a_minted_id_that_points_at_no_row() {
+    let w = World::new("rules_task_series");
+    let t = task_row(&w, 140, "Water");
+    let ins = |columns: &str, values: &str| {
+        format!("INSERT INTO task (id, {columns}) VALUES ('{t}', {values})")
+    };
+    w.refuses(&ins("rule", "'FREQ=DAILY'"));
+    w.refuses(&ins("series_id", "'not-an-id'"));
+    w.refuses(&ins("series_id", "'01900000-0000-4000-8000-000000000001'"));
+    // A series id names no entity: purging whatever it was minted beside cuts nothing.
+    w.takes(&ins(
+        "due, due_timing, rule, series_id",
+        "'2026-03-02', 'all-day', 'FREQ=DAILY', '01900000-0000-7000-8000-0000000000aa'",
+    ));
+    let next = task_row(&w, 141, "Water");
+    w.takes(&format!(
+        "INSERT INTO task (id, due, due_timing, rule, series_id)
+         VALUES ('{next}', '2026-03-03', 'all-day', 'FREQ=DAILY', '01900000-0000-7000-8000-0000000000aa')"
+    ));
+    w.takes(&format!("DELETE FROM entity WHERE id = '{t}'"));
+    let held: i64 = w
+        .scratch
+        .vault
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT COUNT(*) FROM task WHERE series_id = '01900000-0000-7000-8000-0000000000aa'",
+                [],
+                |r| r.get(0),
+            )?)
+        })
+        .expect("a count");
+    assert_eq!(held, 1, "the series outlives its first task");
+    // A task that repeats keeps a due: it cannot lose it and keep the rule.
+    w.refuses(&format!(
+        "UPDATE task SET due = NULL, due_timing = NULL WHERE id = '{next}'"
+    ));
+}
+
+#[test]
+fn a_reminder_counts_back_from_a_due_so_a_task_without_one_holds_none() {
+    let w = World::new("rules_task_reminder");
+    let t = task_row(&w, 150, "Call");
+    w.takes(&format!("INSERT INTO task (id) VALUES ('{t}')"));
+    let remind = |rid: &str| {
+        format!(
+            "INSERT INTO reminder (id, entity_id, entity_kind, offset_min) VALUES ('{rid}', '{t}', 'task', 10)"
+        )
+    };
+    w.refuses_with(&remind("r1"), "counts back from a due date");
+    w.takes(&format!(
+        "UPDATE task SET due = '2026-03-02', due_timing = 'all-day' WHERE id = '{t}'"
+    ));
+    w.takes(&remind("r1"));
+    // Clearing the due takes the task's reminders with it.
+    w.takes(&format!(
+        "UPDATE task SET due = NULL, due_timing = NULL WHERE id = '{t}'"
+    ));
+    let held: i64 = w
+        .scratch
+        .vault
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT COUNT(*) FROM reminder WHERE entity_id = ?1",
+                [&t],
+                |r| r.get(0),
+            )?)
+        })
+        .expect("a count");
+    assert_eq!(held, 0);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Docs, Photos and Places (#1214): C2, A11, H1, H3, D5
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn a_document_a_folder_an_album_and_a_place_need_a_name_and_a_photograph_does_not() {
+    let w = World::new("rules_docs_names");
+    for (n, kind) in [
+        (402, "document"),
+        (404, "folder"),
+        (406, "album"),
+        (408, "place"),
+    ] {
+        for blank in ["", "  "] {
+            w.refuses_with(
+                &format!(
+                    "INSERT INTO entity (id, kind, title, created_at, updated_at)
+                     VALUES ('{}', '{kind}', '{blank}', '{AT}', '{AT}')",
+                    id(401)
+                ),
+                "FOREIGN KEY",
+            );
+        }
+        w.entity(n, kind, "Named");
+    }
+    w.entity(403, "photo", "");
+}
+
+#[test]
+fn a_document_sits_in_a_folder_and_a_folder_in_a_folder_and_nothing_else_is_a_home_for_one() {
+    let w = World::new("rules_docs_home");
+    let (outer, inner) = (
+        w.entity(410, "folder", "Outer"),
+        w.entity(411, "folder", "Inner"),
+    );
+    let book = w.entity(412, "notebook", "Book");
+    let insert = |n: u64, kind: &str, parent: &str, parent_kind: &str| {
+        format!(
+            "INSERT INTO entity (id, kind, title, parent_id, parent_kind, created_at, updated_at)
+             VALUES ('{}', '{kind}', 'x', '{parent}', '{parent_kind}', '{AT}', '{AT}')",
+            id(n)
+        )
+    };
+    w.takes(&insert(413, "document", &outer, "folder"));
+    w.refuses_with(&insert(414, "document", &book, "notebook"), "FOREIGN KEY");
+    w.takes(&format!(
+        "UPDATE entity SET parent_id = '{outer}', parent_kind = 'folder' WHERE id = '{inner}'"
+    ));
+    // A folder never ends up inside itself, however deep.
+    w.refuses_with(
+        &format!(
+            "UPDATE entity SET parent_id = '{inner}', parent_kind = 'folder' WHERE id = '{outer}'"
+        ),
+        "no loops",
+    );
+    // Two siblings may repeat a name.
+    w.takes(&insert(415, "folder", &outer, "folder").replace("'x'", "'Inner'"));
+    // A document is one column's home: it has no second one.
+    w.takes(&format!(
+        "UPDATE entity SET parent_id = NULL, parent_kind = NULL WHERE id = '{}'",
+        id(413)
+    ));
+}
+
+#[test]
+fn a_photograph_is_a_picture_with_a_kept_clip_whole_coordinates_and_a_lineage_without_loops() {
+    let w = World::new("rules_photo");
+    let hash = "d".repeat(64);
+    let clip = "e".repeat(64);
+    w.takes(&format!(
+        "INSERT INTO blob (hash, size) VALUES ('{hash}', 3), ('{clip}', 4)"
+    ));
+    let one = w.entity(420, "photo", "");
+    let row = |id: &str, extra_cols: &str, extra_vals: &str, media: &str| {
+        format!(
+            "INSERT INTO photo (id, blob, media_type, form{extra_cols})
+             VALUES ('{id}', '{hash}', '{media}', 'photo'{extra_vals})"
+        )
+    };
+    // Sound is kept in Docs.
+    w.refuses_with(&row(&one, "", "", "audio/mpeg"), "CHECK");
+    w.refuses_with(&row(&one, "", "", "AUDIO/ogg"), "CHECK");
+    // `form` is a lookup row.
+    w.refuses_with(
+        &format!("INSERT INTO photo (id, blob, media_type, form) VALUES ('{one}', '{hash}', 'image/png', 'hologram')"),
+        "FOREIGN KEY",
+    );
+    // A latitude and a longitude go together and stay on the globe.
+    w.refuses_with(&row(&one, ", lat", ", 1.0", "image/png"), "CHECK");
+    w.refuses_with(
+        &row(&one, ", lat, lon", ", 91.0, 0.0", "image/png"),
+        "CHECK",
+    );
+    w.refuses_with(
+        &row(&one, ", lat, lon", ", 0.0, 181.0", "image/png"),
+        "CHECK",
+    );
+    // A clip's length needs the clip.
+    w.refuses_with(
+        &row(&one, ", motion_duration_s", ", 1.5", "image/png"),
+        "CHECK",
+    );
+    w.takes(&row(
+        &one,
+        ", lat, lon, motion_blob, motion_duration_s",
+        &format!(", 48.0, 2.0, '{clip}', 1.5"),
+        "image/png",
+    ));
+    // The same bytes may be a second photograph: the blob is not unique.
+    let two = w.entity(421, "photo", "");
+    w.takes(&row(&two, "", "", "image/png"));
+    // A photograph is never an edit of itself or of its own edit.
+    w.refuses_with(
+        &format!("UPDATE photo SET edited_from = '{one}' WHERE id = '{one}'"),
+        "no loops",
+    );
+    w.takes(&format!(
+        "UPDATE photo SET edited_from = '{one}' WHERE id = '{two}'"
+    ));
+    w.refuses_with(
+        &format!("UPDATE photo SET edited_from = '{two}' WHERE id = '{one}'"),
+        "no loops",
+    );
+    // A place is a named place the member has; a photograph's `place_id` is a place's id.
+    let note = w.entity(422, "note", "N");
+    w.refuses_with(
+        &format!("UPDATE photo SET place_id = '{note}' WHERE id = '{one}'"),
+        "FOREIGN KEY",
+    );
+    let place = w.entity(423, "place", "Cabin");
+    w.takes(&format!(
+        "INSERT INTO place (id, lat, lon) VALUES ('{place}', 61.0, 7.0)"
+    ));
+    w.refuses_with(
+        &format!("UPDATE place SET lat = NULL WHERE id = '{place}'"),
+        "CHECK",
+    );
+    w.takes(&format!(
+        "UPDATE photo SET place_id = '{place}' WHERE id = '{one}'"
+    ));
+}
+
+#[test]
+fn an_album_holds_photographs_in_an_order_and_a_photograph_may_be_in_two() {
+    let w = World::new("rules_album");
+    let (a, b) = (w.entity(430, "album", "A"), w.entity(431, "album", "B"));
+    let photo = w.entity(432, "photo", "");
+    let note = w.entity(433, "note", "N");
+    let edge = |from: &str, to: &str, position: &str| {
+        format!(
+            "INSERT INTO edge (from_id, rel, to_id, position, created_at)
+             VALUES ('{from}', 'contains', '{to}', {position}, '{AT}')"
+        )
+    };
+    w.takes(&edge(&a, &photo, "1.0"));
+    w.takes(&edge(&b, &photo, "1.0"));
+    w.refuses_with(&edge(&a, &note, "2.0"), "no edge of this relation");
+    w.refuses_with(&edge(&photo, &a, "2.0"), "no edge of this relation");
+}
+
+// ---------------------------------------------------------------------------------------------
 // Chat (L5, A1, A3): a chat is an ordinary entity; a message is a closed state machine
 // ---------------------------------------------------------------------------------------------
 
@@ -1367,34 +2186,94 @@ fn a_chat_needs_a_title_and_a_message_is_a_state_machine_with_lookup_reasons() {
     w.refuses(&message(1, "assistant", "bogus", "", ""));
     // A refusal names a reason of the lookup and no other outcome does.
     w.refuses(&message(1, "assistant", "refused", "", ""));
-    w.refuses(&message(1, "assistant", "answered", ", refusal", ", 'no_tool_fits'"));
-    w.refuses(&message(1, "assistant", "refused", ", refusal", ", 'no_such_reason'"));
-    w.takes(&message(1, "assistant", "refused", ", refusal", ", 'no_tool_fits'"));
+    w.refuses(&message(
+        1,
+        "assistant",
+        "answered",
+        ", refusal",
+        ", 'no_tool_fits'",
+    ));
+    w.refuses(&message(
+        1,
+        "assistant",
+        "refused",
+        ", refusal",
+        ", 'no_such_reason'",
+    ));
+    w.takes(&message(
+        1,
+        "assistant",
+        "refused",
+        ", refusal",
+        ", 'no_tool_fits'",
+    ));
     // A notice is a row of its lookup and rides an assistant's message only.
-    w.refuses(&message(2, "assistant", "answered", ", notice", ", 'no_such_notice'"));
+    w.refuses(&message(
+        2,
+        "assistant",
+        "answered",
+        ", notice",
+        ", 'no_such_notice'",
+    ));
     w.refuses(&message(2, "user", "sent", ", notice", ", 'doc_truncated'"));
-    w.takes(&message(2, "assistant", "answered", ", notice", ", 'doc_truncated'"));
+    w.takes(&message(
+        2,
+        "assistant",
+        "answered",
+        ", notice",
+        ", 'doc_truncated'",
+    ));
     // A lookup row a message uses is not taken away.
     w.refuses("DELETE FROM message_refusal WHERE code = 'no_tool_fits'");
     // The record is the vault's object and carries "v":1; the cards are an array and carry none.
-    for bad in ["[1]", "'x'", "'{\"a\":1}'", "'{\"v\":2}'", "'{\"v\":\"1\"}'", "'{bad'"] {
+    for bad in [
+        "[1]",
+        "'x'",
+        "'{\"a\":1}'",
+        "'{\"v\":2}'",
+        "'{\"v\":\"1\"}'",
+        "'{bad'",
+    ] {
         let bad = bad.trim_matches('\'');
-        w.refuses(&message(3, "assistant", "answered", ", record", &format!(", '{bad}'")));
+        w.refuses(&message(
+            3,
+            "assistant",
+            "answered",
+            ", record",
+            &format!(", '{bad}'"),
+        ));
     }
     w.refuses(&message(3, "user", "sent", ", record", ", '{\"v\":1}'"));
-    w.takes(&message(3, "assistant", "answered", ", record", ", '{\"v\":1,\"read\":[]}'"));
+    w.takes(&message(
+        3,
+        "assistant",
+        "answered",
+        ", record",
+        ", '{\"v\":1,\"read\":[]}'",
+    ));
     w.refuses(&message(4, "assistant", "answered", ", cards", ", '{}'"));
     w.refuses(&message(4, "assistant", "answered", ", cards", ", 'nope'"));
-    w.takes(&message(4, "assistant", "answered", ", cards", ", '[{\"app\":\"notes\"}]'"));
+    w.takes(&message(
+        4,
+        "assistant",
+        "answered",
+        ", cards",
+        ", '[{\"app\":\"notes\"}]'",
+    ));
     // A message is never born settled, and a thread holds one proposal waiting.
     for settled in ["applied", "dismissed", "stale", "failed"] {
-        w.refuses_with(&message(5, "assistant", settled, "", ""), "proposed before it is settled");
+        w.refuses_with(
+            &message(5, "assistant", settled, "", ""),
+            "proposed before it is settled",
+        );
     }
     w.takes(&message(5, "assistant", "proposed", "", ""));
     w.refuses(&message(6, "assistant", "proposed", "", ""));
     // A proposal settles once; a told answer never changes.
     let set = |ordinal: i64, to: &str| {
-        format!("UPDATE message SET outcome = '{to}' WHERE thread_id = '{chat}' AND ordinal = {ordinal}")
+        format!(
+            "UPDATE message SET outcome = '{to}' WHERE thread_id = '{chat}' AND ordinal = {ordinal}"
+        )
     };
     w.refuses_with(&set(2, "dismissed"), "only a proposal settles");
     w.refuses_with(&set(5, "answered"), "settles as applied");

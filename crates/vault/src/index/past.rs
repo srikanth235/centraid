@@ -49,9 +49,17 @@ use crate::model::Kind;
 /// The typed text of an earlier state, by table: a kind's own columns and its children's. Each
 /// is a column of the live census (`Reach::Own`), which a test holds.
 pub const EARLIER_COLUMNS: &[(&str, &[&str])] = &[
-    ("person", &["nickname", "role", "met"]),
+    (
+        "person",
+        &[
+            "given", "family", "phonetic", "nickname", "role", "org", "met",
+        ],
+    ),
+    ("person_date", &["label"]),
     ("contact_point", &["value", "label"]),
     ("place", &["address", "locality"]),
+    ("txn", &["memo"]),
+    ("txn_split", &["memo"]),
     ("event", &["description", "url"]),
     ("task", &["description", "url"]),
     // A Locker item's PLAIN fields and a passkey's site (K3): never `value_sealed`, `private_key`
