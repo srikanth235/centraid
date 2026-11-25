@@ -403,9 +403,10 @@ pub enum PurgeRule {
     /// a holder that has no trash lets what may sit at the top move there and purges the rest.
     /// A purge is never refused for what its target holds.
     Home,
-    /// The referrer's own row goes and nothing else: a split filed under a purged category (the
-    /// line is left with no part for it; a line left with other parts that no longer sum to it is
-    /// the money lane's to define).
+    /// The referrer's own row goes and nothing else: a split filed under a purged category. A line
+    /// left with other parts must still sum to its amount, so Money first files the parts again
+    /// under the category's group, or, with no group, drops them all
+    /// ([`crate::commands::txn::refile_parts_of`]).
     Drop,
 }
 
@@ -599,6 +600,10 @@ pub(crate) fn purge_one(
                 }
             }
             PurgeRule::Drop => {
+                // A line left with other parts must still sum: Money says what becomes of them.
+                if *table == "txn_split" {
+                    crate::commands::txn::refile_parts_of(ctx, id)?;
+                }
                 connection.execute(&format!("DELETE FROM {table} WHERE {first} = ?1"), [id])?;
             }
             // WHAT AN ORIGIN FILLS IS THE TARGET OF ITS FOLLOW, for whatever kind it is (an

@@ -867,6 +867,139 @@ fn a_split_goes_to_a_category_and_a_reading_is_one_of_its_metric() {
 }
 
 #[test]
+fn an_account_a_line_a_transfer_a_budget_and_a_rule_hold_the_rules_money_states() {
+    let w = World::new("rules_money");
+    let (a1, a2) = (w.entity(40, "account", "A"), w.entity(41, "account", "B"));
+    let acct = |a: &str, extra: &str| {
+        format!(
+            "INSERT INTO account (id, type, currency{extra}) VALUES ('{a}', 'checking', 'USD'{})",
+            if extra.is_empty() {
+                ""
+            } else {
+                ", 5, '2026-01-01'"
+            }
+        )
+    };
+    // A type is a row of the lookup; an opening balance that is not nothing has its day; a currency is three capitals.
+    w.refuses_with(
+        &format!("INSERT INTO account (id, type, currency) VALUES ('{a1}', 'mortgage', 'USD')"),
+        "FOREIGN KEY",
+    );
+    w.refuses(&format!("INSERT INTO account (id, type, currency, opening_minor) VALUES ('{a1}', 'checking', 'USD', 5)"));
+    w.refuses(&format!(
+        "INSERT INTO account (id, type, currency) VALUES ('{a1}', 'checking', 'usd')"
+    ));
+    for kind in ["loan", "investment", "asset"] {
+        w.takes(&format!(
+            "INSERT INTO account (id, type, currency) VALUES ('{}', '{kind}', 'USD')",
+            w.entity(100 + kind.len() as u64, "account", kind)
+        ));
+    }
+    w.takes(&acct(&a1, ", opening_minor, opening_on"));
+    w.takes(&acct(&a2, ""));
+    // A line: a day, the closed sets of status and origin, both halves of what was charged or neither.
+    let line = |n: u64, a: &str, cols: &str, vals: &str| {
+        let t = w.entity(n, "txn", "T");
+        format!(
+            "INSERT INTO txn (id, account_id, posted_on, amount_minor{cols}) VALUES ('{t}', '{a}', '2026-03-01', -300{vals})"
+        )
+    };
+    w.refuses(&line(42, &a1, ", status", ", 'void'"));
+    w.refuses(&line(43, &a1, ", entered", ", 'robot'"));
+    w.refuses(&line(44, &a1, ", original_amount_minor", ", 5"));
+    w.refuses(&line(
+        45,
+        &a1,
+        ", original_amount_minor, original_currency",
+        ", 5, 'eur'",
+    ));
+    w.takes(&line(
+        46,
+        &a1,
+        ", original_amount_minor, original_currency, entered",
+        ", 5, 'EUR', 'hand'",
+    ));
+    let (h1, h2, h3) = (id(46), w.entity(47, "txn", "T2"), w.entity(48, "txn", "T3"));
+    w.takes(&format!("INSERT INTO txn (id, account_id, posted_on, amount_minor, entered) VALUES ('{h2}', '{a2}', '2026-03-01', 300, 'hand')"));
+    w.takes(&format!("INSERT INTO txn (id, account_id, posted_on, amount_minor, entered) VALUES ('{h3}', '{a2}', '2026-03-01', -9, 'hand')"));
+    // A hand line is edited and may become a statement line; nothing else ever changes `entered`, and
+    // a statement line's day, amount, account and what was charged never change.
+    w.takes(&format!("UPDATE txn SET amount_minor = -250, posted_on = '2026-03-02' WHERE id = '{h2}'; UPDATE txn SET amount_minor = 300 WHERE id = '{h2}'"));
+    w.refuses_with(&format!("UPDATE txn SET entered = 'statement' WHERE id = '{h3}'; UPDATE txn SET entered = 'hand' WHERE id = '{h3}'"), "origin never changes");
+    let stated = w.entity(49, "txn", "T4");
+    w.takes(&format!("INSERT INTO txn (id, account_id, posted_on, amount_minor) VALUES ('{stated}', '{a2}', '2026-03-01', -4)"));
+    w.refuses_with(
+        &format!("UPDATE txn SET amount_minor = 1 WHERE id = '{stated}'"),
+        "never edited",
+    );
+    // A transfer: two accounts, two directions, the lower id first, a line in one pair, and a paired
+    // line keeps its account and direction; the pair goes with either line.
+    let (lo, hi) = if h1 < h2 {
+        (h1.clone(), h2.clone())
+    } else {
+        (h2.clone(), h1.clone())
+    };
+    w.refuses(&format!(
+        "INSERT INTO transfer (a, b) VALUES ('{hi}', '{lo}')"
+    ));
+    w.refuses_with(
+        &format!("INSERT INTO transfer (a, b) VALUES ('{h2}', '{h3}')"),
+        "out of one account",
+    );
+    w.takes(&format!(
+        "INSERT INTO transfer (a, b) VALUES ('{lo}', '{hi}')"
+    ));
+    w.refuses_with(
+        &format!("UPDATE txn SET amount_minor = -5 WHERE id = '{h2}'"),
+        "keeps its account",
+    );
+    w.refuses_with(
+        &format!("UPDATE txn SET account_id = '{a1}' WHERE id = '{h2}'"),
+        "keeps its account",
+    );
+    w.takes(&format!(
+        "UPDATE txn SET amount_minor = 400 WHERE id = '{h2}'"
+    ));
+    // A budget has a real month and an amount that is not negative; no currency column.
+    w.refuses("INSERT INTO budget (category_id, month, amount_minor) VALUES ('category:food', '2026-13', 5)");
+    w.refuses("INSERT INTO budget (category_id, month, amount_minor) VALUES ('category:food', '2026-03', -5)");
+    w.takes("INSERT INTO budget (category_id, month, amount_minor) VALUES ('category:food', '2026-03', 5)");
+    // A rule's pattern is a JSON object with its version, a way to match, words, and a sane range.
+    let rule = |n: u64, pattern: &str, name: &str| {
+        format!(
+            "INSERT INTO rule (id, pattern, display_name, category_id, position, created_at) VALUES ('{}', '{pattern}', {name}, 'category:food', 1, '{AT}')",
+            id(n)
+        )
+    };
+    w.refuses(&rule(60, r#"{"match":"is","text":"x"}"#, "NULL"));
+    w.refuses(&rule(61, r#"{"v":1,"match":"fuzzy","text":"x"}"#, "NULL"));
+    w.refuses(&rule(62, r#"{"v":1,"match":"is","text":"  "}"#, "NULL"));
+    w.refuses(&rule(
+        63,
+        r#"{"v":1,"match":"is","text":"x","min":-1}"#,
+        "NULL",
+    ));
+    w.refuses(&rule(
+        64,
+        r#"{"v":1,"match":"is","text":"x","min":9,"max":3}"#,
+        "NULL",
+    ));
+    w.refuses(&rule(65, r#"{"v":1,"match":"is","text":"x"}"#, "' '"));
+    w.takes(&rule(
+        66,
+        r#"{"v":1,"match":"contains","text":"x","min":3,"max":9}"#,
+        "'Payee'",
+    ));
+    // A checkpoint is a real day.
+    w.refuses(&format!(
+        "INSERT INTO checkpoint (account_id, day, balance_minor) VALUES ('{a1}', '2026-02-30', 1)"
+    ));
+    w.takes(&format!(
+        "INSERT INTO checkpoint (account_id, day, balance_minor) VALUES ('{a1}', '2026-02-28', 1)"
+    ));
+}
+
+#[test]
 fn a_locker_field_holds_the_columns_its_kind_says() {
     let w = World::new("rules_locker");
     let item = w.entity(28, "locker_item", "Bank");

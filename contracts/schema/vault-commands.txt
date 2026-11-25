@@ -1,5 +1,14 @@
+account.add
+account.edit
+account.remember_layout
+account.set_opening
 blob.collect
 blob.stage
+budget.set
+budget.set_carry
+category.add
+category.merge
+checkpoint.record
 container.create
 container.move
 container.style
@@ -27,6 +36,7 @@ follow.advance_cursor
 follow.calendar
 follow.contacts
 follow.reminders
+follow.statement
 follow.stop
 follow.take_stated
 history.keep_version
@@ -62,6 +72,10 @@ person.save_contact_point
 person.set_avatar
 reminder.add
 reminder.remove
+rule.add
+rule.apply
+rule.delete
+rule.edit
 tag.add
 tag.color
 tag.remove
@@ -74,4 +88,12 @@ task.organize
 task.reopen
 touch.edit
 touch.log
+txn.add
+txn.categorize
+txn.confirm_match
+txn.edit
+txn.export_csv
+txn.link_transfer
+txn.split
+txn.unlink_transfer
 vault.rename
