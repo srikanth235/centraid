@@ -37,14 +37,18 @@
 -- A1: every kind of entity, and what the kind lets a row do.
 --   linkable      the kind may be an end of a hand-made `link` and the target of a `[[title]]` (F1: a reading is neither).
 --   may_be_top    a row of the kind may sit at the top level; 0 means it must have a home (A19: an event needs a calendar, a section a project).
+--   may_be_unnamed  a row of the kind may have an empty (or blank) title; 0 means it needs one (K11: a note). A kind starts at 1 and
+--                 its app lane sets 0 when its command says the kind needs a title.
 --   may_be_named  a row of the kind may carry a non-empty title; 0 means the title must be empty (F1: a reading's is empty, the screen formats the figure).
 CREATE TABLE entity_kind (
   code         TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z_]*'),
   linkable     INTEGER NOT NULL CHECK (linkable IN (0,1)),
   may_be_top   INTEGER NOT NULL CHECK (may_be_top IN (0,1)),
   may_be_named INTEGER NOT NULL CHECK (may_be_named IN (0,1)),
+  may_be_unnamed INTEGER NOT NULL CHECK (may_be_unnamed IN (0,1)),
   UNIQUE (code, may_be_top),
-  UNIQUE (code, may_be_named)
+  UNIQUE (code, may_be_named),
+  UNIQUE (code, may_be_unnamed)
 ) STRICT, WITHOUT ROWID;
 
 -- A19: which kind may sit in which home, as `edge_shape` says which kinds an edge may join. The
@@ -233,6 +237,7 @@ CREATE TABLE entity (
   -- against the kind's `may_be_top` and `may_be_named`.
   topless INTEGER GENERATED ALWAYS AS (CASE WHEN parent_id IS NULL THEN 1 END) VIRTUAL,
   named   INTEGER GENERATED ALWAYS AS (CASE WHEN title <> '' THEN 1 END) VIRTUAL,
+  unnamed INTEGER GENERATED ALWAYS AS (CASE WHEN trim(title) = '' THEN 1 END) VIRTUAL,
   CHECK (parent_id IS NULL OR parent_id <> id),
   CHECK ((parent_id IS NULL) = (parent_kind IS NULL)),
   CHECK ((deleted_at IS NULL) = (purge_at IS NULL)),
@@ -243,7 +248,8 @@ CREATE TABLE entity (
   FOREIGN KEY (parent_id, parent_kind) REFERENCES entity(id, kind) ON DELETE NO ACTION,
   FOREIGN KEY (kind, parent_kind) REFERENCES home_shape(kind, home_kind) ON DELETE NO ACTION,
   FOREIGN KEY (kind, topless) REFERENCES entity_kind(code, may_be_top) ON DELETE NO ACTION,
-  FOREIGN KEY (kind, named) REFERENCES entity_kind(code, may_be_named) ON DELETE NO ACTION
+  FOREIGN KEY (kind, named) REFERENCES entity_kind(code, may_be_named) ON DELETE NO ACTION,
+  FOREIGN KEY (kind, unnamed) REFERENCES entity_kind(code, may_be_unnamed) ON DELETE NO ACTION
 ) STRICT;
 -- Reader: a kind's list by title (the People roster, Docs by name); also the child side of `kind`.
 CREATE INDEX entity_by_title   ON entity(kind, deleted_at, title, id);
@@ -981,24 +987,15 @@ CREATE INDEX reading_by_metric ON reading(metric, person_id, at, id);
 CREATE TABLE note (
   id         TEXT PRIMARY KEY,
   kind       TEXT GENERATED ALWAYS AS ('note') VIRTUAL,
-  -- K11: a note's words are read whole to index, preview and snapshot, so they weigh at most 64 KiB
-  -- (the command's `BODY_BUDGET_BYTES` says it in a sentence; this is the same rule).
-  body       TEXT NOT NULL DEFAULT '' CHECK (length(CAST(body AS BLOB)) <= 65536),
+  -- K11: the size budget of the words (64 KiB today) is the command's on purpose: a budget the
+  -- product may tune is not an integrity rule, and a CHECK would freeze it behind a rebuild of `note`.
+  body       TEXT NOT NULL DEFAULT '',
   format     TEXT NOT NULL DEFAULT 'markdown' CHECK (format IN ('markdown','plain')),
   journal_on TEXT CHECK (date(journal_on) IS journal_on),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
 -- Reader: Journal, a day at a time and newest first.
 CREATE INDEX note_by_journal ON note(journal_on, id) WHERE journal_on IS NOT NULL;
--- K11: a note needs a title (the lookup's `may_be_named` only says a kind MAY carry one; a note's
--- list rows, a `[[link]]` and the search all read it). The title is the entity's, so it is checked
--- where the title is made and where it changes.
-CREATE TRIGGER note_has_a_title BEFORE INSERT ON note
-  WHEN (SELECT title FROM entity WHERE id = new.id) = ''
-  BEGIN SELECT RAISE(ABORT, 'a note needs a title'); END;
-CREATE TRIGGER note_keeps_its_title BEFORE UPDATE OF title ON entity
-  WHEN new.kind = 'note' AND new.title = ''
-  BEGIN SELECT RAISE(ABORT, 'a note needs a title'); END;
 
 -- H2: an image or file placed inside a note's body is a CHILD of the note, not an item: in no list,
 -- search result or trash, cascading with the note, its earlier versions kept through `revision_blob`
@@ -1370,13 +1367,13 @@ CREATE TABLE locker_key (
 -- Seeds: the rows founding writes, under fixed ids `<kind>:<key>`. Lookups first.
 -- ---------------------------------------------------------------------------------------------
 
-INSERT INTO entity_kind (code, linkable, may_be_top, may_be_named) VALUES
-  ('person',1,1,1), ('place',1,1,1), ('event',1,0,1), ('task',1,1,1), ('workout',1,1,1),
-  ('touch',1,1,1), ('reading',0,1,0), ('note',1,1,1), ('document',1,1,1), ('photo',1,1,1),
-  ('account',1,1,1), ('txn',1,1,1), ('thread',0,1,1), ('locker_item',1,1,1),
-  ('tag',0,1,1), ('category',0,1,1), ('workout_kind',0,1,1), ('touch_kind',0,1,1), ('relation',0,1,1),
-  ('notebook',0,1,1), ('folder',0,1,1), ('album',0,1,1), ('list',0,1,1), ('project',0,1,1),
-  ('section',0,0,1), ('area',0,1,1), ('calendar',0,1,1);
+INSERT INTO entity_kind (code, linkable, may_be_top, may_be_named, may_be_unnamed) VALUES
+  ('person',1,1,1,1), ('place',1,1,1,1), ('event',1,0,1,1), ('task',1,1,1,1), ('workout',1,1,1,1),
+  ('touch',1,1,1,1), ('reading',0,1,0,1), ('note',1,1,1,0), ('document',1,1,1,1), ('photo',1,1,1,1),
+  ('account',1,1,1,1), ('txn',1,1,1,1), ('thread',0,1,1,1), ('locker_item',1,1,1,1),
+  ('tag',0,1,1,1), ('category',0,1,1,1), ('workout_kind',0,1,1,1), ('touch_kind',0,1,1,1), ('relation',0,1,1,1),
+  ('notebook',0,1,1,1), ('folder',0,1,1,1), ('album',0,1,1,1), ('list',0,1,1,1), ('project',0,1,1,1),
+  ('section',0,0,1,1), ('area',0,1,1,1), ('calendar',0,1,1,1);
 
 -- A19, C1, C2: where each kind may sit. A concept's parent is of its own kind.
 INSERT INTO home_shape (kind, home_kind) VALUES

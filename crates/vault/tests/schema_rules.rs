@@ -989,25 +989,23 @@ fn a_note_has_a_real_day_a_known_format_and_assets_that_name_held_bytes_and_go_w
         &format!("INSERT INTO note (id, format) VALUES ('{note}', 'rtf')"),
         "CHECK",
     );
-    // The words weigh at most 64 KiB, counted in bytes (so `é` is two), and a note needs a title.
-    let words = |letters: u32, accent: &str| {
-        format!(
-            "INSERT INTO note (id, body) VALUES ('{note}', replace(hex(zeroblob({letters})), '00', '{accent}'))"
-        )
-    };
-    w.refuses_with(&words(65_537, "a"), "CHECK");
-    w.refuses_with(&words(32_769, "é"), "CHECK");
-    w.takes(&words(32_768, "é"));
-    w.takes(&format!("DELETE FROM note WHERE id = '{note}'"));
-    let untitled = w.entity(203, "note", "");
-    w.refuses_with(
-        &format!("INSERT INTO note (id) VALUES ('{untitled}')"),
-        "a note needs a title",
-    );
+    // A note needs a title (`entity_kind.may_be_unnamed = 0`), a blank one is none; a kind that may
+    // be unnamed (a photograph) takes an empty one. The words' size is the command's budget, not a rule.
+    for blank in ["", "  "] {
+        w.refuses_with(
+            &format!(
+                "INSERT INTO entity (id, kind, title, created_at, updated_at)
+                 VALUES ('{}', 'note', '{blank}', '{AT}', '{AT}')",
+                id(203)
+            ),
+            "FOREIGN KEY",
+        );
+    }
+    w.entity(204, "photo", "");
     w.takes(&format!("INSERT INTO note (id) VALUES ('{note}')"));
     w.refuses_with(
-        &format!("UPDATE entity SET title = '' WHERE id = '{note}'"),
-        "a note needs a title",
+        &format!("UPDATE entity SET title = ' ' WHERE id = '{note}'"),
+        "FOREIGN KEY",
     );
     w.takes(&format!(
         "UPDATE note SET journal_on = '2026-03-01' WHERE id = '{note}'"

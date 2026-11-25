@@ -516,6 +516,7 @@ CREATE TABLE entity (
   -- against the kind's `may_be_top` and `may_be_named`.
   topless INTEGER GENERATED ALWAYS AS (CASE WHEN parent_id IS NULL THEN 1 END) VIRTUAL,
   named   INTEGER GENERATED ALWAYS AS (CASE WHEN title <> '' THEN 1 END) VIRTUAL,
+  unnamed INTEGER GENERATED ALWAYS AS (CASE WHEN trim(title) = '' THEN 1 END) VIRTUAL,
   CHECK (parent_id IS NULL OR parent_id <> id),
   CHECK ((parent_id IS NULL) = (parent_kind IS NULL)),
   CHECK ((deleted_at IS NULL) = (purge_at IS NULL)),
@@ -526,7 +527,8 @@ CREATE TABLE entity (
   FOREIGN KEY (parent_id, parent_kind) REFERENCES entity(id, kind) ON DELETE NO ACTION,
   FOREIGN KEY (kind, parent_kind) REFERENCES home_shape(kind, home_kind) ON DELETE NO ACTION,
   FOREIGN KEY (kind, topless) REFERENCES entity_kind(code, may_be_top) ON DELETE NO ACTION,
-  FOREIGN KEY (kind, named) REFERENCES entity_kind(code, may_be_named) ON DELETE NO ACTION
+  FOREIGN KEY (kind, named) REFERENCES entity_kind(code, may_be_named) ON DELETE NO ACTION,
+  FOREIGN KEY (kind, unnamed) REFERENCES entity_kind(code, may_be_unnamed) ON DELETE NO ACTION
 ) STRICT;
 
 -- table entity_kind on entity_kind
@@ -535,8 +537,10 @@ CREATE TABLE entity_kind (
   linkable     INTEGER NOT NULL CHECK (linkable IN (0,1)),
   may_be_top   INTEGER NOT NULL CHECK (may_be_top IN (0,1)),
   may_be_named INTEGER NOT NULL CHECK (may_be_named IN (0,1)),
+  may_be_unnamed INTEGER NOT NULL CHECK (may_be_unnamed IN (0,1)),
   UNIQUE (code, may_be_top),
-  UNIQUE (code, may_be_named)
+  UNIQUE (code, may_be_named),
+  UNIQUE (code, may_be_unnamed)
 ) STRICT, WITHOUT ROWID;
 
 -- table event on event
@@ -755,9 +759,9 @@ CREATE TABLE message_refusal (      -- A1
 CREATE TABLE note (
   id         TEXT PRIMARY KEY,
   kind       TEXT GENERATED ALWAYS AS ('note') VIRTUAL,
-  -- K11: a note's words are read whole to index, preview and snapshot, so they weigh at most 64 KiB
-  -- (the command's `BODY_BUDGET_BYTES` says it in a sentence; this is the same rule).
-  body       TEXT NOT NULL DEFAULT '' CHECK (length(CAST(body AS BLOB)) <= 65536),
+  -- K11: the size budget of the words (64 KiB today) is the command's on purpose: a budget the
+  -- product may tune is not an integrity rule, and a CHECK would freeze it behind a rebuild of `note`.
+  body       TEXT NOT NULL DEFAULT '',
   format     TEXT NOT NULL DEFAULT 'markdown' CHECK (format IN ('markdown','plain')),
   journal_on TEXT CHECK (date(journal_on) IS journal_on),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
@@ -1305,16 +1309,6 @@ CREATE TRIGGER message_outcome_settles_once BEFORE UPDATE OF outcome ON message
     SELECT RAISE(ABORT, 'a proposal settles as applied, dismissed, stale or failed')
      WHERE new.outcome NOT IN ('applied','dismissed','stale','failed');
   END;
-
--- trigger note_has_a_title on note
-CREATE TRIGGER note_has_a_title BEFORE INSERT ON note
-  WHEN (SELECT title FROM entity WHERE id = new.id) = ''
-  BEGIN SELECT RAISE(ABORT, 'a note needs a title'); END;
-
--- trigger note_keeps_its_title on entity
-CREATE TRIGGER note_keeps_its_title BEFORE UPDATE OF title ON entity
-  WHEN new.kind = 'note' AND new.title = ''
-  BEGIN SELECT RAISE(ABORT, 'a note needs a title'); END;
 
 -- trigger revision_blob_is_history on revision_blob
 CREATE TRIGGER revision_blob_is_history BEFORE UPDATE ON revision_blob
