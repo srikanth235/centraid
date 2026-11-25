@@ -19,9 +19,10 @@
 //! See `crates/vault/src/custody/README.md` for the whole picture.
 
 pub mod locker_key;
+pub mod sealed_file;
 
 pub use locker_key::{
-    LOCKER_CIPHERTEXT_PREFIX, LOCKER_KEY_BYTES, LockerKeyError, LockerKeyErrorCode, SealedItemCell,
+    LOCKER_CIPHERTEXT_PREFIX, LOCKER_KEY_BYTES, LockerKeyError, LockerKeyErrorCode, SealedFile, SealedItemCell,
     decrypt_under_locker_key, encrypt_under_locker_key, is_locker_ciphertext, live_locker_key_id,
     locker_aad,
 };

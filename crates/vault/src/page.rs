@@ -551,37 +551,12 @@ fn in_unit(count: i64, unit: i64, rounding: Rounding) -> Amount {
     }
 }
 
-/// THE READS THAT MAY SEE A LOCKER ITEM'S ROW.
-///
-/// A Locker item is an entity, so a page over `entity` or `edge` would serve
-/// it with every other kind's rows: its title, its tags, the notes that link
-/// it. Locker's items are the member's most private rows, so a page serves
-/// them only to a read that is named as one that may (#1135, the Locker lane,
-/// L4):
-///
-/// - `locker.*`: Locker's own reads, behind its gate on the shell;
-/// - `home.locker`: Home's count of Locker's items, which selects ids and
-///   nothing a member wrote;
-/// - `assist.native.*`: the assistant's reads. It has the owner's access to a
-///   Locker item's plain rows (the owner's ruling of 2026-10-22), and no
-///   access to a sealed value, which [`withholds_sealed_value`] holds for it.
-///
-/// Every other read (a generic list, the Trash of another app) is given the
-/// page **without** them: the rows are not there, and no count of them is
-/// either.
-#[must_use]
-pub fn reaches_locker(name: &str) -> bool {
-    name.starts_with("locker.") || name.starts_with(ASSISTANT_READ) || name == "home.locker"
-}
-
-/// The prefix of the assistant's reads of the vault's tables.
-const ASSISTANT_READ: &str = "assist.native.";
-
 /// The clauses every read of `page` is held to before its own cursor: the author's predicate, and
-/// the Locker rules (a sealed column is named only by its presence test; a read that is not one of
-/// Locker's neither reads a Locker table nor sees a Locker item through another).
+/// the one rule sealing leaves (a sealed column is named only by its presence test, except in a
+/// read of Locker's own). A Locker item is an item like any other: any read may see its row, its
+/// plain fields and its edges.
 fn served_clauses(page: &KeysetPage) -> Result<Vec<String>> {
-    let mut clauses: Vec<String> = page
+    let clauses: Vec<String> = page
         .predicate
         .as_ref()
         .map(|text| vec![format!("({text})")])
@@ -599,18 +574,6 @@ fn served_clauses(page: &KeysetPage) -> Result<Vec<String>> {
             ),
         });
     }
-    if !reaches_locker(&page.name) {
-        if is_locker_table(&page.from) {
-            return Err(VaultError::InvalidInput {
-                name: page.name.clone(),
-                detail: format!(
-                    "`{}` is a Locker table, and this read is not one of Locker's",
-                    page.from
-                ),
-            });
-        }
-        clauses.extend(locker_exclusion(&page.from));
-    }
     Ok(clauses)
 }
 
@@ -624,8 +587,8 @@ fn is_sealed_column(word: &str) -> bool {
 
 /// THE SEALED-COLUMN GUARD, which holds for every read that is not Locker's own.
 ///
-/// [`reaches_locker`] lets the assistant's reads page a Locker table, and a
-/// sealed value is the one thing it has no access to. A read that is not
+/// Any read may page a Locker table, and a sealed value is the one thing no read but Locker's has
+/// access to. A read that is not
 /// named `locker.*` therefore may not project a sealed column, order by one or
 /// name one in its predicate (a predicate is an oracle: `password = 'x'`). Only
 /// the kit's presence test, `<cell> IS NOT NULL AS <name>`, names one, and it
@@ -655,20 +618,6 @@ fn withholds_sealed_value(page: &KeysetPage) -> bool {
 /// secret and is paged by name like any other table.
 fn is_locker_table(table: &str) -> bool {
     table == "locker_item" || table.starts_with("locker_item_")
-}
-
-/// The clause that takes Locker's items out of a page over `entity`, and the
-/// edges that touch one out of a page over `edge`.
-fn locker_exclusion(from: &str) -> Option<String> {
-    match from {
-        "entity" => Some("(\"kind\" <> 'locker_item')".to_owned()),
-        "edge" => Some(
-            "(NOT EXISTS (SELECT 1 FROM entity AS locker_end WHERE locker_end.kind = 'locker_item' \
-             AND locker_end.id IN (\"edge\".\"from_id\", \"edge\".\"to_id\", \"edge\".\"label_id\")))"
-                .to_owned(),
-        ),
-        _ => None,
-    }
 }
 
 /// One page of rows, plus the cursor to ask from next.

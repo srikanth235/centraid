@@ -64,7 +64,7 @@ const TAG_BYTES: usize = 16;
 /// still needs.
 pub const LOCKER_ENCRYPTED_COLUMNS: &[(&str, &str, &[&str])] = &[
     ("locker_item_field", "id", &["value_sealed"]),
-    ("locker_item_passkey", "item_id", &["private_key"]),
+    ("locker_item_passkey", "id", &["private_key"]),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -362,19 +362,19 @@ impl crate::file::Vault {
         })
     }
 
-    /// One built-in sealed cell of a LIVE item, for a reveal. `None` when no
-    /// live item has `item_id` or `column` is not one of the five sealed item
-    /// cells; `Some(SealedItemCell { ciphertext: None, key_id: None })` when
-    /// the live item has no value stored for that field.
+    /// One single-instance built-in secret of a LIVE item, by its stable `field_key`
+    /// (`password`, `card_number`, `otp_seed`), for a reveal. `None` when no live item has
+    /// `item_id` or `field_key` is not a built-in secret key; `Some` with no ciphertext when the
+    /// live item holds no value for it.
     ///
     /// # Errors
     /// A failed read.
     pub fn locker_sealed_item_cell(
         &self,
         item_id: &str,
-        column: &str,
+        field_key: &str,
     ) -> crate::error::Result<Option<SealedItemCell>> {
-        if !crate::commands::locker::SEALED_ITEM_CELLS.contains(&column) {
+        if !crate::commands::locker::secret_keys().contains(&field_key) {
             return Ok(None);
         }
         self.read(|connection| {
@@ -383,37 +383,23 @@ impl crate::file::Vault {
                    FROM locker_item i
                    JOIN entity e ON e.id = i.id
                    LEFT JOIN locker_item_field f
-                     ON f.item_id = i.id AND f.field_key = ?2
+                     ON f.item_id = i.id AND f.field_key = ?2 AND f.single = 1
                   WHERE i.id = ?1 AND e.deleted_at IS NULL",
             )?;
-            let mut rows = statement.query([item_id, column])?;
+            let mut rows = statement.query([item_id, field_key])?;
             Ok(match rows.next()? {
-                Some(row) => {
-                    let ciphertext: Option<String> = row.get(0)?;
-                    let ciphertext = ciphertext.filter(|value| !value.is_empty());
-                    Some(SealedItemCell {
-                        key_id: if ciphertext.is_some() {
-                            row.get(1)?
-                        } else {
-                            None
-                        },
-                        ciphertext,
-                    })
-                }
+                Some(row) => Some(cell_of(row.get(0)?, row.get(1)?)),
                 None => None,
             })
         })
     }
 
-    /// One custom field's sealed value, for a reveal (#1047 T2). `None` when
-    /// no field `field_id` of a LIVE item `item_id` exists, or the field is not
-    /// of the `sealed` kind — the same `None` for each, so a reveal adds no
-    /// existence oracle beside the item's own (#873's sidecar rule: a trashed
-    /// item's sidecars stop revealing with it).
+    /// One sealed field's value (a secret or a one-time-code seed), for a reveal behind the
+    /// owner check. `None` when no field `field_id` of a LIVE item `item_id` exists or it is not
+    /// a sealed or one-time-code field: the same `None` for each, so a reveal adds no existence
+    /// oracle beside the item's own.
     ///
-    /// The ciphertext's additional data binds it to the FIELD's id, not the
-    /// item's: a new sealed field carries the id it was sealed against
-    /// (D-1020-L9), and `locker.set_field` refuses one that does not.
+    /// The ciphertext's additional data binds it to the FIELD's id, not the item's.
     ///
     /// # Errors
     /// A failed read.
@@ -422,30 +408,116 @@ impl crate::file::Vault {
         item_id: &str,
         field_id: &str,
     ) -> crate::error::Result<Option<SealedItemCell>> {
-        self.field_cell(item_id, field_id, "sealed")
+        self.read(|connection| {
+            let mut statement = connection.prepare(
+                "SELECT f.value_sealed, f.key_id
+                   FROM locker_item_field f
+                   JOIN entity i ON i.id = f.item_id
+                  WHERE f.id = ?1 AND f.item_id = ?2
+                    AND f.kind IN ('sealed', 'otp') AND i.deleted_at IS NULL",
+            )?;
+            let mut rows = statement.query([field_id, item_id])?;
+            Ok(match rows.next()? {
+                Some(row) => Some(cell_of(row.get(0)?, row.get(1)?)),
+                None => None,
+            })
+        })
     }
 
-    /// One custom one-time-code (`otp`) field's sealed seed, for the rolling code and for an
-    /// export: never for a reveal, which refuses a seed. Bound to the FIELD's id like a sealed
-    /// field's value, and `None` in the same cases (no live item, no such field, not `otp`).
+    /// One passkey's sealed private key, for the core to sign with behind the unlock. `None`
+    /// unless the passkey is one of a LIVE item's.
     ///
     /// # Errors
     /// A failed read.
-    pub fn locker_otp_field_cell(
+    pub fn locker_sealed_passkey_cell(
+        &self,
+        item_id: &str,
+        passkey_id: &str,
+    ) -> crate::error::Result<Option<SealedItemCell>> {
+        self.read(|connection| {
+            let mut statement = connection.prepare(
+                "SELECT p.private_key, p.key_id
+                   FROM locker_item_passkey p JOIN entity i ON i.id = p.item_id
+                  WHERE p.id = ?1 AND p.item_id = ?2 AND i.deleted_at IS NULL",
+            )?;
+            let mut rows = statement.query([passkey_id, item_id])?;
+            Ok(match rows.next()? {
+                Some(row) => Some(cell_of(row.get(0)?, row.get(1)?)),
+                None => None,
+            })
+        })
+    }
+
+    /// A sealed file of a LIVE item, for the core to open: the stored (sealed) bytes' hash, and
+    /// the sealed cell that holds its name and media type. With `seq`, the file as that earlier
+    /// version held it, from the history slot `field:<id>` (a replaced or removed file stays
+    /// readable). The bytes are `lkf1` ciphertext; opening them is the core's.
+    ///
+    /// # Errors
+    /// A failed read.
+    pub fn locker_sealed_file(
         &self,
         item_id: &str,
         field_id: &str,
-    ) -> crate::error::Result<Option<SealedItemCell>> {
-        self.field_cell(item_id, field_id, "otp")
+        seq: Option<i64>,
+    ) -> crate::error::Result<Option<SealedFile>> {
+        self.read(|connection| {
+            let live: i64 = connection.query_row(
+                "SELECT COUNT(*) FROM locker_item i JOIN entity e ON e.id = i.id
+                  WHERE i.id = ?1 AND e.deleted_at IS NULL",
+                [item_id],
+                |row| row.get(0),
+            )?;
+            if live != 1 {
+                return Ok(None);
+            }
+            let Some(seq) = seq else {
+                let mut statement = connection.prepare(
+                    "SELECT value_blob, value_sealed, key_id FROM locker_item_field
+                      WHERE id = ?1 AND item_id = ?2 AND kind = 'file'",
+                )?;
+                let mut rows = statement.query([field_id, item_id])?;
+                return Ok(match rows.next()? {
+                    Some(row) => Some(SealedFile {
+                        blob: row.get(0)?,
+                        name: cell_of(row.get(1)?, row.get(2)?),
+                    }),
+                    None => None,
+                });
+            };
+            let Some(state) = crate::history::version_state(connection, item_id, seq)? else {
+                return Ok(None);
+            };
+            let row = state
+                .get("locker_item_field")
+                .and_then(serde_json::Value::as_array)
+                .into_iter()
+                .flatten()
+                .find(|row| text_of(row, "id").as_deref() == Some(field_id));
+            let Some(row) = row.filter(|row| text_of(row, "kind").as_deref() == Some("file"))
+            else {
+                return Ok(None);
+            };
+            let slot = format!("field:{field_id}");
+            let blob: Option<String> = connection
+                .query_row(
+                    "SELECT blob FROM revision_blob WHERE entity_id = ?1 AND seq = ?2 AND slot = ?3",
+                    rusqlite::params![item_id, seq, slot],
+                    |row| row.get(0),
+                )
+                .ok();
+            Ok(blob.map(|blob| SealedFile {
+                blob,
+                name: cell_of(text_of(row, "value_sealed"), text_of(row, "key_id")),
+            }))
+        })
     }
 
-    /// One sealed cell of a LIVE item as an EARLIER version held it, for a reveal of a changed
-    /// secret: a built-in cell (`column`, one of the sealed item cells) or, when `field_id`
-    /// is stated, that field row's `sealed`-kind value. `None` when the item is not live, the
-    /// version is not in its history, or the cell is not one a reveal may open (a one-time-code
-    /// seed is `SEED_NOT_SHOWN` for the item and for a field, as it is live). The ciphertext is
-    /// as the version kept it, bound to the same field id and key generation it was sealed with, so
-    /// the core opens it with the same key and the same AAD as the live cell.
+    /// One sealed field of a LIVE item as an EARLIER version held it, for a reveal of a changed
+    /// secret (a one-time-code seed too). `None` when the item is not live or the version does
+    /// not hold that sealed field. The ciphertext is as the version kept it, bound to the same
+    /// field id and key generation it was sealed with, so the core opens it with the same key
+    /// and the same AAD as the live cell.
     ///
     /// # Errors
     /// A failed read.
@@ -453,18 +525,8 @@ impl crate::file::Vault {
         &self,
         item_id: &str,
         seq: i64,
-        column: &str,
         field_id: &str,
     ) -> crate::error::Result<Option<SealedItemCell>> {
-        let by_field = !field_id.is_empty();
-        if by_field && column != "value_sealed"
-            || !by_field && !crate::commands::locker::SEALED_ITEM_CELLS.contains(&column)
-        {
-            return Ok(None);
-        }
-        if !by_field && column == "otp_seed" {
-            return Ok(None);
-        }
         self.read(|connection| {
             let live: i64 = connection.query_row(
                 "SELECT COUNT(*) FROM locker_item i JOIN entity e ON e.id = i.id
@@ -478,73 +540,45 @@ impl crate::file::Vault {
             let Some(state) = crate::history::version_state(connection, item_id, seq)? else {
                 return Ok(None);
             };
-            let text = |row: &serde_json::Value, name: &str| {
-                row.get(name)
-                    .and_then(serde_json::Value::as_str)
-                    .filter(|value| !value.is_empty())
-                    .map(str::to_owned)
-            };
             let field = state
                 .get("locker_item_field")
                 .and_then(serde_json::Value::as_array)
                 .into_iter()
                 .flatten()
-                .find(|row| {
-                    if by_field {
-                        text(row, "id").as_deref() == Some(field_id)
-                    } else {
-                        text(row, "field_key").as_deref() == Some(column)
-                    }
-                });
-            match field {
-                Some(row) if text(row, "kind").as_deref() == Some("sealed") => {
-                    let ciphertext = text(row, "value_sealed");
-                    Ok(Some(SealedItemCell {
-                        key_id: ciphertext.as_ref().and_then(|_| text(row, "key_id")),
-                        ciphertext,
-                    }))
+                .find(|row| text_of(row, "id").as_deref() == Some(field_id));
+            Ok(match field {
+                Some(row)
+                    if matches!(text_of(row, "kind").as_deref(), Some("sealed" | "otp")) =>
+                {
+                    Some(cell_of(text_of(row, "value_sealed"), text_of(row, "key_id")))
                 }
-                None if !by_field => Ok(Some(SealedItemCell {
-                    ciphertext: None,
-                    key_id: None,
-                })),
-                _ => Ok(None),
-            }
-        })
-    }
-
-    fn field_cell(
-        &self,
-        item_id: &str,
-        field_id: &str,
-        kind: &str,
-    ) -> crate::error::Result<Option<SealedItemCell>> {
-        self.read(|connection| {
-            let mut statement = connection.prepare(
-                "SELECT f.value_sealed, f.key_id
-                   FROM locker_item_field f
-                   JOIN entity i ON i.id = f.item_id
-                  WHERE f.id = ?1 AND f.item_id = ?2
-                    AND f.kind = ?3 AND i.deleted_at IS NULL",
-            )?;
-            let mut rows = statement.query([field_id, item_id, kind])?;
-            Ok(match rows.next()? {
-                Some(row) => {
-                    let ciphertext: Option<String> = row.get(0)?;
-                    let ciphertext = ciphertext.filter(|value| !value.is_empty());
-                    Some(SealedItemCell {
-                        key_id: if ciphertext.is_some() {
-                            row.get(1)?
-                        } else {
-                            None
-                        },
-                        ciphertext,
-                    })
-                }
-                None => None,
+                _ => None,
             })
         })
     }
+}
+
+fn text_of(row: &serde_json::Value, name: &str) -> Option<String> {
+    row.get(name)
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+}
+
+fn cell_of(ciphertext: Option<String>, key_id: Option<String>) -> SealedItemCell {
+    let ciphertext = ciphertext.filter(|value| !value.is_empty());
+    SealedItemCell {
+        key_id: if ciphertext.is_some() { key_id } else { None },
+        ciphertext,
+    }
+}
+
+/// A sealed file as it is at rest: the hash of its `lkf1` bytes in the content store, and the
+/// sealed cell holding its name and media type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SealedFile {
+    pub blob: String,
+    pub name: SealedItemCell,
 }
 
 #[cfg(test)]
@@ -599,7 +633,7 @@ mod tests {
                 [item_id],
             )
             .unwrap();
-        let field_id = crate::commands::locker::built_in_field_id(item_id, "password");
+        let field_id = crate::commands::locker::field_id_of(item_id, "password");
         connection
             .execute(
                 "INSERT INTO locker_item_field \
@@ -724,7 +758,7 @@ mod tests {
         let secrets = ["s3cret", "otp-seed-bytes", "4111111111111111"];
         for (index, plaintext) in secrets.iter().enumerate() {
             let item = crate::test_ids::uuid(index as u64 + 1);
-            let field_id = crate::commands::locker::built_in_field_id(&item, "password");
+            let field_id = crate::commands::locker::field_id_of(&item, "password");
             let sealed = encrypt_under_locker_key(&key, "k-1", &field_id, plaintext).unwrap();
             insert_item(&fixture.connection, &item, &sealed, "k-1");
         }
