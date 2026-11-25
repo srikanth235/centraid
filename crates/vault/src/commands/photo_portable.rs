@@ -86,16 +86,16 @@ pub(crate) fn extension_of(media_type: &str) -> &'static str {
 }
 
 /// One photograph to write: its bytes' hash, its media type and its stamp (`YYYY-MM-DD HHMMSS`).
-pub(crate) struct Item {
-    pub(crate) id: String,
-    pub(crate) blob: String,
-    pub(crate) size: u64,
-    pub(crate) media_type: String,
-    pub(crate) stamp: Option<String>,
+pub struct Item {
+    pub id: String,
+    pub blob: String,
+    pub size: u64,
+    pub media_type: String,
+    pub stamp: Option<String>,
 }
 
 /// Every live photograph (or one album's) in the order it was taken.
-pub(crate) fn live_photos(connection: &Connection, album: Option<&str>) -> Result<Vec<Item>> {
+pub fn live_photos(connection: &Connection, album: Option<&str>) -> Result<Vec<Item>> {
     // The capture time on the clock where it was taken (SQLite does the date arithmetic), else
     // the day the photograph was imported.
     let mut statement = connection.prepare_cached(
@@ -193,7 +193,7 @@ fn write_archive(
 /// `/`), named by when it was taken. Returns how many went in and the photographs it could not
 /// include (bytes not on this phone, or a file that cannot be read), each named as it would have
 /// been. The whole-vault export writes the same entries under `Photos/`.
-pub(crate) fn add_photos<W: Write + Seek>(
+pub fn add_photos<W: Write + Seek>(
     zip: &mut ZipWriter<W>,
     blobs: &(dyn BlobStore + Send + Sync),
     items: Vec<Item>,

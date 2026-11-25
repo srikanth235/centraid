@@ -46,6 +46,8 @@
 pub mod arrival;
 pub mod blob;
 pub mod container;
+pub mod document;
+pub mod document_portable;
 pub mod edge;
 pub mod entity;
 pub mod flag;
@@ -55,6 +57,9 @@ pub mod locker;
 pub mod note;
 pub mod note_portable;
 pub mod origin_cursor;
+pub mod photo;
+pub mod photo_portable;
+pub mod place;
 pub mod reminder;
 pub mod sealed;
 pub mod tag;
@@ -365,20 +370,25 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 11] = [
+        let modules: &[fn() -> Vec<CommandDefinition>] = &[
             blob::definitions,
             container::definitions,
+            document::definitions,
+            document_portable::definitions,
             edge::definitions,
             entity::definitions,
             flag::definitions,
             follow::definitions,
             history::definitions,
             note::definitions,
+            photo::definitions,
+            photo_portable::definitions,
+            place::definitions,
             reminder::definitions,
             tag::definitions,
             vault::definitions,
         ];
-        for definitions in modules {
+        for definitions in modules.iter().copied() {
             for definition in definitions() {
                 registry.register(definition)?;
             }

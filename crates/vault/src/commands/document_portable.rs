@@ -49,7 +49,7 @@ pub struct LeftOut {
 }
 
 /// The command's answer for what was left out: `[{name, why}]`, the first [`NAMED`].
-pub(crate) fn left_out_json(left: &[LeftOut]) -> serde_json::Value {
+pub fn left_out_json(left: &[LeftOut]) -> serde_json::Value {
     left.iter()
         .take(NAMED)
         .map(|item| serde_json::json!({ "name": item.name, "why": item.why }))
@@ -58,7 +58,7 @@ pub(crate) fn left_out_json(left: &[LeftOut]) -> serde_json::Value {
 
 /// `Left out.txt` into the archive, naming every original it could not include, or nothing when
 /// none was left out. Returns whether it wrote the file.
-pub(crate) fn add_left_out<W: Write + Seek>(
+pub fn add_left_out<W: Write + Seek>(
     zip: &mut ZipWriter<W>,
     left: &[LeftOut],
 ) -> Result<bool> {
@@ -90,7 +90,7 @@ fn pre_export(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 }
 
 /// A live folder: its name and the folder it is in.
-pub(crate) struct Folder {
+pub struct Folder {
     name: String,
     parent: Option<String>,
 }
@@ -173,7 +173,7 @@ fn apart_from_files(used: &BTreeSet<String>, prefix: &str, names: &mut [String])
 }
 
 /// Empty the staging folder: a file an earlier export left is plaintext that must not linger.
-pub(crate) fn clear(dir: &Path) -> Result<()> {
+pub fn clear(dir: &Path) -> Result<()> {
     fs::create_dir_all(dir)?;
     for entry in fs::read_dir(dir)? {
         let path = entry?.path();
@@ -187,13 +187,12 @@ pub(crate) fn clear(dir: &Path) -> Result<()> {
 }
 
 /// Every live folder by id.
-pub(crate) fn live_folders(connection: &Connection) -> Result<BTreeMap<String, Folder>> {
+pub fn live_folders(connection: &Connection) -> Result<BTreeMap<String, Folder>> {
     let mut folders: BTreeMap<String, Folder> = BTreeMap::new();
     {
         let mut statement = connection.prepare_cached(
-            "SELECT e.id, e.title, c.parent_id
-               FROM container c JOIN entity e ON e.id = c.id
-              WHERE c.kind = 'folder' AND e.deleted_at IS NULL",
+            "SELECT e.id, e.title, e.parent_id
+               FROM entity e WHERE e.kind = 'folder' AND e.deleted_at IS NULL",
         )?;
         let rows = statement.query_map([], |row| {
             Ok((
@@ -213,9 +212,9 @@ pub(crate) fn live_folders(connection: &Connection) -> Result<BTreeMap<String, F
 }
 
 /// Every live document: its title, its blob and its folder, in the order it was made.
-pub(crate) fn live_documents(connection: &Connection) -> Result<Vec<DocumentRow>> {
+pub fn live_documents(connection: &Connection) -> Result<Vec<DocumentRow>> {
     let mut statement = connection.prepare_cached(
-        "SELECT e.n, e.title, d.blob, d.folder_id
+        "SELECT e.n, e.title, d.blob, e.parent_id
            FROM entity e JOIN document d ON d.id = e.id
           WHERE e.kind = 'document' AND e.deleted_at IS NULL",
     )?;
@@ -237,7 +236,7 @@ pub(crate) fn live_documents(connection: &Connection) -> Result<Vec<DocumentRow>
 }
 
 /// A document to write: its title, its blob's hash and the folder it is in.
-pub(crate) type DocumentRow = (String, String, Option<String>);
+pub type DocumentRow = (String, String, Option<String>);
 
 /// `document.export_zip`: see the module header.
 fn export_zip(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
@@ -300,7 +299,7 @@ fn write_archive(
 /// `/`), in the folders the member sees. Returns how many went in and the originals it could not
 /// include (bytes not on this phone, or a file that cannot be read), each named. The whole-vault
 /// export writes the same entries under `Docs/`.
-pub(crate) fn add_documents<W: Write + Seek>(
+pub fn add_documents<W: Write + Seek>(
     zip: &mut ZipWriter<W>,
     blobs: &(dyn BlobStore + Send + Sync),
     folders: &BTreeMap<String, Folder>,
@@ -313,7 +312,7 @@ pub(crate) fn add_documents<W: Write + Seek>(
 
 /// The whole-vault export's cancellable document stream. It checks the shared signal between
 /// documents and before each fixed-size ZIP read, so cancellation never waits on a large original.
-pub(crate) fn add_documents_cancellable<W: Write + Seek>(
+pub fn add_documents_cancellable<W: Write + Seek>(
     zip: &mut ZipWriter<W>,
     blobs: &(dyn BlobStore + Send + Sync),
     folders: &BTreeMap<String, Folder>,
