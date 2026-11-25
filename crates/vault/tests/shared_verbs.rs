@@ -440,10 +440,6 @@ fn nested_holders_each_name_their_own_holder_and_come_back_together() {
     w.ok("entity.trash", json!({"id": &outer}));
     assert_eq!(w.trashed_by(&doc_in_outer), Some(outer.clone()));
     assert_eq!(w.trashed_by(&inner), None);
-    assert!(
-        w.refused("entity.restore", json!({"id": &inner}))
-            .contains("restore “Outer” first")
-    );
     w.ok("entity.restore", json!({"id": &outer}));
     assert!(!w.trashed(&outer) && !w.trashed(&doc_in_outer));
     assert!(
@@ -503,12 +499,11 @@ fn an_account_a_person_and_a_task_hold_what_belongs_to_them() {
     });
     w.ok("entity.trash", json!({"id": &account}));
     assert_eq!(w.trashed_by(&line), Some(account.clone()));
-    assert!(
-        w.refused("entity.restore", json!({"id": &line}))
-            .contains("restore “Everyday” first")
-    );
+    // One line comes out of a trashed account on its own; the rest come back with the account.
+    w.ok("entity.restore", json!({"id": &line}));
+    assert!(!w.trashed(&line) && w.trashed(&account));
     w.ok("entity.restore", json!({"id": &account}));
-    assert!(!w.trashed(&line));
+    assert!(!w.trashed(&account));
     // A person holds what was written about them alone, and nothing else.
     let person = w.mint();
     w.commit(|tx| common::add_person(tx, &person, "Ada", AT));
@@ -533,34 +528,42 @@ fn an_account_a_person_and_a_task_hold_what_belongs_to_them() {
 }
 
 #[test]
-fn a_row_is_not_restored_inside_a_trash_and_the_sentence_names_the_holder() {
+fn one_item_comes_out_of_a_trashed_holder_at_the_top_and_one_that_needs_a_home_does_not() {
     let w = World::new();
     let book = w.container("notebook", "Recipes", None);
     let with = w.note("Soup", Some(&book));
     let own = w.note("Stew", Some(&book));
     w.ok("entity.trash", json!({"id": &own}));
     w.ok("entity.trash", json!({"id": &book}));
-    // Taken with the holder, or trashed on its own beforehand: either way it is inside a trash.
+    // "I trashed the folder but need this one": taken with the holder, or trashed on its own before,
+    // it comes back at the top level and the holder stays in the trash.
     for id in [&with, &own] {
-        assert!(
-            w.refused("entity.restore", json!({"id": id}))
-                .contains("restore “Recipes” first"),
-        );
-        assert!(w.trashed(id));
+        w.ok("entity.restore", json!({"id": id}));
+        assert!(!w.trashed(id));
+        assert_eq!(w.home(id), None);
+        assert_eq!(w.trashed_by(id), None);
     }
-    // The database says the same (an event cannot be anywhere else).
-    let event = w.event("calendar:default");
+    assert!(w.trashed(&book));
+    // Restoring the holder now brings back nothing that left.
+    w.ok("entity.restore", json!({"id": &book}));
+    assert_eq!(w.home(&with), None);
+    // The undo of a trash puts the item back where it was when its home is live.
+    let kept = w.note("Kept", Some(&book));
+    w.ok("entity.trash", json!({"id": &kept}));
+    w.ok("entity.restore", json!({"id": &kept}));
+    assert_eq!(w.home(&kept), Some(book.clone()));
+    // An event needs a calendar: while its calendar is in the trash it is refused, naming the holder.
     let cal = w.container("calendar", "Work", None);
-    w.ok("entity.move", json!({"id": &event, "parent": &cal}));
-    w.ok("entity.trash", json!({"id": &event}));
+    let event = w.event(&cal);
     w.ok("entity.trash", json!({"id": &cal}));
     assert!(
         w.refused("entity.restore", json!({"id": &event}))
             .contains("restore “Work” first")
     );
+    assert!(w.trashed(&event));
     w.ok("entity.restore", json!({"id": &cal}));
-    w.ok("entity.restore", json!({"id": &event}));
-    assert!(!w.trashed(&event));
+    assert!(!w.trashed(&event), "it came back with its calendar");
+    assert_eq!(w.home(&event), Some(cal));
 }
 
 // ---------------------------------------------------------------------------
@@ -568,14 +571,15 @@ fn a_row_is_not_restored_inside_a_trash_and_the_sentence_names_the_holder() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn a_purge_removes_contents_before_the_holder_and_moves_the_rest_to_the_top_level() {
+fn a_purge_removes_everything_homed_in_a_holder_contents_before_the_holder() {
     let w = World::new();
     let book = w.container("notebook", "Recipes", None);
     let inner = w.container("notebook", "Inner", Some(&book));
     let deep = w.note("Soup", Some(&inner));
     let back = w.note("Stew", Some(&book));
     let alone = w.note("Alone", Some(&book));
-    // One member was in the trash before its notebook went: it is no one's contents.
+    // One member was in the trash before its notebook went: it is no one's contents, and is
+    // purged with the holder all the same.
     w.ok("entity.trash", json!({"id": &alone}));
     w.ok("entity.trash", json!({"id": &book}));
     assert_eq!(w.trashed_by(&alone), None);
@@ -598,20 +602,13 @@ fn a_purge_removes_contents_before_the_holder_and_moves_the_rest_to_the_top_leve
         assert!(!w.exists(id));
     }
     assert!(
-        w.exists(&alone),
-        "a row trashed on its own is not lost with the holder"
-    );
-    assert_eq!(w.home(&alone), None, "it is at the top level now");
-    assert!(w.trashed(&alone), "and still in the trash");
-    assert_eq!(
-        w.one::<i64>("SELECT COUNT(*) FROM note WHERE id = ?1", &[&deep]),
-        0,
-        "the kind row went with the entity"
+        !w.exists(&alone),
+        "everything still homed in a trashed holder goes with it, trashed with it or on its own"
     );
 }
 
 #[test]
-fn a_purge_refuses_with_a_sentence_when_something_would_lose_its_meaning() {
+fn a_purge_refuses_only_the_owner_the_founded_calendar_and_a_kind_in_use() {
     let w = World::new();
     // The owner, and the calendar every vault is founded with.
     let me = w
@@ -631,21 +628,13 @@ fn a_purge_refuses_with_a_sentence_when_something_would_lose_its_meaning() {
         w.refused("entity.purge", json!({"id": "calendar:default"}))
             .contains("founded with")
     );
-    // A calendar whose event was trashed on its own: the event cannot live without a calendar.
+    // A calendar holding an event trashed on its own is deleted for ever with it.
     let cal = w.container("calendar", "Work", None);
     let event = w.event(&cal);
     w.ok("entity.trash", json!({"id": &event}));
     w.ok("entity.trash", json!({"id": &cal}));
-    let sentence = w.refused("entity.purge", json!({"id": &cal}));
-    assert!(
-        sentence.contains("1 event is still in “Work”"),
-        "{sentence}"
-    );
-    assert!(w.exists(&cal) && w.exists(&event));
-    // Once the event is gone, the calendar can go.
-    w.ok("entity.purge", json!({"id": &event}));
     w.ok("entity.purge", json!({"id": &cal}));
-    assert!(!w.exists(&cal));
+    assert!(!w.exists(&cal) && !w.exists(&event));
     // A kind of workout in use is changed first (workout kinds have no trash, so no trash step).
     let run = "workout_kind:run";
     let workout = w.mint();
@@ -681,9 +670,12 @@ fn a_purge_refuses_with_a_sentence_when_something_would_lose_its_meaning() {
         )?;
         Ok(())
     });
-    assert!(
-        w.refused("entity.purge", json!({"id": "category:food"}))
-            .contains("1 line is filed under “Food”")
+    // A category with a line filed under it is deleted: the line is left uncategorised.
+    w.ok("entity.purge", json!({"id": "category:food"}));
+    assert!(!w.exists("category:food"));
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM txn_split WHERE txn_id = ?1", &[&line]),
+        0
     );
     // A trash-less kind is deleted, not moved to the trash; a trash kind must be in it first.
     assert!(
@@ -1333,4 +1325,39 @@ fn the_flags_the_arrivals_and_the_colours_are_what_the_founded_file_holds() {
             .map(|k| k.as_str().to_owned())
             .collect()
     );
+}
+
+#[test]
+fn empty_trash_with_nested_holders_always_succeeds() {
+    let w = World::new();
+    let outer = w.container("folder", "Outer", None);
+    let inner = w.container("folder", "Inner", Some(&outer));
+    let a = w.bare(Kind::Document, "A", Some(&inner));
+    let b = w.bare(Kind::Document, "B", Some(&outer));
+    let cal = w.container("calendar", "Work", None);
+    let event = w.event(&cal);
+    let project = w.container("project", "P", None);
+    let section = w.container("section", "S", Some(&project));
+    let task = w.task(Some(&section));
+    w.ok("entity.trash", json!({"id": &inner}));
+    w.ok("entity.trash", json!({"id": &event}));
+    for id in [&outer, &cal, &project] {
+        w.ok("entity.trash", json!({"id": id}));
+    }
+    let out = w.ok("entity.empty_trash", json!({}));
+    assert!(out["purged"].as_i64() >= Some(3));
+    for id in [
+        &outer, &inner, &a, &b, &cal, &event, &project, &section, &task,
+    ] {
+        assert!(!w.exists(id), "{id} survived the emptying");
+    }
+}
+
+/// TODO(money lane, E3): a split line whose category is purged keeps its other parts, which then no
+/// longer sum to the line. Purge drops the parts that name the category (so it never refuses); what
+/// the line should become is the money lane's to define.
+#[test]
+#[ignore = "money lane: what a multi-part line becomes when one of its categories is purged"]
+fn a_line_split_across_categories_keeps_a_sum_when_one_is_purged() {
+    panic!("the money lane defines this (see UNPLUGGED.md)");
 }

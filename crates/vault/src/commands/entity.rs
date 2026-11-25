@@ -400,9 +400,15 @@ pub enum PurgeRule {
     Refuse,
     /// The origin's follow ends with its target.
     Forget,
-    /// What the target held. What the trash took with it is gone first (`trashed_by`); a held
-    /// row that may sit at the top moves there; one that needs a home makes the purge refuse.
+    /// What the target held. What the trash took with it is gone first (`trashed_by`). Everything
+    /// else still homed in a holder that is in the trash goes too (it is in the trash with it);
+    /// a holder that has no trash lets what may sit at the top move there and purges the rest.
+    /// A purge is never refused for what its target holds.
     Home,
+    /// The referrer's own row goes and nothing else: a split filed under a purged category (the
+    /// line is left with no part for it; a line left with other parts that no longer sum to it is
+    /// the money lane's to define).
+    Drop,
 }
 
 /// Every foreign key into an entity (or a kind's table) that deletes nothing itself
@@ -422,7 +428,7 @@ pub const PURGE_RULES: &[(&str, &str, PurgeRule)] = &[
     ("touch", "place_id", PurgeRule::Detach),
     ("touch", "type_id,type_kind", PurgeRule::Refuse),
     ("txn", "account_id", PurgeRule::Purge),
-    ("txn_split", "category_id,category_kind", PurgeRule::Refuse),
+    ("txn_split", "category_id,category_kind", PurgeRule::Drop),
     ("vault", "self_id,self_kind", PurgeRule::Refuse),
     ("workout", "place_id", PurgeRule::Detach),
     ("workout", "type_id,type_kind", PurgeRule::Refuse),
@@ -452,28 +458,6 @@ fn purge_refusal(connection: &Connection, found: &Found) -> Result<Option<String
     for (table, columns, rule) in PURGE_RULES {
         let first = columns.split(',').next().unwrap_or_default();
         match (rule, *table) {
-            (PurgeRule::Home, _) => {
-                // What the trash took with the holder goes with it; a row trashed on its own that
-                // needs a home cannot be left without one.
-                let stuck: Option<(String, i64)> = connection
-                    .query_row(
-                        "SELECT e.kind, COUNT(*) FROM entity e JOIN entity_kind k ON k.code = e.kind
-                          WHERE e.parent_id = ?1 AND k.may_be_top = 0 AND e.trashed_by IS NOT ?1
-                          GROUP BY e.kind ORDER BY e.kind LIMIT 1",
-                        [&found.id],
-                        |row| Ok((row.get(0)?, row.get(1)?)),
-                    )
-                    .optional()?;
-                if let Some((kind, held)) = stuck {
-                    let noun = Kind::parse(&kind).map_or(kind, Kind::noun);
-                    return Ok(Some(format!(
-                        "{held} {noun}{} still in “{}”; move or delete {} first",
-                        if held == 1 { " is" } else { "s are" },
-                        found.title,
-                        if held == 1 { "it" } else { "them" },
-                    )));
-                }
-            }
             (PurgeRule::Refuse, "vault") => {}
             (PurgeRule::Refuse, table) => {
                 let used = count(
@@ -482,19 +466,11 @@ fn purge_refusal(connection: &Connection, found: &Found) -> Result<Option<String
                     &found.id,
                 )?;
                 if used > 0 {
-                    return Ok(Some(match table {
-                        "txn_split" => format!(
-                            "{used} line{} filed under “{}”; file {} elsewhere first",
-                            if used == 1 { " is" } else { "s are" },
-                            found.title,
-                            if used == 1 { "it" } else { "them" },
-                        ),
-                        _ => format!(
-                            "{used} {} use “{}”; change them first",
-                            if used == 1 { "activity" } else { "activities" },
-                            found.title
-                        ),
-                    }));
+                    return Ok(Some(format!(
+                        "{used} {} use “{}”; change them first",
+                        if used == 1 { "activity" } else { "activities" },
+                        found.title
+                    )));
                 }
             }
             _ => {}
@@ -601,15 +577,19 @@ pub(crate) fn purge_one(
                 }
             }
             PurgeRule::Home => {
-                // A row that needs a home cannot outlive it (the command refused before this);
-                // the rest move to the top level.
-                for stuck in ids(
-                    connection,
-                    "SELECT e.id FROM entity e JOIN entity_kind k ON k.code = e.kind
-                      WHERE e.parent_id = ?1 AND k.may_be_top = 0",
-                    id,
-                )? {
-                    purge_one(ctx, &stuck, purged)?;
+                // Whatever is still homed here: in the trash with a holder that is in it, so it
+                // goes; or, of a holder with no trash, it goes only if it needs a home.
+                let held: Vec<String> = connection
+                    .prepare(
+                        "SELECT e.id FROM entity e JOIN entity_kind k ON k.code = e.kind
+                          WHERE e.parent_id = ?1 AND (?2 OR k.may_be_top = 0) ORDER BY e.n DESC",
+                    )?
+                    .query_map(rusqlite::params![id, found.deleted_at.is_some()], |row| {
+                        row.get(0)
+                    })?
+                    .collect::<rusqlite::Result<_>>()?;
+                for held in held {
+                    purge_one(ctx, &held, purged)?;
                 }
                 let detached = ids(connection, "SELECT id FROM entity WHERE parent_id = ?1", id)?;
                 connection.execute(
@@ -619,6 +599,9 @@ pub(crate) fn purge_one(
                 for row in &detached {
                     ctx.touch(row)?;
                 }
+            }
+            PurgeRule::Drop => {
+                connection.execute(&format!("DELETE FROM {table} WHERE {first} = ?1"), [id])?;
             }
             // WHAT AN ORIGIN FILLS IS THE TARGET OF ITS FOLLOW, for whatever kind it is (an
             // account, a calendar, a folder): the follow stops with it, as `follow.stop` stops
@@ -766,21 +749,12 @@ fn pre_restore(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if found.deleted_at.is_none() {
         return Ok(Some(format!("“{}” is not in the trash", found.title)));
     }
-    // A ROW IS NOT BROUGHT BACK INSIDE SOMETHING THAT IS STILL GONE: not into a home in the trash,
-    // and not out from under the holder whose trash took it. The holder comes back first and
-    // takes with it the rows that name it. (An event cannot sit anywhere else, a note could; one
-    // rule for every kind keeps nothing visible in a trashed home and nothing lost.)
-    let holder: Option<String> = ctx
-        .connection()
-        .query_row(
-            "SELECT h.title FROM entity e JOIN entity h ON h.id IN (e.trashed_by, e.parent_id)
-              WHERE e.id = ?1 AND h.deleted_at IS NOT NULL
-              ORDER BY h.id = e.trashed_by DESC LIMIT 1",
-            [&found.id],
-            |row| row.get(0),
-        )
-        .optional()?;
-    if let Some(title) = holder {
+    // ONE ITEM COMES OUT OF A TRASHED HOLDER ("I trashed the folder but need this file"): at the
+    // top level, where its kind may sit. A kind that needs a home (an event, a section) is not
+    // brought back into a trashed one: the holder comes back first.
+    if let Some(title) = trashed_home(ctx.connection(), &found.id)?
+        && !may_be_top(ctx.connection(), found.kind)?
+    {
         return Ok(Some(format!(
             "“{}” is in “{title}”, which is in the trash; restore “{title}” first",
             found.title
@@ -792,10 +766,37 @@ fn pre_restore(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok(None)
 }
 
+/// The title of this row's home when the home is in the trash.
+fn trashed_home(connection: &Connection, id: &str) -> Result<Option<String>> {
+    Ok(connection
+        .query_row(
+            "SELECT h.title FROM entity e JOIN entity h ON h.id = e.parent_id
+              WHERE e.id = ?1 AND h.deleted_at IS NOT NULL",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
+fn may_be_top(connection: &Connection, kind: Kind) -> Result<bool> {
+    Ok(connection.query_row(
+        "SELECT may_be_top FROM entity_kind WHERE code = ?1",
+        [kind.as_str()],
+        |row| row.get(0),
+    )?)
+}
+
 /// Bring one entity back from the trash, and what its trash took with it: the rows that name it
 /// in `trashed_by`, and the rows that name those. A row trashed on its own names no one and stays.
 pub(crate) fn restore_one(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Vec<String>> {
     let mut restored = Vec::new();
+    // Out of a trashed home it comes back at the top level; a live home is where it returns to.
+    if trashed_home(ctx.connection(), id)?.is_some() {
+        ctx.connection().execute(
+            "UPDATE entity SET parent_id = NULL, parent_kind = NULL WHERE id = ?1",
+            [id],
+        )?;
+    }
     restore_row(ctx, id, &mut restored)?;
     Ok(restored)
 }

@@ -1253,8 +1253,8 @@ CREATE TRIGGER entity_not_moved_into_a_trash BEFORE UPDATE OF parent_id ON entit
 -- trigger entity_not_restored_into_a_trash on entity
 CREATE TRIGGER entity_not_restored_into_a_trash BEFORE UPDATE OF deleted_at ON entity
   WHEN old.deleted_at IS NOT NULL AND new.deleted_at IS NULL
-   AND EXISTS (SELECT 1 FROM entity h WHERE h.deleted_at IS NOT NULL AND h.id IN (old.parent_id, old.trashed_by))
-  BEGIN SELECT RAISE(ABORT, 'what holds this is in the trash: restore it first'); END;
+   AND EXISTS (SELECT 1 FROM entity h WHERE h.deleted_at IS NOT NULL AND h.id = new.parent_id)
+  BEGIN SELECT RAISE(ABORT, 'that home is in the trash: restore it first'); END;
 
 -- trigger link_ends_are_fixed on link
 CREATE TRIGGER link_ends_are_fixed BEFORE UPDATE OF a, b ON link

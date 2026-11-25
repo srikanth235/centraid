@@ -526,16 +526,26 @@ fn nothing_live_is_made_moved_or_restored_inside_a_trash() {
         ),
         "in the trash",
     );
-    // A row trashed by a holder that is not its home is held to the same.
+    // A row trashed by a holder that is not its home has no home to be inside: it may come out.
     w.takes(&format!(
         "UPDATE entity SET deleted_at = '{AT}', purge_at = '{AT}', trashed_by = '{book}' WHERE id = '{other}'"
     ));
-    w.refuses_with(
-        &format!(
-            "UPDATE entity SET deleted_at = NULL, purge_at = NULL, trashed_by = NULL WHERE id = '{other}'"
-        ),
-        "in the trash",
-    );
+    w.takes(&format!(
+        "UPDATE entity SET deleted_at = NULL, purge_at = NULL, trashed_by = NULL WHERE id = '{other}'"
+    ));
+    // Out of a trashed home means leaving it first: to the top level.
+    w.takes(&format!(
+        "UPDATE entity SET parent_id = NULL, parent_kind = NULL WHERE id = '{note}'"
+    ));
+    w.takes(&format!(
+        "UPDATE entity SET deleted_at = NULL, purge_at = NULL, trashed_by = NULL WHERE id = '{note}'"
+    ));
+    w.takes(&format!(
+        "UPDATE entity SET deleted_at = '{AT}', purge_at = '{AT}', trashed_by = '{book}' WHERE id = '{note}'"
+    ));
+    w.takes(&format!(
+        "UPDATE entity SET parent_id = '{book}', parent_kind = 'notebook' WHERE id = '{note}'"
+    ));
     // The holder first, then what it took.
     w.takes(&format!(
         "UPDATE entity SET deleted_at = NULL, purge_at = NULL WHERE id = '{book}'"

@@ -62,7 +62,7 @@ and moves it back.
 - **app lane: calendar/tasks (event, ical, task, occurrence, reminders UI reads)**: `agenda`, `agenda_days`, `agenda_portable`, `agenda_wave2`
 - **app lane: documents and photos**: `docs_photos`, `document_portable`, `photo_portable`, `store_health`
 - **app lane: people (person, contact_point, touch, person_date)**: `people`, `person_portable`
-- **app lane: money (money, txn, rule, csv, splits)**: `money_health`, `money_opening_rename`, `txn_portable`
+- **app lane: money (money, txn, rule, csv, splits)**: the ignored TODO `a_line_split_across_categories_keeps_a_sum_when_one_is_purged` in `shared_verbs.rs` (purging a category drops the `txn_split` parts that name it; a line left with other parts no longer sums to its amount, which E3 leaves to this lane), `money_health`, `money_opening_rename`, `txn_portable`
 - **app lane: health (workout, measurement, reading)**: `health_portable`, `workout_whole`
 - **app lane: locker**: `locker_clock`, `locker_commands`, `locker_plaintext_gate`, `locker_wall`
 - **app lane: chat (thread)**: `chat`
