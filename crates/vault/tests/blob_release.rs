@@ -330,23 +330,6 @@ fn slots() -> Vec<Slot> {
             replace: |id, two| format!("UPDATE person SET avatar = '{two}' WHERE id = '{id}'"),
         },
         Slot {
-            name: "a cover",
-            make: |w, one| {
-                let id = w.ok(
-                    "container.create",
-                    json!({"kind": "album", "title": "Trip"}),
-                )["id"]
-                    .as_str()
-                    .expect("an id")
-                    .to_owned();
-                w.sql(&format!(
-                    "UPDATE container SET cover = '{one}' WHERE id = '{id}'"
-                ));
-                id
-            },
-            replace: |id, two| format!("UPDATE container SET cover = '{two}' WHERE id = '{id}'"),
-        },
-        Slot {
             name: "a note asset",
             make: |w, one| {
                 let note = w.sql_as_entity(Kind::Note, "Trip", |id| {

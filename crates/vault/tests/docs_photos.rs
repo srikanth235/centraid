@@ -964,15 +964,26 @@ fn an_album_keeps_its_cover_while_the_photograph_is_there() {
         w.one::<Option<String>>("SELECT cover FROM container WHERE id = ?1", &[&album]),
         None
     );
-    // The album's earlier version (before its cover was cleared) still names the bytes in its
-    // `cover` slot, so a purge of the photograph does not release them while that version lives.
-    assert_eq!(purged["released"], json!([]));
+    // A cover is a view of the photograph's bytes, not the album's content: no version keeps it,
+    // so the purge releases the bytes it named.
+    assert!(
+        purged["released"]
+            .as_array()
+            .expect("a list")
+            .iter()
+            .any(|h| h.as_str() == Some(&blob)),
+        "{purged}"
+    );
     assert_eq!(
-        w.one::<String>(
-            "SELECT slot FROM revision_blob WHERE entity_id = ?1 AND blob = ?2",
-            &[&album, &blob]
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM revision_blob WHERE blob = ?1",
+            &[&blob]
         ),
-        "cover"
+        0
+    );
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM blob WHERE hash = ?1", &[&blob]),
+        0
     );
 }
 
@@ -1027,4 +1038,53 @@ fn derivatives_are_files_or_text_as_the_lookup_says_and_the_words_are_searchable
         json!({ "blob": dblob, "variant": "text", "text": "invoice number nine" }),
     );
     assert_eq!(hits(&w, "invoice", &doc), 1);
+}
+
+#[test]
+fn restoring_an_album_version_leaves_its_current_cover_as_it_is() {
+    let w = world("dp_cover_restore");
+    let (a, b) = (
+        id_of(&photo(&w, "first", json!({}))),
+        id_of(&photo(&w, "second", json!({}))),
+    );
+    let blob = |id: &str| w.one::<String>("SELECT blob FROM photo WHERE id = ?1", &[id]);
+    let album = w.container("album", "Summer");
+    for p in [&a, &b] {
+        w.ok(
+            "edge.add",
+            json!({ "from": album, "rel": "contains", "to": p }),
+        );
+    }
+    w.ok("album.set_cover", json!({ "id": album, "photo_id": a }));
+    w.ok(
+        "entity.retitle",
+        json!({ "id": album, "title": "Summer 2025" }),
+    );
+    w.ok("album.set_cover", json!({ "id": album, "photo_id": b }));
+    // An earlier version of the album held another title; no version holds a cover.
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM revision_blob WHERE entity_id = ?1",
+            &[&album]
+        ),
+        0
+    );
+    let seq = w.one::<i64>(
+        "SELECT MIN(seq) FROM revision WHERE entity_id = ?1",
+        &[&album],
+    );
+    w.ok(
+        "history.restore_version",
+        json!({ "id": album, "seq": seq }),
+    );
+    assert_eq!(
+        w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&album]),
+        "Summer",
+        "the version came back"
+    );
+    assert_eq!(
+        w.one::<String>("SELECT cover FROM container WHERE id = ?1", &[&album]),
+        blob(&b),
+        "the cover is the album's current one"
+    );
 }

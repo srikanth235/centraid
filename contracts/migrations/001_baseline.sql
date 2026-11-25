@@ -618,8 +618,9 @@ CREATE TRIGGER revision_is_history
   BEGIN SELECT RAISE(ABORT, 'a revision is history'); END;
 
 -- B3: EVERY blob an earlier version names: a document's bytes, a Locker sealed file (I7), a note
--- asset (H2), an avatar, a cover, a Live Photo's motion clip. `slot` says which column or child it
--- was (`blob`, `avatar`, `cover`, `motion`, `field:<id>`, `asset:<id>`); `media_type` is kept for
+-- asset (H2), an avatar, a Live Photo's motion clip (an album's cover is a view of a photograph's
+-- bytes, not its content, so no version keeps one). `slot` says which column or child it
+-- was (`blob`, `avatar`, `motion`, `field:<id>`, `asset:<id>`); `media_type` is kept for
 -- the document-bytes slot. No hash is stored inside `state`, so the blob collector and the backup
 -- read this table and `PRAGMA foreign_key_list` alone.
 CREATE TABLE revision_blob (
