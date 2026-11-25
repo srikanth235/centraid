@@ -849,25 +849,54 @@ struct ExportNoteInput {
 /// note's assets beside it. Writes nothing.
 fn export(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let input: ExportNoteInput = ctx.parse_input()?;
-    let archive = markdown_entries(ctx.connection(), ctx.blobs(), input.notebook_id.as_deref())?;
+    let mut archive = markdown_entries(ctx.connection(), input.notebook_id.as_deref())?;
     let count = archive.notes;
+    let mut weight = 0_i64;
+    let mut missing_assets = 0_usize;
+    for asset in std::mem::take(&mut archive.assets) {
+        weight += asset.size;
+        if weight > EXPORT_ASSET_BYTES {
+            return Err(VaultError::InvalidInput {
+                name: "notebook_id".to_owned(),
+                detail: "the files in these notes are too many bytes for one archive; export \
+                         a smaller notebook, or the whole vault"
+                    .to_owned(),
+            });
+        }
+        match ctx.blobs().and_then(|store| store.get(&asset.hash).ok()) {
+            Some(bytes) => archive.entries.push(Entry {
+                path: asset.path,
+                bytes,
+            }),
+            None => missing_assets += 1,
+        }
+    }
     let bytes = portable::zip(&archive.entries);
     Ok(serde_json::json!({
         "name": format!("{}.zip", archive.name),
         "media_type": "application/zip",
         "count": count,
-        "missing_assets": archive.missing_assets,
+        "missing_assets": missing_assets,
         "content": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes),
     }))
 }
 
-/// The Markdown files of the member's notes.
+/// An image or file placed in a note: where the archive puts it, and which stored bytes it is.
+/// Nothing is read here; `note.export` reads each, the whole-vault export streams each.
+pub(crate) struct AssetRef {
+    pub path: String,
+    pub hash: String,
+    pub size: i64,
+}
+
+/// The Markdown files of the member's notes, and the assets they link to.
 pub(crate) struct Archive {
     pub name: String,
+    /// The Markdown text only.
     pub entries: Vec<Entry>,
     pub notes: usize,
-    /// Assets whose bytes the store no longer holds: named, not silently dropped.
-    pub missing_assets: usize,
+    /// Each asset, in note order, at the path its note's Markdown links to.
+    pub assets: Vec<AssetRef>,
 }
 
 /// The archive's name and the Markdown files of the member's notes (a notebook's with the
@@ -875,7 +904,6 @@ pub(crate) struct Archive {
 /// it. `note.export` zips them; the whole-vault export writes the same entries under `Notes/`.
 pub(crate) fn markdown_entries(
     connection: &rusqlite::Connection,
-    blobs: Option<&(dyn crate::bytes::BlobStore + Send + Sync)>,
     notebook: Option<&str>,
 ) -> Result<Archive> {
     let mut archive_name = "Notes".to_owned();
@@ -929,7 +957,7 @@ pub(crate) fn markdown_entries(
     )?;
     let mut used: BTreeSet<String> = BTreeSet::new();
     let mut entries: Vec<Entry> = Vec::new();
-    let (mut weight, mut missing_assets) = (0_i64, 0_usize);
+    let mut refs: Vec<AssetRef> = Vec::new();
     let notes = rows.len();
     for (id, title, body, day, book) in rows {
         let labels = tags
@@ -964,29 +992,16 @@ pub(crate) fn markdown_entries(
             .collect::<rusqlite::Result<Vec<_>>>()?;
         let mut names: BTreeSet<String> = BTreeSet::new();
         for (name, hash, size) in held {
-            weight += size;
-            if weight > EXPORT_ASSET_BYTES {
-                return Err(VaultError::InvalidInput {
-                    name: "notebook_id".to_owned(),
-                    detail: "the files in these notes are too many bytes for one archive; export \
-                             a smaller notebook, or the whole vault"
-                        .to_owned(),
-                });
-            }
-            let bytes = blobs.and_then(|store| store.get(&hash).ok());
-            let Some(bytes) = bytes else {
-                missing_assets += 1;
-                continue;
-            };
             let mut file = portable::file_name(&name);
             let mut times = 1;
             while !names.insert(file.to_lowercase()) {
                 times += 1;
                 file = format!("{times} {}", portable::file_name(&name));
             }
-            entries.push(Entry {
+            refs.push(AssetRef {
                 path: place(&format!("{stem_used}{}/{file}", portable::ASSETS_SUFFIX)),
-                bytes,
+                hash,
+                size,
             });
         }
     }
@@ -994,7 +1009,7 @@ pub(crate) fn markdown_entries(
         name: archive_name,
         entries,
         notes,
-        missing_assets,
+        assets: refs,
     })
 }
 
