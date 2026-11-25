@@ -129,7 +129,9 @@ pub(super) fn refusal(connection: &Connection, guests: &[GuestIn]) -> Result<Opt
         if let Some(name) = &guest.name
             && name.trim().is_empty()
         {
-            return Ok(Some("a guest's name says something; leave it out instead".into()));
+            return Ok(Some(
+                "a guest's name says something; leave it out instead".into(),
+            ));
         }
         if guest.organizer == Some(true) {
             organizers += 1;

@@ -59,7 +59,11 @@ struct Day {
 
 impl PartialEq for Day {
     fn eq(&self, other: &Self) -> bool {
-        let place = |day: &Self| day.location.as_deref().map(|name| name.trim().to_lowercase());
+        let place = |day: &Self| {
+            day.location
+                .as_deref()
+                .map(|name| name.trim().to_lowercase())
+        };
         (
             self.cancelled,
             &self.starts,
@@ -516,4 +520,48 @@ pub(crate) fn reminders_take(
     stated: &Json,
 ) -> Result<bool> {
     reminder::set_leads(ctx, id, &alerts_of(stated).unwrap_or_default())
+}
+
+// ---------------------------------------------------------------------------
+// The calendar a phone calendar becomes
+// ---------------------------------------------------------------------------
+
+/// One calendar of the vault per phone calendar, with the phone's colour (a key of the palette).
+/// The first pass founds it, titled as the phone calls it; later passes keep it: the colour follows
+/// the phone's, and so does the name unless the member renamed it (its title is no longer what the
+/// phone last called it).
+pub(crate) fn follow_home(
+    ctx: &CommandCtx<'_, '_>,
+    home: &super::super::follow::Home<'_>,
+) -> Result<String> {
+    let connection = ctx.connection();
+    if let Some(calendar) = home.fills {
+        if let Some(color) = home.color {
+            connection.execute(
+                "UPDATE container SET color = ?2 WHERE id = ?1 AND color IS NOT ?2",
+                [calendar, color],
+            )?;
+        }
+        if let Some(was) = home.was
+            && was != home.label
+        {
+            let title: Option<String> = connection
+                .query_row(
+                    "SELECT title FROM entity WHERE id = ?1",
+                    [calendar],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            if title.as_deref() == Some(was) {
+                crate::commands::entity::rename(ctx, calendar, home.label)?;
+            }
+        }
+        return Ok(calendar.to_owned());
+    }
+    let id = ctx.insert_entity(crate::model::Kind::Calendar, home.label)?;
+    connection.execute(
+        "INSERT INTO container (id, kind, color) VALUES (?1, 'calendar', ?2)",
+        rusqlite::params![id, home.color],
+    )?;
+    Ok(id)
 }

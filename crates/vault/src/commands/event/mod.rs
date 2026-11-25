@@ -60,12 +60,12 @@ use crate::time::recurrence::Semantics;
 use crate::time::rrule;
 
 pub use commands::definitions;
-pub use guests::{GUESTS, GUEST_ADDRESS_KIND, GuestIn, address_key, guests_of, person_of_address};
-pub(crate) use guests::{guests_canon, guests_items, guests_merge, guests_read, guests_take};
 pub(crate) use follow::{
-    overrides_canon, overrides_merge, overrides_read, overrides_take, reminders_canon,
+    follow_home, overrides_canon, overrides_merge, overrides_read, overrides_take, reminders_canon,
     reminders_merge, reminders_read, reminders_take, settle, shape,
 };
+pub use guests::{GUEST_ADDRESS_KIND, GUESTS, GuestIn, address_key, guests_of, person_of_address};
+pub(crate) use guests::{guests_canon, guests_items, guests_merge, guests_read, guests_take};
 
 /// What a new event is told. `timing` is the reading `starts` is under; a zoned event carries its
 /// zone and a UTC `starts`.

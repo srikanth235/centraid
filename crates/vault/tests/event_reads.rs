@@ -43,20 +43,44 @@ fn date(w: &World, person: &str, kind: &str, date: &str) -> String {
 fn a_day_a_week_and_a_month_hold_the_events_that_are_on_them_in_the_viewers_zone() {
     let w = World::new("event_reads");
     // Zoned: 23:30 in New York on the 4th is the 5th in UTC; the viewer's day decides.
-    event(&w, json!({ "title": "Late call", "starts": "2026-03-04T23:30", "ends": "2026-03-05T00:30", "zone": "America/New_York" }));
-    event(&w, json!({ "title": "Lunch", "starts": "2026-03-05T12:00", "ends": "2026-03-05T13:00", "timing": "floating" }));
-    event(&w, json!({ "title": "Holiday", "starts": "2026-03-05", "ends": "2026-03-07", "busy": false }));
-    event(&w, json!({ "title": "Next week", "starts": "2026-03-12T09:00", "timing": "floating" }));
-    event(&w, json!({ "title": "April", "starts": "2026-04-02T09:00", "timing": "floating" }));
-    let trashed = event(&w, json!({ "title": "Gone", "starts": "2026-03-05T15:00", "timing": "floating" }));
+    event(
+        &w,
+        json!({ "title": "Late call", "starts": "2026-03-04T23:30", "ends": "2026-03-05T00:30", "zone": "America/New_York" }),
+    );
+    event(
+        &w,
+        json!({ "title": "Lunch", "starts": "2026-03-05T12:00", "ends": "2026-03-05T13:00", "timing": "floating" }),
+    );
+    event(
+        &w,
+        json!({ "title": "Holiday", "starts": "2026-03-05", "ends": "2026-03-07", "busy": false }),
+    );
+    event(
+        &w,
+        json!({ "title": "Next week", "starts": "2026-03-12T09:00", "timing": "floating" }),
+    );
+    event(
+        &w,
+        json!({ "title": "April", "starts": "2026-04-02T09:00", "timing": "floating" }),
+    );
+    let trashed = event(
+        &w,
+        json!({ "title": "Gone", "starts": "2026-03-05T15:00", "timing": "floating" }),
+    );
     w.ok("entity.trash", json!({ "id": &trashed }));
 
-    let ny = read(&w, |c| reads::day(c, "2026-03-04", Some("America/New_York")));
+    let ny = read(&w, |c| {
+        reads::day(c, "2026-03-04", Some("America/New_York"))
+    });
     assert_eq!(titles(&ny), vec!["Late call@2026-03-04"]);
     let utc = read(&w, |c| reads::day(c, "2026-03-05", Some("UTC")));
     assert_eq!(
         titles(&utc),
-        vec!["Holiday@2026-03-05", "Late call@2026-03-05", "Lunch@2026-03-05"],
+        vec![
+            "Holiday@2026-03-05",
+            "Late call@2026-03-05",
+            "Lunch@2026-03-05"
+        ],
         "all-day first, then by the clock"
     );
     // A multi-day event is on every day it covers, and says where it ends.
@@ -67,7 +91,11 @@ fn a_day_a_week_and_a_month_hold_the_events_that_are_on_them_in_the_viewers_zone
     let week = read(&w, |c| reads::week(c, "2026-03-05", 1, Some("UTC")));
     assert_eq!(
         titles(&week),
-        vec!["Holiday@2026-03-05", "Late call@2026-03-05", "Lunch@2026-03-05"]
+        vec![
+            "Holiday@2026-03-05",
+            "Late call@2026-03-05",
+            "Lunch@2026-03-05"
+        ]
     );
     let month = read(&w, |c| reads::month(c, 2026, 3, Some("UTC")));
     assert_eq!(month.len(), 4, "{:?}", titles(&month));
@@ -88,7 +116,10 @@ fn a_series_shows_its_days_with_the_changes_to_them() {
         json!({ "title": "Standup", "starts": "2026-03-02T09:00", "ends": "2026-03-02T09:30",
                 "zone": "Europe/Paris", "rule": "FREQ=WEEKLY" }),
     );
-    w.ok("event.edit_occurrence", json!({ "id": &id, "original_start": "2026-03-09T08:00:00.000Z", "action": "skip" }));
+    w.ok(
+        "event.edit_occurrence",
+        json!({ "id": &id, "original_start": "2026-03-09T08:00:00.000Z", "action": "skip" }),
+    );
     w.ok(
         "event.edit_occurrence",
         json!({ "id": &id, "original_start": "2026-03-16T08:00:00.000Z", "action": "override",
@@ -106,9 +137,16 @@ fn a_series_shows_its_days_with_the_changes_to_them() {
         "the 9th is skipped, the 16th moved to the 17th at half past ten"
     );
     let moved = &march[1];
-    assert_eq!(moved.original_start.as_deref(), Some("2026-03-16T08:00:00.000Z"));
+    assert_eq!(
+        moved.original_start.as_deref(),
+        Some("2026-03-16T08:00:00.000Z")
+    );
     assert_eq!(moved.location.as_deref(), Some("Room 4"));
-    assert_eq!(moved.ends.as_deref(), Some("2026-03-17T10:00:00.000Z"), "the series' length goes with it");
+    assert_eq!(
+        moved.ends.as_deref(),
+        Some("2026-03-17T10:00:00.000Z"),
+        "the series' length goes with it"
+    );
     assert!(moved.repeats);
     // A split ends the old series and starts the new: the days read as one run.
     w.ok("event.split", json!({ "id": &id, "original_start": "2026-03-23T08:00:00.000Z", "starts": "2026-03-23T10:00", "title": "Late standup" }));
@@ -124,10 +162,8 @@ fn a_series_shows_its_days_with_the_changes_to_them() {
     );
     // A series with a rule the expander cannot read stands for its first day.
     w.commit(|tx| {
-        tx.connection().execute(
-            "UPDATE event SET rule_supported = 0 WHERE id = ?1",
-            [&id],
-        )?;
+        tx.connection()
+            .execute("UPDATE event SET rule_supported = 0 WHERE id = ?1", [&id])?;
         Ok(())
     });
     let odd = read(&w, |c| reads::month(c, 2026, 3, Some("Europe/Paris")));
@@ -144,7 +180,10 @@ fn people_s_dates_are_shown_on_their_day_and_are_never_events() {
     let leap = date(&w, &jo, "anniversary", "2000-02-29");
     let future = w.person("Not yet");
     date(&w, &future, "birthday", "2040-03-05");
-    event(&w, json!({ "title": "Lunch", "starts": "2026-03-05T12:00", "timing": "floating" }));
+    event(
+        &w,
+        json!({ "title": "Lunch", "starts": "2026-03-05T12:00", "timing": "floating" }),
+    );
     let events_before: i64 = w.one("SELECT COUNT(*) FROM event", &[]);
     let day = read(&w, |c| reads::day(c, "2026-03-05", Some("UTC")));
     assert_eq!(
@@ -160,10 +199,17 @@ fn people_s_dates_are_shown_on_their_day_and_are_never_events() {
     );
     assert!(day.iter().all(|i| i.title != "Not yet"));
     assert_eq!(day[0].date_kind.as_deref(), Some("birthday"));
-    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM event", &[]), events_before, "a date makes no event");
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM event", &[]),
+        events_before,
+        "a date makes no event"
+    );
     // 29 February falls on the 28th in a year with no leap day, on the 29th in one.
     let feb = read(&w, |c| reads::day(c, "2026-02-28", Some("UTC")));
-    assert_eq!(feb.iter().map(|i| i.id.clone()).collect::<Vec<_>>(), vec![leap.clone()]);
+    assert_eq!(
+        feb.iter().map(|i| i.id.clone()).collect::<Vec<_>>(),
+        vec![leap.clone()]
+    );
     let leap_year = read(&w, |c| reads::window(c, "2028-02-28", 2, Some("UTC")));
     assert_eq!(
         leap_year.iter().map(|i| i.day.clone()).collect::<Vec<_>>(),
@@ -178,10 +224,21 @@ fn people_s_dates_are_shown_on_their_day_and_are_never_events() {
 #[test]
 fn an_overlap_is_a_read_never_a_refusal() {
     let w = World::new("event_reads_overlap");
-    let a = event(&w, json!({ "title": "A", "starts": "2026-03-05T10:00", "ends": "2026-03-05T12:00", "timing": "floating" }));
-    let b = event(&w, json!({ "title": "B", "starts": "2026-03-05T11:00", "ends": "2026-03-05T11:30", "timing": "floating" }));
-    let c = event(&w, json!({ "title": "C", "starts": "2026-03-05T11:15", "ends": "2026-03-05T13:00", "timing": "floating" }));
-    let found = read(&w, |conn| reads::overlaps(conn, "2026-03-05", 1, Some("UTC")));
+    let a = event(
+        &w,
+        json!({ "title": "A", "starts": "2026-03-05T10:00", "ends": "2026-03-05T12:00", "timing": "floating" }),
+    );
+    let b = event(
+        &w,
+        json!({ "title": "B", "starts": "2026-03-05T11:00", "ends": "2026-03-05T11:30", "timing": "floating" }),
+    );
+    let c = event(
+        &w,
+        json!({ "title": "C", "starts": "2026-03-05T11:15", "ends": "2026-03-05T13:00", "timing": "floating" }),
+    );
+    let found = read(&w, |conn| {
+        reads::overlaps(conn, "2026-03-05", 1, Some("UTC"))
+    });
     let pairs: Vec<(String, String)> = found
         .iter()
         .map(|o| (o.first.0.clone(), o.second.0.clone()))
@@ -192,7 +249,9 @@ fn an_overlap_is_a_read_never_a_refusal() {
     );
     // A cancelled event blocks nothing, and neither does one that was made free.
     w.ok("event.cancel", json!({ "id": &a }));
-    let found = read(&w, |conn| reads::overlaps(conn, "2026-03-05", 1, Some("UTC")));
+    let found = read(&w, |conn| {
+        reads::overlaps(conn, "2026-03-05", 1, Some("UTC"))
+    });
     assert_eq!(found.len(), 1);
 }
 
@@ -225,7 +284,10 @@ fn every_statement_of_a_calendar_read_is_an_index_walk() {
     let w = World::new("event_reads_plans");
     // A vault with rows in every table the reads touch, so the planner has statistics to be wrong about.
     for n in 0..30 {
-        event(&w, json!({ "title": format!("E{n}"), "starts": format!("2026-03-{:02}T09:00", n % 28 + 1), "timing": "floating" }));
+        event(
+            &w,
+            json!({ "title": format!("E{n}"), "starts": format!("2026-03-{:02}T09:00", n % 28 + 1), "timing": "floating" }),
+        );
     }
     let maya = w.person("Maya");
     date(&w, &maya, "birthday", "1990-03-05");
@@ -233,17 +295,29 @@ fn every_statement_of_a_calendar_read_is_an_index_walk() {
         &plan(
             &w,
             reads::SINGLES,
-            &["2026-01-01T00:00", "2026-04-01T00:00", "floating", "2026-03-01T00:00"],
+            &[
+                "2026-01-01T00:00",
+                "2026-04-01T00:00",
+                "floating",
+                "2026-03-01T00:00",
+            ],
         ),
         "event_by_start",
     );
-    assert_walk(&plan(&w, reads::SERIES, &["2026-04-01T00:00"]), "event_by_rule");
+    assert_walk(
+        &plan(&w, reads::SERIES, &["2026-04-01T00:00"]),
+        "event_by_rule",
+    );
     assert_walk(
         &plan(&w, reads::OVERRIDES, &["x", "2026-01-01", "2026-12-31"]),
         "sqlite_autoindex_occurrence",
     );
     assert_walk(
-        &plan(&w, reads::LONG, &["2026-04-01T00:00", "2026-03-01T00:00", "floating"]),
+        &plan(
+            &w,
+            reads::LONG,
+            &["2026-04-01T00:00", "2026-03-01T00:00", "floating"],
+        ),
         "event_long",
     );
     assert_walk(
@@ -262,12 +336,24 @@ fn every_statement_of_a_calendar_read_is_an_index_walk() {
 #[test]
 fn a_long_event_is_found_by_its_own_index_and_costs_a_window_nothing_it_did_not_hold() {
     let w = World::new("event_reads_long");
-    event(&w, json!({ "title": "Semester", "starts": "2026-01-12", "ends": "2026-05-29", "busy": false }));
-    event(&w, json!({ "title": "Trip", "starts": "2026-03-01T08:00", "ends": "2026-03-20T18:00", "timing": "floating" }));
-    event(&w, json!({ "title": "Weekend", "starts": "2026-03-06", "ends": "2026-03-08", "busy": false }));
+    event(
+        &w,
+        json!({ "title": "Semester", "starts": "2026-01-12", "ends": "2026-05-29", "busy": false }),
+    );
+    event(
+        &w,
+        json!({ "title": "Trip", "starts": "2026-03-01T08:00", "ends": "2026-03-20T18:00", "timing": "floating" }),
+    );
+    event(
+        &w,
+        json!({ "title": "Weekend", "starts": "2026-03-06", "ends": "2026-03-08", "busy": false }),
+    );
     for month in ["01", "02", "04", "05"] {
         for n in 1..=20 {
-            event(&w, json!({ "title": format!("m{month}d{n}"), "starts": format!("2026-{month}-{n:02}T09:00"), "timing": "floating" }));
+            event(
+                &w,
+                json!({ "title": format!("m{month}d{n}"), "starts": format!("2026-{month}-{n:02}T09:00"), "timing": "floating" }),
+            );
         }
     }
     let day = read(&w, |c| reads::day(c, "2026-03-10", Some("UTC")));
@@ -275,7 +361,14 @@ fn a_long_event_is_found_by_its_own_index_and_costs_a_window_nothing_it_did_not_
     let after = read(&w, |c| reads::day(c, "2026-06-10", Some("UTC")));
     assert!(after.is_empty(), "the semester ended in May");
     let weekend = read(&w, |c| reads::day(c, "2026-03-08", Some("UTC")));
-    assert_eq!(titles(&weekend), vec!["Semester@2026-03-08", "Weekend@2026-03-08", "Trip@2026-03-08"]);
+    assert_eq!(
+        titles(&weekend),
+        vec![
+            "Semester@2026-03-08",
+            "Weekend@2026-03-08",
+            "Trip@2026-03-08"
+        ]
+    );
     // The rows the walk reads are counted by SQLite, not timed: the long events plus the week behind
     // the window, never the months of short events elsewhere.
     let (short, long): (i64, i64) = read(&w, |c| {
@@ -288,11 +381,22 @@ fn a_long_event_is_found_by_its_own_index_and_costs_a_window_nothing_it_did_not_
             c.query_row("SELECT COUNT(*) FROM event WHERE long = 1", [], |r| r.get(0))?,
         ))
     });
-    assert_eq!((short, long), (1, 2), "{} events in the vault, 3 of them read", w.one::<i64>("SELECT COUNT(*) FROM event", &[]));
+    assert_eq!(
+        (short, long),
+        (1, 2),
+        "{} events in the vault, 3 of them read",
+        w.one::<i64>("SELECT COUNT(*) FROM event", &[])
+    );
     // A day moved into a window from months away is found by its own index.
-    let id = event(&w, json!({ "title": "Standup", "starts": "2026-01-05T09:00", "timing": "floating", "rule": "FREQ=WEEKLY" }));
+    let id = event(
+        &w,
+        json!({ "title": "Standup", "starts": "2026-01-05T09:00", "timing": "floating", "rule": "FREQ=WEEKLY" }),
+    );
     w.ok("event.edit_occurrence", json!({ "id": &id, "original_start": "2026-01-12T09:00", "action": "override", "starts": "2026-08-05T10:00" }));
     let august = read(&w, |c| reads::day(c, "2026-08-05", Some("UTC")));
     assert_eq!(titles(&august), vec!["Standup@2026-08-05"]);
-    assert_eq!(august[0].original_start.as_deref(), Some("2026-01-12T09:00"));
+    assert_eq!(
+        august[0].original_start.as_deref(),
+        Some("2026-01-12T09:00")
+    );
 }

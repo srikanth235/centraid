@@ -216,7 +216,12 @@ struct Frame<'a> {
 }
 
 impl Frame<'_> {
-    fn intersects(&self, timing: Semantics, starts: &str, ends: Option<&str>) -> Option<(String, String)> {
+    fn intersects(
+        &self,
+        timing: Semantics,
+        starts: &str,
+        ends: Option<&str>,
+    ) -> Option<(String, String)> {
         let first = day_of(timing, self.zone, starts, false)?;
         let last = match ends {
             Some(ends) => day_of(timing, self.zone, ends, timing != Semantics::AllDay)?,
@@ -227,8 +232,7 @@ impl Frame<'_> {
             wall_iso(self.from, false),
             wall_iso(add_wall_days(self.to, -1), false),
         );
-        (last >= window_first && first <= window_last)
-            .then(|| (first.max(window_first), last))
+        (last >= window_first && first <= window_last).then(|| (first.max(window_first), last))
     }
 }
 
@@ -370,8 +374,18 @@ fn singles(connection: &Connection, frame: &Frame<'_>, out: &mut Vec<Appearance>
             long.query_map(rusqlite::params![hi, running, timing.as_str()], read_event)?
                 .collect::<rusqlite::Result<Vec<_>>>()?,
         );
-        for (id, title, calendar_id, starts, ends, timing_text, zone_name, busy, status, location) in
-            rows
+        for (
+            id,
+            title,
+            calendar_id,
+            starts,
+            ends,
+            timing_text,
+            zone_name,
+            busy,
+            status,
+            location,
+        ) in rows
         {
             if !seen.insert(id.clone()) {
                 continue;
@@ -544,7 +558,11 @@ fn series(connection: &Connection, frame: &Frame<'_>, out: &mut Vec<Appearance>)
             .and_then(|ends| Some((epoch_ms(ends)? - epoch_ms(&row.starts)?) / 86_400_000))
             .unwrap_or(0);
         let (from, to) = (
-            bound(timing, frame.zone, add_wall_days(frame.from, -(length_days + 2))),
+            bound(
+                timing,
+                frame.zone,
+                add_wall_days(frame.from, -(length_days + 2)),
+            ),
             bound(timing, frame.zone, add_wall_days(frame.to, 1)),
         );
         let times = Times {
@@ -565,7 +583,13 @@ fn series(connection: &Connection, frame: &Frame<'_>, out: &mut Vec<Appearance>)
         let changed = changed_days(connection, &row.id, &from, &to)?;
         for (key, start) in days {
             walked.insert((row.id.clone(), key.clone()));
-            out.extend(day_of_series(frame, row, &key, Some(&start), changed.get(&key)));
+            out.extend(day_of_series(
+                frame,
+                row,
+                &key,
+                Some(&start),
+                changed.get(&key),
+            ));
         }
     }
     // A day moved into the window from a day outside what was expanded.

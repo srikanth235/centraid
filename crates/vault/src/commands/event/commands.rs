@@ -68,9 +68,11 @@ fn references_refusal(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         return Ok(Some(sentence));
     }
     if let Some(leads) = ctx.input.get("reminders").and_then(Json::as_array)
-        && leads
-            .iter()
-            .any(|lead| !lead.as_i64().is_some_and(|m| (0..=MAX_OFFSET_MIN).contains(&m)))
+        && leads.iter().any(|lead| {
+            !lead
+                .as_i64()
+                .is_some_and(|m| (0..=MAX_OFFSET_MIN).contains(&m))
+        })
     {
         return Ok(Some(
             "a reminder comes 0 minutes to a year before, not after".to_owned(),
@@ -111,7 +113,10 @@ fn pre_propose(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         ctx.connection(),
         Kind::Event,
         None,
-        Some(ctx.optional_str("calendar_id").unwrap_or(DEFAULT_CALENDAR_ID)),
+        Some(
+            ctx.optional_str("calendar_id")
+                .unwrap_or(DEFAULT_CALENDAR_ID),
+        ),
     )? {
         return Ok(Some(sentence));
     }

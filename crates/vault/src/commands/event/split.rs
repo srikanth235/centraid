@@ -99,11 +99,16 @@ pub(super) fn split(ctx: &crate::commands::CommandCtx<'_, '_>, input: &EditInput
         .as_deref()
         .ok_or_else(|| invalid("original_start", "a split names the day it begins at"))?;
     let row = row_of(connection, id)?;
-    let rule = row.rule.clone().ok_or_else(|| {
-        invalid("id", "a precondition said this event repeats")
+    let rule = row
+        .rule
+        .clone()
+        .ok_or_else(|| invalid("id", "a precondition said this event repeats"))?;
+    let day = occurrence_at(&row.times, &rule, key).ok_or_else(|| {
+        invalid(
+            "original_start",
+            "a precondition said the series lands there",
+        )
     })?;
-    let day = occurrence_at(&row.times, &rule, key)
-        .ok_or_else(|| invalid("original_start", "a precondition said the series lands there"))?;
     let kept = expand_series(&row.times, &rule, &row.times.starts, &day.start, 10_000);
     let Some(last) = kept.last() else {
         // The first day: the whole series is what changes.
@@ -111,7 +116,8 @@ pub(super) fn split(ctx: &crate::commands::CommandCtx<'_, '_>, input: &EditInput
         return Ok(json!({ "id": id, "split": false }));
     };
     let old = old_of(connection, id)?;
-    let parsed = rrule::inspect(&rule).map_err(|_| invalid("rule", "a precondition said it reads"))?;
+    let parsed =
+        rrule::inspect(&rule).map_err(|_| invalid("rule", "a precondition said it reads"))?;
 
     // The new half's times: from the split day, the length the series had, then what is stated.
     let split_starts = day_start(row.times.timing, &day);
@@ -125,8 +131,11 @@ pub(super) fn split(ctx: &crate::commands::CommandCtx<'_, '_>, input: &EditInput
         timing: row.times.timing,
         zone: row.times.zone.clone(),
     };
-    let after = resolve_times(ctx.input.as_object().unwrap_or(&serde_json::Map::new()), Some(&base))
-        .map_err(|sentence| invalid("starts", &sentence))?;
+    let after = resolve_times(
+        ctx.input.as_object().unwrap_or(&serde_json::Map::new()),
+        Some(&base),
+    )
+    .map_err(|sentence| invalid("starts", &sentence))?;
 
     // The new half's rule: the one stated, else the old one less what the old half keeps.
     let new_rule = match &input.rule {

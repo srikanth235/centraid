@@ -49,9 +49,11 @@ pub mod container;
 pub mod edge;
 pub mod entity;
 pub mod event;
+pub mod event_portable;
 pub mod flag;
 pub mod follow;
 pub mod history;
+pub mod ical;
 pub mod locker;
 pub mod note;
 pub mod note_portable;
@@ -366,12 +368,13 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 12] = [
+        let modules: [fn() -> Vec<CommandDefinition>; 13] = [
             blob::definitions,
             container::definitions,
             edge::definitions,
             entity::definitions,
             event::definitions,
+            event_portable::definitions,
             flag::definitions,
             follow::definitions,
             history::definitions,

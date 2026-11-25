@@ -79,7 +79,12 @@ fn a_zoned_time_is_the_instant_its_wall_clock_is_and_a_skipped_clock_is_refused(
         Some("2026-03-02T08:00:00.000Z")
     );
     assert_eq!(
-        text(&w, "SELECT timing || ' ' || zone FROM event WHERE id = ?1", &[&id]).as_deref(),
+        text(
+            &w,
+            "SELECT timing || ' ' || zone FROM event WHERE id = ?1",
+            &[&id]
+        )
+        .as_deref(),
         Some("zoned Europe/Paris")
     );
     let sentence = w.refused(
@@ -108,8 +113,12 @@ fn a_floating_time_is_a_wall_clock_to_the_minute_and_an_all_day_one_a_date() {
                 "timing": "floating" }),
     );
     assert_eq!(
-        text(&w, "SELECT starts || ' ' || ends || ' ' || ifnull(zone, '-') FROM event WHERE id = ?1", &[&lunch])
-            .as_deref(),
+        text(
+            &w,
+            "SELECT starts || ' ' || ends || ' ' || ifnull(zone, '-') FROM event WHERE id = ?1",
+            &[&lunch]
+        )
+        .as_deref(),
         Some("2026-03-05T12:00 2026-03-05T13:00 -")
     );
     let sentence = w.refused(
@@ -123,8 +132,12 @@ fn a_floating_time_is_a_wall_clock_to_the_minute_and_an_all_day_one_a_date() {
         json!({ "title": "Trip", "starts": "2026-03-05", "ends": "2026-03-07", "busy": false }),
     );
     assert_eq!(
-        text(&w, "SELECT timing || ' ' || starts || ' ' || ends FROM event WHERE id = ?1", &[&trip])
-            .as_deref(),
+        text(
+            &w,
+            "SELECT timing || ' ' || starts || ' ' || ends FROM event WHERE id = ?1",
+            &[&trip]
+        )
+        .as_deref(),
         Some("all-day 2026-03-05 2026-03-07")
     );
     let sentence = w.refused(
@@ -170,7 +183,10 @@ fn the_calendar_is_the_events_home_and_a_move_is_the_shared_verb() {
         Some(work.as_str())
     );
     // Nothing named: the vault's own calendar.
-    let plain = event(&w, json!({ "title": "Plain", "starts": "2026-03-05", "busy": false }));
+    let plain = event(
+        &w,
+        json!({ "title": "Plain", "starts": "2026-03-05", "busy": false }),
+    );
     assert_eq!(
         text(&w, "SELECT parent_id FROM entity WHERE id = ?1", &[&plain]).as_deref(),
         Some("calendar:default")
@@ -183,7 +199,8 @@ fn the_calendar_is_the_events_home_and_a_move_is_the_shared_verb() {
         Some(home.as_str())
     );
     assert!(
-        w.run("event.edit", json!({ "id": &id, "calendar_id": &home })).status
+        w.run("event.edit", json!({ "id": &id, "calendar_id": &home }))
+            .status
             != centraid_vault::CommandStatus::Executed
     );
     // An event is not at the top level, and not in a project.
@@ -235,7 +252,10 @@ fn where_it_is_is_words_and_never_makes_a_place() {
             .execute("INSERT INTO place (id) VALUES (?1)", [&place])?;
         Ok(())
     });
-    w.ok("event.edit", json!({ "id": &id, "place_id": &place, "location": null }));
+    w.ok(
+        "event.edit",
+        json!({ "id": &id, "place_id": &place, "location": null }),
+    );
     assert_eq!(
         text(&w, "SELECT place_id FROM event WHERE id = ?1", &[&id]).as_deref(),
         Some(place.as_str())
@@ -256,9 +276,17 @@ fn an_edit_changes_what_it_states_and_a_moved_start_keeps_the_length() {
         json!({ "title": "Review", "starts": "2026-03-05T10:00", "ends": "2026-03-05T11:30",
                 "timing": "floating", "description": "slides" }),
     );
-    w.ok("event.edit", json!({ "id": &id, "title": "Design review", "starts": "2026-03-06T14:00" }));
+    w.ok(
+        "event.edit",
+        json!({ "id": &id, "title": "Design review", "starts": "2026-03-06T14:00" }),
+    );
     assert_eq!(
-        text(&w, "SELECT starts || ' ' || ends FROM event WHERE id = ?1", &[&id]).as_deref(),
+        text(
+            &w,
+            "SELECT starts || ' ' || ends FROM event WHERE id = ?1",
+            &[&id]
+        )
+        .as_deref(),
         Some("2026-03-06T14:00 2026-03-06T15:30"),
         "a start moved with no end said keeps the length"
     );
@@ -321,7 +349,10 @@ fn guests_are_added_edited_and_removed_and_a_guest_not_in_people_is_still_a_gues
         "an address is the identity: lower case, no `mailto:`"
     );
     // A guest answers; an edit of the list keeps the answer it does not state.
-    w.ok("event.respond", json!({ "id": &id, "address": "JO@example.com", "status": "accepted" }));
+    w.ok(
+        "event.respond",
+        json!({ "id": &id, "address": "JO@example.com", "status": "accepted" }),
+    );
     w.ok(
         "event.edit",
         json!({ "id": &id, "guests": [
@@ -353,11 +384,17 @@ fn guests_are_added_edited_and_removed_and_a_guest_not_in_people_is_still_a_gues
         ] }),
     );
     assert_eq!(
-        w.one::<i64>("SELECT COUNT(*) FROM event_guest WHERE event_id = ?1 AND organizer = 1", &[&id]),
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM event_guest WHERE event_id = ?1 AND organizer = 1",
+            &[&id]
+        ),
         1
     );
     assert_eq!(
-        w.one::<String>("SELECT address FROM event_guest WHERE event_id = ?1 AND organizer = 1", &[&id]),
+        w.one::<String>(
+            "SELECT address FROM event_guest WHERE event_id = ?1 AND organizer = 1",
+            &[&id]
+        ),
         "sam@example.com"
     );
     let sentence = w.refused(
@@ -369,9 +406,15 @@ fn guests_are_added_edited_and_removed_and_a_guest_not_in_people_is_still_a_gues
     );
     assert!(sentence.contains("one organizer"), "{sentence}");
     // An answer needs an invitation, an address needs to be one, and none at all removes every guest.
-    let sentence = w.refused("event.respond", json!({ "id": &id, "address": "nobody@example.com", "status": "accepted" }));
+    let sentence = w.refused(
+        "event.respond",
+        json!({ "id": &id, "address": "nobody@example.com", "status": "accepted" }),
+    );
     assert!(sentence.contains("not invited"), "{sentence}");
-    let sentence = w.refused("event.edit", json!({ "id": &id, "guests": [{ "address": "two words" }] }));
+    let sentence = w.refused(
+        "event.edit",
+        json!({ "id": &id, "guests": [{ "address": "two words" }] }),
+    );
     assert!(sentence.contains("not an address"), "{sentence}");
     w.ok("event.edit", json!({ "id": &id, "guests": [] }));
     assert!(rows(&w).is_empty());
@@ -395,15 +438,17 @@ fn a_guest_resolves_to_a_person_by_address_and_survives_that_persons_purge() {
         )
     };
     assert_eq!(person_of("maya@example.com"), Some(maya.clone()));
-    assert_eq!(person_of("stranger@example.com"), None, "not in People, still a guest");
+    assert_eq!(
+        person_of("stranger@example.com"),
+        None,
+        "not in People, still a guest"
+    );
     // The read resolves an address that became a person's after the guest was invited.
     let sam = w.person("Sam");
     email(&w, &sam, "stranger@example.com");
     let resolved = w
         .vault()
-        .read(|c| {
-            centraid_vault::commands::event::guests_of(c, &id)
-        })
+        .read(|c| centraid_vault::commands::event::guests_of(c, &id))
         .expect("guests");
     assert_eq!(
         resolved
@@ -420,7 +465,10 @@ fn a_guest_resolves_to_a_person_by_address_and_survives_that_persons_purge() {
     w.ok("entity.purge", json!({ "id": &maya }));
     assert_eq!(person_of("maya@example.com"), None);
     assert_eq!(
-        w.one::<i64>("SELECT COUNT(*) FROM event_guest WHERE event_id = ?1", &[&id]),
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM event_guest WHERE event_id = ?1",
+            &[&id]
+        ),
         2,
         "the guest outlives the person"
     );
@@ -456,7 +504,11 @@ fn a_day_of_a_series_is_skipped_moved_and_put_back_by_its_wall_clock() {
     );
     assert_eq!(
         days(&w, &id)[1],
-        (key2.to_owned(), 0, Some("2026-03-16T09:30:00.000Z".to_owned()))
+        (
+            key2.to_owned(),
+            0,
+            Some("2026-03-16T09:30:00.000Z".to_owned())
+        )
     );
     assert_eq!(
         text(&w, "SELECT title || '|' || location FROM occurrence WHERE series_id = ?1 AND original_start = ?2", &[&id, key2])
@@ -468,18 +520,30 @@ fn a_day_of_a_series_is_skipped_moved_and_put_back_by_its_wall_clock() {
         "event.edit_occurrence",
         json!({ "id": &id, "original_start": "2026-03-10T08:00:00.000Z", "action": "skip" }),
     );
-    assert!(sentence.contains("not one the event lands on"), "{sentence}");
+    assert!(
+        sentence.contains("not one the event lands on"),
+        "{sentence}"
+    );
     // A day may be moved as far as the member likes.
     w.ok(
         "event.edit_occurrence",
         json!({ "id": &id, "original_start": key2, "action": "override", "starts": "2026-09-16T10:30" }),
     );
     // Put back: the rows go and the series is the series again.
-    w.ok("event.edit_occurrence", json!({ "id": &id, "original_start": key, "action": "restore" }));
-    w.ok("event.edit_occurrence", json!({ "id": &id, "original_start": key2, "action": "restore" }));
+    w.ok(
+        "event.edit_occurrence",
+        json!({ "id": &id, "original_start": key, "action": "restore" }),
+    );
+    w.ok(
+        "event.edit_occurrence",
+        json!({ "id": &id, "original_start": key2, "action": "restore" }),
+    );
     assert!(days(&w, &id).is_empty());
     // A day of an event that does not repeat is refused.
-    let one = event(&w, json!({ "title": "Once", "starts": "2026-03-05", "busy": false }));
+    let one = event(
+        &w,
+        json!({ "title": "Once", "starts": "2026-03-05", "busy": false }),
+    );
     let sentence = w.refused(
         "event.edit_occurrence",
         json!({ "id": &one, "original_start": "2026-03-05", "action": "skip" }),
@@ -504,7 +568,12 @@ fn a_day_with_its_own_timing_keeps_it_and_one_that_states_the_series_own_stores_
                 "timing": "floating", "starts": "2026-03-09T18:00" }),
     );
     assert_eq!(
-        text(&w, "SELECT timing || ' ' || starts FROM occurrence WHERE series_id = ?1", &[&id]).as_deref(),
+        text(
+            &w,
+            "SELECT timing || ' ' || starts FROM occurrence WHERE series_id = ?1",
+            &[&id]
+        )
+        .as_deref(),
         Some("floating 2026-03-09T18:00")
     );
     // A day that states its series' own timing stores none.
@@ -513,7 +582,14 @@ fn a_day_with_its_own_timing_keeps_it_and_one_that_states_the_series_own_stores_
         json!({ "id": &id, "original_start": "2026-03-16", "action": "override",
                 "timing": "all-day", "starts": "2026-03-17", "title": "Moved a day" }),
     );
-    assert!(text(&w, "SELECT timing FROM occurrence WHERE series_id = ?1 AND original_start = '2026-03-16'", &[&id]).is_none());
+    assert!(
+        text(
+            &w,
+            "SELECT timing FROM occurrence WHERE series_id = ?1 AND original_start = '2026-03-16'",
+            &[&id]
+        )
+        .is_none()
+    );
     // A zoned day needs the zone it is in.
     let sentence = w.refused(
         "event.edit_occurrence",
@@ -534,10 +610,19 @@ fn this_and_following_splits_the_series_and_a_change_of_timing_to_the_future_is_
                 "zone": "Europe/Paris", "rule": "FREQ=WEEKLY", "reminders": [10],
                 "guests": [{ "address": "maya@example.com", "status": "accepted" }] }),
     );
-    w.ok("event.edit_occurrence", json!({ "id": &id, "original_start": "2026-03-09T08:00:00.000Z", "action": "skip" }));
-    w.ok("event.edit_occurrence", json!({ "id": &id, "original_start": "2026-03-23T08:00:00.000Z", "action": "skip" }));
+    w.ok(
+        "event.edit_occurrence",
+        json!({ "id": &id, "original_start": "2026-03-09T08:00:00.000Z", "action": "skip" }),
+    );
+    w.ok(
+        "event.edit_occurrence",
+        json!({ "id": &id, "original_start": "2026-03-23T08:00:00.000Z", "action": "skip" }),
+    );
     let tag = w.made(Kind::Tag, "team");
-    w.ok("edge.add", json!({ "from": &id, "rel": "tagged", "to": &tag }));
+    w.ok(
+        "edge.add",
+        json!({ "from": &id, "rel": "tagged", "to": &tag }),
+    );
     // From the 16th the standup is at ten: a change of timing, to the future.
     let out = w.ok(
         "event.split",
@@ -565,18 +650,30 @@ fn this_and_following_splits_the_series_and_a_change_of_timing_to_the_future_is_
         vec!["2026-03-16T09:00:00.000Z|2026-03-16T09:45:00.000Z|Europe/Paris|Late standup|calendar:default"]
     );
     let new_rule = text(&w, "SELECT rule FROM event WHERE id = ?1", &[&new_id]).expect("a rule");
-    assert!(new_rule.contains("FREQ=WEEKLY") && !new_rule.contains("UNTIL"), "{new_rule}");
+    assert!(
+        new_rule.contains("FREQ=WEEKLY") && !new_rule.contains("UNTIL"),
+        "{new_rule}"
+    );
     assert_eq!(
-        w.strings("SELECT address || status FROM event_guest WHERE event_id = ?1", &[&new_id]),
+        w.strings(
+            "SELECT address || status FROM event_guest WHERE event_id = ?1",
+            &[&new_id]
+        ),
         vec!["maya@example.comaccepted"],
         "the guests and their answers come along"
     );
     assert_eq!(
-        w.strings("SELECT CAST(offset_min AS TEXT) FROM reminder WHERE entity_id = ?1", &[&new_id]),
+        w.strings(
+            "SELECT CAST(offset_min AS TEXT) FROM reminder WHERE entity_id = ?1",
+            &[&new_id]
+        ),
         vec!["10"]
     );
     assert_eq!(
-        w.one::<i64>("SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'tagged'", &[&new_id]),
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'tagged'",
+            &[&new_id]
+        ),
         1
     );
     // Its days: the 9th (before the split) stays with the old half; the 23rd was skipped at nine, and
@@ -599,7 +696,10 @@ fn a_split_that_changes_no_time_carries_the_days_and_shares_out_a_count() {
         json!({ "title": "Course", "starts": "2026-03-02T18:00", "timing": "floating",
                 "rule": "FREQ=WEEKLY;COUNT=6" }),
     );
-    w.ok("event.edit_occurrence", json!({ "id": &id, "original_start": "2026-03-23T18:00", "action": "skip" }));
+    w.ok(
+        "event.edit_occurrence",
+        json!({ "id": &id, "original_start": "2026-03-23T18:00", "action": "skip" }),
+    );
     let out = w.ok(
         "event.split",
         json!({ "id": &id, "original_start": "2026-03-16T18:00", "location": "Annex" }),
@@ -607,7 +707,10 @@ fn a_split_that_changes_no_time_carries_the_days_and_shares_out_a_count() {
     let new_id = out["new_id"].as_str().expect("the new event").to_owned();
     // Two weeks were kept (the 2nd, the 9th); four are left for the new half.
     let old_rule = text(&w, "SELECT rule FROM event WHERE id = ?1", &[&id]).expect("a rule");
-    assert!(old_rule.contains("UNTIL=20260309T180000") && !old_rule.contains("COUNT"), "{old_rule}");
+    assert!(
+        old_rule.contains("UNTIL=20260309T180000") && !old_rule.contains("COUNT"),
+        "{old_rule}"
+    );
     let new_rule = text(&w, "SELECT rule FROM event WHERE id = ?1", &[&new_id]).expect("a rule");
     assert!(new_rule.contains("COUNT=4"), "{new_rule}");
     assert_eq!(
@@ -617,7 +720,10 @@ fn a_split_that_changes_no_time_carries_the_days_and_shares_out_a_count() {
     assert!(text(&w, "SELECT location FROM event WHERE id = ?1", &[&id]).is_none());
     // The skipped week moved with the days it belongs to.
     assert!(days(&w, &id).is_empty());
-    assert_eq!(days(&w, &new_id), vec![("2026-03-23T18:00".to_owned(), 1, None)]);
+    assert_eq!(
+        days(&w, &new_id),
+        vec![("2026-03-23T18:00".to_owned(), 1, None)]
+    );
 }
 
 #[test]
@@ -639,8 +745,14 @@ fn splitting_at_the_first_day_is_the_edit_of_the_whole_series_and_a_day_off_the_
         "event.split",
         json!({ "id": &id, "original_start": "2026-03-03T08:00:00.000Z", "title": "Nope" }),
     );
-    assert!(sentence.contains("not one the event lands on"), "{sentence}");
-    let once = event(&w, json!({ "title": "Once", "starts": "2026-03-05", "busy": false }));
+    assert!(
+        sentence.contains("not one the event lands on"),
+        "{sentence}"
+    );
+    let once = event(
+        &w,
+        json!({ "title": "Once", "starts": "2026-03-05", "busy": false }),
+    );
     let sentence = w.refused(
         "event.split",
         json!({ "id": &once, "original_start": "2026-03-05", "title": "Nope" }),
@@ -652,18 +764,33 @@ fn splitting_at_the_first_day_is_the_edit_of_the_whole_series_and_a_day_off_the_
 fn a_change_to_the_whole_series_moves_its_days_with_it_and_a_new_timing_drops_them() {
     let w = World::new("event_series_edit");
     let id = standup(&w);
-    w.ok("event.edit_occurrence", json!({ "id": &id, "original_start": "2026-03-09T08:00:00.000Z", "action": "skip" }));
+    w.ok(
+        "event.edit_occurrence",
+        json!({ "id": &id, "original_start": "2026-03-09T08:00:00.000Z", "action": "skip" }),
+    );
     // The standup moves from nine to ten for the whole series: the skipped week stays skipped.
-    w.ok("event.edit", json!({ "id": &id, "starts": "2026-03-02T10:00", "ends": "2026-03-02T10:30" }));
-    assert_eq!(days(&w, &id), vec![("2026-03-09T09:00:00.000Z".to_owned(), 1, None)]);
+    w.ok(
+        "event.edit",
+        json!({ "id": &id, "starts": "2026-03-02T10:00", "ends": "2026-03-02T10:30" }),
+    );
+    assert_eq!(
+        days(&w, &id),
+        vec![("2026-03-09T09:00:00.000Z".to_owned(), 1, None)]
+    );
     // A series that stops repeating has no days to change.
     w.ok("event.edit", json!({ "id": &id, "timing": "floating", "starts": "2026-03-02T10:00", "ends": "2026-03-02T10:30", "zone": null }));
-    assert!(days(&w, &id).is_empty(), "a new timing starts the series' days afresh");
+    assert!(
+        days(&w, &id).is_empty(),
+        "a new timing starts the series' days afresh"
+    );
     w.ok("event.edit", json!({ "id": &id, "rule": null }));
     assert!(text(&w, "SELECT rule FROM event WHERE id = ?1", &[&id]).is_none());
     // A rule outside the expander's subset is refused where it is written.
     let sentence = w.refused("event.edit", json!({ "id": &id, "rule": "FREQ=HOURLY" }));
-    assert!(sentence.to_lowercase().contains("hourly") || sentence.contains("FREQ"), "{sentence}");
+    assert!(
+        sentence.to_lowercase().contains("hourly") || sentence.contains("FREQ"),
+        "{sentence}"
+    );
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -673,13 +800,28 @@ fn a_change_to_the_whole_series_moves_its_days_with_it_and_a_new_timing_drops_th
 #[test]
 fn a_busy_event_may_land_on_a_busy_one_and_the_read_says_so() {
     let w = World::new("event_overlap");
-    let a = event(&w, json!({ "title": "Dentist", "starts": "2026-03-05T10:00", "ends": "2026-03-05T11:00", "timing": "floating" }));
+    let a = event(
+        &w,
+        json!({ "title": "Dentist", "starts": "2026-03-05T10:00", "ends": "2026-03-05T11:00", "timing": "floating" }),
+    );
     // Nothing refuses the second: the same hour, busy.
-    let b = event(&w, json!({ "title": "Call", "starts": "2026-03-05T10:30", "ends": "2026-03-05T11:30", "timing": "floating" }));
+    let b = event(
+        &w,
+        json!({ "title": "Call", "starts": "2026-03-05T10:30", "ends": "2026-03-05T11:30", "timing": "floating" }),
+    );
     // A free one, an all-day one and the next hour overlap nothing.
-    let _free = event(&w, json!({ "title": "Maybe", "starts": "2026-03-05T10:15", "ends": "2026-03-05T10:45", "timing": "floating", "busy": false }));
-    let _all_day = event(&w, json!({ "title": "Trip", "starts": "2026-03-05", "ends": "2026-03-05", "busy": true }));
-    let _next = event(&w, json!({ "title": "Lunch", "starts": "2026-03-05T11:30", "ends": "2026-03-05T12:30", "timing": "floating" }));
+    let _free = event(
+        &w,
+        json!({ "title": "Maybe", "starts": "2026-03-05T10:15", "ends": "2026-03-05T10:45", "timing": "floating", "busy": false }),
+    );
+    let _all_day = event(
+        &w,
+        json!({ "title": "Trip", "starts": "2026-03-05", "ends": "2026-03-05", "busy": true }),
+    );
+    let _next = event(
+        &w,
+        json!({ "title": "Lunch", "starts": "2026-03-05T11:30", "ends": "2026-03-05T12:30", "timing": "floating" }),
+    );
     let found = w
         .vault()
         .read(|c| centraid_vault::commands::event::reads::overlaps(c, "2026-03-05", 1, Some("UTC")))
@@ -697,8 +839,17 @@ fn a_busy_event_may_land_on_a_busy_one_and_the_read_says_so() {
 fn an_events_alerts_are_reminder_rows_set_changed_and_moved_with_the_event() {
     let w = World::new("event_reminders");
     // An event has no alert unless it is given one (no default alert existed for an event).
-    let none = event(&w, json!({ "title": "Quiet", "starts": "2099-03-05T10:00", "timing": "floating" }));
-    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM reminder WHERE entity_id = ?1", &[&none]), 0);
+    let none = event(
+        &w,
+        json!({ "title": "Quiet", "starts": "2099-03-05T10:00", "timing": "floating" }),
+    );
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM reminder WHERE entity_id = ?1",
+            &[&none]
+        ),
+        0
+    );
     assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM alert", &[]), 0);
     let id = event(
         &w,
@@ -721,7 +872,10 @@ fn an_events_alerts_are_reminder_rows_set_changed_and_moved_with_the_event() {
     assert_eq!(leads(&w), vec!["10", "1440"]);
     assert_eq!(fire(&w), vec!["2099-03-04T10:00", "2099-03-05T09:50"]);
     // The alert moves with the start.
-    w.ok("event.edit", json!({ "id": &id, "starts": "2099-03-06T10:00" }));
+    w.ok(
+        "event.edit",
+        json!({ "id": &id, "starts": "2099-03-06T10:00" }),
+    );
     assert_eq!(fire(&w), vec!["2099-03-05T10:00", "2099-03-06T09:50"]);
     // A reminder is a lead of 0 minutes to a year before, and nothing else (the input schema says so).
     assert!(
@@ -729,9 +883,13 @@ fn an_events_alerts_are_reminder_rows_set_changed_and_moved_with_the_event() {
             .execute(
                 &w.registry,
                 &centraid_vault::Principal::owner("phone"),
-                &centraid_vault::Command::new("event.edit", json!({ "id": &id, "reminders": [-5] })),
+                &centraid_vault::Command::new(
+                    "event.edit",
+                    json!({ "id": &id, "reminders": [-5] })
+                ),
             )
-            .map_or(true, |outcome| outcome.status != centraid_vault::CommandStatus::Executed)
+            .map_or(true, |outcome| outcome.status
+                != centraid_vault::CommandStatus::Executed)
     );
     // Cancelling or trashing takes the alerts; null removes them.
     w.ok("event.edit", json!({ "id": &id, "reminders": null }));
@@ -750,7 +908,10 @@ fn a_series_day_that_is_skipped_or_moved_moves_the_alert() {
         w.strings("SELECT a.fire_key FROM alert a JOIN reminder r ON r.id = a.reminder_id WHERE r.entity_id = ?1", &[&id])
     };
     assert_eq!(fire(&w), vec!["2026-03-05T09:00"]);
-    w.ok("event.edit_occurrence", json!({ "id": &id, "original_start": "2026-03-05T09:00", "action": "skip" }));
+    w.ok(
+        "event.edit_occurrence",
+        json!({ "id": &id, "original_start": "2026-03-05T09:00", "action": "skip" }),
+    );
     assert_eq!(fire(&w), vec!["2026-03-06T09:00"]);
     w.ok(
         "event.edit_occurrence",

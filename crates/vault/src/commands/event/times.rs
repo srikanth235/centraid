@@ -151,8 +151,14 @@ pub(super) fn resolve_times(
         Some(_) => None,
         // A start moved with no end said keeps the length it had.
         None => match base {
-            Some(base) if base.timing == timing && base.zone == zone.as_ref().map(|z| z.name().to_owned()) && base.starts != starts => {
-                base.ends.as_deref().map(|ends| moved_end(timing, &base.starts, ends, &starts))
+            Some(base)
+                if base.timing == timing
+                    && base.zone == zone.as_ref().map(|z| z.name().to_owned())
+                    && base.starts != starts =>
+            {
+                base.ends
+                    .as_deref()
+                    .map(|ends| moved_end(timing, &base.starts, ends, &starts))
             }
             Some(base) => base
                 .ends
@@ -394,7 +400,12 @@ pub(super) fn epoch_ms(value: &str) -> Option<i64> {
 
 /// `ends` carried to a start that moved: the same length after the new start, in the form the
 /// timing keeps (a floating clock to the minute).
-pub(super) fn moved_end(timing: Semantics, was_starts: &str, was_ends: &str, starts: &str) -> String {
+pub(super) fn moved_end(
+    timing: Semantics,
+    was_starts: &str,
+    was_ends: &str,
+    starts: &str,
+) -> String {
     let (Some(a), Some(b), Some(c)) = (epoch_ms(was_starts), epoch_ms(was_ends), epoch_ms(starts))
     else {
         return was_ends.to_owned();

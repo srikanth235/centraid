@@ -17,7 +17,7 @@ use crate::error::Result;
 use crate::model::Kind;
 
 use super::merge::same;
-use super::{Child, Gone, Match, Maps, OriginRow, SystemMap};
+use super::{Child, Gone, Maps, Match, OriginRow, SystemMap};
 
 fn no_defaults(
     _: &rusqlite::Connection,
@@ -133,7 +133,7 @@ pub const SYSTEMS: &[SystemMap] = &[
         gone: Gone::Trash,
         window: None,
         defaults: no_defaults,
-        founds: None,
+        founds: Some(event::follow_home),
         shape: event::shape,
         settle: event::settle,
         named: nothing_to_settle,
