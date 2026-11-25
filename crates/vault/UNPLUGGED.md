@@ -50,6 +50,7 @@ and make it pass. Tests of removed behaviour are deleted, not ported.
 Each is the old test of a thing the new schema changed; the owner rewrites it against the new tables
 and moves it back.
 
+- **checkpoint 2/3: crates/ontology**: `ontology_graph` (was `graph`): tests `centraid_ontology::graph`'s catalogue of edge relations and column links and its Locker-wall reads. It waits because `crates/ontology` is rewritten in a later checkpoint (its list still names `links` and `attendee`, and there is no Locker wall now); the vault-only edge tests are `tests/graph.rs`
 - **K7 index file (index/, writers, search_owed drain, geo)**: `index_owed`, `index_walks`, `page_source`
 - **K8 reminders and alerts (alerts.rs, reminder, alert)**: `alerts`
 - **K9 following (commands/follow/, arrival.rs, origin_cursor.rs)**: `arrival` (an arrival is two columns of `entity` now and makes no origin or source; `arrival::SYSTEMS` is read only by `follow/merge.rs`'s exclusion clause, now dead), `shared_verbs_people_follow`, `origin_cursor`, `follow_items`, `follow_reminders`, `follow_retire`, `follow_stated`, `follow_gaps`, `calendar_follow`
