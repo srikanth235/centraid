@@ -363,6 +363,16 @@ CREATE TRIGGER edge_anchor_needs_an_anchored_shape BEFORE UPDATE OF anchor ON ed
        AND (s.from_kind = f.kind OR (s.from_kind = '*' AND fk.linkable = 1))
        AND (s.to_kind   = t.kind OR (s.to_kind   = '*' AND tk.linkable = 1)))
   BEGIN SELECT RAISE(ABORT, 'this edge cannot carry an anchor'); END;
+-- A place in a list is kept only by a relation that is ordered (the insert trigger says the same of a new edge).
+CREATE TRIGGER edge_position_needs_an_ordered_shape BEFORE UPDATE OF position ON edge
+  WHEN new.position IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM edge_shape s
+      JOIN entity f ON f.id = new.from_id JOIN entity_kind fk ON fk.code = f.kind
+      JOIN entity t ON t.id = new.to_id   JOIN entity_kind tk ON tk.code = t.kind
+     WHERE s.rel = new.rel AND s.ordered = 1
+       AND (s.from_kind = f.kind OR (s.from_kind = '*' AND fk.linkable = 1))
+       AND (s.to_kind   = t.kind OR (s.to_kind   = '*' AND tk.linkable = 1)))
+  BEGIN SELECT RAISE(ABORT, 'this edge cannot keep a place in a list'); END;
 CREATE TRIGGER edge_ends_are_fixed BEFORE UPDATE OF from_id, rel, to_id, label_id ON edge
   BEGIN SELECT RAISE(ABORT, 'an edge''s ends never change; remove it and add another'); END;
 

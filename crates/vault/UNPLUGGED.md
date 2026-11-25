@@ -33,8 +33,6 @@ and make it pass. Tests of removed behaviour are deleted, not ported.
 | Where | What was done | Owner |
 |---|---|---|
 | `commands/follow/systems.rs` | `SYSTEMS` is empty; the per-system maps are in this file's history at `40b18d2c`. The engine (`merge.rs`, `commands.rs`) is untouched and its tests are aside | K9 and each app lane (re-adds its map) |
-| `commands/edge.rs` | `Rel::Links`/`Attendee`, `state` and the reverse-link dedupe removed; shape check reads `entity_kind.linkable` for `*`; `anchor` carries `"v":1` | K5 |
-| `links.rs` | compiles (`Kind::Workout`, no `Links` rel); **its SQL still reads the old `links` edges** and is wrong | K5 |
 | `commands/note.rs` | compiles; still writes the old columns (`notebook_id`, `wikilink` edges), so `note.create`, `note.edit` and the rest fail against the new tables until K11 rewrites it. A note is made in tests with `common::insert_note` | K11 |
 | `commands/follow/` (the pass) | a follow pass commits through `Vault::commit` or `Command::as_actor`; it must say `Actor::Store { origin_id }` (`CommitTx::set_actor`) so its revisions carry `actor = 'store'` and the origin, which the table's CHECK demands of a store. `follow::system_of` (read only by the old cause parsing) is gone | K9 |
 | `history/write.rs`, `commands/event/times.rs` | `history.keep_version` keeps `table.column` fields only; the event overlay (`attendee`, `reminder` lists, the `occurrence`/`DAY` day) is gone: an occurrence is outside a series' snapshot (B1) and guests and reminders are rows with their own keys. `commands/event/times.rs` still names `history::DAY` | calendar lane |
@@ -52,7 +50,6 @@ and make it pass. Tests of removed behaviour are deleted, not ported.
 Each is the old test of a thing the new schema changed; the owner rewrites it against the new tables
 and moves it back.
 
-- **K5 graph (edge.rs, links.rs, link and mention tables)**: `graph`, `links`, `shared_verbs_edges` (the edge half of the old `shared_verbs`; `edge.rs` still builds a relation's id with `model::concept_id`, which only a seeded concept has: a member's is minted, found by `concept(kind, key)`)
 - **K7 index file (index/, writers, search_owed drain, geo)**: `index_owed`, `index_walks`, `page_source`
 - **K8 reminders and alerts (alerts.rs, reminder, alert)**: `alerts`
 - **K9 following (commands/follow/, arrival.rs, origin_cursor.rs)**: `arrival` (an arrival is two columns of `entity` now and makes no origin or source; `arrival::SYSTEMS` is read only by `follow/merge.rs`'s exclusion clause, now dead), `shared_verbs_people_follow`, `origin_cursor`, `follow_items`, `follow_reminders`, `follow_retire`, `follow_stated`, `follow_gaps`, `calendar_follow`

@@ -22,6 +22,8 @@ follow.take_stated
 history.keep_version
 history.restore_version
 history.undo
+link.add
+link.remove
 note.create
 note.edit
 note.export

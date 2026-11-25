@@ -74,6 +74,48 @@ impl World {
         );
     }
 
+    /// An entity of `kind` in the first home its kind's `home_shape` allows, made first when it
+    /// has to be (a kind with `may_be_top = 0`); an empty title for a kind that takes none.
+    fn entity_in(&self, n: u64, kind: &str) -> String {
+        let (needs_home, named): (bool, bool) = self
+            .scratch
+            .vault
+            .read(|c| {
+                Ok(c.query_row(
+                    "SELECT may_be_top = 0, may_be_named FROM entity_kind WHERE code = ?1",
+                    [kind],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )?)
+            })
+            .expect("a kind");
+        let id = id(n);
+        let title = if named { "x" } else { "" };
+        if needs_home {
+            let home_kind: String = self
+                .scratch
+                .vault
+                .read(|c| {
+                    Ok(c.query_row(
+                        "SELECT home_kind FROM home_shape WHERE kind = ?1 ORDER BY home_kind LIMIT 1",
+                        [kind],
+                        |r| r.get(0),
+                    )?)
+                })
+                .expect("a home kind");
+            let home = self.entity_in(n + 5_000, &home_kind);
+            self.takes(&format!(
+                "INSERT INTO entity (id, kind, title, parent_id, parent_kind, created_at, updated_at)
+                 VALUES ('{id}', '{kind}', '{title}', '{home}', '{home_kind}', '{AT}', '{AT}')"
+            ));
+        } else {
+            self.takes(&format!(
+                "INSERT INTO entity (id, kind, title, created_at, updated_at)
+                 VALUES ('{id}', '{kind}', '{title}', '{AT}', '{AT}')"
+            ));
+        }
+        id
+    }
+
     fn entity(&self, n: u64, kind: &str, title: &str) -> String {
         let id = id(n);
         self.takes(&format!(
@@ -247,6 +289,287 @@ fn a_link_has_its_lower_id_first_and_joins_only_linkable_kinds() {
     w.takes(&format!(
         "INSERT INTO link (a, b, created_at) VALUES ('{a}', '{b}', '{AT}')"
     ));
+}
+
+#[test]
+fn a_link_pair_is_one_row_and_its_ends_never_change() {
+    let w = World::new("rules_k5_link");
+    let a = w.entity(100, "note", "A");
+    let b = w.entity(101, "person", "B");
+    let c = w.entity(102, "task", "C");
+    w.takes(&format!(
+        "INSERT INTO link (a, b, created_at) VALUES ('{a}', '{b}', '{AT}')"
+    ));
+    // A pair is one row: the same pair again, in the only order the table keeps, is a duplicate.
+    w.refuses_with(
+        &format!("INSERT INTO link (a, b, created_at) VALUES ('{a}', '{b}', '{AT}')"),
+        "UNIQUE",
+    );
+    w.refuses_with(
+        &format!("UPDATE link SET b = '{c}' WHERE a = '{a}'"),
+        "never change",
+    );
+    w.refuses_with(
+        &format!("UPDATE link SET a = '{c}' WHERE a = '{a}'"),
+        "never change",
+    );
+    // Purging an end takes the link (ON DELETE CASCADE): nothing else names it.
+    w.takes(&format!("DELETE FROM entity WHERE id = '{b}'"));
+    assert_eq!(
+        w.scratch
+            .vault
+            .read(|c| Ok(c.query_row("SELECT COUNT(*) FROM link", [], |r| r.get::<_, i64>(0))?))
+            .expect("reads"),
+        0
+    );
+}
+
+#[test]
+fn a_mention_names_a_linkable_item_or_none_and_waits_again_when_its_target_goes() {
+    let w = World::new("rules_k5_mention");
+    let note = w.entity(103, "note", "N");
+    let item = w.entity(104, "person", "P");
+    let tag = w.entity(105, "tag", "T");
+    let reading = w.entity(106, "reading", "");
+    w.takes(&format!("INSERT INTO note (id) VALUES ('{note}')"));
+    for bad in [&tag, &reading] {
+        w.refuses_with(
+            &format!("INSERT INTO mention (note_id, ordinal, wikilink, to_id) VALUES ('{note}', 0, 'x', '{bad}')"),
+            "cannot mention",
+        );
+    }
+    w.takes(&format!(
+        "INSERT INTO mention (note_id, ordinal, wikilink) VALUES ('{note}', 0, 'waits')"
+    ));
+    w.refuses_with(
+        &format!("UPDATE mention SET to_id = '{tag}' WHERE note_id = '{note}'"),
+        "cannot mention",
+    );
+    w.takes(&format!(
+        "UPDATE mention SET to_id = '{item}' WHERE note_id = '{note}'"
+    ));
+    // The note owns its mentions: only a note has any, and an empty title is no mention.
+    w.refuses(&format!(
+        "INSERT INTO mention (note_id, ordinal, wikilink) VALUES ('{item}', 1, 'x')"
+    ));
+    w.refuses(&format!(
+        "INSERT INTO mention (note_id, ordinal, wikilink) VALUES ('{note}', 2, '  ')"
+    ));
+    w.takes(&format!("DELETE FROM entity WHERE id = '{item}'"));
+    let unresolved: bool = w
+        .scratch
+        .vault
+        .read(|c| Ok(c.query_row("SELECT to_id IS NULL FROM mention", [], |r| r.get(0))?))
+        .expect("reads");
+    assert!(
+        unresolved,
+        "a purged target turns its mention back into an unresolved one"
+    );
+}
+
+#[test]
+fn an_edge_joins_the_kinds_a_shape_names_and_wears_what_the_shape_allows() {
+    let w = World::new("rules_k5_edge");
+    let note = w.entity(107, "note", "N");
+    let person = w.entity(108, "person", "P");
+    let other = w.entity(109, "person", "Q");
+    let album = w.entity(110, "album", "A");
+    let photo = w.entity(111, "photo", "F");
+    let task = w.entity(112, "task", "T");
+    let relation = w.entity(113, "relation", "Friend");
+    let tag = w.entity(114, "tag", "t");
+    let insert = |from: &str, rel: &str, to: &str, extra_cols: &str, extra_vals: &str| {
+        format!(
+            "INSERT INTO edge (from_id, rel, to_id, created_at{extra_cols}) VALUES ('{from}', '{rel}', '{to}', '{AT}'{extra_vals})"
+        )
+    };
+    // The rows a shape says, and one of each way to be refused.
+    w.takes(&insert(&note, "about", &person, "", ""));
+    w.refuses_with(
+        &insert(&person, "about", &note, "", ""),
+        "no edge of this relation",
+    );
+    w.refuses_with(
+        &insert(&note, "about", &tag, "", ""),
+        "no edge of this relation",
+    );
+    w.refuses_with(
+        &insert(&note, "nonsense", &person, "", ""),
+        "no edge of this relation",
+    );
+    w.refuses(&insert(&note, "about", &note, "", ""));
+    // A duplicate is refused, with or without a label.
+    w.refuses_with(&insert(&note, "about", &person, "", ""), "UNIQUE");
+    // A label exactly where the shape names a label kind, and of that kind.
+    w.refuses_with(
+        &insert(&person, "related", &other, "", ""),
+        "no edge of this relation",
+    );
+    w.refuses_with(
+        &insert(
+            &person,
+            "related",
+            &other,
+            ", label_id",
+            &format!(", '{tag}'"),
+        ),
+        "no edge of this relation",
+    );
+    w.takes(&insert(
+        &person,
+        "related",
+        &other,
+        ", label_id",
+        &format!(", '{relation}'"),
+    ));
+    w.refuses_with(
+        &insert(
+            &note,
+            "about",
+            &other,
+            ", label_id",
+            &format!(", '{relation}'"),
+        ),
+        "no edge of this relation",
+    );
+    // A place only where the relation is ordered, on insert and on update.
+    w.refuses_with(
+        &insert(&task, "about", &person, ", position", ", 1.0"),
+        "no edge of this relation",
+    );
+    w.takes(&insert(&album, "contains", &photo, ", position", ", 1.0"));
+    w.takes(&format!(
+        "UPDATE edge SET position = 0.5 WHERE from_id = '{album}'"
+    ));
+    w.refuses_with(
+        &format!("UPDATE edge SET position = 3.0 WHERE from_id = '{note}'"),
+        "keep a place",
+    );
+    // An anchor only where the shape is anchored, an object, with its version.
+    w.refuses_with(
+        &insert(&task, "about", &person, ", anchor", ", '{\"v\":1}'"),
+        "no edge of this relation",
+    );
+    w.refuses(&insert(
+        &note,
+        "about",
+        &other,
+        ", anchor",
+        ", '{\"from\":1}'",
+    ));
+    w.refuses(&insert(&note, "about", &other, ", anchor", ", '[1]'"));
+    w.refuses(&insert(&note, "about", &other, ", anchor", ", 'nope'"));
+    w.takes(&insert(
+        &note,
+        "about",
+        &other,
+        ", anchor",
+        ", '{\"v\":1,\"from\":1}'",
+    ));
+    w.takes(&format!(
+        "UPDATE edge SET anchor = '{{\"v\":1}}' WHERE from_id = '{note}' AND to_id = '{person}'"
+    ));
+    w.refuses(&format!(
+        "UPDATE edge SET anchor = '{{\"from\":1}}' WHERE from_id = '{note}' AND to_id = '{person}'"
+    ));
+    w.takes(&insert(&task, "about", &person, "", ""));
+    w.refuses_with(
+        &format!("UPDATE edge SET anchor = '{{\"v\":1}}' WHERE from_id = '{task}'"),
+        "cannot carry an anchor",
+    );
+    // An edge's ends never change.
+    w.refuses_with(
+        &format!(
+            "UPDATE edge SET to_id = '{other}' WHERE from_id = '{note}' AND to_id = '{person}'"
+        ),
+        "never change",
+    );
+    w.refuses_with(
+        &format!("UPDATE edge SET rel = 'with' WHERE from_id = '{note}' AND to_id = '{person}'"),
+        "never change",
+    );
+}
+
+#[test]
+fn the_edge_trigger_joins_exactly_the_pairs_edge_shape_says_over_every_pair_of_kinds() {
+    let w = World::new("rules_k5_matrix");
+    let kinds: Vec<(String, bool)> = w
+        .scratch
+        .vault
+        .read(|c| {
+            let mut s = c.prepare("SELECT code, linkable FROM entity_kind ORDER BY code")?;
+            Ok(s.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<rusqlite::Result<Vec<(String, bool)>>>()?)
+        })
+        .expect("kinds");
+    let rels: Vec<String> = w
+        .scratch
+        .vault
+        .read(|c| {
+            let mut s = c.prepare("SELECT DISTINCT rel FROM edge_shape")?;
+            Ok(s.query_map([], |r| r.get(0))?
+                .collect::<rusqlite::Result<Vec<String>>>()?)
+        })
+        .expect("rels");
+    let mut n = 200;
+    let ends: Vec<(String, String, bool)> = kinds
+        .iter()
+        .map(|(kind, linkable)| {
+            n += 1;
+            (kind.clone(), w.entity_in(n, kind), *linkable)
+        })
+        .collect();
+    let seconds: Vec<(String, String, bool)> = kinds
+        .iter()
+        .map(|(kind, linkable)| {
+            n += 1;
+            (kind.clone(), w.entity_in(n, kind), *linkable)
+        })
+        .collect();
+    // (rel, from kind, to kind, label kind) as the table has them.
+    let shapes: Vec<(String, String, String, Option<String>)> = w
+        .scratch
+        .vault
+        .read(|c| {
+            let mut s = c.prepare("SELECT rel, from_kind, to_kind, label_kind FROM edge_shape")?;
+            Ok(
+                s.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?,
+            )
+        })
+        .expect("shapes");
+    let label: String = w.entity_in(n + 1, "relation");
+    let (mut took, mut refused) = (0, 0);
+    w.scratch
+        .vault
+        .commit(|tx| {
+            let c = tx.connection();
+            for rel in &rels {
+                for (fk, fid, flink) in &ends {
+                    for (tk, tid, tlink) in &seconds {
+                        let shape = shapes.iter().find(|(r, f, t, _)| {
+                            r == rel
+                                && (f == fk || (f == "*" && *flink))
+                                && (t == tk || (t == "*" && *tlink))
+                        });
+                        let label_id = shape.and_then(|s| s.3.as_ref()).map(|_| label.clone());
+                        c.execute_batch("SAVEPOINT pair")?;
+                        // Prepared once: compiling the edge's triggers is the cost, not the rule.
+                        let done = c
+                            .prepare_cached(
+                                "INSERT INTO edge (from_id, rel, to_id, label_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                            )?
+                            .execute(rusqlite::params![fid, rel, tid, label_id, AT]);
+                        c.execute_batch("ROLLBACK TO pair; RELEASE pair")?;
+                        assert_eq!(done.is_ok(), shape.is_some(), "{rel}: {fk} -> {tk}: {done:?}");
+                        if done.is_ok() { took += 1 } else { refused += 1 }
+                    }
+                }
+            }
+            Ok(())
+        })
+        .expect("the matrix commits");
+    assert!(took > 40 && refused > 3_000, "{took} {refused}");
 }
 
 // ---------------------------------------------------------------------------------------------
