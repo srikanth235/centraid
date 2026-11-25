@@ -12,6 +12,7 @@
 //! | no CHECK or trigger names a value that lives in a lookup table | `no_check_or_trigger_names_a_value_a_lookup_table_holds` |
 //! | the lookup seeds equal every Rust enum that mirrors them | `lookups.rs` and `the_lookup_seeds_equal_the_rust_lists_that_mirror_them` |
 //! | every blob column is a `revision_blob` slot, `OMITTED`, or in `RENTERS` | `every_blob_column_is_a_slot_or_omitted_and_has_a_renter` (and `history.rs`, `blob_release.rs`) |
+//! | every text column is findable, sealed or argued out | `every_text_column_is_findable_sealed_or_argued_out` (`TEXT`) |
 //!
 //! The rest of the file is the structure every kind relies on: one host table per kind, the trash
 //! pair on `entity` alone, and an index behind every foreign key.
@@ -670,4 +671,440 @@ fn the_trash_pair_lives_on_entity_only() {
         assert_eq!(holders, ["entity"].map(str::to_owned).into());
         Ok(())
     });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Every text column is findable, sealed or argued out
+// ---------------------------------------------------------------------------------------------
+
+/// The text of one column's own definition inside a `CREATE TABLE`.
+fn column_definition(sql: &str, column: &str) -> String {
+    let body = &sql[sql.find('(').map_or(0, |at| at + 1)..];
+    let (mut depth, mut start, mut pieces) = (0_i32, 0, Vec::new());
+    for (at, letter) in body.char_indices() {
+        match letter {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            ',' if depth == 0 => {
+                pieces.push(&body[start..at]);
+                start = at + 1;
+            }
+            _ => {}
+        }
+    }
+    pieces.push(&body[start..]);
+    pieces
+        .into_iter()
+        .map(|piece| piece.split_whitespace().collect::<Vec<_>>().join(" "))
+        .find(|piece| piece.starts_with(&format!("{column} ")))
+        .unwrap_or_default()
+}
+
+/// A `TEXT` column the declaration alone shows is not prose: a key into another table (an id, a
+/// lookup's code, a hash), a generated constant, a closed list, JSON, a date or an instant.
+fn is_structural(connection: &Connection, table: &str, column: &str) -> bool {
+    // A lookup table is a fixed vocabulary written only by a migration; a column that is part of
+    // any foreign key names a row of another table.
+    let keyed: bool = connection
+        .query_row(
+            "SELECT EXISTS (SELECT 1 FROM pragma_foreign_key_list(?1) WHERE \"from\" = ?2)",
+            [table, column],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
+    if keyed || LOOKUP_TABLES.contains(&table) {
+        return true;
+    }
+    if column == "id" || column == "kind" || column.ends_with("_id") || column.ends_with("_kind") {
+        return true;
+    }
+    let sql = table_sql(connection, table)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let own = column_definition(&sql, column);
+    own.contains("REFERENCES")
+        || own.contains("GENERATED")
+        || own.contains(&format!("{column} IN ("))
+        || sql.contains(&format!("{column} IN ("))
+        || sql.contains(&format!("json_valid({column})"))
+        || sql.contains(&format!("date({column})"))
+        || sql.contains(&format!("length({column}) = 64"))
+        || ["%Y-%m-%dT%H:%M:%fZ", "%Y-%m-%dT%H:%M"]
+            .iter()
+            .any(|shape| sql.contains(&format!("strftime('{shape}', {column}) IS {column}")))
+}
+
+fn why_of(table: &str, column: &str) -> Option<&'static Text> {
+    TEXT.iter()
+        .find(|(t, c, _)| *t == table && *c == column)
+        .map(|(_, _, why)| why)
+}
+
+/// The two writers of what the index holds: the live text and the earlier versions' words.
+const TEXT_OF: &str = concat!(
+    include_str!("../src/index/text.rs"),
+    include_str!("../src/index/past.rs")
+);
+
+/// What a text column is, when the declaration alone does not say.
+enum Text {
+    /// A member's words: `index::text_of` (or the earlier-versions writer) reads it.
+    Found,
+    /// Ciphertext or a sealed file's cell: never read by any index.
+    Sealed,
+    /// Not prose a member searches, and why.
+    Not(&'static str),
+}
+
+/// Every `TEXT` column of the vault file and of the index file that is not structural by its
+/// declaration. A column added to the schema fails the test until it is placed here.
+const TEXT: &[(&str, &str, Text)] = &[
+    ("entity", "title", Text::Found),
+    (
+        "entity",
+        "arrived_label",
+        Text::Not("a file or device name an item came in with, cut to a length, never content"),
+    ),
+    ("action_key", "key", Text::Not("an act's correlation token")),
+    (
+        "action_key",
+        "asked",
+        Text::Not("a digest of what an act asked"),
+    ),
+    (
+        "vault",
+        "name",
+        Text::Not("the vault's own name, one per file and not an entity"),
+    ),
+    ("vault", "zone", Text::Not("a time zone name")),
+    ("vault", "currency", Text::Not("an ISO code")),
+    (
+        "concept",
+        "key",
+        Text::Not("the folded form of the title, which is found in what it labels"),
+    ),
+    ("container", "icon", Text::Not("an icon key")),
+    ("origin", "ref", Text::Not("the source's own key")),
+    (
+        "origin",
+        "label",
+        Text::Not("the name of a followed store, not something a member wrote about a thing"),
+    ),
+    (
+        "origin",
+        "cursor",
+        Text::Not("a platform's change token, opaque to the vault"),
+    ),
+    (
+        "source",
+        "stated_title",
+        Text::Not("a copy of what a store called the record; the live title is the entity's"),
+    ),
+    (
+        "revision",
+        "cause",
+        Text::Not("the name of the command that made the change"),
+    ),
+    (
+        "revision_blob",
+        "slot",
+        Text::Not("which column a kept blob was in"),
+    ),
+    ("revision_blob", "media_type", Text::Not("a MIME type")),
+    ("derivative", "media_type", Text::Not("a MIME type")),
+    ("derivative", "text", Text::Found),
+    (
+        "person",
+        "sort_name",
+        Text::Not("derived from the name for ordering"),
+    ),
+    ("person", "given", Text::Found),
+    ("person", "family", Text::Found),
+    ("person", "phonetic", Text::Found),
+    ("person", "nickname", Text::Found),
+    ("person", "role", Text::Found),
+    ("person", "org", Text::Found),
+    ("person", "met", Text::Found),
+    ("person_date", "label", Text::Found),
+    ("contact_point", "value", Text::Found),
+    ("contact_point", "label", Text::Found),
+    (
+        "contact_point",
+        "normalized",
+        Text::Not("the value normalised for matching a duplicate"),
+    ),
+    ("place", "address", Text::Found),
+    ("place", "locality", Text::Found),
+    ("place", "zone", Text::Not("a time zone name")),
+    ("event", "description", Text::Found),
+    ("event", "location", Text::Found),
+    ("event", "url", Text::Found),
+    ("event", "rule", Text::Not("an RFC 5545 rule")),
+    ("event", "zone", Text::Not("a time zone name")),
+    ("event_guest", "address", Text::Found),
+    ("event_guest", "name", Text::Found),
+    ("occurrence", "title", Text::Found),
+    ("occurrence", "description", Text::Found),
+    ("occurrence", "location", Text::Found),
+    ("occurrence", "url", Text::Found),
+    ("occurrence", "zone", Text::Not("a time zone name")),
+    ("task", "description", Text::Found),
+    ("task", "url", Text::Found),
+    ("task", "rule", Text::Not("an RFC 5545 rule")),
+    ("task", "zone", Text::Not("a time zone name")),
+    ("note", "body", Text::Found),
+    (
+        "note_asset",
+        "name",
+        Text::Not("a file name of a picture placed in a note"),
+    ),
+    ("note_asset", "media_type", Text::Not("a MIME type")),
+    (
+        "mention",
+        "wikilink",
+        Text::Not("the title in a note's `[[words]]`: a copy of `note.body`, which is found"),
+    ),
+    ("document", "media_type", Text::Not("a MIME type")),
+    ("photo", "media_type", Text::Not("a MIME type")),
+    ("photo", "burst", Text::Not("a group key the camera minted")),
+    ("account", "currency", Text::Not("an ISO code")),
+    ("txn", "original_currency", Text::Not("an ISO code")),
+    ("budget", "month", Text::Not("a month")),
+    (
+        "rule",
+        "display_name",
+        Text::Not(
+            "a rule is not an entity; the name it gives lands on the line's title, which is found",
+        ),
+    ),
+    ("touch", "notes", Text::Found),
+    ("workout", "notes", Text::Found),
+    (
+        "workout",
+        "recorded_by",
+        Text::Not("the name of the device that recorded it"),
+    ),
+    (
+        "thread",
+        "scope",
+        Text::Not("the key of the screen a chat belongs to"),
+    ),
+    ("message", "text", Text::Found),
+    (
+        "message_attachment",
+        "label",
+        Text::Not("a copy of the attached thing's title, or a pasted image's name"),
+    ),
+    ("locker_item_field", "value_text", Text::Found),
+    ("locker_item_field", "value_sealed", Text::Sealed),
+    (
+        "locker_item_field",
+        "field_key",
+        Text::Not("a built-in field's key, a token"),
+    ),
+    (
+        "locker_item_field",
+        "section",
+        Text::Not("a field's group name; out of search by owner decision D11"),
+    ),
+    (
+        "locker_item_field",
+        "label",
+        Text::Not("a field's name; out of search by owner decision D11"),
+    ),
+    ("locker_item_passkey", "private_key", Text::Sealed),
+    ("locker_item_passkey", "rp_id", Text::Found),
+    (
+        "locker_item_passkey",
+        "user_handle",
+        Text::Not("a relying party's opaque handle"),
+    ),
+    (
+        "locker_item_passkey",
+        "display_name",
+        Text::Not("the relying party's account label"),
+    ),
+    (
+        "locker_item_passkey",
+        "algorithm",
+        Text::Not("a signature algorithm name"),
+    ),
+    (
+        "edge",
+        "rel",
+        Text::Not("a relation: the vocabulary is `edge_shape`, which a trigger holds the edge to"),
+    ),
+    ("txn", "memo", Text::Found),
+    ("txn_split", "memo", Text::Found),
+    ("revision", "body", Text::Found),
+    (
+        "reading",
+        "context",
+        Text::Not(
+            "a reading is not an item a member searches: no title, never queued for the index",
+        ),
+    ),
+    (
+        "search_owed",
+        "after",
+        Text::Not("a cursor in id order over what a label feeds, not prose"),
+    ),
+    ("alert", "reminder_id", Text::Not("a reminder's id")),
+    (
+        "alert",
+        "timing",
+        Text::Not("how `fire_key` reads: fixed or floating"),
+    ),
+    (
+        "alert",
+        "fire_key",
+        Text::Not("an instant or a wall clock the writer computed"),
+    ),
+    ("index_state", "built_at", Text::Not("an instant")),
+    (
+        "search_word",
+        "word",
+        Text::Not("the index's own vocabulary, kept as a list"),
+    ),
+    (
+        "index_state",
+        "self_id",
+        Text::Not("the id of the vault this file belongs to"),
+    ),
+];
+
+#[test]
+fn every_text_column_is_findable_sealed_or_argued_out() {
+    let w = World::new("commit_text");
+    read(&w, |connection| {
+        // The control: a prose column is not structural and a key is, so an empty answer below
+        // means every column was looked at and placed.
+        assert!(!is_structural(connection, "note", "body"));
+        assert!(!is_structural(connection, "entity", "title"));
+        assert!(
+            is_structural(connection, "task", "parent_task_id")
+                || is_structural(connection, "entity", "parent_id")
+        );
+        // The vault file and the attached index file, table by table.
+        let mut seen = BTreeSet::new();
+        let mut unplaced = Vec::new();
+        let mut redundant = Vec::new();
+        for schema in ["main", "ix"] {
+            let names: Vec<String> = connection
+                .prepare(&format!(
+                    "SELECT name FROM {schema}.sqlite_master
+                      WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'
+                        AND sql NOT LIKE 'CREATE VIRTUAL%' ORDER BY name"
+                ))?
+                .query_map([], |row| row.get(0))?
+                .collect::<rusqlite::Result<_>>()?;
+            for table in names {
+                if schema == "ix"
+                    && ["geo_node", "geo_parent", "geo_rowid"].contains(&table.as_str())
+                    || table.starts_with("search_")
+                        && table != "search_word"
+                        && table != "search_owed"
+                {
+                    continue;
+                }
+                let sql: String = connection.query_row(
+                    &format!("SELECT sql FROM {schema}.sqlite_master WHERE name = ?1"),
+                    [&table],
+                    |row| row.get(0),
+                )?;
+                let columns: Vec<(String, String)> = connection
+                    .prepare(&format!(
+                        "SELECT name, type FROM pragma_table_xinfo('{table}', '{schema}')"
+                    ))?
+                    .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+                    .collect::<rusqlite::Result<_>>()?;
+                let _ = sql;
+                for (column, declared) in columns {
+                    if !declared.eq_ignore_ascii_case("TEXT") {
+                        continue;
+                    }
+                    seen.insert((table.clone(), column.clone()));
+                    let placed = TEXT.iter().any(|(t, c, _)| *t == table && *c == column);
+                    let structural = schema == "main" && is_structural(connection, &table, &column);
+                    if !placed && !structural {
+                        unplaced.push(format!("{table}.{column}"));
+                    }
+                    if placed && structural && matches!(why_of(&table, &column), Some(Text::Not(_)))
+                    {
+                        redundant.push(format!("{table}.{column}"));
+                    }
+                }
+            }
+        }
+        assert!(
+            unplaced.is_empty(),
+            "a text column is neither structural by its declaration nor placed in TEXT: index it, seal it or argue it out: {unplaced:?}"
+        );
+        assert!(
+            redundant.is_empty(),
+            "structural by their declarations, so they need no line in TEXT: {redundant:?}"
+        );
+        let stale: Vec<String> = TEXT
+            .iter()
+            .filter(|(t, c, _)| !seen.contains(&((*t).to_owned(), (*c).to_owned())))
+            .map(|(t, c, _)| format!("{t}.{c}"))
+            .collect();
+        assert!(
+            stale.is_empty(),
+            "in TEXT and not a TEXT column of the files: {stale:?}"
+        );
+        for (table, column, why) in TEXT {
+            // A column called findable is one the index's text or past-words writer reads.
+            if matches!(why, Text::Found) {
+                assert!(
+                    TEXT_OF.contains(&format!("\"{column}\"")) || TEXT_OF.contains(column),
+                    "{table}.{column} is called findable and no text writer names `{column}`"
+                );
+            }
+            if let Text::Not(reason) = why {
+                assert!(
+                    !reason.is_empty(),
+                    "{table}.{column} is argued out without a reason"
+                );
+            }
+        }
+        Ok(())
+    });
+}
+
+/// The earlier versions' words and the live text are one list of what a member typed: every column
+/// the past index reads is one the census calls findable.
+#[test]
+fn every_column_the_past_index_reads_is_findable() {
+    for (table, columns) in centraid_vault::index::EARLIER_COLUMNS {
+        for column in *columns {
+            assert!(
+                TEXT.iter()
+                    .any(|(t, c, why)| t == table && c == column && matches!(why, Text::Found)),
+                "{table}.{column} is read for earlier versions and is not findable in TEXT"
+            );
+        }
+    }
+}
+
+/// The control: a sealed cell is never named by either writer as text, and a column of the census
+/// that is sealed is one `text_of` is told to leave alone.
+#[test]
+fn a_sealed_column_is_named_by_neither_text_writer_as_text() {
+    for (table, column, why) in TEXT {
+        if matches!(why, Text::Sealed) {
+            let reads = TEXT_OF
+                .lines()
+                .filter(|line| !line.trim_start().starts_with("//"))
+                .any(|line| {
+                    line.contains(&format!("{column} FROM"))
+                        || line.contains(&format!("SELECT {column}"))
+                });
+            assert!(
+                !reads,
+                "{table}.{column} is sealed and a text writer selects it"
+            );
+        }
+    }
 }
