@@ -25,8 +25,8 @@ use crate::custody::sealed_file;
 use crate::error::Result;
 
 use super::custody::{
-    NONE, assert_fresh_id, assert_key_generation, assert_sealed_cell,
-    assert_well_formed_id, invalid, sentence_of,
+    NONE, assert_fresh_id, assert_key_generation, assert_sealed_cell, assert_well_formed_id,
+    invalid, sentence_of,
 };
 use super::schema::{
     FIELD_KINDS, SEALED_PLACEHOLDER, built_in, field_id_of, is_month_key, is_sealed_kind,
@@ -132,11 +132,7 @@ pub(super) struct Plan {
     pub write: Write,
 }
 
-fn existing_of(
-    ctx: &CommandCtx<'_, '_>,
-    item_id: &str,
-    id: &str,
-) -> Result<Option<Existing>> {
+fn existing_of(ctx: &CommandCtx<'_, '_>, item_id: &str, id: &str) -> Result<Option<Existing>> {
     Ok(ctx
         .connection()
         .query_row(
@@ -172,7 +168,9 @@ fn id_is_free(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<std::result::Result<
 /// Whether `hash` is `lkf1` bytes the content store holds, and the sentence when it is not.
 fn file_refusal(ctx: &CommandCtx<'_, '_>, hash: &str) -> Result<Option<String>> {
     let Some(store) = ctx.blobs() else {
-        return Ok(Some("this vault has nowhere to keep a file's bytes".to_owned()));
+        return Ok(Some(
+            "this vault has nowhere to keep a file's bytes".to_owned(),
+        ));
     };
     if !crate::blob::is_hash(hash) || !store.has(hash).unwrap_or(false) {
         return Ok(Some("those bytes are not in this vault's store".to_owned()));
@@ -337,7 +335,10 @@ pub(super) fn plan(
             // Leave alone (or only the metadata changes).
             None | Some(SEALED_PLACEHOLDER) => {
                 let Some(row) = &found else {
-                    refuse!("there is no saved {} to keep; type it, or leave it empty", plan.label);
+                    refuse!(
+                        "there is no saved {} to keep; type it, or leave it empty",
+                        plan.label
+                    );
                 };
                 if input.blob.is_some() {
                     refuse!("new bytes for a file come with its new sealed name");
@@ -377,8 +378,8 @@ pub(super) fn plan(
                 } else {
                     None
                 };
-                let replaced_bytes = blob.is_some()
-                    && found.as_ref().is_some_and(|row| row.value_blob != blob);
+                let replaced_bytes =
+                    blob.is_some() && found.as_ref().is_some_and(|row| row.value_blob != blob);
                 let set_at = match &found {
                     None => ctx.now.clone(),
                     Some(row) => match input.changed {
@@ -388,9 +389,9 @@ pub(super) fn plan(
                             plan.label
                         ),
                         Some(true) => ctx.now.clone(),
-                        Some(false) if replaced_bytes => refuse!(
-                            "a file with new bytes is a changed file: say so"
-                        ),
+                        Some(false) if replaced_bytes => {
+                            refuse!("a file with new bytes is a changed file: say so")
+                        }
                         Some(false) => row.value_set_at.clone().unwrap_or_else(|| ctx.now.clone()),
                     },
                 };
@@ -434,17 +435,15 @@ pub(super) fn plan(
         refuse!("that value is over the {PLAIN_VALUE_BUDGET_BYTES}-byte budget for a field");
     }
     if is_locker_ciphertext(&value) {
-        refuse!(
-            "a plain field never holds a sealed value: put a secret in a sealed field"
-        );
+        refuse!("a plain field never holds a sealed value: put a secret in a sealed field");
     }
     if kind == "date" {
         let wanted = if is_month_key(item_type, plan.field_key.as_deref().unwrap_or("")) {
             normalise_date(&value)
         } else {
-            let valid: bool = ctx
-                .connection()
-                .query_row("SELECT date(?1) IS ?1", [&value], |row| row.get(0))?;
+            let valid: bool =
+                ctx.connection()
+                    .query_row("SELECT date(?1) IS ?1", [&value], |row| row.get(0))?;
             valid.then(|| value.clone())
         };
         match wanted {
@@ -490,10 +489,7 @@ pub(super) fn plan(
 
 /// Make a planned write. The first half of every field write the handlers share.
 pub(super) fn apply(ctx: &CommandCtx<'_, '_>, item_id: &str, planned: &Plan) -> Result<String> {
-    let id = planned
-        .id
-        .clone()
-        .unwrap_or_else(|| ctx.next_id());
+    let id = planned.id.clone().unwrap_or_else(|| ctx.next_id());
     match &planned.write {
         Write::Delete => {
             ctx.connection().execute(
@@ -513,7 +509,11 @@ pub(super) fn apply(ctx: &CommandCtx<'_, '_>, item_id: &str, planned: &Plan) -> 
                     .blobs()
                     .and_then(|store| store.size(hash).ok())
                     .unwrap_or(0);
-                crate::blob::stage(ctx.connection(), hash, i64::try_from(size).unwrap_or(i64::MAX))?;
+                crate::blob::stage(
+                    ctx.connection(),
+                    hash,
+                    i64::try_from(size).unwrap_or(i64::MAX),
+                )?;
             }
             ctx.connection().execute(
                 "INSERT INTO locker_item_field
@@ -582,7 +582,8 @@ pub(super) fn write_all(
 ) -> Result<Vec<String>> {
     let mut ids = Vec::with_capacity(fields.len());
     for field in fields {
-        let planned = plan(ctx, item_id, item_type, field)?.map_err(|sentence| invalid("fields", sentence))?;
+        let planned = plan(ctx, item_id, item_type, field)?
+            .map_err(|sentence| invalid("fields", sentence))?;
         ids.push(apply(ctx, item_id, &planned)?);
     }
     Ok(ids)
@@ -611,19 +612,18 @@ pub(super) fn set_field() -> CommandDefinition {
             check: |ctx| {
                 let input: SetFieldInput = ctx.parse_input()?;
                 let item_type = type_of(ctx, &input.item_id)?;
-                Ok(refusal_of(
+                refusal_of(
                     ctx,
                     &input.item_id,
                     &item_type,
                     std::slice::from_ref(&input.field),
-                )?)
+                )
             },
         },
     ];
     let mut definition = definition(
         "locker.set_field",
-        concat!(
-            r#"{
+        r#"{
           "type": "object",
           "required": ["item_id"],
           "additionalProperties": false,
@@ -640,8 +640,7 @@ pub(super) fn set_field() -> CommandDefinition {
             "key_id": { "type": "string", "minLength": 1 },
             "changed": { "type": "boolean" }
           }
-        }"#
-        ),
+        }"#,
         Idempotency::Idempotent,
         PRE,
         NONE,

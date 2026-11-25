@@ -99,10 +99,7 @@ pub(super) fn set_passkey() -> CommandDefinition {
         NONE,
         |ctx| {
             let input: SetPasskeyInput = ctx.parse_input()?;
-            let id = input
-                .passkey_id
-                .clone()
-                .unwrap_or_else(|| ctx.next_id());
+            let id = input.passkey_id.clone().unwrap_or_else(|| ctx.next_id());
             let existing: Option<(Option<String>, Option<String>, String)> = ctx
                 .connection()
                 .query_row(
@@ -115,9 +112,11 @@ pub(super) fn set_passkey() -> CommandDefinition {
             // The placeholder, or no key, keeps the key and the generation it was sealed under
             // (a rename sends no `key_id`: a caller that never held the key has none to name).
             let (stored, stored_key_id) = match input.private_key.as_deref() {
-                Some(SEALED_PLACEHOLDER) | None => existing
-                    .as_ref()
-                    .map_or((None, None), |(key, key_id, _)| (key.clone(), key_id.clone())),
+                Some(SEALED_PLACEHOLDER) | None => {
+                    existing.as_ref().map_or((None, None), |(key, key_id, _)| {
+                        (key.clone(), key_id.clone())
+                    })
+                }
                 Some("") => (None, None),
                 Some(key) => (Some(key.to_owned()), input.key_id.clone()),
             };
@@ -175,7 +174,10 @@ pub(super) fn remove_passkey() -> CommandDefinition {
                 let found = count(
                     ctx,
                     "SELECT COUNT(*) FROM locker_item_passkey WHERE id = ?1 AND item_id = ?2",
-                    &[ctx.required_str("passkey_id")?, ctx.required_str("item_id")?],
+                    &[
+                        ctx.required_str("passkey_id")?,
+                        ctx.required_str("item_id")?,
+                    ],
                 )?;
                 Ok((found != 1).then(|| "that is not one of this item's passkeys".to_owned()))
             },

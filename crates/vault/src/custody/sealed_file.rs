@@ -385,7 +385,11 @@ impl<R: Read> OpenReader<R> {
                 return Err(SealedFileError::NotASealedFile);
             }
             let chunk = chunk_size_of(&head).ok_or(SealedFileError::NotASealedFile)?;
-            self.header = Some(head[..].try_into().map_err(|_| SealedFileError::Truncated)?);
+            self.header = Some(
+                head[..]
+                    .try_into()
+                    .map_err(|_| SealedFileError::Truncated)?,
+            );
             self.whole = chunk as usize + CHUNK_OVERHEAD;
             let mut first = Vec::new();
             read_full(&mut self.sealed, &mut first, self.whole)?;

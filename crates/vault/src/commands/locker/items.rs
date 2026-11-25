@@ -21,9 +21,8 @@ use super::{definition, item_type_of};
 fn fields_of(ctx: &CommandCtx<'_, '_>, key: &str) -> Result<Vec<FieldIn>> {
     match ctx.input.get(key) {
         None => Ok(Vec::new()),
-        Some(value) => serde_json::from_value(value.clone()).map_err(|error| {
-            invalid(key, format!("a field list is malformed: {error}"))
-        }),
+        Some(value) => serde_json::from_value(value.clone())
+            .map_err(|error| invalid(key, format!("a field list is malformed: {error}"))),
     }
 }
 
@@ -54,7 +53,12 @@ pub(super) fn add_item() -> CommandDefinition {
             predicate: "fields_are_well_formed_and_secrets_are_sealed",
             check: |ctx| {
                 let fields = fields_of(ctx, "fields")?;
-                refusal_of(ctx, ctx.required_str("item_id")?, ctx.required_str("type")?, &fields)
+                refusal_of(
+                    ctx,
+                    ctx.required_str("item_id")?,
+                    ctx.required_str("type")?,
+                    &fields,
+                )
             },
         },
     ];

@@ -547,10 +547,11 @@ impl crate::file::Vault {
                 .flatten()
                 .find(|row| text_of(row, "id").as_deref() == Some(field_id));
             Ok(match field {
-                Some(row)
-                    if matches!(text_of(row, "kind").as_deref(), Some("sealed" | "otp")) =>
-                {
-                    Some(cell_of(text_of(row, "value_sealed"), text_of(row, "key_id")))
+                Some(row) if matches!(text_of(row, "kind").as_deref(), Some("sealed" | "otp")) => {
+                    Some(cell_of(
+                        text_of(row, "value_sealed"),
+                        text_of(row, "key_id"),
+                    ))
                 }
                 _ => None,
             })

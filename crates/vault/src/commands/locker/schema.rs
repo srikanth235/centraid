@@ -433,6 +433,9 @@ mod tests {
         assert!(secret_keys_of("login").contains(&"otp_seed"));
         assert!(secret_keys().contains(&"card_number"));
         // A dated field is plain.
-        assert_eq!(built_in("passport", "expires").map(|f| f.kind), Some("date"));
+        assert_eq!(
+            built_in("passport", "expires").map(|f| f.kind),
+            Some("date")
+        );
     }
 }

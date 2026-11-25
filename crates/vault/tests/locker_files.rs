@@ -99,7 +99,10 @@ fn the_committed_vectors_still_hold() {
     // The bytes are what the code seals to with the same nonces: the format has not moved.
     assert_eq!(sealed, vector_seal());
     // They open to the plaintext, under the key, the key id and the field they were sealed for.
-    assert_eq!(open_bytes(&sealed, &key, key_id, field).unwrap(), hex_of("plaintext_hex"));
+    assert_eq!(
+        open_bytes(&sealed, &key, key_id, field).unwrap(),
+        hex_of("plaintext_hex")
+    );
     // A file with its tail cut off, and one with two chunks swapped, do not open.
     for broken in ["tail_cut_off_hex", "two_chunks_swapped_hex"] {
         assert!(
@@ -124,9 +127,14 @@ struct Stream {
 
 impl Read for Stream {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let n = buf.len().min(usize::try_from(self.left).unwrap_or(usize::MAX));
+        let n = buf
+            .len()
+            .min(usize::try_from(self.left).unwrap_or(usize::MAX));
         for byte in &mut buf[..n] {
-            self.state = self.state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            self.state = self
+                .state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             *byte = (self.state >> 33) as u8;
         }
         self.left -= n as u64;
@@ -154,28 +162,62 @@ fn a_large_file_is_sealed_into_the_store_and_opened_as_a_stream() {
     let w = world("locker_stream");
     let size = 3 * 1024 * 1024 + 123;
     let store = centraid_blobs::ByteStore::open(w.scratch.join("vault.bytes")).expect("a store");
-    let mut sealer = SealReader::new(Stream { left: size, state: 7 }, &K, "key-1", "item-1:scan").unwrap();
-    let stored = store.put_stream(&mut sealer).expect("the sealed bytes are stored");
+    let mut sealer = SealReader::new(
+        Stream {
+            left: size,
+            state: 7,
+        },
+        &K,
+        "key-1",
+        "item-1:scan",
+    )
+    .unwrap();
+    let stored = store
+        .put_stream(&mut sealer)
+        .expect("the sealed bytes are stored");
     // What is stored is the ciphertext: its hash is the ciphertext's, its size the format's.
-    assert_eq!(stored.bytes, sealed_file::sealed_len(size, sealed_file::DEFAULT_CHUNK_BYTES));
-    let (plain_hash, _) = digest_of(Stream { left: size, state: 7 });
+    assert_eq!(
+        stored.bytes,
+        sealed_file::sealed_len(size, sealed_file::DEFAULT_CHUNK_BYTES)
+    );
+    let (plain_hash, _) = digest_of(Stream {
+        left: size,
+        state: 7,
+    });
     assert_ne!(stored.hash.to_hex(), plain_hash);
     let on_disk = std::fs::File::open(&stored.path).unwrap();
     assert_eq!(digest_of(on_disk).0, stored.hash.to_hex());
     // It opens as a stream to exactly the plaintext (compared by hash, never held whole)...
-    let opened = OpenReader::new(std::fs::File::open(&stored.path).unwrap(), &K, "key-1", "item-1:scan").unwrap();
+    let opened = OpenReader::new(
+        std::fs::File::open(&stored.path).unwrap(),
+        &K,
+        "key-1",
+        "item-1:scan",
+    )
+    .unwrap();
     assert_eq!(digest_of(opened), (plain_hash, size));
     // ...and a stored file with its last chunk dropped fails before the end.
     let cut = std::fs::read(&stored.path).unwrap();
-    let whole = usize::try_from(sealed_file::DEFAULT_CHUNK_BYTES).unwrap() + sealed_file::CHUNK_OVERHEAD;
+    let whole =
+        usize::try_from(sealed_file::DEFAULT_CHUNK_BYTES).unwrap() + sealed_file::CHUNK_OVERHEAD;
     let cut = &cut[..cut.len() - (cut.len() - HEADER_BYTES) % whole];
     assert!(open_bytes(cut, &K, "key-1", "item-1:scan").is_err());
     // No file in the scratch directory holds the plaintext's first bytes (no plaintext copy).
     let mut head = vec![0_u8; 4096];
-    Stream { left: 4096, state: 7 }.read_exact(&mut head).unwrap();
+    Stream {
+        left: 4096,
+        state: 7,
+    }
+    .read_exact(&mut head)
+    .unwrap();
     for entry in walk(w.scratch.dir()) {
         let bytes = std::fs::read(&entry).unwrap();
-        assert!(!bytes.windows(head.len()).any(|window| window == head.as_slice()), "{entry:?}");
+        assert!(
+            !bytes
+                .windows(head.len())
+                .any(|window| window == head.as_slice()),
+            "{entry:?}"
+        );
     }
 }
 
@@ -200,8 +242,17 @@ fn sealed_file_for(
     plaintext: &[u8],
 ) -> (String, String) {
     let sealed = sealed_file::seal_bytes(plaintext, &K, &key_id(w), field).unwrap();
-    let hash = w.vault().blobs().expect("a store").put(&sealed).expect("stored");
-    let cell = seal(w, field, &json!({ "name": name, "media_type": "application/pdf" }).to_string());
+    let hash = w
+        .vault()
+        .blobs()
+        .expect("a store")
+        .put(&sealed)
+        .expect("stored");
+    let cell = seal(
+        w,
+        field,
+        &json!({ "name": name, "media_type": "application/pdf" }).to_string(),
+    );
     (hash, cell)
 }
 
@@ -209,7 +260,13 @@ fn sealed_file_for(
 fn a_file_field_holds_ciphertext_by_hash_and_a_replaced_or_removed_file_stays_readable() {
     let w = world("locker_file_field");
     let item = item_id(&w);
-    add(&w, &item, "passport", "Passport", vec![plain("full_name", "A Holder")]);
+    add(
+        &w,
+        &item,
+        "passport",
+        "Passport",
+        vec![plain("full_name", "A Holder")],
+    );
     let field = "scan-field-1";
     let (hash, cell) = sealed_file_for(&w, field, "passport.pdf", b"%PDF the first scan");
     let live = key_id(&w);
@@ -242,20 +299,32 @@ fn a_file_field_holds_ciphertext_by_hash_and_a_replaced_or_removed_file_stays_re
         hash,
         "the hash is the stored (sealed) bytes'"
     );
-    assert_ne!(hash, centraid_vault::blob::content_digest(b"%PDF the first scan"));
+    assert_ne!(
+        hash,
+        centraid_vault::blob::content_digest(b"%PDF the first scan")
+    );
 
     // The same file sealed twice is two files with two hashes: nothing dedupes.
     let (again, _) = sealed_file_for(&w, "scan-field-2", "passport.pdf", b"%PDF the first scan");
     assert_ne!(again, hash);
 
     // Refused: bytes that are not a sealed file, bytes the store lacks, a blob on a text field.
-    let plain_hash = w.vault().blobs().unwrap().put(b"just plain bytes, no header at all.").unwrap();
+    let plain_hash = w
+        .vault()
+        .blobs()
+        .unwrap()
+        .put(b"just plain bytes, no header at all.")
+        .unwrap();
     for (bad, said) in [
-        (plain_hash.as_str(), "not a file sealed under the Locker key"),
+        (
+            plain_hash.as_str(),
+            "not a file sealed under the Locker key",
+        ),
         ("0".repeat(64).as_str(), "not in this vault's store"),
     ] {
         assert!(
-            w.refused("locker.set_field", input(bad, &cell, Some(true))).contains(said),
+            w.refused("locker.set_field", input(bad, &cell, Some(true)))
+                .contains(said),
             "{said}"
         );
     }
@@ -267,18 +336,30 @@ fn a_file_field_holds_ciphertext_by_hash_and_a_replaced_or_removed_file_stays_re
         .contains("only a file field")
     );
     // New bytes on an existing file say they changed.
-    let (second, second_cell) = sealed_file_for(&w, field, "passport-2.pdf", b"%PDF the second scan");
+    let (second, second_cell) =
+        sealed_file_for(&w, field, "passport-2.pdf", b"%PDF the second scan");
     assert!(
-        w.refused("locker.set_field", input(&second, &second_cell, None)).contains("say whether")
+        w.refused("locker.set_field", input(&second, &second_cell, None))
+            .contains("say whether")
     );
     assert!(
-        w.refused("locker.set_field", input(&second, &second_cell, Some(false))).contains("changed file")
+        w.refused(
+            "locker.set_field",
+            input(&second, &second_cell, Some(false))
+        )
+        .contains("changed file")
     );
 
     // A replaced file: the old one stays readable, sealed, through its history slot.
-    let versions_before: i64 = w.one("SELECT COUNT(*) FROM revision WHERE entity_id = ?1", &[&item]);
+    let versions_before: i64 = w.one(
+        "SELECT COUNT(*) FROM revision WHERE entity_id = ?1",
+        &[&item],
+    );
     w.ok("locker.set_field", input(&second, &second_cell, Some(true)));
-    let held: i64 = w.one("SELECT MAX(seq) FROM revision WHERE entity_id = ?1", &[&item]);
+    let held: i64 = w.one(
+        "SELECT MAX(seq) FROM revision WHERE entity_id = ?1",
+        &[&item],
+    );
     assert_eq!(held, versions_before + 1);
     assert_eq!(
         w.one::<String>(
@@ -287,24 +368,50 @@ fn a_file_field_holds_ciphertext_by_hash_and_a_replaced_or_removed_file_stays_re
         ),
         hash
     );
-    let earlier = w.vault().locker_sealed_file(&item, field, Some(held)).unwrap().expect("the earlier file");
+    let earlier = w
+        .vault()
+        .locker_sealed_file(&item, field, Some(held))
+        .unwrap()
+        .expect("the earlier file");
     assert_eq!(earlier.blob, hash);
     let bytes = w.vault().blobs().unwrap().get(&earlier.blob).unwrap();
-    assert_eq!(open_bytes(&bytes, &K, &live, field).unwrap(), b"%PDF the first scan");
-    let now = w.vault().locker_sealed_file(&item, field, None).unwrap().unwrap();
+    assert_eq!(
+        open_bytes(&bytes, &K, &live, field).unwrap(),
+        b"%PDF the first scan"
+    );
+    let now = w
+        .vault()
+        .locker_sealed_file(&item, field, None)
+        .unwrap()
+        .unwrap();
     assert_eq!(now.blob, second);
     // Collecting the blobs frees neither: the old one is kept by the version, the new by the field.
     w.vault().collect_blobs().unwrap();
     assert!(w.vault().blobs().unwrap().has(&hash).unwrap());
     assert!(w.vault().blobs().unwrap().has(&second).unwrap());
     // A removed file stays readable the same way.
-    w.ok("locker.remove_field", json!({ "item_id": item, "field_id": field }));
-    let removed_at: i64 = w.one("SELECT MAX(seq) FROM revision WHERE entity_id = ?1", &[&item]);
-    let gone = w.vault().locker_sealed_file(&item, field, Some(removed_at)).unwrap().expect("kept");
+    w.ok(
+        "locker.remove_field",
+        json!({ "item_id": item, "field_id": field }),
+    );
+    let removed_at: i64 = w.one(
+        "SELECT MAX(seq) FROM revision WHERE entity_id = ?1",
+        &[&item],
+    );
+    let gone = w
+        .vault()
+        .locker_sealed_file(&item, field, Some(removed_at))
+        .unwrap()
+        .expect("kept");
     assert_eq!(gone.blob, second);
     w.vault().collect_blobs().unwrap();
     assert!(w.vault().blobs().unwrap().has(&second).unwrap());
-    assert!(w.vault().locker_sealed_file(&item, field, None).unwrap().is_none());
+    assert!(
+        w.vault()
+            .locker_sealed_file(&item, field, None)
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]
@@ -333,16 +440,28 @@ fn nothing_is_ever_made_from_a_sealed_file_and_it_is_always_kept_and_sent() {
         .map(|outcome| format!("{:?}", outcome.reason))
         .unwrap_or_else(|error| error.to_string());
     assert!(refusal.contains("nothing is made from it"), "{refusal}");
-    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM derivative WHERE blob = ?1", &[&hash]), 0);
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM derivative WHERE blob = ?1", &[&hash]),
+        0
+    );
     // It is flagged sealed for the backup and the phone's free-up pass, now and as an earlier version.
-    let sealed = w.vault().read(|c| centraid_vault::blob::sealed_hashes(c)).unwrap();
+    let sealed = w.vault().read(centraid_vault::blob::sealed_hashes).unwrap();
     assert!(sealed.contains(&hash));
     let files = centraid_vault::backup::files::content_files(w.vault()).unwrap();
-    let listed = files.iter().find(|f| f.h.to_hex() == hash).expect("listed for the backup");
+    let listed = files
+        .iter()
+        .find(|f| f.h.to_hex() == hash)
+        .expect("listed for the backup");
     assert!(listed.sealed);
-    w.ok("locker.remove_field", json!({ "item_id": item, "field_id": field }));
-    let sealed = w.vault().read(|c| centraid_vault::blob::sealed_hashes(c)).unwrap();
-    assert!(sealed.contains(&hash), "an earlier version's file is still sealed");
+    w.ok(
+        "locker.remove_field",
+        json!({ "item_id": item, "field_id": field }),
+    );
+    let sealed = w.vault().read(centraid_vault::blob::sealed_hashes).unwrap();
+    assert!(
+        sealed.contains(&hash),
+        "an earlier version's file is still sealed"
+    );
     // Not an item's attachment either: a sealed file is a field, never a document.
     assert_eq!(locker::ITEM_TYPES.len(), 15);
     let _ = id_of(&item, "x");

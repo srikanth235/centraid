@@ -25,7 +25,12 @@ fn fields_of_type(
     locker::built_ins(item_type)
         .into_iter()
         .map(|field| match field.kind {
-            "sealed" | "otp" => secret(w, item, field.key, &format!("SECRET-{}-{item_type}", field.key)),
+            "sealed" | "otp" => secret(
+                w,
+                item,
+                field.key,
+                &format!("SECRET-{}-{item_type}", field.key),
+            ),
             "date" if field.key == "expiry" => plain(field.key, "08/27"),
             "date" => plain(field.key, "2031-05-04"),
             "url" => plain(field.key, "https://example.com/login"),
@@ -46,25 +51,46 @@ fn every_type_is_created_edited_trashed_and_restored_with_its_built_in_keys() {
         // Raw rows: one per field, a secret as ciphertext with its generation and its age, a plain
         // value as text; nothing of a secret in a plain column.
         assert_eq!(
-            w.one::<i64>("SELECT COUNT(*) FROM locker_item_field WHERE item_id = ?1", &[&item]),
+            w.one::<i64>(
+                "SELECT COUNT(*) FROM locker_item_field WHERE item_id = ?1",
+                &[&item]
+            ),
             i64::try_from(count).unwrap(),
             "{item_type}"
         );
         for field in locker::built_ins(item_type) {
-            let (kind, text, sealed, key, set_at): (String, Option<String>, Option<String>, Option<String>, Option<String>) = w
+            let (kind, text, sealed, key, set_at): (
+                String,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+            ) = w
                 .vault()
                 .read(|c| {
                     Ok(c.query_row(
                         "SELECT kind, value_text, value_sealed, key_id, value_set_at
                            FROM locker_item_field WHERE item_id = ?1 AND field_key = ?2",
                         [&item, field.key],
-                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+                        |row| {
+                            Ok((
+                                row.get(0)?,
+                                row.get(1)?,
+                                row.get(2)?,
+                                row.get(3)?,
+                                row.get(4)?,
+                            ))
+                        },
                     )?)
                 })
                 .unwrap_or_else(|e| panic!("{item_type}.{}: {e}", field.key));
             assert_eq!(kind, field.kind, "{item_type}.{}", field.key);
             if locker::is_sealed_kind(&kind) {
-                assert!(sealed.as_deref().is_some_and(|c| c.starts_with("lk1:")), "{}", field.key);
+                assert!(
+                    sealed.as_deref().is_some_and(|c| c.starts_with("lk1:")),
+                    "{}",
+                    field.key
+                );
                 assert_eq!(key.as_deref(), Some(key_id(&w).as_str()));
                 assert!(set_at.is_some(), "{} has no age", field.key);
                 assert!(text.is_none());
@@ -86,7 +112,10 @@ fn every_type_is_created_edited_trashed_and_restored_with_its_built_in_keys() {
             "locker.edit_item",
             json!({ "item_id": item, "title": "Renamed", "fields": edit }),
         );
-        assert_eq!(w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&item]), "Renamed");
+        assert_eq!(
+            w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&item]),
+            "Renamed"
+        );
         assert_eq!(
             w.one::<String>(
                 "SELECT value_text FROM locker_item_field WHERE id = ?1",
@@ -98,11 +127,20 @@ fn every_type_is_created_edited_trashed_and_restored_with_its_built_in_keys() {
 
         // Trash and restore are the vault's shared verbs.
         w.ok("entity.trash", json!({ "id": item }));
-        assert!(w.one::<Option<String>>("SELECT deleted_at FROM entity WHERE id = ?1", &[&item]).is_some());
+        assert!(
+            w.one::<Option<String>>("SELECT deleted_at FROM entity WHERE id = ?1", &[&item])
+                .is_some()
+        );
         w.ok("entity.restore", json!({ "id": item }));
-        assert!(w.one::<Option<String>>("SELECT deleted_at FROM entity WHERE id = ?1", &[&item]).is_none());
+        assert!(
+            w.one::<Option<String>>("SELECT deleted_at FROM entity WHERE id = ?1", &[&item])
+                .is_none()
+        );
         assert_eq!(
-            w.one::<i64>("SELECT COUNT(*) FROM locker_item_field WHERE item_id = ?1", &[&item]),
+            w.one::<i64>(
+                "SELECT COUNT(*) FROM locker_item_field WHERE item_id = ?1",
+                &[&item]
+            ),
             i64::try_from(count).unwrap(),
             "{item_type}: the fields survive the trash"
         );
@@ -156,9 +194,15 @@ fn a_secret_must_arrive_sealed_under_the_live_generation_and_a_refusal_never_quo
     // A key that is not the type's, a date that is not one, a kind that cannot change.
     for (field, said) in [
         (plain("cvv", "123"), "not one of the fields of a login"),
-        (json!({ "label": "Odd", "kind": "date", "value": "tomorrow" }), "not a date"),
+        (
+            json!({ "label": "Odd", "kind": "date", "value": "tomorrow" }),
+            "not a date",
+        ),
         (json!({ "label": "Odd" }), "needs a kind"),
-        (json!({ "field_key": "password", "kind": "text", "value": "x" }), "kind cannot change"),
+        (
+            json!({ "field_key": "password", "kind": "text", "value": "x" }),
+            "kind cannot change",
+        ),
     ] {
         let sentence = w.refused(
             "locker.add_item",
@@ -173,16 +217,26 @@ fn a_secret_must_arrive_sealed_under_the_live_generation_and_a_refusal_never_quo
             { "label": "Recovery", "kind": "sealed", "value": seal(&w, "x", "x"), "key_id": live }
         ] }),
     );
-    assert!(sentence.contains("the id it was sealed against"), "{sentence}");
+    assert!(
+        sentence.contains("the id it was sealed against"),
+        "{sentence}"
+    );
     // Nothing was written by any of it, and an item id must be a minted one.
     assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM locker_item", &[]), 0);
     assert!(
-        w.refused("locker.add_item", json!({ "item_id": "not-minted", "type": "login", "title": "x" }))
-            .contains("UUIDv7")
+        w.refused(
+            "locker.add_item",
+            json!({ "item_id": "not-minted", "type": "login", "title": "x" })
+        )
+        .contains("UUIDv7")
     );
     // The same plaintext is nowhere in the file.
     let file = std::fs::read(w.scratch.dir().join("vault.db")).unwrap();
-    assert!(!file.windows(plaintext.len()).any(|window| window == plaintext.as_bytes()));
+    assert!(
+        !file
+            .windows(plaintext.len())
+            .any(|window| window == plaintext.as_bytes())
+    );
 }
 
 #[test]
@@ -202,11 +256,17 @@ fn a_secrets_age_moves_only_when_its_value_changes_and_a_seed_is_revealable() {
     );
     let password = id_of(&item, "password");
     let age = |w: &common::world::World| {
-        w.one::<String>("SELECT value_set_at FROM locker_item_field WHERE id = ?1", &[&password])
+        w.one::<String>(
+            "SELECT value_set_at FROM locker_item_field WHERE id = ?1",
+            &[&password],
+        )
     };
     let first = age(&w);
     // A rename, and a plain edit, do not touch it.
-    w.ok("locker.edit_item", json!({ "item_id": item, "title": "Bank 2", "fields": [plain("username", "you")] }));
+    w.ok(
+        "locker.edit_item",
+        json!({ "item_id": item, "title": "Bank 2", "fields": [plain("username", "you")] }),
+    );
     assert_eq!(age(&w), first);
     // A placeholder leaves the secret alone.
     w.ok(
@@ -224,14 +284,23 @@ fn a_secrets_age_moves_only_when_its_value_changes_and_a_seed_is_revealable() {
         field
     };
     assert!(
-        w.refused("locker.edit_item", json!({ "item_id": item, "fields": [field(None)] }))
-            .contains("say whether")
+        w.refused(
+            "locker.edit_item",
+            json!({ "item_id": item, "fields": [field(None)] })
+        )
+        .contains("say whether")
     );
     // The same secret sealed again: new ciphertext, the same age.
-    w.ok("locker.edit_item", json!({ "item_id": item, "fields": [field(Some(false))] }));
+    w.ok(
+        "locker.edit_item",
+        json!({ "item_id": item, "fields": [field(Some(false))] }),
+    );
     assert_eq!(age(&w), first);
     assert_eq!(
-        w.one::<String>("SELECT value_sealed FROM locker_item_field WHERE id = ?1", &[&password]),
+        w.one::<String>(
+            "SELECT value_sealed FROM locker_item_field WHERE id = ?1",
+            &[&password]
+        ),
         again
     );
     // A changed value moves it.
@@ -245,7 +314,11 @@ fn a_secrets_age_moves_only_when_its_value_changes_and_a_seed_is_revealable() {
 
     // Both secrets, the seed too, come out of the doors as ciphertext only the core can open.
     for (key, plaintext) in [("password", "second"), ("otp_seed", "JBSWY3DPEHPK3PXP")] {
-        let cell = w.vault().locker_sealed_item_cell(&item, key).unwrap().expect("a cell");
+        let cell = w
+            .vault()
+            .locker_sealed_item_cell(&item, key)
+            .unwrap()
+            .expect("a cell");
         let opened = centraid_vault::custody::decrypt_under_locker_key(
             &common::locker::K,
             cell.key_id.as_deref().unwrap(),
@@ -254,12 +327,20 @@ fn a_secrets_age_moves_only_when_its_value_changes_and_a_seed_is_revealable() {
         )
         .unwrap();
         assert_eq!(opened, plaintext);
-        let by_id = w.vault().locker_sealed_field_cell(&item, &id_of(&item, key)).unwrap();
+        let by_id = w
+            .vault()
+            .locker_sealed_field_cell(&item, &id_of(&item, key))
+            .unwrap();
         assert_eq!(by_id, Some(cell));
     }
     // A trashed item reveals nothing.
     w.ok("entity.trash", json!({ "id": item }));
-    assert!(w.vault().locker_sealed_item_cell(&item, "password").unwrap().is_none());
+    assert!(
+        w.vault()
+            .locker_sealed_item_cell(&item, "password")
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]
@@ -279,7 +360,10 @@ fn several_urls_an_alias_held_by_one_item_and_one_of_each_single_key() {
         ],
     );
     assert_eq!(
-        w.one::<i64>("SELECT COUNT(*) FROM locker_item_field WHERE item_id = ?1 AND kind = 'url'", &[&one]),
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM locker_item_field WHERE item_id = ?1 AND kind = 'url'",
+            &[&one]
+        ),
         2
     );
     // Another item may not take the alias, whatever its case; its own may be rewritten.
@@ -287,7 +371,10 @@ fn several_urls_an_alias_held_by_one_item_and_one_of_each_single_key() {
         "locker.add_item",
         json!({ "item_id": two, "type": "login", "title": "Two", "fields": [plain("alias", "shared-name")] }),
     );
-    assert!(sentence.contains("already used by another item"), "{sentence}");
+    assert!(
+        sentence.contains("already used by another item"),
+        "{sentence}"
+    );
     let alias_row = w.one::<String>(
         "SELECT id FROM locker_item_field WHERE item_id = ?1 AND claimed = 1",
         &[&one],
@@ -307,15 +394,24 @@ fn several_urls_an_alias_held_by_one_item_and_one_of_each_single_key() {
         .contains("already used")
     );
     w.ok("entity.purge", json!({ "id": one }));
-    w.ok("locker.edit_item", json!({ "item_id": two, "fields": [plain("alias", "renamed-alias")] }));
+    w.ok(
+        "locker.edit_item",
+        json!({ "item_id": two, "fields": [plain("alias", "renamed-alias")] }),
+    );
     // A malformed alias is a sentence.
     assert!(
-        w.refused("locker.edit_item", json!({ "item_id": two, "fields": [plain("alias", "has space")] }))
-            .contains("an alias is")
+        w.refused(
+            "locker.edit_item",
+            json!({ "item_id": two, "fields": [plain("alias", "has space")] })
+        )
+        .contains("an alias is")
     );
     // The file refuses a second single-instance key whatever the command says.
     let two_username = id_of(&two, "username");
-    w.ok("locker.edit_item", json!({ "item_id": two, "fields": [plain("username", "x")] }));
+    w.ok(
+        "locker.edit_item",
+        json!({ "item_id": two, "fields": [plain("username", "x")] }),
+    );
     let why = w
         .vault()
         .commit(|tx| {
@@ -357,13 +453,22 @@ fn an_item_holds_several_passkeys_found_by_their_site_and_a_rename_keeps_the_key
     let a = pk(&w, &one, "bank.example", "KEY-A");
     let b = pk(&w, &one, "mail.example", "KEY-B");
     let c = pk(&w, &two, "bank.example", "KEY-C");
-    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM locker_item_passkey WHERE item_id = ?1", &[&one]), 2);
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM locker_item_passkey WHERE item_id = ?1",
+            &[&one]
+        ),
+        2
+    );
     let found = w
         .vault()
         .read(|conn| reads::passkeys_for_rp(conn, "bank.example"))
         .unwrap();
     assert_eq!(
-        found.iter().map(|p| p.passkey_id.clone()).collect::<Vec<_>>(),
+        found
+            .iter()
+            .map(|p| p.passkey_id.clone())
+            .collect::<Vec<_>>(),
         {
             let mut ids = vec![a.clone(), c.clone()];
             ids.sort();
@@ -377,14 +482,19 @@ fn an_item_holds_several_passkeys_found_by_their_site_and_a_rename_keeps_the_key
         "bank.example",
     );
     assert!(detail.contains("locker_item_passkey_by_rp"), "{detail}");
-    assert!(!detail.contains("SCAN") && !detail.contains("TEMP B-TREE"), "{detail}");
+    assert!(
+        !detail.contains("SCAN") && !detail.contains("TEMP B-TREE"),
+        "{detail}"
+    );
     // A rename sends the placeholder and no generation: the key stays sealed under its own.
     let before: (String, String) = w
         .vault()
         .read(|c| {
-            Ok(c.query_row("SELECT private_key, key_id FROM locker_item_passkey WHERE id = ?1", [&a], |r| {
-                Ok((r.get(0)?, r.get(1)?))
-            })?)
+            Ok(c.query_row(
+                "SELECT private_key, key_id FROM locker_item_passkey WHERE id = ?1",
+                [&a],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )?)
         })
         .unwrap();
     w.ok(
@@ -395,14 +505,20 @@ fn an_item_holds_several_passkeys_found_by_their_site_and_a_rename_keeps_the_key
     let after: (String, String) = w
         .vault()
         .read(|c| {
-            Ok(c.query_row("SELECT private_key, key_id FROM locker_item_passkey WHERE id = ?1", [&a], |r| {
-                Ok((r.get(0)?, r.get(1)?))
-            })?)
+            Ok(c.query_row(
+                "SELECT private_key, key_id FROM locker_item_passkey WHERE id = ?1",
+                [&a],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )?)
         })
         .unwrap();
     assert_eq!(before, after);
     // The core's door opens it; plaintext is refused on the way in.
-    let cell = w.vault().locker_sealed_passkey_cell(&one, &a).unwrap().unwrap();
+    let cell = w
+        .vault()
+        .locker_sealed_passkey_cell(&one, &a)
+        .unwrap()
+        .unwrap();
     assert_eq!(
         centraid_vault::custody::decrypt_under_locker_key(
             &common::locker::K,
@@ -413,7 +529,12 @@ fn an_item_holds_several_passkeys_found_by_their_site_and_a_rename_keeps_the_key
         .unwrap(),
         "KEY-A"
     );
-    assert!(w.vault().locker_sealed_passkey_cell(&two, &a).unwrap().is_none());
+    assert!(
+        w.vault()
+            .locker_sealed_passkey_cell(&two, &a)
+            .unwrap()
+            .is_none()
+    );
     assert!(
         w.refused(
             "locker.set_passkey",
@@ -429,9 +550,24 @@ fn an_item_holds_several_passkeys_found_by_their_site_and_a_rename_keeps_the_key
         )
         .contains("id its key was sealed against")
     );
-    w.ok("locker.remove_passkey", json!({ "item_id": one, "passkey_id": b }));
-    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM locker_item_passkey WHERE item_id = ?1", &[&one]), 1);
-    assert!(w.refused("locker.remove_passkey", json!({ "item_id": two, "passkey_id": a })).contains("not one of"));
+    w.ok(
+        "locker.remove_passkey",
+        json!({ "item_id": one, "passkey_id": b }),
+    );
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM locker_item_passkey WHERE item_id = ?1",
+            &[&one]
+        ),
+        1
+    );
+    assert!(
+        w.refused(
+            "locker.remove_passkey",
+            json!({ "item_id": two, "passkey_id": a })
+        )
+        .contains("not one of")
+    );
 }
 
 fn explain(w: &common::world::World, sql: &str, bind: &str) -> String {
@@ -443,7 +579,9 @@ fn explain_rows(w: &common::world::World, sql: &str, binds: &[String]) -> String
         .read(|c| {
             let mut statement = c.prepare(&format!("EXPLAIN QUERY PLAN {sql}"))?;
             let rows = statement
-                .query_map(rusqlite::params_from_iter(binds.iter()), |row| row.get::<_, String>(3))?
+                .query_map(rusqlite::params_from_iter(binds.iter()), |row| {
+                    row.get::<_, String>(3)
+                })?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
             Ok(rows.join("\n"))
         })
@@ -467,41 +605,75 @@ fn a_cards_expiry_is_the_last_day_of_its_month_takes_a_reminder_and_notifies_wit
     );
     let expiry = id_of(&card, "expiry");
     assert_eq!(
-        w.one::<String>("SELECT value_text FROM locker_item_field WHERE id = ?1", &[&expiry]),
+        w.one::<String>(
+            "SELECT value_text FROM locker_item_field WHERE id = ?1",
+            &[&expiry]
+        ),
         "2027-08-31"
     );
     // It reads back as MM/YY.
     let shown = w.vault().read(|c| reads::fields_of(c, &card)).unwrap();
-    let view = shown.iter().find(|f| f.field_key.as_deref() == Some("expiry")).unwrap();
+    let view = shown
+        .iter()
+        .find(|f| f.field_key.as_deref() == Some("expiry"))
+        .unwrap();
     assert_eq!(view.display.as_deref(), Some("08/27"));
     assert_eq!(view.value.as_deref(), Some("2027-08-31"));
-    assert!(shown.iter().any(|f| f.sealed && f.value.is_none()), "a secret is a bit, not a value");
+    assert!(
+        shown.iter().any(|f| f.sealed && f.value.is_none()),
+        "a secret is a bit, not a value"
+    );
     // The month, the year and a whole date all land on the same day.
     for given in ["8/2027", "2027-08", "2027-08-05"] {
-        w.ok("locker.edit_item", json!({ "item_id": card, "fields": [plain("expiry", given)] }));
+        w.ok(
+            "locker.edit_item",
+            json!({ "item_id": card, "fields": [plain("expiry", given)] }),
+        );
         assert_eq!(
-            w.one::<String>("SELECT value_text FROM locker_item_field WHERE id = ?1", &[&expiry]),
+            w.one::<String>(
+                "SELECT value_text FROM locker_item_field WHERE id = ?1",
+                &[&expiry]
+            ),
             "2027-08-31",
             "{given}"
         );
     }
     // February of a leap and of a common year.
-    for (given, last) in [("02/28", "2028-02-29"), ("02/27", "2027-02-28"), ("02/2100", "2100-02-28")] {
-        w.ok("locker.edit_item", json!({ "item_id": card, "fields": [plain("expiry", given)] }));
+    for (given, last) in [
+        ("02/28", "2028-02-29"),
+        ("02/27", "2027-02-28"),
+        ("02/2100", "2100-02-28"),
+    ] {
+        w.ok(
+            "locker.edit_item",
+            json!({ "item_id": card, "fields": [plain("expiry", given)] }),
+        );
         assert_eq!(
-            w.one::<String>("SELECT value_text FROM locker_item_field WHERE id = ?1", &[&expiry]),
+            w.one::<String>(
+                "SELECT value_text FROM locker_item_field WHERE id = ?1",
+                &[&expiry]
+            ),
             last,
             "{given}"
         );
     }
     assert!(
-        w.refused("locker.edit_item", json!({ "item_id": card, "fields": [plain("expiry", "13/27")] }))
-            .contains("not a date")
+        w.refused(
+            "locker.edit_item",
+            json!({ "item_id": card, "fields": [plain("expiry", "13/27")] })
+        )
+        .contains("not a date")
     );
-    w.ok("locker.edit_item", json!({ "item_id": card, "fields": [plain("expiry", "08/27")] }));
+    w.ok(
+        "locker.edit_item",
+        json!({ "item_id": card, "fields": [plain("expiry", "08/27")] }),
+    );
 
     // It takes a reminder; a text field and a sealed one do not.
-    let reminder = w.ok("reminder.add", json!({ "entity_id": card, "field_id": expiry, "offset_min": 60 }))["id"]
+    let reminder = w.ok(
+        "reminder.add",
+        json!({ "entity_id": card, "field_id": expiry, "offset_min": 60 }),
+    )["id"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -531,11 +703,20 @@ fn a_cards_expiry_is_the_last_day_of_its_month_takes_a_reminder_and_notifies_wit
     assert_eq!(notice.at.as_deref(), Some("2027-08-31"));
     let said = format!("{notice:?}");
     for value in ["A Holder", "4111", "lk1:", "cardholder"] {
-        assert!(!said.contains(value), "the notice carried `{value}`: {said}");
+        assert!(
+            !said.contains(value),
+            "the notice carried `{value}`: {said}"
+        );
     }
     // A date field of any other type notifies the same way: a passport's expiry.
     let passport = item_id(&w);
-    add(&w, &passport, "passport", "Passport", vec![plain("expires", "2031-05-04")]);
+    add(
+        &w,
+        &passport,
+        "passport",
+        "Passport",
+        vec![plain("expires", "2031-05-04")],
+    );
     let r = w.ok(
         "reminder.add",
         json!({ "entity_id": passport, "field_id": id_of(&passport, "expires"), "offset_min": 0 }),
@@ -544,49 +725,103 @@ fn a_cards_expiry_is_the_last_day_of_its_month_takes_a_reminder_and_notifies_wit
         .unwrap()
         .to_owned();
     let notice = w.vault().read(|c| alerts::notice(c, &r)).unwrap().unwrap();
-    assert_eq!((notice.title.as_str(), notice.what.as_deref()), ("Passport", Some("Expires")));
+    assert_eq!(
+        (notice.title.as_str(), notice.what.as_deref()),
+        ("Passport", Some("Expires"))
+    );
     // Changing the date moves the alert; taking the field away takes the reminder.
-    w.ok("locker.remove_field", json!({ "item_id": card, "field_id": expiry }));
-    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM reminder WHERE entity_id = ?1", &[&card]), 0);
+    w.ok(
+        "locker.remove_field",
+        json!({ "item_id": card, "field_id": expiry }),
+    );
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM reminder WHERE entity_id = ?1",
+            &[&card]
+        ),
+        0
+    );
 }
 
 #[test]
 fn autofill_finds_the_items_for_a_site_by_the_url_index_and_a_use_is_not_an_edit() {
     let w = world("locker_autofill");
     let (one, two, three) = (item_id(&w), item_id(&w), item_id(&w));
-    add(&w, &one, "login", "One", vec![plain("url", "https://Example.com/"), plain("url", "https://other.example")]);
+    add(
+        &w,
+        &one,
+        "login",
+        "One",
+        vec![
+            plain("url", "https://Example.com/"),
+            plain("url", "https://other.example"),
+        ],
+    );
     add(&w, &two, "login", "Two", vec![plain("url", "example.com")]);
-    add(&w, &three, "membership", "Three", vec![plain("url", "https://example.com"), plain("member_number", "x")]);
+    add(
+        &w,
+        &three,
+        "membership",
+        "Three",
+        vec![
+            plain("url", "https://example.com"),
+            plain("member_number", "x"),
+        ],
+    );
     let found = |w: &common::world::World, ident: &str| {
-        w.vault().read(|c| reads::items_for_identifier(c, ident)).unwrap()
+        w.vault()
+            .read(|c| reads::items_for_identifier(c, ident))
+            .unwrap()
     };
     let mut want = vec![one.clone(), two.clone(), three.clone()];
     want.sort();
-    assert_eq!(found(&w, "https://example.com/login-page-is-not-a-site"), Vec::<String>::new());
+    assert_eq!(
+        found(&w, "https://example.com/login-page-is-not-a-site"),
+        Vec::<String>::new()
+    );
     assert_eq!(found(&w, "https://example.com"), want);
     assert_eq!(found(&w, "example.com"), want);
     assert_eq!(found(&w, "HTTPS://EXAMPLE.COM/"), want);
     assert_eq!(found(&w, "https://other.example"), vec![one.clone()]);
     // An app identifier is an address like any other.
-    w.ok("locker.edit_item", json!({ "item_id": two, "fields": [plain("url", "androidapp://com.example.app")] }));
+    w.ok(
+        "locker.edit_item",
+        json!({ "item_id": two, "fields": [plain("url", "androidapp://com.example.app")] }),
+    );
     assert_eq!(found(&w, "androidapp://com.example.app"), vec![two.clone()]);
     // A trashed item is not offered.
     w.ok("entity.trash", json!({ "id": three }));
     assert!(!found(&w, "example.com").contains(&three));
     // The plan: the url index, no scan, no sort.
     let candidates = reads::url_candidates("https://example.com");
-    let detail = explain_rows(&w, &reads::items_for_urls_sql(candidates.len()), &candidates);
+    let detail = explain_rows(
+        &w,
+        &reads::items_for_urls_sql(candidates.len()),
+        &candidates,
+    );
     assert!(detail.contains("locker_item_field_by_url"), "{detail}");
-    assert!(!detail.contains("SCAN") && !detail.contains("TEMP B-TREE"), "{detail}");
+    assert!(
+        !detail.contains("SCAN") && !detail.contains("TEMP B-TREE"),
+        "{detail}"
+    );
 
     // A use stamps the item and nothing else: no version, no `updated_at`.
     let (versions, updated) = (rev_count(&w, &one), w.stamp(&one));
     w.ok("locker.mark_used", json!({ "item_id": one }));
     assert_eq!(rev_count(&w, &one), versions);
     assert_eq!(w.stamp(&one), updated);
-    assert!(w.one::<Option<String>>("SELECT last_used_at FROM locker_item WHERE id = ?1", &[&one]).is_some());
+    assert!(
+        w.one::<Option<String>>(
+            "SELECT last_used_at FROM locker_item WHERE id = ?1",
+            &[&one]
+        )
+        .is_some()
+    );
     // A code stamps too; an item with no seed has no code.
-    assert!(w.refused("locker.totp_code", json!({ "item_id": one })).contains("no one-time-code"));
+    assert!(
+        w.refused("locker.totp_code", json!({ "item_id": one }))
+            .contains("no one-time-code")
+    );
     // The unlock stamps live on the key row.
     key_id(&w);
     w.ok("locker.mark_unlock_failed", json!({}));
@@ -619,14 +854,24 @@ fn a_duplicate_takes_plain_fields_and_tags_and_the_cores_re_sealed_secrets_but_n
     );
     assert_eq!(out["title"], "Bank copy");
     assert_eq!(
-        w.one::<String>("SELECT value_text FROM locker_item_field WHERE id = ?1", &[&id_of(&copy, "username")]),
+        w.one::<String>(
+            "SELECT value_text FROM locker_item_field WHERE id = ?1",
+            &[&id_of(&copy, "username")]
+        ),
         "me"
     );
     assert_eq!(
-        w.one::<i64>("SELECT COUNT(*) FROM locker_item_field WHERE item_id = ?1 AND claimed = 1", &[&copy]),
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM locker_item_field WHERE item_id = ?1 AND claimed = 1",
+            &[&copy]
+        ),
         0
     );
-    let cell = w.vault().locker_sealed_item_cell(&copy, "password").unwrap().unwrap();
+    let cell = w
+        .vault()
+        .locker_sealed_item_cell(&copy, "password")
+        .unwrap()
+        .unwrap();
     assert!(
         centraid_vault::custody::decrypt_under_locker_key(
             &common::locker::K,
@@ -636,17 +881,34 @@ fn a_duplicate_takes_plain_fields_and_tags_and_the_cores_re_sealed_secrets_but_n
         )
         .is_ok()
     );
-    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'tagged'", &[&copy]), 1);
-    assert!(w.one::<Option<String>>("SELECT starred_at FROM entity WHERE id = ?1", &[&copy]).is_none());
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM edge WHERE from_id = ?1 AND rel = 'tagged'",
+            &[&copy]
+        ),
+        1
+    );
+    assert!(
+        w.one::<Option<String>>("SELECT starred_at FROM entity WHERE id = ?1", &[&copy])
+            .is_none()
+    );
     // The source's cipher is bound to the source's row, so the copy cannot be handed it.
-    let moved = w.vault().locker_sealed_item_cell(&source, "password").unwrap().unwrap();
+    let moved = w
+        .vault()
+        .locker_sealed_item_cell(&source, "password")
+        .unwrap()
+        .unwrap();
     let other = item_id(&w);
     add(&w, &other, "login", "Other", vec![]);
     w.ok(
         "locker.edit_item",
         json!({ "item_id": other, "fields": [{ "field_key": "password", "value": moved.ciphertext, "key_id": moved.key_id }] }),
     );
-    let stolen = w.vault().locker_sealed_item_cell(&other, "password").unwrap().unwrap();
+    let stolen = w
+        .vault()
+        .locker_sealed_item_cell(&other, "password")
+        .unwrap()
+        .unwrap();
     assert!(
         centraid_vault::custody::decrypt_under_locker_key(
             &common::locker::K,

@@ -120,9 +120,11 @@ pub struct FieldView {
 /// SQLite's refusal.
 pub fn fields_of(connection: &Connection, item_id: &str) -> Result<Vec<FieldView>> {
     let item_type: Option<String> = connection
-        .query_row("SELECT type FROM locker_item WHERE id = ?1", [item_id], |row| {
-            row.get(0)
-        })
+        .query_row(
+            "SELECT type FROM locker_item WHERE id = ?1",
+            [item_id],
+            |row| row.get(0),
+        )
         .ok();
     let item_type = item_type.unwrap_or_default();
     let mut statement = connection.prepare_cached(

@@ -43,7 +43,11 @@ pub(super) fn assert_sealed_cell(name: &str, value: Option<&str>) -> Result<()> 
 
 /// The key generation a sealed write names must be the vault's one. Absent when the input carries
 /// no sealed value at all: a retag is not a secret write and must not need the key plane.
-pub(super) fn assert_key_generation(key_id: Option<&str>, carries_secret: bool, ctx: &CommandCtx<'_, '_>) -> Result<()> {
+pub(super) fn assert_key_generation(
+    key_id: Option<&str>,
+    carries_secret: bool,
+    ctx: &CommandCtx<'_, '_>,
+) -> Result<()> {
     if !carries_secret {
         return Ok(());
     }
@@ -113,7 +117,8 @@ pub(super) fn sentence_of(error: VaultError) -> String {
 
 /// Live is the ENTITY's word: a Locker item's trash window is on its `entity` row, like every
 /// kind's.
-pub(super) const ITEM_LIVE_SQL: &str = "SELECT COUNT(*) FROM locker_item i JOIN entity e ON e.id = i.id
+pub(super) const ITEM_LIVE_SQL: &str =
+    "SELECT COUNT(*) FROM locker_item i JOIN entity e ON e.id = i.id
       WHERE i.id = ?1 AND e.deleted_at IS NULL";
 
 pub(super) const ITEM_LIVE_CHECK: CommandCondition = CommandCondition {
