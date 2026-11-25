@@ -346,8 +346,9 @@ impl Vault {
                     }
                 }
             }
-            // The index is part of the commit: a change and its search rows
-            // land together or not at all.
+            // The index file owes what this commit changed: the queue (`search_owed`) is part of
+            // the commit, in `vault.db`; the index file itself is written right after it
+            // (`index::after_commit`), because no transaction spans the two files.
             let mut owed = std::mem::take(&mut self.pending.borrow_mut().reindex);
             owed.extend(auto.reindex);
             crate::index::reindex(&connection, &owed)?;
@@ -387,6 +388,9 @@ impl Vault {
                 // before it would be a screen redrawn from a transaction that
                 // could still roll back.
                 let tally = hook.take(&census)?;
+                // The index file is written from what the commit queued. The hook is off, so
+                // none of it is a screen's change, and it never fails a commit that is durable.
+                crate::index::after_commit(&self.connection());
                 let rows = tally.rows;
                 let tables: Vec<String> = tally.tables.into_iter().collect();
                 tracing::debug!(rows, tables = tables.len(), "commit");
@@ -432,6 +436,7 @@ pub(crate) fn is_index(table: &str) -> bool {
         || table == "alert"
         || table == "geo"
         || table == "index_state"
+        || crate::index::is_scratch(table)
         || matches!(table, "geo_node" | "geo_rowid" | "geo_parent")
         || is_fts_shadow(table)
 }

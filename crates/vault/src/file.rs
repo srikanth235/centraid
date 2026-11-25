@@ -25,7 +25,7 @@
 use std::cell::{Cell, Ref, RefCell};
 use std::path::{Path, PathBuf};
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 
 use crate::clock::{Clock, ClockIds, Ids, SystemClock};
 use crate::error::{Result, VaultError};
@@ -90,11 +90,20 @@ enum IndexFile {
     Foreign(i64),
 }
 
-fn inspect_index(index: &Path) -> Result<IndexFile> {
+/// Look at the file at the index path WITHOUT changing it (it is opened read-only): a database that
+/// is not this build's index file is left exactly as it was found.
+///
+/// `self_id` is the vault's own person (`None` before the vault is founded). A file whose
+/// `index_state` names another vault, or another tokenizer version, is derived data of the wrong
+/// kind and is founded again.
+fn inspect_index(index: &Path, self_id: Option<&str>) -> Result<IndexFile> {
     if !index.exists() {
         return Ok(IndexFile::Missing);
     }
-    let Ok(connection) = Connection::open(index) else {
+    let Ok(connection) = Connection::open_with_flags(
+        index,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    ) else {
         return Ok(IndexFile::Stale);
     };
     let Ok(application_id) =
@@ -111,7 +120,10 @@ fn inspect_index(index: &Path) -> Result<IndexFile> {
     let version: i64 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .unwrap_or(-1);
-    if version != crate::migrations::index_head_version() || quick_check(&connection).is_err() {
+    if version != crate::migrations::index_head_version()
+        || quick_check(&connection).is_err()
+        || !crate::index::state_is_current(&connection, self_id)
+    {
         return Ok(IndexFile::Stale);
     }
     Ok(IndexFile::Current)
@@ -405,6 +417,9 @@ impl Vault {
         connection.pragma_update(None, "foreign_keys", "ON")?;
         let vault = Self::wrap(connection, path, head_version(), clock, ids)?;
         vault.attach_index()?;
+        // What founding seeded (the seeded containers) is in the new index file now, and nothing is
+        // owed: a fresh file is the whole of a fresh vault, small by construction.
+        crate::index::rebuild(&vault.connection())?;
         Ok(vault)
     }
 
@@ -509,12 +524,18 @@ impl Vault {
     /// sibling.
     fn attach_index(&self) -> Result<()> {
         let index = index_file_path(&self.path);
-        let mut refounded = false;
-        match inspect_index(&index)? {
+        let self_id: Option<String> = self
+            .connection()
+            .query_row("SELECT self_id FROM vault", [], |row| row.get(0))
+            .optional()?;
+        match inspect_index(&index, self_id.as_deref())? {
             IndexFile::Current => {}
             IndexFile::Missing | IndexFile::Stale => {
+                // THE QUEUE FIRST, THE FILE SECOND. The rows are owed in `vault.db` before the new
+                // file takes its name, so a kill between the two finds the old (or no) file again and
+                // owes the same rows again (a row owed twice is one row).
+                crate::index::owe_everything(&self.connection())?;
                 found_index_file(&self.path)?;
-                refounded = true;
             }
             IndexFile::Foreign(found) => {
                 return Err(VaultError::NotAVault {
@@ -524,17 +545,10 @@ impl Vault {
                 });
             }
         }
-        let connection = self.connection();
-        connection.execute(
+        self.connection().execute(
             "ATTACH DATABASE ?1 AS ix",
             [index.to_string_lossy().as_ref()],
         )?;
-        if refounded {
-            connection.execute(
-                "INSERT INTO search_owed (n) SELECT n FROM entity WHERE true ON CONFLICT (n) DO NOTHING",
-                [],
-            )?;
-        }
         Ok(())
     }
 
@@ -628,6 +642,7 @@ impl Vault {
         // The lookup tables are fixed from here on: a migration ran on this connection before it
         // was wrapped, and nothing after it may write one (K2).
         crate::lookups::install(&connection)?;
+        crate::index::install(&connection)?;
         Ok(Self {
             connection: Held(RefCell::new(Some(connection))),
             path,

@@ -1,9 +1,6 @@
-//! The indexes the baseline carries are the ones its reads walk (#1191, V5): each read below
-//! plans as a search or an ordered walk of the index named, with no sort of its own. The plan
-//! sweep of `crates/core/tests/query_plans.rs` counts the table scans of every app read over the
-//! year-3 vault and names the index each app statement is served by; this names the index each
-//! statement of the vault's own is served by. Every statement planned here is the product's own
-//! constant, never a copy.
+//! V6, moved out of `index_walks` by K7 (it is the edge lane's statement): `edge_order` has a
+//! reader. Its fixture still writes the old ids (`list-1`, `p1`), which the grammar of an id now
+//! refuses; K5 rewrites it with minted ids and moves it back to `tests/`.
 
 mod common;
 
@@ -18,64 +15,6 @@ fn plan(scratch: &common::Scratch, sql: &str, binds: &[&str]) -> String {
             Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?.join(" | "))
         })
         .expect("a plan")
-}
-
-fn walks(plan: &str, index: &str) {
-    assert!(
-        plan.contains(&format!("INDEX {index}")),
-        "{index} is not used: {plan}"
-    );
-    assert!(!plan.contains("TEMP B-TREE"), "the read sorts: {plan}");
-}
-
-#[test]
-fn a_guests_address_finds_its_person_by_the_contact_point_index() {
-    let scratch = common::Scratch::founded("walk-contact").expect("a vault");
-    walks(
-        &plan(
-            &scratch,
-            centraid_vault::commands::event::PERSON_OF_EMAIL,
-            &["a@example.com"],
-        ),
-        "contact_point_by_value",
-    );
-}
-
-/// A category's plans are read by the primary key `(category_id, month)`, which the statement the
-/// merge of two categories runs seeks; no secondary index serves it. The reads of a month across
-/// categories (`budget_by_month`), the series (`event_by_rule`) and the newest statement line
-/// (`source_by_seen`) are app statements, so the vault cannot name them: their proofs plan the
-/// apps' own statements in `crates/core/tests/query_plans.rs` (`the_named_reads_walk_their_index`).
-#[test]
-fn a_categorys_plans_are_a_seek_of_the_budget_key() {
-    let scratch = common::Scratch::founded("walk-budget").expect("a vault");
-    let per_category = plan(
-        &scratch,
-        centraid_vault::commands::money::PLANS_OF_CATEGORY,
-        &["category:food"],
-    );
-    assert!(
-        per_category.contains("SEARCH budget USING PRIMARY KEY"),
-        "{per_category}"
-    );
-}
-
-/// M5: the whole-library listing the drill and garbage collection run (`content_hashes`) names
-/// every claim by design, so it reads the whole `blob` table; what it must not do is sort. Its
-/// statement is the product's own constant, and it is an ordered walk of `blob`'s unique `hash`
-/// index, never a temporary sort tree.
-#[test]
-fn the_content_listing_walks_the_hash_index_and_never_sorts() {
-    let scratch = common::Scratch::founded("walk-content").expect("a vault");
-    let plan = plan(
-        &scratch,
-        centraid_vault::backup::naming::CONTENT_HASHES,
-        &[],
-    );
-    assert!(
-        plan.contains("USING INDEX") && !plan.contains("TEMP B-TREE"),
-        "the listing sorts or does not use the hash index: {plan}"
-    );
 }
 
 /// V6: `edge_order` has a reader and no other index serves it as well, so it stays. The plan is the

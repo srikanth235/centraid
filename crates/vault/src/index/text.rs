@@ -182,7 +182,7 @@ pub fn text_of(connection: &Connection, id: &str, kind: Kind) -> Result<Option<S
             connection,
             "SELECT value_text FROM (
                  SELECT value_text FROM locker_item_field
-                  WHERE item_id = ?1 AND value_text IS NOT NULL
+                  WHERE item_id = ?1 AND value_text IS NOT NULL AND value_text NOT LIKE 'lk1:%'
                   ORDER BY position, id)
              UNION ALL SELECT rp_id FROM (
                  SELECT rp_id FROM locker_item_passkey WHERE item_id = ?1 ORDER BY id)",

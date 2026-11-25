@@ -129,7 +129,8 @@ fn page_read_equals_online_backup() {
     pinned.end().expect("ends");
 }
 
-/// Every file under `dir` that is not the vault's own three, as (path, bytes).
+/// Every file under `dir` that is not the vault's own three, as (path, bytes). The index file is
+/// among them: it is the vault's derived data beside it (`index::is_index_file`), not a copy of it.
 fn others(dir: &Path, vault_name: &str) -> Vec<(PathBuf, Vec<u8>)> {
     let mut out = Vec::new();
     let mut stack = vec![dir.to_path_buf()];
@@ -199,6 +200,11 @@ fn no_plaintext_vault_copy_on_disk() {
                     "{} holds the canary in the clear",
                     file.display()
                 );
+                // The index file is a database of its own whose empty pages are the same bytes as
+                // another database's empty pages: it is checked for the canary, not for pages.
+                if centraid_vault::index::is_index_file(&path_of(&scratch), &file) {
+                    continue;
+                }
                 for page in bytes.chunks(page_size).filter(|p| p.len() == page_size) {
                     assert!(
                         !page_hashes.contains(blake3::hash(page).as_bytes()),
@@ -274,7 +280,9 @@ fn a_damaged_page_is_found_on_the_pin() {
         pinned.end().expect("ends");
         size
     };
+    // The LAST table leaf: rows of data, not the schema or a lookup table the pin itself reads.
     let leaf = (1..bytes.len() / page_size)
+        .rev()
         .find(|page| bytes[page * page_size] == 0x0d)
         .expect("a table leaf");
     // The cell count of a leaf: a number no page could hold.

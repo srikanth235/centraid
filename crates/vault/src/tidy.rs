@@ -166,7 +166,8 @@ impl Vault {
         })
     }
 
-    /// Merge the search indexes so the words of purged items leave their pages ([`crate::index::compact`]), in a commit of its own.
+    /// Merge the search indexes so the words of purged items leave their pages ([`crate::index::compact`]),
+    /// in a commit of its own (the merge runs right after it, once).
     ///
     /// # Errors
     /// The vault's refusal.
@@ -184,24 +185,31 @@ impl Vault {
         })
     }
 
-    /// Write the next batch of the search rows a commit left owed (a label of thousands, trashed
-    /// or restored), in a commit of its own; returns how many are still owed.
+    /// Write the next batch of what the index file is owed (a commit's rest, a label's members, a
+    /// re-founded file's every entity), in transactions of its own; returns how many rows are still
+    /// owed (counted up to a thousand). **Nothing is cleared that was not written**, and a kill
+    /// between the two leaves it owed.
     ///
-    /// A batch is about the call budget long, so the caller holds the vault for it and no more.
+    /// A batch is about the call budget long ([`crate::index::OWED_BATCH`] entities), so the caller
+    /// holds the vault for it and no more. Does nothing inside a commit or a read.
     ///
     /// # Errors
     /// SQLite's refusal.
     pub fn reindex_owed(&self) -> Result<usize> {
-        let owed: bool = self.read(|connection| Ok(crate::index::owed(connection)? > 0))?;
-        if !owed {
+        if self.in_commit() {
             return Ok(0);
         }
-        Ok(self
-            .commit(|tx| {
-                tx.set_producer("index.owed");
-                crate::index::reindex_owed(tx.connection(), crate::index::OWED_BATCH)
-            })?
-            .value)
+        let connection = self.connection();
+        crate::index::drain_batch(&connection, crate::index::OWED_BATCH)
+    }
+
+    /// Throw the index file's contents away and write them again from the rows, to the end (what the
+    /// tests compare the incremental index with; a launched app drains by [`Self::reindex_owed`]).
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn rebuild_index(&self) -> Result<()> {
+        crate::index::rebuild(&self.connection())
     }
 
     /// Move the repeating alerts whose firing has passed on to their next, in a commit of its own

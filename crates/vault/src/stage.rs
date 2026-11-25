@@ -27,6 +27,9 @@ pub enum Stage {
     BeforeCommit,
     /// `COMMIT` has returned: the commit is durable.
     Committed,
+    /// The index file's rows for what a commit queued are written and committed; the queue in
+    /// `vault.db` is not yet cleared (a kill here leaves them owed, and they are written again).
+    IndexWritten,
     /// `open` ran `PRAGMA quick_check` (counted by a test: a healthy open runs it once).
     QuickChecked,
 }
