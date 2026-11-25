@@ -422,3 +422,69 @@ fn an_empty_vault_still_makes_an_archive_and_a_second_export_replaces_the_first(
     let (second, _) = w.all();
     assert_eq!(first["path"], second["path"]);
 }
+
+impl World {
+    fn note_with_asset(&self, title: &str, name: &str, bytes: &[u8]) -> (String, String) {
+        let id = self.id(
+            "note.create",
+            json!({ "title": title, "body": "see the picture" }),
+        );
+        let hash = self.stage(bytes);
+        self.ok(
+            "note.asset_add",
+            json!({ "id": id, "blob": hash, "name": name, "media_type": "image/png" }),
+        );
+        (id, hash)
+    }
+}
+
+#[test]
+fn a_notes_image_is_in_the_archive_beside_it_byte_for_byte() {
+    let w = World::new();
+    let picture: Vec<u8> = (0..150_000_u32).map(|n| (n % 247) as u8).collect();
+    w.note_with_asset("Trip", "view.png", &picture);
+    let (out, entries) = w.all();
+    assert_eq!(out["missing"], 0);
+    assert!(entries.iter().any(|(name, _)| name == "Notes/Trip.md"));
+    assert_eq!(find(&entries, "Notes/Trip.assets/view.png"), picture);
+}
+
+#[test]
+fn two_notes_with_one_title_keep_their_images_apart() {
+    let w = World::new();
+    w.note_with_asset("Same", "a.png", b"first picture");
+    w.note_with_asset("Same", "a.png", b"second picture");
+    let (_, entries) = w.all();
+    assert_eq!(find(&entries, "Notes/Same.assets/a.png"), b"first picture");
+    assert_eq!(
+        find(&entries, "Notes/Same 2.assets/a.png"),
+        b"second picture"
+    );
+}
+
+#[test]
+fn a_notes_image_whose_bytes_are_gone_is_named_not_dropped() {
+    let w = World::new();
+    let (_, hash) = w.note_with_asset("Trip", "view.png", b"lost picture");
+    w.scratch
+        .vault
+        .blobs()
+        .expect("a store")
+        .remove(&hash)
+        .expect("removed");
+    let (out, entries) = w.all();
+    assert_eq!(out["missing"], 1);
+    assert_eq!(
+        out["left_out"],
+        json!([{ "name": "Notes/Trip.assets/view.png", "why": "not on this phone" }])
+    );
+    assert!(
+        entries
+            .iter()
+            .all(|(name, _)| name != "Notes/Trip.assets/view.png")
+    );
+    assert!(has_bytes(
+        find(&entries, "Left out.txt"),
+        b"Notes/Trip.assets/view.png"
+    ));
+}
