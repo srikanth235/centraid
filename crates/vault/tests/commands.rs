@@ -63,7 +63,6 @@ fn the_registry_carries_the_shared_verbs_and_the_plugged_modules_and_nothing_els
         "history.undo",
         "note.create",
         "note.edit",
-        "note.move",
         "vault.rename",
     ] {
         assert!(names.contains(&expected), "`{expected}` is not registered");

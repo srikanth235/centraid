@@ -705,13 +705,24 @@ struct ByIdInput {
     id: String,
 }
 
+/// THE ONE PATH THAT RENAMES A ROW: a kind's own edit command that takes a title calls this, so
+/// the mentions waiting for the new title resolve ([`crate::commands::note::resolve_waiting`]).
+/// Returns whether the title changed.
+pub(crate) fn rename(ctx: &CommandCtx<'_, '_>, id: &str, title: &str) -> Result<bool> {
+    let changed = ctx.connection().execute(
+        "UPDATE entity SET title = ?2 WHERE id = ?1 AND title <> ?2",
+        [id, title],
+    )?;
+    if changed > 0 {
+        crate::commands::note::resolve_waiting(ctx, id)?;
+    }
+    Ok(changed > 0)
+}
+
 fn retitle(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let input: RetitleInput = ctx.parse_input()?;
     let title = input.title.trim();
-    ctx.connection().execute(
-        "UPDATE entity SET title = ?2 WHERE id = ?1",
-        [input.id.as_str(), title],
-    )?;
+    rename(ctx, &input.id, title)?;
     with_rev(
         ctx,
         &input.id,

@@ -968,3 +968,108 @@ fn a_revision_is_history_and_a_version_names_only_blobs_the_vault_holds() {
     w.takes(&format!("DELETE FROM entity WHERE id = '{note}'"));
     w.takes(&format!("DELETE FROM blob WHERE hash = '{hash}'"));
 }
+
+// ---------------------------------------------------------------------------------------------
+// K11: a note's day, format, mentions and assets
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn a_note_has_a_real_day_a_known_format_and_assets_that_name_held_bytes_and_go_with_it() {
+    let w = World::new("rules_k11_note");
+    let note = w.entity(201, "note", "N");
+    let hash = "c".repeat(64);
+    // A journal day is a date, and only a date.
+    for bad in ["yesterday", "2026-02-30", "2026-3-1", "2026-03-01T09:00"] {
+        w.refuses_with(
+            &format!("INSERT INTO note (id, journal_on) VALUES ('{note}', '{bad}')"),
+            "CHECK",
+        );
+    }
+    w.refuses_with(
+        &format!("INSERT INTO note (id, format) VALUES ('{note}', 'rtf')"),
+        "CHECK",
+    );
+    // The words weigh at most 64 KiB, counted in bytes (so `é` is two), and a note needs a title.
+    let words = |letters: u32, accent: &str| {
+        format!(
+            "INSERT INTO note (id, body) VALUES ('{note}', replace(hex(zeroblob({letters})), '00', '{accent}'))"
+        )
+    };
+    w.refuses_with(&words(65_537, "a"), "CHECK");
+    w.refuses_with(&words(32_769, "é"), "CHECK");
+    w.takes(&words(32_768, "é"));
+    w.takes(&format!("DELETE FROM note WHERE id = '{note}'"));
+    let untitled = w.entity(203, "note", "");
+    w.refuses_with(
+        &format!("INSERT INTO note (id) VALUES ('{untitled}')"),
+        "a note needs a title",
+    );
+    w.takes(&format!("INSERT INTO note (id) VALUES ('{note}')"));
+    w.refuses_with(
+        &format!("UPDATE entity SET title = '' WHERE id = '{note}'"),
+        "a note needs a title",
+    );
+    w.takes(&format!(
+        "UPDATE note SET journal_on = '2026-03-01' WHERE id = '{note}'"
+    ));
+    w.takes(&format!(
+        "UPDATE note SET journal_on = NULL WHERE id = '{note}'"
+    ));
+    w.refuses_with(
+        &format!("UPDATE note SET journal_on = 'soon' WHERE id = '{note}'"),
+        "CHECK",
+    );
+    // An asset names bytes the vault holds, has a name and a type, and belongs to a note.
+    let asset = |id: u64, name: &str, media: &str, blob: &str, owner: &str| {
+        format!(
+            "INSERT INTO note_asset (id, note_id, blob, name, media_type)
+             VALUES ('{}', '{owner}', '{blob}', '{name}', '{media}')",
+            id
+        )
+    };
+    w.refuses_with(&asset(1, "a.png", "image/png", &hash, &note), "FOREIGN KEY");
+    w.takes(&format!(
+        "INSERT INTO blob (hash, size) VALUES ('{hash}', 3)"
+    ));
+    w.refuses_with(&asset(2, "  ", "image/png", &hash, &note), "CHECK");
+    w.refuses_with(&asset(3, "a.png", " ", &hash, &note), "CHECK");
+    let person = w.entity(202, "person", "P");
+    w.refuses_with(
+        &asset(4, "a.png", "image/png", &hash, &person),
+        "FOREIGN KEY",
+    );
+    w.takes(&asset(5, "a.png", "image/png", &hash, &note));
+    // The bytes are not dropped from under the asset; the asset goes with its note.
+    w.refuses_with(
+        &format!("DELETE FROM blob WHERE hash = '{hash}'"),
+        "FOREIGN KEY",
+    );
+    w.takes(&format!("DELETE FROM entity WHERE id = '{note}'"));
+    w.takes(&format!("DELETE FROM blob WHERE hash = '{hash}'"));
+}
+
+#[test]
+fn a_mention_is_one_row_of_its_note_by_ordinal_and_goes_with_it() {
+    let w = World::new("rules_k11_mention");
+    let note = w.entity(211, "note", "N");
+    w.takes(&format!("INSERT INTO note (id) VALUES ('{note}')"));
+    let mention = |ordinal: i64, words: &str| {
+        format!(
+            "INSERT INTO mention (note_id, ordinal, wikilink) VALUES ('{note}', {ordinal}, '{words}')"
+        )
+    };
+    // The same words twice are two rows; one ordinal is one row.
+    w.takes(&mention(0, "Alex"));
+    w.takes(&mention(1, "Alex"));
+    w.refuses_with(&mention(1, "Other"), "UNIQUE");
+    w.refuses_with(&mention(-1, "Alex"), "CHECK");
+    w.takes(&format!("DELETE FROM entity WHERE id = '{note}'"));
+    assert_eq!(
+        w.scratch
+            .vault
+            .read(|c| Ok(c.query_row("SELECT COUNT(*) FROM mention", [], |r| r.get::<_, i64>(0))?))
+            .expect("counts"),
+        0,
+        "a note's mentions go with it"
+    );
+}

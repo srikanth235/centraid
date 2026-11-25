@@ -1,5 +1,17 @@
 # UNPLUGGED (#1214, checkpoint 1)
 
+## The pattern (notes, K11: copy `commands/note.rs`, `tests/notes.rs`)
+
+Re-plugging a module, in order:
+1. **Registry**: `pub mod` in `commands/mod.rs` and its `definitions` in `Registry::with_system_commands`; no verb the shared ones already are (`entity.move`, `retitle`, `trash`, `star`, `tag.add`, `edge.add`).
+2. **Home and kind row**: create with `ctx.insert_entity_in`/`_under` (the home is `entity.parent_id`; refuse in a sentence with `entity::home_refusal`); a move is `entity.move`; a rename of anything linkable goes through `entity::rename`, a create through `insert_entity_*` (both call `note::resolve_waiting`).
+3. **Lookups**: read an attribute (`entity_kind.linkable`, `home_shape`, `*_kind` rows), never a list of kinds in Rust; a new lookup value is a baseline row and `tests/lookups.rs`.
+4. **History**: `history::TABLES` (kind row), `Role::Child` (child tables), `BLOB_SLOTS` (a rented blob, slot `<name>:<id>`), `OMITTED`/`CONTENT`; the commit door writes versions, the command never does. Do not collect a slotted blob in the handler: the new version names it.
+5. **Search**: `Kind` SEARCHABLE (`model.rs`) and the kind's arm in `index/text.rs::text_of`; a labelling row goes in `DEPENDENTS`.
+6. **Rules twice**: each sentence a precondition says is also a CHECK, key or trigger in the baseline, with a raw-SQL row in `tests/schema_rules.rs` (a baseline edit means `SCHEMA_DIGEST`, `format_identity.rs`, `cargo run -p centraid-vault --bin export-ladder-ddl > contracts/schema/vault-ddl.sql`).
+7. **Tests**: against `tests/common/world.rs`; plan tests (`EXPLAIN QUERY PLAN`) assert an index name and no `TEMP B-TREE`/`SCAN`, never seconds. Move the old file out of `tests/unplugged/` (delete what tested removed behaviour, with a line saying why).
+8. **Regenerate**: `export-commands > contracts/schema/vault-commands.txt` when verbs change; delete your rows here; run `cargo xtask rules`.
+
 The v0 schema (`contracts/migrations/001_baseline.sql`, with the index file's own ladder in
 `contracts/migrations/index/001_index.sql`) replaced the old baseline whole. Everything that was
 written against the old tables is either rewritten (the kernel lane: `model.rs`, `lookups.rs`, the
@@ -52,7 +64,6 @@ and moves it back.
 - **K8 reminders and alerts (alerts.rs, reminder, alert)**: `alerts`
 - **K9 following (commands/follow/, arrival.rs, origin_cursor.rs)**: `arrival` (an arrival is two columns of `entity` now and makes no origin or source; `arrival::SYSTEMS` is read only by `follow/merge.rs`'s exclusion clause, now dead), `shared_verbs_people_follow`, `origin_cursor`, `follow_items`, `follow_reminders`, `follow_retire`, `follow_stated`, `follow_gaps`, `calendar_follow`
 - **K10 blobs and backup, phone side (blob.rs, backup/)**: `backup_sim`, `restore_drill`, `blob_release` (the bytes under the trash, from the old `trash_and_bytes`), `shared_verbs_blobs` (`backup_snapshot` is plugged: its proof file is named by the `promises` rule)
-- **K11 notes (commands/note.rs, note_portable.rs)**: `notes`, `note_portable`
 - **K12 commitments and generated pages**: `commitments`, `stored_rules`, `ontology_page`, `ontology_widen`
 - **app lane: calendar/tasks (event, ical, task, occurrence, reminders UI reads)**: `agenda`, `agenda_days`, `agenda_portable`, `agenda_wave2`
 - **app lane: documents and photos**: `docs_photos`, `document_portable`, `photo_portable`, `store_health`

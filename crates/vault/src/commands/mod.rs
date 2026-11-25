@@ -210,7 +210,10 @@ impl<'conn> CommandCtx<'_, 'conn> {
                 detail: "an id is a lowercase UUIDv7".to_owned(),
             });
         }
-        self.tx.insert_entity_in(id, kind, title, parent, &self.now)
+        self.tx
+            .insert_entity_in(id, kind, title, parent, &self.now)?;
+        // A new item may be the title a note's `[[link]]` has been waiting for.
+        note::resolve_waiting(self, id)
     }
 
     /// [`Self::insert_entity`] born in a home.

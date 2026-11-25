@@ -981,13 +981,24 @@ CREATE INDEX reading_by_metric ON reading(metric, person_id, at, id);
 CREATE TABLE note (
   id         TEXT PRIMARY KEY,
   kind       TEXT GENERATED ALWAYS AS ('note') VIRTUAL,
-  body       TEXT NOT NULL DEFAULT '',
+  -- K11: a note's words are read whole to index, preview and snapshot, so they weigh at most 64 KiB
+  -- (the command's `BODY_BUDGET_BYTES` says it in a sentence; this is the same rule).
+  body       TEXT NOT NULL DEFAULT '' CHECK (length(CAST(body AS BLOB)) <= 65536),
   format     TEXT NOT NULL DEFAULT 'markdown' CHECK (format IN ('markdown','plain')),
   journal_on TEXT CHECK (date(journal_on) IS journal_on),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE
 ) STRICT;
 -- Reader: Journal, a day at a time and newest first.
 CREATE INDEX note_by_journal ON note(journal_on, id) WHERE journal_on IS NOT NULL;
+-- K11: a note needs a title (the lookup's `may_be_named` only says a kind MAY carry one; a note's
+-- list rows, a `[[link]]` and the search all read it). The title is the entity's, so it is checked
+-- where the title is made and where it changes.
+CREATE TRIGGER note_has_a_title BEFORE INSERT ON note
+  WHEN (SELECT title FROM entity WHERE id = new.id) = ''
+  BEGIN SELECT RAISE(ABORT, 'a note needs a title'); END;
+CREATE TRIGGER note_keeps_its_title BEFORE UPDATE OF title ON entity
+  WHEN new.kind = 'note' AND new.title = ''
+  BEGIN SELECT RAISE(ABORT, 'a note needs a title'); END;
 
 -- H2: an image or file placed inside a note's body is a CHILD of the note, not an item: in no list,
 -- search result or trash, cascading with the note, its earlier versions kept through `revision_blob`

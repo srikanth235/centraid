@@ -24,11 +24,13 @@ history.restore_version
 history.undo
 link.add
 link.remove
+note.asset_add
+note.asset_remove
+note.asset_reorder
 note.create
 note.edit
 note.export
 note.import
-note.move
 note.restore_version
 tag.add
 tag.color
