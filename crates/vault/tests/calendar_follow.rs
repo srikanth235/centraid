@@ -621,3 +621,137 @@ fn a_followed_calendar_the_member_trashed_stays_trashed_until_the_member_restore
     let arrival = event_of(&w, "uid:2");
     assert!(!deleted(&w, &calendar) && !deleted(&w, &event) && !deleted(&w, &arrival));
 }
+
+// ---------------------------------------------------------------------------------------------
+// Stopped and followed again; what differs; taking the phone's word back
+// ---------------------------------------------------------------------------------------------
+
+fn stop(w: &World, calendar: &str) {
+    w.ok("follow.stop", json!({ "system": "calendar", "ref": calendar }));
+}
+
+fn differences(w: &World, id: &str) -> Vec<centraid_vault::commands::follow::Difference> {
+    w.vault()
+        .read(|c| centraid_vault::commands::follow::differences(c, id))
+        .expect("differences")
+}
+
+#[test]
+fn a_calendar_followed_again_keeps_its_calendar_and_adds_no_event_twice() {
+    let w = World::new("cal_follow_again");
+    read(&w, vec![meeting("uid:1", "Standup")]);
+    let home: String = w.one("SELECT fills FROM origin WHERE ref = 'calendar:work'", &[]);
+    let calendars = w.one::<i64>("SELECT COUNT(*) FROM entity WHERE kind = 'calendar'", &[]);
+    stop(&w, "calendar:work");
+    // The calendar and the event stay, and the event shows no "Phone says" while nothing follows it.
+    let event = event_of(&w, "uid:1");
+    assert!(differences(&w, &event).is_empty(), "a stopped calendar's event is not followed");
+    let again = read(&w, vec![meeting("uid:1", "Standup")]);
+    assert_eq!((again["added"].clone(), again["unchanged"].clone()), (json!(0), json!(1)));
+    assert_eq!(w.one::<String>("SELECT fills FROM origin WHERE ref = 'calendar:work'", &[]), home);
+    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM entity WHERE kind = 'calendar'", &[]), calendars);
+    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM event", &[]), 1);
+}
+
+#[test]
+fn an_event_the_member_trashed_or_edited_while_the_calendar_was_stopped_stays_that_way() {
+    let w = World::new("cal_follow_stopped");
+    read(&w, vec![meeting("uid:1", "Standup"), meeting("uid:2", "Retro")]);
+    let (standup, retro) = (event_of(&w, "uid:1"), event_of(&w, "uid:2"));
+    stop(&w, "calendar:work");
+    w.ok("entity.trash", json!({ "id": &standup }));
+    w.ok("entity.retitle", json!({ "id": &retro, "title": "Retrospective" }));
+    read(&w, vec![meeting("uid:1", "Standup"), meeting("uid:2", "Retro")]);
+    assert!(deleted(&w, &standup), "the event the member trashed stays trashed, not added again");
+    assert_eq!(w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&retro]), "Retrospective");
+    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM event", &[]), 2);
+}
+
+#[test]
+fn an_event_reports_its_followed_fields_and_its_guests_item_by_item_and_a_take_puts_them_back() {
+    let w = World::new("cal_follow_take");
+    let guest = |name: &str, email: &str, state: &str| json!({ "name": name, "email": email, "state": state });
+    let attend = |guests: Value| read(&w, vec![with(meeting("uid:1", "Sync"), "attendees", guests)]);
+    attend(json!([guest("Ann", "ann@example.com", "needs-action"), guest("Ben", "ben@example.com", "needs-action")]));
+    let event = event_of(&w, "uid:1");
+    assert!(differences(&w, &event).is_empty());
+    w.ok("event.edit", json!({ "id": &event, "description": "mine" }));
+    w.ok("event.respond", json!({ "id": &event, "address": "ann@example.com", "status": "accepted" }));
+    let diff = differences(&w, &event);
+    assert_eq!(diff.iter().map(|d| d.field.as_str()).collect::<Vec<_>>(), ["description", "attendees"]);
+    assert_eq!(diff[0].stated, json!("agenda"));
+    assert_eq!(diff[1].items.len(), 1, "only Ann differs; Ben is as stated");
+    assert_eq!(diff[1].items[0].key, "ann@example.com");
+    assert_eq!(diff[1].items[0].stated.as_ref().expect("stated")["state"], "needs-action");
+    assert_eq!(diff[1].items[0].held.as_ref().expect("held")["state"], "accepted");
+    // Ben taken off and Cy added are differences too.
+    w.ok(
+        "event.edit",
+        json!({ "id": &event, "guests": [{ "address": "ann@example.com", "status": "accepted" }, { "address": "cy@example.com" }] }),
+    );
+    let keys: Vec<String> = differences(&w, &event)
+        .into_iter()
+        .flat_map(|d| d.items.into_iter().map(|i| i.key))
+        .collect();
+    assert_eq!(keys, ["ann@example.com", "ben@example.com", "cy@example.com"]);
+    for key in ["cy@example.com", "ben@example.com", "ann@example.com"] {
+        w.ok("follow.take_stated", json!({ "entity": &event, "field": "attendees", "item_key": key }));
+    }
+    assert!(differences(&w, &event).iter().all(|d| d.field != "attendees"));
+    assert_eq!(
+        w.strings("SELECT address || '|' || status FROM event_guest WHERE event_id = ?1 ORDER BY address", &[&event]),
+        vec!["ann@example.com|needs-action", "ben@example.com|needs-action"]
+    );
+    // The phone then answers for Ann: the taken guest follows again.
+    attend(json!([guest("Ann", "ann@example.com", "declined"), guest("Ben", "ben@example.com", "needs-action")]));
+    assert_eq!(
+        w.one::<String>("SELECT status FROM event_guest WHERE event_id = ?1 AND address = 'ann@example.com'", &[&event]),
+        "declined"
+    );
+}
+
+#[test]
+fn taking_a_followed_series_puts_its_days_back() {
+    let w = World::new("cal_follow_take_days");
+    let series = |shown: Value| {
+        json!({ "external_id": "uid:trash", "device_id": "phone-1", "fields": {
+            "title": "Trash day", "starts": "2026-03-02", "ends": "2026-03-02", "timing": "all-day",
+            "zone": null, "rule": "FREQ=WEEKLY",
+            "overrides": { "from": "2026-03-01T00:00:00Z", "to": "2026-03-31T00:00:00Z", "shown": shown, "moved": [] } } })
+    };
+    read_into(&w, "home", None, vec![series(json!(["2026-03-02", "2026-03-09", "2026-03-16", "2026-03-23", "2026-03-30"]))], true);
+    let id: String = w.one("SELECT entity_id FROM source", &[]);
+    assert!(differences(&w, &id).is_empty());
+    w.ok("event.edit_occurrence", json!({ "id": &id, "original_start": "2026-03-09", "action": "skip" }));
+    let diff = differences(&w, &id);
+    assert_eq!((diff.len(), diff[0].field.as_str(), diff[0].items.len()), (1, "overrides", 0), "reported whole");
+    let sentence = w.refused("follow.take_stated", json!({ "entity": &id, "field": "overrides", "item_key": "2026-03-09" }));
+    assert!(sentence.contains("as a whole"), "{sentence}");
+    w.ok("follow.take_stated", json!({ "entity": &id, "field": "overrides" }));
+    assert!(differences(&w, &id).is_empty());
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM occurrence WHERE series_id = ?1 AND cancelled = 1 AND original_start = '2026-03-09'", &[&id]),
+        0,
+        "the skipped day is back"
+    );
+}
+
+#[test]
+fn a_series_that_moves_in_the_day_takes_its_overrides_with_it_and_one_that_stops_landing_drops_them() {
+    let w = World::new("cal_follow_rekey");
+    let series = |starts: &str, rule: &str| {
+        json!({ "external_id": "uid:standup", "fields": {
+            "title": "Standup", "starts": starts, "zone": "Europe/Paris", "rule": rule } })
+    };
+    read(&w, vec![series("2026-03-02T09:00:00", "FREQ=WEEKLY")]);
+    let id: String = w.one("SELECT entity_id FROM source", &[]);
+    w.ok("event.edit_occurrence", json!({ "id": &id, "original_start": "2026-03-09T08:00:00.000Z", "action": "skip" }));
+    read(&w, vec![series("2026-03-02T10:00:00", "FREQ=WEEKLY")]);
+    assert_eq!(
+        days(&w, &id),
+        [("2026-03-09T09:00:00.000Z".to_owned(), 1, None)],
+        "the skipped week is still skipped, at the hour the series keeps now"
+    );
+    read(&w, vec![series("2026-03-02T10:00:00", "FREQ=MONTHLY")]);
+    assert!(days(&w, &id).is_empty(), "a day nothing will read is not kept");
+}
