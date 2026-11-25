@@ -46,6 +46,9 @@ CREATE INDEX container_by_kind  ON container(kind, id);
 -- index derivative_by_out on derivative
 CREATE INDEX derivative_by_out ON derivative(out) WHERE out IS NOT NULL;
 
+-- index derivative_by_variant on derivative
+CREATE INDEX derivative_by_variant ON derivative(variant, blob);
+
 -- index document_by_blob on document
 CREATE INDEX document_by_blob ON document(blob);
 

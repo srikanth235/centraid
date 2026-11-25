@@ -212,6 +212,11 @@ pub const TABLES: &[(&str, &str, &str)] = &[
     ),
     (
         "kinds",
+        "txn_match_dismissal",
+        "A hand line and a statement line the member said are not the same money: a dismissed pair is never proposed again, and goes with either line.",
+    ),
+    (
+        "kinds",
         "transfer",
         "Two lines that are the two halves of one movement of the member's own money: one row, the lower line first.",
     ),
@@ -334,6 +339,11 @@ pub const TABLES: &[(&str, &str, &str)] = &[
         "vocabulary",
         "arrival_via",
         "The ways a one-time arrival came in: vCard, CSV, upload, picker, Markdown, scan.",
+    ),
+    (
+        "vocabulary",
+        "arrival_via_kind",
+        "Which kind of item each one-time arrival brings in: a vCard a person, an upload a document, a CSV a person, a Locker item or a line.",
     ),
     (
         "vocabulary",

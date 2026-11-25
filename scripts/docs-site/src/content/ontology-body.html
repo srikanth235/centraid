@@ -30,7 +30,7 @@
     <div class="hero-kv">
       <div><b data-count="kinds">27</b>kinds</div>
       <div><b data-count="relations">7</b>edge relations</div>
-      <div><b data-count="tables">74</b>tables</div>
+      <div><b data-count="tables">76</b>tables</div>
       <div><b>1</b>file, on the phone</div>
       <div><b>0</b>silos</div>
     </div>
@@ -129,7 +129,7 @@
 <div class="colrow"><span class="cn">starred_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">pinned_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">archived_at</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">arrived_via</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ arrival_via.code</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">arrived_via</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ arrival_via_kind.via</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">arrived_label</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">topless</span><span class="ct">integer</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ entity_kind.may_be_top</span><span class="cnote">generated</span></div>
 <div class="colrow"><span class="cn">named</span><span class="ct">integer</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ entity_kind.may_be_named</span><span class="cnote">generated</span></div>
@@ -431,6 +431,11 @@
 <div class="colrow"><span class="cn">amount_minor</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">memo</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
+<div class="tbl rv in" data-group="kinds" data-table="txn_match_dismissal"><header><h4>txn_match_dismissal</h4><p class="tp">A hand line and a statement line the member said are not the same money: a dismissed pair is never proposed again, and goes with either line.</p></header>
+<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
+<div class="colrow"><span class="cn">hand_id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ txn.id</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">statement_id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ txn.id</span><span class="cnote"></span></div>
+</div></div>
 <div class="tbl rv in" data-group="kinds" data-table="transfer"><header><h4>transfer</h4><p class="tp">Two lines that are the two halves of one movement of the member's own money: one row, the lower line first.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">a</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ txn.id</span><span class="cnote"></span></div>
@@ -671,6 +676,11 @@
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">code</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
+<div class="tbl rv in" data-group="vocabulary" data-table="arrival_via_kind"><header><h4>arrival_via_kind</h4><p class="tp">Which kind of item each one-time arrival brings in: a vCard a person, an upload a document, a CSV a person, a Locker item or a line.</p></header>
+<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
+<div class="colrow"><span class="cn">via</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ arrival_via.code</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">entity_kind</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ entity_kind.code</span><span class="cnote"></span></div>
+</div></div>
 <div class="tbl rv in" data-group="vocabulary" data-table="origin_system"><header><h4>origin_system</h4><p class="tp">The stores that can be followed, the kind of home each fills, and whether each can be stopped.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">code</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
@@ -788,7 +798,7 @@
 <div class="colrow"><span class="cn">tokenizer</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">built_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<p class="note" data-tables="74" data-columns="446">74 tables and 446 columns, read off a vault this build founded.</p>
+<p class="note" data-tables="76" data-columns="450">76 tables and 450 columns, read off a vault this build founded.</p>
 <!-- schema:end -->
     </div>
     <div class="physcard rv">
