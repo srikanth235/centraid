@@ -1838,6 +1838,7 @@ mod tests {
             gateway_id: GatewayId::from_bytes([1; 16]),
             protocol,
             time_ms: 0,
+            label: None,
         }
     }
 

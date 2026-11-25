@@ -7,7 +7,7 @@
 //! |---|---|
 //! | [`naming`] | the keys from the root key, and the vault's claims on content |
 //! | [`files`] | every file the vault knows by hash, with what a pass decides by |
-//! | [`tree`] | manifest v5: the root, range leaves and the blobs radix tree (§3) |
+//! | [`tree`] | manifest v6: the root, range leaves and the blobs radix tree (§3) |
 //! | [`directory`] | the sealed gateway directory (E8) |
 //! | [`wal`] | which pages the WAL says changed since the last snapshot |
 //! | [`snapshot`] | one pinned read of the vault into a tree: dirty ranges, a periodic full read (§5) |

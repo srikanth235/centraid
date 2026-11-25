@@ -21,6 +21,7 @@ use std::path::Path;
 
 use rusqlite::{Connection, Row, params};
 
+use crate::rules::engine::Finding;
 use crate::rules::ids::{Digest, Name, Nonce, SecretHash, Signature, TokenHash, VaultId};
 use crate::rules::state::{
     ClaimRecord, Fault, HeadRecord, Hold, ObjectRecord, RevokedToken, SecretRecord, SnapshotRecord,
@@ -28,6 +29,16 @@ use crate::rules::state::{
 };
 use crate::rules::wire::PairKind;
 use crate::server::sql;
+use crate::server::store::{PackId, PackLocation};
+
+/// One object row in a packfile listing: `(name, digest, size, pack_offset, damaged_at_ms)`.
+pub struct PackObjectRow {
+    pub name: Name,
+    pub digest: Digest,
+    pub size: u64,
+    pub pack_offset: u64,
+    pub damaged_at_ms: Option<i64>,
+}
 
 /// The gateway's state in SQLite.
 #[derive(Debug)]
@@ -35,15 +46,18 @@ pub struct SqliteState {
     connection: Connection,
     /// Transactions begun, for the test that proves a bundle commits in one.
     begun: std::sync::atomic::AtomicU64,
+    /// Staged `(pack_id, pack_offset)` handed to `put_object` when a bundle
+    /// frame is stored (`rules` remains pure and unaware of pack coordinates).
+    pack_slot: std::sync::Arc<std::sync::Mutex<Option<PackLocation>>>,
 }
 
 /// The state file inside a data directory.
 pub const STATE_FILE: &str = "state.db";
 
-/// `PRAGMA application_id` of a gateway's `state.db`: `CGW3`, so no other
-/// SQLite file, and no gateway of an earlier protocol, is mistaken for one
-/// (#1191, E13).
-pub const APPLICATION_ID: i32 = 0x4347_5733;
+/// `PRAGMA application_id` of a gateway's `state.db`: `CGW4`, so no other
+/// SQLite file, and no gateway of an earlier protocol or store layout, is
+/// mistaken for one (#1191, #1212, E13).
+pub const APPLICATION_ID: i32 = 0x4347_5734;
 
 /// What `serve` and `pairings` say, with exit code 2, to a data folder an
 /// earlier gateway made. The words are the owner's (decision 8).
@@ -111,6 +125,7 @@ impl SqliteState {
         Ok(Self {
             connection,
             begun: std::sync::atomic::AtomicU64::new(0),
+            pack_slot: std::sync::Arc::default(),
         })
     }
 }
@@ -433,6 +448,238 @@ impl SqliteState {
     /// A store fault.
     pub fn revoked_count(&self, vault: &VaultId) -> Result<u64, StoreFault> {
         self.count(sql::REVOKED_COUNT, params![vault.as_bytes()])
+    }
+
+    /// Shared slot used by `POST /bundle` to attach `(pack_id, pack_offset)` to
+    /// each frame admitted as `Stored` inside `Gateway::put_bundle`.
+    #[must_use]
+    pub fn pack_slot(&self) -> std::sync::Arc<std::sync::Mutex<Option<PackLocation>>> {
+        std::sync::Arc::clone(&self.pack_slot)
+    }
+
+    /// Stage the `(pack_id, pack_offset)` for the next new `put_object` call.
+    ///
+    /// # Errors
+    ///
+    /// A store fault if the slot lock is poisoned.
+    pub fn stage_pack_location(&self, loc: PackLocation) -> Result<(), StoreFault> {
+        *self
+            .pack_slot
+            .lock()
+            .map_err(|_| StoreFault::new("the pack slot lock was poisoned"))? = Some(loc);
+        Ok(())
+    }
+
+    /// One object row together with its `(pack_id, pack_offset)`.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    pub fn object_with_location(
+        &self,
+        vault: &VaultId,
+        name: &Name,
+    ) -> Result<Option<(ObjectRecord, PackLocation)>, StoreFault> {
+        Ok(rows(
+            &self.connection,
+            sql::OBJECT_WITH_PACK_SELECT,
+            params![vault.as_bytes(), name.as_bytes()],
+            |row| {
+                let record = object_record(row, 0)?;
+                let pack_id = PackId::from_bytes(blob(row, 7)?);
+                let pack_offset = unsigned(row.get(8).map_err(fault)?)?;
+                Ok((
+                    record,
+                    PackLocation {
+                        pack_id,
+                        pack_offset,
+                    },
+                ))
+            },
+        )?
+        .pop())
+    }
+
+    /// Up to `page` objects across all vaults ordered by
+    /// `(vault, pack_id, pack_offset, name)` using `object_by_pack`:
+    /// `scrub_once` opens each packfile once and hashes sequentially.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    pub fn scrub_pack_page(
+        &self,
+        after: Option<(&VaultId, &PackId, u64, &Name)>,
+        page: usize,
+    ) -> Result<Vec<(VaultId, PackLocation, ObjectRecord)>, StoreFault> {
+        let after_offset = match after {
+            Some((_, _, offset, _)) => signed(offset)?,
+            None => -1,
+        };
+        rows(
+            &self.connection,
+            sql::OBJECTS_BY_PACK_SELECT,
+            params![
+                after.map_or(BEFORE_ANY, |(vault, _, _, _)| &vault.as_bytes()[..]),
+                after.map_or(BEFORE_ANY, |(_, pack_id, _, _)| &pack_id.as_bytes()[..]),
+                after_offset,
+                after.map_or(BEFORE_ANY, |(_, _, _, name)| &name.as_bytes()[..]),
+                limit(page),
+            ],
+            |row| {
+                let vault = VaultId::from_bytes(blob(row, 0)?);
+                let pack_id = PackId::from_bytes(blob(row, 1)?);
+                let pack_offset = unsigned(row.get(2).map_err(fault)?)?;
+                let record = object_record(row, 3)?;
+                Ok((
+                    vault,
+                    PackLocation {
+                        pack_id,
+                        pack_offset,
+                    },
+                    record,
+                ))
+            },
+        )
+    }
+
+    /// Up to `page` objects in one `(vault, pack_id)` ordered by
+    /// `(pack_offset, name)` using `object_by_pack`, for sparse pack compaction.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    pub fn pack_objects_page(
+        &self,
+        vault: &VaultId,
+        pack_id: &PackId,
+        after: Option<(u64, &Name)>,
+        page: usize,
+    ) -> Result<Vec<PackObjectRow>, StoreFault> {
+        let after_offset = match after {
+            Some((offset, _)) => signed(offset)?,
+            None => -1,
+        };
+        rows(
+            &self.connection,
+            sql::OBJECTS_IN_PACK_SELECT,
+            params![
+                vault.as_bytes(),
+                pack_id.as_bytes(),
+                after_offset,
+                after.map_or(BEFORE_ANY, |(_, name)| &name.as_bytes()[..]),
+                limit(page),
+            ],
+            |row| {
+                Ok(PackObjectRow {
+                    name: Name::from_bytes(blob(row, 0)?),
+                    digest: Digest::from_bytes(blob(row, 1)?),
+                    size: unsigned(row.get(2).map_err(fault)?)?,
+                    pack_offset: unsigned(row.get(3).map_err(fault)?)?,
+                    damaged_at_ms: row.get(4).map_err(fault)?,
+                })
+            },
+        )
+    }
+
+    /// `(row_count, live_bytes)` of rows in `object` referencing `(vault, pack_id)`.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    pub fn pack_stats(&self, vault: &VaultId, pack_id: &PackId) -> Result<(u64, u64), StoreFault> {
+        let (rows_found, bytes_found): (i64, i64) = self
+            .connection
+            .prepare_cached(sql::OBJECT_PACK_STATS)
+            .and_then(|mut prepared| {
+                prepared.query_row(params![vault.as_bytes(), pack_id.as_bytes()], |row| {
+                    Ok((row.get(0)?, row.get(1)?))
+                })
+            })
+            .map_err(fault)?;
+        Ok((unsigned(rows_found)?, unsigned(bytes_found)?))
+    }
+
+    /// Whether at least one row in `object` references `(vault, pack_id)`.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    pub fn pack_has_objects(&self, vault: &VaultId, pack_id: &PackId) -> Result<bool, StoreFault> {
+        Ok(!rows(
+            &self.connection,
+            sql::OBJECT_PACK_EXISTS,
+            params![vault.as_bytes(), pack_id.as_bytes()],
+            |_row| Ok(()),
+        )?
+        .is_empty())
+    }
+
+    /// Atomically remap `(vault, name)` from `old` to `new` if it still points
+    /// at `old`.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    pub fn remap_object_pack(
+        &mut self,
+        vault: &VaultId,
+        name: &Name,
+        old: PackLocation,
+        new: PackLocation,
+    ) -> Result<bool, StoreFault> {
+        Ok(self.run(
+            sql::OBJECT_REMAP_PACK,
+            params![
+                new.pack_id.as_bytes(),
+                signed(new.pack_offset)?,
+                vault.as_bytes(),
+                name.as_bytes(),
+                old.pack_id.as_bytes(),
+                signed(old.pack_offset)?,
+            ],
+        )? > 0)
+    }
+
+    /// Record a scrub finding for `scrubbed` only if the object row is still
+    /// at `loc` with matching `(digest, stored_at_ms)`. Returns `Ok(false)` if
+    /// the object was removed, replaced, or relocated by compaction.
+    ///
+    /// # Errors
+    ///
+    /// A store fault.
+    pub fn record_scrub_at_location(
+        &mut self,
+        vault: &VaultId,
+        scrubbed: &ObjectRecord,
+        loc: PackLocation,
+        finding: Finding,
+        now_ms: i64,
+    ) -> Result<bool, Fault> {
+        self.atomically(|state| {
+            let Some((mut current, current_loc)) =
+                state.object_with_location(vault, &scrubbed.name)?
+            else {
+                return Ok(false);
+            };
+            if current_loc != loc
+                || current.digest != scrubbed.digest
+                || current.stored_at_ms != scrubbed.stored_at_ms
+            {
+                return Ok(false);
+            }
+            let damaged = match finding {
+                Finding::Intact => None,
+                Finding::Corrupt | Finding::Missing => {
+                    Some(current.damaged_at_ms.unwrap_or(now_ms))
+                }
+            };
+            if damaged != current.damaged_at_ms {
+                current.damaged_at_ms = damaged;
+                state.put_object(vault, &current)?;
+            }
+            Ok(true)
+        })
     }
 }
 
@@ -846,19 +1093,47 @@ impl State for SqliteState {
     }
 
     fn put_object(&mut self, vault: &VaultId, record: &ObjectRecord) -> Result<(), StoreFault> {
-        self.run(
-            sql::OBJECT_UPSERT,
-            params![
-                vault.as_bytes(),
-                record.name.as_bytes(),
-                record.digest.as_bytes(),
-                signed(record.size)?,
-                record.stored_at_ms,
-                record.hold.map(|hold| hold.at_ms),
-                record.hold.map(|hold| hold.purge_after_ms),
-                record.damaged_at_ms,
-            ],
-        )?;
+        let staged_loc = self
+            .pack_slot
+            .lock()
+            .map_err(|_| StoreFault::new("the pack slot lock was poisoned"))?
+            .take();
+        if let Some(loc) = staged_loc {
+            self.run(
+                sql::OBJECT_UPSERT,
+                params![
+                    vault.as_bytes(),
+                    record.name.as_bytes(),
+                    record.digest.as_bytes(),
+                    signed(record.size)?,
+                    loc.pack_id.as_bytes(),
+                    signed(loc.pack_offset)?,
+                    record.stored_at_ms,
+                    record.hold.map(|hold| hold.at_ms),
+                    record.hold.map(|hold| hold.purge_after_ms),
+                    record.damaged_at_ms,
+                ],
+            )?;
+        } else {
+            let updated = self.run(
+                sql::OBJECT_META_UPDATE,
+                params![
+                    vault.as_bytes(),
+                    record.name.as_bytes(),
+                    record.digest.as_bytes(),
+                    signed(record.size)?,
+                    record.stored_at_ms,
+                    record.hold.map(|hold| hold.at_ms),
+                    record.hold.map(|hold| hold.purge_after_ms),
+                    record.damaged_at_ms,
+                ],
+            )?;
+            if updated == 0 {
+                return Err(StoreFault::new(
+                    "cannot insert a new object row without a packfile location",
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -1066,10 +1341,31 @@ mod tests {
             }),
             damaged_at_ms: Some(45),
         };
+        let loc = PackLocation {
+            pack_id: PackId::from_bytes([0xaa; 16]),
+            pack_offset: 4096,
+        };
+        state.stage_pack_location(loc).expect("stages pack loc");
         state.put_object(&vault, &object).expect("writes");
         assert_eq!(
             state.object(&vault, &object.name).expect("reads"),
             Some(object)
+        );
+        assert_eq!(
+            state
+                .object_with_location(&vault, &object.name)
+                .expect("reads"),
+            Some((object, loc))
+        );
+        // Metadata update without staging a new pack location preserves (pack_id, pack_offset).
+        let mut healed = object;
+        healed.damaged_at_ms = None;
+        state.put_object(&vault, &healed).expect("updates meta");
+        assert_eq!(
+            state
+                .object_with_location(&vault, &object.name)
+                .expect("reads"),
+            Some((healed, loc))
         );
         assert_eq!(
             state.purgeable(None, 50, 10).expect("reads"),
@@ -1109,6 +1405,45 @@ mod tests {
         };
         state.put_head(&vault, &head).expect("writes");
         assert_eq!(state.head(&vault).expect("reads"), Some(head));
+    }
+
+    /// Raw SQL inserts that violate `object`'s packfile `CHECK` constraints
+    /// (`length(pack_id) = 16`, `pack_offset >= 0`) are refused by SQLite.
+    #[test]
+    fn raw_sql_rejects_wrong_pack_id_length_and_negative_pack_offset() {
+        for (what, fixture) in [
+            (
+                "15-byte pack_id",
+                include_str!("../../tests/fixtures/bad_pack_id_short.sql"),
+            ),
+            (
+                "17-byte pack_id",
+                include_str!("../../tests/fixtures/bad_pack_id_long.sql"),
+            ),
+            (
+                "negative pack_offset",
+                include_str!("../../tests/fixtures/bad_pack_offset_negative.sql"),
+            ),
+        ] {
+            let state = SqliteState::in_memory().expect("opens");
+            let err = state
+                .connection
+                .execute_batch(fixture)
+                .expect_err("SQLite CHECK constraint must reject bad row");
+            assert!(
+                matches!(
+                    err,
+                    rusqlite::Error::SqliteFailure(
+                        rusqlite::ffi::Error {
+                            code: rusqlite::ErrorCode::ConstraintViolation,
+                            ..
+                        },
+                        _
+                    )
+                ),
+                "{what}: unexpected error {err:?}"
+            );
+        }
     }
 
     /// The rules run over SQLite exactly as they do over memory: one pairing,

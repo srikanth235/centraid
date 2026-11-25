@@ -71,8 +71,18 @@ wait "$registered""#;
 /// advertisement.
 #[must_use]
 pub fn registration_args(gateway_id: &GatewayId, port: u16) -> Vec<String> {
+    registration_args_with_label(gateway_id, port, None)
+}
+
+/// [`registration_args`], appending `label=<label>` to TXT when provided.
+#[must_use]
+pub fn registration_args_with_label(
+    gateway_id: &GatewayId,
+    port: u16,
+    label: Option<&str>,
+) -> Vec<String> {
     let id = gateway_id.hex();
-    vec![
+    let mut args = vec![
         "-R".to_owned(),
         format!("centraid-gateway-{}", &id[..8]),
         DNS_SD_TYPE.to_owned(),
@@ -80,7 +90,14 @@ pub fn registration_args(gateway_id: &GatewayId, port: u16) -> Vec<String> {
         port.to_string(),
         format!("gw={id}"),
         format!("v={}", crate::rules::limits::PROTOCOL),
-    ]
+    ];
+    if let Some(label) = label
+        && !label.is_empty()
+        && label.len() <= 128
+    {
+        args.push(format!("label={label}"));
+    }
+    args
 }
 
 /// A registration made through the system's `dns-sd`, withdrawn when dropped.
@@ -101,11 +118,21 @@ impl SystemRegistration {
         Self::start_after(program, gateway_id, port, SETTLE).await
     }
 
-    /// [`Self::start`], judging the tool over `settle` rather than the usual wait.
+    /// [`Self::start`], also passing an optional TXT `label`.
     ///
-    /// The tool is watched for the whole window and a failure is answered the
-    /// moment it exits, so a long window costs nothing when the tool fails: only
-    /// a registration that holds waits it out.
+    /// # Errors
+    ///
+    /// As [`Self::start`].
+    pub async fn start_with_label(
+        program: &Path,
+        gateway_id: &GatewayId,
+        port: u16,
+        label: Option<&str>,
+    ) -> std::io::Result<Self> {
+        Self::start_after_with_label(program, gateway_id, port, label, SETTLE).await
+    }
+
+    /// [`Self::start`], judging the tool over `settle` rather than the usual wait.
     ///
     /// # Errors
     ///
@@ -116,12 +143,22 @@ impl SystemRegistration {
         port: u16,
         settle: Duration,
     ) -> std::io::Result<Self> {
+        Self::start_after_with_label(program, gateway_id, port, None, settle).await
+    }
+
+    async fn start_after_with_label(
+        program: &Path,
+        gateway_id: &GatewayId,
+        port: u16,
+        label: Option<&str>,
+        settle: Duration,
+    ) -> std::io::Result<Self> {
         let mut child = Command::new("/bin/sh")
             .arg("-c")
             .arg(HOLD)
             .arg("centraid-dns-sd")
             .arg(program)
-            .args(registration_args(gateway_id, port))
+            .args(registration_args_with_label(gateway_id, port, label))
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -187,9 +224,26 @@ impl Announcement {
 /// advertise still serves: a phone's pairing record keeps the addresses it
 /// last knew.
 pub async fn announce(gateway_id: GatewayId, host: &str, port: u16) -> Option<Announcement> {
+    announce_with_label(gateway_id, host, port, None).await
+}
+
+/// [`announce`], also carrying an optional human-readable `label` in the TXT record.
+pub async fn announce_with_label(
+    gateway_id: GatewayId,
+    host: &str,
+    port: u16,
+    label: Option<&str>,
+) -> Option<Announcement> {
     #[cfg(target_os = "macos")]
     if Path::new(SYSTEM_DNS_SD).is_file() {
-        match SystemRegistration::start(Path::new(SYSTEM_DNS_SD), &gateway_id, port).await {
+        match SystemRegistration::start_with_label(
+            Path::new(SYSTEM_DNS_SD),
+            &gateway_id,
+            port,
+            label,
+        )
+        .await
+        {
             Ok(registration) => {
                 tracing::info!(
                     host = %host,
@@ -204,7 +258,7 @@ pub async fn announce(gateway_id: GatewayId, host: &str, port: u16) -> Option<An
             ),
         }
     }
-    match Advertisement::start(gateway_id, host, port) {
+    match Advertisement::start_with_label(gateway_id, host, port, label) {
         Ok(advertisement) => {
             tracing::info!(host = %host, "advertising _centraid-gateway._tcp");
             Some(Announcement::InProcess(advertisement))
@@ -247,6 +301,19 @@ mod tests {
                 "8443",
                 "gw=0123456789abcdef0123456789abcdef",
                 "v=1"
+            ]
+        );
+        assert_eq!(
+            registration_args_with_label(&id(), 8443, Some("a=b")),
+            vec![
+                "-R",
+                "centraid-gateway-01234567",
+                "_centraid-gateway._tcp",
+                "local",
+                "8443",
+                "gw=0123456789abcdef0123456789abcdef",
+                "v=1",
+                "label=a=b"
             ]
         );
     }

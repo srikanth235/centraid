@@ -9,7 +9,7 @@ repository.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-# `centraid-sealed/3`'s AEAD (#1209).
+# `centraid-sealed/4`'s AEAD (#1209, #1212).
 chacha20poly1305.workspace = true
 hex.workspace = true
 # The one image codec (#1025 S3, D-1025-S7-50); see the workspace manifest for

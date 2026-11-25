@@ -1,14 +1,14 @@
 #![forbid(unsafe_code)]
-//! `centraid-gateway` — the gateway a member runs (#1080).
+//! `centraid-gateway` — the gateway a member runs (#1080, #1212).
 //!
 //! ```text
-//! centraid-gateway serve    --data-dir ~/centraid-gateway [--bind 0.0.0.0:8443] [--no-mdns]
-//! centraid-gateway pair     --data-dir ~/centraid-gateway [--port 8443]
+//! centraid-gateway serve    --data-dir ~/centraid-gateway [--bind 0.0.0.0:8443] [--name NAME] [--announce HOST:PORT]... [--no-mdns]
+//! centraid-gateway pair     --data-dir ~/centraid-gateway [--port 8443] [--name NAME] [--announce HOST:PORT]...
 //! centraid-gateway pairings --data-dir ~/centraid-gateway [revoke <token id>]
 //! centraid-gateway vault    <id8> freeze|unfreeze|undo|purge-now --yes|delete-vault --yes --data-dir ~/centraid-gateway
 //! centraid-gateway scrub    --data-dir ~/centraid-gateway
 //! centraid-gateway health   --data-dir ~/centraid-gateway [--addr 127.0.0.1:8443] [--pin <hex>]
-//! centraid-gateway install  --data-dir ~/centraid-gateway [--bind 0.0.0.0:8443] [--dry-run]
+//! centraid-gateway install  --data-dir ~/centraid-gateway [--bind 0.0.0.0:8443] [--name NAME] [--announce HOST:PORT]... [--dry-run]
 //! ```
 //!
 //! **It runs with no vault.** `serve` on an empty directory mints the
@@ -31,8 +31,8 @@ use centraid_gateway::server::service::{DEFAULT_LABEL, Platform, UnitSpec};
 use centraid_gateway::server::sweeps::{Schedule, scrub_once};
 use centraid_gateway::server::tls::Identity;
 use centraid_gateway::server::{
-    DEFAULT_PORT, OpenError, Shared, addrs, last_bound, record_bound, report, serve, service,
-    sweeps, system_clock,
+    DEFAULT_PORT, OpenError, Shared, addrs, last_bound, last_served, record_served, report, serve,
+    service, sweeps, system_clock,
 };
 use clap::{Parser, Subcommand};
 
@@ -56,6 +56,12 @@ enum Command {
         /// Where to listen.
         #[arg(long, env = "CENTRAID_GATEWAY_BIND", default_value = "0.0.0.0:8443")]
         bind: String,
+        /// Human-readable name for this gateway; defaults to this host's clean name.
+        #[arg(long, env = "CENTRAID_GATEWAY_NAME")]
+        name: Option<String>,
+        /// Additional `host:port` or `ip:port` addresses to advertise (repeatable or comma-separated).
+        #[arg(long, env = "CENTRAID_GATEWAY_ANNOUNCE", value_delimiter = ',')]
+        announce: Vec<String>,
         /// Do not advertise `_centraid-gateway._tcp` on the LAN.
         #[arg(long)]
         no_mdns: bool,
@@ -67,6 +73,12 @@ enum Command {
         /// The port phones dial, when `serve` has not run here to say.
         #[arg(long)]
         port: Option<u16>,
+        /// Override the gateway name carried in the pairing QR.
+        #[arg(long, env = "CENTRAID_GATEWAY_NAME")]
+        name: Option<String>,
+        /// Additional `host:port` or `ip:port` addresses to advertise (overrides persisted ones when set).
+        #[arg(long, env = "CENTRAID_GATEWAY_ANNOUNCE", value_delimiter = ',')]
+        announce: Vec<String>,
     },
     /// List the paired vaults, their safety numbers and their tokens; or
     /// revoke one token by the id the list prints.
@@ -112,6 +124,12 @@ enum Command {
         data_dir: PathBuf,
         #[arg(long, default_value = "0.0.0.0:8443")]
         bind: String,
+        /// Configure `--name` in the installed service unit.
+        #[arg(long, env = "CENTRAID_GATEWAY_NAME")]
+        name: Option<String>,
+        /// Configure `--announce` in the installed service unit (repeatable or comma-separated).
+        #[arg(long, env = "CENTRAID_GATEWAY_ANNOUNCE", value_delimiter = ',')]
+        announce: Vec<String>,
         /// Print the unit and its path, and touch nothing.
         #[arg(long)]
         dry_run: bool,
@@ -159,9 +177,16 @@ async fn main() -> anyhow::Result<()> {
         Command::Serve {
             data_dir,
             bind,
+            name,
+            announce,
             no_mdns,
-        } => run(&data_dir, &bind, no_mdns).await,
-        Command::Pair { data_dir, port } => pair(&data_dir, port),
+        } => run(&data_dir, &bind, name.as_deref(), &announce, no_mdns).await,
+        Command::Pair {
+            data_dir,
+            port,
+            name,
+            announce,
+        } => pair(&data_dir, port, name.as_deref(), &announce),
         Command::Pairings {
             data_dir,
             action: None,
@@ -184,10 +209,30 @@ async fn main() -> anyhow::Result<()> {
         Command::Install {
             data_dir,
             bind,
+            name,
+            announce,
             dry_run,
             label,
-        } => install(&data_dir, &bind, dry_run, label),
+        } => install(&data_dir, &bind, name.as_deref(), &announce, dry_run, label),
     }
+}
+
+/// Validate and normalize `--announce` entries against `default_port`.
+fn parse_announced(raw: &[String], default_port: u16) -> anyhow::Result<Vec<String>> {
+    let mut normalized = Vec::new();
+    for entry in raw {
+        let trimmed = entry.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let Some(addr) = addrs::normalize_announce(trimmed, default_port) else {
+            anyhow::bail!("invalid --announce address {trimmed:?}; expected host:port or ip:port");
+        };
+        if !normalized.contains(&addr) {
+            normalized.push(addr);
+        }
+    }
+    Ok(normalized)
 }
 
 /// Open the gateway in `data_dir`. A data folder an earlier gateway made, or
@@ -206,8 +251,32 @@ fn open(data_dir: &Path) -> anyhow::Result<Shared> {
 /// The exit code of a data folder this gateway will not open.
 const EXIT_REFUSED: i32 = 2;
 
+fn resolve_serve_config(
+    data_dir: &Path,
+    default_port: u16,
+    name: Option<&str>,
+    announce: &[String],
+) -> anyhow::Result<(String, Vec<String>)> {
+    let persisted = last_served(data_dir);
+    let resolved_name = addrs::clean_gateway_name(
+        name.or_else(|| persisted.as_ref().and_then(|record| record.name.as_deref())),
+    );
+    let normalized_announce = if announce.is_empty() {
+        persisted.map(|record| record.announce).unwrap_or_default()
+    } else {
+        parse_announced(announce, default_port)?
+    };
+    Ok((resolved_name, normalized_announce))
+}
+
 /// `serve`.
-async fn run(data_dir: &Path, bind: &str, no_mdns: bool) -> anyhow::Result<()> {
+async fn run(
+    data_dir: &Path,
+    bind: &str,
+    name: Option<&str>,
+    announce: &[String],
+    no_mdns: bool,
+) -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -217,6 +286,11 @@ async fn run(data_dir: &Path, bind: &str, no_mdns: bool) -> anyhow::Result<()> {
     let opened = open(data_dir)?;
     let pin = opened.identity().pin();
     let gateway_id = opened.identity().gateway_id();
+    let listener = serve::bind(bind).await?;
+    let bound = listener.local_addr()?;
+    let (resolved_name, normalized_announce) =
+        resolve_serve_config(data_dir, bound.port(), name, announce)?;
+    opened.set_label(resolved_name.clone());
     // THE TERMINAL HEARS EACH PAIRING AS IT LANDS, with the safety number a
     // member may compare against the phone's.
     let shared = Arc::new(opened.with_announcer(Arc::new(move |event| {
@@ -228,13 +302,12 @@ async fn run(data_dir: &Path, bind: &str, no_mdns: bool) -> anyhow::Result<()> {
     if cleared > 0 {
         tracing::info!(cleared, "removed uploads a stop left staged");
     }
-    let listener = serve::bind(bind).await?;
-    let bound = listener.local_addr()?;
     let config = shared.identity().server_config()?;
     let listener = TlsListener::new(listener, config)?;
-    record_bound(data_dir, bound)?;
+    record_served(data_dir, bound, Some(&resolved_name), &normalized_announce)?;
 
     println!("gateway   {gateway_id}");
+    println!("name      {resolved_name}");
     println!("pin       {pin}");
     println!("listening {bound}");
     let pairings = shared.rules(|gateway| gateway.pairings())?;
@@ -251,7 +324,7 @@ async fn run(data_dir: &Path, bind: &str, no_mdns: bool) -> anyhow::Result<()> {
         shared.rules(|gateway| Ok(gateway.secrets()?.iter().any(|secret| secret.is_live(now))))?;
     if pairings.is_empty() && !waiting {
         // An empty gateway's first need is the thing to scan.
-        let payload = shared.payload(addrs::advertised(bound))?;
+        let payload = shared.payload(addrs::advertised_with(bound, &normalized_announce))?;
         for line in report::payload_lines(&payload) {
             println!("{line}");
         }
@@ -262,7 +335,7 @@ async fn run(data_dir: &Path, bind: &str, no_mdns: bool) -> anyhow::Result<()> {
     let advertisement = if no_mdns {
         None
     } else {
-        advertise(gateway_id, bound).await
+        advertise(gateway_id, bound, &resolved_name).await
     };
     tokio::spawn(sweeps::run(Arc::clone(&shared), Schedule::default()));
     serve::run(listener, shared, shutdown()).await?;
@@ -272,18 +345,17 @@ async fn run(data_dir: &Path, bind: &str, no_mdns: bool) -> anyhow::Result<()> {
 
 /// Advertise on the LAN, or say why not: through the system's `dns-sd` on a
 /// Mac, so the Bonjour Sleep Proxy can wake it for the phone's browse
-/// (Q-1080-1), from this process everywhere else. A gateway that cannot
-/// advertise still serves: a phone's pairing record keeps the addresses it
-/// last knew.
+/// (Q-1080-1), from this process everywhere else.
 async fn advertise(
     gateway_id: centraid_gateway::rules::ids::GatewayId,
     bound: SocketAddr,
+    resolved_name: &str,
 ) -> Option<Announcement> {
-    let Some(host) = addrs::host_name() else {
+    let Some(host) = addrs::host_name().or_else(|| addrs::bonjour_host_label(resolved_name)) else {
         tracing::warn!("this host's name is not one Bonjour can carry; not advertising");
         return None;
     };
-    bonjour::announce(gateway_id, &host, bound.port()).await
+    bonjour::announce_with_label(gateway_id, &host, bound.port(), Some(resolved_name)).await
 }
 
 /// Ctrl-C, or the SIGTERM a service manager or `docker stop` sends.
@@ -311,14 +383,34 @@ async fn shutdown() {
 }
 
 /// `pair`.
-fn pair(data_dir: &Path, port: Option<u16>) -> anyhow::Result<()> {
+fn pair(
+    data_dir: &Path,
+    port: Option<u16>,
+    name: Option<&str>,
+    announce: &[String],
+) -> anyhow::Result<()> {
     let shared = open(data_dir)?;
-    let mut bound = last_bound(data_dir)
+    let persisted = last_served(data_dir);
+    let mut bound = persisted
+        .as_ref()
+        .and_then(|record| record.bind.parse().ok())
         .unwrap_or_else(|| SocketAddr::from((Ipv4Addr::UNSPECIFIED, DEFAULT_PORT)));
     if let Some(port) = port {
         bound.set_port(port);
     }
-    let payload = shared.payload(addrs::advertised(bound))?;
+    let effective_name = match name {
+        Some(explicit) => addrs::clean_gateway_name(Some(explicit)),
+        None => {
+            addrs::clean_gateway_name(persisted.as_ref().and_then(|record| record.name.as_deref()))
+        }
+    };
+    shared.set_label(effective_name);
+    let effective_announce = if !announce.is_empty() {
+        parse_announced(announce, bound.port())?
+    } else {
+        persisted.map(|record| record.announce).unwrap_or_default()
+    };
+    let payload = shared.payload(addrs::advertised_with(bound, &effective_announce))?;
     for line in report::payload_lines(&payload) {
         println!("{line}");
     }
@@ -330,6 +422,7 @@ fn pairings(data_dir: &Path) -> anyhow::Result<()> {
     let shared = open(data_dir)?;
     let pin = shared.identity().pin();
     println!("gateway   {}", shared.identity().gateway_id());
+    println!("name      {}", shared.label());
     println!("pin       {pin}");
     let pairings = shared.rules(|gateway| gateway.pairings())?;
     if pairings.is_empty() {
@@ -352,9 +445,7 @@ fn pairings(data_dir: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// `pairings revoke <id>`: the lost-phone case (#1080, the audit's finding
-/// 2). The id is a prefix of the token's hash, as `pairings` prints it; it
-/// must name exactly one token.
+/// `pairings revoke <id>`.
 fn revoke(data_dir: &Path, id: &str) -> anyhow::Result<()> {
     let id = id.trim().to_ascii_lowercase();
     anyhow::ensure!(
@@ -496,21 +587,42 @@ fn private_dir(dir: &Path) -> anyhow::Result<()> {
 }
 
 /// `install`.
-fn install(data_dir: &Path, bind: &str, dry_run: bool, label: String) -> anyhow::Result<()> {
+fn install(
+    data_dir: &Path,
+    bind: &str,
+    name: Option<&str>,
+    announce: &[String],
+    dry_run: bool,
+    label: String,
+) -> anyhow::Result<()> {
     let platform = Platform::host().context(
         "neither systemd nor launchd is available here; run the container image instead",
     )?;
+    let default_port = bind
+        .parse::<SocketAddr>()
+        .map_or(DEFAULT_PORT, |addr| addr.port());
+    let normalized_announce = parse_announced(announce, default_port)?;
     let data_dir = std::path::absolute(data_dir).context("resolving the data directory")?;
+    let mut arguments = vec![
+        "serve".to_owned(),
+        "--data-dir".to_owned(),
+        data_dir.display().to_string(),
+        "--bind".to_owned(),
+        bind.to_owned(),
+    ];
+    if let Some(name) = name {
+        let cleaned = addrs::clean_gateway_name(Some(name));
+        arguments.push("--name".to_owned());
+        arguments.push(cleaned);
+    }
+    for addr in normalized_announce {
+        arguments.push("--announce".to_owned());
+        arguments.push(addr);
+    }
     let spec = UnitSpec {
         label,
         program: std::env::current_exe().context("resolving this binary")?,
-        arguments: vec![
-            "serve".to_owned(),
-            "--data-dir".to_owned(),
-            data_dir.display().to_string(),
-            "--bind".to_owned(),
-            bind.to_owned(),
-        ],
+        arguments,
         log_dir: data_dir.join("logs"),
         data_dir,
     };
@@ -523,9 +635,6 @@ fn install(data_dir: &Path, bind: &str, dry_run: bool, label: String) -> anyhow:
         print!("{text}");
         return Ok(());
     }
-    // The unit names these directories, and systemd refuses to start a unit
-    // whose `BindPaths=` or `ReadWritePaths=` do not exist; launchd will not
-    // create a log file's directory.
     private_dir(&spec.data_dir)?;
     if platform == Platform::Launchd {
         private_dir(&spec.log_dir)?;
@@ -575,5 +684,83 @@ mod cli_tests {
         };
         assert_eq!(data_dir, std::path::PathBuf::from("test-gateway"));
         assert_eq!(id, "abcdef12");
+    }
+
+    #[test]
+    fn serve_and_pair_accept_name_and_repeatable_or_comma_separated_announce() {
+        let cli = Cli::try_parse_from([
+            "centraid-gateway",
+            "serve",
+            "--data-dir",
+            "gw",
+            "--name",
+            "Home NAS",
+            "--announce",
+            "100.101.102.103:8443",
+            "--announce",
+            "nas.tailnet.ts.net:8443,203.0.113.1:8443",
+        ])
+        .expect("serve parses");
+        let Command::Serve { name, announce, .. } = cli.command else {
+            panic!("serve selected");
+        };
+        assert_eq!(name.as_deref(), Some("Home NAS"));
+        assert_eq!(
+            announce,
+            vec![
+                "100.101.102.103:8443",
+                "nas.tailnet.ts.net:8443",
+                "203.0.113.1:8443"
+            ]
+        );
+
+        let pair_cli = Cli::try_parse_from([
+            "centraid-gateway",
+            "pair",
+            "--data-dir",
+            "gw",
+            "--name",
+            "Studio Mac",
+            "--announce",
+            "studio.ts.net:9443",
+        ])
+        .expect("pair parses");
+        let Command::Pair { name, announce, .. } = pair_cli.command else {
+            panic!("pair selected");
+        };
+        assert_eq!(name.as_deref(), Some("Studio Mac"));
+        assert_eq!(announce, vec!["studio.ts.net:9443"]);
+    }
+
+    #[test]
+    fn serve_restart_without_flags_preserves_persisted_name_and_announce() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let bound: std::net::SocketAddr = "0.0.0.0:8443".parse().expect("socket addr");
+        centraid_gateway::server::record_served(
+            dir.path(),
+            bound,
+            Some("Persisted NAS"),
+            &["nas.tail1234.ts.net:8443".to_owned()],
+        )
+        .expect("writes serve.json");
+
+        let (resolved_name, resolved_announce) =
+            super::resolve_serve_config(dir.path(), bound.port(), None, &[])
+                .expect("resolves persisted config");
+        assert_eq!(resolved_name, "Persisted NAS");
+        assert_eq!(
+            resolved_announce,
+            vec!["nas.tail1234.ts.net:8443".to_owned()]
+        );
+
+        let (override_name, override_announce) = super::resolve_serve_config(
+            dir.path(),
+            9443,
+            Some("New Name"),
+            &["new.ts.net".to_owned()],
+        )
+        .expect("overrides persisted config");
+        assert_eq!(override_name, "New Name");
+        assert_eq!(override_announce, vec!["new.ts.net:9443".to_owned()]);
     }
 }

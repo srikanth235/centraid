@@ -108,26 +108,25 @@ pub(crate) fn assemble_into(
     Ok(Assembled::Landed(stored.path))
 }
 
-/// The refs of the original `h` in the newest tree this phone holds: the way to ask a gateway for
-/// it. Empty when the tree does not list its bytes.
+/// The refs of the original `h` in the newest tree this phone holds (in `O(depth)`), falling
+/// back to `state.blob_chunks(h, Class::Originals)` when the newest tree does not list it yet.
 pub(crate) fn refs_of_original(
     state: &DeviceState,
     keys: &BackupKeys,
     h: &PlaintextHash,
 ) -> Result<Vec<Ref>> {
-    let Some((name, _)) = state.device().map_err(plane_error)?.newest else {
-        return Ok(Vec::new());
-    };
-    let Some(reference) = status::node_ref(state, keys, &name) else {
-        return Ok(Vec::new());
-    };
-    let root = tree::root_of(state, &reference).map_err(plane_error)?;
-    Ok(tree::entries_of(state, &root.blobs)
-        .map_err(plane_error)?
-        .into_iter()
-        .find(|entry| entry.h == *h)
-        .map(|entry| entry.refs(Class::Originals).to_vec())
-        .unwrap_or_default())
+    if let Some((name, _)) = state.device().map_err(plane_error)?.newest
+        && let Some(reference) = status::node_ref(state, keys, &name)
+    {
+        let root = tree::root_of(state, &reference).map_err(plane_error)?;
+        if let Some(entry) = tree::lookup_entry(state, &root.blobs, h).map_err(plane_error)?
+            && entry.kind == tree::EntryKind::Original
+            && !entry.original.is_empty()
+        {
+            return Ok(entry.original);
+        }
+    }
+    state.blob_chunks(h, Class::Originals).map_err(plane_error)
 }
 
 /// **Bring one original back** (`fetch_original`).
@@ -395,7 +394,10 @@ fn bring_thumbnails(
 ) -> Result<(usize, usize)> {
     let mut needed: Vec<&tree::Entry> = Vec::new();
     for entry in entries {
-        if entry.thumbnail.is_empty() || have_local(state, bytes, &entry.h)? {
+        if entry.kind != tree::EntryKind::Thumbnail
+            || entry.thumbnail.is_empty()
+            || have_local(state, bytes, &entry.h)?
+        {
             continue;
         }
         needed.push(entry);
@@ -596,7 +598,10 @@ pub(crate) fn bring_originals(
     let mut originals_landed = 0_usize;
     let mut missing = thumbs_missing;
     for entry in &entries {
-        if entry.original.is_empty() || have_local(&state, bytes, &entry.h)? {
+        if entry.kind != tree::EntryKind::Original
+            || entry.original.is_empty()
+            || have_local(&state, bytes, &entry.h)?
+        {
             continue;
         }
         let video = entry

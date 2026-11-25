@@ -142,6 +142,9 @@ pub const TOKEN_ID_HEX: usize = 12;
 pub fn payload_lines(payload: &PairPayload) -> Vec<String> {
     let text = payload.to_json();
     let mut lines = vec![format!("pair      {text}")];
+    if let Some(label) = &payload.label {
+        lines.push(format!("name      {label}"));
+    }
     match qr::render(&text) {
         Ok(rendered) => lines.push(rendered),
         // The text above is the same payload and can be pasted.

@@ -802,6 +802,25 @@ impl Sim {
                     }
                 }
             }
+            let standing = engine::standing(&self.rig.state, self.inner[index].gateway_id())
+                .expect("standing");
+            if let Ok(Some(newest_ref)) = self.rig.env(self.clock).newest()
+                && let Ok(root) = tree::root_of(&self.rig.state, &newest_ref)
+                && let Ok(stats) = tree::stats_of(&self.rig.state, &root.blobs)
+            {
+                if standing.originals && stats.unheld_orig_files > 0 {
+                    self.fail(format!(
+                        "gateway {index} claimed standing.originals while unheld_orig_files={}",
+                        stats.unheld_orig_files
+                    ));
+                }
+                if standing.thumbnails && stats.unheld_thumb_files > 0 {
+                    self.fail(format!(
+                        "gateway {index} claimed standing.thumbnails while unheld_thumb_files={}",
+                        stats.unheld_thumb_files
+                    ));
+                }
+            }
         }
         self.claims_tick(complete);
         self.log.push(format!("engine {limit}"));

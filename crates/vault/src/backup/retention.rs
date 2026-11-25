@@ -165,6 +165,7 @@ pub fn collect(env: &Env<'_>, store: &dyn Store) -> Result<Collected> {
         roots.insert(newest);
     }
     let mut keep_names: BTreeSet<Name> = env.state.undone_names(&id, env.now_ms)?;
+    let mut visited_nodes: BTreeSet<Name> = BTreeSet::new();
     for name in &roots {
         // The root's own ref: from the cache, or resealed from what the gateway holds.
         let reference = match env.state.get_node(name)? {
@@ -178,13 +179,12 @@ pub fn collect(env: &Env<'_>, store: &dyn Store) -> Result<Collected> {
                 }
             },
         };
-        match tree::everything_of(&source, &reference) {
-            Ok(names) => keep_names.extend(names),
-            Err(error) => {
-                return Ok(Collected::Doubt(format!(
-                    "the kept root {name} will not open: {error}"
-                )));
-            }
+        if let Err(error) =
+            tree::collect_everything_into(&source, &reference, &mut visited_nodes, &mut keep_names)
+        {
+            return Ok(Collected::Doubt(format!(
+                "the kept root {name} will not open: {error}"
+            )));
         }
     }
     let garbage: Vec<Name> = listing
@@ -230,13 +230,12 @@ pub fn undo(env: &Env<'_>, store: &dyn Store, names: &[Name]) -> Result<u64> {
 /// # Errors
 /// A missing node.
 pub fn reachable(source: &dyn NodeSource, roots: &[Ref]) -> Result<BTreeMap<Name, ()>> {
-    let mut out = BTreeMap::new();
+    let mut visited_nodes = BTreeSet::new();
+    let mut names = BTreeSet::new();
     for root in roots {
-        for name in tree::everything_of(source, root)? {
-            out.insert(name, ());
-        }
+        tree::collect_everything_into(source, root, &mut visited_nodes, &mut names)?;
     }
-    Ok(out)
+    Ok(names.into_iter().map(|name| (name, ())).collect())
 }
 
 #[cfg(test)]

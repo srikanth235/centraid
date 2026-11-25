@@ -962,6 +962,7 @@ mod tests {
             gateway_id: centraid_gateway::rules::ids::GatewayId::from_bytes([1; 16]),
             protocol: centraid_gateway::rules::limits::PROTOCOL,
             time_ms,
+            label: None,
         })
     }
 

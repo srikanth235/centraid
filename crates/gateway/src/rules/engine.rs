@@ -178,6 +178,8 @@ pub struct Gateway<S> {
     /// The key nonces are MAC'd under: gateway-local, kept with the identity,
     /// handed to the rules as an argument like a clock.
     nonce_key: [u8; 32],
+    /// What this gateway calls itself (`--name`, or its clean hostname).
+    label: Option<String>,
     /// Per vault: when the window of checks it is counted in began, and how many it holds
     /// (decision 34). Memory only: a restart gives a fresh window.
     checks: std::collections::BTreeMap<VaultId, (i64, u32)>,
@@ -190,8 +192,27 @@ impl<S: State> Gateway<S> {
             state,
             id,
             nonce_key,
+            label: None,
             checks: std::collections::BTreeMap::new(),
         }
+    }
+
+    /// Configure the human-readable label `/v1/info` answers.
+    #[must_use]
+    pub fn with_label(mut self, label: Option<String>) -> Self {
+        self.label = label;
+        self
+    }
+
+    /// Update the human-readable label `/v1/info` answers.
+    pub fn set_label(&mut self, label: Option<String>) {
+        self.label = label;
+    }
+
+    /// This gateway's configured label, if any.
+    #[must_use]
+    pub fn label(&self) -> Option<&str> {
+        self.label.as_deref()
     }
 
     /// This gateway's id.
@@ -202,11 +223,12 @@ impl<S: State> Gateway<S> {
 
     /// `GET /v1/info`. Answers before anything is paired.
     #[must_use]
-    pub const fn info(&self, now_ms: i64) -> Info {
+    pub fn info(&self, now_ms: i64) -> Info {
         Info {
             gateway_id: self.id,
             protocol: PROTOCOL,
             time_ms: now_ms,
+            label: self.label.clone(),
         }
     }
 

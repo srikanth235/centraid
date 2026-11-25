@@ -21,14 +21,20 @@ pub const DIGEST_HEADER: &str = "content-digest";
 pub const CODE_HEADER: &str = "centraid-code";
 
 /// `GET /v1/info`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Info {
     pub gateway_id: GatewayId,
     /// [`crate::rules::limits::PROTOCOL`].
     pub protocol: u32,
     /// The gateway's clock.
     pub time_ms: i64,
+    /// What this gateway calls itself (`--name`, or its clean hostname).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
+
+/// Alias for [`Info`], `/v1/info`'s response body.
+pub type InfoResponse = Info;
 
 /// How a phone asks to be paired.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -551,5 +557,28 @@ mod tests {
         let text = format!(r#"{{"generation":3,"signature":"{signature}"}}"#);
         let parsed: UndoRequest = serde_json::from_str(&text).expect("parses");
         assert_eq!(parsed.names, None);
+    }
+
+    #[test]
+    fn info_label_is_omitted_when_none_and_carried_when_some() {
+        let bare = Info {
+            gateway_id: GatewayId::from_bytes([7; 16]),
+            protocol: 1,
+            time_ms: 42,
+            label: None,
+        };
+        let json = serde_json::to_value(&bare).expect("serialises");
+        assert!(json.get("label").is_none(), "{json}");
+        let parsed: Info = serde_json::from_value(json).expect("parses");
+        assert_eq!(parsed, bare);
+
+        let named = Info {
+            label: Some("Home NAS".to_owned()),
+            ..bare
+        };
+        let json = serde_json::to_value(&named).expect("serialises");
+        assert_eq!(json["label"], "Home NAS");
+        let parsed: Info = serde_json::from_value(json).expect("parses");
+        assert_eq!(parsed, named);
     }
 }

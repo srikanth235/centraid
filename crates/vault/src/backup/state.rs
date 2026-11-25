@@ -7,7 +7,7 @@
 //! between the newest tree and the one it confirmed (`conf`, `troot`,
 //! `oroot`), computed from the node cache.
 //!
-//! The file carries `application_id = CBS1` ([`STATE_APPLICATION_ID`]) and a
+//! The file carries `application_id = CBS2` ([`STATE_APPLICATION_ID`]) and a
 //! `user_version` that counts the rungs of `state_ladder/`, which is one:
 //! v0 has nothing to upgrade from.
 
@@ -20,8 +20,8 @@ use rusqlite::{Connection, OptionalExtension as _, params};
 use super::tree::NodeSource;
 use super::{Result, invariant};
 
-/// `CBS1`: this file is a backup device state.
-pub const STATE_APPLICATION_ID: i64 = 0x4342_5331;
+/// `CBS2`: this file is a backup device state.
+pub const STATE_APPLICATION_ID: i64 = 0x4342_5332;
 
 /// The rungs of the ladder, in order. `user_version` is how many are applied.
 const LADDER: &[&str] = &[include_str!("state_ladder/001_founding.sql")];
@@ -70,6 +70,19 @@ impl Reach {
     }
 }
 
+/// Persistent per-gateway housekeeping and health notes (spec §6).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct GatewayNotesRecord {
+    pub collected_ms: u64,
+    pub held_count: u64,
+    pub held_purge_at_ms: Option<i64>,
+    pub refusal_code: Option<i32>,
+    pub damaged: bool,
+    pub sample_checked: u64,
+    pub sample_of: u64,
+    pub manifest_unreadable: bool,
+}
+
 /// One paired gateway, as the phone keeps it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Gateway {
@@ -94,6 +107,8 @@ pub struct Gateway {
     pub directory_dirty: bool,
     /// The last head that was not `conf` had gone backwards; cleared when a new head is confirmed.
     pub regressed: bool,
+    /// Persistent housekeeping and health notes for this gateway.
+    pub notes: GatewayNotesRecord,
 }
 
 impl Gateway {
@@ -125,6 +140,16 @@ impl Gateway {
             scrub_cursor: None,
             directory_dirty: true,
             regressed: false,
+            notes: GatewayNotesRecord {
+                collected_ms: 0,
+                held_count: 0,
+                held_purge_at_ms: None,
+                refusal_code: None,
+                damaged: false,
+                sample_checked: 0,
+                sample_of: 0,
+                manifest_unreadable: false,
+            },
         }
     }
 }
@@ -215,7 +240,8 @@ fn pair_of(name: Option<String>, ms: Option<i64>) -> Result<Option<(Name, u64)>>
 
 const GATEWAY_COLUMNS: &str = "gateway_id, addrs, cert_der, label, epoch, generation, conf, conf_ms, \
      troot, troot_ms, oroot, oroot_ms, reach, moved_epoch, reach_ms, paired_ms, sample_counter, \
-     scrub_cursor, directory_dirty, regressed";
+     scrub_cursor, directory_dirty, regressed, collected_ms, held_count, held_purge_at_ms, \
+     refusal_code, damaged_flag, sample_checked, sample_of, manifest_unreadable";
 
 impl DeviceState {
     /// Open (founding when new) the state at `path`.
@@ -351,6 +377,18 @@ impl DeviceState {
             scrub_cursor: None,
             directory_dirty: row.get::<_, i64>(18)? != 0,
             regressed: row.get::<_, i64>(19)? != 0,
+            notes: GatewayNotesRecord {
+                collected_ms: unsigned(row.get(20)?),
+                held_count: unsigned(row.get(21)?),
+                held_purge_at_ms: row.get(22)?,
+                refusal_code: row
+                    .get::<_, Option<i64>>(23)?
+                    .map(|code| i32::try_from(code).unwrap_or(i32::MAX)),
+                damaged: row.get::<_, i64>(24)? != 0,
+                sample_checked: unsigned(row.get(25)?),
+                sample_of: unsigned(row.get(26)?),
+                manifest_unreadable: row.get::<_, i64>(27)? != 0,
+            },
         };
         // The text columns are parsed by the caller, which can fail with the plane's error.
         let texts = vec![
@@ -565,6 +603,68 @@ impl DeviceState {
         self.connection.execute(
             "UPDATE gateway SET directory_dirty = ?2 WHERE gateway_id = ?1",
             params![gateway_id, i64::from(dirty)],
+        )?;
+        Ok(())
+    }
+
+    /// Persistent notes for `gateway_id`; returns defaults when the gateway is not paired.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn gateway_notes(&self, gateway_id: &str) -> Result<GatewayNotesRecord> {
+        let row = self
+            .connection
+            .query_row(
+                "SELECT collected_ms, held_count, held_purge_at_ms, refusal_code, damaged_flag,
+                        sample_checked, sample_of, manifest_unreadable
+                 FROM gateway WHERE gateway_id = ?1",
+                [gateway_id],
+                |row| {
+                    Ok(GatewayNotesRecord {
+                        collected_ms: unsigned(row.get(0)?),
+                        held_count: unsigned(row.get(1)?),
+                        held_purge_at_ms: row.get(2)?,
+                        refusal_code: row
+                            .get::<_, Option<i64>>(3)?
+                            .map(|code| i32::try_from(code).unwrap_or(i32::MAX)),
+                        damaged: row.get::<_, i64>(4)? != 0,
+                        sample_checked: unsigned(row.get(5)?),
+                        sample_of: unsigned(row.get(6)?),
+                        manifest_unreadable: row.get::<_, i64>(7)? != 0,
+                    })
+                },
+            )
+            .optional()?;
+        Ok(row.unwrap_or_default())
+    }
+
+    /// Persist `notes` on `gateway_id`.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn set_gateway_notes(&self, gateway_id: &str, notes: &GatewayNotesRecord) -> Result<()> {
+        self.connection.execute(
+            "UPDATE gateway SET
+                collected_ms = ?2,
+                held_count = ?3,
+                held_purge_at_ms = ?4,
+                refusal_code = ?5,
+                damaged_flag = ?6,
+                sample_checked = ?7,
+                sample_of = ?8,
+                manifest_unreadable = ?9
+             WHERE gateway_id = ?1",
+            params![
+                gateway_id,
+                signed(notes.collected_ms),
+                signed(notes.held_count),
+                notes.held_purge_at_ms,
+                notes.refusal_code.map(i64::from),
+                i64::from(notes.damaged),
+                signed(notes.sample_checked),
+                signed(notes.sample_of),
+                i64::from(notes.manifest_unreadable),
+            ],
         )?;
         Ok(())
     }
@@ -918,25 +1018,37 @@ impl DeviceState {
         Ok(())
     }
 
-    // ── originals only the OS library holds ──
+    // ── sealed chunk refs per blob and class ──
 
-    /// Record the sealed chunks of the original `hash`, in order, whose bytes only the OS photo
-    /// library holds: what the snapshot lists for it. Replaces any earlier record.
+    /// Record the sealed chunks of `hash` under `class` (`Class::Thumbnails` or `Class::Originals`),
+    /// in order. Replaces any earlier record for `(hash, class)`.
     ///
     /// # Errors
-    /// SQLite's refusal.
-    pub fn put_os_chunks(&self, hash: &PlaintextHash, refs: &[Ref]) -> Result<()> {
+    /// `Class::Records` (which is not a content blob class), or SQLite's refusal.
+    pub fn put_blob_chunks(&self, hash: &PlaintextHash, class: Class, refs: &[Ref]) -> Result<()> {
+        if class == Class::Records {
+            return Err(invariant(
+                "blob_chunk stores only thumbnails and originals, not records",
+            ));
+        }
+        let hex = hash.to_hex();
+        let class_byte = i64::from(class.byte());
         let transaction = self.connection.unchecked_transaction()?;
-        transaction.execute("DELETE FROM os_chunk WHERE hash = ?1", [hash.to_hex()])?;
+        transaction.execute(
+            "DELETE FROM blob_chunk WHERE hash = ?1 AND class = ?2",
+            params![hex, class_byte],
+        )?;
         for (index, reference) in refs.iter().enumerate() {
             transaction.execute(
-                "INSERT INTO os_chunk (hash, idx, name, digest, len) VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT INTO blob_chunk (hash, class, idx, name, digest, len)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 params![
-                    hash.to_hex(),
+                    hex,
+                    class_byte,
                     signed(index as u64),
                     reference.name.to_hex(),
                     reference.digest.to_hex(),
-                    i64::from(reference.len)
+                    i64::from(reference.len),
                 ],
             )?;
         }
@@ -944,15 +1056,19 @@ impl DeviceState {
         Ok(())
     }
 
-    /// The recorded chunks of `hash`, in order; empty when none were recorded.
+    /// The recorded chunks of `hash` under `class`, in order; empty when none were recorded or
+    /// when `class` is `Class::Records`.
     ///
     /// # Errors
     /// SQLite's refusal, or a row that will not read back.
-    pub fn os_chunks(&self, hash: &PlaintextHash) -> Result<Vec<Ref>> {
-        let mut statement = self
-            .connection
-            .prepare("SELECT name, digest, len FROM os_chunk WHERE hash = ?1 ORDER BY idx")?;
-        let rows = statement.query_map([hash.to_hex()], |row| {
+    pub fn blob_chunks(&self, hash: &PlaintextHash, class: Class) -> Result<Vec<Ref>> {
+        if class == Class::Records {
+            return Ok(Vec::new());
+        }
+        let mut statement = self.connection.prepare(
+            "SELECT name, digest, len FROM blob_chunk WHERE hash = ?1 AND class = ?2 ORDER BY idx",
+        )?;
+        let rows = statement.query_map(params![hash.to_hex(), i64::from(class.byte())], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
@@ -962,15 +1078,125 @@ impl DeviceState {
         let mut out = Vec::new();
         for row in rows {
             let (name, digest, len) = row?;
-            let bad = || invariant("an os_chunk row does not read back");
+            let bad = || invariant("a blob_chunk row does not read back");
             out.push(Ref {
                 name: Name::from_hex(&name).map_err(|_| bad())?,
                 digest: Digest::from_hex(&digest).map_err(|_| bad())?,
                 len: u32::try_from(len).map_err(|_| bad())?,
-                class: Class::Originals,
+                class,
             });
         }
         Ok(out)
+    }
+
+    /// Remove every recorded chunk ref for `hash` across all classes.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn remove_blob_chunks(&self, hash: &PlaintextHash) -> Result<()> {
+        self.connection
+            .execute("DELETE FROM blob_chunk WHERE hash = ?1", [hash.to_hex()])?;
+        Ok(())
+    }
+
+    /// Record the sealed chunks of the original `hash`, in order, whose bytes only the OS photo
+    /// library holds: what the snapshot lists for it. Replaces any earlier record.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn put_os_chunks(&self, hash: &PlaintextHash, refs: &[Ref]) -> Result<()> {
+        self.put_blob_chunks(hash, Class::Originals, refs)
+    }
+
+    /// The recorded chunks of `hash`, in order; empty when none were recorded.
+    ///
+    /// # Errors
+    /// SQLite's refusal, or a row that will not read back.
+    pub fn os_chunks(&self, hash: &PlaintextHash) -> Result<Vec<Ref>> {
+        self.blob_chunks(hash, Class::Originals)
+    }
+
+    // ── folded WAL dirty ranges ──
+
+    /// Every 64 KiB range index folded from an oversized WAL and awaiting the next snapshot.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn dirty_ranges(&self) -> Result<BTreeSet<u64>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT range_index FROM dirty_range ORDER BY range_index")?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, i64>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows.into_iter().map(unsigned).collect())
+    }
+
+    /// Every 64 KiB range index folded from an oversized WAL, paired with its `noted_ms` stamp.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn dirty_ranges_with_stamp(&self) -> Result<Vec<(u64, u64)>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT range_index, noted_ms FROM dirty_range ORDER BY range_index")?;
+        let rows = statement
+            .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows
+            .into_iter()
+            .map(|(range, noted_ms)| (unsigned(range), unsigned(noted_ms)))
+            .collect())
+    }
+
+    /// Persist `ranges` folded from the WAL at `now_ms` so the next snapshot still reads them.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn add_dirty_ranges(
+        &self,
+        ranges: impl IntoIterator<Item = u64>,
+        now_ms: u64,
+    ) -> Result<()> {
+        let transaction = self.connection.unchecked_transaction()?;
+        for range in ranges {
+            transaction.execute(
+                "INSERT INTO dirty_range (range_index, noted_ms) VALUES (?1, ?2)
+                 ON CONFLICT (range_index) DO UPDATE SET noted_ms = MAX(dirty_range.noted_ms + 1, excluded.noted_ms)",
+                params![signed(range), signed(now_ms)],
+            )?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// Clear folded dirty ranges once a snapshot has recorded them.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn clear_dirty_ranges(&self) -> Result<()> {
+        self.connection.execute("DELETE FROM dirty_range", [])?;
+        Ok(())
+    }
+
+    /// Clear only the folded dirty ranges whose `(range_index, noted_ms)` stamp matches what a
+    /// snapshot read, preserving rows added or updated concurrently afterwards.
+    ///
+    /// # Errors
+    /// SQLite's refusal.
+    pub fn clear_dirty_ranges_matching(&self, consumed: &[(u64, u64)]) -> Result<()> {
+        if consumed.is_empty() {
+            return Ok(());
+        }
+        let transaction = self.connection.unchecked_transaction()?;
+        for &(range_index, noted_ms) in consumed {
+            transaction.execute(
+                "DELETE FROM dirty_range WHERE range_index = ?1 AND noted_ms = ?2",
+                params![signed(range_index), signed(noted_ms)],
+            )?;
+        }
+        transaction.commit()?;
+        Ok(())
     }
 
     // ── undo ──

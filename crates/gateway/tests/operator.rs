@@ -135,24 +135,25 @@ async fn delete_vault_needs_a_frozen_vault_and_removes_everything() {
     assert!(unfrozen.0.contains("not frozen"), "{unfrozen}");
     assert!(member.phone.get(&member.vault, &live, None).await.is_ok());
 
+    assert!(
+        gateway.data_dir().join("packs").join(vault.hex()).is_dir(),
+        "vault pack directory exists before delete-vault"
+    );
     operator::run(shared, &vault, Verb::Freeze, false).expect("freezes");
     let lines = operator::run(shared, &vault, Verb::DeleteVault, true).expect("deletes");
     assert!(
         lines[0].contains("2 objects") && lines[0].contains("1 tokens"),
         "{lines:?}"
     );
-    for name in [held, live] {
-        assert!(
-            !gateway
-                .data_dir()
-                .join("objects")
-                .join(vault.hex())
-                .join(&name.hex()[..2])
-                .join(name.hex())
-                .exists(),
-            "an object file survives"
-        );
-    }
+    assert!(
+        !gateway.data_dir().join("packs").join(vault.hex()).exists(),
+        "packs/<vault_hex>/ was removed completely"
+    );
+    let _ = held;
+    assert!(
+        shared.store().pack_files().expect("lists").is_empty(),
+        "no packfiles remain"
+    );
     assert!(
         shared
             .rules(|gateway| gateway.pairings())

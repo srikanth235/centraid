@@ -226,9 +226,14 @@ impl ChunkSealer {
                 size: sealed.object.len() as u64,
                 fresh,
             }),
-            // THE BUDGET IS THE WINDOW: what does not fit is asked for again once what is staged
-            // has gone to every gateway.
-            Err(_) => self.full = true,
+            // THE BUDGET IS THE WINDOW: when staging is full (or I/O cannot stage the chunk),
+            // stop staging further chunks in this stream while still hashing and naming all refs
+            // so the remaining chunks are asked for again on the next pass.
+            Err(centraid_vault::backup::PlaneError::StagingFull) => self.full = true,
+            Err(error) => {
+                tracing::debug!(%error, "library chunk staging failed");
+                self.full = true;
+            }
         }
     }
 

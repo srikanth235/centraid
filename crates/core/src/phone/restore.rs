@@ -864,6 +864,7 @@ impl Scan<'_> {
             pin: entry.pin.parse().ok()?,
             secret: centraid_gateway::rules::ids::Secret::from_bytes([0; 16]),
             exp_ms: 0,
+            label: None,
         };
         let client = pair::first_contact(&payload, self.runtime).ok()?;
         let sibling = client.sibling();
@@ -1316,13 +1317,8 @@ impl Scan<'_> {
         // at a time, newest first.
         let _ = std::fs::write(plane.originals_marker(), b"");
 
-        let derivatives_total = tree::entries_of(&ledger, &manifest.blobs)
-            .map(|entries| {
-                entries
-                    .iter()
-                    .filter(|entry| !entry.thumbnail.is_empty())
-                    .count()
-            })
+        let derivatives_total = tree::stats_of(&ledger, &manifest.blobs)
+            .map(|stats| stats.thumb_files)
             .map_or(0, |n| u32::try_from(n).unwrap_or(u32::MAX));
         // THE FILE FIRST: it takes the name `vault.db`, so the vault opens immediately once the
         // records are in (R3). Thumbnails and then originals follow in background passes.

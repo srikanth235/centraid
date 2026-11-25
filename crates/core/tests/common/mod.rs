@@ -138,6 +138,7 @@ impl Gateway {
     /// Every object row the gateway keeps for `vault`, tombstoned and damaged
     /// ones included.
     pub fn objects(&self, vault: &VaultId) -> Vec<ObjectRecord> {
+        self.spawned.shared().wait_active_bundles();
         let mut out = Vec::new();
         let mut after: Option<(VaultId, centraid_gateway::rules::ids::Name)> = None;
         loop {

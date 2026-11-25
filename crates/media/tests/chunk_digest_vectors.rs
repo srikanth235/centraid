@@ -1,12 +1,12 @@
 //! Known answers for the digest of a sealed chunk
 //! (`contracts/crypto/chunk-digest-vectors.json`, #1191 B9, regenerated for
-//! `centraid-sealed/3` in #1209).
+//! `centraid-sealed/4` in #1212).
 //!
-//! A tree node names each object by `{name, digest, len}`, and the digest is
-//! BLAKE3 of the object as stored. An object sealed again later must reproduce
-//! it byte for byte, so a zstd change that alters output must fail HERE and
-//! not as read-back reporting damage forever. The workspace pins the zstd
-//! crate exactly for the same reason.
+//! A tree node names each object by `{name, digest, len, class}`, and the
+//! digest is BLAKE3 of the object as stored. An object sealed again later must
+//! reproduce it byte for byte, so a zstd or Padmé framing change that alters
+//! output must fail HERE and not as read-back reporting damage forever. The
+//! workspace pins the zstd crate exactly for the same reason.
 //!
 //! `CENTRAID_UPDATE_FIXTURES=1` regenerates the file; the comparison runs
 //! either way. Nothing is released, so a deliberate change regenerates it and
@@ -59,7 +59,7 @@ fn current() -> Value {
                 "input": what,
                 "class": class.byte(),
                 "plaintextLen": plaintext.len(),
-                "compressed": sealed.object[5] & sealed::FLAG_ZSTD != 0,
+                "compressed": sealed.flags & sealed::FLAG_ZSTD != 0,
                 "sealedLen": sealed.object.len(),
                 "name": sealed.name.to_hex(),
                 "digest": sealed.digest.to_hex(),
@@ -81,6 +81,31 @@ fn chunk_digests_match_the_committed_known_answers() {
     let committed: Value =
         serde_json::from_str(&std::fs::read_to_string(&path).expect("read")).expect("parses");
     assert_eq!(committed, now, "a zstd or framing change moved a digest");
+}
+
+#[test]
+fn media_classes_never_compress_and_sealed_lengths_stay_bounded() {
+    assert_eq!(sealed::OVERHEAD_BYTES, 51);
+    assert_eq!(sealed::MAX_OBJECT_BYTES, CHUNK_BYTES + 51);
+    let generated = current();
+    let cases = generated["cases"].as_array().expect("cases");
+    let mut compressed_records = 0_usize;
+    for case in cases {
+        let class = case["class"].as_u64().expect("class");
+        let compressed = case["compressed"].as_bool().expect("compressed");
+        let sealed_len =
+            usize::try_from(case["sealedLen"].as_u64().expect("sealedLen")).expect("usize");
+        assert!(sealed_len >= sealed::MIN_OBJECT_BYTES);
+        assert!(sealed_len <= CHUNK_BYTES + 51);
+        if class == u64::from(Class::Thumbnails.byte())
+            || class == u64::from(Class::Originals.byte())
+        {
+            assert!(!compressed, "media class compressed");
+        } else if compressed {
+            compressed_records += 1;
+        }
+    }
+    assert_eq!(compressed_records, 2);
 }
 
 #[test]

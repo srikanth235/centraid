@@ -116,10 +116,19 @@ Layout used below: `gateway/tests/` is `crates/gateway/tests/`, `gateway/conform
 - `an_older_gateway_data_directory_is_refused_with_the_sentence` (gateway, `gateway/tests/data_dir.rs`): an earlier gateway's `state.db` fixture; observe exit 2, the exact sentence of E13, and the file's bytes unchanged. B1.
 - `a_gateway_below_required_protocol_is_refused` (gateway, `gateway/tests/older_gateway.rs`): a stub answering `/v1/info` with protocol 0; observe `GatewayTooOld { found: 0, required: 1 }` and no second request. B1.
 - `a_head_from_the_future_is_refused` (gateway, `gateway/conformance`: `taken_at_is_bounded`): `CLOCK_AHEAD` above 300,000 ms, accepted at the bound. B7.
-- `a_bundle_commits_in_one_transaction` (gateway, `gateway/tests/bundle_commit.rs`): the adapter's statement counter shows one `BEGIN IMMEDIATE`/`COMMIT` pair per bundle; a kill between staging and commit leaves no row without bytes, and the orphan sweep removes the files. B7.
+- `a_bundle_commits_in_one_transaction` (gateway, `gateway/tests/bundle_commit.rs`): the adapter's statement counter shows one `BEGIN IMMEDIATE`/`COMMIT` pair per bundle; a kill between packfile rename and SQLite commit leaves zero rows and one orphan `.pack` file, and `orphans_once` removes it after `ORPHAN_MIN_AGE_MS`. B7.
 - `pairing_secrets_are_pruned_and_bounded` (gateway, `gateway/conformance`: `secrets_are_bounded`). B7.
 - `delete_vault_needs_a_frozen_vault_and_removes_everything` (gateway, `gateway/tests/operator.rs`). B7.
 - `the_release_gateway_does_not_link_the_harness` (xtask, `rules.rs` check `gateway_harness_out_of_release`). B7.
+
+## #1212 regression tests
+
+- `sealed4_vectors` (media, `crates/media/tests/sealed4_vectors.rs`): pins `centraid-sealed/4` (`CSB4`) derived keys, Padmé lengths, encrypted `flags`/`class`, `zstd` level 3 applied only on `records`, names, nonces, objects, and digests against `contracts/crypto/sealed4-vectors.json`.
+- `pack_compaction` (gateway, `gateway/tests/pack_compaction.rs`): verifies sparse packfile compaction (`>= 50%` dead bytes) after `purge` and small-pack coalescing (`< 16 MiB` up to `256 MiB`) with atomic CAS `(pack_id, pack_pos)` remap while preserving every byte and digest on `GET`, ranged `GET`, `POST /fetch`, and `scrub`.
+- `split_brain_stale_vault_with_later_timestamp_cannot_claim_over_higher_writes_head` (core, `core/tests/restore_edges.rs`): proves a stale split-brain vault with a later local timestamp (`own.last_write_ms >= head.taken_at_ms`) cannot claim over a remote head with higher `writes`; `pair` refuses `VaultMoved` and leaves the gateway's head intact.
+- `newly_paired_second_gateway_repairs_cloud_only_original_from_first_gateway` (core, `core/tests/phone_backup.rs`): proves a newly paired second gateway repairs freed cloud-only originals from the first gateway via peer stores and confirms `oroot`.
+- `gateway_notes_persist_across_core_reopen` (core, `core/tests/phone_backup.rs`): proves `GatewayNotes` (`collected_ms`, `held_count`, `held_purge_at_ms`, `refusal_code`, `damaged_flag`, `sample_checked`, `sample_of`, `manifest_unreadable`) persist in `state.db` (`CBS2`) across core close and reopen without dialing.
+- `back_up_now_streams_all_batches_past_max_rounds_while_asks_advance` (screens, `crates/screens/src/passes/tests.rs`): proves `"Back up now"` streams all advancing `need_bytes` batches past `MAX_ROUNDS` while capping identical stalled asks and keeping non-`"Back up now"` runs bounded at `MAX_ROUNDS`.
 
 ## Gate-level checks (the acceptance criteria)
 

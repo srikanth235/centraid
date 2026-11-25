@@ -29,16 +29,19 @@ use tokio_rustls::rustls::pki_types::ServerName;
 async fn a_phone_pairs_from_the_text_of_a_qr_and_hands_off_an_upload() {
     let dir = tempfile::tempdir().expect("a temp dir");
     let gateway = spawn(dir.path()).await.expect("spawned");
+    gateway.shared().set_label("Backups Box".to_owned());
 
     // What `pair` prints, and what the camera reads back.
     let printed = gateway.payload().to_json();
     let payload = PairPayload::parse(&printed).expect("the QR's text parses");
     assert_eq!(payload.gw, gateway.gateway_id);
     assert_eq!(payload.pin, gateway.pin);
+    assert_eq!(payload.label.as_deref(), Some("Backups Box"));
 
     let phone = Client::first_contact(payload.addrs.clone(), payload.pin);
     let info = phone.info().await.expect("the pinned gateway answers");
     assert_eq!(info.gateway_id, payload.gw, "the QR and the gateway agree");
+    assert_eq!(info.label.as_deref(), Some("Backups Box"));
 
     let identity = ed25519_dalek::SigningKey::from_bytes(&[3; 32]);
     let vault = VaultId::from_bytes(identity.verifying_key().to_bytes());

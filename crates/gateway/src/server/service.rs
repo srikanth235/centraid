@@ -254,6 +254,7 @@ fn escaped(text: &str) -> String {
         text.replace('\\', "\\\\")
             .replace('"', "\\\"")
             .replace('%', "%%")
+            .replace('$', "$$")
     )
 }
 
@@ -384,5 +385,14 @@ mod tests {
         assert!(
             systemd_unit(&awkward).contains("ExecStart=\"/opt/my gateway/centraid-gateway\" serve")
         );
+    }
+
+    #[test]
+    fn a_dollar_sign_in_name_is_escaped_for_systemd() {
+        let mut with_dollar = spec();
+        with_dollar.arguments.push("--name".to_owned());
+        with_dollar.arguments.push("My $HOME NAS".to_owned());
+        let unit = systemd_unit(&with_dollar);
+        assert!(unit.contains("\"My $$HOME NAS\""), "{unit}");
     }
 }

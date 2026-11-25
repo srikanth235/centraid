@@ -91,13 +91,12 @@ fn back_up_lose_everything_restore_in_the_order_of_r3_and_prove_it() {
         );
         Ok(())
     };
-    let mut order: Vec<(u64, Class)> = Vec::new();
+    let mut order: Vec<(i64, Class)> = Vec::new();
     let mut sink = |entry: &Entry, bytes: &[u8]| -> centraid_vault::backup::Result<()> {
         assert_eq!(PlaintextHash::of(bytes), entry.h);
-        let class = if entry.thumbnail.is_empty() {
-            Class::Originals
-        } else {
-            Class::Thumbnails
+        let class = match entry.kind {
+            centraid_vault::backup::tree::EntryKind::Thumbnail => Class::Thumbnails,
+            _ => Class::Originals,
         };
         order.push((entry.taken_at_ms, class));
         restored_media.borrow_mut().insert(entry.h, bytes.to_vec());
@@ -141,7 +140,7 @@ fn back_up_lose_everything_restore_in_the_order_of_r3_and_prove_it() {
     );
     // Newest first within a class.
     for class in [Class::Thumbnails, Class::Originals] {
-        let times: Vec<u64> = order
+        let times: Vec<i64> = order
             .iter()
             .filter(|(_, c)| *c == class)
             .map(|(t, _)| *t)

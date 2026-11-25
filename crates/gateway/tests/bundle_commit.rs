@@ -1,12 +1,12 @@
-//! A BUNDLE'S FRAMES COMMIT EACH ON ITS OWN, AND A CRASH LEAVES ONLY FILES
-//! (#1209, spec §4; #1191, B7, E14).
+//! A BUNDLE COMMITS IN ONE TRANSACTION, AND A CRASH LEAVES ONLY AN ORPHAN PACK
+//! (`CGW4`, #1209, #1212, spec §4; #1191, B7, E14).
 //!
-//! Each frame is staged, fsynced, renamed into place and then given its row,
-//! in its own transaction, as its last byte arrives. A crash between a
-//! frame's rename and its row leaves a file with no row — the orphan sweep
-//! takes it once it is an hour old — and never a row whose bytes are missing;
-//! the frames before it are committed and stay so. The crash is real: a child
-//! process is killed with SIGKILL between a rename and its row.
+//! Each `POST bundle` streams valid frames into one staged packfile, `fsync`s
+//! it once, renames it into `packs/<vault>/<pack>.pack`, and commits all
+//! completed frames in a single `BEGIN IMMEDIATE … COMMIT` SQLite transaction.
+//! A process killed with `SIGKILL` between pack rename and SQLite commit leaves
+//! zero rows in `state.db` and one orphan `.pack` file on disk, which
+//! `orphans_once` removes once `ORPHAN_MIN_AGE_MS` passes.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -16,6 +16,7 @@ use centraid_gateway::rules::bundle::Frame;
 use centraid_gateway::rules::ids::{Name, VaultId};
 use centraid_gateway::rules::state::State as _;
 use centraid_gateway::server::harness::{Spawned, pair_secret, spawn};
+use centraid_gateway::server::store::PackId;
 use centraid_gateway::server::sweeps::orphans_once;
 
 async fn paired(gateway: &Spawned) -> (VaultId, centraid_gateway::client::Client) {
@@ -39,11 +40,12 @@ fn frame(label: &str) -> Frame {
     Frame::of(name, blake3::hash(label.as_bytes()).as_bytes().repeat(16))
 }
 
-/// One transaction per frame, counted by the adapter, not timed: five frames
-/// are five commits, and the same five again are five more (each is judged on
-/// its own, so a cut after frame k has committed frames 1..k and nothing else).
+/// One transaction per bundle, counted by the adapter, not timed: five frames
+/// in one bundle execute one `BEGIN IMMEDIATE … COMMIT` transaction and write
+/// one `.pack` file; re-sending the same five executes one transaction and
+/// unlinks the redundant packfile because zero frames were newly stored.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_bundle_commits_each_frame_in_its_own_transaction() {
+async fn a_bundle_commits_in_one_transaction() {
     let dir = tempfile::tempdir().expect("a temp dir");
     let gateway = spawn(dir.path()).await.expect("spawned");
     let (vault, phone) = paired(&gateway).await;
@@ -60,12 +62,22 @@ async fn a_bundle_commits_each_frame_in_its_own_transaction() {
     let before = begun();
     let answer = phone.bundle(&vault, &frames).await.expect("stores");
     assert_eq!(answer.stored(), 5, "{answer:?}");
-    assert_eq!(begun() - before, 5, "five frames, five transactions");
+    assert_eq!(begun() - before, 1, "five frames, one SQLite transaction");
+    assert_eq!(
+        gateway.shared().store().pack_files().expect("lists").len(),
+        1,
+        "one packfile on disk"
+    );
 
     let before = begun();
     let answer = phone.bundle(&vault, &frames).await.expect("answers");
     assert_eq!(answer.there(), 5);
-    assert_eq!(begun() - before, 5);
+    assert_eq!(begun() - before, 1, "duplicate bundle, one transaction");
+    assert_eq!(
+        gateway.shared().store().pack_files().expect("lists").len(),
+        1,
+        "redundant packfile with zero stored frames was unlinked"
+    );
     gateway.shutdown().await;
 }
 
@@ -79,12 +91,12 @@ fn bundle_of_three() -> Vec<Frame> {
         .collect()
 }
 
-/// **The child**: not a test of its own. Re-executed by
+/// **The child**: re-executed by
 /// `a_process_killed_between_a_rename_and_its_row_leaves_only_a_file`
 /// with a data directory and a marker path, it uploads a bundle of three
-/// frames and, the moment the second file has been renamed into place and
-/// before its row is written, writes the marker and stops for ever, inside
-/// the open transaction, until the parent kills it.
+/// frames and, the moment the staged `.pack` file has been renamed into
+/// `packs/<vault>/` and before the SQLite transaction commits any rows, writes
+/// the marker and parks forever until the parent sends `SIGKILL`.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn child_stages_a_bundle_and_stalls() {
     let (Some(data), Some(marker)) = (std::env::var_os(CHILD_DATA), std::env::var_os(CHILD_MARKER))
@@ -98,7 +110,7 @@ async fn child_stages_a_bundle_and_stalls() {
         .store()
         .knobs()
         .after_rename(Some(Arc::new(move |renamed| {
-            if renamed == 2 {
+            if renamed == 1 {
                 std::fs::write(&marker, b"renamed").expect("the marker");
                 loop {
                     std::thread::park();
@@ -109,11 +121,9 @@ async fn child_stages_a_bundle_and_stalls() {
     unreachable!("the parent kills this process");
 }
 
-/// A PROCESS KILLED BETWEEN A FRAME'S RENAME AND ITS ROW leaves that file and
-/// no row, and the frame before it committed. The parent opens the data
-/// directory the child left: the vault is there, the first frame has its row,
-/// two files are on disk; the orphan sweep takes the second once the gateway's
-/// clock says it is old, and not before.
+/// A PROCESS KILLED WITH `SIGKILL` BETWEEN PACK RENAME AND SQLITE COMMIT leaves
+/// zero rows in `object` and one orphan `.pack` file on disk; `orphans_once`
+/// leaves it alone while young and removes it once `ORPHAN_MIN_AGE_MS` passes.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_process_killed_between_a_rename_and_its_row_leaves_only_a_file() {
     let dir = tempfile::tempdir().expect("a temp dir");
@@ -131,8 +141,6 @@ async fn a_process_killed_between_a_rename_and_its_row_leaves_only_a_file() {
         .stderr(std::process::Stdio::null())
         .spawn()
         .expect("starts the child");
-    // Wait for the event, not for a time: the marker says two files are in
-    // place and no row is.
     let waited = Instant::now();
     while !marker.exists() {
         assert!(
@@ -160,13 +168,13 @@ async fn a_process_killed_between_a_rename_and_its_row_leaves_only_a_file() {
         .expect("reads");
     assert_eq!(
         rows.len(),
-        1,
-        "the first frame committed on its own; the second has no row: {rows:?}"
+        0,
+        "killed before SQLite commit: zero object rows: {rows:?}"
     );
     assert_eq!(
-        gateway.shared().store().files().expect("lists").len(),
-        2,
-        "both renamed files are on disk"
+        gateway.shared().store().pack_files().expect("lists").len(),
+        1,
+        "one orphan .pack file on disk"
     );
     assert_eq!(
         gateway
@@ -180,22 +188,22 @@ async fn a_process_killed_between_a_rename_and_its_row_leaves_only_a_file() {
     assert_eq!(
         orphans_once(gateway.shared()).expect("sweeps"),
         0,
-        "a file is not old enough to be an orphan yet"
+        "the packfile is younger than ORPHAN_MIN_AGE_MS"
     );
     gateway.advance_clock(TWO_HOURS_MS);
     assert_eq!(orphans_once(gateway.shared()).expect("sweeps"), 1);
     assert_eq!(
-        gateway.shared().store().files().expect("lists").len(),
-        1,
-        "the committed frame's file stands"
+        gateway.shared().store().pack_files().expect("lists").len(),
+        0,
+        "the orphan .pack file was cleaned up"
     );
     gateway.shutdown().await;
 }
 
-/// A SWEEP DURING AN OPEN BUNDLE REMOVES NOTHING (#1191, E14): the hook runs
-/// the orphan sweep after the second rename, while that frame is between its
-/// rename and its row, with the clock two hours on so age alone would take
-/// the file. It removes none; once the bundle is in, every file has a row.
+/// A SWEEP DURING AN OPEN BUNDLE COMMIT REMOVES NOTHING (#1191, E14): the hook
+/// runs `orphans_once` right after the packfile rename while `commit_guard` is
+/// active and before its SQLite transaction commits, with the clock two hours
+/// ahead. It removes nothing; once committed, all three frames are live.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_sweep_during_an_open_bundle_removes_nothing() {
     let dir = tempfile::tempdir().expect("a temp dir");
@@ -211,10 +219,10 @@ async fn a_sweep_during_an_open_bundle_removes_nothing() {
         .store()
         .knobs()
         .after_rename(Some(Arc::new(move |renamed| {
-            if renamed == 2 {
+            if renamed == 1 {
                 seen.store(orphans_once(&shared).expect("sweeps"), Ordering::SeqCst);
                 files.store(
-                    shared.store().files().expect("lists").len() as u64,
+                    shared.store().pack_files().expect("lists").len() as u64,
                     Ordering::SeqCst,
                 );
             }
@@ -225,30 +233,33 @@ async fn a_sweep_during_an_open_bundle_removes_nothing() {
     assert_eq!(removed.load(Ordering::SeqCst), 0, "the sweep stood aside");
     assert_eq!(
         on_disk.load(Ordering::SeqCst),
-        2,
-        "both renamed files stood"
+        1,
+        "the renamed packfile stood"
     );
-    assert_eq!(gateway.shared().store().files().expect("lists").len(), 3);
+    assert_eq!(
+        gateway.shared().store().pack_files().expect("lists").len(),
+        1
+    );
     assert_eq!(
         orphans_once(gateway.shared()).expect("sweeps"),
         0,
-        "after the commit every file has a row"
+        "after the commit the packfile is referenced by object rows"
     );
-    let held = phone
-        .exists(&vault, &[frames[0].name])
-        .await
-        .expect("exists");
-    assert!(held.is_empty());
+    let names: Vec<Name> = frames.iter().map(|f| f.name).collect();
+    assert!(
+        phone
+            .exists(&vault, &names)
+            .await
+            .expect("exists")
+            .is_empty()
+    );
     gateway.shutdown().await;
 }
 
-/// R3, PER FRAME: THE FRAMES BEFORE A FAULT STAY COMMITTED. The bundle heals a
-/// damaged name with its own bytes (its own commit) and then faults on a
-/// second frame: the first is whole (row and file agree, no longer damaged),
-/// the second has no file and no row, and the next bundle finishes the work
-/// with `there` for the first and `stored` for the second.
+/// A FAULT INSIDE A BUNDLE TRANSACTION ROLLS BACK ATOMICALLY AND UNLINKS THE
+/// FAILED PACKFILE, WHILE EARLIER COMMITTED BUNDLES AND HEALED ROWS STAND.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_frame_that_faults_leaves_the_frames_before_it_committed() {
+async fn a_faulting_bundle_rolls_back_cleanly_and_heals_on_retry() {
     let dir = tempfile::tempdir().expect("a temp dir");
     let gateway = spawn(dir.path()).await.expect("spawned");
     let (vault, phone) = paired(&gateway).await;
@@ -266,43 +277,20 @@ async fn a_frame_that_faults_leaves_the_frames_before_it_committed() {
         "the scrub marked it damaged"
     );
 
-    // The second commit of the next bundle fails.
+    // Fault on the 2nd object inside the single bundle transaction: the whole
+    // transaction rolls back and the new packfile is unlinked.
     gateway.shared().store().knobs().fail_commit(2);
     let both = [healing.clone(), other.clone()];
     assert!(
         phone.bundle(&vault, &both).await.is_err(),
-        "the fault is an error"
+        "the fault surfaces as an error"
     );
     gateway.shared().store().knobs().fail_commit(0);
 
-    let on_disk = gateway
-        .shared()
-        .store()
-        .read_digest(&vault, &healing.name)
-        .expect("reads")
-        .expect("the file is there");
-    let row = gateway
-        .shared()
-        .rules(|rules| Ok(rules.state.object(&vault, &healing.name)?))
-        .expect("reads")
-        .expect("the row is there");
     assert_eq!(
-        (row.digest, row.size),
-        on_disk,
-        "the row and the file agree on the bytes"
-    );
-    assert!(
-        row.damaged_at_ms.is_none(),
-        "the first frame committed on its own, and healed the name"
-    );
-    assert!(
-        gateway
-            .shared()
-            .store()
-            .path(&vault, &other.name)
-            .metadata()
-            .is_err(),
-        "the frame that faulted left no file"
+        gateway.shared().store().pack_files().expect("lists").len(),
+        1,
+        "the failed bundle's packfile was unlinked on rollback"
     );
     assert!(
         gateway
@@ -310,11 +298,25 @@ async fn a_frame_that_faults_leaves_the_frames_before_it_committed() {
             .rules(|rules| Ok(rules.state.object(&vault, &other.name)?))
             .expect("reads")
             .is_none(),
-        "and no row"
+        "the rolled-back bundle left no row for `other`"
     );
-    // The phone's next bundle finishes it.
+
+    // Retry succeeds in one transaction: `healing` is healed in a new pack and `other` is stored.
     let answer = phone.bundle(&vault, &both).await.expect("stores");
-    assert_eq!((answer.there(), answer.stored()), (1, 1), "{answer:?}");
+    assert_eq!(answer.stored(), 2, "{answer:?}");
+    let (row, loc) = gateway
+        .shared()
+        .rules(|rules| Ok(rules.state.object_with_location(&vault, &healing.name)?))
+        .expect("reads")
+        .expect("the row is there");
+    assert!(row.damaged_at_ms.is_none(), "healing cleared damaged_at_ms");
+    let slice_digest = gateway
+        .shared()
+        .store()
+        .read_slice_digest(&vault, loc, row.size)
+        .expect("reads")
+        .expect("slice exists");
+    assert_eq!(slice_digest, row.digest);
     assert!(
         phone
             .exists(&vault, &[healing.name, other.name])
@@ -325,12 +327,10 @@ async fn a_frame_that_faults_leaves_the_frames_before_it_committed() {
     gateway.shutdown().await;
 }
 
-/// R5: THE ORPHAN SWEEP'S LOOK AND ITS UNLINK ARE ONE STEP. An old file with
-/// no row is about to be removed; at that very point (inside the step, after
-/// the look at the index, before the unlink) a frame of the same name is
-/// started on another thread. It cannot run until the step ends — the sweep
-/// holds the gateway's one lock across both — so its file is stored after the
-/// unlink, not under it: the name is live, with its bytes on disk.
+/// R5: THE ORPHAN SWEEP'S CHECK AND UNLINK ARE ONE ATOMIC STEP UNDER THE
+/// GATEWAY LOCK. While `orphans_once` is inside `before_orphan_unlink` removing
+/// an aged orphan `.pack` file, a concurrent `POST bundle` waits for the lock
+/// and commits its own `.pack` file safely afterward.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_frame_of_the_same_name_cannot_lose_its_file_to_the_orphan_sweep() {
     let dir = tempfile::tempdir().expect("a temp dir");
@@ -345,15 +345,16 @@ async fn a_frame_of_the_same_name_cannot_lose_its_file_to_the_orphan_sweep() {
     .await
     .expect("pairs");
     let vault = VaultId::from_bytes(key.verifying_key().to_bytes());
-    let racing = frame("a name an orphan file holds");
+    let racing = frame("a name uploaded concurrently with orphan unlink");
 
-    // An orphan file, old enough.
-    let path = gateway.shared().store().path(&vault, &racing.name);
-    std::fs::create_dir_all(path.parent().expect("a parent")).expect("a fan-out dir");
-    std::fs::write(&path, b"what a crash left").expect("an orphan");
+    // Plant an aged orphan `.pack` file with zero rows in `object`.
+    let orphan_id = PackId::from_bytes([0xee; 16]);
+    let orphan_path = gateway.shared().store().pack_path(&vault, &orphan_id);
+    std::fs::create_dir_all(orphan_path.parent().expect("vault packs dir")).expect("creates dir");
+    std::fs::write(&orphan_path, b"what a crash left").expect("writes orphan pack");
     std::fs::File::options()
         .write(true)
-        .open(&path)
+        .open(&orphan_path)
         .expect("opens")
         .set_modified(std::time::SystemTime::now() - Duration::from_secs(2 * 3600))
         .expect("ages");
@@ -378,7 +379,7 @@ async fn a_frame_of_the_same_name_cannot_lose_its_file_to_the_orphan_sweep() {
                     centraid_gateway::client::Client::new(&destination)
                         .bundle(&vault, std::slice::from_ref(&frame))
                         .await
-                        .expect("the frame is admitted, after the step");
+                        .expect("the bundle is admitted after the orphan step");
                 });
             });
             *slot.lock().expect("slot") = Some(handle);
@@ -394,15 +395,23 @@ async fn a_frame_of_the_same_name_cannot_lose_its_file_to_the_orphan_sweep() {
         .await
         .expect("joined");
 
-    assert_eq!(std::fs::read(&path).expect("its file"), racing.bytes);
+    assert!(!orphan_path.exists(), "the orphan packfile was removed");
     let phone = gateway.client(paired.token);
+    assert_eq!(
+        phone.get(&vault, &racing.name, None).await.expect("reads"),
+        racing.bytes
+    );
     assert!(
         phone
             .exists(&vault, &[racing.name])
             .await
             .expect("exists")
             .is_empty(),
-        "the name is live"
+        "the newly uploaded object is live"
+    );
+    assert_eq!(
+        gateway.shared().store().pack_files().expect("lists").len(),
+        1
     );
     gateway.shutdown().await;
 }

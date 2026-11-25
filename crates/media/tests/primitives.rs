@@ -9,7 +9,7 @@
 //! derivation passes; so does a `blake3` version bump that changed a context
 //! string's handling. So the vectors live in `contracts/crypto/blake3-vectors.json`,
 //! where they are bytes rather than behaviour, and this regenerates and diffs
-//! them the way `contracts/crypto/sealed3-vectors.json` and
+//! them the way `contracts/crypto/sealed4-vectors.json` and
 //! `contracts/crypto/identity-vectors.json` are regenerated and diffed:
 //! `CENTRAID_UPDATE_FIXTURES=1` writes the file and the comparison still runs
 //! afterwards, so the variable is a generator and never a way to go green.
@@ -19,9 +19,9 @@
 //! The contexts below are the shapes this repository derives with — a purpose
 //! and a vault id folded into one context string (BLAKE3 has no salt argument —
 //! D-1025-S4-3), and a nonce-length output off the XOF — pinned as primitives.
-//! The backup format's own sites (`centraid backup v2 root`, `… name`,
-//! `… object`) are pinned with the format, in `tests/sealed_vectors.rs`
-//! ([#1080](https://github.com/srikanth235/centraid/issues/1080)).
+//! The backup format's own sites (`centraid backup v2 root`, `… v2 name`,
+//! `… v4 object`, `… v4 nonce`) are pinned with the format, in
+//! `tests/sealed4_vectors.rs` ([#1212](https://github.com/srikanth235/centraid/issues/1212)).
 
 use std::path::{Path, PathBuf};
 

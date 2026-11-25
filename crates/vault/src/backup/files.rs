@@ -62,24 +62,41 @@ impl ContentFile {
 /// [`super::PlaneError`] when the vault will not read, or a row holds a hash
 /// that is not 64 lowercase hex characters or a negative size.
 pub fn content_files(vault: &Vault) -> Result<Vec<ContentFile>> {
+    let now_text = vault.clock().now_text();
+    let now_ms = vault.clock().now_ms();
+    vault.read(|connection| Ok(content_files_on(connection, &now_text, now_ms)))?
+}
+
+/// [`content_files`] read directly on `connection` (used by pinned read transactions without
+/// locking [`Vault`]).
+///
+/// # Errors
+/// As [`content_files`].
+pub fn content_files_on(
+    connection: &rusqlite::Connection,
+    now_text: &str,
+    now_ms: i64,
+) -> Result<Vec<ContentFile>> {
     type Row = (String, i64, Option<String>, Option<String>, String);
-    let rows: Vec<Row> = vault.read(|connection| {
+    let rows: Vec<Row> = (|| -> rusqlite::Result<Vec<Row>> {
         let mut statement = connection.prepare(
             "SELECT b.hash, b.size,
-                    (SELECT variant FROM derivative WHERE out = b.hash LIMIT 1),
+                    (SELECT variant FROM derivative WHERE out = b.hash LIMIT 1) AS variant,
                     COALESCE((SELECT media_type FROM derivative WHERE out = b.hash LIMIT 1),
                              (SELECT media_type FROM photo WHERE blob = b.hash),
                              (SELECT media_type FROM document WHERE blob = b.hash LIMIT 1),
                              (SELECT media_type FROM revision WHERE blob = b.hash LIMIT 1)),
-                    COALESCE((SELECT created_at FROM derivative WHERE out = b.hash LIMIT 1),
-                             (SELECT e.created_at FROM photo p JOIN entity e ON e.id = p.id
+                    COALESCE((SELECT p.taken_at FROM derivative dv JOIN photo p ON p.blob = dv.blob
+                               WHERE dv.out = b.hash LIMIT 1),
+                             (SELECT created_at FROM derivative WHERE out = b.hash LIMIT 1),
+                             (SELECT COALESCE(p.taken_at, e.created_at) FROM photo p JOIN entity e ON e.id = p.id
                                WHERE p.blob = b.hash),
                              (SELECT e.created_at FROM document d JOIN entity e ON e.id = d.id
                                WHERE d.blob = b.hash LIMIT 1),
                              (SELECT at FROM revision WHERE blob = b.hash LIMIT 1),
                              '')
                FROM blob b
-              ORDER BY 5 DESC, 3 IS NOT NULL, 1",
+              ORDER BY 5 DESC, variant IS NOT NULL, 1",
         )?;
         let rows = statement.query_map([], |row| {
             Ok((
@@ -90,9 +107,9 @@ pub fn content_files(vault: &Vault) -> Result<Vec<ContentFile>> {
                 row.get(4)?,
             ))
         })?;
-        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
-    })?;
-    let lapsed = lapsed_blobs(vault)?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+    })()?;
+    let lapsed = lapsed_blobs_on(connection, now_text, now_ms)?;
     let mut out = Vec::with_capacity(rows.len());
     for (hash, size, variant, media_type, created_at) in rows {
         if lapsed.contains(&hash) {
@@ -146,8 +163,10 @@ pub fn content_files_for(
                              (SELECT media_type FROM photo WHERE blob = b.hash),
                              (SELECT media_type FROM document WHERE blob = b.hash LIMIT 1),
                              (SELECT media_type FROM revision WHERE blob = b.hash LIMIT 1)),
-                    COALESCE((SELECT created_at FROM derivative WHERE out = b.hash LIMIT 1),
-                             (SELECT e.created_at FROM photo p JOIN entity e ON e.id = p.id
+                    COALESCE((SELECT p.taken_at FROM derivative dv JOIN photo p ON p.blob = dv.blob
+                               WHERE dv.out = b.hash LIMIT 1),
+                             (SELECT created_at FROM derivative WHERE out = b.hash LIMIT 1),
+                             (SELECT COALESCE(p.taken_at, e.created_at) FROM photo p JOIN entity e ON e.id = p.id
                                WHERE p.blob = b.hash),
                              (SELECT e.created_at FROM document d JOIN entity e ON e.id = d.id
                                WHERE d.blob = b.hash LIMIT 1),
@@ -217,64 +236,71 @@ pub const RENTERS: &[(&str, &str, &str)] = &[
 /// The hashes only lapsed entities rent: every renter of each is an entity
 /// whose `purge_at` is at or before now, or a derivative of such a blob.
 fn lapsed_blobs(vault: &Vault) -> Result<std::collections::HashSet<String>> {
-    use std::collections::{HashMap, HashSet};
     let now = vault.clock().now_text();
     let now_ms = vault.clock().now_ms();
-    vault
-        .read(|connection| {
-            // A clock far from the vault's last commit lapses nothing: bytes of a still-restorable
-            // trashed item stay in the backup (#1191, V19).
-            if !crate::clock::is_credible(connection, now_ms)? {
-                return Ok(HashSet::new());
+    vault.read(|connection| Ok(lapsed_blobs_on(connection, &now, now_ms)))?
+}
+
+fn lapsed_blobs_on(
+    connection: &rusqlite::Connection,
+    now: &str,
+    now_ms: i64,
+) -> Result<std::collections::HashSet<String>> {
+    use std::collections::{HashMap, HashSet};
+    let read = || -> crate::error::Result<HashSet<String>> {
+        // A clock far from the vault's last commit lapses nothing: bytes of a still-restorable
+        // trashed item stay in the backup (#1191, V19).
+        if !crate::clock::is_credible(connection, now_ms)? {
+            return Ok(HashSet::new());
+        }
+        // hash -> whether some renter is live
+        let mut live: HashMap<String, bool> = HashMap::new();
+        for (table, column, owner) in RENTERS {
+            let mut statement = connection.prepare(&format!(
+                "SELECT t.{column}, e.purge_at IS NOT NULL AND e.purge_at <= ?1
+                   FROM {table} t JOIN entity e ON e.id = t.{owner}
+                  WHERE t.{column} IS NOT NULL"
+            ))?;
+            let rows = statement.query_map([now], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, bool>(1)?))
+            })?;
+            for row in rows {
+                let (hash, lapsed) = row?;
+                let entry = live.entry(hash).or_insert(false);
+                *entry = *entry || !lapsed;
             }
-            // hash -> whether some renter is live
-            let mut live: HashMap<String, bool> = HashMap::new();
-            for (table, column, owner) in RENTERS {
-                let mut statement = connection.prepare(&format!(
-                    "SELECT t.{column}, e.purge_at IS NOT NULL AND e.purge_at <= ?1
-                       FROM {table} t JOIN entity e ON e.id = t.{owner}
-                      WHERE t.{column} IS NOT NULL"
-                ))?;
-                let rows = statement.query_map([&now], |row| {
-                    Ok((row.get::<_, String>(0)?, row.get::<_, bool>(1)?))
-                })?;
-                for row in rows {
-                    let (hash, lapsed) = row?;
-                    let entry = live.entry(hash).or_insert(false);
-                    *entry = *entry || !lapsed;
+        }
+        // A derivative's file is its original's: live while the original is.
+        let derived: Vec<(String, String)> = connection
+            .prepare("SELECT blob, out FROM derivative WHERE out IS NOT NULL")?
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        loop {
+            let mut changed = false;
+            for (original, out) in &derived {
+                // An original nothing rents is not lapsed (claimed, not yet named).
+                let original_live = live.get(original).copied().unwrap_or(true);
+                let entry = live.entry(out.clone()).or_insert(false);
+                if original_live && !*entry {
+                    *entry = true;
+                    changed = true;
                 }
             }
-            // A derivative's file is its original's: live while the original is.
-            let derived: Vec<(String, String)> = connection
-                .prepare("SELECT blob, out FROM derivative WHERE out IS NOT NULL")?
-                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
-                .collect::<rusqlite::Result<_>>()?;
-            loop {
-                let mut changed = false;
-                for (original, out) in &derived {
-                    // An original nothing rents is not lapsed (claimed, not yet named).
-                    let original_live = live.get(original).copied().unwrap_or(true);
-                    let entry = live.entry(out.clone()).or_insert(false);
-                    if original_live && !*entry {
-                        *entry = true;
-                        changed = true;
-                    }
-                }
-                if !changed {
-                    break;
-                }
+            if !changed {
+                break;
             }
-            Ok(live
-                .into_iter()
-                .filter(|(_, live)| !live)
-                .map(|(hash, _)| hash)
-                .collect::<HashSet<_>>())
-        })
-        .map_err(|error| {
-            invariant(format!(
-                "the vault would not say which blobs have lapsed: {error}"
-            ))
-        })
+        }
+        Ok(live
+            .into_iter()
+            .filter(|(_, live)| !live)
+            .map(|(hash, _)| hash)
+            .collect::<HashSet<_>>())
+    };
+    read().map_err(|error| {
+        invariant(format!(
+            "the vault would not say which blobs have lapsed: {error}"
+        ))
+    })
 }
 
 #[cfg(test)]
@@ -390,5 +416,66 @@ mod tests {
         assert_eq!(files[1].h, original);
         assert!(files[1].is_original() && files[1].video);
         assert_eq!(files[1].len, 9000);
+    }
+
+    #[test]
+    fn photo_taken_at_orders_capture_time_and_propagates_to_derivatives() {
+        let (_dir, vault) = founded();
+        let (moon_orig, moon_thumb, recent_orig) = (
+            hash(b"moon landing"),
+            hash(b"moon thumb"),
+            hash(b"recent photo"),
+        );
+        let id_moon = vault.ids().next();
+        let id_recent = vault.ids().next();
+        vault
+            .commit(|tx| {
+                let c = tx.connection();
+                crate::blob::stage(c, &moon_orig.to_hex(), 100)?;
+                tx.insert_entity(
+                    &id_moon,
+                    crate::model::Kind::Photo,
+                    "",
+                    "2026-11-24T12:00:00.000Z",
+                )?;
+                c.execute(
+                    "INSERT INTO photo (id, blob, media_type, form, taken_at)
+                     VALUES (?1, ?2, 'image/jpeg', 'photo', '1969-07-20T20:17:40.000Z')",
+                    rusqlite::params![id_moon, moon_orig.to_hex()],
+                )?;
+                crate::blob::write_derivative(
+                    c,
+                    "2026-11-24T12:00:01.000Z",
+                    &moon_orig.to_hex(),
+                    "thumb",
+                    Some((&moon_thumb.to_hex(), 30, "image/jpeg")),
+                    None,
+                )?;
+
+                crate::blob::stage(c, &recent_orig.to_hex(), 200)?;
+                tx.insert_entity(
+                    &id_recent,
+                    crate::model::Kind::Photo,
+                    "",
+                    "2026-11-23T12:00:00.000Z",
+                )?;
+                c.execute(
+                    "INSERT INTO photo (id, blob, media_type, form, taken_at)
+                     VALUES (?1, ?2, 'image/jpeg', 'photo', '2025-06-01T12:00:00.000Z')",
+                    rusqlite::params![id_recent, recent_orig.to_hex()],
+                )?;
+                Ok(())
+            })
+            .expect("commits");
+
+        let files = content_files(&vault).expect("reads");
+        assert_eq!(files.len(), 3);
+        assert_eq!(files[0].h, recent_orig);
+        assert_eq!(files[0].created_at, "2025-06-01T12:00:00.000Z");
+        // Moon photo and its derivative both carry 1969-07-20T20:17:40.000Z and sort after 2025.
+        assert_eq!(files[1].h, moon_orig);
+        assert_eq!(files[1].created_at, "1969-07-20T20:17:40.000Z");
+        assert_eq!(files[2].h, moon_thumb);
+        assert_eq!(files[2].created_at, "1969-07-20T20:17:40.000Z");
     }
 }
