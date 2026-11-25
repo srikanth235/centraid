@@ -410,3 +410,68 @@ fn a_kill_after_the_index_write_and_before_the_queue_is_cleared_writes_it_again_
     assert_equals_a_rebuild(&dir, "after the queue was paid twice");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_trash_takes_the_past_rows_and_a_restore_brings_them_back() {
+    let scratch = common::Scratch::founded("past-trash").expect("a vault");
+    let vault = &scratch.vault;
+    let registry = Registry::with_system_commands().expect("a registry");
+    let id = common::insert_note_with(vault, "Ledger", "emus").expect("a note");
+    edit(vault, &id, "kiwis");
+    assert_eq!(hits(vault, "search_past", "emus"), 1);
+    go(vault, &registry, "entity.trash", json!({"id": id}));
+    assert_eq!(
+        hits(vault, "search_past", "emus"),
+        0,
+        "a trashed item has no past rows"
+    );
+    assert_equals_a_rebuild(scratch.dir(), "with the note in the trash");
+    go(vault, &registry, "entity.restore", json!({"id": id}));
+    assert_eq!(hits(vault, "search_past", "emus"), 1);
+    assert_equals_a_rebuild(scratch.dir(), "with the note restored");
+}
+
+/// THE SUPERSET EXEMPTION, in one place: an edit that drops a word leaves it in `search_word` (a
+/// contentless index cannot name what an edit dropped); the correction read checks each candidate
+/// against `search_vocab` (`crates/search/src/sqlite.rs`, `best_of`: only a word some document
+/// holds is offered), and a rebuild rewrites the list exactly. Everything else in
+/// `assert_equals_a_rebuild` is compared exactly.
+#[test]
+fn a_word_an_edit_removed_has_no_posting_so_it_is_never_offered_and_a_rebuild_drops_it() {
+    let scratch = common::Scratch::founded("dropped-word").expect("a vault");
+    let vault = &scratch.vault;
+    let id = common::insert_note_with(vault, "Orchard", "quinces and medlars").expect("a note");
+    edit(vault, &id, "quinces");
+    let listed = common::index::words_file(&index_path(scratch.dir()));
+    assert!(
+        listed.contains("medlars"),
+        "the list is a superset after an edit"
+    );
+    let offered: i64 = vault
+        .read(|c| {
+            Ok(c.query_row(
+                "SELECT count(*) FROM search_vocab WHERE term = 'medlars'",
+                [],
+                |r| r.get(0),
+            )?)
+        })
+        .expect("counts");
+    assert_eq!(
+        offered, 0,
+        "no posting: the correction read never offers it"
+    );
+    vault.rebuild_index().expect("rebuilds");
+    // Rewritten exactly: the words of the live rows and of the earlier versions, and no others
+    // (`medlars` stays because the earlier version of the note said it, and is found there).
+    let listed = common::index::words_file(&index_path(scratch.dir()));
+    let held: std::collections::BTreeSet<String> = vault
+        .read(|c| {
+            let mut s = c.prepare(
+                "SELECT term FROM search_vocab UNION SELECT term FROM search_past_vocab",
+            )?;
+            Ok(s.query_map([], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?)
+        })
+        .expect("terms");
+    assert_eq!(listed, held);
+}

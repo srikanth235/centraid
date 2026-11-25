@@ -193,3 +193,35 @@ fn what_a_locker_item_said_before_is_found_in_the_past_and_a_trashed_item_has_no
     assert_no_ciphertext_anywhere(vault, scratch.dir());
     assert_equals_a_rebuild(scratch.dir(), "with the item restored");
 }
+
+/// THE CENSUS OF EARLIER TEXT: every column `EARLIER_COLUMNS` indexes is a TEXT column of a table
+/// the schema has, none holds ciphertext, and every kind with past rows has a table named there or
+/// is indexed by its title alone.
+#[test]
+fn every_earlier_text_column_is_a_plain_text_column_of_the_schema() {
+    let scratch = common::Scratch::founded("census").expect("a vault");
+    scratch
+        .vault
+        .read(|c| {
+            for (table, columns) in centraid_vault::index::EARLIER_COLUMNS {
+                for column in *columns {
+                    let kind: Option<String> = c
+                        .query_row(
+                            "SELECT type FROM pragma_table_info(?1) WHERE name = ?2",
+                            [table, column],
+                            |r| r.get(0),
+                        )
+                        .ok();
+                    assert_eq!(kind.as_deref(), Some("TEXT"), "{table}.{column}");
+                    assert!(
+                        !centraid_vault::custody::locker_key::LOCKER_ENCRYPTED_COLUMNS
+                            .iter()
+                            .any(|(t, _, cols)| t == table && cols.contains(column)),
+                        "{table}.{column} is ciphertext"
+                    );
+                }
+            }
+            Ok(())
+        })
+        .expect("reads");
+}
