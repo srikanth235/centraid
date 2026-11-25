@@ -307,10 +307,62 @@ fn copy_index_file(from: &std::path::Path, to: &std::path::Path) {
     }
 }
 
+/// An event, a task and a person's date, each with a reminder (raw rows for the kinds whose
+/// modules are not plugged in yet; `reminder.add` for the reminders), so the alert table has rows
+/// of every shape to rebuild.
+fn add_reminders(rig: &Rig) {
+    const AT: &str = "2030-01-01T09:00:00.000Z";
+    let (event, task, person, date) = (
+        rig.vault().ids().next(),
+        rig.vault().ids().next(),
+        rig.vault().ids().next(),
+        rig.vault().ids().next(),
+    );
+    rig.vault()
+        .commit(|tx| {
+            tx.connection().execute_batch(&format!(
+                "INSERT INTO entity (id, kind, title, parent_id, parent_kind, created_at, updated_at)
+                   VALUES ('{event}', 'event', 'Standup', 'calendar:default', 'calendar', '{AT}', '{AT}');
+                 INSERT INTO event (id, starts, timing) VALUES ('{event}', '2031-03-01T10:00', 'floating');
+                 INSERT INTO entity (id, kind, title, created_at, updated_at)
+                   VALUES ('{task}', 'task', 'Call', '{AT}', '{AT}');
+                 INSERT INTO task (id, due, due_timing) VALUES ('{task}', '2031-03-02T10:00', 'floating');
+                 INSERT INTO entity (id, kind, title, created_at, updated_at)
+                   VALUES ('{person}', 'person', 'Ada', '{AT}', '{AT}');
+                 INSERT INTO person (id) VALUES ('{person}');
+                 INSERT INTO person_date (id, person_id, kind, single, label, date)
+                   VALUES ('{date}', '{person}', 'birthday', 1, NULL, '1990-03-14');"
+            ))?;
+            Ok(())
+        })
+        .expect("the fixtures");
+    let registry = centraid_vault::commands::Registry::with_system_commands().expect("a registry");
+    for input in [
+        serde_json::json!({ "entity_id": event, "offset_min": 10 }),
+        serde_json::json!({ "entity_id": task, "offset_min": 30 }),
+        serde_json::json!({ "entity_id": person, "date_id": date, "offset_min": 1440 }),
+    ] {
+        let outcome = rig
+            .vault()
+            .execute(
+                &registry,
+                &centraid_vault::Principal::owner("phone"),
+                &centraid_vault::Command::new("reminder.add", input),
+            )
+            .expect("runs");
+        assert_eq!(
+            outcome.status,
+            centraid_vault::CommandStatus::Executed,
+            "{:?}",
+            outcome.reason
+        );
+    }
+}
+
 fn alerts_of(vault: &Vault) -> Vec<String> {
     vault
         .read(|c| {
-            let mut statement = c.prepare("SELECT * FROM ix.alert")?;
+            let mut statement = c.prepare("SELECT * FROM ix.alert ORDER BY reminder_id")?;
             let columns = statement.column_count();
             let rows = statement
                 .query_map([], |row| {
@@ -334,6 +386,7 @@ fn alerts_of(vault: &Vault) -> Vec<String> {
 #[test]
 fn a_restore_founds_the_index_file_again_and_search_equals_the_backed_up_vault() {
     let (rig, _) = rig_with_a_library("index-restore");
+    add_reminders(&rig);
     add_located_photo(&rig, "the harbour at dawn", 52.52, 13.405);
     rig.grow(3, "lighthouse");
     index_dump::drain(rig.vault());
@@ -345,6 +398,11 @@ fn a_restore_founds_the_index_file_again_and_search_equals_the_backed_up_vault()
         "the backed-up vault has words and a point to find"
     );
     let alerts_before = alerts_of(rig.vault());
+    assert_eq!(
+        alerts_before.len(),
+        3,
+        "an event's, a task's and a person date's alert: {alerts_before:?}"
+    );
     // The backup is taken with the index owed some rows (a commit's rest, not yet paid): the queue
     // is in `vault.db` and travels with it, and a restored vault pays it (and everything else).
     rig.vault()
@@ -376,9 +434,18 @@ fn a_restore_founds_the_index_file_again_and_search_equals_the_backed_up_vault()
     let restore =
         Restore::open(&rig.keys, &[&store as &dyn Store], &taken.root.name).expect("opens");
     let mut checked = false;
+    // The index is rebuilt under the clock the backed-up vault ran on: a repeating reminder's next
+    // alert is a function of "now", so a fair comparison holds the clock still.
+    let clock = std::sync::Arc::clone(&rig.scratch.clock);
     let (records, _, _) = restore
-        .restore_all(
+        .restore_all_with(
             &path,
+            &|| {
+                (
+                    Box::new(std::sync::Arc::clone(&clock)),
+                    Box::new(centraid_vault::clock::SeededIds::new("restore")),
+                )
+            },
             &mut |opened_path| {
                 let vault = Vault::open(opened_path).expect("opens through the ladder");
                 assert!(

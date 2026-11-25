@@ -533,12 +533,39 @@ impl<'a> Restore<'a> {
         opened: &mut dyn FnMut(&Path) -> Result<()>,
         sink: &mut dyn FnMut(&Entry, &[u8]) -> Result<()>,
     ) -> std::result::Result<(RecordsReport, MediaReport, MediaReport), RestoreError> {
+        self.restore_all_with(
+            path,
+            &|| {
+                (
+                    Box::new(crate::clock::SystemClock),
+                    Box::new(crate::clock::ClockIds::system()),
+                )
+            },
+            opened,
+            sink,
+        )
+    }
+
+    /// [`Self::restore_all`] with the clock and ids the index file is rebuilt under (a repeating
+    /// reminder's next alert depends on the clock): the shell passes the system's, a test its own.
+    ///
+    /// # Errors
+    /// As [`Self::restore_all`].
+    pub fn restore_all_with(
+        &self,
+        path: &Path,
+        clock: &dyn Fn() -> (Box<dyn crate::clock::Clock>, Box<dyn crate::clock::Ids>),
+        opened: &mut dyn FnMut(&Path) -> Result<()>,
+        sink: &mut dyn FnMut(&Entry, &[u8]) -> Result<()>,
+    ) -> std::result::Result<(RecordsReport, MediaReport, MediaReport), RestoreError> {
         let records = self.records(path)?;
         // THE INDEX FILE IS FOUNDED AND WRITTEN HERE, from the restored rows, before the vault is
         // handed over: search, the spatial index and the alerts a restored vault answers equal
         // the ones the backed-up vault did, with no wait for the idle pass.
         {
-            let vault = crate::file::Vault::open(path).map_err(PlaneError::from)?;
+            let (clock, ids) = clock();
+            let vault =
+                crate::file::Vault::open_with(path, clock, ids).map_err(PlaneError::from)?;
             vault.rebuild_index().map_err(PlaneError::from)?;
         }
         opened(path)?;
