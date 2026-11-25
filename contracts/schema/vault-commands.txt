@@ -35,15 +35,21 @@ flag.set
 follow.advance_cursor
 follow.calendar
 follow.contacts
+follow.health
+follow.health_readings
 follow.reminders
 follow.statement
 follow.stop
 follow.take_stated
+health.export_csv
 history.keep_version
 history.restore_version
 history.undo
 link.add
 link.remove
+measurement.clear
+measurement.log
+measurement.record
 note.asset_add
 note.asset_remove
 note.asset_reorder
@@ -70,6 +76,8 @@ person.remove_date
 person.reorder_contact_points
 person.save_contact_point
 person.set_avatar
+reading.add
+reading.edit
 reminder.add
 reminder.remove
 rule.add
@@ -97,3 +105,5 @@ txn.link_transfer
 txn.split
 txn.unlink_transfer
 vault.rename
+workout.edit
+workout.log

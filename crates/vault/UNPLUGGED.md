@@ -55,7 +55,6 @@ and make it pass. Tests of removed behaviour are deleted, not ported.
 | Module | Owner | Why it cannot compile or run yet |
 |---|---|---|
 | `document`, `document_portable`, `photo`, `photo_portable`, `place` | docs/photos lane | folder is the home; photo lat/lon, motion, no `blob UNIQUE`; no place from coordinates |
-| `workout`, `measurement`, `health_portable` | health lane | `workout`, `touch` and `reading` are kinds; `measurement.origin_id`; `reading` |
 | `thread` (chat) | chat lane | chats are ordinary trashable entities (L5); refusals/notices are lookups |
 | `vault_export` | export | reads every kind |
 | `locker` is **compiled, not registered** | locker lane | its SQL is the old Locker (memo, alias, address tables); its constants are read by `custody/` and `history/read.rs` |
@@ -79,7 +78,6 @@ and moves it back.
 - **people parts of `lane_follow_*`** (contacts' points, owner, doubt, return, tombstones) are ported to `tests/lane_follow_people.rs`; what stays in those files is the other lanes'
 - **K12 commitments and generated pages**: `commitments`, `stored_rules`, `ontology_page`, `ontology_widen`
 - **app lane: documents and photos**: `docs_photos`, `document_portable`, `photo_portable`, `store_health`, `lane_follow_stated` (a followed document), `lane_follow_gaps` (a followed file claims its bytes in its command), `lane_origin_cursor` (`photo.add`'s `roll_cursor` and `roll_device`; the engine's own cursor tests are `tests/origin_cursor.rs`), `arrival` was deleted (below)
-- **app lane: health (workout, measurement, reading)**: `health_portable`, `workout_whole`, `lane_follow_stated` (a followed workout's measures), `lane_follow_retire` (Health followed again), `lane_origin_cursor` (health days and a delta's deleted workouts; `follow::write_day_totals` is the one writer of `measurement.origin_id`)
 - **app lane: locker**: `locker_clock`, `locker_commands`, `locker_plaintext_gate`, `locker_wall`
 - **app lane: chat (thread)**: `chat`
 - **export (vault_export, every kind)**: `vault_export`, `unusual_input` (every app's export of unusual text; none of it the kernel)

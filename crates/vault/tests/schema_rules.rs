@@ -2019,7 +2019,11 @@ fn a_workout_is_of_a_workout_kind_in_a_span_and_a_place_that_is_one() {
         )
     };
     let with = |n: u64, columns: &str, values: &str| {
-        workout(n, &format!(", type_id{columns}"), &format!(", 'workout_kind:run'{values}"))
+        workout(
+            n,
+            &format!(", type_id{columns}"),
+            &format!(", 'workout_kind:run'{values}"),
+        )
     };
     // the kind of workout is a workout kind, not any entity; the row has one
     w.refuses(&workout(133, "", ""));
@@ -2027,15 +2031,26 @@ fn a_workout_is_of_a_workout_kind_in_a_span_and_a_place_that_is_one() {
     w.refuses(&workout(135, ", type_id", &format!(", '{note}'")));
     w.takes(&with(136, "", ""));
     // a span ends at or after its start; the figures are not negative or empty
-    w.refuses_with(&with(137, ", ends", ", '2026-03-01T08:00:00.000Z'"), "CHECK");
+    w.refuses_with(
+        &with(137, ", ends", ", '2026-03-01T08:00:00.000Z'"),
+        "CHECK",
+    );
     w.takes(&with(138, ", ends", &format!(", '{AT}'")));
     w.refuses(&with(139, ", distance_m", ", -1"));
     w.refuses(&with(140, ", moving_s", ", 0"));
     w.refuses(&with(141, ", heart_bpm", ", 0"));
-    w.takes(&with(142, ", distance_m, moving_s, heart_bpm, energy_kcal, climb_m", ", 5000, 1800, 140, 300, 10"));
+    w.takes(&with(
+        142,
+        ", distance_m, moving_s, heart_bpm, energy_kcal, climb_m",
+        ", 5000, 1800, 140, 300, 10",
+    ));
     // a place is a place
     w.refuses(&with(143, ", place_id", &format!(", '{note}'")));
-    w.takes(&with(144, ", place_id, notes", &format!(", '{place}', 'felt good'")));
+    w.takes(&with(
+        144,
+        ", place_id, notes",
+        &format!(", '{place}', 'felt good'"),
+    ));
     // a workout is `with` people and nothing else
     let wid = id(138);
     w.refuses(&format!(

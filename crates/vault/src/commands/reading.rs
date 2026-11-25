@@ -212,7 +212,10 @@ fn subject(ctx: &CommandCtx<'_, '_>) -> Result<String> {
 
 fn pre_add(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let connection = ctx.connection();
-    let second = ctx.input.get("value2").is_some_and(|value| !value.is_null());
+    let second = ctx
+        .input
+        .get("value2")
+        .is_some_and(|value| !value.is_null());
     if let Some(sentence) = metric_refusal(connection, ctx.required_str("metric")?, Some(second))? {
         return Ok(Some(sentence));
     }
@@ -411,7 +414,8 @@ fn row_of(row: &rusqlite::Row<'_>, units: Units) -> rusqlite::Result<ReadingRow>
 
 /// A person's readings of one metric between two instants (`[from, to)`), oldest first: a walk of
 /// `reading_by_person` that stops at the limit, the trash left out.
-pub const OVER_TIME_SQL: &str = "SELECT r.id, r.person_id, r.metric, r.at, r.value, r.value2, r.context, h.unit
+pub const OVER_TIME_SQL: &str =
+    "SELECT r.id, r.person_id, r.metric, r.at, r.value, r.value2, r.context, h.unit
        FROM reading r
        JOIN entity e ON e.id = r.id
        JOIN health_metric h ON h.code = r.metric
@@ -421,7 +425,8 @@ pub const OVER_TIME_SQL: &str = "SELECT r.id, r.person_id, r.metric, r.at, r.val
       LIMIT 500";
 
 /// The latest live reading of one metric for a person: the end of `reading_by_person`.
-pub const LATEST_SQL: &str = "SELECT r.id, r.person_id, r.metric, r.at, r.value, r.value2, r.context, h.unit
+pub const LATEST_SQL: &str =
+    "SELECT r.id, r.person_id, r.metric, r.at, r.value, r.value2, r.context, h.unit
        FROM reading r
        JOIN entity e ON e.id = r.id
        JOIN health_metric h ON h.code = r.metric

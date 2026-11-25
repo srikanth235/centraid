@@ -271,8 +271,16 @@ fn pre_export(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         None => Some(format!("`{metric}` is not a figure Health keeps.")),
         Some(found) if found != wanted => Some(format!(
             "`{metric}` is a {}, not a {}.",
-            if found == "reading" { "reading" } else { "daily total" },
-            if wanted == "reading" { "reading" } else { "daily total" },
+            if found == "reading" {
+                "reading"
+            } else {
+                "daily total"
+            },
+            if wanted == "reading" {
+                "reading"
+            } else {
+                "daily total"
+            },
         )),
         Some(_) => None,
     })

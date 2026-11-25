@@ -111,7 +111,11 @@ fn metric_row(connection: &rusqlite::Connection, code: &str) -> Result<Option<Me
         .query_row(
             "SELECT cadence FROM health_metric WHERE code = ?1",
             [code],
-            |row| Ok(Metric { cadence: row.get(0)? }),
+            |row| {
+                Ok(Metric {
+                    cadence: row.get(0)?,
+                })
+            },
         )
         .optional()?)
 }
@@ -183,6 +187,40 @@ fn origin_input<'a>(ctx: &'a CommandCtx<'_, '_>, key: &str) -> Option<&'a str> {
         .and_then(Json::as_str)
 }
 
+/// A sentence when the store the days come from is not a health store the member follows: one
+/// that is stopped is followed again by a pass, not by a batch of totals.
+fn origin_refusal(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let connection = ctx.connection();
+    let (Some(system), Some(reference)) = (origin_input(ctx, "system"), origin_input(ctx, "ref"))
+    else {
+        return Ok(None);
+    };
+    let health: bool = connection.query_row(
+        "SELECT EXISTS (SELECT 1 FROM source_shape WHERE system = ?1 AND entity_kind = 'reading')",
+        [system],
+        |row| row.get(0),
+    )?;
+    if !health {
+        return Ok(Some(format!(
+            "`{system}` is not a health store: it states no readings."
+        )));
+    }
+    let retired: Option<bool> = connection
+        .query_row(
+            "SELECT retired_at IS NOT NULL FROM origin WHERE system = ?1 AND ref = ?2",
+            [system, reference],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(match retired {
+        Some(true) => Some("That health store is not followed now.".to_owned()),
+        None if origin_input(ctx, "cursor").is_none() => {
+            Some(format!("There is no store `{reference}`: follow it first."))
+        }
+        _ => None,
+    })
+}
+
 fn pre_record(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let connection = ctx.connection();
     if origin_input(ctx, "cursor").is_some() && origin_input(ctx, "device_id").is_none() {
@@ -194,6 +232,9 @@ fn pre_record(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         return Ok(Some(
             "There is no such person to record days for.".to_owned(),
         ));
+    }
+    if let Some(sentence) = origin_refusal(ctx)? {
+        return Ok(Some(sentence));
     }
     let mut seen = BTreeSet::new();
     for (day, metric, _) in days_of(ctx) {
@@ -670,7 +711,10 @@ mod tests {
         assert_eq!(Units::Imperial.show("kg", 72.4, None), "159.6 lb");
         assert_eq!(Units::Metric.show("degC", 36.6, None), "36.6 °C");
         assert_eq!(Units::Imperial.show("degC", 36.6, None), "97.9 °F");
-        assert_eq!(Units::Imperial.show("mmHg", 120.0, Some(80.0)), "120/80 mmHg");
+        assert_eq!(
+            Units::Imperial.show("mmHg", 120.0, Some(80.0)),
+            "120/80 mmHg"
+        );
         assert_eq!(Units::Metric.show("count", 8000.0, None), "8000");
         assert_eq!(Units::Metric.distance(5_300.0), "5.3 km");
         assert_eq!(Units::Metric.distance(800.0), "800 m");

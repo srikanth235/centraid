@@ -21,9 +21,7 @@ use rusqlite::types::Value as Sql;
 use serde_json::{Map, Value as Json};
 
 use crate::commands::edge::{self, Extras};
-use crate::commands::entity::{
-    self, STALE_GUARD, lookup_live, require, with_rev,
-};
+use crate::commands::entity::{self, STALE_GUARD, lookup_live, require, with_rev};
 use crate::commands::follow::{Gone, Match, OriginRow, SystemMap, canonical_instants};
 use crate::commands::tag::ensure_concept;
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
@@ -176,9 +174,11 @@ fn whole_patch<'de, D: serde::Deserializer<'de>>(
 fn place_refusal(connection: &rusqlite::Connection, place: &str) -> Result<Option<String>> {
     Ok(match lookup_live(connection, place)? {
         Err(sentence) => Some(sentence),
-        Ok(found) if found.kind != Kind::Place => {
-            Some(format!("“{}” is a {}, not a place", found.title, found.kind.noun()))
-        }
+        Ok(found) if found.kind != Kind::Place => Some(format!(
+            "“{}” is a {}, not a place",
+            found.title,
+            found.kind.noun()
+        )),
         Ok(_) => None,
     })
 }
@@ -189,9 +189,7 @@ fn with_refusal(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         return Ok(None);
     };
     if people.len() > MAX_WITH {
-        return Ok(Some(format!(
-            "a workout is with at most {MAX_WITH} people"
-        )));
+        return Ok(Some(format!("a workout is with at most {MAX_WITH} people")));
     }
     for person in people.iter().filter_map(Json::as_str) {
         match lookup_live(ctx.connection(), person)? {
@@ -334,7 +332,10 @@ fn log(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             input.energy_kcal,
             input.heart_bpm,
             input.climb_m,
-            input.notes.as_deref().filter(|notes| !notes.trim().is_empty()),
+            input
+                .notes
+                .as_deref()
+                .filter(|notes| !notes.trim().is_empty()),
         ],
     )?;
     set_with(ctx, &id, &input.with)?;
@@ -434,7 +435,10 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     }
     let mut sets: Vec<(&str, Sql)> = Vec::new();
     if let Some(word) = input.workout_type.as_deref() {
-        sets.push(("type_id", Sql::Text(ensure_concept(ctx, Kind::WorkoutKind, word)?)));
+        sets.push((
+            "type_id",
+            Sql::Text(ensure_concept(ctx, Kind::WorkoutKind, word)?),
+        ));
     }
     for (column, value) in [("starts", input.starts.as_deref())] {
         if let Some(text) = value {
@@ -458,10 +462,12 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         sets.push(("ends", held));
     }
     let text = |value: &Option<Option<String>>| {
-        value.as_ref().map(|value| match value.as_deref().map(str::trim) {
-            Some(text) if !text.is_empty() => Sql::Text(text.to_owned()),
-            _ => Sql::Null,
-        })
+        value
+            .as_ref()
+            .map(|value| match value.as_deref().map(str::trim) {
+                Some(text) if !text.is_empty() => Sql::Text(text.to_owned()),
+                _ => Sql::Null,
+            })
     };
     if let Some(value) = text(&input.place_id) {
         sets.push(("place_id", value));
@@ -473,11 +479,26 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
         sets.push(("recorded_by", value));
     }
     for (column, value) in [
-        ("moving_s", input.moving_s.map(|v| v.map_or(Sql::Null, Sql::Integer))),
-        ("heart_bpm", input.heart_bpm.map(|v| v.map_or(Sql::Null, Sql::Integer))),
-        ("distance_m", input.distance_m.map(|v| v.map_or(Sql::Null, Sql::Real))),
-        ("energy_kcal", input.energy_kcal.map(|v| v.map_or(Sql::Null, Sql::Real))),
-        ("climb_m", input.climb_m.map(|v| v.map_or(Sql::Null, Sql::Real))),
+        (
+            "moving_s",
+            input.moving_s.map(|v| v.map_or(Sql::Null, Sql::Integer)),
+        ),
+        (
+            "heart_bpm",
+            input.heart_bpm.map(|v| v.map_or(Sql::Null, Sql::Integer)),
+        ),
+        (
+            "distance_m",
+            input.distance_m.map(|v| v.map_or(Sql::Null, Sql::Real)),
+        ),
+        (
+            "energy_kcal",
+            input.energy_kcal.map(|v| v.map_or(Sql::Null, Sql::Real)),
+        ),
+        (
+            "climb_m",
+            input.climb_m.map(|v| v.map_or(Sql::Null, Sql::Real)),
+        ),
     ] {
         if let Some(value) = value {
             sets.push((column, value));
@@ -525,8 +546,8 @@ pub const ON_DAY_SQL: &str = "SELECT w.id, e.title, k.title, w.starts, w.ends, w
             w.moving_s, w.distance_m, w.energy_kcal, w.heart_bpm, w.climb_m, w.recorded_by,
             w.notes
        FROM workout w
-       JOIN entity e ON e.id = w.id
-       JOIN entity k ON k.id = w.type_id
+       CROSS JOIN entity e ON e.id = w.id
+       CROSS JOIN entity k ON k.id = w.type_id
       WHERE w.starts >= ?1 AND w.starts < ?2 AND e.deleted_at IS NULL
       ORDER BY w.starts, w.id
       LIMIT 200";
@@ -585,6 +606,61 @@ pub fn on_day(
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
+}
+
+/// The touches that started in `[from, to)`, the other half of "what happened on this day": a
+/// walk of `touch_by_start`.
+pub const TOUCHES_ON_DAY_SQL: &str = "SELECT t.id, k.title, t.starts, t.ends, t.notes
+       FROM touch t
+       CROSS JOIN entity e ON e.id = t.id
+       CROSS JOIN entity k ON k.id = t.type_id
+      WHERE t.starts >= ?1 AND t.starts < ?2 AND e.deleted_at IS NULL
+      ORDER BY t.starts, t.id
+      LIMIT 200";
+
+/// One touch of a day: its id, its kind's title, its span and its words.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DayTouch {
+    pub id: String,
+    pub kind: String,
+    pub starts: String,
+    pub ends: Option<String>,
+    pub notes: Option<String>,
+}
+
+/// What happened between two instants: the workouts and the touches, each in the order they began.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WhatHappened {
+    pub workouts: Vec<DayWorkout>,
+    pub touches: Vec<DayTouch>,
+}
+
+/// The one read "what happened on this day" over both kinds: Calendar's day view calls it with the
+/// day's two instants.
+///
+/// # Errors
+///
+/// A read the file refuses.
+pub fn what_happened(
+    connection: &rusqlite::Connection,
+    from: &str,
+    to: &str,
+    units: crate::commands::measurement::Units,
+) -> Result<WhatHappened> {
+    let workouts = on_day(connection, from, to, units)?;
+    let touches = connection
+        .prepare_cached(TOUCHES_ON_DAY_SQL)?
+        .query_map([from, to], |row| {
+            Ok(DayTouch {
+                id: row.get(0)?,
+                kind: row.get(1)?,
+                starts: row.get(2)?,
+                ends: row.get(3)?,
+                notes: row.get(4)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(WhatHappened { workouts, touches })
 }
 
 /// The people a workout was done with, by the order they were joined.
