@@ -263,6 +263,13 @@ pub const OMITTED: &[(&str, &str, &str)] = &[
     ("container", "kind", "identity: the entity's kind"),
     // The file a photograph is does not change; an edit makes another photograph. Its motion clip
     // is named like any blob ([`BLOB_SLOTS`]).
+    // An album's cover shows bytes the album points at; it is not the album's own content, so a
+    // version keeps none of it and a purged photograph's bytes go with it.
+    (
+        "container",
+        "cover",
+        "a view of another item's bytes, not the album's content",
+    ),
     ("photo", "blob", "immutable: the file"),
     ("photo", "media_type", "immutable: the file"),
     ("photo", "form", "immutable: the file"),
@@ -329,12 +336,6 @@ pub const BLOB_SLOTS: &[BlobSlot] = &[
         table: "person",
         column: "avatar",
         slot: SlotName::One("avatar"),
-        media_type: None,
-    },
-    BlobSlot {
-        table: "container",
-        column: "cover",
-        slot: SlotName::One("cover"),
         media_type: None,
     },
     BlobSlot {

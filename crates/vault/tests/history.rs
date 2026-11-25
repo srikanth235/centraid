@@ -812,22 +812,33 @@ fn a_persons_avatar_is_a_slot() {
     );
 }
 
+/// A cover is a view of another item's bytes, not the album's content: no version names it (it is
+/// in `OMITTED`, not in `BLOB_SLOTS`), so the earlier cover's bytes are not kept by the album.
 #[test]
-fn a_containers_cover_is_a_slot() {
+fn a_containers_cover_is_a_view_and_no_version_keeps_it() {
     let w = World::new("slot-cover");
     let (one, two) = (w.blob("cover one"), w.blob("cover two"));
     let id = w.container("album", "Trip", None);
     w.sql(&format!(
         "UPDATE container SET cover = '{one}' WHERE id = '{id}'"
     ));
-    assert_slot_kept_and_restored(
-        &w,
-        &id,
-        "cover",
-        &one,
-        &two,
-        &format!("SELECT cover FROM container WHERE id = '{id}'"),
-        &format!("UPDATE container SET cover = '{two}' WHERE id = '{id}'"),
+    w.sql(&format!(
+        "UPDATE container SET cover = '{two}' WHERE id = '{id}'"
+    ));
+    w.sql(&format!(
+        "UPDATE entity SET title = 'Trip 2' WHERE id = '{id}'"
+    ));
+    assert!(centraid_vault::history::blob_slot("container", "cover").is_none());
+    assert!(
+        centraid_vault::history::OMITTED
+            .iter()
+            .any(|(table, column, _)| (*table, *column) == ("container", "cover"))
+    );
+    assert_eq!(
+        w.one::<i64>(&format!(
+            "SELECT COUNT(*) FROM revision_blob WHERE entity_id = '{id}'"
+        )),
+        0
     );
 }
 
