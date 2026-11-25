@@ -769,6 +769,10 @@ CREATE TABLE event (
   -- Minutes of travel the member allows before it starts.
   travel_min     INTEGER CHECK (travel_min IS NULL OR travel_min >= 0),
   description    TEXT,
+  -- 1 when the event runs past a week (any of the three timings parses in `date()`); a calendar read
+  -- looks for a long event on its own index and for a short one only a week back, so a day, a week or
+  -- a month is a bounded walk however long a trip or a semester runs. Plain date arithmetic, no clock.
+  long           INTEGER GENERATED ALWAYS AS (CASE WHEN ends IS NOT NULL AND date(ends) > date(starts, '+7 days') THEN 1 END) VIRTUAL,
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   UNIQUE (id, timing),
   CHECK ((timing = 'zoned') = (zone IS NOT NULL)),
@@ -780,6 +784,8 @@ CREATE TABLE event (
 CREATE INDEX event_by_start ON event(starts, id);
 -- Reader: the series, in start order: the expander's read of every repeating event.
 CREATE INDEX event_by_rule  ON event(starts, id) WHERE rule IS NOT NULL;
+-- Reader: the long events that may run into a window (a calendar read's second seek).
+CREATE INDEX event_long     ON event(starts, id) WHERE long = 1;
 -- Reader: "events at this place"; the child side of `place_id`.
 CREATE INDEX event_by_place ON event(place_id) WHERE place_id IS NOT NULL;
 
@@ -861,6 +867,8 @@ CREATE TABLE occurrence (
 ) STRICT;
 -- Reader: "this day's place"; the child side of `place_id`.
 CREATE INDEX occurrence_by_place ON occurrence(place_id) WHERE place_id IS NOT NULL;
+-- Reader: a day moved INTO a window from anywhere (a calendar read's seek for moved days).
+CREATE INDEX occurrence_by_moved ON occurrence(starts, series_id) WHERE starts IS NOT NULL;
 
 -- D1, D2, D3, D4, C1. A task's home (`entity.parent_id`) is a project, a section or its parent task.
 -- `due` is nullable, so its timing is too: `due_timing` is set exactly when `due` is and `zone`
@@ -899,6 +907,15 @@ CREATE INDEX task_by_due       ON task(status, due, id);
 CREATE INDEX task_by_done      ON task(status, done_at, id);
 CREATE INDEX task_by_scheduled ON task(scheduled_on, id) WHERE scheduled_on IS NOT NULL;
 CREATE INDEX task_by_series    ON task(series_id, due, id) WHERE series_id IS NOT NULL;
+-- D2: a reminder counts back from a due, so a task with none holds none: one is not made on a task
+-- without a due, and clearing the due takes the task's reminders with it. (Neither names a kind: the
+-- row is the task's own, found by its key.)
+CREATE TRIGGER reminder_needs_a_due BEFORE INSERT ON reminder
+  WHEN EXISTS (SELECT 1 FROM task WHERE id = new.entity_id AND due IS NULL)
+  BEGIN SELECT RAISE(ABORT, 'a reminder counts back from a due date: this task has none'); END;
+CREATE TRIGGER task_without_a_due_has_no_reminders AFTER UPDATE OF due ON task
+  WHEN new.due IS NULL
+  BEGIN DELETE FROM reminder WHERE entity_id = new.id; END;
 
 -- L1: a workout is its own kind (no longer an `activity` with a `type_kind`): its figures and its
 -- notes. L6: a followed workout can be edited field by field (the follower's three-way merge keeps
@@ -1415,7 +1432,7 @@ CREATE TABLE locker_key (
 -- ---------------------------------------------------------------------------------------------
 
 INSERT INTO entity_kind (code, linkable, may_be_top, may_be_named, may_be_unnamed) VALUES
-  ('person',1,1,1,0), ('place',1,1,1,0), ('event',1,0,1,1), ('task',1,1,1,1), ('workout',1,1,1,1),
+  ('person',1,1,1,0), ('place',1,1,1,0), ('event',1,0,1,1), ('task',1,1,1,0), ('workout',1,1,1,1),
   ('touch',1,1,1,1), ('reading',0,1,0,1), ('note',1,1,1,0), ('document',1,1,1,0), ('photo',1,1,1,1),
   ('account',1,1,1,1), ('txn',1,1,1,1), ('thread',0,1,1,1), ('locker_item',1,1,1,1),
   ('tag',0,1,1,1), ('category',0,1,1,1), ('workout_kind',0,1,1,1), ('touch_kind',0,1,1,1), ('relation',0,1,1,1),

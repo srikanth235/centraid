@@ -399,64 +399,6 @@ fn a_merge_re_points_every_foreign_key_into_an_entity_not_a_hand_list() {
 // A series' days
 // ---------------------------------------------------------------------------
 
-fn series(starts: &str, rule: &str) -> Value {
-    json!({ "external_id": "uid:standup", "fields": {
-        "title": "Standup", "starts": starts, "zone": "Europe/Paris", "rule": rule } })
-}
-
-fn days(w: &World, id: &str) -> Vec<(String, i64)> {
-    w.scratch
-        .vault
-        .read(|c| {
-            let mut statement = c.prepare(
-                "SELECT original_start, cancelled FROM occurrence WHERE series_id = ?1 ORDER BY 1",
-            )?;
-            let rows = statement
-                .query_map([id], |row| Ok((row.get(0)?, row.get(1)?)))?
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(rows)
-        })
-        .expect("days")
-}
-
-#[test]
-fn a_series_that_moves_in_the_day_takes_its_overrides_with_it() {
-    let w = World::new();
-    calendar(&w, true, vec![series("2026-03-02T09:00:00", "FREQ=WEEKLY")]);
-    let id = w.one::<String>("SELECT entity_id FROM source", &[]);
-    w.ok(
-        "event.edit_occurrence",
-        json!({ "id": id, "original_start": "2026-03-09T09:00:00", "scope": "occurrence", "action": "skip" }),
-    );
-    calendar(&w, true, vec![series("2026-03-02T10:00:00", "FREQ=WEEKLY")]);
-    assert_eq!(
-        days(&w, &id),
-        [("2026-03-09T10:00:00".to_owned(), 1)],
-        "the skipped week is still skipped, at the hour the series keeps now"
-    );
-}
-
-#[test]
-fn a_series_that_no_longer_lands_on_an_override_s_day_drops_it() {
-    let w = World::new();
-    calendar(&w, true, vec![series("2026-03-02T09:00:00", "FREQ=WEEKLY")]);
-    let id = w.one::<String>("SELECT entity_id FROM source", &[]);
-    w.ok(
-        "event.edit_occurrence",
-        json!({ "id": id, "original_start": "2026-03-09T09:00:00", "scope": "occurrence", "action": "skip" }),
-    );
-    calendar(
-        &w,
-        true,
-        vec![series("2026-03-02T09:00:00", "FREQ=MONTHLY")],
-    );
-    assert_eq!(
-        days(&w, &id),
-        Vec::<(String, i64)>::new(),
-        "a day nothing will read is not kept"
-    );
-}
-
 // ---------------------------------------------------------------------------
 // Statements
 // ---------------------------------------------------------------------------

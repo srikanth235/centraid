@@ -14,11 +14,20 @@
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Map, Value as Json};
 
-use super::merge::same;
-use super::{Child, Gone, Maps, OriginRow, SystemMap};
-use crate::commands::CommandCtx;
-use crate::error::{Result, VaultError};
+use crate::commands::{CommandCtx, event};
+use crate::error::Result;
 use crate::model::Kind;
+
+use super::merge::same;
+use super::{Child, Gone, Maps, Match, OriginRow, SystemMap};
+use crate::error::VaultError;
+
+fn no_defaults(
+    _: &rusqlite::Connection,
+    _: &OriginRow,
+) -> Result<Vec<(&'static str, rusqlite::types::Value)>> {
+    Ok(Vec::new())
+}
 
 /// The name a system gives a record: `stated.title`, kept in a column of its own so a read of it
 /// parses no JSON.
@@ -160,14 +169,81 @@ pub const STATEMENT: SystemMap = SystemMap {
     named: crate::commands::rule::name_new_line,
 };
 
-/// The maps the vault follows, one per app lane that has plugged its own in: the phone's contacts
-/// (People), a picked folder's files and the camera roll (Docs and Photos) and a bank's statement
-/// (Money).
+/// The maps the vault follows. A lane's map is one row; the pass command, its schema and its
+/// preconditions are built from it.
 pub const SYSTEMS: &[SystemMap] = &[
+    // The phone's calendars: an event in the calendar of the vault that stands for the phone's
+    // calendar (the engine founds it, named and coloured as the phone has it; the member's own
+    // rename stands). The fields are the event's own columns, `location` as the words the phone
+    // wrote (a followed record never founds a place, D5), and three fields that are rows of their
+    // own: the series' one-day overrides, the alerts, and the guests (stated as `attendees`).
+    // `starts` and `reminders` are the keys `alerts.rs` reads to let the phone alert for a record
+    // it still states (one alert per real thing).
+    SystemMap {
+        system: "calendar",
+        command: "follow.calendar",
+        kind: Kind::Event,
+        claims: None,
+        fields: &[
+            "description",
+            "url",
+            "location",
+            "starts",
+            "ends",
+            "timing",
+            "zone",
+            "rule",
+            "busy",
+        ],
+        fixed: &[],
+        children: &[
+            Child {
+                name: "overrides",
+                read: event::overrides_read,
+                canon: event::overrides_canon,
+                merge: event::overrides_merge,
+                // Judged whole: a day is not an item the screens name one at a time.
+                items: None,
+                take: event::overrides_take,
+                stamp: None,
+            },
+            // The alerts, minutes before, judged whole (`event::shape` states them as an array).
+            Child {
+                name: "reminders",
+                read: event::reminders_read,
+                canon: event::reminders_canon,
+                merge: event::reminders_merge,
+                items: None,
+                take: event::reminders_take,
+                stamp: None,
+            },
+            // The guests, one by one, by address: a guest who is in People is resolved to the
+            // person by their address; one who is not is a guest all the same.
+            Child {
+                name: "attendees",
+                read: event::guests_read,
+                canon: event::guests_canon,
+                merge: event::guests_merge,
+                items: Some(event::guests_items),
+                take: event::guests_take,
+                stamp: None,
+            },
+        ],
+        match_on: &[Match::Title, Match::Column("starts")],
+        gone: Gone::Trash,
+        window: None,
+        defaults: no_defaults,
+        founds: Some(event::follow_home),
+        shape: event::shape,
+        settle: event::settle,
+        named: nothing_to_settle,
+    },
+    crate::commands::task::PHONE_REMINDERS,
     crate::commands::person::CONTACTS,
+    STATEMENT,
+    // The phone's picked folders and its camera roll (Docs and Photos).
     crate::commands::document::FILES,
     crate::commands::photo::ROLL,
-    STATEMENT,
 ];
 
 /// The product's maps, [`SYSTEMS`], as the type the follow commands are built from.

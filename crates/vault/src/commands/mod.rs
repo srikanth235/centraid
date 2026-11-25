@@ -52,9 +52,12 @@ pub mod document;
 pub mod document_portable;
 pub mod edge;
 pub mod entity;
+pub mod event;
+pub mod event_portable;
 pub mod flag;
 pub mod follow;
 pub mod history;
+pub mod ical;
 pub mod locker;
 pub mod money;
 pub mod note;
@@ -70,6 +73,8 @@ pub mod reminder;
 pub mod rule;
 pub mod sealed;
 pub mod tag;
+pub mod task;
+pub mod task_portable;
 pub mod touch;
 pub mod txn;
 pub mod txn_portable;
@@ -388,6 +393,8 @@ impl Registry {
             document_portable::definitions,
             edge::definitions,
             entity::definitions,
+            event::definitions,
+            event_portable::definitions,
             flag::definitions,
             follow::definitions,
             history::definitions,
@@ -401,6 +408,8 @@ impl Registry {
             reminder::definitions,
             rule::definitions,
             tag::definitions,
+            task::definitions,
+            task_portable::definitions,
             touch::definitions,
             txn::definitions,
             txn_portable::definitions,
