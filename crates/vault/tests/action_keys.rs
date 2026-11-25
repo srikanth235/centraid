@@ -54,10 +54,10 @@ fn a_founded_vault_has_no_journal_and_holds_action_keys_instead() {
     assert_eq!(
         count(
             &scratch.vault,
-            "SELECT count(*) FROM sqlite_schema WHERE name LIKE '%journal%'"
+            "SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name LIKE '%journal%'"
         ),
         0,
-        "nothing in the founded file is the journal"
+        "no table of the founded file is the journal (a note's `journal_on` is a date)"
     );
     assert!(
         columns(&scratch.vault, "action_key").len() == 3,

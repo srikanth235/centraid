@@ -1,35 +1,43 @@
-//! The verbs every entity shares: retitle, trash, restore, purge, empty the trash.
+//! The verbs every entity shares: retitle, move, trash, restore, purge, empty the trash.
 //!
 //! One implementation for every kind that allows it, refusing the kinds it does
 //! not serve with a sentence. A kind's own create and edit commands live with
-//! its app; these four lines are the same for all of them
+//! its app; these lines are the same for all of them
 //! ([#1135](https://github.com/srikanth235/centraid/issues/1135)).
 //!
-//! ## What happens to what points at an entity
+//! ## One home
 //!
-//! The engine refuses a delete that would leave a pointer dangling (no foreign
-//! key to another entity cascades or nulls itself, with two named exceptions),
-//! so the command that removes the target decides, per kind, in one place:
-//! [`members`] and [`DETACH`].
+//! Where a row sits is `entity.parent_id` and the kind of what holds it `entity.parent_kind`, for
+//! every kind (a note's notebook, a document's folder, an event's calendar, a task's project,
+//! section or parent task, a section's project, a project's area, a concept's parent). Which kind
+//! may sit in which is the `home_shape` table, whether a kind may sit at the top is
+//! `entity_kind.may_be_top`, and a home is never a loop (the `entity_home_is_acyclic` trigger).
+//! [`move_home`] is the one path that changes it; [`home_refusal`] says in a sentence what the
+//! database would refuse.
 //!
-//! - **A holder takes its members to the trash with it** and brings them back
-//!   with it: a notebook's notes, a folder's documents, a project's tasks and
-//!   sections, an account's transactions. They are stamped with the holder's own
-//!   `deleted_at`, so a restore knows which members went *with* it and which
-//!   were already in the trash.
-//! - **A purge purges what went with the holder** and moves everything else to
-//!   the top level (`DETACH`): a note the member restored on its own is not lost
-//!   with its notebook's purge. What cannot live without the holder (a section
-//!   without its project, a transaction without its account) is purged.
-//! - **A calendar is a holder too**: its events go to the trash with it and come back with it,
-//!   and the vault's own calendar (the one every vault is founded with) is never trashed.
-//! - **A person is a holder of what is written about them alone**: a note, a
-//!   touch or a yearly date about that person and no one else goes to the trash
-//!   with them and comes back with them. A task about them stays.
+//! ## What a trash takes, and what a purge does with what points at an entity
+//!
+//! - **A holder takes what it holds to the trash with it** and brings it back with it: a
+//!   notebook's notes, a folder's documents, a project's sections and tasks, a calendar's events,
+//!   a task's subtasks, an account's lines, and what was written about one person alone. A row
+//!   the trash took has `trashed_by` naming the holder that took it (its direct holder, so nested
+//!   holders name each other); a row trashed on its own has none. **No timestamp is compared**:
+//!   restoring a holder brings back the rows that name it, and the rows that name those, and
+//!   nothing else, so a row trashed on its own earlier stays in the trash.
+//! - **A row whose holder is in the trash is not restored on its own** ([`pre_restore`]): it is
+//!   inside something that is gone, and the sentence says which holder to restore first. Nothing
+//!   is lost and nothing sits visible in a trashed home.
+//! - **A purge removes the contents before the holder**: the rows naming it in `trashed_by`, and
+//!   theirs in turn. What else pointed at it is [`PURGE_RULES`]: a held row that may sit at the top
+//!   moves there, one that needs a home makes the purge refuse with a sentence; a place, an origin
+//!   or a copy it was made from is let go; a line or a reading cannot outlive its account or
+//!   person.
+//! - **A calendar is a holder too**, and the vault's own calendar (the one every vault is
+//!   founded with) is never trashed.
 //! - **A row past its `purge_at` is emptied by the launch pass**
 //!   (`Vault::empty_overdue_trash`) and restores until then.
-//! - **A purge refuses with a sentence** when something would lose its meaning:
-//!   a calendar with events, an activity kind in use, the self person, a flag.
+//! - **`entity.n` is never reused** (the table is `AUTOINCREMENT`): a purged item's row number
+//!   is not given to a new one, so a search index never shows a purged item's words under it.
 
 use rusqlite::{Connection, OptionalExtension};
 
@@ -217,175 +225,282 @@ fn ids(connection: &Connection, sql: &str, id: &str) -> Result<Vec<String>> {
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
-/// Every member a holder keeps, in the trash or not: what goes to the trash
-/// with it and comes back with it.
-fn members(connection: &Connection, holder: &Found) -> Result<Vec<String>> {
-    let sql = match holder.kind {
-        Kind::Notebook => {
-            "SELECT id FROM note WHERE notebook_id = ?1
-             UNION ALL SELECT id FROM container WHERE parent_id = ?1"
-        }
-        Kind::Folder => {
-            "SELECT id FROM document WHERE folder_id = ?1
-             UNION ALL SELECT id FROM container WHERE parent_id = ?1"
-        }
-        Kind::Project => {
-            "SELECT id FROM container WHERE parent_id = ?1 AND kind = 'section'
-             UNION ALL SELECT id FROM task WHERE project_id = ?1"
-        }
-        Kind::Account => "SELECT id FROM txn WHERE account_id = ?1",
-        // A calendar holds its events (a repeating one is one row): they go to the trash with it
-        // and, stamped with its own `deleted_at`, only those come back with it.
-        Kind::Calendar => "SELECT id FROM event WHERE calendar_id = ?1",
-        // What was written or logged about one person and no one else: their
-        // notes and journal words, the touches that were with them alone, and
-        // their yearly dates. A task about them is the member's own and stays,
-        // and so is a document, a line, a photograph or a Locker item joined to
-        // them: **an allow-list**, so a kind the model learns to join to a
-        // person is kept until someone decides otherwise. `depicts` never
-        // cascades.
-        Kind::Person => {
+/// What a holder holds that is still live: the rows in its home, then what a kind holds without a
+/// home column. These follow it to the trash.
+fn held(connection: &Connection, holder: &Found) -> Result<Vec<String>> {
+    // What sits in the holder's home, then what a kind holds without a home column.
+    let mut held = ids(
+        connection,
+        "SELECT id FROM entity WHERE parent_id = ?1 AND deleted_at IS NULL ORDER BY n",
+        &holder.id,
+    )?;
+    let more = match holder.kind {
+        // An account's lines.
+        Kind::Account => Some(
+            "SELECT t.id FROM txn t JOIN entity e ON e.id = t.id
+              WHERE t.account_id = ?1 AND e.deleted_at IS NULL",
+        ),
+        // What was written or logged about one person and no one else. A task about them is the
+        // member's own and stays, and so is a document, a line, a photograph or a Locker item
+        // joined to them: **an allow-list**, so a kind the model learns to join to a person is
+        // kept until someone decides otherwise. `depicts` never cascades.
+        Kind::Person => Some(
             "SELECT e.from_id FROM edge e JOIN entity f ON f.id = e.from_id
               WHERE e.to_id = ?1 AND e.rel IN ('about', 'with')
-                AND f.kind IN ('note', 'event', 'touch', 'workout')
+                AND f.kind IN ('note', 'touch', 'workout') AND f.deleted_at IS NULL
                 AND NOT EXISTS (SELECT 1 FROM edge o WHERE o.from_id = e.from_id
-                                   AND o.rel IN ('about', 'with') AND o.to_id <> ?1)"
-        }
-        // A subtask follows its parent.
-        Kind::Task => "SELECT id FROM entity WHERE parent_id = ?1",
-        // The words kept of a touch or a workout belong to it.
-        Kind::Workout | Kind::Touch => {
-            "SELECT from_id FROM edge WHERE to_id = ?1 AND rel = 'about'"
-        }
-        _ => return Ok(Vec::new()),
+                                   AND o.rel IN ('about', 'with') AND o.to_id <> ?1)",
+        ),
+        _ => None,
     };
-    ids(connection, sql, &holder.id)
+    if let Some(sql) = more {
+        for id in ids(connection, sql, &holder.id)? {
+            if !held.contains(&id) {
+                held.push(id);
+            }
+        }
+    }
+    Ok(held)
 }
 
-/// What a purge moves to the top level, because it may outlive its holder:
-/// `(holder, referrer's table, the SET clause, the column that points at it)`.
-///
-/// What cannot outlive the holder is not here: [`purge_one`] purges it.
-const DETACH: &[(Kind, &str, &str, &str)] = &[
-    (Kind::Notebook, "note", "notebook_id = NULL", "notebook_id"),
-    (Kind::Notebook, "container", "parent_id = NULL", "parent_id"),
-    (Kind::Folder, "document", "folder_id = NULL", "folder_id"),
-    (Kind::Folder, "container", "parent_id = NULL", "parent_id"),
-    (Kind::Area, "container", "parent_id = NULL", "parent_id"),
-    (
-        Kind::Project,
-        "task",
-        "project_id = NULL, section_id = NULL",
-        "project_id",
-    ),
-    (Kind::Section, "task", "section_id = NULL", "section_id"),
-    (Kind::Category, "txn", "category_id = NULL", "category_id"),
-    (Kind::Category, "concept", "parent_id = NULL", "parent_id"),
-    (Kind::Place, "event", "place_id = NULL", "place_id"),
-    (Kind::Place, "occurrence", "place_id = NULL", "place_id"),
-    (Kind::Place, "activity", "place_id = NULL", "place_id"),
-    (Kind::Place, "photo", "place_id = NULL", "place_id"),
-    (Kind::Task, "task", "parent_id = NULL", "parent_id"),
-    (Kind::Task, "task", "series_id = NULL", "series_id"),
-    (Kind::Photo, "photo", "edited_from = NULL", "edited_from"),
-];
+// ---------------------------------------------------------------------------
+// One home (A19)
+// ---------------------------------------------------------------------------
 
-/// What a purge does with a pointer the engine would refuse to delete out from
-/// under.
+/// A sentence when a row of `kind` cannot sit in `parent` (`None`: at the top level): the home is
+/// not there or is in the trash, its kind is not one the `home_shape` table allows, the row would
+/// end up inside itself, or the kind needs a home and none was named. The database refuses each
+/// of these rows too (`entity`'s keys and the `entity_home_is_acyclic` trigger); this says it in
+/// a sentence first. `id` is the row being moved, and none for a row about to be made.
+pub(crate) fn home_refusal(
+    connection: &Connection,
+    kind: Kind,
+    id: Option<&str>,
+    parent: Option<&str>,
+) -> Result<Option<String>> {
+    let Some(parent_id) = parent else {
+        let may_be_top: bool = connection.query_row(
+            "SELECT may_be_top FROM entity_kind WHERE code = ?1",
+            [kind.as_str()],
+            |row| row.get(0),
+        )?;
+        if may_be_top {
+            return Ok(None);
+        }
+        let homes = ids(
+            connection,
+            "SELECT home_kind FROM home_shape WHERE kind = ?1 ORDER BY home_kind",
+            kind.as_str(),
+        )?;
+        let homes: Vec<String> = homes
+            .iter()
+            .map(|home| Kind::parse(home).map_or_else(|| home.clone(), Kind::noun))
+            .collect();
+        return Ok(Some(format!(
+            "a {} belongs in a {}",
+            kind.noun(),
+            homes.join(" or a ")
+        )));
+    };
+    let parent = match lookup_live(connection, parent_id)? {
+        Ok(parent) => parent,
+        Err(sentence) => return Ok(Some(sentence)),
+    };
+    let allowed: bool = connection.query_row(
+        "SELECT EXISTS (SELECT 1 FROM home_shape WHERE kind = ?1 AND home_kind = ?2)",
+        [kind.as_str(), parent.kind.as_str()],
+        |row| row.get(0),
+    )?;
+    if !allowed {
+        return Ok(Some(format!(
+            "a {} does not go inside a {}",
+            kind.noun(),
+            parent.kind.noun()
+        )));
+    }
+    if let Some(id) = id {
+        // Climb from the new home: finding the row itself means it would end up inside itself.
+        let inside: bool = connection.query_row(
+            "WITH RECURSIVE up(id) AS (
+               SELECT ?1 UNION SELECT e.parent_id FROM entity e JOIN up ON e.id = up.id
+                WHERE e.parent_id IS NOT NULL)
+             SELECT EXISTS (SELECT 1 FROM up WHERE id = ?2)",
+            [parent_id, id],
+            |row| row.get(0),
+        )?;
+        if inside {
+            return Ok(Some(format!("“{}” cannot go inside itself", parent.title)));
+        }
+    }
+    Ok(None)
+}
+
+/// THE ONE PATH THAT MOVES A ROW: a note to another notebook, a document to a folder, a task to a
+/// section, a container or a concept to another holder, anything to the top level. Whether it may
+/// is [`home_refusal`]'s (the database says the same). Returns whether the home changed; a move to
+/// where the row already is writes nothing.
+pub(crate) fn move_home(ctx: &CommandCtx<'_, '_>, id: &str, parent: Option<&str>) -> Result<bool> {
+    let changed = ctx.connection().execute(
+        "UPDATE entity
+            SET parent_id = ?2, parent_kind = (SELECT kind FROM entity WHERE id = ?2)
+          WHERE id = ?1 AND parent_id IS NOT ?2",
+        rusqlite::params![id, parent],
+    )?;
+    if changed > 0 {
+        ctx.touch(id)?;
+    }
+    Ok(changed > 0)
+}
+
+fn pre_move(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let found = match lookup_live(ctx.connection(), ctx.required_str("id")?)? {
+        Ok(found) => found,
+        Err(sentence) => return Ok(Some(sentence)),
+    };
+    if is_self(ctx.connection(), &found.id)? {
+        return Ok(Some(
+            "this is you; a vault cannot do without its owner".to_owned(),
+        ));
+    }
+    home_refusal(
+        ctx.connection(),
+        found.kind,
+        Some(&found.id),
+        ctx.optional_str("parent"),
+    )
+}
+
+#[derive(serde::Deserialize)]
+struct MoveInput {
+    id: String,
+    parent: Option<String>,
+}
+
+/// `entity.move`: any row to another home, or to the top level.
+fn move_entity(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let input: MoveInput = ctx.parse_input()?;
+    let moved = move_home(ctx, &input.id, input.parent.as_deref())?;
+    Ok(serde_json::json!({ "id": input.id, "moved": moved }))
+}
+
+// ---------------------------------------------------------------------------
+// What a purge does with what points at an entity
+// ---------------------------------------------------------------------------
+
+/// What a purge does with a pointer the engine would refuse to delete out from under.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PurgeRule {
-    /// The referrer moves to the top level ([`DETACH`]), or goes with the
-    /// holder when it went to the trash with it or cannot outlive it.
+    /// The referrer lets go of its target (the pointer becomes NULL): a photograph's place, the
+    /// photograph it was edited from.
     Detach,
-    /// The referrer is purged with its target: it cannot outlive it.
+    /// The referrer is purged with its target: it cannot outlive it (an account's line, a
+    /// person's reading).
     Purge,
-    /// The purge refuses with a sentence while the referrer exists
-    /// ([`purge_refusal`]).
+    /// The purge refuses with a sentence while the referrer exists ([`purge_refusal`]).
     Refuse,
     /// The origin's follow ends with its target.
     Forget,
+    /// What the target held. What the trash took with it is gone first (`trashed_by`); a held
+    /// row that may sit at the top moves there; one that needs a home makes the purge refuse.
+    Home,
 }
 
-/// Every foreign key into an entity (or a kind's table) that deletes nothing
-/// itself (`ON DELETE NO ACTION`), and what a purge does about it:
-/// `(table, the key's columns as PRAGMA foreign_key_list states them, rule)`.
+/// Every foreign key into an entity (or a kind's table) that deletes nothing itself
+/// (`ON DELETE NO ACTION`), and what a purge does about it: `(table, the key's columns as
+/// PRAGMA foreign_key_list states them, rule)`.
 ///
-/// A commitment test (`commitments.rs`) derives the same list from the founded
-/// file and requires it equal, so a pointer added to the schema without a
-/// purge rule fails there and not in a member's vault.
+/// `tests/purge_rules.rs` derives the same list from the founded file and requires it equal, so a
+/// pointer added to the schema without a purge rule fails there and not in a member's vault.
 pub const PURGE_RULES: &[(&str, &str, PurgeRule)] = &[
-    ("activity", "type_id,type_kind", PurgeRule::Refuse),
-    ("activity", "place_id", PurgeRule::Detach),
-    ("concept", "parent_id", PurgeRule::Detach),
-    ("container", "parent_id", PurgeRule::Detach),
-    ("document", "folder_id,folder_kind", PurgeRule::Detach),
-    ("event", "calendar_id,calendar_kind", PurgeRule::Refuse),
+    ("entity", "parent_id,parent_kind", PurgeRule::Home),
     ("event", "place_id", PurgeRule::Detach),
-    ("note", "notebook_id,notebook_kind", PurgeRule::Detach),
     ("occurrence", "place_id", PurgeRule::Detach),
     ("origin", "fills,fills_kind", PurgeRule::Forget),
-    ("photo", "place_id", PurgeRule::Detach),
     ("photo", "edited_from", PurgeRule::Detach),
-    ("task", "section_id,section_kind", PurgeRule::Detach),
-    ("task", "project_id,project_kind", PurgeRule::Detach),
-    ("task", "parent_id", PurgeRule::Detach),
-    ("task", "series_id", PurgeRule::Detach),
-    ("txn", "category_id,category_kind", PurgeRule::Detach),
-    ("txn", "account_id,currency", PurgeRule::Purge),
+    ("photo", "place_id", PurgeRule::Detach),
+    ("reading", "person_id", PurgeRule::Purge),
+    ("touch", "place_id", PurgeRule::Detach),
+    ("touch", "type_id,type_kind", PurgeRule::Refuse),
+    ("txn", "account_id", PurgeRule::Purge),
+    ("txn_split", "category_id,category_kind", PurgeRule::Refuse),
     ("vault", "self_id,self_kind", PurgeRule::Refuse),
+    ("workout", "place_id", PurgeRule::Detach),
+    ("workout", "type_id,type_kind", PurgeRule::Refuse),
 ];
 
-/// A sentence when this kind of entity cannot be purged as it stands.
-fn purge_refusal(connection: &Connection, found: &Found) -> Result<Option<String>> {
+/// A sentence when this is one of the two rows a vault cannot do without: its owner, and the
+/// calendar it is founded with. Neither is trashed, purged or merged away.
+fn protected(connection: &Connection, found: &Found) -> Result<Option<String>> {
     if is_self(connection, &found.id)? {
         return Ok(Some(
             "this is you; a vault cannot do without its owner".to_owned(),
         ));
     }
-    let refusal = match found.kind {
-        Kind::Calendar => {
-            if found.id == DEFAULT_CALENDAR_ID {
-                return Ok(Some(
-                    "this is the calendar every vault is founded with; it cannot be removed"
-                        .to_owned(),
-                ));
+    if found.id == DEFAULT_CALENDAR_ID {
+        return Ok(Some(
+            "this is the calendar every vault is founded with; it cannot be removed".to_owned(),
+        ));
+    }
+    Ok(None)
+}
+
+/// A sentence when this kind of entity cannot be purged as it stands.
+fn purge_refusal(connection: &Connection, found: &Found) -> Result<Option<String>> {
+    if let Some(sentence) = protected(connection, found)? {
+        return Ok(Some(sentence));
+    }
+    for (table, columns, rule) in PURGE_RULES {
+        let first = columns.split(',').next().unwrap_or_default();
+        match (rule, *table) {
+            (PurgeRule::Home, _) => {
+                // What the trash took with the holder goes with it; a row trashed on its own that
+                // needs a home cannot be left without one.
+                let stuck: Option<(String, i64)> = connection
+                    .query_row(
+                        "SELECT e.kind, COUNT(*) FROM entity e JOIN entity_kind k ON k.code = e.kind
+                          WHERE e.parent_id = ?1 AND k.may_be_top = 0 AND e.trashed_by IS NOT ?1
+                          GROUP BY e.kind ORDER BY e.kind LIMIT 1",
+                        [&found.id],
+                        |row| Ok((row.get(0)?, row.get(1)?)),
+                    )
+                    .optional()?;
+                if let Some((kind, held)) = stuck {
+                    let noun = Kind::parse(&kind).map_or(kind, Kind::noun);
+                    return Ok(Some(format!(
+                        "{held} {noun}{} still in “{}”; move or delete {} first",
+                        if held == 1 { " is" } else { "s are" },
+                        found.title,
+                        if held == 1 { "it" } else { "them" },
+                    )));
+                }
             }
-            // Events that went to the trash WITH the calendar are purged with it; any other is
-            // still the member's.
-            let events = count(
-                connection,
-                "SELECT COUNT(*) FROM entity en
-                  WHERE en.parent_id = ?1 AND en.kind = 'event'
-                    AND en.deleted_at IS NOT (SELECT deleted_at FROM entity WHERE id = ?1)",
-                &found.id,
-            )?;
-            (events > 0).then(|| {
-                format!(
-                    "{events} event{} still on “{}”; move or delete {} first",
-                    if events == 1 { " is" } else { "s are" },
-                    found.title,
-                    if events == 1 { "it" } else { "them" },
-                )
-            })
+            (PurgeRule::Refuse, "vault") => {}
+            (PurgeRule::Refuse, table) => {
+                let used = count(
+                    connection,
+                    &format!("SELECT COUNT(*) FROM {table} WHERE {first} = ?1"),
+                    &found.id,
+                )?;
+                if used > 0 {
+                    return Ok(Some(match table {
+                        "txn_split" => format!(
+                            "{used} line{} filed under “{}”; file {} elsewhere first",
+                            if used == 1 { " is" } else { "s are" },
+                            found.title,
+                            if used == 1 { "it" } else { "them" },
+                        ),
+                        _ => format!(
+                            "{used} {} use “{}”; change them first",
+                            if used == 1 { "activity" } else { "activities" },
+                            found.title
+                        ),
+                    }));
+                }
+            }
+            _ => {}
         }
-        Kind::WorkoutKind | Kind::TouchKind => {
-            let used = count(
-                connection,
-                "SELECT (SELECT COUNT(*) FROM workout WHERE type_id = ?1)
-                      + (SELECT COUNT(*) FROM touch WHERE type_id = ?1)",
-                &found.id,
-            )?;
-            (used > 0).then(|| {
-                format!(
-                    "{used} {} use “{}”; change them first",
-                    if used == 1 { "activity" } else { "activities" },
-                    found.title
-                )
-            })
-        }
-        _ => None,
-    };
-    Ok(refusal)
+    }
+    Ok(None)
 }
 
 pub(crate) fn trash_stamp(ctx: &CommandCtx<'_, '_>) -> Result<(String, String)> {
@@ -398,7 +513,8 @@ pub(crate) fn trash_stamp(ctx: &CommandCtx<'_, '_>) -> Result<(String, String)> 
     ))
 }
 
-/// Trash one entity at `(deleted_at, purge_at)`; its live members follow it.
+/// Trash one entity at `(deleted_at, purge_at)`; what it holds follows it, each row naming its own
+/// holder in `trashed_by`.
 ///
 /// **The owner's person is refused by every path** (a follower's absence, a
 /// merge, a member's trash): this is the one place that takes anything to the
@@ -415,24 +531,34 @@ pub(crate) fn trash_one(
             detail: "this is you; a vault cannot do without its owner".to_owned(),
         });
     }
+    trash_row(ctx, id, None, stamp, trashed)
+}
+
+fn trash_row(
+    ctx: &CommandCtx<'_, '_>,
+    id: &str,
+    by: Option<&str>,
+    stamp: &(String, String),
+    trashed: &mut Vec<String>,
+) -> Result<()> {
     let found = require(ctx.connection(), id)?;
     ctx.connection().execute(
-        "UPDATE entity SET deleted_at = ?2, purge_at = ?3 WHERE id = ?1",
-        rusqlite::params![id, stamp.0, stamp.1],
+        "UPDATE entity SET deleted_at = ?2, purge_at = ?3, trashed_by = ?4 WHERE id = ?1",
+        rusqlite::params![id, stamp.0, stamp.1, by],
     )?;
     trashed.push(id.to_owned());
-    for member in members(ctx.connection(), &found)? {
-        if !is_self(ctx.connection(), &member)?
-            && find(ctx.connection(), &member)?.is_some_and(|m| m.deleted_at.is_none())
-        {
-            trash_one(ctx, &member, stamp, trashed)?;
+    // Only what is still live follows: a row trashed on its own earlier stays what it was, and
+    // so stays out of this holder's restore.
+    for member in held(ctx.connection(), &found)? {
+        if !is_self(ctx.connection(), &member)? {
+            trash_row(ctx, &member, Some(id), stamp, trashed)?;
         }
     }
     Ok(())
 }
 
-/// Purge one entity, and whatever went to the trash with it; move the rest of
-/// what pointed at it to the top level.
+/// Purge one entity, contents first: what the trash took with it (and theirs in turn), then
+/// [`PURGE_RULES`] for whatever else pointed at it.
 pub(crate) fn purge_one(
     ctx: &CommandCtx<'_, '_>,
     id: &str,
@@ -442,31 +568,72 @@ pub(crate) fn purge_one(
     let Some(found) = find(connection, id)? else {
         return Ok(());
     };
-    // What cannot live without the holder goes with it; what went to the trash
-    // with it goes too. Everything else is detached below.
-    for member in members(connection, &found)? {
-        let Some(m) = find(connection, &member)? else {
-            continue;
-        };
-        let cannot_outlive = matches!(
-            (found.kind, m.kind),
-            (Kind::Project, Kind::Section) | (Kind::Account, Kind::Txn)
-        );
-        let went_with = found.deleted_at.is_some() && m.deleted_at == found.deleted_at;
-        if cannot_outlive || went_with {
-            purge_one(ctx, &member, purged)?;
-        }
+    for member in ids(
+        connection,
+        "SELECT id FROM entity WHERE trashed_by = ?1 ORDER BY n DESC",
+        id,
+    )? {
+        purge_one(ctx, &member, purged)?;
     }
-    for (holder, table, set, column) in DETACH {
-        if *holder != found.kind {
-            continue;
+    for (table, columns, rule) in PURGE_RULES {
+        let first = columns.split(',').next().unwrap_or_default();
+        match rule {
+            PurgeRule::Detach => {
+                let set = columns
+                    .split(',')
+                    .map(|column| format!("{column} = NULL"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                // The host/child auto-touch TEMP triggers stamp `updated_at` and re-index every
+                // detached referrer.
+                connection.execute(
+                    &format!("UPDATE {table} SET {set} WHERE {first} = ?1"),
+                    [id],
+                )?;
+            }
+            PurgeRule::Purge => {
+                for referrer in ids(
+                    connection,
+                    &format!("SELECT id FROM {table} WHERE {first} = ?1"),
+                    id,
+                )? {
+                    purge_one(ctx, &referrer, purged)?;
+                }
+            }
+            PurgeRule::Home => {
+                // A row that needs a home cannot outlive it (the command refused before this);
+                // the rest move to the top level.
+                for stuck in ids(
+                    connection,
+                    "SELECT e.id FROM entity e JOIN entity_kind k ON k.code = e.kind
+                      WHERE e.parent_id = ?1 AND k.may_be_top = 0",
+                    id,
+                )? {
+                    purge_one(ctx, &stuck, purged)?;
+                }
+                let detached = ids(connection, "SELECT id FROM entity WHERE parent_id = ?1", id)?;
+                connection.execute(
+                    "UPDATE entity SET parent_id = NULL, parent_kind = NULL WHERE parent_id = ?1",
+                    [id],
+                )?;
+                for row in &detached {
+                    ctx.touch(row)?;
+                }
+            }
+            // WHAT AN ORIGIN FILLS IS THE TARGET OF ITS FOLLOW, for whatever kind it is (an
+            // account, a calendar, a folder): the follow stops with it, as `follow.stop` stops
+            // one. The sources it kept are forgotten (the rows they named stay the member's own,
+            // or are already gone with the target and leave only their tombstones), and the
+            // origin goes.
+            PurgeRule::Forget => {
+                connection.execute(
+                    "DELETE FROM source WHERE origin_id IN (SELECT id FROM origin WHERE fills = ?1)",
+                    [id],
+                )?;
+                connection.execute("DELETE FROM origin WHERE fills = ?1", [id])?;
+            }
+            PurgeRule::Refuse => {}
         }
-        // The host/child auto-touch TEMP triggers stamp `updated_at` and re-index every detached
-        // referrer (including `occurrence` → `series_id`) automatically.
-        connection.execute(
-            &format!("UPDATE {table} SET {set} WHERE {column} = ?1"),
-            [id],
-        )?;
     }
     // An album's cover is a photograph's bytes: once those are purged the cover
     // goes, so the bytes are not held by a picture of something that is gone.
@@ -477,21 +644,11 @@ pub(crate) fn purge_one(
             [id],
         )?;
     }
-    // WHAT AN ORIGIN FILLS IS THE TARGET OF ITS FOLLOW, for whatever kind it
-    // is (an account, a calendar, a folder): the follow stops with it, as
-    // `follow.stop` stops one. The sources it kept are forgotten (the rows they
-    // named stay the member's own, or are already gone with the target and
-    // leave only their tombstones), and the origin is retired.
-    connection.execute(
-        "DELETE FROM source WHERE origin_id IN (SELECT id FROM origin WHERE fills = ?1)",
-        [id],
-    )?;
-    connection.execute("DELETE FROM origin WHERE fills = ?1", [id])?;
     // The people and things a note was about lose its words from their search
     // text; they are not touched, only re-indexed.
     for target in ids(
         connection,
-        "SELECT to_id FROM edge WHERE from_id = ?1 AND rel IN ('about', 'links')",
+        "SELECT to_id FROM edge WHERE from_id = ?1 AND rel = 'about'",
         id,
     )? {
         ctx.mark_for_index(&target);
@@ -515,15 +672,9 @@ pub(crate) fn purge_one(
     // A Locker item's sidecars are deleted explicitly, in this commit, though
     // they declare ON DELETE CASCADE. A cascade would fire the same `AFTER DELETE` triggers (the
     // commit's touch triggers and the history's rely on that for every other child); the explicit
-    // deletes only keep the order plain: sidecars, then the item row, then the entity. Its
-    // receipts stay: they name it by value.
+    // deletes only keep the order plain: sidecars, then the item row, then the entity.
     if found.kind == Kind::LockerItem {
-        for table in [
-            "locker_item_field",
-            "locker_item_address",
-            "locker_item_passkey",
-            "locker_item_alias",
-        ] {
+        for table in ["locker_item_field", "locker_item_passkey"] {
             connection.execute(&format!("DELETE FROM {table} WHERE item_id = ?1"), [id])?;
         }
         connection.execute("DELETE FROM locker_item WHERE id = ?1", [id])?;
@@ -545,8 +696,18 @@ fn pre_retitle(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         Ok(found) => found,
         Err(sentence) => return Ok(Some(sentence)),
     };
-    // A photograph may have no title at all; nothing else may.
-    if found.kind != Kind::Photo && ctx.required_str("title")?.trim().is_empty() {
+    let title = ctx.required_str("title")?.trim();
+    // A kind that carries no title (a reading's is empty: the screen formats the figure).
+    let may_be_named: bool = ctx.connection().query_row(
+        "SELECT may_be_named FROM entity_kind WHERE code = ?1",
+        [found.kind.as_str()],
+        |row| row.get(0),
+    )?;
+    if !may_be_named && !title.is_empty() {
+        return Ok(Some(format!("a {} has no name", found.kind.noun())));
+    }
+    // A photograph may have no title at all; nothing else that is named may.
+    if may_be_named && found.kind != Kind::Photo && title.is_empty() {
         return Ok(Some(format!("a {} needs a name", found.kind.noun())));
     }
     Ok(None)
@@ -582,15 +743,8 @@ fn pre_trash(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         Ok(found) => found,
         Err(sentence) => return Ok(Some(sentence)),
     };
-    if is_self(ctx.connection(), &found.id)? {
-        return Ok(Some(
-            "this is you; a vault cannot do without its owner".to_owned(),
-        ));
-    }
-    if found.id == DEFAULT_CALENDAR_ID {
-        return Ok(Some(
-            "this is the calendar every vault is founded with; it cannot be removed".to_owned(),
-        ));
+    if let Some(sentence) = protected(ctx.connection(), &found)? {
+        return Ok(Some(sentence));
     }
     Ok((!found.kind.has_trash())
         .then(|| format!("a {} is deleted, not moved to the trash", found.kind.noun())))
@@ -612,24 +766,25 @@ fn pre_restore(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if found.deleted_at.is_none() {
         return Ok(Some(format!("“{}” is not in the trash", found.title)));
     }
-    // An event is not brought back into a calendar that is in the trash: the calendar comes back
-    // first, and takes with it the events that went with it.
-    if found.kind == Kind::Event {
-        let calendar: Option<String> = ctx
-            .connection()
-            .query_row(
-                "SELECT c.title FROM event ev JOIN entity c ON c.id = ev.calendar_id
-                  WHERE ev.id = ?1 AND c.deleted_at IS NOT NULL",
-                [&found.id],
-                |row| row.get(0),
-            )
-            .optional()?;
-        if let Some(title) = calendar {
-            return Ok(Some(format!(
-                "“{}” is on “{title}”, which is in the trash; restore the calendar first",
-                found.title
-            )));
-        }
+    // A ROW IS NOT BROUGHT BACK INSIDE SOMETHING THAT IS STILL GONE: not into a home in the trash,
+    // and not out from under the holder whose trash took it. The holder comes back first and
+    // takes with it the rows that name it. (An event cannot sit anywhere else, a note could; one
+    // rule for every kind keeps nothing visible in a trashed home and nothing lost.)
+    let holder: Option<String> = ctx
+        .connection()
+        .query_row(
+            "SELECT h.title FROM entity e JOIN entity h ON h.id IN (e.trashed_by, e.parent_id)
+              WHERE e.id = ?1 AND h.deleted_at IS NOT NULL
+              ORDER BY h.id = e.trashed_by DESC LIMIT 1",
+            [&found.id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if let Some(title) = holder {
+        return Ok(Some(format!(
+            "“{}” is in “{title}”, which is in the trash; restore “{title}” first",
+            found.title
+        )));
     }
     // THE GRACE WINDOW REFUSES NOTHING. An overdue row is emptied by the pass
     // at launch (`Vault::empty_overdue_trash`); until that pass runs it is a
@@ -637,36 +792,31 @@ fn pre_restore(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     Ok(None)
 }
 
-/// Everything that went to the trash together with `holder`, however deep.
-fn went_with(connection: &Connection, holder: &Found) -> Result<Vec<String>> {
-    let mut found = Vec::new();
-    for member in members(connection, holder)? {
-        let Some(m) = find(connection, &member)? else {
-            continue;
-        };
-        if m.deleted_at == holder.deleted_at {
-            found.extend(went_with(connection, &m)?);
-            found.push(member);
-        }
-    }
-    Ok(found)
+/// Bring one entity back from the trash, and what its trash took with it: the rows that name it
+/// in `trashed_by`, and the rows that name those. A row trashed on its own names no one and stays.
+pub(crate) fn restore_one(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Vec<String>> {
+    let mut restored = Vec::new();
+    restore_row(ctx, id, &mut restored)?;
+    Ok(restored)
 }
 
-/// Bring one entity back from the trash, and what went to the trash with it.
-pub(crate) fn restore_one(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Vec<String>> {
-    let holder = require(ctx.connection(), id)?;
-    let mut restored = Vec::new();
-    // What went to the trash WITH the holder (its members, and theirs in turn)
-    // comes back with it; what was already there stays where it was.
-    let with_it = went_with(ctx.connection(), &holder)?;
-    for target in std::iter::once(id.to_owned()).chain(with_it) {
-        ctx.connection().execute(
-            "UPDATE entity SET deleted_at = NULL, purge_at = NULL WHERE id = ?1",
-            [&target],
-        )?;
-        restored.push(target);
+fn restore_row(ctx: &CommandCtx<'_, '_>, id: &str, restored: &mut Vec<String>) -> Result<()> {
+    // The rows naming it are read first: clearing `id` does not change them, but the order is
+    // the one a reader expects (the holder, then what it held).
+    let with_it = ids(
+        ctx.connection(),
+        "SELECT id FROM entity WHERE trashed_by = ?1 ORDER BY n",
+        id,
+    )?;
+    ctx.connection().execute(
+        "UPDATE entity SET deleted_at = NULL, purge_at = NULL, trashed_by = NULL WHERE id = ?1",
+        [id],
+    )?;
+    restored.push(id.to_owned());
+    for member in with_it {
+        restore_row(ctx, &member, restored)?;
     }
-    Ok(restored)
+    Ok(())
 }
 
 /// `entity.restore`.
@@ -681,6 +831,9 @@ fn pre_purge(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         Ok(found) => found,
         Err(sentence) => return Ok(Some(sentence)),
     };
+    if let Some(sentence) = protected(ctx.connection(), &found)? {
+        return Ok(Some(sentence));
+    }
     if found.kind.has_trash() && found.deleted_at.is_none() {
         return Ok(Some(format!(
             "“{}” is not in the trash; move it there first",
@@ -734,7 +887,6 @@ const DOOMED_CHUNK: i64 = 64;
 struct EmptyTrashInput {
     kind: Option<String>,
     with_kind: Option<String>,
-    having: Option<String>,
     due_only: Option<bool>,
     limit: Option<u64>,
     defer_collect: Option<bool>,
@@ -743,9 +895,8 @@ struct EmptyTrashInput {
 /// Purge what is in the trash: one kind's (with `with_kind`, a second beside it: a People trash holds people and lists), or every kind's; all of it, or only
 /// what has waited out its window; and, with a `limit`, at most that many
 /// roots (what went with them is not counted against it), saying `more` when
-/// something else is due. With `having: "workout"` only the activities that have a workout row
-/// (what Health's trash lists; a touch trashed with its person has none and stays). What cannot
-/// be purged as it stands (a calendar with events, the self person) stays in the trash, and does not stop the rest. With
+/// something else is due. What cannot be purged as it stands (a calendar with events of its own,
+/// the self person) stays in the trash, and does not stop the rest. With
 /// `defer_collect` the bytes nothing names any more are not collected here: the caller of a
 /// pass in batches collects once at its end.
 fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
@@ -764,7 +915,6 @@ fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     }
     let kind = input.kind.as_deref();
     let with_kind = input.with_kind.as_deref();
-    let having = input.having.as_deref();
     let mut purged = Vec::new();
     let mut roots = 0usize;
     let mut more = false;
@@ -778,11 +928,9 @@ fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             .prepare(
                 "SELECT id, deleted_at, n FROM entity
                   WHERE deleted_at IS NOT NULL
-                    AND (?1 IS NULL OR kind = ?1 OR kind = ?8)
+                    AND (?1 IS NULL OR kind = ?1 OR kind = ?7)
                     AND (?2 = 0 OR purge_at <= ?3)
                     AND (?4 IS NULL OR (deleted_at, n) > (?4, ?5))
-                    AND (?7 IS NULL OR (?7 = 'workout'
-                         AND EXISTS (SELECT 1 FROM workout WHERE workout.id = entity.id)))
                   ORDER BY deleted_at, n LIMIT ?6",
             )?
             .query_map(
@@ -793,7 +941,6 @@ fn empty_trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
                     after.as_ref().map(|(at, _)| at),
                     after.as_ref().map_or(0, |(_, n)| *n),
                     DOOMED_CHUNK,
-                    having,
                     with_kind
                 ],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
@@ -862,6 +1009,25 @@ pub fn definitions() -> Vec<CommandDefinition> {
             retitle,
         ),
         CommandDefinition::plain(
+            "entity.move",
+            "entity",
+            r#"{
+              "type": "object",
+              "required": ["id"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "parent": { "type": ["string", "null"] }
+              }
+            }"#,
+            Idempotency::Idempotent,
+            &[CommandCondition {
+                predicate: "entity_can_go_there",
+                check: pre_move,
+            }],
+            move_entity,
+        ),
+        CommandDefinition::plain(
             "entity.trash",
             "entity",
             BY_ID,
@@ -903,7 +1069,6 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "properties": {
                 "kind": { "type": "string", "minLength": 1 },
                 "with_kind": { "type": "string", "minLength": 1 },
-                "having": { "type": "string", "enum": ["workout"] },
                 "due_only": { "type": "boolean" },
                 "limit": { "type": "integer", "minimum": 1 },
                 "defer_collect": { "type": "boolean" }
@@ -927,25 +1092,4 @@ fn permanent(mut definition: CommandDefinition) -> CommandDefinition {
     definition.risk = Risk::Medium;
     definition.confirm = true;
     definition
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Every pointer a purge detaches is one `DETACH` performs, and the other way
-    /// round: the two tables cannot drift apart.
-    #[test]
-    fn the_detach_table_and_the_purge_rules_name_the_same_pointers() {
-        let named: std::collections::BTreeSet<(&str, &str)> = PURGE_RULES
-            .iter()
-            .filter(|(_, _, rule)| *rule == PurgeRule::Detach)
-            .map(|(table, columns, _)| (*table, columns.split(',').next().unwrap_or("")))
-            .collect();
-        let performed: std::collections::BTreeSet<(&str, &str)> = DETACH
-            .iter()
-            .map(|(_, table, _, column)| (*table, *column))
-            .collect();
-        assert_eq!(named, performed);
-    }
 }

@@ -1238,6 +1238,24 @@ CREATE TRIGGER entity_home_is_acyclic BEFORE UPDATE OF parent_id ON entity
 CREATE TRIGGER entity_kind_is_fixed BEFORE UPDATE OF id, kind ON entity
   BEGIN SELECT RAISE(ABORT, 'an entity''s id and kind never change'); END;
 
+-- trigger entity_not_born_in_a_trash on entity
+CREATE TRIGGER entity_not_born_in_a_trash BEFORE INSERT ON entity
+  WHEN new.deleted_at IS NULL AND new.parent_id IS NOT NULL
+   AND EXISTS (SELECT 1 FROM entity h WHERE h.id = new.parent_id AND h.deleted_at IS NOT NULL)
+  BEGIN SELECT RAISE(ABORT, 'that home is in the trash: restore it first'); END;
+
+-- trigger entity_not_moved_into_a_trash on entity
+CREATE TRIGGER entity_not_moved_into_a_trash BEFORE UPDATE OF parent_id ON entity
+  WHEN new.deleted_at IS NULL AND new.parent_id IS NOT NULL
+   AND EXISTS (SELECT 1 FROM entity h WHERE h.id = new.parent_id AND h.deleted_at IS NOT NULL)
+  BEGIN SELECT RAISE(ABORT, 'that home is in the trash: restore it first'); END;
+
+-- trigger entity_not_restored_into_a_trash on entity
+CREATE TRIGGER entity_not_restored_into_a_trash BEFORE UPDATE OF deleted_at ON entity
+  WHEN old.deleted_at IS NOT NULL AND new.deleted_at IS NULL
+   AND EXISTS (SELECT 1 FROM entity h WHERE h.deleted_at IS NOT NULL AND h.id IN (old.parent_id, old.trashed_by))
+  BEGIN SELECT RAISE(ABORT, 'what holds this is in the trash: restore it first'); END;
+
 -- trigger link_ends_are_fixed on link
 CREATE TRIGGER link_ends_are_fixed BEFORE UPDATE OF a, b ON link
   BEGIN SELECT RAISE(ABORT, 'a link''s ends never change; remove it and add another'); END;

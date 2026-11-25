@@ -22,7 +22,6 @@ and make it pass. Tests of removed behaviour are deleted, not ported.
 | `document`, `document_portable`, `photo`, `photo_portable`, `place` | docs/photos lane | folder is the home; photo lat/lon, motion, no `blob UNIQUE`; no place from coordinates |
 | `money`, `txn_portable`, `rule`, `csv` | money lane | `txn_split`, `entered`, no `void`, no `txn.currency`, `Flag` gone |
 | `workout`, `measurement`, `health_portable` | health lane | `workout`, `touch` and `reading` are kinds; `measurement.origin_id`; `reading` |
-| `flag` | K4 | starred/pinned/archived are columns of `entity` (A14): the module is replaced, not ported |
 | `thread` (chat) | chat lane | chats are ordinary trashable entities (L5); refusals/notices are lookups |
 | `vault_export` | export | reads every kind |
 | `locker` is **compiled, not registered** | locker lane | its SQL is the old Locker (memo, alias, address tables); its constants are read by `custody/` and `history/read.rs` |
@@ -36,8 +35,7 @@ and make it pass. Tests of removed behaviour are deleted, not ported.
 | `commands/follow/systems.rs` | `SYSTEMS` is empty; the per-system maps are in this file's history at `40b18d2c`. The engine (`merge.rs`, `commands.rs`) is untouched and its tests are aside | K9 and each app lane (re-adds its map) |
 | `commands/edge.rs` | `Rel::Links`/`Attendee`, `state` and the reverse-link dedupe removed; shape check reads `entity_kind.linkable` for `*`; `anchor` carries `"v":1` | K5 |
 | `links.rs` | compiles (`Kind::Workout`, no `Links` rel); **its SQL still reads the old `links` edges** and is wrong | K5 |
-| `commands/entity.rs` | enum arms patched (`Workout`/`Touch`, no `Flag`, no `ActivityKind`); `PURGE_RULES`, trash and `went_with` are still the old timestamp logic and the old column names | K4 |
-| `commands/container.rs`, `commands/note.rs`, `commands/tag.rs` | compile; the home columns (`parent_id`) and `follow_calendar` (removed, dead) are not rewritten; `journal_markdown_entries` and `portable_stem` removed (dead without export) | K4, K11 |
+| `commands/note.rs` | compiles; still writes the old columns (`notebook_id`, `wikilink` edges), so `note.create`, `note.edit` and the rest fail against the new tables until K11 rewrites it. A note is made in tests with `common::insert_note` | K11 |
 | `commands/history.rs` | the event overlay and a text document's words are removed from `history.keep_version`/`pre_keep` | K6 and the event/document lanes |
 | `history/shape.rs` | `TABLES`, `OMITTED`, `RELATIONS_OUTSIDE` rewritten for the new tables; B1 roles applied (budget, rule, occurrence outside) | K6 |
 | `history/mod.rs`, `history/read.rs` | the revision writes `actor` (member or assistant from the cause prefix; **a store's revision needs its origin, not carried yet, so it is written as the member's**), `shape = 1`, and the document's bytes as `revision_blob` slot `document.blob`; **no other blob slot** (avatar, cover, motion, sealed file, note asset) is recorded yet | K6 |
@@ -53,13 +51,12 @@ and make it pass. Tests of removed behaviour are deleted, not ported.
 Each is the old test of a thing the new schema changed; the owner rewrites it against the new tables
 and moves it back.
 
-- **K4 entity kernel (entity.rs, container, tag, flags, trash, arrival columns)**: `action_keys`, `clock_bound`, `secure_delete`, `stale_save`, `trash_and_bytes`, `unusual_input`, `command_list`, `commands`, `change_census`, `shared_verbs`, `first_item`
-- **K5 graph (edge.rs, links.rs, link and mention tables)**: `graph`, `links`
+- **K5 graph (edge.rs, links.rs, link and mention tables)**: `graph`, `links`, `shared_verbs_edges` (the edge half of the old `shared_verbs`; `edge.rs` still builds a relation's id with `model::concept_id`, which only a seeded concept has: a member's is minted, found by `concept(kind, key)`)
 - **K6 history (history/, revision, revision_blob)**: `history`, `revision_kept`, `earlier_versions_found`
 - **K7 index file (index/, writers, search_owed drain, geo)**: `index_owed`, `index_walks`, `page_source`
 - **K8 reminders and alerts (alerts.rs, reminder, alert)**: `alerts`
-- **K9 following (commands/follow/, arrival.rs, origin_cursor.rs)**: `arrival`, `origin_cursor`, `follow_items`, `follow_reminders`, `follow_retire`, `follow_stated`, `follow_gaps`, `calendar_follow`
-- **K10 blobs and backup, phone side (blob.rs, backup/)**: `backup_sim`, `restore_drill` (`backup_snapshot` is plugged: its proof file is named by the `promises` rule)
+- **K9 following (commands/follow/, arrival.rs, origin_cursor.rs)**: `arrival` (an arrival is two columns of `entity` now and makes no origin or source; `arrival::SYSTEMS` is read only by `follow/merge.rs`'s exclusion clause, now dead), `shared_verbs_people_follow`, `origin_cursor`, `follow_items`, `follow_reminders`, `follow_retire`, `follow_stated`, `follow_gaps`, `calendar_follow`
+- **K10 blobs and backup, phone side (blob.rs, backup/)**: `backup_sim`, `restore_drill`, `blob_release` (the bytes under the trash, from the old `trash_and_bytes`), `shared_verbs_blobs` (`backup_snapshot` is plugged: its proof file is named by the `promises` rule)
 - **K11 notes (commands/note.rs, note_portable.rs)**: `notes`, `note_portable`
 - **K12 commitments and generated pages**: `commitments`, `stored_rules`, `ontology_page`, `ontology_widen`
 - **app lane: calendar/tasks (event, ical, task, occurrence, reminders UI reads)**: `agenda`, `agenda_days`, `agenda_portable`, `agenda_wave2`
@@ -69,7 +66,7 @@ and moves it back.
 - **app lane: health (workout, measurement, reading)**: `health_portable`, `workout_whole`
 - **app lane: locker**: `locker_clock`, `locker_commands`, `locker_plaintext_gate`, `locker_wall`
 - **app lane: chat (thread)**: `chat`
-- **export (vault_export, every kind)**: `vault_export`
+- **export (vault_export, every kind)**: `vault_export`, `unusual_input` (every app's export of unusual text; none of it the kernel)
 - `schema_rules` (the earlier proof of the app tables' rules, written against the model before
   #1214): the lanes re-prove their own rules in the new `tests/schema_rules.rs`, which holds the
   kernel's.
@@ -81,6 +78,7 @@ shipped, so the baseline was replaced in place (#1214, Scope).
 
 ## Not done by this lane (so not here)
 
-K4 to K12 as listed in the issue. Generated files other than `contracts/schema/vault-ddl.sql`
-(`vault-commands.txt`, the ontology page) are regenerated at the end of the checkpoint;
-`tests/ontology_page.rs` is aside until then. The index file's DDL has no generated fixture yet.
+K5 to K12 as listed in the issue. `contracts/schema/vault-ddl.sql` and `contracts/schema/vault-commands.txt`
+are regenerated by whoever changes the schema or the registry (`tests/command_list.rs` is plugged: a lane that
+re-plugs a module regenerates the list in the same commit). The ontology page is regenerated at the end of the
+checkpoint; `tests/ontology_page.rs` is aside until then. The index file's DDL has no generated fixture yet.

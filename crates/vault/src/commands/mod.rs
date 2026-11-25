@@ -48,6 +48,7 @@ pub mod blob;
 pub mod container;
 pub mod edge;
 pub mod entity;
+pub mod flag;
 pub mod follow;
 pub mod history;
 pub mod locker;
@@ -181,8 +182,41 @@ impl<'conn> CommandCtx<'_, 'conn> {
 
     /// [`Self::insert_entity`] for an id the caller minted first (a row a
     /// shell may re-offer, keyed by an id the phone minted).
+    ///
+    /// # Errors
+    /// [`VaultError::InvalidInput`] when `id` is not a canonical UUIDv7: the one id a member's
+    /// row has (a seeded slug is founding's alone, #1214 A17); then whatever SQLite refused.
     pub fn insert_entity_as(&self, id: &str, kind: Kind, title: &str) -> Result<()> {
-        self.tx.insert_entity(id, kind, title, &self.now)
+        self.insert_entity_in(id, kind, title, None)
+    }
+
+    /// [`Self::insert_entity_as`] born in a home: `parent` holds it.
+    pub fn insert_entity_in(
+        &self,
+        id: &str,
+        kind: Kind,
+        title: &str,
+        parent: Option<&str>,
+    ) -> Result<()> {
+        if !crate::model::is_minted_id(id) {
+            return Err(VaultError::InvalidInput {
+                name: "id".to_owned(),
+                detail: "an id is a lowercase UUIDv7".to_owned(),
+            });
+        }
+        self.tx.insert_entity_in(id, kind, title, parent, &self.now)
+    }
+
+    /// [`Self::insert_entity`] born in a home.
+    pub fn insert_entity_under(
+        &self,
+        kind: Kind,
+        title: &str,
+        parent: Option<&str>,
+    ) -> Result<String> {
+        let id = self.next_id();
+        self.insert_entity_in(&id, kind, title, parent)?;
+        Ok(id)
     }
 
     /// A required string input.
@@ -321,11 +355,12 @@ impl Registry {
     /// The registry the phone serves: every command this build carries.
     pub fn with_system_commands() -> Result<Self> {
         let mut registry = Self::new();
-        let modules: [fn() -> Vec<CommandDefinition>; 9] = [
+        let modules: [fn() -> Vec<CommandDefinition>; 10] = [
             blob::definitions,
             container::definitions,
             edge::definitions,
             entity::definitions,
+            flag::definitions,
             follow::definitions,
             history::definitions,
             note::definitions,

@@ -22,8 +22,10 @@ fn the_command_list_is_the_registry() {
     for name in [
         "vault.rename",
         "entity.retitle",
-        "note.edit",
-        "follow.contacts",
+        "entity.move",
+        "flag.set",
+        "tag.add",
+        "container.create",
     ] {
         assert!(live.contains(&name), "`{name}` is not registered");
     }

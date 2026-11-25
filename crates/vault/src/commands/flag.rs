@@ -1,13 +1,70 @@
 //! `flag.set` and `flag.clear`: starred, pinned, archived.
 //!
-//! A flag is one of three seeded concepts and setting it is a `tagged` edge to
-//! it, on any entity that is not itself a word. A star, a pinned note, an
-//! archived project and an archived category are the same row shape.
+//! A flag is an instant on the row itself (`entity.starred_at`, `pinned_at`, `archived_at`, A14),
+//! set to the injected clock's now and cleared to NULL, on every kind (a project is archived, so is
+//! a category; a note is pinned). Setting one is **not an edit**: it stamps neither
+//! `updated_at` nor a revision (the commit triggers skip these columns), so a starred note keeps
+//! the "last edited" it had and the history of a pinned task does not grow. Setting a flag that is
+//! set keeps its first instant.
 
-use crate::commands::tag::{pre_flaggable, set_tagged};
+use crate::commands::entity::lookup_live;
 use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
 use crate::error::{Result, VaultError};
-use crate::model::Flag;
+
+/// The three flags, each a column of `entity`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Flag {
+    Starred,
+    Pinned,
+    Archived,
+}
+
+impl Flag {
+    pub const ALL: [Self; 3] = [Self::Starred, Self::Pinned, Self::Archived];
+
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Starred => "starred",
+            Self::Pinned => "pinned",
+            Self::Archived => "archived",
+        }
+    }
+
+    #[must_use]
+    pub fn parse(word: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|flag| flag.as_str() == word)
+    }
+
+    /// The column of `entity` that holds this flag's instant.
+    #[must_use]
+    pub const fn column(self) -> &'static str {
+        match self {
+            Self::Starred => "starred_at",
+            Self::Pinned => "pinned_at",
+            Self::Archived => "archived_at",
+        }
+    }
+
+    /// The statement that sets it (the first instant is kept) and the one that clears it. Fixed
+    /// text per flag: no input is spelled into SQL.
+    const fn statements(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Starred => (
+                "UPDATE entity SET starred_at = ?2 WHERE id = ?1 AND starred_at IS NULL",
+                "UPDATE entity SET starred_at = NULL WHERE id = ?1 AND starred_at IS NOT NULL",
+            ),
+            Self::Pinned => (
+                "UPDATE entity SET pinned_at = ?2 WHERE id = ?1 AND pinned_at IS NULL",
+                "UPDATE entity SET pinned_at = NULL WHERE id = ?1 AND pinned_at IS NOT NULL",
+            ),
+            Self::Archived => (
+                "UPDATE entity SET archived_at = ?2 WHERE id = ?1 AND archived_at IS NULL",
+                "UPDATE entity SET archived_at = NULL WHERE id = ?1 AND archived_at IS NOT NULL",
+            ),
+        }
+    }
+}
 
 #[derive(serde::Deserialize)]
 struct FlagInput {
@@ -24,14 +81,23 @@ fn flag_of(word: &str) -> Result<Flag> {
 
 fn set(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let input: FlagInput = ctx.parse_input()?;
-    let changed = set_tagged(ctx, &input.id, &flag_of(&input.flag)?.id(), true)?;
-    Ok(serde_json::json!({ "changed": changed }))
+    let (set, _) = flag_of(&input.flag)?.statements();
+    let changed = ctx
+        .connection()
+        .execute(set, rusqlite::params![input.id, ctx.now])?;
+    Ok(serde_json::json!({ "changed": changed > 0 }))
 }
 
 fn clear(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let input: FlagInput = ctx.parse_input()?;
-    let changed = set_tagged(ctx, &input.id, &flag_of(&input.flag)?.id(), false)?;
-    Ok(serde_json::json!({ "changed": changed }))
+    let (_, clear) = flag_of(&input.flag)?.statements();
+    let changed = ctx.connection().execute(clear, [input.id.as_str()])?;
+    Ok(serde_json::json!({ "changed": changed > 0 }))
+}
+
+/// A sentence when this entity takes no flag: it is missing or is in the trash.
+fn pre_flaggable(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    Ok(lookup_live(ctx.connection(), ctx.required_str("id")?)?.err())
 }
 
 const SCHEMA: &str = r#"{

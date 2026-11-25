@@ -282,6 +282,23 @@ CREATE TRIGGER entity_home_is_acyclic BEFORE UPDATE OF parent_id ON entity
          SELECT e.parent_id FROM entity e JOIN ancestors a ON e.id = a.id WHERE e.parent_id IS NOT NULL)
        SELECT 1 FROM ancestors WHERE id = new.id);
   END;
+-- A13, A19: nothing live sits inside a trash. A row is not made in, moved into or restored under a
+-- home that is in the trash, nor restored out from under the holder whose trash took it: the holder
+-- comes back first and brings back the rows that name it. (A holder's own trash updates its members
+-- to deleted, which none of these catch.)
+CREATE TRIGGER entity_not_born_in_a_trash BEFORE INSERT ON entity
+  WHEN new.deleted_at IS NULL AND new.parent_id IS NOT NULL
+   AND EXISTS (SELECT 1 FROM entity h WHERE h.id = new.parent_id AND h.deleted_at IS NOT NULL)
+  BEGIN SELECT RAISE(ABORT, 'that home is in the trash: restore it first'); END;
+CREATE TRIGGER entity_not_moved_into_a_trash BEFORE UPDATE OF parent_id ON entity
+  WHEN new.deleted_at IS NULL AND new.parent_id IS NOT NULL
+   AND EXISTS (SELECT 1 FROM entity h WHERE h.id = new.parent_id AND h.deleted_at IS NOT NULL)
+  BEGIN SELECT RAISE(ABORT, 'that home is in the trash: restore it first'); END;
+CREATE TRIGGER entity_not_restored_into_a_trash BEFORE UPDATE OF deleted_at ON entity
+  WHEN old.deleted_at IS NOT NULL AND new.deleted_at IS NULL
+   AND EXISTS (SELECT 1 FROM entity h WHERE h.deleted_at IS NOT NULL AND h.id IN (old.parent_id, old.trashed_by))
+  BEGIN SELECT RAISE(ABORT, 'what holds this is in the trash: restore it first'); END;
+
 
 -- A7: the plain graph relations only: contains, tagged, about, attached, with, related, depicts.
 -- `edge_shape` is the relation vocabulary and says which kinds each joins; it is pruned of

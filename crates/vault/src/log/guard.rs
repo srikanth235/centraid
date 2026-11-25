@@ -166,14 +166,31 @@ impl<'conn> CommitTx<'conn> {
     /// # Errors
     /// Whatever SQLite refused: a duplicate id, a kind the CHECK does not know.
     pub fn insert_entity(&self, id: &str, kind: Kind, title: &str, now: &str) -> Result<()> {
+        self.insert_entity_in(id, kind, title, None, now)
+    }
+
+    /// [`Self::insert_entity`] born in a home: `parent` is the id of the row that holds it (its
+    /// kind is read from that row, so a home that does not exist leaves the pair the database
+    /// refuses).
+    ///
+    /// # Errors
+    /// Whatever SQLite refused: a duplicate id, a home of a kind the shape does not allow.
+    pub fn insert_entity_in(
+        &self,
+        id: &str,
+        kind: Kind,
+        title: &str,
+        parent: Option<&str>,
+        now: &str,
+    ) -> Result<()> {
         self.pending
             .borrow_mut()
             .instant
             .get_or_insert_with(|| now.to_owned());
         self.connection.execute(
-            "INSERT INTO entity (id, kind, title, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?4)",
-            rusqlite::params![id, kind.as_str(), title, now],
+            "INSERT INTO entity (id, kind, title, parent_id, parent_kind, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?5, (SELECT kind FROM entity WHERE id = ?5), ?4, ?4)",
+            rusqlite::params![id, kind.as_str(), title, now, parent],
         )?;
         self.born(id);
         Ok(())

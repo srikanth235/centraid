@@ -408,3 +408,143 @@ fn a_locker_field_holds_the_columns_its_kind_says() {
         "INSERT INTO reminder (id, entity_id, entity_kind, field_id, offset_min) VALUES ('r2', '{item}', 'locker_item', 'f7', 0)"
     ));
 }
+
+// ---------------------------------------------------------------------------------------------
+// K4: the rules the shared verbs state in a sentence (`tests/shared_verbs.rs`) are the database's too
+// ---------------------------------------------------------------------------------------------
+
+#[test]
+fn a_kind_that_needs_a_home_has_one_and_a_reading_has_no_name() {
+    let w = World::new("rules_k4_homes");
+    // A section needs a project, an event a calendar: `entity_kind.may_be_top = 0`.
+    w.refuses(&format!(
+        "INSERT INTO entity (id, kind, title, created_at, updated_at)
+         VALUES ('{}', 'section', 'S', '{AT}', '{AT}')",
+        id(20)
+    ));
+    let project = w.entity(21, "project", "P");
+    w.takes(&format!(
+        "INSERT INTO entity (id, kind, title, parent_id, parent_kind, created_at, updated_at)
+         VALUES ('{}', 'section', 'S', '{project}', 'project', '{AT}', '{AT}')",
+        id(22)
+    ));
+    // Taking a section out of its project is a move to the top, which it may not make.
+    w.refuses(&format!(
+        "UPDATE entity SET parent_id = NULL, parent_kind = NULL WHERE id = '{}'",
+        id(22)
+    ));
+    // A reading's title is empty (`may_be_named = 0`); a note may carry one.
+    w.refuses(&format!(
+        "INSERT INTO entity (id, kind, title, created_at, updated_at)
+         VALUES ('{}', 'reading', 'x', '{AT}', '{AT}')",
+        id(23)
+    ));
+    w.takes(&format!(
+        "INSERT INTO entity (id, kind, title, created_at, updated_at)
+         VALUES ('{}', 'reading', '', '{AT}', '{AT}')",
+        id(24)
+    ));
+}
+
+#[test]
+fn a_concept_sits_in_a_concept_of_its_own_kind_and_never_in_itself() {
+    let w = World::new("rules_k4_concepts");
+    let food = w.entity(25, "tag", "Food");
+    let soup = w.entity(26, "tag", "Soup");
+    let cat = w.entity(27, "category", "Cat");
+    w.takes(&format!(
+        "UPDATE entity SET parent_id = '{food}', parent_kind = 'tag' WHERE id = '{soup}'"
+    ));
+    w.refuses(&format!(
+        "UPDATE entity SET parent_id = '{cat}', parent_kind = 'category' WHERE id = '{soup}'"
+    ));
+    w.refuses_with(
+        &format!("UPDATE entity SET parent_id = '{soup}', parent_kind = 'tag' WHERE id = '{food}'"),
+        "no loops",
+    );
+    w.refuses(&format!(
+        "UPDATE entity SET parent_id = '{food}', parent_kind = 'tag' WHERE id = '{food}'"
+    ));
+    // A holder is not deleted from under what it holds.
+    w.refuses(&format!("DELETE FROM entity WHERE id = '{food}'"));
+}
+
+#[test]
+fn a_tag_goes_only_on_a_linkable_kind() {
+    let w = World::new("rules_k4_tagged");
+    let tag = w.entity(28, "tag", "t");
+    let note = w.entity(29, "note", "n");
+    let book = w.entity(30, "notebook", "b");
+    let chat = w.entity(31, "thread", "c");
+    let reading = w.entity(32, "reading", "");
+    let cat = w.entity(33, "category", "k");
+    let edge = |from: &str| {
+        format!(
+            "INSERT INTO edge (from_id, rel, to_id, created_at) VALUES ('{from}', 'tagged', '{tag}', '{AT}')"
+        )
+    };
+    for bad in [&book, &chat, &reading, &cat, &tag] {
+        w.refuses_with(&edge(bad), "no edge of this relation");
+    }
+    w.takes(&edge(&note));
+}
+
+#[test]
+fn nothing_live_is_made_moved_or_restored_inside_a_trash() {
+    let w = World::new("rules_k4_trash");
+    let book = w.entity(34, "notebook", "b");
+    let note = w.entity(35, "note", "n");
+    let other = w.entity(36, "note", "o");
+    w.takes(&format!(
+        "UPDATE entity SET parent_id = '{book}', parent_kind = 'notebook' WHERE id = '{note}'"
+    ));
+    // The holder's trash takes its member: both deleted, the member naming the holder.
+    w.takes(&format!(
+        "UPDATE entity SET deleted_at = '{AT}', purge_at = '{AT}' WHERE id = '{book}'"
+    ));
+    w.takes(&format!(
+        "UPDATE entity SET deleted_at = '{AT}', purge_at = '{AT}', trashed_by = '{book}' WHERE id = '{note}'"
+    ));
+    // Not born in it, not moved into it, not restored out from under it.
+    w.refuses_with(
+        &format!(
+            "INSERT INTO entity (id, kind, title, parent_id, parent_kind, created_at, updated_at)
+             VALUES ('{}', 'note', 'x', '{book}', 'notebook', '{AT}', '{AT}')",
+            id(37)
+        ),
+        "in the trash",
+    );
+    w.refuses_with(
+        &format!(
+            "UPDATE entity SET parent_id = '{book}', parent_kind = 'notebook' WHERE id = '{other}'"
+        ),
+        "in the trash",
+    );
+    w.refuses_with(
+        &format!(
+            "UPDATE entity SET deleted_at = NULL, purge_at = NULL, trashed_by = NULL WHERE id = '{note}'"
+        ),
+        "in the trash",
+    );
+    // A row trashed by a holder that is not its home is held to the same.
+    w.takes(&format!(
+        "UPDATE entity SET deleted_at = '{AT}', purge_at = '{AT}', trashed_by = '{book}' WHERE id = '{other}'"
+    ));
+    w.refuses_with(
+        &format!(
+            "UPDATE entity SET deleted_at = NULL, purge_at = NULL, trashed_by = NULL WHERE id = '{other}'"
+        ),
+        "in the trash",
+    );
+    // The holder first, then what it took.
+    w.takes(&format!(
+        "UPDATE entity SET deleted_at = NULL, purge_at = NULL WHERE id = '{book}'"
+    ));
+    w.takes(&format!(
+        "UPDATE entity SET deleted_at = NULL, purge_at = NULL, trashed_by = NULL WHERE id IN ('{note}', '{other}')"
+    ));
+    // A row is not trashed by itself.
+    w.refuses(&format!(
+        "UPDATE entity SET deleted_at = '{AT}', purge_at = '{AT}', trashed_by = '{note}' WHERE id = '{note}'"
+    ));
+}

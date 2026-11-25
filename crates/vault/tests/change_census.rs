@@ -30,11 +30,12 @@ mod common;
 #[test]
 fn a_commit_that_edits_one_table_reports_that_table_only() {
     let scratch = common::Scratch::founded("census-one").expect("a vault is founded");
+    let one = scratch.vault.ids().next();
     let outcome = scratch
         .vault
         .commit(|tx| {
             tx.set_producer("test.one-table");
-            common::add_person(tx, "p-one", "One", "2026-01-01T00:00:00.000Z")?;
+            common::add_person(tx, &one, "One", "2026-01-01T00:00:00.000Z")?;
             Ok(())
         })
         .expect("the commit lands");
@@ -145,10 +146,11 @@ fn a_rollback_reports_nothing_and_does_not_leak_into_the_next_commit() {
 #[test]
 fn a_commit_that_writes_a_without_rowid_table_reports_it() {
     let scratch = common::Scratch::founded("census-without-rowid").expect("a vault is founded");
+    let days = scratch.vault.ids().next();
     scratch
         .vault
         .commit(|tx| {
-            common::add_person(tx, "p-days", "Days", "2026-01-01T00:00:00.000Z")?;
+            common::add_person(tx, &days, "Days", "2026-01-01T00:00:00.000Z")?;
             Ok(())
         })
         .expect("a person lands");
@@ -158,8 +160,8 @@ fn a_commit_that_writes_a_without_rowid_table_reports_it() {
         .commit(|tx| {
             tx.connection().execute(
                 "INSERT INTO measurement (person_id, day, metric, value)
-                 VALUES ('p-days', '2026-01-01', 'steps', 8000)",
-                [],
+                 VALUES (?1, '2026-01-01', 'steps', 8000)",
+                [&days],
             )?;
             Ok(())
         })
@@ -172,11 +174,11 @@ fn a_commit_that_writes_a_without_rowid_table_reports_it() {
         .vault
         .commit(|tx| {
             tx.connection().execute(
-                "UPDATE measurement SET value = 9000 WHERE person_id = 'p-days'",
-                [],
+                "UPDATE measurement SET value = 9000 WHERE person_id = ?1",
+                [&days],
             )?;
             tx.connection()
-                .execute("DELETE FROM measurement WHERE person_id = 'p-days'", [])?;
+                .execute("DELETE FROM measurement WHERE person_id = ?1", [&days])?;
             Ok(())
         })
         .expect("the measurement changes");

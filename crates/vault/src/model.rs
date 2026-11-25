@@ -524,10 +524,25 @@ impl Rel {
     }
 }
 
-/// The id of a seeded concept, or of a member's tag: `<kind>:<key>`.
+/// The id of a SEEDED concept: `<kind>:<key>`. A concept the member makes has a minted id and is
+/// found by `concept(kind, key)`, never by this.
 #[must_use]
 pub fn concept_id(kind: Kind, key: &str) -> String {
     format!("{}:{key}", kind.as_str())
+}
+
+/// Whether `id` is a canonical lowercase UUIDv7: the id grammar of every row a command makes
+/// (`entity.id`'s CHECK, A17). A seeded `kind:key` slug is founding's and is not one.
+#[must_use]
+pub fn is_minted_id(id: &str) -> bool {
+    let bytes = id.as_bytes();
+    bytes.len() == 36
+        && bytes.iter().enumerate().all(|(at, byte)| match at {
+            8 | 13 | 18 | 23 => *byte == b'-',
+            14 => *byte == b'7',
+            19 => matches!(byte, b'8'..=b'b'),
+            _ => matches!(byte, b'0'..=b'9' | b'a'..=b'f'),
+        })
 }
 
 /// The id of the calendar every vault is founded with.
