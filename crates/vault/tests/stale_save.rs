@@ -6,8 +6,8 @@
 //!
 //! The kernel's own save is the shared retitle, proved here on a note. Each app's edit (a person's,
 //! a task's, a document's, an event's, an account's, a Locker item's, one day of a series, a line's
-//! filing, and a note's quiet autosave) is re-proved by the lane that plugs its commands back in
-//! (`UNPLUGGED.md`), with `the_four_facts` as its model.
+//! filing, and a note's quiet autosave) is re-proved by the app that owns its commands,
+//! with `the_four_facts` as its model.
 
 mod common;
 

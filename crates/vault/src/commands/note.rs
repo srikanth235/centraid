@@ -1,5 +1,5 @@
 //! `note.*`: a note's own verbs — create, edit, restore a version, its assets, a Markdown import
-//! and export. **This file is the pattern an app lane copies**; `UNPLUGGED.md` says how.
+//! and export. **This file is the pattern an app lane copies**; `.claude/skills/change/vault-model.md` says how.
 //!
 //! A note is an entity of kind `note` whose words live on its kind row. Where it sits (its
 //! notebook, or the top level) is its home, `entity.parent_id`, like every kind's: a note is made

@@ -2,7 +2,7 @@
 //! wave 3, and #1214 K4): an overdue row is restorable until a pass empties it, the pass is
 //! bounded and a clock far from the last write empties nothing, a purge clears what an origin
 //! fills, and moving a section keeps what is in it. (The bytes under the trash, `released` and the
-//! file sweep, are K10's: `tests/unplugged/blob_release.rs`.)
+//! file sweep, are K10's: `tests/blob_release.rs`.)
 
 mod common;
 

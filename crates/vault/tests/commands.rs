@@ -71,8 +71,8 @@ fn the_registry_carries_the_shared_verbs_and_the_plugged_modules_and_nothing_els
     ] {
         assert!(names.contains(&expected), "`{expected}` is not registered");
     }
-    // A per-kind verb belongs to its app's lane; a lane's schema joins this list when its
-    // commands are plugged back in (#1214, `UNPLUGGED.md`); `vault` is the singleton's own.
+    // A per-kind verb belongs to its app; an app's schema joins this list with its commands;
+    // `vault` is the singleton's own.
     for name in &names {
         let schema = name.split('.').next().unwrap_or_default();
         assert!(

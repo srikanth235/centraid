@@ -5,7 +5,7 @@
 //! `otp` fill `value_sealed` and `key_id`; `file` fills `value_blob`, `value_sealed` and `key_id`),
 //! and nothing in the DDL lists a key, so a sixteenth type is a seed row in `locker_type` and a
 //! table here, never a rebuild. **Which key is which kind is this file's**, and the plaintext gate
-//! (`tests/unplugged/locker_plaintext_gate.rs`) walks [`secret_keys`] so a secret key added here
+//! (`tests/locker_plaintext_gate.rs`) walks [`secret_keys`] so a secret key added here
 //! is hunted for in every door the moment it exists.
 //!
 //! A built-in field is identified by its stable `field_key` (`password`, `card_number`,

@@ -1,5 +1,10 @@
 //! The graph catalogue is held to the founded file, and the one reading of it
 //! presents edges and foreign-key columns together (#1173, O1).
+//!
+//! ASIDE until checkpoint 2 of #1214 (cargo does not discover this directory): it tests
+//! `centraid_ontology::graph`, whose catalogue still names the `links` and `attendee` relations and a
+//! Locker wall that no longer exists. Rewrite it with that crate and move it to `tests/`; the vault's
+//! own edge tests are `tests/graph.rs`.
 
 mod common;
 

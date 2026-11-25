@@ -1,5 +1,5 @@
-//! The follow engine, proved with maps of the tests' own: the product's `SYSTEMS` is empty until
-//! each app lane re-plugs its map (`crates/vault/UNPLUGGED.md`), and a map says only which fields
+//! The follow engine, proved with maps of the tests' own: the product's `SYSTEMS` maps are each proved
+//! in their own app's file (`.claude/skills/change/following.md`), and a map says only which fields
 //! of a kind a system states. What a system fills, retires, names or yields is the file's
 //! (`origin_system`, `source_shape`), which is what these tests read it through.
 //!

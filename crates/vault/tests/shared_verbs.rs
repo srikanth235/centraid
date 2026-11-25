@@ -7,9 +7,8 @@
 //! the verb and the gate together. The rules a sentence states are held by the database too:
 //! `schema_rules.rs` writes each bad row with raw SQL.
 //!
-//! The shared verbs' tests that read an app's tables (edges, links, a person merge, a follow's
-//! three-way merge, a document's bytes) went with their lanes: each re-proves its own against the
-//! new tables when its module is plugged back in (`UNPLUGGED.md`).
+//! The shared verbs' tests that read an app's tables (a person merge, a follow's three-way
+//! merge, a document's bytes) are each app's own: `people_merge.rs`, `follow_*.rs`, `docs_photos.rs`.
 
 mod common;
 
