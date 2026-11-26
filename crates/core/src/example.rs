@@ -1582,7 +1582,7 @@ fn seed_tasks(seeder: &mut Seeder, now: i64, rich: bool) {
 
     for input in [
         json!({ "title": "Rotate the tires before the drive", "due": at(now, -2, 9, 0), "priority": 8 }),
-        json!({ "title": "Book dentist appointment", "due": at(now, 1, 9, 0), "priority": 5, "effort_min": 15 }),
+        json!({ "title": "Book dentist appointment", "due": at(now, 1, 9, 0), "priority": 5 }),
         json!({
             "title": "Pick up the dry cleaning",
             "description": "Ticket is on the fridge.",
@@ -1602,43 +1602,30 @@ fn seed_tasks(seeder: &mut Seeder, now: i64, rich: bool) {
             "priority": 6,
         }),
     );
-    // A PROJECT, so Tasks' project place has something to open (#1047): the
-    // trip, filed under its "Booking" section, with a second task beside it.
+    // A TASK LIST, so Reminders' list place has something to open (#1047): the trip, filed in it,
+    // with a second task beside it.
     let project = Seeder::id(
         seeder
             .run(
                 "container.create",
-                json!({ "kind": "project", "title": "Tahoe trip", "color": if rich { "petrol" } else { "blue" }, "position": 1 }),
+                json!({ "kind": "task_list", "title": "Tahoe trip", "color": if rich { "petrol" } else { "blue" }, "position": 1 }),
             )
             .as_ref(),
         "id",
     );
     if let Some(project) = project.as_ref() {
-        let section = Seeder::id(
-            seeder
-                .run(
-                    "container.create",
-                    json!({ "kind": "section", "title": "Booking", "parent": project, "position": 1 }),
-                )
-                .as_ref(),
-            "id",
-        );
         let lift = add(
             seeder,
             json!({ "title": "Buy lift tickets online", "due": at(now, 5, 9, 0), "priority": 4 }),
         );
-        for (task, position) in [(trip.as_ref(), 1), (lift.as_ref(), 2)] {
+        for task in [trip.as_ref(), lift.as_ref()] {
             let Some(task) = task else { continue };
-            let mut input = json!({ "id": task, "project_id": project, "position": position });
-            if let Some(section) = section.as_ref() {
-                input["section_id"] = json!(section);
-            }
-            seeder.run("task.organize", input);
+            seeder.run("entity.move", json!({ "id": task, "parent": project }));
         }
     }
     if let Some(trip) = trip.as_ref() {
         for input in [
-            json!({ "title": "Compare cabins — South Lake vs Truckee", "parent_id": trip, "effort_min": 45 }),
+            json!({ "title": "Compare cabins — South Lake vs Truckee", "parent_id": trip }),
             json!({ "title": "Book the Tahoe cabin", "parent_id": trip, "due": at(now, 3, 9, 0) }),
         ] {
             add(seeder, input);
@@ -1707,7 +1694,7 @@ fn seed_tasks(seeder: &mut Seeder, now: i64, rich: bool) {
             seeder
                 .run(
                     "container.create",
-                    json!({ "kind": "project", "title": title, "color": color,
+                    json!({ "kind": "task_list", "title": title, "color": color,
                             "position": position + 2 }),
                 )
                 .as_ref(),
@@ -1715,7 +1702,7 @@ fn seed_tasks(seeder: &mut Seeder, now: i64, rich: bool) {
         );
         let Some(list) = list else { continue };
         for (index, (name, due, flagged)) in tasks.iter().enumerate() {
-            let mut input = json!({ "title": name, "project_id": list, "position": index + 1,
+            let mut input = json!({ "title": name, "parent_id": list, "position": index + 1,
                                     "priority": 3 });
             if let Some(due) = due {
                 input["due"] = json!(at(now, *due, 9, 0));

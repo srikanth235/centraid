@@ -8,12 +8,12 @@
 //!   "people":    [{"key":"neha","name":"Neha Rao","role":"…","nickname":"…","met":"…",
 //!                  "cadence":30,"starred":true,"last_contacted":"2026-09-01T10:00",
 //!                  "last_contacted_kind":"call"}],
-//!   "lists":     [{"key":"home","name":"Home","area":"…"}],
+//!   "lists":     [{"key":"home","name":"Home"}],
 //!   "events":    [{"key":"dentist","name":"Dentist","start":"2026-10-02T09:00",
 //!                  "end":"2026-10-02T10:00","description":"…","attendees":["neha"],
 //!                  "cancelled":true}],
 //!   "tasks":     [{"key":"cabin","name":"Book the cabin","due":"2026-06-19T09:00",
-//!                  "status":"open","effort":30,"priority":2,"description":"…",
+//!                  "status":"open","priority":2,"description":"…",
 //!                  "parent":"key","list":"home","completed":"2026-06-01T10:00"}],
 //!   "notebooks": [{"key":"recipes","name":"Recipes"}],
 //!   "notes":     [{"key":"dal","name":"Dal","body":"…","notebook":"recipes","pinned":true}],
@@ -61,8 +61,6 @@ struct Seeder {
     locker: Option<(String, Vec<u8>)>,
     /// `key.field` of every world value the vault cannot hold.
     dropped: Vec<String>,
-    /// The areas lists sit in, by title: containers made the first time a list names one.
-    areas: BTreeMap<String, String>,
 }
 
 fn at(text: &str) -> Result<i64, String> {
@@ -105,20 +103,6 @@ impl Seeder {
             }
         }
         Ok(())
-    }
-
-    /// The id of the area named `title`, made now if no list has named it yet.
-    fn area(&mut self, title: &str) -> Result<String, String> {
-        if let Some(id) = self.areas.get(title) {
-            return Ok(id.clone());
-        }
-        let id = self.mint();
-        self.run(
-            "container.create",
-            json!({"id": id, "kind": "area", "title": title}),
-        )?;
-        self.areas.insert(title.to_owned(), id.clone());
-        Ok(id)
     }
 
     fn mint(&self) -> String {
@@ -252,7 +236,6 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         cursor: epoch,
         locker: None,
         dropped: Vec::new(),
-        areas: BTreeMap::new(),
     };
     seeder
         .keys
@@ -281,14 +264,10 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
     for row in rows(world, "lists") {
         seeder.clock_for(row, "created")?;
         let id = seeder.mint();
-        let mut input = json!({
-            "id": id, "kind": "project",
+        let input = json!({
+            "id": id, "kind": "task_list",
             "title": str_of(row, "name").ok_or("a list needs a name")?,
         });
-        // a list's area is the container of that name, made the first time a list names it
-        if let Some(area) = str_of(row, "area") {
-            input["parent"] = json!(seeder.area(area)?);
-        }
         seeder.run("container.create", input)?;
         seeder.key(row, Kind::List, id)?;
     }
@@ -380,9 +359,6 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         if let Some(due) = str_of(row, "due") {
             input["due"] = json!(vault_time(due)?);
         }
-        if let Some(effort) = row.get("effort").and_then(Value::as_i64) {
-            input["effort_min"] = json!(effort);
-        }
         if let Some(priority) = row.get("priority").and_then(Value::as_i64) {
             input["priority"] = json!(priority);
         }
@@ -392,8 +368,10 @@ pub fn seed_report(world: &Value, path: &Path) -> Result<(Value, Vec<String>), S
         if let Some(parent) = str_of(row, "parent") {
             input["parent_id"] = json!(seeder.id(parent, Kind::Task)?);
         }
-        if let Some(list) = str_of(row, "list") {
-            input["project_id"] = json!(seeder.id(list, Kind::List)?);
+        if let Some(list) = str_of(row, "list")
+            && input.get("parent_id").is_none()
+        {
+            input["parent_id"] = json!(seeder.id(list, Kind::List)?);
         }
         seeder.run("task.add", input)?;
         seeder.key(row, Kind::Task, id)?;
