@@ -89,6 +89,7 @@ struct Entry {
     ui: Ui,
     handlers: HandlerMap,
     reads: ReadContext,
+    watched: std::collections::BTreeSet<&'static str>,
     covered: Option<Place>,
     restore: Option<Place>,
     status: Option<Status>,
@@ -144,6 +145,7 @@ impl Rooms {
             ui: Ui::default(),
             handlers: HandlerMap::default(),
             reads: ReadContext::new(),
+            watched: std::collections::BTreeSet::new(),
             covered: None,
             restore: None,
             status: None,
@@ -269,7 +271,10 @@ impl Rooms {
             let Some(entry) = stack.last_mut() else {
                 continue;
             };
-            if entry.reads.intersects(written.iter().copied()) && rebuild(entry, door).is_ok() {
+            if (entry.reads.intersects(written.iter().copied())
+                || entry.watched.iter().any(|table| written.contains(table)))
+                && rebuild(entry, door).is_ok()
+            {
                 shown.push(self.shown(&tab, Move::Reload));
             }
         }
@@ -423,7 +428,7 @@ fn own(entry: &mut Entry, tag: &str, input: &Input, door: &dyn Door) -> Then {
 fn rebuild(entry: &mut Entry, door: &dyn Door) -> Result<(), Refusal> {
     let mut build = Build::new(&mut entry.ui, door, entry.depth);
     let mut room = entry.screen.build(&mut build);
-    let (mut sel, reads) = build.into_parts();
+    let (mut sel, reads, watched) = build.into_parts();
     if let Some(status) = &entry.status {
         room.status_line = Some(wire::RoomStatusLine {
             sentence: status.sentence.clone(),
@@ -449,6 +454,7 @@ fn rebuild(entry: &mut Entry, door: &dyn Door) -> Result<(), Refusal> {
     }
     entry.handlers = handlers;
     entry.reads = reads;
+    entry.watched = watched;
     entry.last = Some(room);
     Ok(())
 }

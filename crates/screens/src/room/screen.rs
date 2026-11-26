@@ -87,6 +87,7 @@ pub struct Build<'a> {
     pub ui: &'a mut Ui,
     pub door: &'a dyn Door,
     reads: ReadContext,
+    watched: std::collections::BTreeSet<&'static str>,
 }
 
 impl<'a> Build<'a> {
@@ -97,6 +98,7 @@ impl<'a> Build<'a> {
             ui,
             door,
             reads: ReadContext::new(),
+            watched: std::collections::BTreeSet::new(),
         }
     }
 
@@ -105,8 +107,15 @@ impl<'a> Build<'a> {
         self.reads.record(read);
     }
 
-    pub(super) fn into_parts(self) -> (Sel, ReadContext) {
-        (self.sel, self.reads)
+    /// Reload when a commit writes any of `tables`, for what the room read through the core's own
+    /// doors and not through a registered read (the backup status reads the `backup` ledger and
+    /// the vault's `blob` rows).
+    pub fn watch(&mut self, tables: &[&'static str]) {
+        self.watched.extend(tables.iter().copied());
+    }
+
+    pub(super) fn into_parts(self) -> (Sel, ReadContext, std::collections::BTreeSet<&'static str>) {
+        (self.sel, self.reads, self.watched)
     }
 }
 

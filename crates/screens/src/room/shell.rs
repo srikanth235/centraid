@@ -20,6 +20,8 @@ pub const BACKUP: &str = "backup";
 
 const EN: Locale = Locale::En;
 
+const BACKUP_TABLES: [&str; 2] = ["backup", "blob"];
+
 pub const APPEARANCE_KEY: &str = "settings.appearance";
 pub const UNITS_KEY: &str = "settings.units";
 pub const DETAILS_KEY: &str = "settings.details";
@@ -90,6 +92,7 @@ impl RoomScreen for Home {
     }
 
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
+        b.watch(&BACKUP_TABLES);
         let status = the_line(b.door)
             .map(|(line, ..)| line.status)
             .unwrap_or_default();
@@ -173,6 +176,7 @@ impl RoomScreen for Settings {
     }
 
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
+        b.watch(&BACKUP_TABLES);
         let appearance = stored(b, APPEARANCE_KEY, "system");
         let units = stored(b, UNITS_KEY, "phone");
         let details = stored(b, DETAILS_KEY, "on");
@@ -304,6 +308,7 @@ impl RoomScreen for Backup {
     }
 
     fn build(&mut self, b: &mut Build<'_>) -> wire::Room {
+        b.watch(&BACKUP_TABLES);
         let mut frame = room(wire::RoomKind::SystemPlace, BACKUP).title(&words::backup_title(EN));
         if b.depth > 1 {
             frame = frame.back(&mut b.sel, &settings_words::settings_title(EN));
