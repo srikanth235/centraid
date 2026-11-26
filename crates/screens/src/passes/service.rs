@@ -228,12 +228,6 @@ impl Service {
             E::DataChanged(_) => self.conductor.commit_landed(),
             E::TimerFired(fired) => self.conductor.timer(&fired.timer),
             E::Signalled(_) => self.asked(),
-            E::RollReported(report) => match report.kind {
-                // THE WALK ENDED, OR FAILED, OR HAD NONE TO WALK: the pass runs either way.
-                Some(wire::roll_reported::Kind::Walked(_)) => self.conductor.walked(),
-                Some(wire::roll_reported::Kind::Fed(fed)) => self.conductor.streamed(fed.landed),
-                None => Vec::new(),
-            },
             E::ShellFact(fact) => self.fact(fact),
             _ => Vec::new(),
         };
@@ -423,11 +417,7 @@ impl Screen for Service {
                     self.handle(other, ctx, &mut out);
                 } else if matches!(
                     other,
-                    E::Lifecycle(_)
-                        | E::DataChanged(_)
-                        | E::ShellFact(_)
-                        | E::Signalled(_)
-                        | E::RollReported(_)
+                    E::Lifecycle(_) | E::DataChanged(_) | E::ShellFact(_) | E::Signalled(_)
                 ) {
                     // A pass reads the member's rule at its start, and the rule
                     // is in the device store the shell has not yet answered.

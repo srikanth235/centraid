@@ -285,7 +285,6 @@ message ScreenEvent {
     // conductor's wake, to the pass and vault services).
     Signalled signalled = 1501;
     // RUNTIME-ORIGINATED: the camera-roll service's report to the pass service.
-    RollReported roll_reported = 1502;
     // ---- the vault shelf (1560-1599, lane H2): vault_screens.proto ----
     // RUNTIME-ORIGINATED from `ScreenRequest.memory_warning`.
     MemoryWarning memory_warning = 1560;
