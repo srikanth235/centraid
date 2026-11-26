@@ -9,7 +9,6 @@ blob.stage
 budget.set
 budget.set_carry
 category.add
-category.merge
 checkpoint.record
 container.create
 container.move
@@ -31,6 +30,7 @@ entity.purge
 entity.restore
 entity.retitle
 entity.trash
+event.add_guest
 event.cancel
 event.edit
 event.edit_occurrence

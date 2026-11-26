@@ -6,8 +6,9 @@
 //! [`budgets_of_month`]). What is written is a decision (a name, a category, a budget, a rule) or a
 //! fact the bank stated (a line, a checkpoint).
 //!
-//! - **An account** is an entity with a type (a lookup: `account_type`), a currency that is fixed
-//!   once it has lines, and the balance it opened with on a day (`opening_on`: lines on or before it
+//! - **An account** is an entity with a type (a lookup: `account_type`), a currency (changing it
+//!   rescales every figure kept in it, and is refused when one would lose a fraction), and the
+//!   balance it opened with on a day (`opening_on`: lines on or before it
 //!   are already in that balance). A statement origin fills it only once a statement is read or its
 //!   bank number or column layout is remembered (`origin.ref`, `origin.config`): an account kept by
 //!   hand has none. Closing is the `archived` flag, a rename is `entity.retitle`, and trashing an
@@ -25,8 +26,9 @@ use std::collections::BTreeMap;
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Value as Json, json};
 
-use crate::commands::entity::{self, STALE_GUARD, with_rev};
-use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency, Risk};
+use crate::commands::entity::{STALE_GUARD, with_rev};
+use crate::commands::txn_portable::exponent;
+use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempotency};
 use crate::error::Result;
 use crate::model::{Kind, fold_label};
 
@@ -34,7 +36,7 @@ use crate::model::{Kind, fold_label};
 // Small helpers. SQL lives in `crates/vault` by construction.
 // ---------------------------------------------------------------------------
 
-/// Every month a category has a budget for, read when two categories merge: a seek by the primary
+/// Every month a category has a budget for: a seek by the primary
 /// key `(category_id, month)`. `money_walks.rs` plans it.
 pub const PLANS_OF_CATEGORY: &str =
     "SELECT month, amount_minor, carry FROM budget WHERE category_id = ?1";
@@ -287,6 +289,96 @@ fn pre_account(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     ))
 }
 
+/// The tables that keep a figure in an account's currency, each with the filter that reaches the
+/// account's rows. `original_*` (another currency) and a budget (per category) are not among them.
+const FIGURES: [(&str, &str, &str); 4] = [
+    ("account", "opening_minor", "id = ?1"),
+    ("txn", "amount_minor", "account_id = ?1"),
+    (
+        "txn_split",
+        "amount_minor",
+        "txn_id IN (SELECT id FROM txn WHERE account_id = ?1)",
+    ),
+    ("checkpoint", "balance_minor", "account_id = ?1"),
+];
+
+/// How an account's figures scale when its currency changes: `Some((true, f))` multiplies by `f`,
+/// `Some((false, f))` divides, `None` leaves them be.
+fn scale(connection: &Connection, id: &str, currency: &str) -> Result<Option<(bool, i64)>> {
+    let held: String =
+        connection.query_row("SELECT currency FROM account WHERE id = ?1", [id], |row| {
+            row.get(0)
+        })?;
+    let (old, new) = (exponent(&held), exponent(currency));
+    let factor = 10_i64.pow(old.abs_diff(new));
+    Ok((old != new).then_some((new > old, factor)))
+}
+
+/// A sentence when changing the account to `currency` would lose a fraction of a figure or
+/// overflow one.
+fn rescale_sentence(connection: &Connection, id: &str, currency: &str) -> Result<Option<String>> {
+    let Some((up, factor)) = scale(connection, id, currency)? else {
+        return Ok(None);
+    };
+    for (table, column, filter) in FIGURES {
+        if up {
+            let widest: Option<i64> = connection.query_row(
+                &format!("SELECT MAX(ABS({column})) FROM {table} WHERE {filter}"),
+                [id],
+                |row| row.get(0),
+            )?;
+            if widest.is_some_and(|widest| widest.checked_mul(factor).is_none()) {
+                return Ok(Some(format!(
+                    "A figure in this account is too large to hold in {currency}."
+                )));
+            }
+        } else {
+            let lost: i64 = connection.query_row(
+                &format!(
+                    "SELECT COUNT(*) FROM {table} WHERE {filter} AND {column} % {factor} <> 0"
+                ),
+                [id],
+                |row| row.get(0),
+            )?;
+            if lost > 0 {
+                return Ok(Some(format!(
+                    "{currency} has no cents, and {lost} figure{} in this account {}.",
+                    if lost == 1 { "" } else { "s" },
+                    if lost == 1 { "has some" } else { "have some" },
+                )));
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// Give the account `currency`, keeping every figure in the account's currency worth what it was:
+/// the digits scale by the change of the currencies' minor units. Whether anything changed.
+fn relabel(connection: &Connection, id: &str, currency: &str) -> Result<bool> {
+    let Some(scaled) = scale(connection, id, currency)? else {
+        return Ok(connection.execute(
+            "UPDATE account SET currency = ?2 WHERE id = ?1 AND currency IS NOT ?2",
+            [id, currency],
+        )? > 0);
+    };
+    let (up, factor) = scaled;
+    let operator = if up { '*' } else { '/' };
+    for (table, column, filter) in FIGURES.iter().skip(1) {
+        connection.execute(
+            &format!("UPDATE {table} SET {column} = {column} {operator} {factor} WHERE {filter}"),
+            [id],
+        )?;
+    }
+    connection.execute(
+        &format!(
+            "UPDATE account SET currency = ?2, opening_minor = opening_minor {operator} {factor}
+              WHERE id = ?1"
+        ),
+        [id, currency],
+    )?;
+    Ok(true)
+}
+
 fn pre_edit_account(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     if let Some(sentence) = pre_account(ctx)? {
         return Ok(Some(sentence));
@@ -315,19 +407,8 @@ fn pre_edit_account(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
                 "A currency is a three-letter code like USD.".to_owned(),
             ));
         }
-        let held: String =
-            connection.query_row("SELECT currency FROM account WHERE id = ?1", [id], |row| {
-                row.get(0)
-            })?;
-        let lines: bool = connection.query_row(
-            "SELECT EXISTS (SELECT 1 FROM txn WHERE account_id = ?1)",
-            [id],
-            |row| row.get(0),
-        )?;
-        if lines && held != currency.trim().to_uppercase() {
-            return Ok(Some(
-                "An account's currency is fixed once it has lines.".to_owned(),
-            ));
+        if let Some(sentence) = rescale_sentence(connection, id, &currency.trim().to_uppercase())? {
+            return Ok(Some(sentence));
         }
     }
     if let Some(number) = ctx.optional_str("external_ref")
@@ -376,11 +457,16 @@ fn edit_account(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             [id, account_type],
         )? > 0;
     }
+    let mut replaced = None;
     if let Some(currency) = input.currency.as_deref() {
-        changed |= connection.execute(
-            "UPDATE account SET currency = ?2 WHERE id = ?1 AND currency IS NOT ?2",
-            [id, &currency.trim().to_uppercase()],
-        )? > 0;
+        let held: String =
+            connection.query_row("SELECT currency FROM account WHERE id = ?1", [id], |row| {
+                row.get(0)
+            })?;
+        if relabel(connection, id, &currency.trim().to_uppercase())? {
+            changed = true;
+            replaced = Some(held);
+        }
     }
     if let Some(budget) = input.on_budget {
         changed |= connection.execute(
@@ -401,7 +487,11 @@ fn edit_account(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     if changed {
         ctx.touch(id)?;
     }
-    with_rev(ctx, id, json!({ "id": id, "changed": changed }))
+    let mut answer = json!({ "id": id, "changed": changed });
+    if let Some(held) = replaced {
+        answer["replaced"] = json!({ "currency": held });
+    }
+    with_rev(ctx, id, answer)
 }
 
 fn pre_set_opening(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -896,77 +986,6 @@ fn add_category(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     Ok(json!({ "id": id }))
 }
 
-fn pre_merge_category(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    let connection = ctx.connection();
-    let (from, into) = (ctx.required_str("from_id")?, ctx.required_str("into_id")?);
-    if !(is_live(connection, from, Kind::Category)? && is_live(connection, into, Kind::Category)?) {
-        return Ok(Some("There is no such category.".to_owned()));
-    }
-    if from == into {
-        return Ok(Some(
-            "Choose a different category to merge into.".to_owned(),
-        ));
-    }
-    let children: bool = connection.query_row(
-        "SELECT EXISTS (SELECT 1 FROM entity WHERE parent_id = ?1)",
-        [from],
-        |row| row.get(0),
-    )?;
-    Ok(unless(
-        !children,
-        "Merge or move the categories inside it first.",
-    ))
-}
-
-#[derive(serde::Deserialize)]
-struct MergeCategoryInput {
-    from_id: String,
-    into_id: String,
-}
-
-/// Fold one category into another: the parts filed under it, its rules and its budgets move, and
-/// it goes. Where both budgeted the same month the budgets add. A line's parts keep their amounts,
-/// so every line still sums.
-fn merge_category(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
-    let input: MergeCategoryInput = ctx.parse_input()?;
-    let connection = ctx.connection();
-    let (from, into) = (input.from_id.as_str(), input.into_id.as_str());
-    let parts = connection.execute(
-        "UPDATE txn_split SET category_id = ?2 WHERE category_id = ?1",
-        [from, into],
-    )?;
-    let rules = connection.execute(
-        "UPDATE rule SET category_id = ?2 WHERE category_id = ?1",
-        [from, into],
-    )?;
-    let plans: Vec<(String, i64, i64)> = connection
-        .prepare(PLANS_OF_CATEGORY)?
-        .query_map([from], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
-        .collect::<rusqlite::Result<_>>()?;
-    for (month, amount, carry) in &plans {
-        let held: bool = connection.query_row(
-            "SELECT EXISTS (SELECT 1 FROM budget WHERE category_id = ?1 AND month = ?2)",
-            [into, month],
-            |row| row.get(0),
-        )?;
-        if held {
-            connection.execute(
-                "UPDATE budget SET amount_minor = amount_minor + ?3, carry = MAX(carry, ?4)
-                  WHERE category_id = ?1 AND month = ?2",
-                rusqlite::params![into, month, amount, carry],
-            )?;
-        } else {
-            connection.execute(
-                "UPDATE budget SET category_id = ?3 WHERE category_id = ?1 AND month = ?2",
-                [from, month, into],
-            )?;
-        }
-    }
-    // The category leaves; the budgets and rules that stayed went with it and its archive mark too.
-    entity::purge_one(ctx, from, &mut Vec::new())?;
-    Ok(json!({ "parts": parts, "rules": rules, "plans": plans.len() }))
-}
-
 // ---------------------------------------------------------------------------
 // The registry
 // ---------------------------------------------------------------------------
@@ -1009,28 +1028,6 @@ pub fn definitions() -> Vec<CommandDefinition> {
         predicate: "category_is_new_and_under_a_group",
         check: pre_new_category,
     }];
-    const MERGE: &[CommandCondition] = &[CommandCondition {
-        predicate: "categories_can_merge",
-        check: pre_merge_category,
-    }];
-
-    let mut merge = CommandDefinition::plain(
-        "category.merge",
-        "category",
-        r#"{
-          "type": "object",
-          "required": ["from_id", "into_id"],
-          "additionalProperties": false,
-          "properties": {
-            "from_id": { "type": "string", "minLength": 1 },
-            "into_id": { "type": "string", "minLength": 1 }
-          }
-        }"#,
-        Idempotency::Idempotent,
-        MERGE,
-        merge_category,
-    );
-    merge.risk = Risk::Medium;
 
     vec![
         CommandDefinition::plain(
@@ -1197,6 +1194,5 @@ pub fn definitions() -> Vec<CommandDefinition> {
             NEW_CATEGORY,
             add_category,
         ),
-        merge,
     ]
 }

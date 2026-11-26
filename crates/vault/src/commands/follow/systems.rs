@@ -76,6 +76,21 @@ fn nothing_to_settle(_: &CommandCtx<'_, '_>, _: &str) -> Result<()> {
     Ok(())
 }
 
+/// A line whose amount the bank changed keeps its parts adding up: the last part takes the
+/// difference.
+fn settle_line(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<()> {
+    ctx.connection().execute(
+        "UPDATE txn_split
+            SET amount_minor = amount_minor
+                + (SELECT t.amount_minor - (SELECT SUM(amount_minor) FROM txn_split WHERE txn_id = t.id)
+                     FROM txn t WHERE t.id = txn_split.txn_id)
+          WHERE txn_id = ?1
+            AND position = (SELECT MAX(position) FROM txn_split WHERE txn_id = ?1)",
+        [id],
+    )?;
+    Ok(())
+}
+
 /// A statement line is in the account its origin fills (the line's account stays `txn.account_id`,
 /// it is not a home). The line is entered from a statement, the column's default.
 fn statement_defaults(
@@ -134,11 +149,12 @@ const LINE: Child = Child {
 };
 
 /// A bank's statement (Money): read line by line into an account (its one origin fills it; a statement is
-// not a phone's store and is never stopped): the vault adds a line once, a re-import writes
-// nothing, a line's day, amount and what was charged are the bank's and never edited, and the
-// payee a rule names is given to a line when it is added, never after. A pending line the bank
-// later posts is the bank's word (`status`). The member's categories are `txn_split` and their
-// memo is `txn.memo`: neither is stated, so neither is ever overwritten.
+// not a phone's store and is never stopped): the vault adds a line once and a re-import adds it
+// again never. A field the member edited stays theirs and the bank's word is read beside it
+// (`follow::differences`); one they did not edit follows the bank (a pending line the bank later
+// posts). The payee a rule names is given to a line when it is added, never after. The member's
+// categories are `txn_split` and their memo is `txn.memo`: neither is stated, so neither is ever
+// overwritten.
 pub const STATEMENT: SystemMap = SystemMap {
     system: "statement",
     command: "follow.statement",
@@ -151,13 +167,7 @@ pub const STATEMENT: SystemMap = SystemMap {
         "original_amount_minor",
         "original_currency",
     ],
-    fixed: &[
-        "title",
-        "posted_on",
-        "amount_minor",
-        "original_amount_minor",
-        "original_currency",
-    ],
+    fixed: &["title"],
     children: &[LINE],
     match_on: &[],
     gone: Gone::Keep,
@@ -165,7 +175,7 @@ pub const STATEMENT: SystemMap = SystemMap {
     defaults: statement_defaults,
     founds: None,
     shape: as_stated,
-    settle: nothing_to_settle,
+    settle: settle_line,
     named: crate::commands::rule::name_new_line,
 };
 

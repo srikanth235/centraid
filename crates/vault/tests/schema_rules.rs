@@ -939,16 +939,14 @@ fn an_account_a_line_a_transfer_a_budget_and_a_rule_hold_the_rules_money_states(
     let (h1, h2, h3) = (id(46), w.entity(47, "txn", "T2"), w.entity(48, "txn", "T3"));
     w.takes(&format!("INSERT INTO txn (id, account_id, posted_on, amount_minor, entered) VALUES ('{h2}', '{a2}', '2026-03-01', 300, 'hand')"));
     w.takes(&format!("INSERT INTO txn (id, account_id, posted_on, amount_minor, entered) VALUES ('{h3}', '{a2}', '2026-03-01', -9, 'hand')"));
-    // A hand line is edited and may become a statement line; nothing else ever changes `entered`, and
-    // a statement line's day, amount, account and what was charged never change.
+    // A hand line is edited and may become a statement line; nothing else ever changes `entered`.
     w.takes(&format!("UPDATE txn SET amount_minor = -250, posted_on = '2026-03-02' WHERE id = '{h2}'; UPDATE txn SET amount_minor = 300 WHERE id = '{h2}'"));
     w.refuses_with(&format!("UPDATE txn SET entered = 'statement' WHERE id = '{h3}'; UPDATE txn SET entered = 'hand' WHERE id = '{h3}'"), "origin never changes");
     let stated = w.entity(49, "txn", "T4");
     w.takes(&format!("INSERT INTO txn (id, account_id, posted_on, amount_minor) VALUES ('{stated}', '{a2}', '2026-03-01', -4)"));
-    w.refuses_with(
-        &format!("UPDATE txn SET amount_minor = 1 WHERE id = '{stated}'"),
-        "never edited",
-    );
+    w.takes(&format!(
+        "UPDATE txn SET amount_minor = 1, posted_on = '2026-03-02' WHERE id = '{stated}'; UPDATE txn SET amount_minor = -4 WHERE id = '{stated}'"
+    ));
     // A dismissed match is a hand line against a statement line of one account, once, never against
     // itself, and goes with either line.
     let dismiss = |hand: &str, statement: &str| {
@@ -2179,6 +2177,13 @@ fn a_day_has_one_total_of_a_daily_metric_and_never_a_negative_one() {
     w.refuses(&total("2026-03-03", "blood_pressure", "120"));
     w.refuses(&total("2026-03-03", "mood", "1"));
     // the store it came from is an origin
+    w.refuses(&format!(
+        "INSERT INTO measurement (person_id, day, metric, value, origin_id, stated) VALUES ('{person}', '2026-03-04', 'steps', 1, 'nobody', 1)"
+    ));
+    // what the store stated comes with the store, and is not negative
+    w.refuses(&format!(
+        "INSERT INTO measurement (person_id, day, metric, value, stated) VALUES ('{person}', '2026-03-04', 'steps', 1, 1)"
+    ));
     w.refuses(&format!(
         "INSERT INTO measurement (person_id, day, metric, value, origin_id) VALUES ('{person}', '2026-03-04', 'steps', 1, 'nobody')"
     ));
