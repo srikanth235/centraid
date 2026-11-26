@@ -1,9 +1,10 @@
 //! A CONVERSATION, AS THE SHELL READS IT BACK.
 //!
 //! The writes are [`crate::commands::thread`]. Everything here reads: the thread list, one thread's
-//! messages with their cards and attachments, the turns a reopened thread hands the assistant's
-//! session, whether the row a card names is still there, and what the chat may read of a vault
-//! photograph or document it was handed ([#1135](https://github.com/srikanth235/centraid/issues/1135)).
+//! messages with their cards and attachments (their words read live from the items they show), the
+//! turns a reopened thread hands the assistant's session, whether the row a card names is still
+//! there, and what the chat may read of a vault photograph or document it was handed
+//! ([#1135](https://github.com/srikanth235/centraid/issues/1135)).
 //!
 //! None of it takes a vault-wide lock for longer than one bounded query, and none of it writes: a
 //! read that healed a row would be a writer the command plane does not know about.
@@ -17,6 +18,15 @@ use crate::model::Kind;
 
 /// The longest a thread's title runs, in characters, before it is cut.
 pub const TITLE_CHARS: usize = 60;
+
+/// What a card draws when the item it showed is deleted or in the trash.
+pub const DELETED_ITEM: &str = "An item you deleted";
+
+/// What a photo attachment draws when the photograph is deleted or in the trash.
+pub const DELETED_PHOTO: &str = "A deleted photo";
+
+/// What a document attachment draws when the document is deleted or in the trash.
+pub const DELETED_DOCUMENT: &str = "A deleted document";
 
 /// The media types of a document whose text the chat will read.
 pub const ATTACH_TEXT_TYPES: [&str; 3] = ["text/plain", "text/markdown", "text/x-markdown"];
@@ -53,16 +63,16 @@ pub struct ThreadRow {
     pub updated_ms: i64,
 }
 
-/// A card as it was said: a snapshot, with no reference to its row.
+/// A card as the thread draws it: the item it shows, with its title read now.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct StoredCard {
-    pub app: String,
-    pub entity: String,
+    /// The shown item's kind, or empty when the item is gone.
+    pub kind: String,
+    /// The shown item's id while it is in the vault and not in the trash, else empty.
     pub row_id: String,
     pub qualifier: String,
+    /// The item's title now, or [`DELETED_ITEM`] when it is gone.
     pub title: String,
-    pub subtitle: String,
-    pub meta: String,
 }
 
 /// An attachment as it was sent: the typed reference, and a file to draw as its thumbnail when this
@@ -71,6 +81,8 @@ pub struct StoredCard {
 pub struct StoredAttachment {
     /// `photo`, `document` or `image`.
     pub form: String,
+    /// An image's own label; a photograph's or document's title now, or the tombstone
+    /// ([`DELETED_PHOTO`], [`DELETED_DOCUMENT`]) when it is gone.
     pub label: String,
     /// The vault photograph or document, while it is still in the vault and not in the trash.
     pub entity_id: Option<String>,
@@ -102,13 +114,23 @@ pub struct StoredThread {
     pub messages: Vec<StoredMessage>,
 }
 
-/// One earlier turn, as the assistant's session wants it back.
+/// What a stored turn's attachment draws in the history's marker.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TurnAttachment {
+    /// `photo`, `document` or `image`.
+    pub form: String,
+    /// The label or live title, or `None` when the photograph or document is gone.
+    pub label: Option<String>,
+}
+
+/// One earlier answered turn that carried attachments, as the assistant's session wants it back.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoredTurn {
     /// The member's words.
     pub question: String,
-    /// The assistant's routing record for the turn, when it kept one.
-    pub record_json: Option<String>,
+    pub attachments: Vec<TurnAttachment>,
+    /// What the assistant said.
+    pub answer: String,
 }
 
 /// Where the bytes of a photograph are, for the chat to read.
@@ -191,12 +213,11 @@ fn thread_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ThreadRow> {
 
 fn messages_of(connection: &Connection, thread_id: &str) -> Result<Vec<StoredMessage>> {
     let mut statement = connection.prepare(
-        "SELECT ordinal, role, text, outcome, refusal, notice, cards
+        "SELECT ordinal, role, text, outcome, refusal, notice
            FROM message WHERE thread_id = ?1 ORDER BY ordinal",
     )?;
-    let rows = statement
+    let mut messages = statement
         .query_map([thread_id], |row| {
-            let cards: String = row.get(6)?;
             Ok(StoredMessage {
                 ordinal: row.get(0)?,
                 role: row.get(1)?,
@@ -204,36 +225,45 @@ fn messages_of(connection: &Connection, thread_id: &str) -> Result<Vec<StoredMes
                 outcome: row.get(3)?,
                 refusal: row.get(4)?,
                 notice: row.get(5)?,
-                cards: cards_of(&cards),
+                cards: Vec::new(),
                 attachments: Vec::new(),
             })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
-    Ok(rows)
+    let mut cards = connection.prepare(
+        "SELECT c.ordinal, c.qualifier, e.kind, e.id, e.title
+           FROM message_card c
+           LEFT JOIN entity e ON e.id = c.entity_id AND e.deleted_at IS NULL
+          WHERE c.thread_id = ?1 ORDER BY c.ordinal, c.position",
+    )?;
+    let rows = cards
+        .query_map([thread_id], |row| {
+            let title: Option<String> = row.get(4)?;
+            Ok((
+                row.get::<_, i64>(0)?,
+                StoredCard {
+                    qualifier: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                    kind: row.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                    row_id: row.get::<_, Option<String>>(3)?.unwrap_or_default(),
+                    title: title.unwrap_or_else(|| DELETED_ITEM.to_owned()),
+                },
+            ))
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    for (ordinal, card) in rows {
+        if let Some(message) = messages.iter_mut().find(|m| m.ordinal == ordinal) {
+            message.cards.push(card);
+        }
+    }
+    Ok(messages)
 }
 
-/// The cards a message snapshot holds. A snapshot this build cannot read is no cards, not a thread
-/// that will not open.
-fn cards_of(json: &str) -> Vec<StoredCard> {
-    let word = |card: &serde_json::Value, key: &str| {
-        card.get(key)
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or_default()
-            .to_owned()
-    };
-    serde_json::from_str::<Vec<serde_json::Value>>(json)
-        .unwrap_or_default()
-        .iter()
-        .map(|card| StoredCard {
-            app: word(card, "app"),
-            entity: word(card, "entity"),
-            row_id: word(card, "id"),
-            qualifier: word(card, "qualifier"),
-            title: word(card, "title"),
-            subtitle: word(card, "subtitle"),
-            meta: word(card, "meta"),
-        })
-        .collect()
+fn tombstone(form: &str) -> &'static str {
+    if form == "document" {
+        DELETED_DOCUMENT
+    } else {
+        DELETED_PHOTO
+    }
 }
 
 impl Vault {
@@ -319,28 +349,34 @@ impl Vault {
         };
         // A trashed photograph or document is as gone to the member as a purged one, so its
         // reference reads as lost here too.
-        let attachments: Vec<(i64, StoredAttachment, Option<String>)> = self.read(|connection| {
-            let mut statement = connection.prepare(
-                "SELECT a.ordinal, a.form, a.label,
-                        (SELECT id FROM entity WHERE id = a.entity_id AND deleted_at IS NULL), a.thumb
-                   FROM message_attachment a WHERE a.thread_id = ?1 ORDER BY a.ordinal, a.position",
-            )?;
-            let rows = statement
-                .query_map([thread_id], |row| {
-                    Ok((
-                        row.get(0)?,
-                        StoredAttachment {
-                            form: row.get(1)?,
-                            label: row.get(2)?,
-                            entity_id: row.get(3)?,
-                            thumbnail_path: None,
-                        },
-                        row.get(4)?,
-                    ))
-                })?
-                .collect::<std::result::Result<Vec<_>, _>>()?;
-            Ok(rows)
-        })?;
+        let attachments: Vec<(i64, StoredAttachment, Option<String>)> =
+            self.read(|connection| {
+                let mut statement = connection.prepare(
+                    "SELECT a.ordinal, a.form, a.label, e.id, e.title, a.thumb
+                   FROM message_attachment a
+                   LEFT JOIN entity e ON e.id = a.entity_id AND e.deleted_at IS NULL
+                  WHERE a.thread_id = ?1 ORDER BY a.ordinal, a.position",
+                )?;
+                let rows = statement
+                    .query_map([thread_id], |row| {
+                        let form: String = row.get(1)?;
+                        let own: Option<String> = row.get(2)?;
+                        let title: Option<String> = row.get(4)?;
+                        let label = own.or(title).unwrap_or_else(|| tombstone(&form).to_owned());
+                        Ok((
+                            row.get(0)?,
+                            StoredAttachment {
+                                form,
+                                label,
+                                entity_id: row.get(3)?,
+                                thumbnail_path: None,
+                            },
+                            row.get(5)?,
+                        ))
+                    })?
+                    .collect::<std::result::Result<Vec<_>, _>>()?;
+                Ok(rows)
+            })?;
         for (ordinal, mut attachment, thumb) in attachments {
             attachment.thumbnail_path = self.attachment_thumbnail(&attachment, thumb.as_deref())?;
             if let Some(message) = messages.iter_mut().find(|m| m.ordinal == ordinal) {
@@ -381,32 +417,61 @@ impl Vault {
             .map(|path| path.to_string_lossy().into_owned()))
     }
 
-    /// The last `turns` turns of a thread that kept a routing record, oldest first, for a reopened
-    /// thread's session. A turn with no record (a stopped one) is not history: the assistant never
-    /// recorded it either.
+    /// The last `turns` answered turns of a thread that carried attachments, oldest first, for a
+    /// reopened thread's session. A turn is rebuilt from the member's words, its attachments (a
+    /// photograph's or document's title read live, `None` when it is gone) and the answer's words:
+    /// the assistant keeps no other record of it.
     ///
     /// # Errors
     /// [`crate::error::VaultError`] when the vault itself is unreadable.
     pub fn chat_history(&self, thread_id: &str, turns: usize) -> Result<Vec<StoredTurn>> {
         self.read(|connection| {
             let mut statement = connection.prepare(
-                "SELECT u.text, a.record
+                "SELECT u.ordinal, u.text, a.text
                    FROM message a
                    JOIN message u ON u.thread_id = a.thread_id AND u.ordinal = a.ordinal - 1
-                  WHERE a.thread_id = ?1 AND a.role = 'assistant' AND a.record IS NOT NULL
+                  WHERE a.thread_id = ?1 AND a.role = 'assistant' AND a.outcome = 'answered'
+                    AND a.text <> ''
+                    AND EXISTS (SELECT 1 FROM message_attachment m
+                                 WHERE m.thread_id = u.thread_id AND m.ordinal = u.ordinal)
                   ORDER BY a.ordinal DESC LIMIT ?2",
             )?;
-            let mut rows = statement
+            let mut held = connection.prepare_cached(
+                "SELECT a.form, a.label, e.title
+                   FROM message_attachment a
+                   LEFT JOIN entity e ON e.id = a.entity_id AND e.deleted_at IS NULL
+                  WHERE a.thread_id = ?1 AND a.ordinal = ?2 ORDER BY a.position",
+            )?;
+            let found = statement
                 .query_map(
                     rusqlite::params![thread_id, i64::try_from(turns).unwrap_or(i64::MAX)],
                     |row| {
-                        Ok(StoredTurn {
-                            question: row.get(0)?,
-                            record_json: row.get(1)?,
-                        })
+                        Ok((
+                            row.get::<_, i64>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                        ))
                     },
                 )?
                 .collect::<std::result::Result<Vec<_>, _>>()?;
+            let mut rows = Vec::with_capacity(found.len());
+            for (ordinal, question, answer) in found {
+                let attachments = held
+                    .query_map(rusqlite::params![thread_id, ordinal], |row| {
+                        let own: Option<String> = row.get(1)?;
+                        let title: Option<String> = row.get(2)?;
+                        Ok(TurnAttachment {
+                            form: row.get(0)?,
+                            label: own.or(title),
+                        })
+                    })?
+                    .collect::<std::result::Result<Vec<_>, _>>()?;
+                rows.push(StoredTurn {
+                    question,
+                    attachments,
+                    answer,
+                });
+            }
             rows.reverse();
             Ok(rows)
         })
@@ -431,7 +496,7 @@ impl Vault {
 
     /// Whether the row a card names is still in the vault and not in the trash.
     ///
-    /// A card is a snapshot with no foreign key, so this is asked at the moment of a tap. An app a
+    /// A tap names its card by words, so this is asked at the moment of it. An app a
     /// card may not name ([`crate::roster`]: one that does not exist) is answered
     /// `false`; an ENTITY word this does not interpret, of a real app, is answered `true`, because
     /// the shell opens whatever it has a route for and an unknown card is not evidence that a row

@@ -894,7 +894,12 @@ const TEXT: &[(&str, &str, Text)] = &[
     (
         "message_attachment",
         "label",
-        Text::Not("a copy of the attached thing's title, or a pasted image's name"),
+        Text::Not("a pasted image's own name; a photo's or document's title is read live"),
+    ),
+    (
+        "message_card",
+        "qualifier",
+        Text::Not("a closed code of at most 24 letters that names no word of the item"),
     ),
     ("locker_item_field", "value_text", Text::Found),
     ("locker_item_field", "value_sealed", Text::Sealed),

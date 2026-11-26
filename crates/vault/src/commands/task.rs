@@ -50,11 +50,11 @@
 //! edges, so the successor of "call Mum" is still about Mum and still tagged. Cancelling ends the
 //! occurrence and spawns nothing.
 //!
-//! ## A snooze moves the alert, not the due (#1188, NA5)
+//! ## A snooze moves the alert, not the due (#1214 S9)
 //!
-//! `snoozed_until` is the instant the member asked to be reminded again. While it is set it is the
-//! task's one alert (on its smallest lead, [`crate::alerts`]); an edit of the due, the leads or the
-//! rule that states no snooze of its own ends it, and so does finishing.
+//! A snooze is a `snooze` row `alert.snooze` writes ([`crate::commands::alert`]), and this module
+//! writes none. The database ends it: a changed due or rule, a changed lead and finishing a task
+//! each delete it by trigger.
 //!
 //! ## Priority is not iCalendar's
 //!
@@ -360,14 +360,13 @@ struct Held {
     priority: i64,
     description: Option<String>,
     url: Option<String>,
-    snoozed_until: Option<String>,
 }
 
 fn held(connection: &Connection, id: &str) -> Result<Option<Held>> {
     Ok(connection
         .query_row(
             "SELECT status, due, due_timing, zone, rule, anchor, series_id, scheduled_on, priority,
-                    description, url, snoozed_until
+                    description, url
                FROM task WHERE id = ?1",
             [id],
             |row| {
@@ -383,7 +382,6 @@ fn held(connection: &Connection, id: &str) -> Result<Option<Held>> {
                     priority: row.get(8)?,
                     description: row.get(9)?,
                     url: row.get(10)?,
-                    snoozed_until: row.get(11)?,
                 })
             },
         )
@@ -501,18 +499,6 @@ fn model_refusal(ctx: &CommandCtx<'_, '_>, held: Option<&Held>) -> Result<Option
         && let Some(sentence) = day_refusal(ctx.connection(), "scheduled_on", Some(day))?
     {
         return Ok(Some(sentence));
-    }
-    if let Some(Some(until)) = stated(ctx, "snoozed_until") {
-        if !matches!(temporal::classify(&until), Some(temporal::Kind::Instant)) {
-            return Ok(Some(temporal::refusal(
-                "snoozed_until",
-                &until,
-                &[temporal::Kind::Instant],
-            )));
-        }
-        if held.is_some_and(|held| held.status != "open") {
-            return Ok(Some("Only an open task can be snoozed.".to_owned()));
-        }
     }
     Ok(None)
 }
@@ -654,15 +640,11 @@ struct EditTaskInput {
     title: Option<String>,
     #[serde(default, deserialize_with = "deserialize_patch")]
     description: Option<Option<String>>,
-    #[serde(default, deserialize_with = "deserialize_patch")]
-    due: Option<Option<String>>,
     priority: Option<i64>,
     #[serde(default, deserialize_with = "deserialize_patch")]
     rule: Option<Option<String>>,
     #[serde(default, deserialize_with = "deserialize_patch")]
     scheduled_on: Option<Option<String>>,
-    #[serde(default, deserialize_with = "deserialize_patch")]
-    snoozed_until: Option<Option<String>>,
     #[serde(default, deserialize_with = "deserialize_patch")]
     url: Option<Option<String>>,
     reminders: Option<Vec<i64>>,
@@ -753,14 +735,6 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             url.as_deref().map(|url| url.trim().to_owned()),
         );
     }
-    // A SNOOZE BELONGS TO THE DUE, THE LEADS AND THE RULE IT WAS SET AGAINST (#1188, NA5): an
-    // edit of any of them that does not state a snooze of its own ends it.
-    let snooze = match &input.snoozed_until {
-        Some(until) => until.as_deref().map(temporal::canonical),
-        None if input.due.is_some() || input.reminders.is_some() || input.rule.is_some() => None,
-        None => was.snoozed_until.clone(),
-    };
-    sets.change("snoozed_until", &was.snoozed_until, snooze);
     let mut changed = sets.apply(ctx, &input.id)?;
     if let Some(title) = input.title.as_deref() {
         changed |= entity::rename(ctx, &input.id, title.trim())?;
@@ -912,7 +886,7 @@ pub fn complete(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Completion> {
         return Ok(done);
     }
     connection.execute(
-        "UPDATE task SET status = 'done', done_at = ?2, snoozed_until = NULL, series_id = ?3
+        "UPDATE task SET status = 'done', done_at = ?2, series_id = ?3
           WHERE id = ?1",
         rusqlite::params![id, ctx.now, series],
     )?;
@@ -980,11 +954,11 @@ fn complete_command(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
 }
 
 /// Close or reopen a task without a successor: cancelling ends the occurrence, reopening makes a
-/// closed one open again. Both are idempotent. A snooze ends with the task being open.
+/// closed one open again. Both are idempotent.
 fn settle(ctx: &CommandCtx<'_, '_>, status: &str) -> Result<Json> {
     let input: TaskIdInput = ctx.parse_input()?;
     let changed = ctx.connection().execute(
-        "UPDATE task SET status = ?2, done_at = NULL, snoozed_until = NULL
+        "UPDATE task SET status = ?2, done_at = NULL
           WHERE id = ?1 AND status <> ?2",
         [input.id.as_str(), status],
     )?;
@@ -1040,7 +1014,6 @@ const EDIT_SCHEMA: &str = r#"{
     "reminders": { "type": "array", "maxItems": 20, "items": { "type": "integer", "minimum": 0, "maximum": 525600 },
       "description": "States the task's leads: exactly these. Omitted: they stay." },
     "rule": { "type": ["string", "null"] },
-    "snoozed_until": { "type": ["string", "null"], "description": "A UTC instant: the reminder sounds again then, the due unmoved." },
     "url": { "type": ["string", "null"], "maxLength": 2048 },
     "expected_rev": { "type": "integer", "minimum": 0 }
   }
