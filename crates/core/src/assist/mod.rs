@@ -53,6 +53,9 @@
 //! Which thread a session saves into is the [`Slot`]'s: none until its first
 //! turn is saved, and none again after a new chat.
 
+pub mod asset;
+pub mod files;
+
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -128,6 +131,8 @@ struct Sessions {
 pub struct Hub {
     host: Mutex<Arc<ModelHost>>,
     sessions: Mutex<Sessions>,
+    /// What the model's download remembers between a plan and a transfer's end.
+    pub(crate) files: files::State,
 }
 
 impl Default for Hub {
@@ -143,7 +148,16 @@ impl Hub {
         Self {
             host: Mutex::new(Arc::new(ModelHost::new())),
             sessions: Mutex::new(Sessions::default()),
+            files: files::State::default(),
         }
+    }
+
+    /// Whether a turn is running in any chat.
+    fn turn_running(&self) -> bool {
+        locked(&self.sessions)
+            .slots
+            .values()
+            .any(|slot| slot.running.load(Ordering::SeqCst))
     }
 
     /// Share a model slot between handles. A phone holds several vaults and one
@@ -423,6 +437,19 @@ fn status_to_wire(
     }
 }
 
+/// Where the files in `models_dir` stand: the current model's presence, the others and the
+/// adapters beside it.
+fn standing_of(hub: &Hub, models_dir: &str) -> files::Standing {
+    let current = asset::path(models_dir, &asset::model());
+    let state = hub.host().status(std::path::Path::new(&current)).state;
+    let present = !matches!(state, centraid_assist::ModelState::Absent);
+    files::standing(
+        present,
+        &other_model_files(&current),
+        &adapter_files(&current),
+    )
+}
+
 /// The other model files beside `model_path` (sorted names): `.gguf` files that are neither the
 /// model, a vision projector nor an adapter ([`adapter_files`]). An unreadable directory has none.
 fn other_model_files(model_path: &str) -> Vec<String> {
@@ -589,6 +616,48 @@ pub fn answer(handle: &Handle, request: &wire::AssistRequest) -> Result<wire::As
                 dismissed_line(dismissed),
                 Vec::new(),
             ))
+        }
+        K::Plan(asked) => {
+            let facts = files::Facts::of(asked.facts.as_ref());
+            let standing = standing_of(hub, &asked.models_dir);
+            let intent =
+                wire::AssistIntent::try_from(asked.intent).unwrap_or(wire::AssistIntent::Status);
+            Ok(response(wire::assist_response::Kind::Plan(hub.files.plan(
+                &standing,
+                &facts,
+                intent,
+                files::Data::of(asked.mobile_data),
+                &asked.models_dir,
+            ))))
+        }
+        K::Finished(asked) => {
+            let facts = files::Facts::of(asked.facts.as_ref());
+            let which = wire::AssistFinishedWhich::try_from(asked.which)
+                .unwrap_or(wire::AssistFinishedWhich::Unspecified);
+            let plan = hub.files.finished(
+                which,
+                asked.ok,
+                || standing_of(hub, &asked.models_dir),
+                &facts,
+                &asked.models_dir,
+                hub.turn_running(),
+            );
+            Ok(response(wire::assist_response::Kind::Plan(plan)))
+        }
+        K::Opened(asked) => {
+            let standing = standing_of(hub, &asked.models_dir);
+            let mut plan = hub.files.plan(
+                &standing,
+                &files::Facts::default(),
+                wire::AssistIntent::Status,
+                files::Data::Keep,
+                &asked.models_dir,
+            );
+            plan.reload = hub.files.take_reload(hub.turn_running());
+            if !plan.reload {
+                plan.load_path = String::new();
+            }
+            Ok(response(wire::assist_response::Kind::Plan(plan)))
         }
         K::Documents(asked) => {
             let limit = if asked.limit == 0 {

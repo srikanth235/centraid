@@ -12,6 +12,8 @@
 //! common` gives for the same allowance.
 #![allow(dead_code)]
 
+pub mod chat;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
