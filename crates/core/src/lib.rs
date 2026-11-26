@@ -56,6 +56,7 @@ pub mod assist;
 pub(crate) mod catalog;
 pub mod config;
 pub mod convert;
+pub mod device;
 pub mod error;
 pub mod events;
 pub mod example;
