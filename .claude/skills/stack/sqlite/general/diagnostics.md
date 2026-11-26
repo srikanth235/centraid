@@ -36,7 +36,7 @@ reproduce -> measure at realistic volume -> read the plan -> fix -> measure agai
 | Symptom | Tool |
 | --- | --- |
 | Query slow | `EXPLAIN QUERY PLAN <sql>` (SQLite shell or `Vault::explain_query_plan`); run `ANALYZE` first if plans vary with database size. |
-| App page may scan a growing table | [`crates/core/tests/query_plans.rs`](../../../../../crates/core/tests/query_plans.rs) plans app loader pages and refuses a scan of a growing table. |
+| App page may scan a growing table | The read registry's plan gate **(target)** plans every registered read and refuses a scan of a growing table. |
 | Writes slow | Batch related statements in one `BEGIN IMMEDIATE`; check `synchronous` and avoid a checkpoint after every commit. |
 | Search slow | Read `EXPLAIN QUERY PLAN` for the search statement; the FTS door's bounds are in `crates/search`; time it by hand with a `--release` year-3 corpus (`crates/core/tests/year3_corpus`). |
 | Whole app read path | `cargo test --release -p centraid-apps-<app> --test year3 -- --ignored --nocapture`; see each app's `tests/journeys.json` ceilings. |

@@ -119,8 +119,8 @@ fn every_icon_key_a_screen_names_resolves() {
             }
         }
     }
-    // A scan over nothing passes forever: the band's three marks alone are here.
-    assert!(seen >= 20, "the scan saw {seen} icon key(s)");
+    // A scan over nothing passes forever; the #1214 purge left one key, so this ratchets up as rooms land.
+    assert!(seen >= 1, "the scan saw {seen} icon key(s)");
     assert!(
         missing.is_empty(),
         "icon keys `design/icons.toml` does not hold (a blank mark on both shells):\n{}",
