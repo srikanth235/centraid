@@ -60,6 +60,8 @@ import androidx.compose.ui.unit.dp
 import centraid.core.v1.Room
 import centraid.core.v1.RoomBand
 import centraid.core.v1.RoomBlock
+import centraid.core.v1.RoomCalendarView
+import centraid.core.v1.RoomCanvasEvent
 import centraid.core.v1.RoomChange
 import centraid.core.v1.RoomFilterMenu
 import centraid.core.v1.RoomHeader
@@ -109,6 +111,7 @@ internal fun RoomView(
     onTap: (String) -> Unit,
     onChange: (RoomChange) -> Unit,
     onScrolled: (anchorSelectorId: String, fractionMilli: Int) -> Unit = { _, _ -> },
+    onCanvas: (RoomCanvasEvent) -> Unit = {},
     modifier: Modifier = Modifier,
     inlineSheet: Boolean = false,
 ) {
@@ -119,13 +122,13 @@ internal fun RoomView(
     }
 
     when (room.kind) {
-        RoomKind.ROOM_KIND_STAGE -> RoomStageLayout(room, onTap, onChange, modifier)
+        RoomKind.ROOM_KIND_STAGE -> RoomStageLayout(room, onTap, onChange, onCanvas, modifier)
         RoomKind.ROOM_KIND_SHEET -> if (inlineSheet) {
-            RoomSheetBody(room, onTap, onChange, modifier)
+            RoomSheetBody(room, onTap, onChange, onCanvas, modifier)
         } else {
-            RoomSheetModal(room, onTap, onChange, modifier)
+            RoomSheetModal(room, onTap, onChange, onCanvas, modifier)
         }
-        else -> RoomStandardLayout(room, onTap, onChange, onScrolled, modifier)
+        else -> RoomStandardLayout(room, onTap, onChange, onScrolled, onCanvas, modifier)
     }
 }
 
@@ -135,12 +138,17 @@ private fun RoomStandardLayout(
     onTap: (String) -> Unit,
     onChange: (RoomChange) -> Unit,
     onScrolled: (String, Int) -> Unit,
+    onCanvas: (RoomCanvasEvent) -> Unit,
     modifier: Modifier,
 ) {
     val isEditor = room.kind == RoomKind.ROOM_KIND_EDITOR
     val showBand = !isEditor && room.band != null && room.selection?.on != true && room.search?.open_ != true
     val listState = rememberLazyListState()
     val readyBlocks = room.ready?.blocks.orEmpty()
+    val fullWidthCanvas = readyBlocks.any { block ->
+        block.photo_grid != null ||
+            (block.calendar_grid != null && block.calendar_grid!!.view != RoomCalendarView.ROOM_CALENDAR_VIEW_LIST)
+    }
 
     LaunchedEffect(room.restore) {
         val place = room.restore ?: return@LaunchedEffect
@@ -183,7 +191,12 @@ private fun RoomStandardLayout(
             )
         }
 
-        Box(Modifier.weight(1f).fillMaxWidth().readableColumn()) {
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .then(if (fullWidthCanvas) Modifier else Modifier.readableColumn()),
+        ) {
             when {
                 room.loading != null -> RowSkeleton()
                 room.failed != null -> {
@@ -217,7 +230,7 @@ private fun RoomStandardLayout(
                             readyBlocks,
                             key = { idx, block -> block.selectorIdOf().ifEmpty { "block-$idx" } },
                         ) { _, block ->
-                            RoomBlockView(block, onTap = onTap, onChange = onChange)
+                            RoomBlockView(block, onTap = onTap, onChange = onChange, onCanvas = onCanvas)
                         }
                         if (search != null && search.open_ && search.ask != null) {
                             item(key = "search-ask") {
@@ -249,6 +262,7 @@ private fun RoomStageLayout(
     room: Room,
     onTap: (String) -> Unit,
     onChange: (RoomChange) -> Unit,
+    onCanvas: (RoomCanvasEvent) -> Unit,
     modifier: Modifier,
 ) {
     val closeSelector = room.header_?.back?.selector_id
@@ -275,7 +289,7 @@ private fun RoomStageLayout(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             room.ready?.blocks?.forEach { block ->
-                RoomBlockView(block, onTap = onTap, onChange = onChange)
+                RoomBlockView(block, onTap = onTap, onChange = onChange, onCanvas = onCanvas)
             }
         }
         if (closeSelector.isNotEmpty()) {
@@ -295,6 +309,7 @@ private fun RoomSheetModal(
     room: Room,
     onTap: (String) -> Unit,
     onChange: (RoomChange) -> Unit,
+    onCanvas: (RoomCanvasEvent) -> Unit,
     modifier: Modifier,
 ) {
     val dismissSelector = room.header_?.back?.selector_id.orEmpty()
@@ -303,7 +318,7 @@ private fun RoomSheetModal(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = Surface.sheet,
     ) {
-        RoomSheetBody(room, onTap, onChange, modifier)
+        RoomSheetBody(room, onTap, onChange, onCanvas, modifier)
     }
 }
 
@@ -312,6 +327,7 @@ internal fun RoomSheetBody(
     room: Room,
     onTap: (String) -> Unit,
     onChange: (RoomChange) -> Unit,
+    onCanvas: (RoomCanvasEvent) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -334,7 +350,7 @@ internal fun RoomSheetBody(
             )
         }
         room.ready?.blocks?.forEach { block ->
-            RoomBlockView(block, onTap = onTap, onChange = onChange)
+            RoomBlockView(block, onTap = onTap, onChange = onChange, onCanvas = onCanvas)
         }
         room.status_line?.let { RoomStatusLineSlot(it, onTap) }
     }
@@ -790,5 +806,7 @@ private fun RoomBlock.selectorIdOf(): String = when {
     menu != null -> menu!!.selector_id
     earlier_versions != null -> earlier_versions!!.selector_id
     origin != null -> origin!!.selector_id
+    note_editor != null -> note_editor!!.selector_id
+    chart != null -> chart!!.selector_id
     else -> ""
 }

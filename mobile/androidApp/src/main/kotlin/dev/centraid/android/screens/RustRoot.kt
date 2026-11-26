@@ -226,6 +226,7 @@ internal class RustRoot {
             onTap = { selectorId -> scope?.launch { roomClient.tap(shown.instance, selectorId) } },
             onChange = { change -> scope?.launch { roomClient.change(shown.instance, change) } },
             onScrolled = { anchor, fraction -> scope?.launch { roomClient.scrolled(shown.instance, anchor, fraction) } },
+            onCanvas = { event -> scope?.launch { roomClient.canvas(shown.instance, event) } },
         )
     }
 

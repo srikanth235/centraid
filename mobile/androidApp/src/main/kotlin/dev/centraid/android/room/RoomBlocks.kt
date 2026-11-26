@@ -141,9 +141,9 @@ internal fun RoomBlockView(
         block.says != null -> RoomSaysBlock(block.says!!, onTap, modifier)
         block.earlier_versions != null -> RoomEarlierVersionsBlock(block.earlier_versions!!, onTap, modifier)
         block.origin != null -> RoomOriginBlock(block.origin!!, onTap, modifier)
-        block.calendar_grid != null -> RoomCanvasPlaceholder("calendar_grid", block.calendar_grid!!.anchor_day, modifier)
-        block.photo_grid != null -> RoomCanvasPlaceholder("photo_grid", "", modifier)
-        block.note_editor != null -> RoomCanvasPlaceholder("note_editor", block.note_editor!!.title, modifier)
+        block.calendar_grid != null -> CalendarGridCanvas(block.calendar_grid!!, onTap, onCanvas, modifier)
+        block.photo_grid != null -> PhotoGridCanvas(block.photo_grid!!, onTap, onChange, onCanvas, modifier)
+        block.note_editor != null -> NoteEditorCanvas(block.note_editor!!, onTap, onCanvas, modifier)
         block.chart != null -> ChartCanvas(block.chart!!, onCanvas, modifier)
     }
 }
@@ -1255,22 +1255,3 @@ private fun RoomDropdownItem(
     )
 }
 
-@Composable
-private fun RoomCanvasPlaceholder(
-    kind: String,
-    summary: String,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier
-            .fillMaxWidth()
-            .padding(KitGeometry.GUTTER)
-            .kitCard()
-            .padding(20.dp)
-            .testTag("canvas-placeholder-$kind"),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        KitText(kind, KitType.Group, Surface.meta)
-        if (summary.isNotEmpty()) KitText(summary, KitType.Row, Surface.ink)
-    }
-}
