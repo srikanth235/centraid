@@ -129,6 +129,11 @@ pub fn steps(profile: Profile) -> Vec<Step> {
         //
         step("restore-drill", run_restore_drill),
         step("rules", run_rules),
+        // THE KIND REGISTRY, THE ACTION CATALOGUE AND THE READ REGISTRY (app-plane §2, §4, §8):
+        // the promises every kind keeps and the rules every action and read follows, held to the
+        // vault's own tables. It is the test that took the place of `promises.rs`, and it is named
+        // so that a missing promise reads as one and not as "the workspace is red".
+        step("registry", run_registry),
         // THE DOCS DOCTRINE'S STATUTE (Q-1005-1): "broken internal links are
         // bugs", decidable and fast (every markdown file, no network), so it is
         // a `local` step and therefore a step of every profile.
@@ -927,6 +932,34 @@ fn run_rules(ctx: &Ctx) -> Result<Outcome> {
         "{findings} structural finding(s) · artifact: {}",
         display_relative(&ctx.root, &dir)
     )))
+}
+
+/// `registry` — every kind declares every promise of app-plane §8; every action has an inverse or
+/// asks first and is reached from chat; every read passes its authorizer and its plan gate. The
+/// two test binaries of `crates/domain`, named across the workspace for the reason `restore-drill`
+/// names its own: the same feature resolution the `test` step warmed.
+fn run_registry(ctx: &Ctx) -> Result<Outcome> {
+    let outcome = process(
+        ctx,
+        "registry",
+        "cargo",
+        &[
+            "test",
+            "--workspace",
+            "--test",
+            "kind_action_registry",
+            "--test",
+            "read_registry",
+        ],
+    )?;
+    if !matches!(outcome, Outcome::Ok(_)) {
+        return Ok(outcome);
+    }
+    Ok(Outcome::Ok(
+        "every kind keeps its promises, every action has an inverse or asks first and chat \
+         reaches it, every read passes its plan"
+            .to_owned(),
+    ))
 }
 
 /// `doc-links` — every relative markdown link and in-repo anchor resolves.
@@ -1857,7 +1890,7 @@ mod tests {
     /// its two targets would. A drill placed before `test` would put a compile
     /// on the loop's critical path and read as a slow drill.
     #[test]
-    fn local_carries_the_seven_cheap_steps_with_the_drill_after_the_tests() {
+    fn local_carries_the_eight_cheap_steps_with_the_drill_after_the_tests() {
         assert_eq!(
             names(Profile::Local),
             [
@@ -1866,6 +1899,7 @@ mod tests {
                 "test",
                 "restore-drill",
                 "rules",
+                "registry",
                 "doc-links",
                 "ledgers"
             ]

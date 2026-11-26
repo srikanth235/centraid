@@ -2,14 +2,14 @@
 
 The one interface between the vault, the core, the assistant and both shells. A read is registered SQL. A write is a typed action. A screen is a **room** holding **blocks** and at most one of four **canvases**; Rust decides which blocks, in what order, with what words and data; SwiftUI and Compose draw each block once. Everything here is stated as meaning, never layout. The wire is [`room.proto`](../../../crates/api-proto/proto/centraid/core/v1/room.proto); field names below are its field names.
 
-**Built and not built.** The vault below this plane is built: [`crates/vault`](../../../crates/vault), [`001_baseline.sql`](../../../contracts/migrations/001_baseline.sql), [`vault-commands.txt`](../../../contracts/schema/vault-commands.txt). Everything else on this page is **(target)** until its lane lands: `crates/domain` (reads, kinds, actions), the room builders, the blocks and canvases in both shells, the device-store registry and the notification scheduler. `room.proto` compiles and is wired to nothing yet.
+**Built and not built.** The vault below this plane is built: [`crates/vault`](../../../crates/vault), [`001_baseline.sql`](../../../contracts/migrations/001_baseline.sql), [`vault-commands.txt`](../../../contracts/schema/vault-commands.txt). So is the declaration layer, [`crates/domain`](../../../crates/domain): the read registry (sections 2 and 3), the action catalogue (section 4) and the kind registry (section 8), held by the registry test. Everything else on this page is **(target)** until its lane lands: the room builders, the blocks and canvases in both shells, the device-store registry and the notification scheduler. `room.proto` compiles and is wired to nothing yet.
 
 ## 1. Who owns what
 
 | Layer | Owns |
 | --- | --- |
 | Vault ([`crates/vault`](../../../crates/vault)) | Schema, typed commands `<kind>.<verb>`, commit guard, history, trash, purge rules |
-| `crates/domain` **(target)** | One module per app: its `KINDS`, `READS`, `ACTIONS` and pure helpers. No proto. The SQL authorizer, not crate walls, keeps a module to its tables |
+| `crates/domain` | One module per app (`apps/`): its kinds and reads; the one action table (`catalogue.rs`); pure helpers. No proto. The SQL authorizer, not crate walls, keeps a module to its tables |
 | Core | Runs reads and actions, the draft service, the notification scheduler, followers |
 | Room builders **(target)** | Turn typed read results into a `Room`; hold selection, search, form and keep-my-place state; map each `selector_id` to a handler |
 | Shells | Draw rooms and blocks, send `RoomEvent`s, perform effects and the hand-written native list (section 5.4) |
@@ -19,7 +19,7 @@ A shell names no screen, no action and no vault command: an element's `selector_
 
 ## 2. The read registry (M1)
 
-A read is a `const` declaration in the app's module of `crates/domain` **(target)**:
+A read is a `const` declaration in the app's module of [`crates/domain/src/apps`](../../../crates/domain/src/apps), a [`Read<Row>`](../../../crates/domain/src/read/mod.rs):
 
 | Field | Meaning |
 | --- | --- |
@@ -31,10 +31,11 @@ A read is a `const` declaration in the app's module of `crates/domain` **(target
 | `reads` | Tables read. The authorizer records the tables a prepared statement touches; the declaration must equal them |
 | `across` | Tables of other modules this read joins, listed apart. A cross-app read is the reader's own SQL; a cross-app write is an action, never SQL |
 | `bound` | `BoundedChild`, `Aggregate`: the most rows it may return; `PagedList`: the page size (default 50, at most 200) |
+| `cursor` | `PagedList`: the `ORDER BY` tuple as `(result column, keyset parameter)` pairs, the last a unique column. A list with none fails the registry test |
 
-**Authorizer.** Every prepared statement runs under SQLite's authorizer: read-only, a function allowlist, and denial of `locker_item_field.value_sealed`, `locker_item_field.value_blob` and `locker_item_passkey.private_key` for **every** module, Locker's included; only `core::locker` reads them. A statement touching a table not in `reads ∪ across` fails to prepare.
+**Authorizer.** Every prepared statement runs under SQLite's authorizer (`read::authorizer`, installed for as long as the read-only `Reader` connection lives): read-only, a function allowlist, and denial of `locker_item_field.value_sealed`, `locker_item_field.value_blob` and `locker_item_passkey.private_key` for **every** module, Locker's included; only `core::locker` reads them. A statement touching a table not in `reads ∪ across` fails to prepare.
 
-**Plan gate.** Each read passes `EXPLAIN QUERY PLAN` at test time; a plan outside its shape fails, and the only exceptions are rows in the query-plan allowlist (a count that only shrinks, [`contracts/ledgers/query-plans.json`](../../../contracts/ledgers/query-plans.json)); the gate itself is **(target)**, lane A's.
+**Plan gate.** Each read passes `EXPLAIN QUERY PLAN` at test time; a plan outside its shape fails, and the only exceptions are rows in the query-plan allowlist (a count that only shrinks, [`contracts/ledgers/query-plans.json`](../../../contracts/ledgers/query-plans.json), `pages`, a row per read with its reason; it holds none today). The gate is [`crates/domain/tests/read_registry.rs`](../../../crates/domain/tests/read_registry.rs).
 
 | Shape | Plan rules |
 | --- | --- |
@@ -43,13 +44,13 @@ A read is a `const` declaration in the app's module of `crates/domain` **(target
 | `Aggregate` | `COUNT`/`SUM`/`MIN`/`MAX`, optionally `GROUP BY` a schema-bounded key (category, month, metric); every table reached by `SEARCH` or a covering-index range; a temp B-tree for `GROUP BY` only with an allowlist row; result ≤ `bound` rows |
 | `PagedList` | Total order ending in a unique column; keyset predicate; `LIMIT :n`; no `SCAN`; no temp B-tree for `ORDER BY` |
 
-**Keyset cursor.** `c1.` + base64url (no padding) of the JSON `[read_name, k1, …, id]`: the last returned row's `ORDER BY` tuple. Opaque to shells. A cursor naming another read, or with the wrong arity, is refused as a `Failed` room ("This list changed. Reload."). A page fetches `n + 1` rows and returns `n`; the extra row only decides `next`. A first page binds the highest string `char(1114111)` for each key (it sorts after any id, instant or slug), so the predicate keeps its index seek. Direction is part of the read, never of the cursor. A section carries `next_page_selector_id` when `next` exists; the shell sends a `RoomTap` on it when the last row scrolls into view, and Rust appends the page.
+**Keyset cursor.** `c1.` + base64url (no padding) of the JSON `[read_name, k1, …, id]`: the last returned row's `ORDER BY` tuple. Opaque to shells. A cursor naming another read, or with the wrong arity, is refused as a `Failed` room ("This list changed. Reload."). A page fetches `n + 1` rows and returns `n`; the extra row only decides `next`. A first page binds the highest string `char(1114111)` for each key (it sorts after any id, instant or slug), so the predicate keeps its index seek; a key that runs upward binds `i64::MIN`. Direction is part of the read, never of the cursor. A section carries `next_page_selector_id` when `next` exists; the shell sends a `RoomTap` on it when the last row scrolls into view, and Rust appends the page.
 
-**Read context.** A room's loads record the union of their `reads ∪ across`. A commit publishes the tables it wrote (the names in [`history/shape.rs`](../../../crates/vault/src/history/shape.rs)); every open room whose context intersects reloads. A reload re-runs each read of the room, and a `PagedList` re-reads the rows already loaded (one statement, `LIMIT` the loaded count, capped at 500; beyond the cap the tail pages are dropped and `next` is set). A room is `Loading` only before its first answer; a reload keeps the old blocks drawn.
+**Read context.** A room's loads record the union of their `reads ∪ across` (`read::ReadContext`). A commit publishes the tables it wrote (the names in [`history/shape.rs`](../../../crates/vault/src/history/shape.rs)); every open room whose context intersects reloads. A reload re-runs each read of the room, and a `PagedList` re-reads the rows already loaded (one statement, `LIMIT` the loaded count, capped at 500; beyond the cap the tail pages are dropped and `next` is set). A room is `Loading` only before its first answer; a reload keeps the old blocks drawn.
 
 **Room state (M3).** `Loading | Ready | Failed`. There is no `Denied`: apps are not principals. A failed read is `Failed` with the core's sentence and a retry selector, never an empty room and never `0` for unknown. Locker's wall is a `wall` block inside `Ready`, not a state.
 
-Four reads, plans checked against `001_baseline.sql`:
+Four reads, plans checked against `001_baseline.sql`. They are declared as `photos.library`, `entity.starred`, `entity.in_home` and one `<app>.trash` per app (`calendar`, `reminders`, `notes`, `docs`, `photos`, `health`, `people`, `money`, `locker`, `shared`), each naming the kinds its app lists. A holder's count is `entity.held_counts` (a `GROUP BY kind` of what a home holds), `money.account_lines` or `people.touches_held`: `Aggregate` reads that answer one row per kind.
 
 | Read | Shape | Statement and plan |
 | --- | --- | --- |
@@ -60,7 +61,7 @@ Four reads, plans checked against `001_baseline.sql`:
 
 ## 3. The "With <name>" timeline (S11)
 
-A person's page holds one section per source; each is a `PagedList` on an index that already exists, and the preview shows the first page's first few rows with the section's own "Show all". No section shows a count (a count is an unbounded aggregate). `:person` is the person's id; `:after`, `:after_start` and `:after_id` are the first-page sentinel or the last row's key. Plans below were run against `001_baseline.sql`.
+A person's page holds one section per source; each is a `PagedList` on an index that already exists, and the preview shows the first page's first few rows with the section's own "Show all". No section shows a count (a count is an unbounded aggregate). `:person` is the person's id; `:after`, `:after_start` and `:after_id` are the first-page sentinel or the last row's key. Plans below were run against `001_baseline.sql`, and the registry test holds each: `people.with_events`, `with_payments`, `with_workouts`, `with_catch_ups`, `with_photos`, `with_docs` and `with_notes`.
 
 ```sql
 -- Events (ordered by when the event starts; event_guest.starts copies event.starts)
@@ -106,13 +107,15 @@ An action is `(kind, verb, qualifier)` and wraps **one vault command** (or the s
 | --- | --- |
 | `kind` | An entity kind or a command group, as in `vault-commands.txt` |
 | `verb` | One word of the closed list below |
-| `qualifier` | Optional. Fixes the variant of one command that a separate member intent needs: the arrival route (`txn.add` / `csv`, `event.add` / `ics`) or the one field a narrow edit sets. Two actions never share `(kind, verb, qualifier)` |
+| `qualifier` | Optional. Fixes the variant of one command that a separate member intent needs: the arrival route (`txn.add` / `csv`, `event.propose` / `ics`) or the one field a narrow edit sets. Two actions never share `(kind, verb, qualifier)` |
 | `input` | A typed struct taken from the vault command's input type; no free-form map. A minted id is declared on the field and the core mints it |
 | `target` | `One(id)` or `Set(ids[])` (below) |
 | `here` | Which pre-filled scope the action accepts (below) |
 | `inverse` | How Undo takes it back (below) |
 | `confirm` | `none`, `outlined` or `owner` (below) |
-| `chat` | `Direct` or `Handoff(reason)` (section 9) |
+| `chat` | `Direct(Say)` or `Handoff(reason)` (section 7). `Say` is one verb of [`verbs.json`](../../../contracts/assist/verbs.json), the kinds the model says it on, and the narrowing it names (`edit:cadence`) |
+
+The table is [`crates/domain/src/catalogue.rs`](../../../crates/domain/src/catalogue.rs): **131** actions, one for each of the 124 commands whose verb is an action verb, and seven more where one command serves a second intent (`flag.set` and `flag.clear` for star, pin and archive, `account.edit` for a currency change, `txn.add` and `event.propose` for a file). An action is named `kind.verb`, or `kind.verb/qualifier` when its qualifier tells it from another; Undo and the census use that name. Each row's `input` is held to the command's own schema by the registry test.
 
 **Closed verb list.** [`command_list.rs`](../../../crates/vault/tests/command_list.rs) holds the vault's 97 verbs. The catalogue narrows them to the **76** a member or the assistant intends, and the 21 below are **system verbs**: called by core services and followers, never by a screen or chat. A test holds `ACTION_VERBS ∪ SYSTEM_VERBS` equal to the vault's `VERBS`, so a new vault verb must be classified.
 
@@ -289,9 +292,10 @@ The shell reports scroll as `RoomScrolled{anchor_selector_id, anchor_fraction_mi
 | Surface | Which actions | What happens |
 | --- | --- | --- |
 | `Direct` | Parametric actions with an inverse or no destructive effect: create, edit, complete, move, star, tag, link, snooze, trash, restore, categorize, respond | The model's call runs as `actor='assistant'`; the answer shows a card with Undo |
-| `Handoff(PickFile)` | `document.add`/`replace`, `photo.add`, `note.import`, `person.import_vcf`/`import_csv`, `txn.add`/`csv`, `event.add`/`ics` | A card opens the screen with the inputs filled; the member picks the file |
+| `Handoff(PickFile)` | `document.add`/`replace`, `photo.add`, `note.import`, `person.import_vcf`/`import_csv`, `txn.add`/`csv`, `event.propose`/`ics` | A card opens the screen with the inputs filled; the member picks the file |
 | `Handoff(Reveal)` | `locker.totp_code`, any reveal of a Locker secret | The card opens Locker behind its wall; no secret enters a prompt |
-| `Handoff(Destructive)` | `entity.purge`, `entity.empty_trash`, every `merge`, a currency change | The card opens the confirm sheet, filled |
+| `Handoff(Destructive)` | `entity.purge`, `entity.empty_trash`, every `merge`, a currency change, `thread.clear` | The card opens the confirm sheet, filled |
+| `Handoff(OwnerCheck)` | every `export*` | The card opens the screen; the OS owner check comes first, which a model's call cannot pass |
 
 The **census** (a test generated from `ACTIONS`, **(target)**) counts both surfaces as reachable and fails a build that adds an action neither covers. The export in [`contracts/assist/export/`](../../../contracts/assist/export) is generated from the catalogue; each action maps to at most one chat verb of [`verbs.json`](../../../contracts/assist/verbs.json). `cargo xtask model-pin` runs **once**, at the end of lane A, and again only when a catalogue change moves the prompt ([contract](../assistant/contract.md)).
 
@@ -299,7 +303,7 @@ A chat card holds no words of the item: it names an entity id and a short `quali
 
 ## 8. The kind registry and the promise charter
 
-Each kind declares in `crates/domain` **(target)** one `KINDS` row; the registry test (L7) replaces `promises.rs` and fails a kind missing any of them:
+Each kind declares in `crates/domain` one `KINDS` row ([`kind.rs`](../../../crates/domain/src/kind.rs), the rows in each app's module); the registry test (L7, [`kind_action_registry.rs`](../../../crates/domain/tests/kind_action_registry.rs)) took the place of `promises.rs` and fails a kind missing any of them, or whose row differs from the vault's own `entity_kind`, `home_shape` and `source_shape`. A promise that does not apply to a kind says so, with its reason (`Trash::Purged`, `Share::Never`, `Export::Within`):
 
 | Declared | Keeps promise |
 | --- | --- |
@@ -311,7 +315,7 @@ Each kind declares in `crates/domain` **(target)** one `KINDS` row; the registry
 | Footers it takes (`attachments`, `linked`, `mentioned_in`, `origin`; `says` where followed) | P8, P3 |
 | Trash read | P9 |
 
-The charter is [promises](../product/promises.md). The registry test also fails: a read with a full scan or a temp B-tree outside the allowlist; a read touching a sealed column; a `PagedList` with no cursor; an action with no inverse and no `outlined`/`owner` class; an action neither `Direct` nor `Handoff`; a screen-only action; a room whose selectors repeat.
+The charter is [promises](../product/promises.md). The registry tests also fail: a read with a full scan or a temp B-tree outside the allowlist; a read touching a sealed column; a `PagedList` with no cursor; an action with no inverse and no `outlined`/`owner` class; an action neither `Direct` nor `Handoff`; a screen-only action; a room whose selectors repeat (**(target)**: it needs the room builders).
 
 ## 9. Notifications
 

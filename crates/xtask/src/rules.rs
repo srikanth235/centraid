@@ -83,7 +83,7 @@ pub struct RuleReport {
     /// cannot tell that from a rule that is silently not running.
     pub note: String,
     /// Lines `cargo xtask rules` prints under a passing rule: known debt a
-    /// register lists (`promises`), which is not a finding.
+    /// rule lists, which is not a finding.
     pub details: Vec<String>,
 }
 

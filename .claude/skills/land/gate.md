@@ -6,10 +6,11 @@
 
 `local`, `pr`, `nightly` and `release` are built by concatenation, so each holds every step of the one before. The step lists are in `crates/xtask/src/gate.rs`.
 
-- **`local`**, the edit-run loop: `fmt`, `clippy`, `test`, `restore-drill`, `rules`, `doc-links`, `ledgers`.
+- **`local`**, the edit-run loop: `fmt`, `clippy`, `test`, `restore-drill`, `rules`, `registry`, `doc-links`, `ledgers`.
   - `test` runs only the crates the change touches and their dependents, as a nextest filter over `--workspace`. It prints `NARROWED to N of M crates`. A change that selects no crate is a loud `SKIP`, not a pass.
   - `cargo xtask test-plan` shows the selection. `CENTRAID_GATE_TESTS=all` widens it and `CENTRAID_GATE_BASE` names another base. Without nextest the whole workspace runs.
   - `restore-drill` runs every `restore_drill` integration test by name, so the narrowed `test` leaves those binaries out.
+  - `registry` runs `crates/domain`'s `kind_action_registry` and `read_registry` tests by name: a kind missing a promise, an action with no inverse and no confirm class, a screen-only action, and a read with a full scan, a temp B-tree outside the allowlist, a sealed column, no cursor or a table it did not declare each fail there.
 - **`pr`** adds `buf`, `deny`, `ci-policy`, `release-build`, `ts-static`, `design`, `lockfile`, `prompt-injection`, `model-record` and `fault-door`. Its `test` runs the whole workspace plus doctests. CI runs this profile.
 - **`nightly`** adds `device-lanes`. They need a runner with devices (`CENTRAID_DEVICE_RUNNER=1`) and are a loud `SKIP` elsewhere.
 - **`release`** adds `artifact-identity` and `prebuilt-core-required`.
@@ -32,7 +33,7 @@ It runs the structural rules alone (the `rules` step). Each rule prints one line
 - `FAIL <rule> — N finding(s) in M file(s) scanned`, then one indented line per finding, with the file and what to do;
 - `PENDING <rule> — <reason>` when the rule's subject is not in the tree yet. It is not a pass.
 
-Lines printed under an `ok` rule are known debt (the `promises` register lists what an app owes), not findings. The rules are file walks, not parse trees. `crates/xtask` is exempt from the two source-scanning rules because it holds their patterns. `crates/xtask/README.md` has the table of rules. When a rule is red, fix the code it names. Do not add a register row to dodge it.
+Lines printed under an `ok` rule are known debt, not findings. `registry` is the test of the kind registry, the action catalogue and the read registry (`crates/domain/tests`), and what an app owes a member is [promises](../product/promises.md). The rules are file walks, not parse trees. `crates/xtask` is exempt from the two source-scanning rules because it holds their patterns. `crates/xtask/README.md` has the table of rules. When a rule is red, fix the code it names. Do not add a register row to dodge it.
 
 ## Counts, not seconds
 

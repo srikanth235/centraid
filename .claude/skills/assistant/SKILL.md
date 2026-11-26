@@ -6,7 +6,7 @@ description: >-
 
 # Assistant
 
-It runs on the phone, writes only on the member's tap, and says what it cannot do. The rules that never bend: [safety.md](safety.md); the product rules: [product.md](product.md); the chat rows in `promises.rs` prove them.
+It runs on the phone, writes only on the member's tap, and says what it cannot do. The rules that never bend: [safety.md](safety.md); the product rules: [product.md](product.md); the registry test (`crates/domain/tests`) proves that chat reaches every action and that none is screen-only.
 
 | If you are doing | Read |
 | --- | --- |

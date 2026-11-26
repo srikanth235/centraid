@@ -20,7 +20,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use centraid_domain::{ActionDecl, FieldDecl, KindDecl, Source};
+use centraid_domain::legacy::{ActionDecl, FieldDecl, KindDecl, Source};
 use serde_json::Value;
 
 fn camel(snake: &str) -> String {
@@ -115,7 +115,7 @@ fn main() {
         serde_json::from_str(&std::fs::read_to_string(&verbs_path).expect("verbs.json"))
             .expect("verbs.json is JSON");
 
-    let live: Vec<&KindDecl> = centraid_domain::KINDS.iter().collect();
+    let live: Vec<&KindDecl> = centraid_domain::legacy::KINDS.iter().collect();
     let live_ids: Vec<&str> = live.iter().map(|kind| kind.id).collect();
     let writable: Vec<&str> = live
         .iter()
@@ -203,7 +203,7 @@ fn main() {
     out.push_str("pub static DECLARED_KINDS: &[DeclaredKind] = &[];\n\n");
 
     let vocabulary = verbs["verbs"].as_array().expect("verbs");
-    let rows: Vec<&ActionDecl> = centraid_domain::ACTIONS.iter().collect();
+    let rows: Vec<&ActionDecl> = centraid_domain::legacy::ACTIONS.iter().collect();
     let backs = |name: &str| {
         rows.iter().any(|row| {
             (row.verb == name || row.also.contains(&name)) && writable.contains(&row.kind)
