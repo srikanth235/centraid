@@ -109,11 +109,20 @@ CREATE INDEX event_by_rule  ON event(starts, id) WHERE rule IS NOT NULL;
 -- index event_by_start on event
 CREATE INDEX event_by_start ON event(starts, id);
 
--- index event_guest_by_person on event_guest
-CREATE INDEX event_guest_by_person ON event_guest(person_id, event_id) WHERE person_id IS NOT NULL;
+-- index event_guest_by_event on event_guest
+CREATE INDEX event_guest_by_event ON event_guest(event_id, id);
+
+-- index event_guest_by_person_start on event_guest
+CREATE INDEX event_guest_by_person_start ON event_guest(person_id, starts, event_id) WHERE person_id IS NOT NULL;
 
 -- index event_guest_one_organizer on event_guest
 CREATE UNIQUE INDEX event_guest_one_organizer ON event_guest(event_id) WHERE organizer = 1;
+
+-- index event_guest_one_per_address on event_guest
+CREATE UNIQUE INDEX event_guest_one_per_address ON event_guest(event_id, address) WHERE address IS NOT NULL;
+
+-- index event_guest_one_per_person on event_guest
+CREATE UNIQUE INDEX event_guest_one_per_person  ON event_guest(event_id, person_id) WHERE person_id IS NOT NULL;
 
 -- index event_long on event
 CREATE INDEX event_long     ON event(starts, id) WHERE long = 1;
@@ -177,6 +186,9 @@ CREATE INDEX message_by_notice  ON message(notice, thread_id)  WHERE notice  IS 
 
 -- index message_by_refusal on message
 CREATE INDEX message_by_refusal ON message(refusal, thread_id) WHERE refusal IS NOT NULL;
+
+-- index message_card_by_entity on message_card
+CREATE INDEX message_card_by_entity ON message_card(entity_id) WHERE entity_id IS NOT NULL;
 
 -- index message_one_proposal_waiting on message
 CREATE UNIQUE INDEX message_one_proposal_waiting ON message(thread_id) WHERE outcome = 'proposed';
@@ -271,6 +283,18 @@ CREATE INDEX revision_by_origin ON revision(origin_id) WHERE origin_id IS NOT NU
 -- index rule_by_category on rule
 CREATE INDEX rule_by_category ON rule(category_id);
 
+-- index snooze_by_date on snooze
+CREATE INDEX snooze_by_date  ON snooze(date_id)  WHERE date_id  IS NOT NULL;
+
+-- index snooze_by_field on snooze
+CREATE INDEX snooze_by_field ON snooze(field_id) WHERE field_id IS NOT NULL;
+
+-- index snooze_by_kind on snooze
+CREATE INDEX snooze_by_kind  ON snooze(entity_kind, entity_id);
+
+-- index snooze_key on snooze
+CREATE UNIQUE INDEX snooze_key ON snooze(entity_id, ifnull(date_id, ''), ifnull(field_id, ''));
+
 -- index source_by_entity on source
 CREATE INDEX source_by_entity ON source(entity_id) WHERE entity_id IS NOT NULL;
 
@@ -332,7 +356,7 @@ CREATE INDEX workout_by_type  ON workout(type_id);
 CREATE TABLE account (
   id            TEXT PRIMARY KEY,
   kind          TEXT GENERATED ALWAYS AS ('account') VIRTUAL,
-  type          TEXT NOT NULL REFERENCES account_type(code) ON DELETE NO ACTION,   -- A1
+  type          TEXT NOT NULL REFERENCES account_type(code) ON DELETE NO ACTION,
   currency      TEXT NOT NULL CHECK (length(currency) = 3 AND currency = upper(currency)),
   -- Where the account stood on `opening_on`, SIGNED (a card owes: negative). The balance on any day is
   -- this plus the posted lines AFTER `opening_on`, derived at read time.
@@ -345,7 +369,7 @@ CREATE TABLE account (
 ) STRICT;
 
 -- table account_type on account_type
-CREATE TABLE account_type (         -- A1, E5
+CREATE TABLE account_type (
   code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z_]*')
 ) STRICT, WITHOUT ROWID;
 
@@ -417,7 +441,7 @@ CREATE TABLE concept_kind (
 CREATE TABLE contact_point (
   id         TEXT PRIMARY KEY,
   person_id  TEXT NOT NULL REFERENCES person(id) ON DELETE CASCADE,
-  kind       TEXT NOT NULL REFERENCES contact_point_kind(code) ON DELETE NO ACTION,   -- A1
+  kind       TEXT NOT NULL REFERENCES contact_point_kind(code) ON DELETE NO ACTION,
   value      TEXT NOT NULL CHECK (length(trim(value)) > 0),
   normalized TEXT NOT NULL,
   label      TEXT,
@@ -427,7 +451,7 @@ CREATE TABLE contact_point (
 ) STRICT;
 
 -- table contact_point_kind on contact_point_kind
-CREATE TABLE contact_point_kind (   -- A1
+CREATE TABLE contact_point_kind (
   code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z]*')
 ) STRICT, WITHOUT ROWID;
 
@@ -436,7 +460,6 @@ CREATE TABLE container (
   id       TEXT PRIMARY KEY,
   kind     TEXT NOT NULL REFERENCES container_kind(code) ON DELETE NO ACTION,
   color    TEXT REFERENCES palette(key) ON DELETE NO ACTION,
-  -- A key of `design/icons.toml`; the command boundary says which keys a list or calendar may wear.
   icon     TEXT CHECK (icon IS NULL OR length(trim(icon)) > 0),
   cover    TEXT REFERENCES blob(hash) ON DELETE NO ACTION,
   position REAL NOT NULL DEFAULT 0,
@@ -482,12 +505,10 @@ CREATE TABLE document (
 -- table edge on edge
 CREATE TABLE edge (
   from_id    TEXT NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
-  rel        TEXT NOT NULL,          -- A1: no CHECK; `edge_shape` is the vocabulary
+  rel        TEXT NOT NULL,
   to_id      TEXT NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
   label_id   TEXT REFERENCES entity(id) ON DELETE CASCADE,
   position   REAL,
-  -- A5 (amended): where in a note the member made this `about`, set by hand and so an edge's, never the
-  -- note-rebuilt `mention`'s. A3: a JSON object the vault defines carries "v":1.
   anchor     TEXT CHECK (anchor IS NULL OR (json_valid(anchor) AND json_type(anchor) = 'object' AND json_extract(anchor, '$.v') IS 1)),
   created_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
   CHECK (from_id <> to_id)
@@ -510,20 +531,14 @@ CREATE TABLE entity (
   -- and the spatial index use it as their row id; a reused number would show a purged item's words
   -- under a new item.
   n          INTEGER PRIMARY KEY AUTOINCREMENT,
-  -- A17: a canonical lowercase UUIDv7 (minted from the injected clock), or a seeded `kind:key` slug
-  -- whose prefix is the row's own kind. The grammar is checked; that a slug names a seeded row is
-  -- the founding's and the commands' (nothing else mints one).
   id         TEXT NOT NULL UNIQUE CHECK (
                (length(id) = 36 AND id GLOB '[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-7[0-9a-f][0-9a-f][0-9a-f]-[89ab][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]')
                OR (instr(id, ':') > 1 AND length(id) > instr(id, ':') AND length(id) <= 96
                    AND id NOT GLOB '*[^a-z0-9_:.-]*' AND substr(id, 1, instr(id, ':') - 1) = kind)),
   kind       TEXT NOT NULL REFERENCES entity_kind(code) ON DELETE NO ACTION,
   title      TEXT NOT NULL,
-  -- A19: ONE home column for every kind (a note's notebook, a document's folder, an event's calendar,
-  -- a task's project, section or parent task, a section's project, a project's area, a concept's
-  -- parent). `home_shape` says which kind may sit in which; `parent_kind` is the home's kind, kept
-  -- beside it so a composite key can state the shape and a second one the home's identity. A holder
-  -- (notebook, folder, project, calendar...) trashes what it holds (A13).
+  -- ONE home column for every kind; `home_shape` says which kind may sit in which and `parent_kind` is the
+  -- home's kind. A holder trashes what it holds. A photo or document captured inside an item takes it as its home.
   parent_id   TEXT,
   parent_kind TEXT,
   created_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
@@ -533,13 +548,9 @@ CREATE TABLE entity (
   -- A13: the holder whose trash took this row with it; NULL when it was trashed on its own. A restore
   -- of the holder brings back exactly the rows naming it, and no timestamp is compared.
   trashed_by TEXT REFERENCES entity(id) ON DELETE SET NULL,
-  -- A14: starred, pinned and archived are instants on the row. Setting one stamps neither
-  -- `updated_at` nor a revision (the commit triggers skip these columns).
   starred_at  TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', starred_at) IS starred_at),
   pinned_at   TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', pinned_at) IS pinned_at),
   archived_at TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', archived_at) IS archived_at),
-  -- A10: a one-time import (a vCard, a CSV, an upload, a picked photo, a Markdown file, a scan) says
-  -- where the row came from, in both columns or neither. `origin`/`source` hold followed stores only.
   arrived_via   TEXT REFERENCES arrival_via(code) ON DELETE NO ACTION,
   arrived_label TEXT CHECK (arrived_label IS NULL OR length(trim(arrived_label)) > 0),
   -- 1 when the row has no home, 1 when its title is non-empty, else NULL: the keys below check them
@@ -589,7 +600,6 @@ CREATE TABLE event (
   location       TEXT CHECK (location IS NULL OR length(trim(location)) > 0),
   place_id       TEXT REFERENCES place(id) ON DELETE NO ACTION,
   url            TEXT,
-  -- Minutes of travel the member allows before it starts.
   travel_min     INTEGER CHECK (travel_min IS NULL OR travel_min >= 0),
   description    TEXT,
   -- 1 when the event runs past a week (any of the three timings parses in `date()`); a calendar read
@@ -606,15 +616,17 @@ CREATE TABLE event (
 
 -- table event_guest on event_guest
 CREATE TABLE event_guest (
+  id        TEXT PRIMARY KEY,
   event_id  TEXT NOT NULL REFERENCES event(id) ON DELETE CASCADE,
-  address   TEXT NOT NULL CHECK (length(trim(address)) > 0),
+  address   TEXT CHECK (address IS NULL OR length(trim(address)) > 0),
   person_id TEXT REFERENCES person(id) ON DELETE SET NULL,
   name      TEXT CHECK (name IS NULL OR length(trim(name)) > 0),
   role      TEXT NOT NULL DEFAULT 'required' CHECK (role IN ('required','optional','non-participant')),
   status    TEXT NOT NULL DEFAULT 'needs-action' CHECK (status IN ('needs-action','accepted','declined','tentative')),
   organizer INTEGER NOT NULL DEFAULT 0 CHECK (organizer IN (0,1)),
-  PRIMARY KEY (event_id, address)
-) STRICT, WITHOUT ROWID;
+  starts    TEXT NOT NULL DEFAULT '' CHECK (starts = '' OR date(starts) IS NOT NULL),
+  CHECK (address IS NOT NULL OR person_id IS NOT NULL)
+) STRICT;
 
 -- table health_metric on health_metric
 CREATE TABLE health_metric (
@@ -631,6 +643,8 @@ CREATE TABLE health_metric (
 CREATE TABLE home_shape (
   kind      TEXT NOT NULL REFERENCES entity_kind(code) ON DELETE NO ACTION,
   home_kind TEXT NOT NULL REFERENCES entity_kind(code) ON DELETE NO ACTION,
+  -- 1: a row in this home is one level deep; it holds no row that sits in such a home itself.
+  shallow   INTEGER NOT NULL DEFAULT 0 CHECK (shallow IN (0,1)),
   PRIMARY KEY (kind, home_kind)
 ) STRICT, WITHOUT ROWID;
 
@@ -647,7 +661,7 @@ CREATE TABLE link (
 CREATE TABLE locker_item (
   id          TEXT PRIMARY KEY,
   kind        TEXT GENERATED ALWAYS AS ('locker_item') VIRTUAL,
-  type        TEXT NOT NULL REFERENCES locker_type(code) ON DELETE NO ACTION,   -- A1
+  type        TEXT NOT NULL REFERENCES locker_type(code) ON DELETE NO ACTION,
   compromised INTEGER NOT NULL DEFAULT 0 CHECK (compromised IN (0,1)),
   -- When the core last opened one of this item's sealed cells (#1146). A use is not an edit: stamping
   -- it does not move the entity's `updated_at` and makes no revision. (I3: `password_set_at` and
@@ -674,7 +688,6 @@ CREATE TABLE locker_item_field (
   position     REAL NOT NULL DEFAULT 0,
   created_at   TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
   updated_at   TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', updated_at) IS updated_at),
-  -- 1 for a `date` field, else NULL: the key a reminder uses to name only a date field (I8).
   dated        INTEGER GENERATED ALWAYS AS (CASE WHEN kind = 'date' THEN 1 END) VIRTUAL,
   UNIQUE (id, item_id),
   UNIQUE (id, dated),
@@ -709,13 +722,12 @@ CREATE TABLE locker_key (
   id         INTEGER PRIMARY KEY CHECK (id = 1),
   key_id     TEXT NOT NULL UNIQUE,
   created_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
-  -- Unlocks the phone refused since the last one it allowed, and when the latest was (#1146).
   failed_unlocks   INTEGER NOT NULL DEFAULT 0 CHECK (failed_unlocks >= 0),
   failed_unlock_at TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', failed_unlock_at) IS failed_unlock_at)
 ) STRICT;
 
 -- table locker_type on locker_type
-CREATE TABLE locker_type (          -- A1: the 15 types; a 16th is a row, not a rebuild (I2)
+CREATE TABLE locker_type (
   code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z_]*')
 ) STRICT, WITHOUT ROWID;
 
@@ -726,9 +738,10 @@ CREATE TABLE measurement (
   metric    TEXT NOT NULL,
   cadence   TEXT GENERATED ALWAYS AS ('total') VIRTUAL,
   value     REAL NOT NULL CHECK (value >= 0),
-  -- Plain foreign key (amendment 7): that it is a health store is the writer's, not named here.
   origin_id TEXT REFERENCES origin(id) ON DELETE NO ACTION,
+  stated    REAL CHECK (stated IS NULL OR stated >= 0),
   PRIMARY KEY (person_id, day, metric),
+  CHECK ((origin_id IS NULL) = (stated IS NULL)),
   FOREIGN KEY (metric, cadence) REFERENCES health_metric(code, cadence) ON DELETE NO ACTION
 ) STRICT, WITHOUT ROWID;
 
@@ -752,17 +765,14 @@ CREATE TABLE message (
   outcome    TEXT NOT NULL CHECK (outcome IN (
                'sent','answered','stopped','refused',
                'proposed','applied','dismissed','stale','failed')),
-  refusal    TEXT REFERENCES message_refusal(code) ON DELETE NO ACTION,   -- A1
-  notice     TEXT REFERENCES message_notice(code) ON DELETE NO ACTION,    -- A1
-  -- A3: a JSON object the vault defines carries "v":1. `cards` is an array: none.
-  record     TEXT CHECK (record IS NULL OR (json_valid(record) AND json_type(record) = 'object' AND json_extract(record, '$.v') IS 1)),
-  cards      TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(cards) AND json_type(cards) = 'array'),
+  refusal    TEXT REFERENCES message_refusal(code) ON DELETE NO ACTION,
+  notice     TEXT REFERENCES message_notice(code) ON DELETE NO ACTION,
   created_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
   updated_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', updated_at) IS updated_at),
   PRIMARY KEY (thread_id, ordinal),
   CHECK ((role = 'user') = (outcome = 'sent')),
   CHECK ((outcome = 'refused') = (refusal IS NOT NULL)),
-  CHECK (role = 'assistant' OR (notice IS NULL AND record IS NULL))
+  CHECK (role = 'assistant' OR notice IS NULL)
 ) STRICT;
 
 -- table message_attachment on message_attachment
@@ -771,22 +781,34 @@ CREATE TABLE message_attachment (
   ordinal   INTEGER NOT NULL,
   position  REAL NOT NULL CHECK (position >= 0),
   form      TEXT NOT NULL CHECK (form IN ('photo','document','image')),
-  label     TEXT NOT NULL,
+  label     TEXT,
   entity_id TEXT REFERENCES entity(id) ON DELETE SET NULL,
   thumb     TEXT REFERENCES blob(hash) ON DELETE NO ACTION,
   PRIMARY KEY (thread_id, ordinal, position),
   FOREIGN KEY (thread_id, ordinal) REFERENCES message(thread_id, ordinal) ON DELETE CASCADE,
   CHECK ((form = 'image') = (thumb IS NOT NULL)),
+  CHECK ((form = 'image') = (label IS NOT NULL)),
   CHECK (form <> 'image' OR entity_id IS NULL)
 ) STRICT;
 
+-- table message_card on message_card
+CREATE TABLE message_card (
+  thread_id TEXT NOT NULL,
+  ordinal   INTEGER NOT NULL,
+  position  REAL NOT NULL CHECK (position >= 0),
+  entity_id TEXT REFERENCES entity(id) ON DELETE SET NULL,
+  qualifier TEXT CHECK (qualifier IS NULL OR (length(qualifier) <= 24 AND qualifier GLOB '[a-z]*' AND qualifier NOT GLOB '*[^a-z_]*')),
+  PRIMARY KEY (thread_id, ordinal, position),
+  FOREIGN KEY (thread_id, ordinal) REFERENCES message(thread_id, ordinal) ON DELETE CASCADE
+) STRICT;
+
 -- table message_notice on message_notice
-CREATE TABLE message_notice (       -- A1
+CREATE TABLE message_notice (
   code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z_]*')
 ) STRICT, WITHOUT ROWID;
 
 -- table message_refusal on message_refusal
-CREATE TABLE message_refusal (      -- A1
+CREATE TABLE message_refusal (
   code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z_]*')
 ) STRICT, WITHOUT ROWID;
 
@@ -824,7 +846,6 @@ CREATE TABLE occurrence (
   zone           TEXT CHECK (zone IS NULL OR length(trim(zone)) > 0),
   title          TEXT,
   description    TEXT,
-  -- This day's own link, place and location; NULL is the series'. Guests and reminders stay the series'.
   url            TEXT,
   location       TEXT CHECK (location IS NULL OR length(trim(location)) > 0),
   place_id       TEXT REFERENCES place(id) ON DELETE NO ACTION,
@@ -843,23 +864,19 @@ CREATE TABLE origin (
   ref        TEXT NOT NULL CHECK (length(trim(ref)) > 0),
   label      TEXT NOT NULL CHECK (length(trim(label)) > 0),
   device_id  TEXT CHECK (device_id IS NULL OR length(trim(device_id)) > 0),
-  -- The home a follow filled, of the kind its system makes (`origin_system.fills_kind`).
   fills      TEXT,
   fills_kind TEXT,
-  -- Where the last pass of a followed store stopped (its change token). Cleared when the follow stops.
   cursor     TEXT,
-  config     TEXT CHECK (config IS NULL OR (json_valid(config) AND json_type(config) = 'object' AND json_extract(config, '$.v') IS 1)),  -- A3
+  config     TEXT CHECK (config IS NULL OR (json_valid(config) AND json_type(config) = 'object' AND json_extract(config, '$.v') IS 1)),
   created_at TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
   -- Stop following RETIRES an origin instead of deleting it: it keeps its `fills` and its sources,
   -- so following the same `ref` again finds them. A retired origin is followed by nobody.
   retired_at TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', retired_at) IS retired_at),
-  -- 1 when retired / when it names a device, else NULL: keys into the system's `can_retire` / `on_device`.
   retired INTEGER GENERATED ALWAYS AS (CASE WHEN retired_at IS NOT NULL THEN 1 END) VIRTUAL,
   bound   INTEGER GENERATED ALWAYS AS (CASE WHEN device_id  IS NOT NULL THEN 1 END) VIRTUAL,
   UNIQUE (system, ref),
   UNIQUE (id, system),
   CHECK ((fills IS NULL) = (fills_kind IS NULL)),
-  -- K9: a cursor is the word of the install that read (`device_id`), and a retired origin holds none.
   CHECK (cursor IS NULL OR device_id IS NOT NULL),
   CHECK (cursor IS NULL OR retired_at IS NULL),
   FOREIGN KEY (system, fills_kind) REFERENCES origin_system(code, fills_kind) ON DELETE NO ACTION,
@@ -888,7 +905,7 @@ CREATE TABLE palette (
 CREATE TABLE person (
   id           TEXT PRIMARY KEY,
   kind         TEXT GENERATED ALWAYS AS ('person') VIRTUAL,
-  form         TEXT NOT NULL DEFAULT 'person' REFERENCES person_form(code) ON DELETE NO ACTION,   -- A1 (amendment 6)
+  form         TEXT NOT NULL DEFAULT 'person' REFERENCES person_form(code) ON DELETE NO ACTION,
   sort_name    TEXT,
   given        TEXT,
   family       TEXT,
@@ -935,9 +952,8 @@ CREATE TABLE photo (
   id          TEXT PRIMARY KEY,
   kind        TEXT GENERATED ALWAYS AS ('photo') VIRTUAL,
   blob        TEXT NOT NULL REFERENCES blob(hash) ON DELETE NO ACTION,
-  -- Sound is kept in Docs: Photos holds pictures, film and scans.
   media_type  TEXT NOT NULL CHECK (length(trim(media_type)) > 0 AND lower(media_type) NOT GLOB 'audio/*'),
-  form        TEXT NOT NULL REFERENCES photo_form(code) ON DELETE NO ACTION,   -- A1
+  form        TEXT NOT NULL REFERENCES photo_form(code) ON DELETE NO ACTION,
   taken_at    TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', taken_at) IS taken_at),
   offset_min  INTEGER CHECK (offset_min IS NULL OR offset_min BETWEEN -1080 AND 1080),
   width       INTEGER CHECK (width IS NULL OR width > 0),
@@ -947,7 +963,6 @@ CREATE TABLE photo (
   lon         REAL CHECK (lon IS NULL OR lon BETWEEN -180 AND 180),
   motion_blob TEXT REFERENCES blob(hash) ON DELETE NO ACTION,
   motion_duration_s REAL CHECK (motion_duration_s IS NULL OR motion_duration_s >= 0),
-  -- A copy of the capture's metadata, versioned by its origin system (A3: no "v").
   exif        TEXT CHECK (exif IS NULL OR json_valid(exif)),
   burst       TEXT,
   edited_from TEXT REFERENCES photo(id) ON DELETE NO ACTION,
@@ -959,7 +974,7 @@ CREATE TABLE photo (
 ) STRICT;
 
 -- table photo_form on photo_form
-CREATE TABLE photo_form (           -- A1
+CREATE TABLE photo_form (
   code TEXT PRIMARY KEY CHECK (code GLOB '[a-z]*' AND code NOT GLOB '*[^a-z]*')
 ) STRICT, WITHOUT ROWID;
 
@@ -987,7 +1002,6 @@ CREATE TABLE reading (
   value      REAL NOT NULL,
   value2     REAL,
   has_value2 INTEGER GENERATED ALWAYS AS (value2 IS NOT NULL) VIRTUAL,
-  -- fasting, after a meal, sitting: free words of the member's.
   context    TEXT CHECK (context IS NULL OR length(trim(context)) > 0),
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
   FOREIGN KEY (metric, cadence, has_value2) REFERENCES health_metric(code, cadence, has_value2) ON DELETE NO ACTION
@@ -1023,15 +1037,11 @@ CREATE TABLE revision (
   entity_id  TEXT NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
   seq        INTEGER NOT NULL CHECK (seq >= 1),
   at         TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', at) IS at),
-  -- B4: who made the change. `cause` stays as a diagnostic and is never parsed.
   actor      TEXT NOT NULL CHECK (actor IN ('member','assistant','store')),
-  -- B4: for a store, the origin it followed.
   origin_id  TEXT REFERENCES origin(id) ON DELETE NO ACTION,
   cause      TEXT NOT NULL DEFAULT '',
-  -- A3: the version of the snapshot's grammar this row was written in.
   shape      INTEGER NOT NULL CHECK (shape >= 1),
   state      TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(state)),
-  -- A note's words live in a cell of their own so `fill_body` can read the nearest newer version that kept one.
   body       TEXT,
   -- Whether a quiet save (an editor's autosave) made this version, and when its session last folded
   -- another in (NULL: never). A quiet save of the same command by the same actor within ten idle
@@ -1056,7 +1066,6 @@ CREATE TABLE revision_blob (
 -- table rule on rule
 CREATE TABLE rule (
   id            TEXT PRIMARY KEY,
-  -- A3: a JSON object the vault defines carries "v":1.
   pattern       TEXT NOT NULL CHECK (json_valid(pattern) AND json_type(pattern) = 'object' AND json_extract(pattern, '$.v') IS 1),
   -- The name the line shows once the rule has run: the payee, not the bank's words (which stay in
   -- `source.stated`). NULL leaves the line's name alone.
@@ -1066,8 +1075,6 @@ CREATE TABLE rule (
   position      REAL NOT NULL,
   created_at    TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', created_at) IS created_at),
   FOREIGN KEY (category_id, category_kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
-  -- What a pattern says: how to match, the words to look for, and an optional range of the amount's
-  -- magnitude (never negative, the smallest never above the largest).
   CHECK (json_extract(pattern, '$.match') IN ('is', 'contains', 'matches')
      AND json_type(pattern, '$.text') = 'text' AND length(trim(json_extract(pattern, '$.text'))) > 0
      AND (json_type(pattern, '$.min') IS NULL OR (json_type(pattern, '$.min') = 'integer' AND json_extract(pattern, '$.min') >= 0))
@@ -1082,6 +1089,23 @@ CREATE TABLE search_owed (
   after TEXT
 ) STRICT;
 
+-- table snooze on snooze
+CREATE TABLE snooze (
+  entity_id   TEXT NOT NULL,
+  entity_kind TEXT NOT NULL,
+  date_id     TEXT,
+  field_id    TEXT,
+  until       TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', until) IS until),
+  via_child   INTEGER GENERATED ALWAYS AS (date_id IS NOT NULL OR field_id IS NOT NULL) VIRTUAL,
+  dated_field INTEGER GENERATED ALWAYS AS (CASE WHEN field_id IS NOT NULL THEN 1 END) VIRTUAL,
+  CHECK (date_id IS NULL OR field_id IS NULL),
+  FOREIGN KEY (entity_id, entity_kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
+  FOREIGN KEY (entity_kind, via_child) REFERENCES reminder_target(kind, via_child) ON DELETE NO ACTION,
+  FOREIGN KEY (date_id, entity_id)  REFERENCES person_date(id, person_id)    ON DELETE CASCADE,
+  FOREIGN KEY (field_id, entity_id) REFERENCES locker_item_field(id, item_id) ON DELETE CASCADE,
+  FOREIGN KEY (field_id, dated_field) REFERENCES locker_item_field(id, dated) ON DELETE CASCADE
+) STRICT;
+
 -- table source on source
 CREATE TABLE source (
   id          TEXT PRIMARY KEY,
@@ -1091,7 +1115,6 @@ CREATE TABLE source (
   device_id   TEXT CHECK (device_id IS NULL OR length(trim(device_id)) > 0),
   entity_id   TEXT,
   entity_kind TEXT,
-  -- A copy of the outside system's record, versioned by its origin system (A3: no "v").
   stated      TEXT NOT NULL CHECK (json_valid(stated)),
   stated_title TEXT,
   seen_at     TEXT NOT NULL CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', seen_at) IS seen_at),
@@ -1129,14 +1152,8 @@ CREATE TABLE task (
   done_at       TEXT CHECK ((status = 'done') = (done_at IS NOT NULL) AND strftime('%Y-%m-%dT%H:%M:%fZ', done_at) IS done_at),
   rule          TEXT,
   anchor        TEXT NOT NULL DEFAULT 'scheduled' CHECK (anchor IN ('scheduled','completion')),
-  -- D4: a stable id the members of a repeating series share, minted when the series begins and
-  -- pointing at no row, so purging the first task no longer cuts the series.
   series_id     TEXT CHECK (series_id IS NULL OR (length(series_id) = 36 AND series_id GLOB '[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]-7[0-9a-f][0-9a-f][0-9a-f]-[89ab][0-9a-f][0-9a-f][0-9a-f]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]')),
-  -- A SNOOZE MOVES THE ALERT, NOT THE DUE (#1188, NA5): the instant the member asked to be reminded
-  -- again. While set it is the task's one alert; an edit of the due, a lead or the rule clears it, and so does finishing.
-  snoozed_until TEXT CHECK (strftime('%Y-%m-%dT%H:%M:%fZ', snoozed_until) IS snoozed_until AND (snoozed_until IS NULL OR status = 'open')),
   url           TEXT CHECK (url IS NULL OR length(trim(url)) > 0),
-  effort_min    INTEGER CHECK (effort_min IS NULL OR effort_min > 0),
   description   TEXT,
   position      REAL NOT NULL DEFAULT 0,
   FOREIGN KEY (id, kind) REFERENCES entity(id, kind) ON DELETE CASCADE,
@@ -1248,11 +1265,6 @@ CREATE TABLE workout (
   FOREIGN KEY (type_id, type_kind) REFERENCES entity(id, kind) ON DELETE NO ACTION
 ) STRICT;
 
--- trigger account_currency_is_fixed on account
-CREATE TRIGGER account_currency_is_fixed BEFORE UPDATE OF currency ON account
-  WHEN new.currency <> old.currency AND EXISTS (SELECT 1 FROM txn WHERE account_id = old.id)
-  BEGIN SELECT RAISE(ABORT, 'an account''s currency is fixed once it has lines'); END;
-
 -- trigger edge_anchor_needs_an_anchored_shape on edge
 CREATE TRIGGER edge_anchor_needs_an_anchored_shape BEFORE UPDATE OF anchor ON edge
   WHEN new.anchor IS NOT NULL AND NOT EXISTS (
@@ -1328,6 +1340,21 @@ CREATE TRIGGER entity_not_restored_into_a_trash BEFORE UPDATE OF deleted_at ON e
    AND EXISTS (SELECT 1 FROM entity h WHERE h.deleted_at IS NOT NULL AND h.id = new.parent_id)
   BEGIN SELECT RAISE(ABORT, 'that home is in the trash: restore it first'); END;
 
+-- trigger event_edit_clears_its_snooze on event
+CREATE TRIGGER event_edit_clears_its_snooze AFTER UPDATE OF starts, ends, timing, zone, rule ON event
+  WHEN new.starts IS NOT old.starts OR new.ends IS NOT old.ends OR new.timing IS NOT old.timing
+    OR new.zone IS NOT old.zone OR new.rule IS NOT old.rule
+  BEGIN DELETE FROM snooze WHERE entity_id = new.id; END;
+
+-- trigger event_guest_copies_the_start on event_guest
+CREATE TRIGGER event_guest_copies_the_start AFTER INSERT ON event_guest
+  BEGIN UPDATE event_guest SET starts = (SELECT starts FROM event WHERE id = new.event_id) WHERE id = new.id; END;
+
+-- trigger event_start_moves_its_guests on event
+CREATE TRIGGER event_start_moves_its_guests AFTER UPDATE OF starts ON event
+  WHEN new.starts IS NOT old.starts
+  BEGIN UPDATE event_guest SET starts = new.starts WHERE event_id = new.id; END;
+
 -- trigger link_ends_are_fixed on link
 CREATE TRIGGER link_ends_are_fixed BEFORE UPDATE OF a, b ON link
   BEGIN SELECT RAISE(ABORT, 'a link''s ends never change; remove it and add another'); END;
@@ -1337,6 +1364,11 @@ CREATE TRIGGER link_ends_are_linkable BEFORE INSERT ON link
   WHEN EXISTS (SELECT 1 FROM entity e JOIN entity_kind k ON k.code = e.kind
                 WHERE e.id IN (new.a, new.b) AND k.linkable = 0)
   BEGIN SELECT RAISE(ABORT, 'this kind of item cannot be linked'); END;
+
+-- trigger locker_date_edit_clears_its_snooze on locker_item_field
+CREATE TRIGGER locker_date_edit_clears_its_snooze AFTER UPDATE OF value_text ON locker_item_field
+  WHEN new.kind = 'date' AND new.value_text IS NOT old.value_text
+  BEGIN DELETE FROM snooze WHERE field_id = new.id; END;
 
 -- trigger mention_target_is_linkable on mention
 CREATE TRIGGER mention_target_is_linkable BEFORE INSERT ON mention
@@ -1365,6 +1397,11 @@ CREATE TRIGGER message_outcome_settles_once BEFORE UPDATE OF outcome ON message
      WHERE new.outcome NOT IN ('applied','dismissed','stale','failed');
   END;
 
+-- trigger person_date_edit_clears_its_snooze on person_date
+CREATE TRIGGER person_date_edit_clears_its_snooze AFTER UPDATE OF date ON person_date
+  WHEN new.date IS NOT old.date
+  BEGIN DELETE FROM snooze WHERE date_id = new.id; END;
+
 -- trigger photo_lineage_is_acyclic on photo
 CREATE TRIGGER photo_lineage_is_acyclic BEFORE UPDATE OF edited_from ON photo
   WHEN new.edited_from IS NOT NULL
@@ -1377,6 +1414,19 @@ CREATE TRIGGER photo_lineage_is_acyclic BEFORE UPDATE OF edited_from ON photo
          SELECT p.edited_from FROM photo p JOIN ancestors a ON p.id = a.id WHERE p.edited_from IS NOT NULL)
        SELECT 1 FROM ancestors WHERE id = new.id);
   END;
+
+-- trigger reminder_lead_change_clears_the_snooze on reminder
+CREATE TRIGGER reminder_lead_change_clears_the_snooze AFTER UPDATE OF offset_min ON reminder
+  WHEN new.offset_min <> old.offset_min
+  BEGIN DELETE FROM snooze WHERE entity_id = new.entity_id AND ifnull(date_id, '') = ifnull(new.date_id, '') AND ifnull(field_id, '') = ifnull(new.field_id, ''); END;
+
+-- trigger reminder_lead_edit_clears_the_snooze on reminder
+CREATE TRIGGER reminder_lead_edit_clears_the_snooze AFTER INSERT ON reminder
+  BEGIN DELETE FROM snooze WHERE entity_id = new.entity_id AND ifnull(date_id, '') = ifnull(new.date_id, '') AND ifnull(field_id, '') = ifnull(new.field_id, ''); END;
+
+-- trigger reminder_lead_removal_clears_the_snooze on reminder
+CREATE TRIGGER reminder_lead_removal_clears_the_snooze AFTER DELETE ON reminder
+  BEGIN DELETE FROM snooze WHERE entity_id = old.entity_id AND ifnull(date_id, '') = ifnull(old.date_id, '') AND ifnull(field_id, '') = ifnull(old.field_id, ''); END;
 
 -- trigger reminder_needs_a_due on reminder
 CREATE TRIGGER reminder_needs_a_due BEFORE INSERT ON reminder
@@ -1406,6 +1456,29 @@ CREATE TRIGGER source_never_names_the_owner BEFORE INSERT ON source
 CREATE TRIGGER source_tombstone_is_final BEFORE UPDATE OF entity_id ON source
   WHEN old.entity_id IS NULL AND new.entity_id IS NOT NULL
   BEGIN SELECT RAISE(ABORT, 'a purged row''s source never takes a row again'); END;
+
+-- trigger task_edit_clears_its_snooze on task
+CREATE TRIGGER task_edit_clears_its_snooze AFTER UPDATE OF due, rule, status ON task
+  WHEN new.due IS NOT old.due OR new.rule IS NOT old.rule OR new.status <> 'open'
+  BEGIN DELETE FROM snooze WHERE entity_id = new.id; END;
+
+-- trigger task_one_level_of_subtasks on entity
+CREATE TRIGGER task_one_level_of_subtasks BEFORE INSERT ON entity
+  WHEN new.parent_id IS NOT NULL
+   AND EXISTS (SELECT 1 FROM home_shape WHERE kind = new.kind AND home_kind = new.parent_kind AND shallow = 1)
+   AND EXISTS (SELECT 1 FROM entity p JOIN home_shape h ON h.kind = p.kind AND h.home_kind = p.parent_kind AND h.shallow = 1
+                WHERE p.id = new.parent_id)
+  BEGIN SELECT RAISE(ABORT, 'a subtask cannot have subtasks of its own'); END;
+
+-- trigger task_one_level_of_subtasks_on_update on entity
+CREATE TRIGGER task_one_level_of_subtasks_on_update BEFORE UPDATE OF parent_id ON entity
+  WHEN new.parent_id IS NOT NULL
+   AND EXISTS (SELECT 1 FROM home_shape WHERE kind = new.kind AND home_kind = new.parent_kind AND shallow = 1)
+   AND (EXISTS (SELECT 1 FROM entity p JOIN home_shape h ON h.kind = p.kind AND h.home_kind = p.parent_kind AND h.shallow = 1
+                 WHERE p.id = new.parent_id)
+        OR EXISTS (SELECT 1 FROM entity c JOIN home_shape h ON h.kind = c.kind AND h.home_kind = c.parent_kind AND h.shallow = 1
+                    WHERE c.parent_id = new.id))
+  BEGIN SELECT RAISE(ABORT, 'a subtask cannot have subtasks of its own'); END;
 
 -- trigger task_without_a_due_has_no_reminders on task
 CREATE TRIGGER task_without_a_due_has_no_reminders AFTER UPDATE OF due ON task
@@ -1445,9 +1518,3 @@ CREATE TRIGGER txn_match_dismissal_is_a_hand_line_against_a_statement_line BEFOR
                     WHERE h.id = new.hand_id AND h.entered = 'hand'
                       AND s.id = new.statement_id AND s.entered = 'statement')
   BEGIN SELECT RAISE(ABORT, 'a dismissal is a hand line against a statement line of one account'); END;
-
--- trigger txn_statement_line_is_fixed on txn
-CREATE TRIGGER txn_statement_line_is_fixed
-  BEFORE UPDATE OF account_id, posted_on, amount_minor, original_amount_minor, original_currency ON txn
-  WHEN old.entered = 'statement'
-  BEGIN SELECT RAISE(ABORT, 'a statement line is never edited'); END;

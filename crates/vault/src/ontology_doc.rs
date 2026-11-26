@@ -31,7 +31,7 @@ pub const GROUPS: [(&str, &str, &str); 8] = [
     (
         "words",
         "words and holders",
-        "Concepts are the words a member names (tags, categories, relations); containers are the things that hold things (notebooks, folders, albums, projects, calendars).",
+        "Concepts are the words a member names (tags, categories, relations); containers are the things that hold things (notebooks, folders, albums, task lists, calendars).",
     ),
     (
         "kinds",
@@ -128,7 +128,7 @@ pub const TABLES: &[(&str, &str, &str)] = &[
     (
         "words",
         "container",
-        "A thing that holds things: a notebook, folder, album, list, project, section, area or calendar. What it holds is the `parent_id` of the rows in it; an album's photos and a list's people are `contains` edges.",
+        "A thing that holds things: a notebook, folder, album, list, task list or calendar. What it holds is the `parent_id` of the rows in it; an album's photos and a list's people are `contains` edges.",
     ),
     (
         "kinds",
@@ -158,12 +158,17 @@ pub const TABLES: &[(&str, &str, &str)] = &[
     (
         "kinds",
         "event_guest",
-        "Who an event invited, by address, whether or not they are in People, and how they answered.",
+        "Who an event invited, by address or as a person, whether or not they are in People, and how they answered; it carries a copy of the event's start for People's timeline.",
     ),
     (
         "kinds",
         "reminder",
         "One alert of an event, a task, a person's date or a Locker date: how long before, in minutes, it sounds. The one rule behind every notification.",
+    ),
+    (
+        "kinds",
+        "snooze",
+        "The instant a member asked to be reminded again about an event, a task, a person's date or a Locker date; it moves the alert and never the date.",
     ),
     (
         "kinds",
@@ -173,7 +178,7 @@ pub const TABLES: &[(&str, &str, &str)] = &[
     (
         "kinds",
         "task",
-        "Something to do: status, priority, due (with how it reads), repeat and the planned day. Its home is a project, a section or its parent task.",
+        "Something to do: status, priority, due (with how it reads), repeat and the planned day. Its home is a task list or its parent task, one level deep.",
     ),
     (
         "kinds",
@@ -253,7 +258,7 @@ pub const TABLES: &[(&str, &str, &str)] = &[
     (
         "kinds",
         "measurement",
-        "A person's total for a day and a metric: steps, sleep, energy, heart rate. Not an item: no trash, and a correction overwrites it.",
+        "A person's total for a day and a metric: steps, sleep, energy, heart rate. Not an item: no trash, and a correction overwrites it; a followed store's own figure is kept beside it.",
     ),
     (
         "kinds",
@@ -263,12 +268,17 @@ pub const TABLES: &[(&str, &str, &str)] = &[
     (
         "kinds",
         "message",
-        "One turn of a thread: who said it, the words, how it ended (and why it was refused) and the cards it carried.",
+        "One turn of a thread: who said it, the words, how it ended (and why it was refused).",
     ),
     (
         "kinds",
         "message_attachment",
-        "A thing a message brought in: a form, a label, the entity it names and, for a pasted image, a thumbnail.",
+        "A thing a message brought in: a form, the entity it names and, for a pasted image, a label and a thumbnail.",
+    ),
+    (
+        "kinds",
+        "message_card",
+        "A card a message showed: the entity it names, which reads its words live, and a short code for the figure it carried.",
     ),
     (
         "bytes",

@@ -212,7 +212,7 @@
 <div class="colrow"><span class="cn">n</span><span class="ct">integer</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">after</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<div class="schemahdr" data-group="words"><span class="sid">words</span><h3>words and holders</h3><p class="sdesc">Concepts are the words a member names (tags, categories, relations); containers are the things that hold things (notebooks, folders, albums, projects, calendars).</p></div>
+<div class="schemahdr" data-group="words"><span class="sid">words</span><h3>words and holders</h3><p class="sdesc">Concepts are the words a member names (tags, categories, relations); containers are the things that hold things (notebooks, folders, albums, task lists, calendars).</p></div>
 <div class="tbl rv in" data-group="words" data-table="concept"><header><h4>concept</h4><p class="tp">A word the member names: a tag, a category, a workout kind, a touch kind or a relation. Its colour is a palette key.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.id</span><span class="cnote"></span></div>
@@ -221,7 +221,7 @@
 <div class="colrow"><span class="cn">color</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ palette.key</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">colored</span><span class="ct">integer</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ concept_kind.takes_color</span><span class="cnote">generated</span></div>
 </div></div>
-<div class="tbl rv in" data-group="words" data-table="container"><header><h4>container</h4><p class="tp">A thing that holds things: a notebook, folder, album, list, project, section, area or calendar. What it holds is the `parent_id` of the rows in it; an album's photos and a list's people are `contains` edges.</p></header>
+<div class="tbl rv in" data-group="words" data-table="container"><header><h4>container</h4><p class="tp">A thing that holds things: a notebook, folder, album, list, task list or calendar. What it holds is the `parent_id` of the rows in it; an album's photos and a list's people are `contains` edges.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ entity.kind</span><span class="cnote"></span></div>
@@ -297,15 +297,17 @@
 <div class="colrow"><span class="cn">description</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">long</span><span class="ct">integer</span><span><span class="badge b-CK">GEN</span></span><span class="cref"></span><span class="cnote">generated</span></div>
 </div></div>
-<div class="tbl rv in" data-group="kinds" data-table="event_guest"><header><h4>event_guest</h4><p class="tp">Who an event invited, by address, whether or not they are in People, and how they answered.</p></header>
+<div class="tbl rv in" data-group="kinds" data-table="event_guest"><header><h4>event_guest</h4><p class="tp">Who an event invited, by address or as a person, whether or not they are in People, and how they answered; it carries a copy of the event's start for People's timeline.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
-<div class="colrow"><span class="cn">event_id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ event.id</span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">address</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">event_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ event.id</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">address</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">person_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ person.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">name</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">role</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 'required'</span></div>
 <div class="colrow"><span class="cn">status</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 'needs-action'</span></div>
 <div class="colrow"><span class="cn">organizer</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
+<div class="colrow"><span class="cn">starts</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default ''</span></div>
 </div></div>
 <div class="tbl rv in" data-group="kinds" data-table="reminder"><header><h4>reminder</h4><p class="tp">One alert of an event, a task, a person's date or a Locker date: how long before, in minutes, it sounds. The one rule behind every notification.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
@@ -315,6 +317,16 @@
 <div class="colrow"><span class="cn">date_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ person_date.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">field_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ locker_item_field.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">offset_min</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">via_child</span><span class="ct">integer</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ reminder_target.via_child</span><span class="cnote">generated</span></div>
+<div class="colrow"><span class="cn">dated_field</span><span class="ct">integer</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ locker_item_field.dated</span><span class="cnote">generated</span></div>
+</div></div>
+<div class="tbl rv in" data-group="kinds" data-table="snooze"><header><h4>snooze</h4><p class="tp">The instant a member asked to be reminded again about an event, a task, a person's date or a Locker date; it moves the alert and never the date.</p></header>
+<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
+<div class="colrow"><span class="cn">entity_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ locker_item_field.item_id</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">entity_kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-NN">NN</span></span><span class="cref">→ reminder_target.kind</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">date_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ person_date.id</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">field_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ locker_item_field.id</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">until</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">via_child</span><span class="ct">integer</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ reminder_target.via_child</span><span class="cnote">generated</span></div>
 <div class="colrow"><span class="cn">dated_field</span><span class="ct">integer</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ locker_item_field.dated</span><span class="cnote">generated</span></div>
 </div></div>
@@ -334,7 +346,7 @@
 <div class="colrow"><span class="cn">location</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">place_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ place.id</span><span class="cnote"></span></div>
 </div></div>
-<div class="tbl rv in" data-group="kinds" data-table="task"><header><h4>task</h4><p class="tp">Something to do: status, priority, due (with how it reads), repeat and the planned day. Its home is a project, a section or its parent task.</p></header>
+<div class="tbl rv in" data-group="kinds" data-table="task"><header><h4>task</h4><p class="tp">Something to do: status, priority, due (with how it reads), repeat and the planned day. Its home is a task list or its parent task, one level deep.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ entity.kind</span><span class="cnote">generated</span></div>
@@ -348,9 +360,7 @@
 <div class="colrow"><span class="cn">rule</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">anchor</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 'scheduled'</span></div>
 <div class="colrow"><span class="cn">series_id</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">snoozed_until</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">url</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">effort_min</span><span class="ct">integer</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">description</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">position</span><span class="ct">real</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
 </div></div>
@@ -506,7 +516,7 @@
 <div class="colrow"><span class="cn">has_value2</span><span class="ct">integer</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ health_metric.has_value2</span><span class="cnote">generated</span></div>
 <div class="colrow"><span class="cn">context</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<div class="tbl rv in" data-group="kinds" data-table="measurement"><header><h4>measurement</h4><p class="tp">A person's total for a day and a metric: steps, sleep, energy, heart rate. Not an item: no trash, and a correction overwrites it.</p></header>
+<div class="tbl rv in" data-group="kinds" data-table="measurement"><header><h4>measurement</h4><p class="tp">A person's total for a day and a metric: steps, sleep, energy, heart rate. Not an item: no trash, and a correction overwrites it; a followed store's own figure is kept beside it.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">person_id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ person.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">day</span><span class="ct">text</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
@@ -514,6 +524,7 @@
 <div class="colrow"><span class="cn">cadence</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ health_metric.cadence</span><span class="cnote">generated</span></div>
 <div class="colrow"><span class="cn">value</span><span class="ct">real</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">origin_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ origin.id</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">stated</span><span class="ct">real</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
 <div class="tbl rv in" data-group="kinds" data-table="thread"><header><h4>thread</h4><p class="tp">A conversation with the assistant, scoped to the vault or to a thing in it. An ordinary trashable entity.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
@@ -521,7 +532,7 @@
 <div class="colrow"><span class="cn">kind</span><span class="ct">text</span><span><span class="badge b-FK">FK</span><span class="badge b-CK">GEN</span></span><span class="cref">→ entity.kind</span><span class="cnote">generated</span></div>
 <div class="colrow"><span class="cn">scope</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<div class="tbl rv in" data-group="kinds" data-table="message"><header><h4>message</h4><p class="tp">One turn of a thread: who said it, the words, how it ended (and why it was refused) and the cards it carried.</p></header>
+<div class="tbl rv in" data-group="kinds" data-table="message"><header><h4>message</h4><p class="tp">One turn of a thread: who said it, the words, how it ended (and why it was refused).</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">thread_id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ thread.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">ordinal</span><span class="ct">integer</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
@@ -530,20 +541,26 @@
 <div class="colrow"><span class="cn">outcome</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">refusal</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ message_refusal.code</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">notice</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ message_notice.code</span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">record</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">cards</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default '[]'</span></div>
 <div class="colrow"><span class="cn">created_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">updated_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<div class="tbl rv in" data-group="kinds" data-table="message_attachment"><header><h4>message_attachment</h4><p class="tp">A thing a message brought in: a form, a label, the entity it names and, for a pasted image, a thumbnail.</p></header>
+<div class="tbl rv in" data-group="kinds" data-table="message_attachment"><header><h4>message_attachment</h4><p class="tp">A thing a message brought in: a form, the entity it names and, for a pasted image, a label and a thumbnail.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">thread_id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ message.thread_id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">ordinal</span><span class="ct">integer</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ message.ordinal</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">position</span><span class="ct">real</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">form</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
-<div class="colrow"><span class="cn">label</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">label</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">entity_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.id</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">thumb</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ blob.hash</span><span class="cnote"></span></div>
+</div></div>
+<div class="tbl rv in" data-group="kinds" data-table="message_card"><header><h4>message_card</h4><p class="tp">A card a message showed: the entity it names, which reads its words live, and a short code for the figure it carried.</p></header>
+<div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
+<div class="colrow"><span class="cn">thread_id</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ message.thread_id</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">ordinal</span><span class="ct">integer</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ message.ordinal</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">position</span><span class="ct">real</span><span><span class="badge b-PK">PK</span></span><span class="cref"></span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">entity_id</span><span class="ct">text</span><span><span class="badge b-FK">FK</span></span><span class="cref">→ entity.id</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">qualifier</span><span class="ct">text</span><span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
 <div class="schemahdr" data-group="bytes"><span class="sid">bytes</span><h3>bytes</h3><p class="sdesc">A blob is the vault's claim on content; a derivative is what was made from it.</p></div>
 <div class="tbl rv in" data-group="bytes" data-table="blob"><header><h4>blob</h4><p class="tp">The vault's claim on content: its hash and size, numbered in the order the claims were made. Every hash anywhere is a foreign key into this table.</p></header>
@@ -658,6 +675,7 @@
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
 <div class="colrow"><span class="cn">kind</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ entity_kind.code</span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">home_kind</span><span class="ct">text</span><span><span class="badge b-PK">PK</span><span class="badge b-FK">FK</span></span><span class="cref">→ entity_kind.code</span><span class="cnote"></span></div>
+<div class="colrow"><span class="cn">shallow</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote">default 0</span></div>
 </div></div>
 <div class="tbl rv in" data-group="vocabulary" data-table="concept_kind"><header><h4>concept_kind</h4><p class="tp">The kinds of word a member names, and whether each takes a colour.</p></header>
 <div class="colscroll"><div class="colhead"><span>column</span><span>type</span><span>constraints</span><span>references</span><span class="cnote">note</span></div>
@@ -798,7 +816,7 @@
 <div class="colrow"><span class="cn">tokenizer</span><span class="ct">integer</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 <div class="colrow"><span class="cn">built_at</span><span class="ct">text</span><span><span class="badge b-NN">NN</span></span><span class="cref"></span><span class="cnote"></span></div>
 </div></div>
-<p class="note" data-tables="76" data-columns="450">76 tables and 450 columns, read off a vault this build founded.</p>
+<p class="note" data-tables="78" data-columns="462">78 tables and 462 columns, read off a vault this build founded.</p>
 <!-- schema:end -->
     </div>
     <div class="physcard rv">

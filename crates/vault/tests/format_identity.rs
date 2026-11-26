@@ -225,7 +225,7 @@ fn open_of_a_damaged_vault_is_a_typed_error() {
 /// The v0 baseline schema digest at `user_version = 1` (matches `format::SCHEMA_DIGEST` while
 /// the ladder head is rung 1; once released and a rung 2 is appended, this climbs from rung 1).
 const RELEASE_99CC70D8F_SCHEMA_DIGEST: &str =
-    "ed3c174504b6b60529b0cc0e851306dddba54b8f564231c1344c583745ddacb1";
+    "3281a883b5da16230091de00f175043d19ab4e728f0fc1a634d54ba68337a367";
 
 #[test]
 fn a_vault_the_release_wrote_opens_on_this_code_and_keeps_what_it_held() {
