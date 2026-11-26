@@ -3,14 +3,15 @@
 //!
 //! - **There is no `void`** (E1): a wrong line is trashed like any item, and `entity.trash` is the
 //!   verb.
-//! - **A line is entered** from a `statement` or by `hand`, on ANY account, and has a `memo` (E2). A
-//!   statement line (`follow.statement`'s) is never edited: not its amount, its day, its account nor
-//!   what it was originally charged (the table refuses it). A hand line is. When a statement arrives
-//!   the hand lines it seems to match are PROPOSED ([`proposed_matches`]) and nothing merges until
-//!   the member confirms (`txn.confirm_match`): then the statement's amount and day win, the hand
-//!   line's categories and memo carry over, and the hand line becomes the statement line (the one
-//!   change of `entered` the table allows). A pair the member says is not the same money is
-//!   dismissed (`txn.dismiss_match`) and kept, so it is not proposed again.
+//! - **A line is entered** from a `statement` or by `hand`, on ANY account, and has a `memo` (E2).
+//!   Every field of either is the member's to edit; a statement line keeps what its bank last said
+//!   in `source.stated`, so a re-import keeps the member's edits and shows the bank's figure beside
+//!   them. When a statement arrives the hand lines it seems to match are PROPOSED
+//!   ([`proposed_matches`]) and nothing merges until the member confirms (`txn.confirm_match`):
+//!   then the statement's amount and day win, the hand line's categories and memo carry over, and
+//!   the hand line becomes the statement line (the one change of `entered` the table allows). A
+//!   pair the member says is not the same money is dismissed (`txn.dismiss_match`) and kept, so it
+//!   is not proposed again.
 //! - **A line's categories are `txn_split`** (E3): one part for an ordinary line, several for a
 //!   split, none for an uncategorised one, and every report reads that one table. **The parts add
 //!   up to the line's amount.** No row-level constraint can say so, so the commit guard says it
@@ -191,19 +192,30 @@ pub(crate) fn refile_parts_of(ctx: &CommandCtx<'_, '_>, category: &str) -> Resul
             |row| row.get(0),
         )
         .optional()?;
+    let Some(group) = &group else {
+        connection.execute(
+            "DELETE FROM txn_split WHERE txn_id IN (SELECT txn_id FROM txn_split WHERE category_id = ?1)",
+            [category],
+        )?;
+        return Ok(());
+    };
+    refile_parts_into(ctx, category, group)
+}
+
+/// File every part that names `from` under `into` instead, so each line keeps summing and keeps
+/// its other parts; two parts left under one category become one (amounts added, the first one's
+/// memo, in order).
+pub(crate) fn refile_parts_into(ctx: &CommandCtx<'_, '_>, from: &str, into: &str) -> Result<()> {
+    let connection = ctx.connection();
     let lines: Vec<String> = connection
         .prepare_cached("SELECT DISTINCT txn_id FROM txn_split WHERE category_id = ?1")?
-        .query_map([category], |row| row.get(0))?
+        .query_map([from], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?;
     for id in lines {
-        let Some(group) = &group else {
-            connection.execute("DELETE FROM txn_split WHERE txn_id = ?1", [id.as_str()])?;
-            continue;
-        };
         let mut merged: Vec<Part> = Vec::new();
         for mut part in parts_of(connection, &id)? {
-            if part.category_id == category {
-                part.category_id.clone_from(group);
+            if part.category_id == from {
+                part.category_id = into.to_owned();
             }
             match merged
                 .iter_mut()
@@ -352,19 +364,6 @@ fn pre_edit(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     let Some(held) = line(connection, &input.id)? else {
         return Ok(Some("That is not a transaction.".to_owned()));
     };
-    let states_the_bank = input.posted_on.is_some()
-        || input.amount_minor.is_some()
-        || input.account_id.is_some()
-        || input.status.is_some()
-        || input.original_amount_minor.is_some()
-        || input.original_currency.is_some();
-    // The same words the table says: the memo and the categories are the member's on any line.
-    if states_the_bank && held.entered == "statement" {
-        return Ok(Some(
-            "A line the bank stated is never edited. You can change its category, memo or name."
-                .to_owned(),
-        ));
-    }
     if let Some(day) = input.posted_on.as_deref()
         && !is_day(connection, day)?
     {
@@ -411,9 +410,7 @@ fn pre_edit(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
     }
 }
 
-/// `txn.edit`: change a line. A statement line's memo and categories are the member's; its day,
-/// amount, account and what was charged are the bank's (a hand line's are the member's). The
-/// answer carries the revision the next save names.
+/// `txn.edit`: change a line. The answer carries the revision the next save names.
 fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     let input: EditInput = ctx.parse_input()?;
     let connection = ctx.connection();

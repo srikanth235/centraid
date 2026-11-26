@@ -1,10 +1,10 @@
 //! An event's guests (A6): who it invited, whether or not they are in People.
 //!
-//! A guest is an `event_guest` row whose identity on the event is its ADDRESS (an email, lower
-//! case): somebody with no row in People is still a guest, and `person_id` is only the person the
-//! address resolves to (a live person's email point), re-pointed by `person.merge` and set NULL by
-//! the database when that person is purged. One guest may be the organizer; the database holds that
-//! with a partial unique index.
+//! A guest is an `event_guest` row with an id of its own, identified on the event by a PERSON or an
+//! ADDRESS (an email, lower case): somebody with no row in People is still a guest, and so is a
+//! person with no email. `person_id` is the person the guest is, re-pointed by `person.merge`; a
+//! person's purge takes their address-less rows first and sets the others' NULL. One guest may be
+//! the organizer; the database holds that with a partial unique index.
 //!
 //! Also the followed calendar's `attendees` field (a phone states `{name, email, state}` per guest):
 //! merged per guest by address, so a guest the member changed, added or took off stands.
@@ -52,7 +52,7 @@ pub fn person_of_address(connection: &Connection, address: &str) -> Result<Optio
 /// One guest a command states.
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct GuestIn {
-    pub address: String,
+    pub address: Option<String>,
     pub name: Option<String>,
     pub role: Option<String>,
     pub status: Option<String>,
@@ -61,10 +61,19 @@ pub struct GuestIn {
     pub person_id: Option<String>,
 }
 
+impl GuestIn {
+    /// The address, in its one spelling, when one is stated.
+    #[must_use]
+    pub fn key(&self) -> Option<String> {
+        self.address.as_deref().map(address_key)
+    }
+}
+
 /// A guest as the vault reads it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Guest {
-    pub address: String,
+    pub id: String,
+    pub address: Option<String>,
     pub name: Option<String>,
     pub role: String,
     pub status: String,
@@ -73,16 +82,16 @@ pub struct Guest {
     pub person_id: Option<String>,
 }
 
-/// The read of an event's guests: one range of the table's key, in address order.
-pub const GUESTS: &str = "SELECT g.address, g.name, g.role, g.status, g.organizer,
+/// The read of an event's guests: one range of `event_guest_by_event`, in the order they were invited.
+pub const GUESTS: &str = "SELECT g.id, g.address, g.name, g.role, g.status, g.organizer,
         COALESCE(g.person_id, (SELECT p.person_id FROM contact_point p
                                 JOIN entity e ON e.id = p.person_id
                                WHERE p.kind = 'email' AND p.normalized = g.address
                                  AND e.deleted_at IS NULL
                                ORDER BY p.person_id LIMIT 1))
-   FROM event_guest g WHERE g.event_id = ?1 ORDER BY g.address";
+   FROM event_guest g WHERE g.event_id = ?1 ORDER BY g.id";
 
-/// The guests of an event: the organizer first, then by address.
+/// The guests of an event: the organizer first, then by address, then those with none.
 ///
 /// # Errors
 /// SQLite's refusal.
@@ -91,17 +100,24 @@ pub fn guests_of(connection: &Connection, event_id: &str) -> Result<Vec<Guest>> 
         .prepare_cached(GUESTS)?
         .query_map([event_id], |row| {
             Ok(Guest {
-                address: row.get(0)?,
-                name: row.get(1)?,
-                role: row.get(2)?,
-                status: row.get(3)?,
-                organizer: row.get(4)?,
-                person_id: row.get(5)?,
+                id: row.get(0)?,
+                address: row.get(1)?,
+                name: row.get(2)?,
+                role: row.get(3)?,
+                status: row.get(4)?,
+                organizer: row.get(5)?,
+                person_id: row.get(6)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?;
-    // Stable: the organizer to the front, the rest as the key gave them.
-    guests.sort_by_key(|guest| !guest.organizer);
+    guests.sort_by(|a, b| {
+        (!a.organizer, a.address.is_none(), &a.address, &a.id).cmp(&(
+            !b.organizer,
+            b.address.is_none(),
+            &b.address,
+            &b.id,
+        ))
+    });
     Ok(guests)
 }
 
@@ -109,12 +125,17 @@ pub fn guests_of(connection: &Connection, event_id: &str) -> Result<Vec<Guest>> 
 pub(super) fn refusal(connection: &Connection, guests: &[GuestIn]) -> Result<Option<String>> {
     let mut organizers = 0;
     for guest in guests {
-        let key = address_key(&guest.address);
-        if key.is_empty() || key.contains(char::is_whitespace) {
-            return Ok(Some(format!(
-                "“{}” is not an address a guest can be reached at",
-                guest.address.trim()
-            )));
+        match guest.key() {
+            Some(key) if key.is_empty() || key.contains(char::is_whitespace) => {
+                return Ok(Some(format!(
+                    "“{}” is not an address a guest can be reached at",
+                    guest.address.as_deref().unwrap_or_default().trim()
+                )));
+            }
+            None if guest.person_id.is_none() => {
+                return Ok(Some("a guest is a person or an address".to_owned()));
+            }
+            _ => {}
         }
         if let Some(role) = &guest.role
             && !ROLES.contains(&role.as_str())
@@ -153,49 +174,86 @@ pub(super) fn refusal(connection: &Connection, guests: &[GuestIn]) -> Result<Opt
     Ok((organizers > 1).then(|| "an event has one organizer".to_owned()))
 }
 
+/// The guest row a stated guest is already: the one at its address, else the one for its person.
+fn held_match<'a>(held: &'a [Guest], key: Option<&str>, person: Option<&str>) -> Option<&'a Guest> {
+    held.iter()
+        .find(|g| key.is_some() && g.address.as_deref() == key)
+        .or_else(|| {
+            held.iter()
+                .find(|g| person.is_some() && g.person_id.as_deref() == person)
+        })
+}
+
 /// Make the event's guests exactly `wanted`: a guest already invited keeps what the command does
 /// not state (their answer above all), a new one has not answered, one left out is taken off the
-/// list. Returns whether anything changed.
+/// list. A guest is a person or an address; a person already on the list by another address, or
+/// with none, is the same guest. Returns whether anything changed.
 pub(super) fn set_guests(
     ctx: &CommandCtx<'_, '_>,
     event_id: &str,
     wanted: &[GuestIn],
 ) -> Result<bool> {
     let connection = ctx.connection();
-    let mut by_key: BTreeMap<String, &GuestIn> = BTreeMap::new();
-    for guest in wanted {
-        by_key.insert(address_key(&guest.address), guest);
-    }
     let held: Vec<Guest> = guests_of(connection, event_id)?;
+    let mut stated: Vec<(Option<String>, Option<String>, &GuestIn)> = Vec::new();
+    for guest in wanted {
+        let key = guest.key();
+        let person = match (&guest.person_id, &key) {
+            (Some(person), _) => Some(person.clone()),
+            (None, Some(key)) => person_of_address(connection, key)?,
+            (None, None) => None,
+        };
+        let same = |(k, p, _): &(Option<String>, Option<String>, &GuestIn)| {
+            (key.is_some() && *k == key) || (person.is_some() && *p == person)
+        };
+        if let Some(at) = stated.iter().position(same) {
+            stated[at] = (key, person, guest);
+        } else {
+            stated.push((key, person, guest));
+        }
+    }
     let mut changed = false;
-    for guest in held.iter().filter(|g| !by_key.contains_key(&g.address)) {
-        connection.execute(
-            "DELETE FROM event_guest WHERE event_id = ?1 AND address = ?2",
-            [event_id, guest.address.as_str()],
-        )?;
+    let mut kept: Vec<&str> = Vec::new();
+    for (key, person, _) in &stated {
+        if let Some(found) = held_match(&held, key.as_deref(), person.as_deref()) {
+            kept.push(found.id.as_str());
+        }
+    }
+    for guest in held.iter().filter(|g| !kept.contains(&g.id.as_str())) {
+        connection.execute("DELETE FROM event_guest WHERE id = ?1", [&guest.id])?;
         changed = true;
     }
+    let mut seated: Vec<String> = Vec::new();
+    let mut ids: Vec<String> = Vec::new();
+    for (key, person, _) in &stated {
+        ids.push(
+            held_match(&held, key.as_deref(), person.as_deref())
+                .map_or_else(|| ctx.next_id(), |found| found.id.clone()),
+        );
+    }
     // One organizer: a new one takes the badge from whoever had it.
-    if let Some((key, _)) = by_key.iter().find(|(_, g)| g.organizer == Some(true)) {
+    if let Some(at) = stated
+        .iter()
+        .position(|(_, _, g)| g.organizer == Some(true))
+    {
         changed |= connection.execute(
-            "UPDATE event_guest SET organizer = 0
-              WHERE event_id = ?1 AND organizer = 1 AND address <> ?2",
-            [event_id, key.as_str()],
+            "UPDATE event_guest SET organizer = 0 WHERE event_id = ?1 AND organizer = 1 AND id <> ?2",
+            [event_id, ids[at].as_str()],
         )? > 0;
     }
-    for (key, guest) in &by_key {
-        let current = held.iter().find(|g| &g.address == key);
-        let person = match &guest.person_id {
-            Some(person) => Some(person.clone()),
-            None => person_of_address(connection, key)?,
-        };
+    for ((key, person, guest), id) in stated.iter().zip(&ids) {
         let name = guest.name.as_deref().map(str::trim);
-        match current {
+        let person = person.clone().filter(|p| !seated.contains(p));
+        if let Some(person) = &person {
+            seated.push(person.clone());
+        }
+        match held.iter().find(|g| &g.id == id) {
             None => {
                 connection.execute(
-                    "INSERT INTO event_guest (event_id, address, person_id, name, role, status, organizer)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    "INSERT INTO event_guest (id, event_id, address, person_id, name, role, status, organizer)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                     rusqlite::params![
+                        id,
                         event_id,
                         key,
                         person,
@@ -209,21 +267,22 @@ pub(super) fn set_guests(
             }
             Some(held) => {
                 let after = Guest {
-                    address: key.clone(),
+                    id: id.clone(),
+                    address: held.address.clone().or_else(|| key.clone()),
                     name: name.map(str::to_owned).or_else(|| held.name.clone()),
                     role: guest.role.clone().unwrap_or_else(|| held.role.clone()),
                     status: guest.status.clone().unwrap_or_else(|| held.status.clone()),
                     organizer: guest.organizer.unwrap_or(held.organizer),
-                    person_id: held.person_id.clone().or(person.clone()),
+                    person_id: held.person_id.clone().or(person),
                 };
                 if &after != held {
                     connection.execute(
-                        "UPDATE event_guest SET person_id = ?3, name = ?4, role = ?5, status = ?6,
-                                                organizer = ?7
-                          WHERE event_id = ?1 AND address = ?2",
+                        "UPDATE event_guest SET address = ?2, person_id = ?3, name = ?4, role = ?5,
+                                                status = ?6, organizer = ?7
+                          WHERE id = ?1",
                         rusqlite::params![
-                            event_id,
-                            key,
+                            id,
+                            after.address,
                             after.person_id,
                             after.name,
                             after.role,
@@ -242,16 +301,36 @@ pub(super) fn set_guests(
     Ok(changed)
 }
 
-/// A guest's answer. Returns whether it changed.
+/// Add one guest to the list and keep the rest: a person, an address, or both. A guest already
+/// there (by address or person) is updated with what is stated. Returns whether anything changed.
+pub(super) fn add_guest(ctx: &CommandCtx<'_, '_>, event_id: &str, guest: GuestIn) -> Result<bool> {
+    let held = guests_of(ctx.connection(), event_id)?;
+    let mut wanted: Vec<GuestIn> = held
+        .iter()
+        .map(|g| GuestIn {
+            address: g.address.clone(),
+            person_id: g.person_id.clone(),
+            ..GuestIn::default()
+        })
+        .collect();
+    wanted.push(guest);
+    set_guests(ctx, event_id, &wanted)
+}
+
+/// A guest's answer, named by address or by person. Returns whether it changed.
 pub(super) fn respond(
     ctx: &CommandCtx<'_, '_>,
     event_id: &str,
-    address: &str,
+    address: Option<&str>,
+    person: Option<&str>,
     status: &str,
 ) -> Result<bool> {
+    let key = address.map(address_key);
     let changed = ctx.connection().execute(
-        "UPDATE event_guest SET status = ?3 WHERE event_id = ?1 AND address = ?2 AND status <> ?3",
-        [event_id, &address_key(address), status],
+        "UPDATE event_guest SET status = ?4
+          WHERE event_id = ?1 AND status <> ?4
+            AND ((?2 IS NOT NULL AND address = ?2) OR (?3 IS NOT NULL AND person_id = ?3))",
+        rusqlite::params![event_id, key, person, status],
     )?;
     if changed > 0 {
         ctx.touch(event_id)?;
@@ -329,7 +408,10 @@ pub(crate) fn guests_items(guests: &Json) -> BTreeMap<String, Json> {
 
 /// A guest the vault holds, in the form a phone states it.
 fn stated_form(guest: &Guest) -> Json {
-    let mut out = json!({ "email": guest.address, "state": guest.status, "role": guest.role });
+    let mut out = json!({ "state": guest.status, "role": guest.role });
+    if let Some(address) = &guest.address {
+        out["email"] = Json::String(address.clone());
+    }
     if let Some(name) = &guest.name {
         out["name"] = Json::String(name.clone());
     }
@@ -339,9 +421,13 @@ fn stated_form(guest: &Guest) -> Json {
     guest_canon(&out)
 }
 
-/// The guests the event holds, in the form a phone states them.
+/// The guests the event holds, in the form a phone states them: those with an address.
 pub(crate) fn guests_read(connection: &Connection, id: &str) -> Result<Json> {
-    let held: Vec<Json> = guests_of(connection, id)?.iter().map(stated_form).collect();
+    let held: Vec<Json> = guests_of(connection, id)?
+        .iter()
+        .filter(|guest| guest.address.is_some())
+        .map(stated_form)
+        .collect();
     Ok(guests_canon(&Json::Array(held)))
 }
 
@@ -356,36 +442,81 @@ fn addressed(statement: &Json) -> BTreeMap<String, Json> {
 fn write_guest(ctx: &CommandCtx<'_, '_>, id: &str, address: &str, guest: &Json) -> Result<()> {
     let text = |key: &str| guest.get(key).and_then(Json::as_str);
     let organizer = guest.get("organizer").and_then(Json::as_bool) == Some(true);
+    let connection = ctx.connection();
+    let person = person_of_address(connection, address)?;
+    let row: Option<(String, Option<String>)> = connection
+        .query_row(
+            "SELECT id, address FROM event_guest
+              WHERE event_id = ?1 AND (address = ?2 OR (?3 IS NOT NULL AND person_id = ?3))
+              ORDER BY address IS NOT ?2, id LIMIT 1",
+            rusqlite::params![id, address, person],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    let row_id = row
+        .as_ref()
+        .map_or_else(|| ctx.next_id(), |(row_id, _)| row_id.clone());
+    let person = person.filter(|person| {
+        !connection
+            .query_row(
+                "SELECT EXISTS (SELECT 1 FROM event_guest
+                                 WHERE event_id = ?1 AND person_id = ?2 AND id <> ?3)",
+                rusqlite::params![id, person, row_id],
+                |row| row.get::<_, bool>(0),
+            )
+            .unwrap_or(false)
+    });
     if organizer {
-        ctx.connection().execute(
-            "UPDATE event_guest SET organizer = 0 WHERE event_id = ?1 AND address <> ?2",
-            [id, address],
+        connection.execute(
+            "UPDATE event_guest SET organizer = 0 WHERE event_id = ?1 AND id <> ?2",
+            [id, row_id.as_str()],
         )?;
     }
-    let person = person_of_address(ctx.connection(), address)?;
-    ctx.connection().execute(
-        "INSERT INTO event_guest (event_id, address, person_id, name, role, status, organizer)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-         ON CONFLICT (event_id, address) DO UPDATE SET
-           name = excluded.name, role = excluded.role, status = excluded.status,
-           organizer = excluded.organizer, person_id = COALESCE(person_id, excluded.person_id)",
-        rusqlite::params![
-            id,
-            address,
-            person,
-            text("name"),
-            text("role").unwrap_or("required"),
-            text("state").unwrap_or("needs-action"),
-            organizer,
-        ],
-    )?;
+    let params = rusqlite::params![
+        row_id,
+        id,
+        address,
+        person,
+        text("name"),
+        text("role").unwrap_or("required"),
+        text("state").unwrap_or("needs-action"),
+        organizer,
+    ];
+    match row {
+        None => {
+            connection.execute(
+                "INSERT INTO event_guest (id, event_id, address, person_id, name, role, status, organizer)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params,
+            )?;
+        }
+        Some((_, held_address)) => {
+            let address_to_keep = held_address.as_deref().unwrap_or(address);
+            connection.execute(
+                "UPDATE event_guest SET address = ?9, name = ?5, role = ?6, status = ?7, organizer = ?8,
+                        person_id = COALESCE(person_id, ?4)
+                  WHERE id = ?1",
+                rusqlite::params![
+                    row_id,
+                    id,
+                    address,
+                    person,
+                    text("name"),
+                    text("role").unwrap_or("required"),
+                    text("state").unwrap_or("needs-action"),
+                    organizer,
+                    address_to_keep,
+                ],
+            )?;
+        }
+    }
     Ok(())
 }
 
 fn held_by_address(connection: &Connection, id: &str) -> Result<BTreeMap<String, Json>> {
     Ok(guests_of(connection, id)?
         .iter()
-        .map(|guest| (guest.address.clone(), stated_form(guest)))
+        .filter_map(|guest| Some((guest.address.clone()?, stated_form(guest))))
         .collect())
 }
 

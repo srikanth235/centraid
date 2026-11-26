@@ -24,6 +24,60 @@ use crate::commands::{
 use crate::error::Result;
 use crate::model::Kind;
 
+/// The five columns that name a place: an event, one day of a series, a workout, a touch and a
+/// photograph.
+const PLACE_COLUMNS: [&str; 5] = ["event", "occurrence", "workout", "touch", "photo"];
+
+fn pre_merge(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    let (from, into) = (ctx.required_str("from")?, ctx.required_str("into")?);
+    if from == into {
+        return Ok(Some("a place cannot be merged into itself".to_owned()));
+    }
+    for id in [from, into] {
+        let found = match lookup_live(ctx.connection(), id)? {
+            Ok(found) => found,
+            Err(sentence) => return Ok(Some(sentence)),
+        };
+        if found.kind != Kind::Place {
+            return Ok(Some(format!(
+                "“{}” is a {}, and only places are merged",
+                found.title,
+                found.kind.noun()
+            )));
+        }
+    }
+    Ok(None)
+}
+
+/// `place.merge`: the place `from` and the place `into` are one, and `into` stays. Everything that
+/// was at `from` is at `into`, and then `from` is purged. Where `into` has no coordinates, address
+/// or zone, it takes the ones `from` had.
+fn merge(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
+    let (loser, winner) = (ctx.required_str("from")?, ctx.required_str("into")?);
+    let connection = ctx.connection();
+    connection.execute(
+        "UPDATE place SET
+           lat = CASE WHEN place.lat IS NULL THEN l.lat ELSE place.lat END,
+           lon = CASE WHEN place.lat IS NULL THEN l.lon ELSE place.lon END,
+           address = COALESCE(place.address, l.address), zone = COALESCE(place.zone, l.zone)
+         FROM (SELECT * FROM place WHERE id = ?1) AS l
+         WHERE place.id = ?2",
+        [loser, winner],
+    )?;
+    let mut moved = 0;
+    for table in PLACE_COLUMNS {
+        moved += connection.execute(
+            &format!("UPDATE {table} SET place_id = ?2 WHERE place_id = ?1"),
+            [loser, winner],
+        )?;
+    }
+    let mut purged = Vec::new();
+    entity::purge_one(ctx, loser, &mut purged)?;
+    ctx.touch(winner)?;
+    ctx.mark_for_index(winner);
+    Ok(serde_json::json!({ "into": winner, "moved": moved }))
+}
+
 #[derive(serde::Deserialize)]
 struct AddInput {
     id: Option<String>,
@@ -184,7 +238,30 @@ pub fn definitions() -> Vec<CommandDefinition> {
         predicate: "entity_is_a_place",
         check: pre_locate,
     }];
+    const MERGE: &[CommandCondition] = &[CommandCondition {
+        predicate: "both_are_places",
+        check: pre_merge,
+    }];
+    let mut merge_place = CommandDefinition::plain(
+        "place.merge",
+        "place",
+        r#"{
+          "type": "object",
+          "required": ["from", "into"],
+          "additionalProperties": false,
+          "properties": {
+            "from": { "type": "string", "minLength": 1 },
+            "into": { "type": "string", "minLength": 1 }
+          }
+        }"#,
+        Idempotency::Once,
+        MERGE,
+        merge,
+    );
+    merge_place.risk = crate::commands::Risk::Medium;
+    merge_place.confirm = true;
     vec![
+        merge_place,
         CommandDefinition::plain(
             "place.add",
             "place",

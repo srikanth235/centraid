@@ -214,8 +214,7 @@ pub struct SystemMap {
     /// owned, and is the entity's.
     pub fields: &'static [&'static str],
     /// The fields (`title` among them) that are written when a row is added and
-    /// never after: a statement line is never edited, whatever a later
-    /// statement says.
+    /// never after, whatever a later read says.
     pub fixed: &'static [&'static str],
     /// The fields that are rows of their own, after the columns.
     pub children: &'static [Child],

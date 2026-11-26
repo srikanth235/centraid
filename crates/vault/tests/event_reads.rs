@@ -329,7 +329,7 @@ fn every_statement_of_a_calendar_read_is_an_index_walk() {
     // the key, and the series' `occurrence` rows one range of theirs.
     assert_walk(
         &plan(&w, centraid_vault::commands::event::GUESTS, &["x"]),
-        "PRIMARY KEY (event_id=?)",
+        "event_guest_by_event (event_id=?)",
     );
 }
 

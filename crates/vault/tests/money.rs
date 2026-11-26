@@ -6,6 +6,7 @@
 
 mod common;
 
+use centraid_vault::commands::follow;
 use centraid_vault::commands::money::{self, Spent};
 use centraid_vault::commands::txn;
 use centraid_vault::{Command, Principal};
@@ -195,7 +196,7 @@ fn an_account_has_a_type_from_the_lookup_and_an_origin_only_when_a_statement_nee
 }
 
 #[test]
-fn an_opening_balance_needs_its_day_and_the_currency_is_fixed_once_the_account_has_lines() {
+fn an_opening_balance_needs_its_day_and_the_currency_may_change_before_the_first_line() {
     let w = world("account_opening");
     assert!(
         w.refused(
@@ -223,29 +224,111 @@ fn an_opening_balance_needs_its_day_and_the_currency_is_fixed_once_the_account_h
         "account.set_opening",
         json!({ "id": id, "opening_minor": 0 }),
     );
-    // Before it has a line the currency may change; after, the sentence and the table both say no.
     w.ok("account.edit", json!({ "id": id, "currency": "eur" }));
     assert_eq!(
         w.one::<String>("SELECT currency FROM account WHERE id = ?1", &[&id]),
         "EUR"
     );
-    hand(&w, &id, "2026-03-01", -100, "First");
-    assert!(
-        w.refused("account.edit", json!({ "id": id, "currency": "USD" }))
-            .contains("fixed once it has lines")
+}
+
+#[test]
+fn changing_an_accounts_currency_rescales_every_figure_kept_in_it_and_refuses_a_lost_fraction() {
+    let w = world("currency_change");
+    let id = account_in(&w, "Wallet", "checking", "JPY");
+    w.ok(
+        "account.set_opening",
+        json!({ "id": id, "opening_minor": 5_000, "opening_on": "2026-01-01" }),
     );
-    w.ok("account.edit", json!({ "id": id, "currency": "EUR" }));
-    let error = w
-        .vault()
-        .commit(|tx| {
-            tx.connection()
-                .execute("UPDATE account SET currency = 'USD' WHERE id = ?1", [&id])?;
-            Ok(())
-        })
-        .expect_err("refused");
+    let lunch = hand(&w, &id, "2026-03-01", -1_200, "Lunch");
+    let rent = hand(&w, &id, "2026-03-02", -80_000, "Rent");
+    w.ok(
+        "txn.split",
+        json!({ "id": rent, "parts": [
+            { "category_id": "category:food.groceries", "amount_minor": -50_000 },
+            { "category_id": "category:health.care", "amount_minor": -30_000 } ] }),
+    );
+    w.ok(
+        "checkpoint.record",
+        json!({ "account_id": id, "day": "2026-02-01", "balance_minor": 5_000 }),
+    );
+    w.ok(
+        "txn.edit",
+        json!({ "id": lunch, "original_amount_minor": -9, "original_currency": "EUR" }),
+    );
+    w.ok(
+        "budget.set",
+        json!({ "month": "2026-03", "category_id": "category:food", "amount_minor": 1_234 }),
+    );
+    let figures = |w: &World| {
+        w.one::<String>(
+            "SELECT (SELECT opening_minor FROM account WHERE id = ?1) || ' ' ||
+                    (SELECT group_concat(amount_minor, ',') FROM (SELECT amount_minor FROM txn WHERE account_id = ?1 ORDER BY posted_on)) || ' ' ||
+                    (SELECT group_concat(amount_minor, ',') FROM (SELECT s.amount_minor FROM txn_split s JOIN txn t ON t.id = s.txn_id WHERE t.account_id = ?1 ORDER BY t.posted_on, s.position)) || ' ' ||
+                    (SELECT group_concat(balance_minor, ',') FROM checkpoint WHERE account_id = ?1)",
+            &[&id],
+        )
+    };
+    let before = figures(&w);
+    assert_eq!(before, "5000 -1200,-80000 -50000,-30000 5000");
+    let revisions = w.one::<i64>("SELECT COUNT(*) FROM revision WHERE entity_id = ?1", &[&id]);
+    let changed = w.ok("account.edit", json!({ "id": id, "currency": "USD" }));
+    assert_eq!(changed["replaced"], json!({ "currency": "JPY" }));
+    assert_eq!(
+        figures(&w),
+        "500000 -120000,-8000000 -5000000,-3000000 500000",
+        "yen to dollars: two more places"
+    );
+    assert_eq!(
+        w.one::<String>(
+            "SELECT original_amount_minor || original_currency FROM txn WHERE id = ?1",
+            &[&lunch]
+        ),
+        "-9EUR",
+        "what was charged in another currency is not this account's"
+    );
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT amount_minor FROM budget WHERE category_id = 'category:food'",
+            &[]
+        ),
+        1_234
+    );
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM revision WHERE entity_id = ?1", &[&id]),
+        revisions + 1,
+        "one revision"
+    );
+    // One currency to another with the same minor unit keeps its digits.
+    let cad = w.ok("account.edit", json!({ "id": id, "currency": "CAD" }));
+    assert_eq!(cad["changed"], true);
+    assert_eq!(
+        figures(&w),
+        "500000 -120000,-8000000 -5000000,-3000000 500000"
+    );
+    // Back to yen: whole yen, nothing lost, and the digits are what they were.
+    w.ok("account.edit", json!({ "id": id, "currency": "JPY" }));
+    assert_eq!(
+        figures(&w),
+        before,
+        "taking the change back restores every figure"
+    );
+    // A split with cents is refused, and nothing moves.
+    w.ok("account.edit", json!({ "id": id, "currency": "USD" }));
+    w.ok(
+        "txn.split",
+        json!({ "id": rent, "parts": [
+            { "category_id": "category:food.groceries", "amount_minor": -7_999_950 },
+            { "category_id": "category:health.care", "amount_minor": -50 } ] }),
+    );
+    let held = figures(&w);
     assert!(
-        error.to_string().contains("fixed once it has lines"),
-        "{error}"
+        w.refused("account.edit", json!({ "id": id, "currency": "JPY" }))
+            .contains("has no cents")
+    );
+    assert_eq!(figures(&w), held);
+    assert_eq!(
+        w.one::<String>("SELECT currency FROM account WHERE id = ?1", &[&id]),
+        "USD"
     );
 }
 
@@ -636,8 +719,8 @@ fn a_statement_is_followed_line_by_line_and_a_reimport_writes_nothing() {
 }
 
 #[test]
-fn a_statement_line_is_never_edited_but_its_category_memo_and_name_are_the_members() {
-    let w = world("statement_fixed");
+fn a_statement_line_edit_survives_a_re_import_and_the_banks_figure_is_read_beside_it() {
+    let w = world("statement_edit");
     let id = account(&w, "Everyday");
     import(&w, &id, &[GROCER]);
     let grocer = stated(&w, GROCER.0);
@@ -645,67 +728,86 @@ fn a_statement_line_is_never_edited_but_its_category_memo_and_name_are_the_membe
         "txn.categorize",
         json!({ "ids": [grocer], "category_id": "category:food.groceries" }),
     );
-    w.ok("txn.edit", json!({ "id": grocer, "memo": "weekly shop" }));
+    w.ok(
+        "txn.edit",
+        json!({ "id": grocer, "memo": "weekly shop", "amount_minor": -5_000 }),
+    );
     w.ok(
         "entity.retitle",
         json!({ "id": grocer, "title": "Groceries" }),
     );
-    // The bank restates the line with another day, amount and words: none of it reaches the row.
-    let restated = w.ok(
-        "follow.statement",
-        json!({
-            "origin": { "ref": id, "label": "Everyday", "fills": id },
-            "records": [{ "external_id": GROCER.0, "fields": {
-                "title": "WHOLE FOODS MARKET", "posted_on": "2026-03-09", "amount_minor": -9_999 } }],
-        }),
-    );
-    assert_eq!(restated["added"], 0);
-    assert_eq!(
+    let restate = |day: &str, amount: i64| {
+        w.ok(
+            "follow.statement",
+            json!({
+                "origin": { "ref": id, "label": "Everyday", "fills": id },
+                "records": [{ "external_id": GROCER.0, "fields": {
+                    "title": "WHOLE FOODS MARKET", "posted_on": day, "amount_minor": amount } }],
+            }),
+        )
+    };
+    let line = |w: &World| {
         w.one::<String>(
             "SELECT posted_on || ' ' || amount_minor || ' ' || memo FROM txn WHERE id = ?1",
-            &[&grocer]
-        ),
-        "2026-03-02 -4250 weekly shop"
-    );
+            &[&grocer],
+        )
+    };
+    let read = |w: &World| {
+        w.vault()
+            .read(|c| follow::differences(c, &grocer))
+            .expect("differences")
+    };
+    // The bank restates the day and the amount: the day the member left follows, their amount stays.
+    let restated = restate("2026-03-09", -9_999);
+    assert_eq!(restated["added"], 0);
+    assert_eq!(line(&w), "2026-03-09 -5000 weekly shop");
+    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM txn", &[]), 1);
     assert_eq!(
         parts(&w, &grocer),
-        [("category:food.groceries".to_owned(), -4_250)]
+        [("category:food.groceries".to_owned(), -5_000)]
     );
     assert_eq!(
         w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&grocer]),
         "Groceries"
     );
+    let said = read(&w);
+    assert_eq!(said.len(), 1, "{said:?}");
     assert_eq!(
-        w.one::<String>(
-            "SELECT stated_title FROM source WHERE entity_id = ?1",
-            &[&grocer]
+        (
+            said[0].field.as_str(),
+            said[0].stated.clone(),
+            said[0].held.clone()
         ),
-        GROCER.3,
-        "the bank's words stay what it said"
+        ("amount_minor", json!(-9_999), json!(-5_000)),
+        "the statement's figure is readable"
     );
-    // The command says so in a sentence, and the table refuses the same write.
-    for edit in [
-        json!({ "id": grocer, "amount_minor": -1 }),
-        json!({ "id": grocer, "posted_on": "2026-03-01" }),
-        json!({ "id": grocer, "original_amount_minor": 5, "original_currency": "EUR" }),
-    ] {
-        assert!(w.refused("txn.edit", edit).contains("never edited"));
-    }
-    for sql in [
-        "UPDATE txn SET amount_minor = 1",
-        "UPDATE txn SET posted_on = '2026-03-01'",
-        "UPDATE txn SET original_amount_minor = 5, original_currency = 'EUR'",
-        "UPDATE txn SET account_id = (SELECT id FROM account LIMIT 1)",
-    ] {
-        let error = w
-            .vault()
-            .commit(|tx| {
-                tx.connection().execute(sql, [])?;
-                Ok(())
-            })
-            .expect_err(sql);
-        assert!(error.to_string().contains("never edited"), "{sql}: {error}");
-    }
+    // The same statement again writes nothing.
+    let again = restate("2026-03-09", -9_999);
+    assert_eq!(
+        (again["updated"].as_i64(), again["unchanged"].as_i64()),
+        (Some(0), Some(1))
+    );
+    // Restoring the figure to the statement's clears the difference.
+    w.ok("txn.edit", json!({ "id": grocer, "amount_minor": -9_999 }));
+    assert!(read(&w).is_empty());
+    // The bank's own change reaches a line the member left alone, and its parts still add up.
+    restate("2026-03-09", -9_000);
+    assert_eq!(line(&w), "2026-03-09 -9000 weekly shop");
+    assert_eq!(
+        parts(&w, &grocer),
+        [("category:food.groceries".to_owned(), -9_000)]
+    );
+    // A line in a transfer still keeps its account and direction.
+    let other = account(&w, "Savings");
+    let half = hand(&w, &other, "2026-03-09", 9_000, "From Everyday");
+    w.ok(
+        "txn.link_transfer",
+        json!({ "id": grocer, "other_id": half }),
+    );
+    assert!(
+        w.refused("txn.edit", json!({ "id": grocer, "amount_minor": 1 }))
+            .contains("unlink the transfer first")
+    );
     // The line's origin never turns back into a hand line.
     let error = w
         .vault()
@@ -868,12 +970,8 @@ fn a_statement_that_seems_to_be_a_hand_line_only_proposes_the_match_and_confirm_
         w.one::<String>("SELECT title FROM entity WHERE id = ?1", &[&by_hand]),
         "Whole Foods"
     );
-    // The statement states the line now, and from here it is never edited.
+    // The statement states the line now, and the member's edits to it stand.
     assert_eq!(stated(&w, GROCER.0), by_hand);
-    assert!(
-        w.refused("txn.edit", json!({ "id": by_hand, "amount_minor": -1 }))
-            .contains("never edited")
-    );
     assert!(read(&w, |c| txn::proposed_matches(c, &id)).is_empty());
     // Importing the same statement again finds the line and writes nothing.
     let again = import(&w, &id, &[GROCER]);
@@ -1406,10 +1504,8 @@ fn a_transfer_pairs_two_lines_of_two_accounts_in_one_currency_or_two_and_goes_wi
 // ---------------------------------------------------------------------------------------------
 
 #[test]
-fn a_category_is_added_under_a_group_and_merged_with_everything_it_held() {
+fn a_category_is_added_under_a_group() {
     let w = world("categories");
-    let id = account(&w, "Everyday");
-    let coffee = hand(&w, &id, "2026-03-04", -450, "Blue Coffee");
     let beans = w.ok(
         "category.add",
         json!({ "title": "Beans  & Co", "parent_id": "category:food" }),
@@ -1443,64 +1539,6 @@ fn a_category_is_added_under_a_group_and_merged_with_everything_it_held() {
     w.ok(
         "category.add",
         json!({ "title": "Beans & Co", "parent_id": "category:fun" }),
-    );
-    w.ok(
-        "txn.categorize",
-        json!({ "ids": [coffee], "category_id": beans }),
-    );
-    w.ok(
-        "rule.add",
-        json!({ "match": "is", "text": "x", "category_id": beans }),
-    );
-    for (month, category, amount) in [
-        ("2026-03", beans.as_str(), 100),
-        ("2026-03", "category:food.dining", 50),
-        ("2026-04", beans.as_str(), 70),
-    ] {
-        w.ok(
-            "budget.set",
-            json!({ "month": month, "category_id": category, "amount_minor": amount }),
-        );
-    }
-    let merged = w.ok(
-        "category.merge",
-        json!({ "from_id": beans, "into_id": "category:food.dining" }),
-    );
-    assert_eq!(
-        (
-            merged["parts"].as_i64(),
-            merged["rules"].as_i64(),
-            merged["plans"].as_i64()
-        ),
-        (Some(1), Some(1), Some(2))
-    );
-    assert_eq!(
-        parts(&w, &coffee),
-        [("category:food.dining".to_owned(), -450)]
-    );
-    assert_eq!(
-        w.one::<i64>("SELECT category_id = 'category:food.dining' FROM rule", &[]),
-        1
-    );
-    assert_eq!(
-        w.one::<i64>("SELECT amount_minor FROM budget WHERE category_id = 'category:food.dining' AND month = '2026-03'", &[]),
-        150,
-        "where both planned the month, the budgets add"
-    );
-    assert_eq!(
-        w.one::<i64>("SELECT COUNT(*) FROM budget WHERE month = '2026-04' AND category_id = 'category:food.dining'", &[]),
-        1
-    );
-    assert_eq!(
-        w.one::<i64>("SELECT COUNT(*) FROM entity WHERE id = ?1", &[&beans]),
-        0
-    );
-    assert!(
-        w.refused(
-            "category.merge",
-            json!({ "from_id": "category:food", "into_id": "category:fun" })
-        )
-        .contains("inside it")
     );
 }
 

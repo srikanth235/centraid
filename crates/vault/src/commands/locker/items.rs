@@ -15,7 +15,7 @@ use crate::model::Kind;
 
 use super::custody::{ITEM_LIVE_CHECK, NONE, assert_fresh_id, invalid, sentence_of};
 use super::fields::{FieldIn, field_schema, refusal_of, write_all};
-use super::schema::is_sealed_kind;
+use super::schema::{ITEM_TYPES, built_in, is_sealed_kind};
 use super::{definition, item_type_of};
 
 fn fields_of(ctx: &CommandCtx<'_, '_>, key: &str) -> Result<Vec<FieldIn>> {
@@ -115,10 +115,40 @@ pub(super) fn add_item() -> CommandDefinition {
 #[derive(serde::Deserialize)]
 struct EditItemInput {
     item_id: String,
+    #[serde(rename = "type")]
+    item_type: Option<String>,
     title: Option<String>,
     compromised: Option<bool>,
     #[serde(default)]
     remove: Vec<String>,
+}
+
+/// Change an item's type. A field the new type does not define stays on the item, kept as an extra
+/// field: still its own label and value, no longer a built-in the type's template knows.
+fn retype(ctx: &CommandCtx<'_, '_>, item_id: &str, new_type: &str) -> Result<()> {
+    ctx.connection().execute(
+        "UPDATE locker_item SET type = ?2 WHERE id = ?1",
+        [item_id, new_type],
+    )?;
+    let keys: Vec<(String, Option<String>)> = {
+        let mut statement = ctx.connection().prepare(
+            "SELECT id, field_key FROM locker_item_field WHERE item_id = ?1 AND field_key IS NOT NULL",
+        )?;
+        let rows = statement.query_map([item_id], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        rows.collect::<rusqlite::Result<_>>()?
+    };
+    for (id, key) in keys {
+        if key
+            .as_deref()
+            .is_some_and(|key| built_in(new_type, key).is_none())
+        {
+            ctx.connection().execute(
+                "UPDATE locker_item_field SET single = 0, claimed = 0 WHERE id = ?1",
+                [&id],
+            )?;
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn edit_item() -> CommandDefinition {
@@ -130,7 +160,15 @@ pub(super) fn edit_item() -> CommandDefinition {
             predicate: "fields_are_well_formed_and_secrets_are_sealed",
             check: |ctx| {
                 let item_id = ctx.required_str("item_id")?;
-                let item_type = item_type_of(ctx, item_id)?;
+                let item_type = match ctx.optional_str("type") {
+                    Some(stated) if ITEM_TYPES.contains(&stated) => stated.to_owned(),
+                    Some(stated) => {
+                        return Ok(Some(format!(
+                            "“{stated}” is not a kind of item Locker keeps"
+                        )));
+                    }
+                    None => item_type_of(ctx, item_id)?,
+                };
                 let fields = fields_of(ctx, "fields")?;
                 if let Some(sentence) = refusal_of(ctx, item_id, &item_type, &fields)? {
                     return Ok(Some(sentence));
@@ -161,6 +199,12 @@ pub(super) fn edit_item() -> CommandDefinition {
           "properties": {
             "item_id": { "type": "string", "minLength": 1 },
             "expected_rev": { "type": "integer", "minimum": 0 },
+            "type": { "type": "string", "enum": [
+              "login", "card", "note", "identity", "wifi", "password",
+              "ssh_key", "api_credential", "passport", "bank_account",
+              "driving_licence", "software_licence", "crypto_wallet",
+              "membership", "document"],
+              "description": "A new type for the item. A field the new type does not define stays on the item as an extra field." },
             "title": { "type": "string", "maxLength": 1000 },
             "compromised": { "type": "boolean" },
             "fields": { "type": "array", "maxItems": 200, "items": "#,
@@ -175,7 +219,11 @@ pub(super) fn edit_item() -> CommandDefinition {
         NONE,
         |ctx| {
             let input: EditItemInput = ctx.parse_input()?;
-            let item_type = item_type_of(ctx, &input.item_id)?;
+            let mut item_type = item_type_of(ctx, &input.item_id)?;
+            if let Some(stated) = input.item_type.as_deref().filter(|t| *t != item_type) {
+                retype(ctx, &input.item_id, stated)?;
+                stated.clone_into(&mut item_type);
+            }
             let fields = fields_of(ctx, "fields")?;
             if let Some(title) = input.title.as_deref() {
                 entity::rename(ctx, &input.item_id, title.trim())?;

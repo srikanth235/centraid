@@ -52,14 +52,20 @@ use crate::commands::{CommandCondition, CommandCtx, CommandDefinition, Idempoten
 use crate::error::{Result, VaultError};
 use crate::model::Kind;
 
-/// A sentence when the folder the command names (`folder_id`) cannot hold a document: it is not
-/// there, it is in the trash, or it is not a folder.
+/// A sentence when the home the command names (`folder_id`, or `home` for a capture inside an item)
+/// cannot hold a document: it is not there, it is in the trash, or it is not a folder or an item a
+/// capture may be filed in.
 pub(crate) fn folder_refusal(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    if ctx.optional_str("folder_id").is_some() && ctx.optional_str("home").is_some() {
+        return Ok(Some(
+            "a document is in a folder or inside an item, not both".to_owned(),
+        ));
+    }
     home_refusal(
         ctx.connection(),
         Kind::Document,
         None,
-        ctx.optional_str("folder_id"),
+        ctx.optional_str("home").or(ctx.optional_str("folder_id")),
     )
 }
 
@@ -286,6 +292,7 @@ struct AddDocumentInput {
     blob: String,
     media_type: String,
     folder_id: Option<String>,
+    home: Option<String>,
     text: Option<String>,
 }
 
@@ -299,7 +306,7 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
         &input.title,
         &input.blob,
         &input.media_type,
-        input.folder_id.as_deref(),
+        input.home.as_deref().or(input.folder_id.as_deref()),
     )?;
     arrival::record(ctx, &id, Kind::Document)?;
     Ok(serde_json::json!({ "id": id }))
@@ -529,6 +536,8 @@ pub fn definitions() -> Vec<CommandDefinition> {
                 "media_type": { "type": "string", "minLength": 1 },
                 "size": { "type": "integer", "minimum": 0 },
                 "folder_id": { "type": ["string", "null"] },
+                "home": { "type": ["string", "null"],
+                  "description": "The item a capture is filed inside (a payment, an event, a workout, a note, a task, a person): it stays out of the top level and goes with the item." },
                 "text": { "type": "string", "maxLength": 200000 },
                 "#,
                 crate::commands::arrival::arrived_property!(),

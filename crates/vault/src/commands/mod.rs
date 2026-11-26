@@ -46,6 +46,7 @@
 pub mod alert;
 pub mod arrival;
 pub mod blob;
+pub mod concept;
 pub mod contact_point;
 pub mod container;
 pub mod csv;
@@ -395,6 +396,7 @@ impl Registry {
         let modules: &[fn() -> Vec<CommandDefinition>] = &[
             alert::definitions,
             blob::definitions,
+            concept::definitions,
             contact_point::definitions,
             container::definitions,
             document::definitions,

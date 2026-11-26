@@ -112,13 +112,14 @@ fn quoted_param(value: &str) -> String {
     format!("\"{clean}\"")
 }
 
-/// The event's guests: the organizer first, then by address.
+/// The event's guests that have an address to write: the organizer first, then by address.
 fn guests(connection: &Connection, id: &str) -> Result<Vec<Guest>> {
     Ok(crate::commands::event::guests_of(connection, id)?
         .into_iter()
-        .map(|guest| Guest {
+        .filter_map(|guest| Some((guest.address.clone()?, guest)))
+        .map(|(address, guest)| Guest {
             name: guest.name,
-            address: format!("mailto:{}", guest.address),
+            address: format!("mailto:{address}"),
             answer: match guest.status.as_str() {
                 "accepted" => "ACCEPTED",
                 "declined" => "DECLINED",

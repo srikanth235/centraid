@@ -54,7 +54,7 @@ struct Line {
 }
 
 /// The ISO 4217 minor-unit exponent of the codes the product reaches (two unless listed).
-fn exponent(currency: &str) -> u32 {
+pub(crate) fn exponent(currency: &str) -> u32 {
     match currency {
         "BIF" | "CLP" | "DJF" | "GNF" | "ISK" | "JPY" | "KMF" | "KRW" | "PYG" | "RWF" | "UGX"
         | "UYI" | "VND" | "VUV" | "XAF" | "XOF" | "XPF" => 0,

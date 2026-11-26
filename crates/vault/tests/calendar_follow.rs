@@ -287,6 +287,80 @@ fn a_phones_guests_are_guests_whether_or_not_they_are_in_people_and_follow_one_b
 }
 
 #[test]
+fn an_address_the_phone_brings_fills_the_row_of_a_guest_with_none_and_two_such_guests_survive_a_pass()
+ {
+    let w = World::new("cal_follow_person_guests");
+    let maya = w.person("Maya");
+    let sam = w.person("Sam");
+    read(&w, vec![meeting("uid:g", "Walk")]);
+    let event = event_of(&w, "uid:g");
+    w.ok(
+        "event.add_guest",
+        json!({ "id": &event, "person_id": &maya }),
+    );
+    w.ok(
+        "event.add_guest",
+        json!({ "id": &event, "person_id": &sam }),
+    );
+    read(
+        &w,
+        vec![with(
+            meeting("uid:g", "Walk"),
+            "attendees",
+            json!([{ "name": "Pat", "email": "pat@example.com", "state": "accepted" }]),
+        )],
+    );
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM event_guest WHERE event_id = ?1 AND address IS NULL",
+            &[&event]
+        ),
+        2,
+        "two address-less guests survive a pass"
+    );
+    let point = w.mint();
+    w.commit(|tx| {
+        tx.connection().execute(
+            "INSERT INTO contact_point (id, person_id, kind, value, normalized, position)
+             VALUES (?1, ?2, 'email', 'maya@example.com', 'maya@example.com', 0)",
+            rusqlite::params![point, maya],
+        )?;
+        Ok(())
+    });
+    let row_before: String = w.one(
+        "SELECT id FROM event_guest WHERE event_id = ?1 AND person_id = ?2",
+        &[&event, &maya],
+    );
+    read(
+        &w,
+        vec![with(
+            meeting("uid:g", "Walk"),
+            "attendees",
+            json!([
+                { "name": "Pat", "email": "pat@example.com", "state": "accepted" },
+                { "name": "Maya", "email": "maya@example.com", "state": "accepted" }
+            ]),
+        )],
+    );
+    assert_eq!(
+        w.strings(
+            "SELECT id || '|' || address || '|' || status FROM event_guest
+              WHERE event_id = ?1 AND person_id = ?2",
+            &[&event, &maya]
+        ),
+        [format!("{row_before}|maya@example.com|accepted")],
+        "the address filled the person's own row, and no second row was made"
+    );
+    assert_eq!(
+        w.one::<i64>(
+            "SELECT COUNT(*) FROM event_guest WHERE event_id = ?1 AND person_id = ?2",
+            &[&event, &maya]
+        ),
+        1
+    );
+}
+
+#[test]
 fn a_phones_location_is_words_and_never_makes_a_place() {
     let w = World::new("cal_follow_location");
     let places = w.one::<i64>("SELECT COUNT(*) FROM entity WHERE kind = 'place'", &[]);

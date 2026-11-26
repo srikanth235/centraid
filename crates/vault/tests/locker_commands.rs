@@ -924,3 +924,58 @@ fn a_duplicate_takes_plain_fields_and_tags_and_the_cores_re_sealed_secrets_but_n
     assert_eq!(counts["live"], 3);
     assert_eq!(counts["trashed"], 0);
 }
+
+#[test]
+fn an_items_type_can_change_and_a_field_the_new_type_lacks_stays_as_an_extra_field() {
+    let w = world("locker_retype");
+    let item = item_id(&w);
+    add(
+        &w,
+        &item,
+        "login",
+        "Shared",
+        vec![
+            plain("username", "me@example.com"),
+            secret(&w, &item, "password", "SECRET-ONE"),
+        ],
+    );
+    let before = rev_count(&w, &item);
+    w.ok(
+        "locker.edit_item",
+        json!({ "item_id": item, "type": "wifi" }),
+    );
+    assert_eq!(
+        w.one::<String>("SELECT type FROM locker_item WHERE id = ?1", &[&item]),
+        "wifi"
+    );
+    assert_eq!(rev_count(&w, &item), before + 1, "one save, one version");
+    for key in ["username", "password"] {
+        let (single, text): (i64, Option<String>) = w
+            .vault()
+            .read(|c| {
+                Ok(c.query_row(
+                    "SELECT single, value_text FROM locker_item_field
+                      WHERE item_id = ?1 AND field_key = ?2",
+                    [&item, key],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )?)
+            })
+            .unwrap_or_else(|e| panic!("{key}: {e}"));
+        let in_wifi = locker::built_ins("wifi").iter().any(|f| f.key == key);
+        assert_eq!(
+            single == 1,
+            in_wifi,
+            "{key} is single only where the type defines it"
+        );
+        if key == "username" {
+            assert_eq!(text.as_deref(), Some("me@example.com"), "the value stays");
+        }
+    }
+    assert!(
+        w.refused(
+            "locker.edit_item",
+            json!({ "item_id": item, "type": "spaceship" })
+        )
+        .contains("spaceship")
+    );
+}
