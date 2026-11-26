@@ -5,6 +5,8 @@
 //! changed through the shared verbs, so what is proved is the door over the
 //! index the writer keeps, not over a fixture of the door's own.
 
+mod common;
+
 use centraid_search::sqlite::SqliteDoor;
 use centraid_search::{Answer, EachRequest, Principal, Search, SearchError, SearchRequest, Target};
 use centraid_vault::commands::Registry;
@@ -33,7 +35,7 @@ impl World {
         let now = self.vault.clock().now_text();
         self.vault
             .commit(|tx| {
-                let id = format!("note:{id}");
+                let id = common::reg("note", id);
                 let id = id.as_str();
                 tx.insert_entity(id, Kind::Note, title, &now)?;
                 tx.connection()
@@ -50,7 +52,7 @@ impl World {
         self.vault
             .commit(|tx| {
                 for index in 0..count {
-                    let id = format!("note:{prefix}{index:04}");
+                    let id = common::reg("note", &format!("{prefix}{index:04}"));
                     tx.insert_entity(&id, Kind::Note, title, &now)?;
                     tx.connection().execute(
                         "INSERT INTO note (id, body) VALUES (?1, ?2)",
@@ -66,7 +68,7 @@ impl World {
         let now = self.vault.clock().now_text();
         self.vault
             .commit(|tx| {
-                let id = format!("person:{id}");
+                let id = common::reg("person", id);
                 let id = id.as_str();
                 tx.insert_entity(id, Kind::Person, name, &now)?;
                 tx.connection().execute(
@@ -84,7 +86,7 @@ impl World {
             .execute(
                 &self.registry,
                 &VaultPrincipal::owner("phone"),
-                &Command::new(name, input),
+                &Command::new(name, common::mapped(&input)),
             )
             .unwrap_or_else(|error| panic!("`{name}`: {error}"));
         assert_eq!(
@@ -100,7 +102,7 @@ impl World {
             .targets()
             .expect("data")
             .iter()
-            .map(|target| (target.entity.clone(), target.id.clone()))
+            .map(|target| (target.entity.clone(), common::strip(&target.id).to_owned()))
             .collect()
     }
 
@@ -111,7 +113,11 @@ impl World {
             let Answer::Data { page, .. } = self.answer(&asked) else {
                 panic!("data");
             };
-            rows.extend(page.rows.iter().map(|t| (t.entity.clone(), t.id.clone())));
+            rows.extend(
+                page.rows
+                    .iter()
+                    .map(|t| (t.entity.clone(), common::strip(&t.id).to_owned())),
+            );
             match page.next {
                 Some(next) => asked.page.after = Some(next),
                 None => return rows,
@@ -135,10 +141,7 @@ fn request(kinds: &[&str], query: &str, limit: usize) -> SearchRequest {
 }
 
 fn ids(found: &[(String, String)]) -> Vec<&str> {
-    found
-        .iter()
-        .map(|(_, id)| id.split_once(':').map_or(id.as_str(), |(_, rest)| rest))
-        .collect()
+    found.iter().map(|(_, id)| id.as_str()).collect()
 }
 
 #[test]
@@ -193,10 +196,10 @@ fn a_person_is_found_by_the_notes_written_about_them_and_loses_them_with_the_edg
         .vault
         .commit(|tx| {
             tx.connection().execute(
-                "UPDATE note SET body = 'she loves tulips' WHERE id = 'n1'",
+                "UPDATE note SET body = 'she loves tulips' WHERE id = 'note:n1'",
                 [],
             )?;
-            tx.touch("n1", "2026-01-02T00:00:00.000Z")?;
+            tx.touch("note:n1", "2026-01-02T00:00:00.000Z")?;
             Ok(())
         })
         .expect("the note changes");
@@ -223,10 +226,10 @@ fn a_person_is_found_by_a_nickname_and_by_a_contact_point() {
         .commit(|tx| {
             tx.connection().execute(
                 "INSERT INTO contact_point (id, person_id, kind, value, normalized, position)
-                 VALUES ('c1', 'p1', 'email', 'peggy@orchard.example', 'peggy@orchard.example', 1)",
+                 VALUES ('c1', 'person:p1', 'email', 'peggy@orchard.example', 'peggy@orchard.example', 1)",
                 [],
             )?;
-            tx.touch("p1", "2026-01-02T00:00:00.000Z")?;
+            tx.touch("person:p1", "2026-01-02T00:00:00.000Z")?;
             Ok(())
         })
         .expect("the contact point lands");
@@ -249,7 +252,11 @@ fn a_window_continues_by_keyset_without_repeating_or_dropping_a_row() {
             panic!("data");
         };
         assert_eq!(window, 2);
-        seen.extend(page.rows.iter().map(|target| target.id.clone()));
+        seen.extend(
+            page.rows
+                .iter()
+                .map(|target| common::strip(&target.id).to_owned()),
+        );
         match page.next {
             Some(next) => after = Some(next),
             None => break,
@@ -274,15 +281,14 @@ fn excluded_ids_and_unlabelled_entities_are_predicates_not_a_post_filter() {
     let world = World::new();
     world.note("keep", "Garden", "");
     world.note("skip", "Garden", "");
-    world.note("blank", "", "garden garden garden");
     let found = world
-        .answer(&request(&["note"], "garden", 1).excluding(vec!["skip".to_owned()]))
+        .answer(&request(&["note"], "garden", 1).excluding(vec![common::map("skip")]))
         .targets()
         .expect("data")
         .iter()
-        .map(|target| target.id.clone())
+        .map(|target| common::strip(&target.id).to_owned())
         .collect::<Vec<_>>();
-    assert_eq!(found, ["keep"], "an unlabelled note is not a target");
+    assert_eq!(found, ["keep"], "the excluded id is a predicate");
 }
 
 #[test]
@@ -459,7 +465,7 @@ fn a_one_kind_search_is_not_starved_by_newer_matches_of_other_kinds() {
     // The kind, trash and excluded-id filters sit inside the cap, so excluding
     // the newest notes lets older ones fill it.
     let excluded: Vec<String> = (centraid_search::TAIL_ROWS..centraid_search::TAIL_ROWS + 20)
-        .map(|index| format!("n{index:04}"))
+        .map(|index| common::map(&format!("n{index:04}")))
         .collect();
     let found = world.walk(request(&["note"], "orchardkeeper", 200).excluding(excluded));
     assert_eq!(found.len(), centraid_search::TAIL_ROWS);
@@ -484,7 +490,11 @@ fn a_window_continues_across_the_tiers_without_repeating_or_dropping_a_row() {
             panic!("data");
         };
         pages += 1;
-        seen.extend(page.rows.iter().map(|target| target.id.clone()));
+        seen.extend(
+            page.rows
+                .iter()
+                .map(|target| common::strip(&target.id).to_owned()),
+        );
         match page.next {
             Some(next) => {
                 assert!(next.sort_key.contains(':'), "a tier and a rank: {next:?}");
@@ -578,8 +588,8 @@ fn one_statement_answers_a_few_rows_of_each_kind_in_the_order_the_kinds_were_nam
     let kinds: Vec<&str> = found.iter().map(|t| t.entity.as_str()).collect();
     assert_eq!(kinds, ["person", "person", "note", "note"], "{found:?}");
     // Best first inside a kind: a title match before a body match.
-    assert_eq!(found[0].id, "p1");
-    assert_eq!(found[1].id, "p2");
+    assert_eq!(common::strip(&found[0].id), "p1");
+    assert_eq!(common::strip(&found[1].id), "p2");
     // Fewer than the cap is all there is.
     let one = world
         .each(&each(&["person"], "garden", 8))
@@ -599,12 +609,14 @@ fn the_per_kind_door_honours_the_filters_the_window_door_does() {
     world.note("skip", "Garden", "");
     world.note("gone", "Garden", "");
     world.run("entity.trash", serde_json::json!({"id": "gone"}));
-    world.note("blank", "", "garden garden");
     let found = world
-        .each(&each(&["note"], "garden", 8).excluding(vec!["skip".to_owned()]))
+        .each(&each(&["note"], "garden", 8).excluding(vec![common::map("skip")]))
         .expect("answers");
     assert_eq!(
-        found.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(),
+        found
+            .iter()
+            .map(|t| common::strip(&t.id))
+            .collect::<Vec<_>>(),
         ["keep"]
     );
     assert!(matches!(
@@ -824,9 +836,10 @@ fn a_one_character_word_beside_longer_words_is_a_whole_word() {
 
 impl World {
     fn locker_item(&self, id: &str, title: &str, username: &str) {
+        let id = common::reg_uuid("locker_item", id);
         self.run(
             "locker.add_item",
-            serde_json::json!({"item_id": id, "type": "login", "title": title, "username": username}),
+            serde_json::json!({"item_id": id, "type": "login", "title": title, "fields": [{"field_key": "username", "value": username}]}),
         );
     }
 }
@@ -889,6 +902,8 @@ impl World {
     /// importer writes one: a title only when the member gave it one).
     fn photo(&self, id: &str, title: &str, taken_at: &str) {
         let now = self.vault.clock().now_text();
+        let id = common::reg("photo", id);
+        let id = id.as_str();
         let hash = format!(
             "{:0>64}",
             id.bytes().map(|b| format!("{b:x}")).collect::<String>()
@@ -965,10 +980,11 @@ fn a_trashed_label_stops_finding_its_members_and_a_restored_one_finds_them_again
     world
         .vault
         .commit(|tx| {
-            tx.insert_entity("al", Kind::Album, "Zebrafish", &now)?;
+            let album = common::reg("album", "al");
+            tx.insert_entity(&album, Kind::Album, "Zebrafish", &now)?;
             tx.connection().execute(
-                "INSERT INTO container (id, kind) VALUES ('al', 'album')",
-                [],
+                "INSERT INTO container (id, kind) VALUES (?1, 'album')",
+                [&album],
             )?;
             Ok(())
         })
@@ -993,10 +1009,10 @@ fn a_phone_number_is_found_without_its_punctuation() {
         .commit(|tx| {
             tx.connection().execute(
                 "INSERT INTO contact_point (id, person_id, kind, value, normalized, position)
-                 VALUES ('c1', 'p1', 'phone', '+1 (555) 123-4567', '+15551234567', 1)",
+                 VALUES ('c1', 'person:p1', 'phone', '+1 (555) 123-4567', '+15551234567', 1)",
                 [],
             )?;
-            tx.touch("p1", "2026-01-02T00:00:00.000Z")?;
+            tx.touch("person:p1", "2026-01-02T00:00:00.000Z")?;
             Ok(())
         })
         .expect("the contact point lands");
