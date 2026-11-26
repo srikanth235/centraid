@@ -1,0 +1,15 @@
+room editor key="people/new"
+  header title="New person"
+  ready
+    form
+      text #field/name "Name"  rev=0 required focused
+      text #field/role "Role"  rev=0
+      text #field/org "Organisation"  rev=0
+      text #field/nickname "Nickname"  rev=0
+      text #field/met "How you met"  rev=0
+      text #field/cadence "Catch-up days"  rev=0
+      repeat "Contact points" #repeat/contacts
+        add "Add contact" sym="plus" #repeat/contacts/add
+      repeat "Dates" #repeat/dates
+        add "Add date" sym="plus" #repeat/dates/add
+      explicit save="Save"#form/save cancel="Cancel"#form/cancel save_disabled

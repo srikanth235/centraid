@@ -1,0 +1,7 @@
+room pushed_page key="people/trash"
+  header title="Trash · 1"
+    back "People" #back
+  ready
+    trash "Trash · 1" retention="30 days, then erased"
+      row #trash/01900000-0000-7000-8000-000000000020 "Rohan Patel" meta="Deleted 2026-11-26 · Erased 2026-12-26" restore=#trash/01900000-0000-7000-8000-000000000020/restore purge=#trash/01900000-0000-7000-8000-000000000020/purge
+      empty_trash "Empty trash" sym="Trash" destructive #trash/empty

@@ -1,0 +1,40 @@
+room editor key="person/01900000-0000-7000-8000-000000000010/edit"
+  header title="Edit person"
+  ready
+    form
+      text #field/name "Name" "Priya Nair" rev=0 required
+      text #field/role "Role" "Architect" rev=0
+      text #field/org "Organisation" "Studio North" rev=0
+      text #field/nickname "Nickname" "Pri" rev=0
+      text #field/met "How you met" "Design week" rev=0
+      text #field/cadence "Catch-up days" "14" rev=0
+      repeat "Contact points" #repeat/contacts
+        group #repeat/cp/1 remove=#repeat/cp/1/remove
+          choice #field/cp_1_kind "Type"
+            option "Phone"
+            option "Email" selected
+            option "Address"
+            option "Link"
+            option "Handle"
+          text #field/cp_1_val "Value" "priya@studionorth.example" rev=0
+          text #field/cp_1_label "Label" "Work" rev=0
+        group #repeat/cp/2 remove=#repeat/cp/2/remove
+          choice #field/cp_2_kind "Type"
+            option "Phone" selected
+            option "Email"
+            option "Address"
+            option "Link"
+            option "Handle"
+          text #field/cp_2_val "Value" "+1 555 010 2020" rev=0
+          text #field/cp_2_label "Label" "Mobile" rev=0
+        add "Add contact" sym="plus" #repeat/contacts/add
+      repeat "Dates" #repeat/dates
+        group #repeat/dt/3 remove=#repeat/dt/3/remove
+          choice #field/dt_3_kind "Type"
+            option "Birthday" selected
+            option "Anniversary"
+            option "Date"
+          text #field/dt_3_val "Date" "1990-05-14" rev=0
+          text #field/dt_3_label "Label"  rev=0
+        add "Add date" sym="plus" #repeat/dates/add
+      explicit save="Save"#form/save cancel="Cancel"#form/cancel

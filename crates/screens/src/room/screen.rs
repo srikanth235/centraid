@@ -55,6 +55,34 @@ impl Outcome {
     }
 
     #[must_use]
+    pub fn replace(key: &str) -> Self {
+        Self {
+            nav: Nav::Replace(key.to_owned()),
+            status: None,
+        }
+    }
+
+    #[must_use]
+    pub fn pop() -> Self {
+        Self {
+            nav: Nav::Pop,
+            status: None,
+        }
+    }
+
+    #[must_use]
+    pub fn done(sentence: &str, undo: bool) -> Self {
+        Self {
+            nav: Nav::Stay,
+            status: Some(Status {
+                sentence: sentence.to_owned(),
+                undo,
+                refused: false,
+            }),
+        }
+    }
+
+    #[must_use]
     pub fn say(sentence: &str) -> Self {
         Self {
             nav: Nav::Stay,
@@ -86,6 +114,7 @@ pub struct Build<'a> {
     pub sel: Sel,
     pub ui: &'a mut Ui,
     pub door: &'a dyn Door,
+    reader: Option<centraid_domain::read::Reader>,
     reads: ReadContext,
     watched: std::collections::BTreeSet<&'static str>,
 }
@@ -97,6 +126,7 @@ impl<'a> Build<'a> {
             sel: Sel::new(),
             ui,
             door,
+            reader: None,
             reads: ReadContext::new(),
             watched: std::collections::BTreeSet::new(),
         }
@@ -105,6 +135,44 @@ impl<'a> Build<'a> {
     /// Record that `read` ran for this room: a commit that wrote one of its tables reloads it.
     pub fn read(&mut self, read: &ReadDecl) {
         self.reads.record(read);
+    }
+
+    fn reader(&mut self) -> Result<&centraid_domain::read::Reader, super::door::Refused> {
+        if self.reader.is_none() {
+            self.reader = Some(self.door.reader()?);
+        }
+        Ok(self.reader.as_ref().expect("reader just initialized"))
+    }
+
+    /// Run a registered read through the door and record its tables for auto-reload.
+    ///
+    /// # Errors
+    /// The door's or reader's refusal.
+    pub fn run<R: 'static>(
+        &mut self,
+        read: &centraid_domain::read::Read<R>,
+        args: &centraid_domain::read::Args,
+    ) -> Result<centraid_domain::read::Answer<R>, super::door::Refused> {
+        self.reads.record(&read.decl);
+        self.reader()?
+            .run(read, args)
+            .map_err(|error| super::door::Refused(error.to_string()))
+    }
+
+    /// Reload a paged read up to `loaded` rows and record its tables for auto-reload.
+    ///
+    /// # Errors
+    /// The door's or reader's refusal.
+    pub fn reload<R: 'static>(
+        &mut self,
+        read: &centraid_domain::read::Read<R>,
+        args: &centraid_domain::read::Args,
+        loaded: usize,
+    ) -> Result<centraid_domain::read::Answer<R>, super::door::Refused> {
+        self.reads.record(&read.decl);
+        self.reader()?
+            .reload(read, args, loaded)
+            .map_err(|error| super::door::Refused(error.to_string()))
     }
 
     /// Reload when a commit writes any of `tables`, for what the room read through the core's own

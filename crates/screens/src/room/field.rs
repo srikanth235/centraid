@@ -109,6 +109,11 @@ impl Fields {
             .change(seq, text, max)
     }
 
+    #[must_use]
+    pub fn get(&self, name: &str) -> Option<&TextField> {
+        self.by_name.get(name)
+    }
+
     pub fn get_mut(&mut self, name: &str) -> Option<&mut TextField> {
         self.by_name.get_mut(name)
     }

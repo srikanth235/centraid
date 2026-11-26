@@ -13,6 +13,7 @@ pub mod form;
 pub mod frame;
 pub mod host;
 pub mod notify_words;
+pub mod people;
 pub mod rooms;
 pub mod screen;
 pub mod selector;

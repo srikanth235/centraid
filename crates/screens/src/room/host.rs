@@ -144,6 +144,23 @@ impl Door for CtxDoor<'_> {
         .map(|_| ())
     }
 
+    fn device_delete(&self, key: &str) -> std::result::Result<(), Refused> {
+        self.call(&wire::Request {
+            kind: Some(wire::request::Kind::Device(wire::DeviceRequest {
+                kind: Some(wire::device_request::Kind::Delete(wire::DeviceDelete {
+                    key: key.to_owned(),
+                })),
+            })),
+        })
+        .map(|_| ())
+    }
+
+    fn reader(&self) -> std::result::Result<centraid_domain::read::Reader, Refused> {
+        self.ctx
+            .reader()
+            .map_err(|error| Refused(error.to_string()))
+    }
+
     fn vault_id(&self) -> String {
         self.ctx.vault_id()
     }

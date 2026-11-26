@@ -33,6 +33,7 @@ pub fn registry() -> Registry {
         .exact(HOME, || Box::new(Home))
         .exact(SETTINGS, || Box::new(Settings))
         .exact(BACKUP, || Box::new(Backup))
+        .merge(super::people::registry())
 }
 
 fn stored(build: &Build<'_>, key: &str, default: &str) -> String {
@@ -97,6 +98,14 @@ impl RoomScreen for Home {
             .map(|(line, ..)| line.status)
             .unwrap_or_default();
         let tiles = blocks::tiles(vec![
+            blocks::tile(
+                &mut b.sel,
+                "tile/people",
+                &words::home_people_tile(EN),
+                "",
+                glyph("Users", ""),
+                Handler::Open(super::people::PEOPLE.to_owned()),
+            ),
             blocks::tile(
                 &mut b.sel,
                 "tile/backup",

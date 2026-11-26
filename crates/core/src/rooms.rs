@@ -37,6 +37,12 @@ pub trait RoomCtx {
     /// What a draft is kept under for the vault in front.
     fn vault_id(&self) -> String;
 
+    /// A read-only door onto the vault file, guarded by the SQLite authorizer.
+    ///
+    /// # Errors
+    /// The vault file cannot be opened for reading.
+    fn reader(&self) -> Result<centraid_domain::read::Reader>;
+
     /// Show the shell a room.
     fn push(&self, shown: wire::RoomShown);
 }

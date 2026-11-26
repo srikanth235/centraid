@@ -27,6 +27,7 @@ catalog! {
     counted widget_events = ("{n} event", "{n} events");
     counted widget_tasks = ("{n} task", "{n} tasks");
     plain home_title = ("Centraid", "Centraid");
+    plain home_people_tile = ("People", "People");
     plain home_settings_tile = ("Settings", "Settings");
     plain home_backup_tile = ("Backup", "Backup");
     plain backup_title = ("Backup", "Backup");

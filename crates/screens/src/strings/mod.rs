@@ -129,6 +129,7 @@ pub mod custody;
 pub mod home;
 pub mod pairing;
 pub mod passes;
+pub mod people;
 pub mod permission;
 pub mod quantity;
 pub mod room;

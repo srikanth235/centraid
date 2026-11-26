@@ -391,6 +391,14 @@ impl crate::rooms::RoomCtx for HandleState {
         self.device_vault_id()
     }
 
+    fn reader(&self) -> Result<centraid_domain::read::Reader> {
+        centraid_domain::read::Reader::open(self.path()).map_err(|error| {
+            crate::error::CoreError::InvalidRequest {
+                detail: error.to_string(),
+            }
+        })
+    }
+
     fn push(&self, shown: wire::RoomShown) {
         self.events().push(wire::Event {
             kind: Some(wire::event::Kind::Room(Box::new(shown))),

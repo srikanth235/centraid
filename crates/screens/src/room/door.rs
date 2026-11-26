@@ -58,6 +58,23 @@ pub trait Door {
         Err(Refused("this door keeps no device store".to_owned()))
     }
 
+    /// Remove a device-store key, through the registry.
+    ///
+    /// # Errors
+    /// The registry's or the store's sentence.
+    fn device_delete(&self, key: &str) -> Result<(), Refused> {
+        let _ = key;
+        Err(Refused("this door keeps no device store".to_owned()))
+    }
+
+    /// A read-only door onto the vault file, guarded by the SQLite authorizer.
+    ///
+    /// # Errors
+    /// The core's sentence.
+    fn reader(&self) -> Result<centraid_domain::read::Reader, Refused> {
+        Err(Refused("this door carries no reader".to_owned()))
+    }
+
     /// What a draft is kept under for the vault in front.
     fn vault_id(&self) -> String {
         String::new()

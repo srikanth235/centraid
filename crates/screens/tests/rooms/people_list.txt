@@ -1,0 +1,52 @@
+room app_place key="people"
+  header title="People" subtitle="3 people"
+    key add sym="Plus" "Add person" #key/add
+    filter clear=#filter/clear
+      menu #filter
+        section "Show"
+          item "Starred" #filter/starred
+        section "Sort"
+          item "Name" checked #sort/name
+          item "Recently updated" #sort/recent
+  band home=#band/home search=#band/search more=#band/more
+    tab "People" sym="Users" selected #tab/people
+    tab "Lists" sym="List" #tab/lists
+    menu #band/more/menu
+      section
+        item "Phone contacts" #more/contacts
+        item "Import vCard or CSV" #more/import
+        item "Export" #more/export
+        item "Trash" secondary="30 days, then erased" #more/trash
+  ready
+    section #section/people "People"
+      row #row/44f76807-49f2-7707-819d-f521f7803c2a "Ada" meta="My card" swipe="Move to trash" #row/44f76807-49f2-7707-819d-f521f7803c2a/trash
+        menu #row/44f76807-49f2-7707-819d-f521f7803c2a/menu
+          section
+            item "Open" #row/44f76807-49f2-7707-819d-f521f7803c2a/menu/open
+            item "Edit" #row/44f76807-49f2-7707-819d-f521f7803c2a/menu/edit
+            item "Star" #row/44f76807-49f2-7707-819d-f521f7803c2a/menu/star
+            item "Share" #row/44f76807-49f2-7707-819d-f521f7803c2a/menu/share
+            item "Merge" #row/44f76807-49f2-7707-819d-f521f7803c2a/menu/merge
+            item "Select" #row/44f76807-49f2-7707-819d-f521f7803c2a/menu/select
+            item "Move to trash" destructive #row/44f76807-49f2-7707-819d-f521f7803c2a/menu/trash
+      row #row/01900000-0000-7000-8000-000000000010 "Priya Nair" meta="Architect · Studio North · Every 14 days" chips="Starred" swipe="Move to trash" #row/01900000-0000-7000-8000-000000000010/trash
+        menu #row/01900000-0000-7000-8000-000000000010/menu
+          section
+            item "Open" #row/01900000-0000-7000-8000-000000000010/menu/open
+            item "Edit" #row/01900000-0000-7000-8000-000000000010/menu/edit
+            item "Unstar" #row/01900000-0000-7000-8000-000000000010/menu/star
+            item "Share" #row/01900000-0000-7000-8000-000000000010/menu/share
+            item "Merge" #row/01900000-0000-7000-8000-000000000010/menu/merge
+            item "Select" #row/01900000-0000-7000-8000-000000000010/menu/select
+            item "Move to trash" destructive #row/01900000-0000-7000-8000-000000000010/menu/trash
+      row #row/01900000-0000-7000-8000-000000000020 "Rohan Patel" meta="Designer · Studio North" swipe="Move to trash" #row/01900000-0000-7000-8000-000000000020/trash
+        menu #row/01900000-0000-7000-8000-000000000020/menu
+          section
+            item "Open" #row/01900000-0000-7000-8000-000000000020/menu/open
+            item "Edit" #row/01900000-0000-7000-8000-000000000020/menu/edit
+            item "Star" #row/01900000-0000-7000-8000-000000000020/menu/star
+            item "Share" #row/01900000-0000-7000-8000-000000000020/menu/share
+            item "Merge" #row/01900000-0000-7000-8000-000000000020/menu/merge
+            item "Select" #row/01900000-0000-7000-8000-000000000020/menu/select
+            item "Move to trash" destructive #row/01900000-0000-7000-8000-000000000020/menu/trash
+  search placeholder="Search people" #search
