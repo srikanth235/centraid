@@ -576,7 +576,6 @@ impl Export {
                             export_byte_size: original.byte_size,
                             export_content_hash: original.content_hash,
                             export_media_type: original.media_type,
-                            ..wire::ExportOriginals::default()
                         })),
                     }];
                 }

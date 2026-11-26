@@ -8,7 +8,11 @@
     {
       "name": "holdings",
       "kind": "vault",
-      "figures": ["loaded", "foreground", "vaults"],
+      "figures": [
+        "loaded",
+        "foreground",
+        "vaults"
+      ],
       "description": "(vault plumbing, lane H2) The vaults this phone holds: each one's id, name and how it stands (in front, resting, keyed, kept on its own words, frozen with the date and the count of changes no gateway acknowledged), the one in front first. Answered by the shelf, not by a vault: it is the one shell read the front core keeps for itself.",
       "input": {
         "type": "object",
@@ -19,7 +23,10 @@
     {
       "name": "chats",
       "kind": "chat_thread",
-      "figures": ["threads", "corrected"],
+      "figures": [
+        "threads",
+        "corrected"
+      ],
       "description": "The chat drawer's list, newest activity first; with a term, the chats it finds by title and by the member's own words, best first, with the words it corrected a typo to.",
       "input": {
         "type": "object",
@@ -39,7 +46,11 @@
     {
       "name": "chat",
       "kind": "chat_thread",
-      "figures": ["found", "thread", "messages"],
+      "figures": [
+        "found",
+        "thread",
+        "messages"
+      ],
       "description": "One stored chat and its messages, oldest first, each with its cards and attachments as they were said.",
       "input": {
         "type": "object",
@@ -49,14 +60,18 @@
             "minLength": 1
           }
         },
-        "required": ["thread_id"],
+        "required": [
+          "thread_id"
+        ],
         "additionalProperties": false
       }
     },
     {
       "name": "chat-card",
       "kind": "chat_thread",
-      "figures": ["exists"],
+      "figures": [
+        "exists"
+      ],
       "description": "Whether the row a stored card names is still in the vault.",
       "input": {
         "type": "object",
@@ -74,197 +89,11 @@
             "minLength": 1
           }
         },
-        "required": ["app", "entity", "id"],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "phone-differences",
-      "kind": "followed_row",
-      "figures": ["fields"],
-      "description": "(following, #1183) For one followed row, each field the member's edit holds apart from what the phone's store last stated, per item for a contact's numbers, an event's guests and a workout's figures. Worked out on each read, never stored; empty for a row nothing follows or a trashed one. A detail screen words it.",
-      "input": {
-        "type": "object",
-        "properties": {
-          "entity_id": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": ["entity_id"],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "earlier-versions",
-      "kind": "earlier_version",
-      "figures": ["versions"],
-      "description": "(history, #1185) A page of one record's earlier versions, newest first: when each was replaced and when it began, who replaced it (the member, or a phone store's pass), and what the replacing change moved field by field, both values as JSON text. Keyset paged: `after` is the `next` of the page before, `limit` at most 100. Never reachable by the assistant; a detail screen's Earlier versions page.",
-      "input": {
-        "type": "object",
-        "properties": {
-          "entity_id": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": ["entity_id"],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "origin-of",
-      "kind": "followed_row",
-      "figures": ["system"],
-      "description": "(arrival, #1185) Where one record came from: its origin's system (a followed store: contacts, calendar, files, health, statement; or a one-shot arrival: camera_roll, picker, vcard, markdown, csv, scan, upload, phone_reminders) and its name (a store, a file, a device). Both empty for an item the member typed. A Locker item's name is the CSV file's name and nothing of what is in it. A detail screen's \"From ...\" line.",
-      "input": {
-        "type": "object",
-        "properties": {
-          "entity_id": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": ["entity_id"],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "earlier-record",
-      "kind": "earlier_version",
-      "figures": ["fields"],
-      "description": "(history, #1185) One earlier version of a record, whole: every field it held (the entity's and its kind's columns, each child row as a whole JSON object, a sealed cell as the vault's placeholder), when it began and was replaced, who made and replaced it, and what the replacing change moved. Behind the full preview of an earlier version. Never reachable by the assistant.",
-      "input": {
-        "type": "object",
-        "properties": {
-          "entity_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "seq": {
-            "type": "integer",
-            "minimum": 1
-          }
-        },
-        "required": ["entity_id", "seq"],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "earlier-count",
-      "kind": "earlier_version",
-      "figures": ["count"],
-      "description": "(history, #1185) How many earlier versions one record holds, not counting the current one: the number on a detail screen's Earlier versions entry.",
-      "input": {
-        "type": "object",
-        "properties": {
-          "entity_id": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": ["entity_id"],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "links",
-      "kind": "link",
-      "figures": ["items"],
-      "description": "(links, #1185) What one item is linked to by hand, in either direction (a link made on a note shows on the event it points at), in name order, each thing once. A trashed item is left out; a Locker item is listed only on its own page. Any app's detail screen reads it for its page's links.",
-      "input": {
-        "type": "object",
-        "properties": {
-          "entity_id": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": ["entity_id"],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "link-candidates",
-      "kind": "link",
-      "figures": ["candidates"],
-      "description": "(links, #1185) The picker's rows: the items of one kind a link may end at, whose title holds the typed term (any case; an empty term lists the first by name), at most 50, in name order, the member's own person first. Never a Locker item and never a trashed one.",
-      "input": {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "person",
-              "place",
-              "event",
-              "task",
-              "note",
-              "document",
-              "photo",
-              "account",
-              "transaction",
-              "workout"
-            ]
-          },
-          "term": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "limit": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 50
-          }
-        },
-        "required": ["kind"],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "files-followed",
-      "kind": "followed_folder",
-      "figures": ["folders"],
-      "description": "(imports, lane I) The folders the vault follows, with the documents each still holds and each file's last stated stat, so a rescan of an unchanged folder reads no bytes.",
-      "input": {
-        "type": "object",
-        "properties": {},
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "followed-stores",
-      "kind": "followed_store",
-      "figures": ["stores"],
-      "description": "(following, #1185) The phone stores the vault follows (contacts, calendars, folders, health), one row per origin with its label and the install that last followed it. A restored vault holds these although the new phone follows nothing yet: the Reconnect page lists them. Never reachable by the assistant.",
-      "input": {
-        "type": "object",
-        "properties": {},
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "origin-cursor",
-      "kind": "followed_store",
-      "figures": ["cursor"],
-      "description": "(following, #1183) Where the last read of a phone store (the camera roll, the health store) got to: the cursor its origin holds, or empty when there is none, the origin is not there, or another install wrote it, which means a complete read. Never reachable by the assistant.",
-      "input": {
-        "type": "object",
-        "properties": {
-          "system": {
-            "type": "string",
-            "enum": ["camera_roll", "health"]
-          },
-          "ref": {
-            "type": "string",
-            "minLength": 1
-          },
-          "device_id": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": ["system", "ref", "device_id"],
+        "required": [
+          "app",
+          "entity",
+          "id"
+        ],
         "additionalProperties": false
       }
     },
@@ -288,33 +117,6 @@
         "type": "object",
         "properties": {},
         "additionalProperties": false
-      }
-    },
-    {
-      "name": "search",
-      "kind": "search_hit",
-      "figures": ["matches"],
-      "description": "Home's vault search: every searchable app's rows for one term in one answer (notes, people, agenda, tasks, photos, docs, Locker items by their plain text, and the named containers and chat threads), at most eight of each kind, under the owner. Blank answers no hits. `corrected` names the words searched when the typed ones found little and a correction added rows.",
-      "input": {
-        "type": "object",
-        "properties": {
-          "term": {
-            "type": "string"
-          }
-        },
-        "required": ["term"],
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "hits": {
-            "type": "array"
-          },
-          "corrected": {
-            "type": "string"
-          }
-        }
       }
     }
   ],
@@ -345,7 +147,10 @@
             "minLength": 1
           }
         },
-        "required": ["id", "title"],
+        "required": [
+          "id",
+          "title"
+        ],
         "additionalProperties": false
       }
     },
@@ -371,7 +176,9 @@
             "minLength": 1
           }
         },
-        "required": ["id"],
+        "required": [
+          "id"
+        ],
         "additionalProperties": false
       }
     },
@@ -393,273 +200,6 @@
       "input": {
         "type": "object",
         "properties": {},
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "follow-files",
-      "verb": "import",
-      "kind": "followed_folder",
-      "inverse": null,
-      "sealed": [],
-      "bulk": true,
-      "command": "follow.files",
-      "phrasings": [
-        "follow this folder",
-        "keep a folder of files in step",
-        "import the files of a folder"
-      ],
-      "description": "(imports, lane I) Follow a folder of the phone's files through follow.files, one folder at a time: a file the vault lacks becomes a document in the folder's own Docs folder, a changed file a new revision, one gone from a complete read goes to the trash if the member never touched it.",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": {
-          "origin": {
-            "type": "object",
-            "properties": {
-              "ref": {
-                "type": "string"
-              },
-              "label": {
-                "type": "string"
-              },
-              "device_id": {
-                "type": ["string", "null"]
-              },
-              "fills": {
-                "type": ["string", "null"]
-              }
-            },
-            "required": ["ref", "label"],
-            "additionalProperties": false
-          },
-          "records": {
-            "type": "array"
-          },
-          "complete": {
-            "type": "boolean"
-          }
-        },
-        "required": ["origin", "records"],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "stop-following-files",
-      "verb": "detach",
-      "kind": "followed_folder",
-      "inverse": null,
-      "sealed": [],
-      "command": "follow.stop",
-      "phrasings": [
-        "stop following this folder",
-        "unfollow a folder",
-        "forget this folder's link"
-      ],
-      "description": "(imports, lane I) Stop following a folder through follow.stop: the origin is retired (kept with the folder it filled and its sources, so picking the same folder again finds them); every document stays.",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": {
-          "system": {
-            "type": "string",
-            "enum": ["files"]
-          },
-          "ref": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": ["system", "ref"],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "restore-version",
-      "verb": "edit",
-      "kind": "earlier_version",
-      "inverse": null,
-      "sealed": [],
-      "command": "history.restore_version",
-      "phrasings": [
-        "go back to an earlier version",
-        "restore an earlier version",
-        "put it back how it was"
-      ],
-      "description": "(history, #1185) Put a record back to what version `seq` held, field by field, through history.restore_version. It is a commit like any other and makes a version of its own. A detail screen's tap, never the assistant's.",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "seq": {
-            "type": "integer",
-            "minimum": 1
-          }
-        },
-        "required": ["id", "seq"],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "advance-origin-cursor",
-      "verb": "edit",
-      "kind": "followed_store",
-      "inverse": null,
-      "sealed": [],
-      "command": "follow.advance_cursor",
-      "phrasings": [
-        "move the camera roll's cursor on",
-        "remember where the roll read got to",
-        "note how far the phone was read"
-      ],
-      "description": "(following, #1183) Move a phone store's cursor (the camera roll's, the health store's) to where a read got to, as read by one install, through follow.advance_cursor. The records a read brings in carry their own cursor in the same commit; this is for a position no record rides with. The follow, never the assistant's.",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": {
-          "system": {
-            "type": "string",
-            "enum": ["camera_roll", "health"]
-          },
-          "ref": {
-            "type": "string",
-            "minLength": 1
-          },
-          "device_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "cursor": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 4096
-          }
-        },
-        "required": ["system", "ref", "device_id", "cursor"],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "keep-version",
-      "verb": "edit",
-      "kind": "earlier_version",
-      "inverse": null,
-      "sealed": [],
-      "command": "history.keep_version",
-      "phrasings": [
-        "keep what I wrote as an earlier version",
-        "save my words as a version",
-        "keep my edit as an earlier version"
-      ],
-      "description": "(history, #1185) Keep the words a refused stale save held as the record's newest earlier version, beside the record as it is, through history.keep_version; `fields` names each kept field as `table.column` (an event's times and alerts as typed, its guests as `attendee`, a list of person ids, one day of a series as `occurrence`, the override `event.edit_occurrence` would write). The record itself is not changed. An editor's Reload, never the assistant's.",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "fields": {
-            "type": "object",
-            "minProperties": 1
-          }
-        },
-        "required": ["id", "fields"],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "undo-change",
-      "verb": "edit",
-      "kind": "earlier_version",
-      "inverse": null,
-      "sealed": [],
-      "command": "history.undo",
-      "phrasings": [
-        "undo the last change",
-        "undo that restore",
-        "go back one change"
-      ],
-      "description": "(history, #1185) Put a record back to its newest earlier version through history.undo: the Undo after a restore, and the Undo of any edit of one record (the core offers it as the act's inverse, naming the version the act made in `seq`; with `seq` it is refused when the record changed again since). Any app's screen runs it. A detail screen's tap, never the assistant's.",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "seq": {
-            "type": "integer",
-            "minimum": 1
-          }
-        },
-        "required": ["id"],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "undo-create",
-      "verb": "delete",
-      "kind": "earlier_version",
-      "inverse": null,
-      "sealed": [],
-      "command": "entity.trash",
-      "phrasings": [
-        "undo that",
-        "take back what I just added",
-        "remove what I just made"
-      ],
-      "description": "(history, #1185) Move a record an act just created to the trash, through entity.trash: the Undo of an add, a log or a create whose app has no trash action of its own. It is restorable from the trash. Any app's screen runs it. A status line's tap, never the assistant's.",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": ["id"],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "take-stated",
-      "verb": "edit",
-      "kind": "followed_field",
-      "inverse": null,
-      "sealed": [],
-      "command": "follow.take_stated",
-      "phrasings": [
-        "use the phone's value",
-        "take the phone's value back",
-        "follow the phone again"
-      ],
-      "description": "(following, #1183) Make a field of a followed row, or one item of it, equal to what the phone's store last stated, through follow.take_stated. A detail screen's tap, never the assistant's.",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": {
-          "entity": {
-            "type": "string",
-            "minLength": 1
-          },
-          "field": {
-            "type": "string",
-            "minLength": 1
-          },
-          "item_key": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": ["entity", "field"],
         "additionalProperties": false
       }
     }

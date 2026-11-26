@@ -128,12 +128,6 @@ impl<'a> Params<'a> {
         }
     }
 
-    /// The request's `after` as it was sent, for a query whose cursor is one number.
-    pub(crate) fn after_raw(&mut self) -> String {
-        self.after_taken = true;
-        self.request.after.clone()
-    }
-
     /// A string; absent is empty, as proto3 reads it.
     pub(crate) fn text(&mut self, name: &'a str) -> Result<String> {
         Ok(self.opt_text(name)?.unwrap_or_default())
@@ -145,18 +139,6 @@ impl<'a> Params<'a> {
             Some(Some(wire::value::Kind::Text(text))) => Ok(Some(text.clone())),
             Some(_) => Err(self.bad(name, "text")),
         }
-    }
-
-    fn integer(&mut self, name: &'a str) -> Result<Option<i64>> {
-        match self.value(name).map(|value| &value.kind) {
-            None => Ok(None),
-            Some(Some(wire::value::Kind::Integer(number))) => Ok(Some(*number)),
-            Some(_) => Err(self.bad(name, "an integer")),
-        }
-    }
-
-    pub(crate) fn opt_int(&mut self, name: &'a str) -> Result<Option<i64>> {
-        self.integer(name)
     }
 
     /// Refuse any argument no reader asked for.
@@ -203,37 +185,8 @@ fn read(
     query: &str,
     p: &mut Params<'_>,
 ) -> Result<Option<wire::app_query_response::Answer>> {
-    let tz = p.zone();
+    p.zone();
     let answer = match (app, query) {
-        ("shell", "files-followed") => app_query::imports::files_followed(door)?,
-        // reconnect (#1185): the phone stores the vault was following, on whichever phone
-        ("shell", "followed-stores") => app_query::imports::followed_stores(door)?,
-        // following (#1183): what the phone says that differs from one followed row
-        ("shell", "phone-differences") => {
-            app_query::follow::differences(vault, &p.text("entity_id")?)?
-        }
-        // history (#1185): a page of one record's earlier versions, and how many it holds
-        ("shell", "earlier-versions") => {
-            let after = p.after_raw();
-            let limit = p.limit(app_query::history::PAGE as u32);
-            app_query::history::versions(vault, &p.text("entity_id")?, &tz, &after, limit as usize)?
-        }
-        ("shell", "earlier-record") => app_query::history::record(
-            vault,
-            &p.text("entity_id")?,
-            p.opt_int("seq")?.unwrap_or_default(),
-            &tz,
-        )?,
-        // following (#1183): where the last read of a phone store got to, for this install
-        ("shell", "origin-cursor") => app_query::follow::origin_cursor(
-            vault,
-            &p.text("system")?,
-            &p.text("ref")?,
-            &p.text("device_id")?,
-        )?,
-        // arrival (#1185): where one record came from, a followed store or a one-shot arrival
-        ("shell", "earlier-count") => app_query::history::count(vault, &p.text("entity_id")?)?,
-        // the general link (#1185): what an item is linked to, and the picker's rows
         ("shell", "chats") => app_query::chat::threads(
             vault,
             door,

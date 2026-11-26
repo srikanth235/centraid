@@ -34,6 +34,10 @@ pub(crate) fn text(value: impl Into<String>) -> wire::Value {
     }
 }
 
+#[allow(
+    dead_code,
+    reason = "the generated catalogue calls it once a manifest declares a field of this type"
+)]
 pub(crate) fn whole(value: i64) -> wire::Value {
     wire::Value {
         kind: Some(wire::value::Kind::Integer(value)),
@@ -51,6 +55,10 @@ pub(crate) fn real(value: f64) -> wire::Value {
 }
 
 /// A boolean travels as 0 or 1; the core types it by the manifest's schema.
+#[allow(
+    dead_code,
+    reason = "the generated catalogue calls it once a manifest declares a field of this type"
+)]
 pub(crate) fn flag(value: bool) -> wire::Value {
     whole(i64::from(value))
 }
