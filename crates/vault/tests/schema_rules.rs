@@ -1808,7 +1808,7 @@ fn a_guest_is_one_address_of_an_event_with_one_organizer_and_outlives_its_person
     ));
     w.takes(&by_person("by-bea", &bea));
     w.refuses(&by_person("by-bea-again", &bea));
-    w.takes(&format!("DELETE FROM event_guest WHERE id = 'by-bea'"));
+    w.takes("DELETE FROM event_guest WHERE id = 'by-bea'");
     w.refuses(&format!(
         "UPDATE event_guest SET person_id = '{ev}' WHERE address = 'b@example.com'"
     ));
