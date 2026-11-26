@@ -183,7 +183,6 @@ pub struct AttachableDocument {
 fn card_kind(entity: &str) -> Option<Kind> {
     match entity {
         "transaction" => Some(Kind::Txn),
-        "project" => Some(Kind::Project),
         "workout" => Some(Kind::Workout),
         other => Kind::parse(other),
     }
@@ -695,7 +694,6 @@ mod tests {
     #[test]
     fn a_card_entity_names_a_kind_or_none() {
         assert_eq!(card_kind("transaction"), Some(Kind::Txn));
-        assert_eq!(card_kind("project"), Some(Kind::Project));
         assert_eq!(card_kind("album"), Some(Kind::Album));
         assert_eq!(card_kind("somethingnew"), None);
     }

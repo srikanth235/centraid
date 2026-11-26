@@ -166,7 +166,7 @@ pub fn text_of(connection: &Connection, id: &str, kind: Kind) -> Result<Option<S
         )?,
         // A container is found by the container it nests in: a project by its
         // area, a folder or notebook by the one above it.
-        Kind::Notebook | Kind::Folder | Kind::Project => joined(
+        Kind::Notebook | Kind::Folder | Kind::TaskList => joined(
             connection,
             "SELECT p.title FROM entity c JOIN entity p ON p.id = c.parent_id AND p.deleted_at IS NULL WHERE c.id = ?1",
             id,

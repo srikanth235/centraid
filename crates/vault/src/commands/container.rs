@@ -1,14 +1,12 @@
 //! `container.create`, `container.style` and `container.move`: notebooks, folders, albums, lists,
-//! projects, sections, areas and calendars.
+//! task lists and calendars.
 //!
-//! One table hosts all eight and the item's own noun is its kind. A container's home is the one
-//! every row has, `entity.parent_id` (a folder in a folder, a notebook in a notebook, a section in
-//! a project, a project in an area): which kind goes inside which is `home_shape`, and a section
-//! needs a project because its kind may not sit at the top level (`entity_kind.may_be_top`). The
-//! preconditions say each refusal in a sentence first ([`home_refusal`]); the database refuses the
-//! same rows.
+//! One table hosts all six and the item's own noun is its kind. A container's home is the one
+//! every row has, `entity.parent_id` (a folder in a folder, a notebook in a notebook): which kind
+//! goes inside which is `home_shape`. The preconditions say each refusal in a sentence first
+//! ([`home_refusal`]); the database refuses the same rows.
 //!
-//! A list (a project, or a list) and a calendar wear a colour of the eight-colour list palette and
+//! A list (a task list, or a list) and a calendar wear a colour of the eight-colour list palette and
 //! an icon of a short curated set, both by key; `container.style` sets or clears them and
 //! `container.create` takes them at birth. A followed calendar's colour is a key of the palette
 //! too (the party wheel) and is read, never refused, wherever it was stored.
@@ -77,7 +75,7 @@ pub const LIST_ICONS: [&str; 32] = [
 
 /// Whether a container of `kind` wears a colour and an icon of the palette.
 const fn is_styled(kind: Kind) -> bool {
-    matches!(kind, Kind::List | Kind::Project | Kind::Calendar)
+    matches!(kind, Kind::List | Kind::TaskList | Kind::Calendar)
 }
 
 /// The sentence refusing a colour or an icon a list or a calendar cannot wear.
@@ -107,7 +105,9 @@ fn kind_of(word: &str) -> Result<Kind> {
         .filter(|kind| kind.is_container())
         .ok_or_else(|| VaultError::InvalidInput {
             name: "kind".to_owned(),
-            detail: format!("`{word}` is not a notebook, folder, album, list, project, section, area or calendar"),
+            detail: format!(
+                "`{word}` is not a notebook, folder, album, list, task list or calendar"
+            ),
         })
 }
 
@@ -265,7 +265,7 @@ pub fn definitions() -> Vec<CommandDefinition> {
               "properties": {
                 "id": { "type": "string", "minLength": 1 },
                 "kind": { "type": "string",
-                          "enum": ["notebook", "folder", "album", "list", "project", "section", "area", "calendar"] },
+                          "enum": ["notebook", "folder", "album", "list", "task_list", "calendar"] },
                 "title": { "type": "string", "maxLength": 1000 },
                 "parent": { "type": ["string", "null"] },
                 "color": { "type": ["string", "null"] },

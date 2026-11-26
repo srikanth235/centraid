@@ -1,7 +1,7 @@
 //! `task.*`: a task's own verbs, and the one place a task row is founded.
 //!
 //! A task is an entity of kind `task` whose state lives on its kind row. Where it sits is its home,
-//! `entity.parent_id`, like every kind's (A19, C1): a project, a section of one, or a parent task
+//! `entity.parent_id`, like every kind's (A19, C1): a task list or a parent task
 //! (`home_shape` says which). It is made in one (`parent_id` at create) and moved with the shared
 //! `entity.move`. Who or what it is about is an `about` edge (a follow-up on Mum, a note's
 //! checklist line); a tag, a star, an attachment and the trash are the shared verbs. What is here
@@ -64,7 +64,7 @@
 //! ## Followed
 //!
 //! The phone's Reminders are a followed store ([`PHONE_REMINDERS`]): each reminder is a task in
-//! the project the origin fills, and the member's own edit of a field stands.
+//! the task list the origin fills, and the member's own edit of a field stands.
 
 use rusqlite::types::Value as Sql;
 use rusqlite::{Connection, OptionalExtension};
@@ -260,10 +260,9 @@ pub struct NewTask<'a> {
     pub zone: Option<&'a str>,
     pub description: Option<&'a str>,
     pub priority: Option<i64>,
-    pub effort_min: Option<i64>,
     pub rule: Option<&'a str>,
     pub anchor: Option<&'a str>,
-    /// Its home: a project, a section or a parent task; none: the top level.
+    /// Its home: a task list or a parent task; none: the top level.
     pub parent: Option<&'a str>,
     pub position: Option<f64>,
     /// A link the task points at.
@@ -313,9 +312,9 @@ pub fn found(ctx: &CommandCtx<'_, '_>, task: &NewTask<'_>) -> Result<String> {
     let done_at = task.done_at.map(temporal::canonical);
     ctx.connection().execute(
         "INSERT INTO task (id, due, due_timing, zone, scheduled_on, description, priority,
-                           effort_min, rule, anchor, series_id, position, url, status, done_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, COALESCE(?7, 0), ?8, ?9, COALESCE(?10, 'scheduled'),
-                 ?11, ?12, ?13, CASE WHEN ?14 IS NULL THEN 'open' ELSE 'done' END, ?14)",
+                           rule, anchor, series_id, position, url, status, done_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, COALESCE(?7, 0), ?8, COALESCE(?9, 'scheduled'),
+                 ?10, ?11, ?12, CASE WHEN ?13 IS NULL THEN 'open' ELSE 'done' END, ?13)",
         rusqlite::params![
             id,
             due.as_ref().map(|d| d.at.as_str()),
@@ -324,7 +323,6 @@ pub fn found(ctx: &CommandCtx<'_, '_>, task: &NewTask<'_>) -> Result<String> {
             task.scheduled_on,
             task.description,
             task.priority,
-            task.effort_min,
             rule,
             task.anchor,
             series,
@@ -360,7 +358,6 @@ struct Held {
     series_id: Option<String>,
     scheduled_on: Option<String>,
     priority: i64,
-    effort_min: Option<i64>,
     description: Option<String>,
     url: Option<String>,
 }
@@ -369,7 +366,7 @@ fn held(connection: &Connection, id: &str) -> Result<Option<Held>> {
     Ok(connection
         .query_row(
             "SELECT status, due, due_timing, zone, rule, anchor, series_id, scheduled_on, priority,
-                    effort_min, description, url
+                    description, url
                FROM task WHERE id = ?1",
             [id],
             |row| {
@@ -383,9 +380,8 @@ fn held(connection: &Connection, id: &str) -> Result<Option<Held>> {
                     series_id: row.get(6)?,
                     scheduled_on: row.get(7)?,
                     priority: row.get(8)?,
-                    effort_min: row.get(9)?,
-                    description: row.get(10)?,
-                    url: row.get(11)?,
+                    description: row.get(9)?,
+                    url: row.get(10)?,
                 })
             },
         )
@@ -598,7 +594,6 @@ struct AddTaskInput {
     zone: Option<String>,
     description: Option<String>,
     priority: Option<i64>,
-    effort_min: Option<i64>,
     rule: Option<String>,
     anchor: Option<String>,
     parent_id: Option<String>,
@@ -626,7 +621,6 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
             zone: input.zone.as_deref(),
             description: input.description.as_deref(),
             priority: input.priority,
-            effort_min: input.effort_min,
             rule: input.rule.as_deref(),
             anchor: input.anchor.as_deref(),
             parent: input.parent_id.as_deref(),
@@ -647,8 +641,6 @@ struct EditTaskInput {
     #[serde(default, deserialize_with = "deserialize_patch")]
     description: Option<Option<String>>,
     priority: Option<i64>,
-    #[serde(default, deserialize_with = "deserialize_patch")]
-    effort_min: Option<Option<i64>>,
     #[serde(default, deserialize_with = "deserialize_patch")]
     rule: Option<Option<String>>,
     #[serde(default, deserialize_with = "deserialize_patch")]
@@ -732,9 +724,6 @@ fn edit(ctx: &CommandCtx<'_, '_>) -> Result<Json> {
     }
     if let Some(priority) = input.priority {
         sets.change("priority", &was.priority, priority);
-    }
-    if let Some(effort) = input.effort_min {
-        sets.change("effort_min", &was.effort_min, effort);
     }
     if let Some(day) = &input.scheduled_on {
         sets.change("scheduled_on", &was.scheduled_on, day.clone());
@@ -918,8 +907,8 @@ pub fn complete(ctx: &CommandCtx<'_, '_>, id: &str) -> Result<Completion> {
     let next = ctx.insert_entity_under(Kind::Task, &title, home.as_deref())?;
     connection.execute(
         "INSERT INTO task (id, status, priority, due, due_timing, zone, rule, anchor, series_id,
-                           effort_min, description, position, url)
-         SELECT ?2, 'open', priority, ?3, due_timing, zone, rule, anchor, ?4, effort_min,
+                           description, position, url)
+         SELECT ?2, 'open', priority, ?3, due_timing, zone, rule, anchor, ?4,
                 description, position, url
            FROM task WHERE id = ?1",
         rusqlite::params![id, next, next_due, series],
@@ -1001,12 +990,11 @@ const ADD_SCHEMA: &str = r#"{
     "zone": { "type": ["string", "null"], "description": "The zone a moment is read in (an IANA name)." },
     "scheduled_on": { "type": ["string", "null"], "description": "The day the member plans to do it." },
     "priority": { "type": "integer", "minimum": 0, "maximum": 9 },
-    "effort_min": { "type": ["integer", "null"], "minimum": 1 },
     "reminders": { "type": "array", "maxItems": 20, "items": { "type": "integer", "minimum": 0, "maximum": 525600 },
       "description": "Minutes before the due, each once. Omitted: a timed due alerts at its time." },
     "rule": { "type": ["string", "null"], "description": "An RFC 5545 recurrence rule." },
     "anchor": { "type": "string", "enum": ["scheduled", "completion"] },
-    "parent_id": { "type": ["string", "null"], "description": "Its home: a project, a section or a parent task." },
+    "parent_id": { "type": ["string", "null"], "description": "Its home: a task list or a parent task." },
     "position": { "type": "number" },
     "url": { "type": ["string", "null"], "maxLength": 2048, "description": "A link the task points at." },
     "done_at": { "type": ["string", "null"], "description": "Founds the task already done, at this instant (an import of a completed item)." }
@@ -1023,7 +1011,6 @@ const EDIT_SCHEMA: &str = r#"{
     "zone": { "type": ["string", "null"] },
     "scheduled_on": { "type": ["string", "null"] },
     "priority": { "type": "integer", "minimum": 0, "maximum": 9 },
-    "effort_min": { "type": ["integer", "null"], "minimum": 1 },
     "reminders": { "type": "array", "maxItems": 20, "items": { "type": "integer", "minimum": 0, "maximum": 525600 },
       "description": "States the task's leads: exactly these. Omitted: they stay." },
     "rule": { "type": ["string", "null"] },
@@ -1306,7 +1293,7 @@ fn nothing_to_settle(_: &CommandCtx<'_, '_>, _: &str) -> Result<()> {
     Ok(())
 }
 
-/// The phone's Reminders (iOS): a task in the project the origin fills. The member's own edit of a
+/// The phone's Reminders (iOS): a task in the task list the origin fills. The member's own edit of a
 /// field stands; a reminder the phone completes completes the task (the status and the instant
 /// are two fields written as one, so the table's own CHECK holds), and one deleted on the phone
 /// goes to the trash if the member never touched the task. What the phone alerts for, it alerts:

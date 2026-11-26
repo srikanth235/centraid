@@ -79,9 +79,7 @@ pub enum Kind {
     Folder,
     Album,
     List,
-    Project,
-    Section,
-    Area,
+    TaskList,
     Calendar,
 }
 
@@ -105,10 +103,10 @@ const fn spec(
     }
 }
 
-/// The single declarative registry for all 27 entity kinds, in `entity_kind` order.
+/// The single declarative registry for all 25 entity kinds, in `entity_kind` order.
 /// `link_end` is `entity_kind.linkable`: a kind a hand-made link, a `[[title]]` and a wildcard edge
 /// may end at (a reading, a chat, a container and a label are not).
-pub const KIND_SPECS: [KindSpec; 27] = [
+pub const KIND_SPECS: [KindSpec; 25] = [
     // Own host tables (items & threads).
     spec(
         Kind::Person,
@@ -267,31 +265,13 @@ pub const KIND_SPECS: [KindSpec; 27] = [
         false,
     ),
     spec(
-        Kind::Project,
-        "project",
+        Kind::TaskList,
+        "task_list",
         KindGroup::Container,
         true,
         false,
         true,
         true,
-    ),
-    spec(
-        Kind::Section,
-        "section",
-        KindGroup::Container,
-        false,
-        false,
-        true,
-        false,
-    ),
-    spec(
-        Kind::Area,
-        "area",
-        KindGroup::Container,
-        true,
-        false,
-        true,
-        false,
     ),
     spec(
         Kind::Calendar,
@@ -388,7 +368,7 @@ pub const HOST_TABLES: [&str; 16] = collect_host_tables();
 
 impl Kind {
     /// Every kind, in the CHECK's order.
-    pub const ALL: [Self; 27] = collect_kinds(KindFilter::All);
+    pub const ALL: [Self; 25] = collect_kinds(KindFilter::All);
 
     /// The kinds a general link (`links`) may END at: the items of the nine apps and the three
     /// things items are about (#1185). A Locker item is never here: it may start a link and can
@@ -397,17 +377,16 @@ impl Kind {
 
     /// THE KINDS A MEMBER CAN ADD OR IMPORT, one definition for "the member holds something": every
     /// app's items and the containers they make (a workout, a place, an assistant thread, a notebook,
-    /// folder, album, list, project, area or calendar included). Not the concepts (a tag, a flag, a
-    /// category, a kind of workout or activity, a relation) and not a section, which only exists in
-    /// a project. `person` and `calendar` are here, but the founding person and the default Calendar the
+    /// folder, album, list, task list or calendar included). Not the concepts (a tag, a flag, a
+    /// category, a kind of workout or activity, a relation). `person` and `calendar` are here, but the founding person and the default Calendar the
     /// vault is founded with never count (see [`crate::first_item`]).
-    pub const MEMBER_ITEMS: [Self; 21] = collect_kinds(KindFilter::MemberItem);
+    pub const MEMBER_ITEMS: [Self; 20] = collect_kinds(KindFilter::MemberItem);
 
     /// The kinds `concept` hosts: the `concept.kind` CHECK.
     pub const CONCEPTS: [Self; 5] = collect_kinds(KindFilter::Concept);
 
     /// The kinds `container` hosts: the `container.kind` CHECK.
-    pub const CONTAINERS: [Self; 8] = collect_kinds(KindFilter::Container);
+    pub const CONTAINERS: [Self; 6] = collect_kinds(KindFilter::Container);
 
     /// The kinds [`crate::index::text::text_of`] indexes directly in `search`.
     pub const SEARCHABLE: [Self; 16] = collect_kinds(KindFilter::Searchable);

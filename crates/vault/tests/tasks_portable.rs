@@ -45,7 +45,7 @@ fn has(lines: &[String], line: &str) -> bool {
 #[test]
 fn a_reminder_is_a_todo_with_its_due_status_priority_rule_and_alerts() {
     let w = World::new("ics_tasks");
-    let errands = w.container("project", "Errands");
+    let errands = w.container("task_list", "Errands");
     let milk = id(
         &w,
         "task.add",
@@ -121,14 +121,9 @@ fn a_zoned_due_is_written_as_the_wall_clock_of_its_zone() {
 }
 
 #[test]
-fn a_reminder_carries_its_parent_tags_section_list_effort_and_star() {
+fn a_reminder_carries_its_parent_tags_list_and_star() {
     let w = World::new("ics_tasks_more");
-    let errands = w.container("project", "Errands");
-    let section = id(
-        &w,
-        "container.create",
-        json!({ "kind": "section", "title": "This week, soon", "parent": errands }),
-    );
+    let errands = w.container("task_list", "Errands");
     let parent = id(
         &w,
         "task.add",
@@ -137,9 +132,8 @@ fn a_reminder_carries_its_parent_tags_section_list_effort_and_star() {
     let child = id(
         &w,
         "task.add",
-        json!({ "title": "Pack books", "parent_id": parent, "effort_min": 90 }),
+        json!({ "title": "Pack books", "parent_id": parent }),
     );
-    w.ok("entity.move", json!({ "id": &parent, "parent": &section }));
     w.ok("tag.add", json!({ "id": child, "label": "boxes, heavy" }));
     w.ok("tag.add", json!({ "id": child, "label": "home" }));
     w.ok("flag.set", json!({ "id": child, "flag": "starred" }));
@@ -150,12 +144,10 @@ fn a_reminder_carries_its_parent_tags_section_list_effort_and_star() {
         &format!("RELATED-TO;RELTYPE=PARENT:{parent}@centraid")
     ));
     assert!(has(&l, "CATEGORIES:boxes\\, heavy,home") || has(&l, "CATEGORIES:home,boxes\\, heavy"));
-    assert!(has(&l, "ESTIMATED-DURATION:PT90M"));
     assert!(has(&l, "X-CENTRAID-STARRED:TRUE"));
     let (_, text) = file(&w, json!({ "task_id": parent }));
     let l = lines(&text);
     assert!(has(&l, "X-CENTRAID-LIST:Errands"));
-    assert!(has(&l, "X-CENTRAID-SECTION:This week\\, soon"));
     assert!(!text.contains("RELATED-TO") && !text.contains("CATEGORIES"));
-    assert!(!text.contains("ESTIMATED-DURATION") && !text.contains("X-CENTRAID-STARRED"));
+    assert!(!text.contains("X-CENTRAID-STARRED"));
 }

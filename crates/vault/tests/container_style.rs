@@ -52,7 +52,7 @@ fn a_list_is_made_renamed_and_styled() {
     let list = id(
         &w,
         "container.create",
-        json!({ "kind": "project", "title": "Home", "color": "petrol", "icon": "Home" }),
+        json!({ "kind": "task_list", "title": "Home", "color": "petrol", "icon": "Home" }),
     );
     assert_eq!(
         style_of(&w, &list),
@@ -131,7 +131,7 @@ fn a_colour_an_icon_or_a_kind_that_is_not_the_palettes_is_refused_with_a_sentenc
     let list = id(
         &w,
         "container.create",
-        json!({ "kind": "project", "title": "P" }),
+        json!({ "kind": "task_list", "title": "P" }),
     );
     let cal = id(
         &w,
@@ -180,7 +180,7 @@ fn a_colour_an_icon_or_a_kind_that_is_not_the_palettes_is_refused_with_a_sentenc
     );
     let sentence = w.refused(
         "container.create",
-        json!({ "kind": "project", "title": "X", "icon": "Nope" }),
+        json!({ "kind": "task_list", "title": "X", "icon": "Nope" }),
     );
     assert!(
         sentence.contains("not an icon a list can wear"),

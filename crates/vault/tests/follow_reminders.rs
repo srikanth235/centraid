@@ -1,4 +1,4 @@
-//! The phone's Reminders, followed (#1185, #1214): each reminder is a task in the project the
+//! The phone's Reminders, followed (#1185, #1214): each reminder is a task in the task list the
 //! origin fills; the member's edit of a field stands over the phone's word; a phone completion
 //! completes the task; a reminder gone from a complete read goes to the trash and comes back with
 //! the record; the phone alerts for what it states and the vault for what the member changed.
@@ -58,7 +58,7 @@ fn a_reminder_arrives_in_its_list_edits_stand_and_a_phone_completion_completes_t
     );
     assert_eq!(out["added"], 1, "{out}");
     let id = task_of(&w, "r1");
-    // The list is a project the origin fills, and the task is in it.
+    // The list is a task list the origin fills, and the task is in it.
     let project: String = w.one("SELECT fills FROM origin WHERE ref = 'list:1'", &[]);
     assert_eq!(
         w.one::<String>("SELECT parent_id FROM entity WHERE id = ?1", &[&id]),
@@ -66,7 +66,7 @@ fn a_reminder_arrives_in_its_list_edits_stand_and_a_phone_completion_completes_t
     );
     assert_eq!(
         w.one::<String>("SELECT kind FROM entity WHERE id = ?1", &[&project]),
-        "project"
+        "task_list"
     );
     assert_eq!(
         w.one::<String>(
