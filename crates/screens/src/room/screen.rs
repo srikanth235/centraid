@@ -1,8 +1,6 @@
 //! A ROOM'S SCREEN (app-plane §1, "room builders"): turns what a read answered into a [`Room`],
 //! holds nothing a rebuild cannot recompute, and answers the events that are its own.
 
-use std::sync::Arc;
-
 use centraid_api_proto::core_v1 as wire;
 use centraid_domain::read::{ReadContext, ReadDecl};
 
@@ -83,15 +81,18 @@ impl Outcome {
 
 /// What a build holds: the selectors it claims, the room's kept state, and the reads it ran.
 pub struct Build<'a> {
+    /// How deep this room sits in its tab's stack: 1 is a root, which has no back.
+    pub depth: usize,
     pub sel: Sel,
     pub ui: &'a mut Ui,
-    pub door: &'a Arc<dyn Door>,
+    pub door: &'a dyn Door,
     reads: ReadContext,
 }
 
 impl<'a> Build<'a> {
-    pub fn new(ui: &'a mut Ui, door: &'a Arc<dyn Door>) -> Self {
+    pub fn new(ui: &'a mut Ui, door: &'a dyn Door, depth: usize) -> Self {
         Self {
+            depth,
             sel: Sel::new(),
             ui,
             door,
@@ -112,7 +113,7 @@ impl<'a> Build<'a> {
 /// What an event may do beside returning an [`Outcome`].
 pub struct Event<'a> {
     pub ui: &'a mut Ui,
-    pub door: &'a Arc<dyn Door>,
+    pub door: &'a dyn Door,
 }
 
 pub trait RoomScreen: Send {

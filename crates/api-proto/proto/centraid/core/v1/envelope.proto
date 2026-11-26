@@ -152,6 +152,7 @@ message Request {
     // the notification service's launch, presses and permission.
     RoomRequest room = 50;
     NotifyRequest notify = 51;
+    DeviceRequest device = 52;
   }
 }
 
@@ -202,6 +203,7 @@ message Response {
     HeldWholeResponse held_whole = 49;
     RoomResponse room = 50;
     NotifyResponse notify = 51;
+    DeviceResponse device = 52;
   }
 }
 

@@ -39,7 +39,8 @@ pub fn category_of(kind: &str) -> String {
 /// The words a notification says. Every sentence is the catalogue's; the scheduler only picks one.
 pub trait Words: Send + Sync {
     /// Title and body of an alert of an event, a task or a person's date.
-    fn alert(&self, notice: &Notice) -> (String, String);
+    /// `zone` is the member's, in which a zoned instant is read.
+    fn alert(&self, notice: &Notice, zone: &str) -> (String, String);
     /// Title and body when the member keeps details off: it says only that one is due.
     fn private(&self, kind: &str) -> (String, String);
     /// Title and body of a Locker alert: "An item in Locker expires soon", and nothing else.
@@ -180,7 +181,7 @@ fn pending_of(
     let (title, body) = if notice.kind == "locker_item" {
         inputs.words.locker()
     } else if inputs.details {
-        inputs.words.alert(&notice)
+        inputs.words.alert(&notice, inputs.zone)
     } else {
         inputs.words.private(&notice.kind)
     };

@@ -4,7 +4,6 @@
 //! rooms whose read context a commit reaches.
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 use centraid_api_proto::core_v1 as wire;
 use centraid_domain::read::ReadContext;
@@ -85,6 +84,7 @@ const SEARCH_FIELD: &str = "search";
 
 struct Entry {
     id: u64,
+    depth: usize,
     screen: Box<dyn RoomScreen>,
     ui: Ui,
     handlers: HandlerMap,
@@ -96,7 +96,6 @@ struct Entry {
 }
 
 pub struct Rooms {
-    door: Arc<dyn Door>,
     registry: Registry,
     stacks: BTreeMap<String, Vec<Entry>>,
     next: u64,
@@ -111,9 +110,8 @@ enum Then {
 
 impl Rooms {
     #[must_use]
-    pub fn new(registry: Registry, door: Arc<dyn Door>) -> Self {
+    pub fn new(registry: Registry) -> Self {
         Self {
-            door,
             registry,
             stacks: BTreeMap::new(),
             next: 1,
@@ -125,25 +123,23 @@ impl Rooms {
     ///
     /// # Errors
     /// No room under the key, or a room that cannot be built.
-    pub fn open(&mut self, key: &str, tab: &str, root: bool) -> Result<Shown, Refusal> {
+    pub fn open(
+        &mut self,
+        door: &dyn Door,
+        key: &str,
+        tab: &str,
+        root: bool,
+    ) -> Result<Shown, Refusal> {
         let screen = self
             .registry
             .make(key)
             .ok_or_else(|| Refusal::NoRoom(key.to_owned()))?;
-        let stack = self.stacks.entry(tab.to_owned()).or_default();
-        let movement = if root || stack.is_empty() {
-            stack.clear();
-            Move::Replace
-        } else {
-            if let Some(top) = stack.last_mut() {
-                top.covered = Some(top.ui.place());
-            }
-            Move::Push
-        };
+        let held = self.stacks.get(tab).map_or(0, Vec::len);
+        let replace = root || held == 0;
         let id = self.next;
-        self.next += 1;
         let mut entry = Entry {
             id,
+            depth: if replace { 1 } else { held + 1 },
             screen,
             ui: Ui::default(),
             handlers: HandlerMap::default(),
@@ -153,9 +149,18 @@ impl Rooms {
             status: None,
             last: None,
         };
-        let door = self.door.clone();
-        rebuild(&mut entry, &door)?;
+        rebuild(&mut entry, door)?;
+        self.next += 1;
         let stack = self.stacks.entry(tab.to_owned()).or_default();
+        let movement = if replace {
+            stack.clear();
+            Move::Replace
+        } else {
+            if let Some(top) = stack.last_mut() {
+                top.covered = Some(top.ui.place());
+            }
+            Move::Push
+        };
         stack.push(entry);
         Ok(self.shown(tab, movement))
     }
@@ -206,6 +211,7 @@ impl Rooms {
     /// An instance that is not open, or a room that cannot be built.
     pub fn event(
         &mut self,
+        door: &dyn Door,
         instance: u64,
         event: &wire::RoomEvent,
     ) -> Result<Option<Shown>, Refusal> {
@@ -214,27 +220,25 @@ impl Rooms {
         if at != top {
             return Ok(None);
         }
-        let door = self.door.clone();
         let then = {
             let entry = &mut self.stacks.get_mut(&tab).expect("located")[at];
-            handle(entry, event, &door)
+            handle(entry, event, door)
         };
         match then {
             Then::Nothing => Ok(None),
             Then::Rebuild => {
                 let entry = &mut self.stacks.get_mut(&tab).expect("located")[at];
-                rebuild(entry, &door)?;
+                rebuild(entry, door)?;
                 Ok(Some(self.shown(&tab, Move::Reload)))
             }
             Then::Go(Nav::Stay) => Ok(None),
-            Then::Go(Nav::Push(key)) => self.open(&key, &tab, false).map(Some),
-            Then::Go(Nav::Replace(key)) => self.open(&key, &tab, true).map(Some),
-            Then::Go(Nav::Pop) => self.pop(&tab).map(Some),
+            Then::Go(Nav::Push(key)) => self.open(door, &key, &tab, false).map(Some),
+            Then::Go(Nav::Replace(key)) => self.open(door, &key, &tab, true).map(Some),
+            Then::Go(Nav::Pop) => self.pop(door, &tab).map(Some),
         }
     }
 
-    fn pop(&mut self, tab: &str) -> Result<Shown, Refusal> {
-        let door = self.door.clone();
+    fn pop(&mut self, door: &dyn Door, tab: &str) -> Result<Shown, Refusal> {
         let stack = self.stacks.get_mut(tab).expect("popped tab exists");
         if stack.len() > 1 {
             stack.pop();
@@ -243,7 +247,7 @@ impl Rooms {
                 if let Some(place) = entry.restore.clone() {
                     entry.ui.restore(&place);
                 }
-                rebuild(entry, &door)?;
+                rebuild(entry, door)?;
             }
             return Ok(self.shown(tab, Move::Pop));
         }
@@ -252,9 +256,12 @@ impl Rooms {
 
     /// A commit wrote `tables`: every top room whose reads reach them is built again and shown;
     /// a covered room is built again when it is uncovered, as every popped room is.
-    pub fn changed<'a>(&mut self, tables: impl IntoIterator<Item = &'a str>) -> Vec<Shown> {
+    pub fn changed<'a>(
+        &mut self,
+        door: &dyn Door,
+        tables: impl IntoIterator<Item = &'a str>,
+    ) -> Vec<Shown> {
         let written: Vec<&str> = tables.into_iter().collect();
-        let door = self.door.clone();
         let mut shown = Vec::new();
         let tabs: Vec<String> = self.stacks.keys().cloned().collect();
         for tab in tabs {
@@ -262,7 +269,7 @@ impl Rooms {
             let Some(entry) = stack.last_mut() else {
                 continue;
             };
-            if entry.reads.intersects(written.iter().copied()) && rebuild(entry, &door).is_ok() {
+            if entry.reads.intersects(written.iter().copied()) && rebuild(entry, door).is_ok() {
                 shown.push(self.shown(&tab, Move::Reload));
             }
         }
@@ -270,7 +277,7 @@ impl Rooms {
     }
 }
 
-fn handle(entry: &mut Entry, event: &wire::RoomEvent, door: &Arc<dyn Door>) -> Then {
+fn handle(entry: &mut Entry, event: &wire::RoomEvent, door: &dyn Door) -> Then {
     match &event.kind {
         Some(E::Scrolled(scrolled)) => {
             entry.ui.scrolled(Scroll {
@@ -314,7 +321,7 @@ fn handle(entry: &mut Entry, event: &wire::RoomEvent, door: &Arc<dyn Door>) -> T
     }
 }
 
-fn dispatch(entry: &mut Entry, selector: &str, input: &Input, door: &Arc<dyn Door>) -> Then {
+fn dispatch(entry: &mut Entry, selector: &str, input: &Input, door: &dyn Door) -> Then {
     let Some(handler) = entry.handlers.get(selector).cloned() else {
         return Then::Nothing;
     };
@@ -396,7 +403,7 @@ fn dispatch(entry: &mut Entry, selector: &str, input: &Input, door: &Arc<dyn Doo
     }
 }
 
-fn own(entry: &mut Entry, tag: &str, input: &Input, door: &Arc<dyn Door>) -> Then {
+fn own(entry: &mut Entry, tag: &str, input: &Input, door: &dyn Door) -> Then {
     let outcome: Outcome = {
         let mut event = Event {
             ui: &mut entry.ui,
@@ -413,8 +420,8 @@ fn own(entry: &mut Entry, tag: &str, input: &Input, door: &Arc<dyn Door>) -> The
     }
 }
 
-fn rebuild(entry: &mut Entry, door: &Arc<dyn Door>) -> Result<(), Refusal> {
-    let mut build = Build::new(&mut entry.ui, door);
+fn rebuild(entry: &mut Entry, door: &dyn Door) -> Result<(), Refusal> {
+    let mut build = Build::new(&mut entry.ui, door, entry.depth);
     let mut room = entry.screen.build(&mut build);
     let (mut sel, reads) = build.into_parts();
     if let Some(status) = &entry.status {

@@ -24,7 +24,7 @@ const DAY: i64 = 24 * HOUR;
 struct English;
 
 impl Words for English {
-    fn alert(&self, notice: &Notice) -> (String, String) {
+    fn alert(&self, notice: &Notice, _zone: &str) -> (String, String) {
         (notice.title.clone(), notice.at.clone().unwrap_or_default())
     }
 

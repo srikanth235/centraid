@@ -16,7 +16,7 @@ pub struct Done {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Refused(pub String);
 
-pub trait Door: Send + Sync {
+pub trait Door {
     /// Run `act` as one commit.
     ///
     /// # Errors
@@ -30,4 +30,36 @@ pub trait Door: Send + Sync {
     fn undo(&self) -> Result<Done, Refused>;
 
     fn now_ms(&self) -> i64;
+
+    /// One request of the core's own (the backup status, a drain).
+    ///
+    /// # Errors
+    /// The core's sentence.
+    fn call(
+        &self,
+        request: &centraid_api_proto::core_v1::Request,
+    ) -> Result<centraid_api_proto::core_v1::Response, Refused> {
+        let _ = request;
+        Err(Refused("this door carries no core".to_owned()))
+    }
+
+    /// A device-store key's value.
+    fn device_get(&self, key: &str) -> Option<String> {
+        let _ = key;
+        None
+    }
+
+    /// Write a device-store key, through the registry.
+    ///
+    /// # Errors
+    /// The registry's or the store's sentence.
+    fn device_put(&self, key: &str, value: &str) -> Result<(), Refused> {
+        let _ = (key, value);
+        Err(Refused("this door keeps no device store".to_owned()))
+    }
+
+    /// What a draft is kept under for the vault in front.
+    fn vault_id(&self) -> String {
+        String::new()
+    }
 }

@@ -379,6 +379,18 @@ impl crate::rooms::RoomCtx for HandleState {
         HandleState::command(self, name, input, invoke_key)
     }
 
+    fn call(&self, request: &wire::Request) -> Result<wire::Response> {
+        HandleState::call(self, request)
+    }
+
+    fn device(&self) -> Result<std::sync::Arc<crate::device::Checked<crate::device::DirStore>>> {
+        HandleState::device(self)
+    }
+
+    fn vault_id(&self) -> String {
+        self.device_vault_id()
+    }
+
     fn push(&self, shown: wire::RoomShown) {
         self.events().push(wire::Event {
             kind: Some(wire::event::Kind::Room(Box::new(shown))),

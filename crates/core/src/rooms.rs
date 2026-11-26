@@ -22,6 +22,21 @@ pub trait RoomCtx {
         invoke_key: &str,
     ) -> Result<centraid_vault::commands::CommandOutcome>;
 
+    /// One request of the core's own (the backup status, a drain), answered inline.
+    ///
+    /// # Errors
+    /// The core's refusal.
+    fn call(&self, request: &wire::Request) -> Result<wire::Response>;
+
+    /// The device store.
+    ///
+    /// # Errors
+    /// The store cannot be opened.
+    fn device(&self) -> Result<std::sync::Arc<crate::device::Checked<crate::device::DirStore>>>;
+
+    /// What a draft is kept under for the vault in front.
+    fn vault_id(&self) -> String;
+
     /// Show the shell a room.
     fn push(&self, shown: wire::RoomShown);
 }

@@ -376,6 +376,8 @@ pub struct HandleState {
     pub(crate) rooms: std::sync::OnceLock<Arc<dyn crate::rooms::RoomHost>>,
     /// THE NOTIFICATION SERVICE (app-plane §9), once its words are attached.
     pub(crate) notify: std::sync::OnceLock<crate::notify::Service>,
+    /// THE DEVICE STORE BESIDE THE VAULT FILE (app-plane §10), opened on first use.
+    device: std::sync::OnceLock<Arc<crate::device::Checked<crate::device::DirStore>>>,
     /// THE DIRECTORY OF VAULTS THIS CORE IS THE DOOR TO, when it is one
     /// (#1135, lane H2): see [`crate::vaults`]. Read once by whoever builds the
     /// shelf ([`Self::shelf_config`]).
@@ -533,6 +535,7 @@ impl Core {
             screens: std::sync::OnceLock::new(),
             rooms: std::sync::OnceLock::new(),
             notify: std::sync::OnceLock::new(),
+            device: std::sync::OnceLock::new(),
             shelf_config,
             vaults: std::sync::OnceLock::new(),
             launched,
@@ -925,6 +928,41 @@ impl HandleState {
     #[must_use]
     pub fn path(&self) -> &std::path::Path {
         &self.path
+    }
+
+    /// The device store: one file per key in a folder beside the vault file, written only through
+    /// the key registry.
+    ///
+    /// # Errors
+    /// The folder cannot be made.
+    pub fn device(&self) -> Result<Arc<crate::device::Checked<crate::device::DirStore>>> {
+        if let Some(store) = self.device.get() {
+            return Ok(Arc::clone(store));
+        }
+        let mut name = self
+            .path
+            .file_name()
+            .map(std::ffi::OsString::from)
+            .unwrap_or_default();
+        name.push(".device");
+        let store = crate::device::DirStore::open(self.path.with_file_name(name))
+            .map_err(|detail| CoreError::Unavailable { reason: detail })?;
+        let _ = self
+            .device
+            .set(Arc::new(crate::device::Checked::new(store)));
+        Ok(Arc::clone(self.device.get().expect("just set")))
+    }
+
+    /// What a draft or a view preference is kept under for this vault.
+    #[must_use]
+    pub fn device_vault_id(&self) -> String {
+        self.vault_hex().unwrap_or_else(|| {
+            self.path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .unwrap_or("vault")
+                .to_owned()
+        })
     }
 
     /// The backup plane's files beside the vault.
@@ -1770,6 +1808,9 @@ impl HandleState {
                     host.call(self, request)?,
                 )))
             }
+            K::Device(request) => Ok(response(wire::response::Kind::Device(
+                self.device_call(request)?,
+            ))),
             K::Notify(request) => Ok(response(wire::response::Kind::Notify(Box::new(
                 self.notify_call(request)?,
             )))),
@@ -3027,6 +3068,7 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             // A ROOM EVENT IS A HANDFUL OF READS AND ONE ACTION; THE NOTIFICATION SERVICE'S
             // DOORS READ THE ALERT INDEX AND RUN IDEMPOTENT COMMANDS, EACH BOUNDED.
             | K::Room(_)
+            | K::Device(_)
             | K::Notify(_)
             // A PHRASE STEP IS 24 WORDS AND ONE PBKDF2 (#1047 E1).
             | K::Phrase(_)

@@ -131,6 +131,7 @@ pub mod pairing;
 pub mod passes;
 pub mod permission;
 pub mod quantity;
+pub mod room;
 pub mod settings;
 pub mod shared;
 pub mod vault;

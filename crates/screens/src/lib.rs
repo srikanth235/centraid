@@ -91,5 +91,9 @@ pub fn attach(handle: &centraid_core::Handle) {
 pub fn attach_with(handle: &centraid_core::Handle, prepare: vault::Prepare) {
     let (runtime, shelf) = assemble();
     handle.attach_screens(std::sync::Arc::new(runtime));
+    handle.attach_rooms(std::sync::Arc::new(room::RoomRuntime::new(
+        room::shell::registry(),
+    )));
+    handle.attach_notify(std::sync::Arc::new(room::notify_words::Catalogue::default()));
     shelf.bind(handle, prepare);
 }

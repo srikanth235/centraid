@@ -11,7 +11,7 @@ use centraid_screens::room::frame::room;
 use centraid_screens::room::selector::{Act, Handler};
 use centraid_screens::room::{
     Build, Done, Door, Event, Input, Outcome, Refusal, Refused, Registry, RoomError, RoomScreen,
-    Rooms, snapshot,
+    Rooms, Shown, snapshot,
 };
 use serde_json::json;
 
@@ -200,9 +200,38 @@ fn registry() -> Registry {
         }))
 }
 
-fn rooms() -> (Rooms, Arc<Recorder>) {
+struct Harness {
+    rooms: Rooms,
+    door: Arc<Recorder>,
+}
+
+impl Harness {
+    fn open(&mut self, key: &str, tab: &str, root: bool) -> Result<Shown, Refusal> {
+        self.rooms.open(&*self.door, key, tab, root)
+    }
+
+    fn event(&mut self, instance: u64, event: &wire::RoomEvent) -> Result<Option<Shown>, Refusal> {
+        self.rooms.event(&*self.door, instance, event)
+    }
+
+    fn changed<const N: usize>(&mut self, tables: [&str; N]) -> Vec<Shown> {
+        self.rooms.changed(&*self.door, tables)
+    }
+
+    fn depth(&self, tab: &str) -> usize {
+        self.rooms.depth(tab)
+    }
+}
+
+fn rooms() -> (Harness, Arc<Recorder>) {
     let door = Arc::new(Recorder::default());
-    (Rooms::new(registry(), door.clone()), door)
+    (
+        Harness {
+            rooms: Rooms::new(registry()),
+            door: door.clone(),
+        },
+        door,
+    )
 }
 
 fn tap(id: &str) -> wire::RoomEvent {

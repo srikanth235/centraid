@@ -11,13 +11,17 @@ pub mod door;
 pub mod field;
 pub mod form;
 pub mod frame;
+pub mod host;
+pub mod notify_words;
 pub mod rooms;
 pub mod screen;
 pub mod selector;
+pub mod shell;
 pub mod snapshot;
 pub mod ui;
 
 pub use door::{Done, Door, Refused};
+pub use host::RoomRuntime;
 pub use rooms::{Move, Refusal, Rooms, Shown};
 pub use screen::{Build, Event, Input, Nav, Outcome, Registry, RoomScreen, Status};
 pub use selector::{Act, Handler, HandlerMap, RoomError, Sel};

@@ -918,3 +918,31 @@ message RoomRequest {
 message RoomResponse {
   repeated RoomShown shown = 1;
 }
+
+// The device store (app-plane §10), through the core's key registry: a key that is not listed, or a
+// JSON value without its `"v"`, is refused. The shell reads its appearance here at launch.
+message DeviceGet {
+  string key = 1;
+}
+
+message DevicePut {
+  string key = 1;
+  string value = 2;
+}
+
+message DeviceDelete {
+  string key = 1;
+}
+
+message DeviceRequest {
+  oneof kind {
+    DeviceGet get = 1;
+    DevicePut put = 2;
+    DeviceDelete delete = 3;
+  }
+}
+
+message DeviceResponse {
+  bool found = 1;
+  string value = 2;
+}
