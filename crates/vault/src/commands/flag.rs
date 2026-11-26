@@ -68,7 +68,6 @@ impl Flag {
 
 #[derive(serde::Deserialize)]
 struct FlagInput {
-    id: String,
     flag: String,
 }
 
@@ -82,30 +81,39 @@ fn flag_of(word: &str) -> Result<Flag> {
 fn set(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let input: FlagInput = ctx.parse_input()?;
     let (set, _) = flag_of(&input.flag)?.statements();
-    let changed = ctx
-        .connection()
-        .execute(set, rusqlite::params![input.id, ctx.now])?;
-    Ok(serde_json::json!({ "changed": changed > 0 }))
+    let mut changed = 0;
+    for id in ctx.target_ids() {
+        changed += ctx
+            .connection()
+            .execute(set, rusqlite::params![id, ctx.now])?;
+    }
+    Ok(serde_json::json!({ "changed": changed > 0, "count": changed }))
 }
 
 fn clear(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let input: FlagInput = ctx.parse_input()?;
     let (_, clear) = flag_of(&input.flag)?.statements();
-    let changed = ctx.connection().execute(clear, [input.id.as_str()])?;
-    Ok(serde_json::json!({ "changed": changed > 0 }))
+    let mut changed = 0;
+    for id in ctx.target_ids() {
+        changed += ctx.connection().execute(clear, [id.as_str()])?;
+    }
+    Ok(serde_json::json!({ "changed": changed > 0, "count": changed }))
 }
 
 /// A sentence when this entity takes no flag: it is missing or is in the trash.
 fn pre_flaggable(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    Ok(lookup_live(ctx.connection(), ctx.required_str("id")?)?.err())
+    ctx.check_each(|one| Ok(lookup_live(one.connection(), one.required_str("id")?)?.err()))
 }
 
 const SCHEMA: &str = r#"{
   "type": "object",
-  "required": ["id", "flag"],
+  "required": ["flag"],
+  "anyOf": [{ "required": ["id"] }, { "required": ["ids"] }],
   "additionalProperties": false,
   "properties": {
     "id": { "type": "string", "minLength": 1 },
+    "ids": { "type": "array", "minItems": 1, "maxItems": 500,
+             "items": { "type": "string", "minLength": 1 } },
     "flag": { "type": "string", "enum": ["starred", "pinned", "archived"] }
   }
 }"#;

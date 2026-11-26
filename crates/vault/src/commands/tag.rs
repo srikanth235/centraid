@@ -123,11 +123,13 @@ pub(crate) fn tag_refusal(connection: &Connection, kind: Kind) -> Result<Option<
 /// A sentence when this entity cannot carry a tag: it is missing, in the trash, or is of a kind
 /// that takes none.
 pub(crate) fn pre_taggable(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
-    let found = match lookup_live(ctx.connection(), ctx.required_str("id")?)? {
-        Ok(found) => found,
-        Err(sentence) => return Ok(Some(sentence)),
-    };
-    tag_refusal(ctx.connection(), found.kind)
+    ctx.check_each(|one| {
+        let found = match lookup_live(one.connection(), one.required_str("id")?)? {
+            Ok(found) => found,
+            Err(sentence) => return Ok(Some(sentence)),
+        };
+        tag_refusal(one.connection(), found.kind)
+    })
 }
 
 /// Put an edge of `tagged` from `id` to a concept, or take it away.
@@ -155,7 +157,6 @@ pub(crate) fn set_tagged(
 
 #[derive(serde::Deserialize)]
 struct AddTagInput {
-    id: String,
     label: String,
     color: Option<String>,
 }
@@ -175,13 +176,15 @@ fn add(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
             [tag.as_str(), color],
         )?;
     }
-    let added = set_tagged(ctx, &input.id, &tag, true)?;
+    let mut added = false;
+    for id in ctx.target_ids() {
+        added |= set_tagged(ctx, &id, &tag, true)?;
+    }
     Ok(serde_json::json!({ "tag": tag, "added": added }))
 }
 
 #[derive(serde::Deserialize)]
 struct RemoveTagInput {
-    id: String,
     label: String,
 }
 
@@ -190,7 +193,10 @@ fn remove(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let Some(tag) = find_concept(ctx.connection(), Kind::Tag, &input.label)? else {
         return Ok(serde_json::json!({ "tag": null, "removed": false }));
     };
-    let removed = set_tagged(ctx, &input.id, &tag, false)?;
+    let mut removed = false;
+    for id in ctx.target_ids() {
+        removed |= set_tagged(ctx, &id, &tag, false)?;
+    }
     Ok(serde_json::json!({ "tag": tag, "removed": removed }))
 }
 
@@ -251,10 +257,13 @@ fn pre_label(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 
 const SCHEMA: &str = r#"{
   "type": "object",
-  "required": ["id", "label"],
+  "required": ["label"],
+  "anyOf": [{ "required": ["id"] }, { "required": ["ids"] }],
   "additionalProperties": false,
   "properties": {
     "id": { "type": "string", "minLength": 1 },
+    "ids": { "type": "array", "minItems": 1, "maxItems": 500,
+             "items": { "type": "string", "minLength": 1 } },
     "label": { "type": "string", "maxLength": 200 }
   }
 }"#;
@@ -262,10 +271,13 @@ const SCHEMA: &str = r#"{
 /// `tag.add` also takes the colour a NEW label should wear.
 const ADD_SCHEMA: &str = r#"{
   "type": "object",
-  "required": ["id", "label"],
+  "required": ["label"],
+  "anyOf": [{ "required": ["id"] }, { "required": ["ids"] }],
   "additionalProperties": false,
   "properties": {
     "id": { "type": "string", "minLength": 1 },
+    "ids": { "type": "array", "minItems": 1, "maxItems": 500,
+             "items": { "type": "string", "minLength": 1 } },
     "label": { "type": "string", "maxLength": 200 },
     "color": { "enum": ["blue","mustard","violet","petrol","indigo","graphite","raspberry","orchid"] }
   }

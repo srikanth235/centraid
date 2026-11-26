@@ -474,15 +474,24 @@ fn pre_move(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
 
 #[derive(serde::Deserialize)]
 struct MoveInput {
-    id: String,
     parent: Option<String>,
+}
+
+fn pre_move_each(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    ctx.check_each(pre_move)
 }
 
 /// `entity.move`: any row to another home, or to the top level.
 fn move_entity(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
     let input: MoveInput = ctx.parse_input()?;
-    let moved = move_home(ctx, &input.id, input.parent.as_deref())?;
-    Ok(serde_json::json!({ "id": input.id, "moved": moved }))
+    let ids = ctx.target_ids();
+    let mut moved = Vec::new();
+    for id in &ids {
+        if move_home(ctx, id, input.parent.as_deref())? {
+            moved.push(id.clone());
+        }
+    }
+    Ok(serde_json::json!({ "id": ids.first(), "moved": !moved.is_empty(), "moved_ids": moved }))
 }
 
 // ---------------------------------------------------------------------------
@@ -789,6 +798,17 @@ pub(crate) fn purge_one(
     Ok(())
 }
 
+const BY_IDS: &str = r#"{
+  "type": "object",
+  "anyOf": [{ "required": ["id"] }, { "required": ["ids"] }],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "ids": { "type": "array", "minItems": 1, "maxItems": 500,
+             "items": { "type": "string", "minLength": 1 } }
+  }
+}"#;
+
 const BY_ID: &str = r#"{
   "type": "object",
   "required": ["id"],
@@ -866,11 +886,19 @@ fn pre_trash(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
         .then(|| format!("a {} is deleted, not moved to the trash", found.kind.noun())))
 }
 
+fn pre_trash_each(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    ctx.check_each(pre_trash)
+}
+
 fn trash(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let input: ByIdInput = ctx.parse_input()?;
     let stamp = trash_stamp(ctx)?;
     let mut trashed = Vec::new();
-    trash_one(ctx, &input.id, &stamp, &mut trashed)?;
+    for id in ctx.target_ids() {
+        // A row an earlier one of the same list already took with it keeps its holder's name.
+        if find(ctx.connection(), &id)?.is_some_and(|found| found.deleted_at.is_none()) {
+            trash_one(ctx, &id, &stamp, &mut trashed)?;
+        }
+    }
     Ok(serde_json::json!({ "trashed": trashed, "purge_at": stamp.1 }))
 }
 
@@ -970,9 +998,17 @@ fn restore_row(ctx: &CommandCtx<'_, '_>, id: &str, restored: &mut Vec<String>) -
 
 /// `entity.restore`.
 fn restore(ctx: &CommandCtx<'_, '_>) -> Result<serde_json::Value> {
-    let input: ByIdInput = ctx.parse_input()?;
-    let restored = restore_one(ctx, &input.id)?;
+    let mut restored = Vec::new();
+    for id in ctx.target_ids() {
+        if find(ctx.connection(), &id)?.is_some_and(|found| found.deleted_at.is_some()) {
+            restored.extend(restore_one(ctx, &id)?);
+        }
+    }
     Ok(serde_json::json!({ "restored": restored }))
+}
+
+fn pre_restore_each(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
+    ctx.check_each(pre_restore)
 }
 
 fn pre_purge(ctx: &CommandCtx<'_, '_>) -> Result<Option<String>> {
@@ -1162,39 +1198,41 @@ pub fn definitions() -> Vec<CommandDefinition> {
             "entity",
             r#"{
               "type": "object",
-              "required": ["id"],
+              "anyOf": [{ "required": ["id"] }, { "required": ["ids"] }],
               "additionalProperties": false,
               "properties": {
                 "id": { "type": "string", "minLength": 1 },
+                "ids": { "type": "array", "minItems": 1, "maxItems": 500,
+                         "items": { "type": "string", "minLength": 1 } },
                 "parent": { "type": ["string", "null"] }
               }
             }"#,
             Idempotency::Idempotent,
             &[CommandCondition {
                 predicate: "entity_can_go_there",
-                check: pre_move,
+                check: pre_move_each,
             }],
             move_entity,
         ),
         CommandDefinition::plain(
             "entity.trash",
             "entity",
-            BY_ID,
+            BY_IDS,
             Idempotency::Once,
             &[CommandCondition {
                 predicate: "entity_can_be_trashed",
-                check: pre_trash,
+                check: pre_trash_each,
             }],
             trash,
         ),
         CommandDefinition::plain(
             "entity.restore",
             "entity",
-            BY_ID,
+            BY_IDS,
             Idempotency::Once,
             &[CommandCondition {
                 predicate: "entity_is_in_the_trash",
-                check: pre_restore,
+                check: pre_restore_each,
             }],
             restore,
         ),
