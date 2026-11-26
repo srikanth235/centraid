@@ -16,7 +16,6 @@ use centraid_core::screens::VaultRequest;
 use centraid_core::{Handle, Result};
 use prost::Message;
 
-use crate::follow::Follows;
 use crate::kit::act::Settled;
 use crate::kit::undo::Handed;
 use crate::strings::Locale;
@@ -114,10 +113,7 @@ pub struct Ctx<'a> {
     core: &'a dyn ScreenCtx,
     env: &'a Environment,
     done: RefCell<Done>,
-    follows: Follows,
     alerts: crate::kit::permission::AlertBoard,
-    recents: crate::kit::search::Recents,
-    drafts: crate::calendar::draft::Board,
     clipboard: crate::kit::secret::ClipboardBoard,
     /// The line a page that just closed handed down to this screen, until it takes it.
     handed_in: RefCell<Option<Handed>>,
@@ -135,10 +131,7 @@ impl<'a> Ctx<'a> {
             core,
             env,
             done: RefCell::new(Done::default()),
-            follows: Follows::default(),
             alerts: crate::kit::permission::AlertBoard::default(),
-            recents: crate::kit::search::Recents::default(),
-            drafts: crate::calendar::draft::Board::default(),
             clipboard: crate::kit::secret::ClipboardBoard::default(),
             handed_in: RefCell::new(None),
         }
@@ -170,32 +163,10 @@ impl<'a> Ctx<'a> {
         self.handed_in.borrow_mut().take()
     }
 
-    /// This context over the runtime's one follow board, so a screen's ask reaches the
-    /// coordinator that answers every screen.
-    #[must_use]
-    pub(crate) fn with_follows(mut self, follows: Follows) -> Self {
-        self.follows = follows;
-        self
-    }
-
     /// This context over the runtime's one alert board (`kit::permission::AlertBoard`).
     #[must_use]
     pub(crate) fn with_alerts(mut self, alerts: crate::kit::permission::AlertBoard) -> Self {
         self.alerts = alerts;
-        self
-    }
-
-    /// This context over the runtime's one list of recent searches (`kit::search::Recents`).
-    #[must_use]
-    pub(crate) fn with_recents(mut self, recents: crate::kit::search::Recents) -> Self {
-        self.recents = recents;
-        self
-    }
-
-    /// This context over the runtime's one board of the new event's draft (`calendar::draft`).
-    #[must_use]
-    pub(crate) fn with_drafts(mut self, drafts: crate::calendar::draft::Board) -> Self {
-        self.drafts = drafts;
         self
     }
 
@@ -221,29 +192,18 @@ impl<'a> Ctx<'a> {
         })
     }
 
-    /// The unsaved new event, kept in memory for the runtime's life and in the device store by
-    /// `calendar::draft`'s service (#1202, ruling 29).
-    #[must_use]
-    pub fn drafts(&self) -> &crate::calendar::draft::Board {
-        &self.drafts
-    }
-
-    /// The recent searches, kept for the runtime's life (ruling 24, #1202).
-    #[must_use]
-    pub fn recents(&self) -> &crate::kit::search::Recents {
-        &self.recents
-    }
-
     /// What the phone last said about alerts, shared by every screen (#1188, NA1).
     #[must_use]
     pub fn alerts(&self) -> &crate::kit::permission::AlertBoard {
         &self.alerts
     }
 
-    /// The board the follow coordinator shares with the screens (`crate::follow`).
-    #[must_use]
-    pub fn follows(&self) -> &Follows {
-        &self.follows
+    /// Whether this core holds the vault's keys.
+    ///
+    /// # Errors
+    /// Refuses with no vault open.
+    pub fn keyed(&self) -> Result<bool> {
+        self.core.keyed()
     }
 
     /// The one read. The tables it read are remembered: when one changes, the
@@ -322,18 +282,6 @@ impl<'a> Ctx<'a> {
     /// Whatever the core refuses with.
     pub fn content_urls(&self, request: &wire::ContentUrlRequest) -> Result<wire::ContentUrls> {
         self.core.content_urls(request)
-    }
-
-    /// One step of the Locker session. The tables are untouched: the session is
-    /// not a read.
-    ///
-    /// # Errors
-    /// Whatever the session refuses with.
-    pub fn locker(
-        &self,
-        request: &wire::LockerSessionRequest,
-    ) -> Result<wire::LockerSessionResponse> {
-        self.core.locker(request)
     }
 
     /// A vault lifecycle door that is quick (the 24 words, founding a vault).

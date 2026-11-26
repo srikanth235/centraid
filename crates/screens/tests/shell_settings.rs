@@ -134,51 +134,6 @@ fn a_keychain_that_cannot_answer_leaves_the_system_appearance_not_a_spinner() {
 }
 
 #[test]
-fn picking_is_kept_by_home_in_its_one_key_and_home_draws_that_scheme() {
-    let (mut d, home, i) = started();
-    // Home read its own key when it opened; settle it on the phone's scheme.
-    answer(&mut d, home, keychain_get, stored(""));
-    answer(&mut d, i, keychain_get, stored(""));
-
-    d.send(
-        i,
-        E::Settings(wire::SettingsEvent {
-            kind: Some(wire::settings_event::Kind::AppearancePicked(
-                wire::settings_event::AppearancePicked { id: "dark".into() },
-            )),
-        }),
-    );
-    // SETTINGS writes Home's key with the value, and shows the choice once it stuck.
-    let written = d
-        .effects
-        .iter()
-        .find_map(|request| match request.effect.as_ref()?.kind.as_ref()? {
-            wire::effect::Kind::Keychain(op)
-                if op.op == wire::keychain_op::Op::Set as i32 && request.instance == i =>
-            {
-                Some(op.value.clone())
-            }
-            _ => None,
-        })
-        .expect("the choice is written");
-    assert_eq!(written, b"dark");
-    assert_eq!(
-        selected(&data(&d, i)),
-        ["system"],
-        "not shown before it stuck"
-    );
-    answer(&mut d, i, keychain_set, done());
-    assert_eq!(selected(&data(&d, i)), ["dark"]);
-    // And Home draws the scheme at once.
-    match &d.view(home).kind {
-        Some(wire::view_state::Kind::Home(home)) => {
-            assert_eq!(home.scheme, wire::HomeScheme::Dark as i32);
-        }
-        other => panic!("not Home: {other:?}"),
-    }
-}
-
-#[test]
 fn choosing_system_stores_nothing_and_choosing_what_is_chosen_does_nothing() {
     let (mut d, _home, i) = started();
     answer(&mut d, i, keychain_get, stored("light"));
@@ -228,18 +183,6 @@ fn the_rows_say_where_things_stand_and_open_the_pages_that_own_them() {
     let row = |section: usize| data.sections[section].rows[0].clone();
     // Backup and the recovery key open the pages that own them.
     assert_eq!(row(0).route.as_ref().unwrap().screen, "backup.home");
-    // Reconnect phone data opens the page that lists what another phone followed (#1185).
-    let reconnect = data.sections[0]
-        .rows
-        .iter()
-        .find(|row| row.id == "reconnect")
-        .expect("a Reconnect row");
-    assert_eq!(reconnect.route.as_ref().unwrap().screen, "follow.reconnect");
-    // Its back control names Settings, the page it is pushed from (#1202).
-    assert!(matches!(
-        &reconnect.route.as_ref().unwrap().args,
-        Some(wire::route::Args::Reconnect(args)) if args.parent == "Settings"
-    ));
     assert_eq!(row(1).title, "Show recovery key");
     assert_eq!(row(1).route.as_ref().unwrap().screen, "words.show");
     // Until the platform says, the key's sentence is the cautious one.

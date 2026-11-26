@@ -3,29 +3,16 @@
 //! here; SwiftUI and Compose draw `ViewState`, send `ScreenEvent`s and perform
 //! `Effect`s (`screens.proto`).
 
-pub mod agenda;
 pub mod backup;
-pub mod calendar;
 pub mod catalog;
-pub mod chat;
 pub mod custody;
-pub mod docs;
 pub mod effect_reason;
 pub mod field;
-pub mod follow;
-pub mod health;
-pub mod imports;
 pub mod kit;
-pub mod locker;
-pub mod money;
-pub mod notes;
 pub mod pairing;
 pub mod passes;
-pub mod people;
-pub mod photos;
 pub mod proof;
 pub mod registry;
-pub mod reminders;
 pub mod runtime;
 pub mod screen;
 pub mod shell;
@@ -63,35 +50,19 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
         Registry::default()
             .with(proof::NAME, proof::build)
             .merge(shell::registry(&secrets))
-            .merge(agenda::registry())
-            .merge(agenda::glance::registry())
-            .merge(locker::registry())
-            .merge(money::registry())
-            .merge(docs::registry())
-            .merge(health::registry())
-            .merge(notes::registry())
-            .merge(people::registry())
-            .merge(photos::registry())
-            .merge(imports::registry(&secrets))
-            .merge(chat::registry())
             .merge(custody::registry_with(&secrets, &keeper))
             .merge(pairing::registry(&secrets))
             .merge(backup::registry(&secrets))
             .merge(passes::registry(&secrets))
-            .merge(follow::registry())
             .merge(vault::registry(&shelf, &secrets)),
         // THE PHONE IMPORTS ARE HIDDEN TAB ROOTS, NOT SERVICES: the shell sends
         // them its events and forwards their views, so it must see their instances and their views, which a
         // service never shows it. The band words only the places it knows, so
         // they stay out of it; a vault switch reopens them for the vault in front.
-        [
-            vec![
-                (shell::TAB.to_owned(), shell::routes::home()),
-                (chat::TAB.to_owned(), chat::routes::home()),
-                (shell::band::BACKUP.to_owned(), backup::routes::home()),
-            ],
-            imports::roots(),
-        ]
+        [vec![
+            (shell::TAB.to_owned(), shell::routes::home()),
+            (shell::band::BACKUP.to_owned(), backup::routes::home()),
+        ]]
         .concat(),
     )
     .with_units(&secrets)
@@ -99,14 +70,9 @@ pub fn assemble() -> (Runtime, std::sync::Arc<vault::Shelf>) {
     .with_services(
         [
             passes::services(),
-            follow::services(),
             custody::services(),
             vault::services(),
-            agenda::notify::services(),
-            calendar::draft::services(),
             backup::alerts::services(),
-            agenda::glance::services(),
-            health::glance::services(),
         ]
         .concat(),
     );

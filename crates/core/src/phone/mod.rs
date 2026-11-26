@@ -1340,11 +1340,19 @@ mod first_item_tests {
             .iter()
             .zip(crate::starters::NOTES)
         {
-            note(&vault, &format!("starter-{at}"), title, at);
+            note(
+                &vault,
+                &format!(
+                    "note:starter-{}",
+                    at.replace([':', '.'], "-").to_lowercase()
+                ),
+                title,
+                at,
+            );
         }
         assert_eq!(super::first_item_ms(&vault), None);
-        note(&vault, "mine", "Groceries", "2026-02-03T04:05:06.000Z");
-        note(&vault, "later", "Later", "2026-03-01T00:00:00.000Z");
+        note(&vault, "note:mine", "Groceries", "2026-02-03T04:05:06.000Z");
+        note(&vault, "note:later", "Later", "2026-03-01T00:00:00.000Z");
         assert_eq!(
             super::first_item_ms(&vault),
             centraid_vault::clock::parse_iso_ms("2026-02-03T04:05:06.000Z")

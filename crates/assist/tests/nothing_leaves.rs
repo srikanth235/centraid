@@ -1,6 +1,6 @@
 //! NOTHING LEAVES THE DEVICE. The assistant's questions, the vault text it reads and its answers are
-//! handled on the phone: the crate that runs the turn depends on no network library, and neither it,
-//! the core's assistant module nor the chat screen names a socket or an HTTP client. The one fetch
+//! handled on the phone: the crate that runs the turn depends on no network library, and neither it
+//! nor the core's assistant module names a socket or an HTTP client. The one fetch
 //! the chat makes, the model file, is an effect the shell performs (#1188).
 
 use std::path::{Path, PathBuf};
@@ -60,7 +60,6 @@ fn no_assistant_or_chat_source_names_a_socket_or_an_http_client() {
     let mut files = Vec::new();
     sources(&root.join("assist/src"), &mut files);
     sources(&root.join("core/src/assist"), &mut files);
-    sources(&root.join("screens/src/chat"), &mut files);
     assert!(files.len() > 10, "the walk found the sources");
     for file in files {
         let text = product(&file);

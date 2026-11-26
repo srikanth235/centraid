@@ -47,21 +47,17 @@
 //! * A step the vault refuses comes back as a [`Ran`] with `ok` false (the check id in `predicate`,
 //!   the owner-facing sentence in `reason`), never an `Err`: `confirm` types it (`Confirmed::Refused`)
 //!   and names how many steps landed before it. A batch is not atomic across commands.
-//! * The reads (`table`, `events`) see the vault as it is NOW, through the query path a
+//! * The reads (`table`) see the vault as it is NOW, through the query path a
 //!   screen uses: `confirm` reads the rows its steps address again before it runs anything, and a
 //!   row that changed since the turn planned is a typed `Confirmed::Stale`, nothing written. A door
 //!   that served a cached world would make a stale card look fresh.
-//! * [`Door::events`] is `centraid_apps_calendar::occurrences` over the core's own `PageDoor`
-//!   (`VaultDoor`), the zone being the request's: the same function the harness's door calls, so the
-//!   chat and the Agenda tab cannot disagree about which day an event is on (R-1088-8).
 //! * [`Door::advance`] may do nothing on the phone (its clock is the device's), and [`Door::mint_id`]
 //!   must be unguessable-enough to be a row id: a parked create shows the id the confirm writes.
 //!
 //! A refusal by the vault is a value ([`Ran::ok`] false), never an `Err`: an `Err` is a door that
 //! could not answer at all.
 
-pub use centraid_apps_calendar::Occurrence;
-use centraid_apps_kit::row::{Cell, Row};
+use centraid_domain::row::{Cell, Row};
 use centraid_search::Target;
 use serde_json::Value;
 
@@ -197,18 +193,6 @@ pub trait Door: Send {
     fn count_kind(&self, query: &centraid_vault::page::KindCount<'_>) -> Result<u64, String> {
         let _ = query;
         Err("this door counts nothing".to_owned())
-    }
-
-    /// Every occurrence of an event that occupies a civil day of `from_day..=to_day`
-    /// (`YYYY-MM-DD`, days of the IANA zone `tz`): repeating series expanded, the cancelled and
-    /// the trashed left out, each placed on the member's calendar in `tz` (its wall clock, its
-    /// end, the days it occupies). The rows Agenda's own `upcoming` answers, from the one
-    /// implementation of it (`centraid_apps_calendar::occurrences`), so the runtime cannot disagree
-    /// with the Agenda tab (R-1088-8). A door that cannot answer says so; the runtime then reads
-    /// the stored events as they are.
-    fn events(&self, from_day: &str, to_day: &str, tz: &str) -> Result<Vec<Occurrence>, String> {
-        let _ = (from_day, to_day, tz);
-        Err("this door reads no event window".to_owned())
     }
 
     /// A full-text search over one searchable entity: the targets it found, best first. A text

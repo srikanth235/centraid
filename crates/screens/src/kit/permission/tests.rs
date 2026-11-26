@@ -83,13 +83,7 @@ fn a_refused_effect_names_its_state_and_a_plain_failure_names_none() {
 }
 
 #[test]
-fn the_camera_roll_and_notifications_answer_with_the_same_states() {
-    use wire::PhotosMediaPermission as P;
-    assert_eq!(State::of_photos(P::NotAsked), Some(State::NotAsked));
-    assert_eq!(State::of_photos(P::Denied), Some(State::Refused));
-    assert_eq!(State::of_photos(P::Restricted), Some(State::Restricted));
-    assert_eq!(State::of_photos(P::Limited), Some(State::Limited));
-    assert_eq!(State::of_photos(P::Granted), None);
+fn notifications_answer_with_the_states() {
     use wire::NotificationPermission as N;
     assert_eq!(State::of_notifications(N::NotAsked), Some(State::NotAsked));
     assert_eq!(State::of_notifications(N::Denied), Some(State::Refused));

@@ -18,6 +18,10 @@ pub enum Field<T> {
     Is(T),
 }
 
+#[allow(
+    dead_code,
+    reason = "the generated catalogue calls it once an app declares such a field"
+)]
 pub(crate) fn blob(value: impl Into<Vec<u8>>) -> wire::Value {
     wire::Value {
         kind: Some(wire::value::Kind::Blob(value.into())),
@@ -36,6 +40,10 @@ pub(crate) fn whole(value: i64) -> wire::Value {
     }
 }
 
+#[allow(
+    dead_code,
+    reason = "the generated catalogue calls it once an app declares such a field"
+)]
 pub(crate) fn real(value: f64) -> wire::Value {
     wire::Value {
         kind: Some(wire::value::Kind::Real(value)),
@@ -48,12 +56,20 @@ pub(crate) fn flag(value: bool) -> wire::Value {
 }
 
 /// An explicit `null`, for a required property the schema lets be cleared.
+#[allow(
+    dead_code,
+    reason = "the generated catalogue calls it once an app declares such a field"
+)]
 pub(crate) fn null() -> wire::Value {
     wire::Value {
         kind: Some(wire::value::Kind::Null(wire::NullValue {})),
     }
 }
 
+#[allow(
+    dead_code,
+    reason = "the generated catalogue calls it once an app declares such a field"
+)]
 pub(crate) fn put_field<T>(
     map: &mut HashMap<String, wire::Value>,
     name: &str,

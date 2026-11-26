@@ -1,15 +1,13 @@
 //! THE APPS' CATALOGUES, AS ONE LOOKUP (#1135).
 //!
-//! Each app crate embeds its `manifest.json` and carries a Rust action table
-//! (`commands::ACTIONS`) that says which vault command each manifest action
-//! runs. `load` and `act` address an app by its id, so this is the one place
+//! An app carries a manifest and a Rust action table that says which vault command
+//! each manifest action runs. `load` and `act` address an app by its id, so this is the one place
 //! that turns an id into both halves: the parsed manifest (what the app
 //! declares) and the command an action resolves to (what the core runs).
 //!
-//! An app is added here and in `Cargo.toml`, and nowhere else in the dispatch.
 
-use centraid_apps_kit::actions::ActionRow;
-use centraid_apps_kit::manifest::Manifest;
+use centraid_domain::actions::ActionRow;
+use centraid_domain::manifest::Manifest;
 
 /// One app's catalogue.
 #[derive(Clone, Copy)]
@@ -27,65 +25,16 @@ impl App {
 
     /// The vault command an action runs, from the app's Rust action table.
     pub fn command_of(&self, action: &str) -> Option<&'static str> {
-        centraid_apps_kit::actions::find(self.actions, action).map(|row| row.command)
+        centraid_domain::actions::find(self.actions, action).map(|row| row.command)
     }
 }
 
-macro_rules! app {
-    ($id:literal, $krate:ident, $rows:expr) => {
-        App {
-            id: $id,
-            manifest: $krate::manifest::manifest,
-            actions: &$rows,
-        }
-    };
-}
-
-/// Every app, in the order the product lists them.
-pub(crate) const APPS: [App; 9] = [
-    app!(
-        "calendar",
-        centraid_apps_calendar,
-        centraid_apps_calendar::ACTIONS
-    ),
-    app!("docs", centraid_apps_docs, centraid_apps_docs::ACTIONS),
-    app!(
-        "health",
-        centraid_apps_health,
-        centraid_apps_health::manifest::ACTIONS
-    ),
-    app!(
-        "locker",
-        centraid_apps_locker,
-        centraid_apps_locker::commands::ACTIONS
-    ),
-    app!(
-        "money",
-        centraid_apps_money,
-        centraid_apps_money::commands::ACTIONS
-    ),
-    app!("notes", centraid_apps_notes, centraid_apps_notes::ACTIONS),
-    app!(
-        "people",
-        centraid_apps_people,
-        centraid_apps_people::ACTIONS
-    ),
-    app!(
-        "photos",
-        centraid_apps_photos,
-        centraid_apps_photos::ACTIONS
-    ),
-    app!(
-        "reminders",
-        centraid_apps_reminders,
-        centraid_apps_reminders::ACTIONS
-    ),
-];
+/// Every app the new plane declares: none until `centraid_domain::ACTIONS` names one.
+pub(crate) const APPS: [App; 0] = [];
 
 /// THE SHELL'S OWN CATALOGUE: what Home, search, the chat's history and the vault's plumbing read
 /// and write, which is not one app's. It is addressed like an app (`load("shell", ..)`,
-/// `act("shell", ..)`) and is not one of the nine [`APPS`]: the assistant's catalogue and the
-/// training harness carry the nine and never this.
+/// `act("shell", ..)`) and is not one of the [`APPS`].
 pub(crate) const SHELL: App = App {
     id: crate::shell::ID,
     manifest: crate::shell::manifest,
@@ -100,7 +49,7 @@ pub(crate) fn app(id: &str) -> Option<App> {
         .or_else(|| (id == SHELL.id).then_some(SHELL))
 }
 
-/// The manifest `load` answers from for an app id: one of the nine apps', or
+/// The manifest `load` answers from for an app id: one app's, or
 /// the shell's own catalogue ([`crate::shell`], no app: it has no actions, so
 /// [`app`] and `act` never see it).
 pub(crate) fn manifest_of(id: &str) -> Option<&'static Manifest> {
@@ -113,45 +62,6 @@ pub(crate) fn manifest_of(id: &str) -> Option<&'static Manifest> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn every_manifest_action_resolves_to_a_command_and_every_app_is_counted() {
-        let mut actions = 0;
-        let mut counts = Vec::new();
-        for app in APPS {
-            let manifest = app.manifest();
-            counts.push((app.id, manifest.actions.len()));
-            assert_eq!(manifest.id, app.id);
-            for action in &manifest.actions {
-                assert!(
-                    app.command_of(&action.name).is_some(),
-                    "{}.{} has no command in its action table",
-                    app.id,
-                    action.name
-                );
-                actions += 1;
-            }
-        }
-        assert_eq!(
-            counts,
-            [
-                ("calendar", 22),
-                ("docs", 24),
-                ("health", 17),
-                ("locker", 23),
-                ("money", 31),
-                ("notes", 22),
-                ("people", 36),
-                ("photos", 27),
-                ("reminders", 25),
-            ],
-            "each app's declared actions"
-        );
-        assert_eq!(
-            actions, 227,
-            "the nine manifests declare 227 actions: the 178 of the eight, the four the split of Agenda shares (attach and detach for a task and for an event, a calendar's rename and style), and the thirteen that give every trash a way to be emptied and Notes, Calendar, Health and Money a way to delete forever (Money's four take the place of its void), and the one that takes back a People relationship, and the one that stops following the phone's contacts, and the one that stops following the phone's calendars, and the ten that give Docs, Health, Money, People and Photos the attach and detach every app has, and the nine that give Calendar, Health, People and Reminders the general link and unlink and Notes its unlink, and the two that follow and stop following the phone's Reminders, and the two that export Money's transactions and Health's measurements and workouts as a spreadsheet file, and the two that export Docs' originals and the Photos library as one archive, and the one that restores a People list (the screen's Undo of its delete), and the two that move a calendar to the trash with its events and bring it back, less People's birthday-reminder switch that was always on and had no screen (#1185)"
-        );
-    }
 
     #[test]
     fn the_shell_is_addressable_and_is_not_one_of_the_eight_apps() {
@@ -173,45 +83,5 @@ mod tests {
                 row.action
             );
         }
-    }
-
-    /// THERE IS NO `tasks` APP (#1128, the owner's ruling): Tasks are Reminders', so no
-    /// app id, manifest id, crate or query namespace is `tasks`. `task` stays what it is: a vault
-    /// entity kind and a chat kind.
-    #[test]
-    fn no_app_manifest_crate_or_query_namespace_is_called_tasks() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        assert!(
-            !root.join("crates/apps/tasks").exists(),
-            "crates/apps/tasks came back: the tasks are Reminders'"
-        );
-        for manifest in ["Cargo.toml", "crates/core/Cargo.toml"] {
-            let text = std::fs::read_to_string(root.join(manifest)).expect("a manifest");
-            assert!(
-                !text.contains("apps-tasks") && !text.contains("apps/tasks"),
-                "{manifest} names a tasks crate"
-            );
-        }
-        assert!(
-            app("tasks").is_none(),
-            "the catalogue carries a `tasks` app"
-        );
-        for app in APPS {
-            assert_ne!(app.id, "tasks");
-            assert_ne!(app.manifest().id, "tasks");
-            for query in &app.manifest().queries {
-                assert!(
-                    !query.name.starts_with("tasks"),
-                    "{}.{} is a `tasks` query",
-                    app.id,
-                    query.name
-                );
-            }
-        }
-        assert!(!centraid_vault::roster::is_app("tasks"));
-        assert!(
-            centraid_assist::App::from_id("tasks").is_none(),
-            "the assistant reads a `tasks` app"
-        );
     }
 }

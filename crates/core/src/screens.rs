@@ -146,20 +146,6 @@ pub trait ScreenCtx {
         })
     }
 
-    /// One step of the Locker session (unlock, relock, a reveal, a one-time
-    /// code, an export, an import): the session `Request.locker` drives, on the
-    /// same core. The plaintext of a reveal comes back to the screen that asked
-    /// and nowhere else. A door with no session says so.
-    ///
-    /// # Errors
-    /// The session's own refusals.
-    fn locker(&self, request: &wire::LockerSessionRequest) -> Result<wire::LockerSessionResponse> {
-        let _ = request;
-        Err(crate::error::CoreError::Unavailable {
-            reason: "this door holds no Locker session".to_owned(),
-        })
-    }
-
     /// A vault lifecycle door that is neither a read nor a write of an app's
     /// rows, and is quick: the 24 words (`phrase`), founding a vault. The type
     /// limits what a screen can send to `vault.proto` and `phone.proto`; there
@@ -167,6 +153,16 @@ pub trait ScreenCtx {
     ///
     /// # Errors
     /// Whatever the door refuses with.
+    /// Whether this core holds the vault's keys.
+    ///
+    /// # Errors
+    /// Refuses with no vault open.
+    fn keyed(&self) -> Result<bool> {
+        Err(crate::error::CoreError::Unavailable {
+            reason: "this door holds no keys".to_owned(),
+        })
+    }
+
     fn vault(&self, request: VaultRequest) -> Result<wire::Response> {
         let _ = request;
         Err(crate::error::CoreError::Unavailable {
@@ -298,8 +294,8 @@ impl ScreenCtx for HandleState {
         }
     }
 
-    fn locker(&self, request: &wire::LockerSessionRequest) -> Result<wire::LockerSessionResponse> {
-        HandleState::locker_session(self, request)
+    fn keyed(&self) -> Result<bool> {
+        HandleState::keyed(self)
     }
 
     fn vault(&self, request: VaultRequest) -> Result<wire::Response> {

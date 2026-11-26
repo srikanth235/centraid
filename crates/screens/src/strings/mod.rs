@@ -122,50 +122,17 @@ macro_rules! catalog {
     };
 }
 
-pub mod agenda;
-pub mod agenda_calendar;
-pub mod agenda_editor;
-pub mod agenda_event;
-pub mod agenda_glance;
-pub mod agenda_grid;
-pub mod agenda_home;
-pub mod agenda_lists;
-pub mod agenda_notify;
-pub mod agenda_reminders;
-pub mod agenda_repeat;
-pub mod agenda_tasks;
-pub mod agenda_todo;
 pub mod backup;
 pub mod backup_check;
 pub mod backup_home;
-pub mod chat;
-pub mod chat_confirm;
 pub mod custody;
-pub mod docs;
-pub mod follow;
-pub mod health;
-pub mod health_glance;
-pub mod history;
 pub mod home;
-pub mod imports;
-pub mod links;
-pub mod locker;
-pub mod money;
-pub mod notes;
 pub mod pairing;
 pub mod passes;
-pub mod people;
-pub mod people_lists;
 pub mod permission;
-pub mod photos;
-pub mod photos_home;
-pub mod photos_lightbox;
-pub mod photos_shelf;
 pub mod quantity;
-pub mod reads;
 pub mod settings;
 pub mod shared;
-pub mod task;
 pub mod vault;
 
 /// A sentence with holes (`{name}`) filled in, once, by name. A hole the

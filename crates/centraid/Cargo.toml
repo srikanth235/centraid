@@ -15,15 +15,12 @@ path = "src/main.rs"
 [dependencies]
 centraid-api-proto = { path = "../api-proto" }
 centraid-core = { path = "../core" }
-# `seed-demo-vault` turns the demo's 24 words into the seed its core opens
-# with, so Locker's demo items are sealed under the `K` those words derive
-# (D-6). The words are a published test vector, never a member's.
 centraid-identity = { path = "../identity" }
 centraid-blobs = { path = "../blobs" }
 centraid-vault = { path = "../vault" }
 clap.workspace = true
 serde_json.workspace = true
-# The runtime `main` and `seed-demo-vault` build to drive the core's async
+# The runtime `main` builds to drive the core's async
 # byte plane. This binary opens no socket.
 tokio = { workspace = true }
 tracing-subscriber.workspace = true

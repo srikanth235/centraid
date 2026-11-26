@@ -23,11 +23,11 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::native::meta::{Kind, LOOKUP_CAP, ROW_CAP};
+use crate::native::meta::{KINDS, Kind, LOOKUP_CAP, ROW_CAP};
 use crate::native::render;
 use crate::native::search::{can_name, fold, spellings_of};
 use crate::native::session::Session;
-use crate::native::world::{Key, Val, World};
+use crate::native::world::{Key, World};
 
 /// Result sets the focus line holds, newest first.
 pub(crate) const FOCUS_SETS: usize = 3;
@@ -368,22 +368,8 @@ pub(crate) fn acted_part(session: &Session, named: &BTreeSet<usize>) -> Option<S
     Some(part)
 }
 
-fn text_field(world: &World, key: &Key, name: &str) -> Option<String> {
-    match world.row(key)?.field(name)? {
-        Val::Text(text) if !text.is_empty() => Some(text.clone()),
-        Val::Enum(text) => Some((*text).to_owned()),
-        _ => None,
-    }
-}
-
-/// What tells an option of an ask apart from the rows that share its name: a
-/// person's role and nickname; an event's or task's date and
-/// container; a locker item's type and username; a note's, document's or
-/// photo's container.
+/// What tells an option of an ask apart from the rows that share its name: its container.
 fn facets(world: &World, key: &Key) -> Vec<String> {
-    let Some(row) = world.row(key) else {
-        return Vec::new();
-    };
     let mut out: Vec<String> = Vec::new();
     let container = |out: &mut Vec<String>| {
         let names: Vec<String> = containers_of(world, key)
@@ -394,23 +380,7 @@ fn facets(world: &World, key: &Key) -> Vec<String> {
             out.push(names.join(", "));
         }
     };
-    match row.kind {
-        Kind::Person => {
-            out.extend(text_field(world, key, "role"));
-            out.extend(text_field(world, key, "nickname"));
-        }
-        Kind::Event => out.extend(row.date.map(|stamp| stamp.show())),
-        Kind::Task => {
-            out.extend(row.date.map(|stamp| stamp.show()));
-            container(&mut out);
-        }
-        Kind::LockerItem => {
-            out.extend(text_field(world, key, "type"));
-            out.extend(text_field(world, key, "username"));
-        }
-        Kind::Document | Kind::Photo | Kind::Note => container(&mut out),
-        _ => {}
-    }
+    container(&mut out);
     out
 }
 
@@ -754,13 +724,11 @@ fn container_kind_said(message: &str) -> Option<Kind> {
         if !["that", "the", "this", "same", "those", "these", "its"].contains(&pair[0].0.as_str()) {
             return None;
         }
-        match pair[1].0.as_str() {
-            "album" | "albums" => Some(Kind::Album),
-            "folder" | "folders" => Some(Kind::Folder),
-            "list" | "lists" => Some(Kind::List),
-            "notebook" | "notebooks" => Some(Kind::Notebook),
-            _ => None,
-        }
+        let word = pair[1].0.as_str();
+        KINDS
+            .iter()
+            .find(|spec| spec.container && (spec.name == word || spec.plural == word))
+            .map(|spec| spec.kind)
     })
 }
 

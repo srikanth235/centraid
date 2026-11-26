@@ -446,145 +446,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "centraid-apps-calendar"
-version = "1.0.0-alpha.0"
-dependencies = [
- "centraid-apps-kit",
- "centraid-ontology",
- "centraid-search",
- "centraid-vault",
- "rusqlite",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "centraid-apps-docs"
-version = "1.0.0-alpha.0"
-dependencies = [
- "centraid-apps-kit",
- "centraid-media",
- "centraid-ontology",
- "centraid-search",
- "centraid-vault",
- "proptest",
- "rusqlite",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "centraid-apps-health"
-version = "1.0.0-alpha.0"
-dependencies = [
- "centraid-apps-kit",
- "centraid-ontology",
- "centraid-vault",
- "serde_json",
-]
-
-[[package]]
-name = "centraid-apps-kit"
-version = "1.0.0-alpha.0"
-dependencies = [
- "blake3",
- "centraid-ontology",
- "centraid-vault",
- "hex",
- "proptest",
- "rusqlite",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "centraid-apps-locker"
-version = "1.0.0-alpha.0"
-dependencies = [
- "centraid-apps-kit",
- "centraid-search",
- "rusqlite",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "centraid-apps-money"
-version = "1.0.0-alpha.0"
-dependencies = [
- "blake3",
- "centraid-apps-kit",
- "centraid-ontology",
- "centraid-search",
- "centraid-vault",
- "hex",
- "rusqlite",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "centraid-apps-notes"
-version = "1.0.0-alpha.0"
-dependencies = [
- "centraid-apps-kit",
- "centraid-ontology",
- "centraid-search",
- "centraid-vault",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "centraid-apps-people"
-version = "1.0.0-alpha.0"
-dependencies = [
- "centraid-apps-kit",
- "centraid-blobs",
- "centraid-ontology",
- "centraid-vault",
- "rusqlite",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "centraid-apps-photos"
-version = "1.0.0-alpha.0"
-dependencies = [
- "centraid-apps-kit",
- "centraid-media",
- "centraid-ontology",
- "centraid-search",
- "centraid-vault",
- "rusqlite",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "centraid-apps-reminders"
-version = "1.0.0-alpha.0"
-dependencies = [
- "centraid-apps-kit",
- "centraid-ontology",
- "centraid-search",
- "centraid-vault",
- "rusqlite",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
 name = "centraid-assist"
 version = "1.0.0-alpha.0"
 dependencies = [
  "blake3",
- "centraid-apps-calendar",
- "centraid-apps-kit",
+ "centraid-domain",
  "centraid-search",
  "centraid-vault",
  "flate2",
@@ -642,18 +508,9 @@ dependencies = [
  "blake3",
  "bytes",
  "centraid-api-proto",
- "centraid-apps-calendar",
- "centraid-apps-docs",
- "centraid-apps-health",
- "centraid-apps-kit",
- "centraid-apps-locker",
- "centraid-apps-money",
- "centraid-apps-notes",
- "centraid-apps-people",
- "centraid-apps-photos",
- "centraid-apps-reminders",
  "centraid-assist",
  "centraid-blobs",
+ "centraid-domain",
  "centraid-gateway",
  "centraid-identity",
  "centraid-media",
@@ -664,14 +521,12 @@ dependencies = [
  "centraid-vault",
  "ed25519-dalek",
  "hex",
- "hmac",
  "image",
  "jsonschema",
  "prost",
  "rustix",
  "serde",
  "serde_json",
- "sha1",
  "tempfile",
  "thiserror",
  "tokio",
@@ -707,9 +562,9 @@ version = "1.0.0-alpha.0"
 dependencies = [
  "anyhow",
  "blake3",
- "centraid-apps-kit",
  "centraid-assist",
  "centraid-assist-eval",
+ "centraid-domain",
  "centraid-nativetools",
  "clap",
  "fancy-regex",
@@ -730,6 +585,19 @@ dependencies = [
  "serde",
  "thiserror",
  "toml",
+]
+
+[[package]]
+name = "centraid-domain"
+version = "1.0.0-alpha.0"
+dependencies = [
+ "centraid-ontology",
+ "centraid-vault",
+ "proptest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
@@ -808,10 +676,8 @@ name = "centraid-nativetools"
 version = "1.0.0-alpha.0"
 dependencies = [
  "base64 0.22.1",
- "centraid-apps-calendar",
- "centraid-apps-kit",
- "centraid-apps-locker",
  "centraid-assist",
+ "centraid-domain",
  "centraid-ontology",
  "centraid-search",
  "centraid-vault",
@@ -846,13 +712,10 @@ version = "1.0.0-alpha.0"
 dependencies = [
  "base64 0.22.1",
  "centraid-api-proto",
- "centraid-apps-calendar",
- "centraid-apps-docs",
- "centraid-apps-locker",
- "centraid-apps-reminders",
  "centraid-assist",
  "centraid-core",
  "centraid-design",
+ "centraid-domain",
  "centraid-gateway",
  "centraid-identity",
  "centraid-ontology",
@@ -869,7 +732,7 @@ dependencies = [
 name = "centraid-search"
 version = "1.0.0-alpha.0"
 dependencies = [
- "centraid-apps-kit",
+ "centraid-domain",
  "centraid-ontology",
  "centraid-vault",
  "rusqlite",
@@ -3177,17 +3040,6 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
-]
-
-[[package]]
-name = "sha1"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aacc4cc499359472b4abe1bf11d0b12e688af9a805fa5e3016f9a386dc2d0214"
-dependencies = [
- "cfg-if",
- "cpufeatures",
- "digest",
 ]
 
 [[package]]

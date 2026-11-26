@@ -8,7 +8,6 @@
 //! | Make a vault, and its words | [`MAKE`] | [`make`] |
 //! | Type the words back (restore or re-key) | [`ENTER`] | [`enter`] |
 //! | Show the recovery key again | [`SHOW`] | [`show`] |
-//! | A vault's own key, filed in Locker (a service) | [`FILING`] | [`filing`] |
 //!
 //! **The order the words are kept in is [`enrollment`]'s**: each flow is a job
 //! that asks the shell for one thing at a time and takes its answer as input, so
@@ -27,7 +26,6 @@ use crate::strings::{Locale, custody as words};
 pub mod door;
 pub mod enrollment;
 pub mod enter;
-pub mod filing;
 pub mod keeper;
 pub mod make;
 pub mod secrets;
@@ -36,8 +34,6 @@ pub mod show;
 pub const MAKE: &str = "words.make";
 pub const ENTER: &str = "words.enter";
 pub const SHOW: &str = "words.show";
-/// The service that files a vault's own key in Locker after an unlock.
-pub const FILING: &str = "custody.filing";
 
 /// Every custody screen, registered under its route name, over an empty keeper
 /// slot: a make says the session is still opening until a shelf is installed.
@@ -56,23 +52,16 @@ pub fn registry_with(secrets: &secrets::VaultSecrets, keeper: &keeper::KeeperSlo
     let enter = move |route: &wire::Route| enter::build(&a, &b, route);
     let (a, b) = (secrets.clone(), keeper.clone());
     let show = move |route: &wire::Route| show::build(&a, &b, route);
-    let (a, b) = (secrets.clone(), keeper.clone());
-    let filing = move |route: &wire::Route| filing::build(&a, &b, route);
     Registry::default()
         .with(MAKE, make)
         .with(ENTER, enter)
         .with(SHOW, show)
-        .with(FILING, filing)
 }
 
-/// The view-less screens custody runs for as long as the runtime does.
+/// The view-less screens custody runs for as long as the runtime does: none.
 #[must_use]
 pub fn services() -> Vec<wire::Route> {
-    vec![wire::Route {
-        sheet: false,
-        screen: FILING.to_owned(),
-        args: None,
-    }]
+    Vec::new()
 }
 
 /// The sentence a member reads about where their recovery key is kept, from the

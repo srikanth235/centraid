@@ -17,9 +17,9 @@ name = "datagen"
 path = "src/main.rs"
 
 [dependencies]
+centraid-domain = { path = "../domain" }
 centraid-assist = { path = "../assist" }
 centraid-assist-eval = { path = "../assist-eval" }
-centraid-apps-kit = { path = "../apps/kit" }
 centraid-nativetools = { path = "../nativetools" }
 anyhow.workspace = true
 blake3.workspace = true

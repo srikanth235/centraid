@@ -245,17 +245,8 @@ export function measure(root = ROOT) {
 // it; a new one needs the same.
 const BUDGET = {
   "copy-banned-word": {},
-  "copy-dot-join": {
-    // IN_TRASH_LAPSED, IMPORT_COUNTS, STATUS_ROSTER_SHOWN: short metadata
-    // facts and counts, the one sanctioned use of " · ".
-    "crates/screens/src/strings/docs.rs": 1,
-    "crates/screens/src/strings/locker.rs": 1,
-    "crates/screens/src/strings/people.rs": 1,
-  },
+  "copy-dot-join": {},
   "copy-over-budget": {
-    // EXPORT_LEDE: the plaintext-export warning, a security disclosure, which
-    // keeps a full sentence (design/wording.md § Wording).
-    "crates/screens/src/strings/locker.rs": 1,
     // PHOTOS_KEEP_ORIGINALS_LABEL, OWN_LABEL: toggle and checkbox labels, and
     // ENDPOINT_LABEL, RESTORE_HELD_OWN_LABEL: field and list prompts — the
     // `_LABEL` suffix also names these, and they are not buttons.

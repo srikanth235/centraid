@@ -15,20 +15,17 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value, json};
 
-use crate::native::meta::{Kind, PREGROUND_CAP, lookup_shown};
+use crate::native::meta::{KINDS, Kind, PREGROUND_CAP, lookup_shown};
 use crate::native::render;
 use crate::native::session::{Outcome, ResultSet, Session};
 use crate::native::world::{Key, Row, Val};
 
 /// The FTS domains and the model kind each answers for.
-pub(crate) const FTS: &[(&str, Kind)] = &[
-    ("person", Kind::Person),
-    ("note", Kind::Note),
-    ("event", Kind::Event),
-    ("task", Kind::Task),
-    ("document", Kind::Document),
-    ("locker_item", Kind::LockerItem),
-];
+pub(crate) fn fts() -> impl Iterator<Item = (&'static str, Kind)> {
+    KINDS
+        .iter()
+        .filter_map(|spec| spec.search.map(|domain| (domain, spec.kind)))
+}
 
 /// Words a message token must not be matched on.
 const STOPWORDS: &[&str] = &[
@@ -616,7 +613,7 @@ pub(crate) fn name_in_part(
 /// descriptions), not only their names.
 #[must_use]
 pub(crate) fn searches_bodies(kind: Kind) -> bool {
-    FTS.iter().any(|(_, searched)| *searched == kind)
+    fts().any(|(_, searched)| searched == kind)
 }
 
 /// THE ROWS A NAME REACHES BY A WORD, whatever their kind or trash: the rows of `kinds` whose
@@ -638,7 +635,7 @@ pub(crate) fn name_reach(session: &Session, text: &str, kinds: &[Kind]) -> Vec<K
 // ---------------------------------------------------------------------------
 
 // The assistant's OWN measure for ranking a search's words: Levenshtein, with a limit of two for a
-// word of seven letters or more. It is not the typo rule (`centraid_apps_kit::spelling::one_edit`,
+// word of seven letters or more. It is not the typo rule (`centraid_domain::spelling::one_edit`,
 // Damerau one, shared with search since #1097 R5) and is not meant to be: the 0.8B evaluation is
 // scored against these rankings, so `edit_distance` and `word_score` stay as they are (R5a).
 fn edit_distance(a: &str, b: &str) -> usize {
@@ -814,15 +811,15 @@ fn ranked_with(
             scores.insert(row.key(), total);
         }
     }
-    for (entity, kind) in FTS {
-        if !full_text || !kinds.contains(kind) {
+    for (entity, kind) in fts() {
+        if !full_text || !kinds.contains(&kind) {
             continue;
         }
         let Ok(targets) = session.door.search(entity, text, 50) else {
             continue;
         };
         for target in targets {
-            let key = (*kind, target.id.clone());
+            let key = (kind, target.id.clone());
             if session.world.row(&key).is_some() {
                 *scores.entry(key).or_insert(0) += 1;
             }
@@ -1065,7 +1062,7 @@ fn near_candidate(token: &str) -> bool {
 }
 
 /// Whether a message word reaches a row only as a NEAR SPELLING (nt15 R3c, R3e): one edit
-/// (`centraid_apps_kit::spelling::one_edit`) from a word of the row's names with the same first
+/// (`centraid_domain::spelling::one_edit`) from a word of the row's names with the same first
 /// letter (a slip is rarely the first letter: `brazil` for `Brasil`, not `right` for `night`), and
 /// not the plain plural or singular of it (`logins` for `login` is a category, not a slip); or the
 /// one word the words of a name make when said joined, or one edit from it (`weijie` for
@@ -1083,7 +1080,7 @@ fn near_spelling(token: &str, names: &[&str], spelled: &[String]) -> bool {
     if spelled.iter().any(|word| {
         word.chars().next() == first
             && !plural(word)
-            && centraid_apps_kit::spelling::one_edit(token, word)
+            && centraid_domain::spelling::one_edit(token, word)
     }) {
         return true;
     }
@@ -1094,7 +1091,7 @@ fn near_spelling(token: &str, names: &[&str], spelled: &[String]) -> bool {
                 let joined = words[from..=to].concat();
                 joined == token
                     || (joined.chars().next() == first
-                        && centraid_apps_kit::spelling::one_edit(token, &joined))
+                        && centraid_domain::spelling::one_edit(token, &joined))
             })
         })
     })
@@ -1191,7 +1188,6 @@ pub fn preground(session: &mut Session, message: &str) -> Option<String> {
     // (`crate::native::block`).
     let mut leading: Vec<Key> = Vec::new();
     leading.extend(crate::native::block::container_hit(session, message));
-    let me = session.world.me_key();
     let reach: Vec<usize> = (0..tokens.len())
         .map(|at| found.iter().filter(|hit| hit.reached.contains(&at)).count())
         .collect();
@@ -1360,10 +1356,7 @@ pub fn preground(session: &mut Session, message: &str) -> Option<String> {
     for key in keys {
         let number = session.number(&key);
         session.preground.insert(number);
-        let mut part = render::grounded(&session.world, number, &key);
-        if key == me {
-            part.push_str(" (you)");
-        }
+        let part = render::grounded(&session.world, number, &key);
         parts.push(part);
         if let Some((hidden, name)) = copies.more.get(&key) {
             parts.push(format!("+{hidden} more \"{name}\""));

@@ -16,7 +16,6 @@ syntax = "proto3";
 package centraid.core.v1;
 
 import "centraid/core/v1/kit_screens.proto";
-import "centraid/core/v1/photos_home_screens.proto";
 import "centraid/core/v1/route.proto";
 
 // ---------------------------------------------------------------------------
@@ -79,8 +78,6 @@ message NeededBytes {
 // the pass service for its after-import pass when a walk brought photographs in,
 // and reports a walk and a feed to the pass service (`RollReported`).
 message ImportsCameraRollState {
-  PhotosMediaPermission permission = 1;
-  PhotosBackupChanged backup = 2;
   // The photographs the walks so far brought in.
   uint32 imported_total = 3;
   // How many of the last `BytesNeeded` landed under the hash asked for (0 before the
@@ -247,7 +244,6 @@ message LibraryPermission {
 }
 
 message LibraryPermissionRead {
-  PhotosMediaPermission permission = 1;
   // This install's id (the one a phone read carries as `device_id`): the camera roll's cursor in
   // the vault is this install's word, and another's is not trusted (#1183).
   string device_id = 2;

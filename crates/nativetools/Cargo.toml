@@ -17,10 +17,8 @@ name = "nativetools"
 path = "src/bin/nativetools.rs"
 
 [dependencies]
+centraid-domain = { path = "../domain" }
 centraid-assist = { path = "../assist" }
-centraid-apps-calendar = { path = "../apps/calendar" }
-centraid-apps-kit = { path = "../apps/kit" }
-centraid-apps-locker = { path = "../apps/locker" }
 centraid-ontology = { path = "../ontology" }
 centraid-search = { path = "../search" }
 centraid-vault = { path = "../vault" }

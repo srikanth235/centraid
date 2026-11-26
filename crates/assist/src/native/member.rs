@@ -14,7 +14,7 @@
 //! ([`MemberAction::code`], [`qualifier_of_code`]). The shape carries `export` (no item, no column)
 //! without a change.
 
-use centraid_vault::commands::locker::{SEALED_ITEM_CELLS, SEALED_PLACEHOLDER};
+use centraid_vault::commands::locker::{SEALED_PLACEHOLDER, secret_keys};
 use serde_json::{Value, json};
 
 /// What the member does on the card.
@@ -138,9 +138,9 @@ pub fn qualifier_of_code(code: &str) -> Option<String> {
 /// log, the stored question, the card) holds [`SEALED_PLACEHOLDER`] in their place.
 #[must_use]
 pub fn typed_secrets(input: &Value) -> Vec<String> {
-    SEALED_ITEM_CELLS
-        .iter()
-        .filter_map(|column| input.get(*column)?.as_str())
+    secret_keys()
+        .into_iter()
+        .filter_map(|column| input.get(column)?.as_str())
         .filter(|text| !text.is_empty() && *text != SEALED_PLACEHOLDER)
         .map(str::to_owned)
         .collect()
@@ -150,7 +150,7 @@ pub fn typed_secrets(input: &Value) -> Vec<String> {
 #[must_use]
 pub fn masked(input: &Value) -> Value {
     let mut out = input.clone();
-    for column in SEALED_ITEM_CELLS {
+    for column in secret_keys() {
         if let Some(cell) = out.get_mut(column)
             && cell.as_str().is_some_and(|text| !text.is_empty())
         {

@@ -13,7 +13,7 @@
 //! resource can be in, and the test of this module holds every one of them to a sentence of its own.
 //! A refused grant on an [`wire::EffectFailed`] is `denied`, `restricted` or `limited`
 //! ([`State::of`]); the camera roll's and notifications' own answers carry the same states
-//! ([`State::of_photos`], [`State::of_notifications`]).
+//! ([`State::of_notifications`]).
 
 use centraid_api_proto::core_v1 as wire;
 
@@ -53,19 +53,6 @@ impl State {
             Some(Self::Refused)
         } else {
             None
-        }
-    }
-
-    /// The state the camera roll's grant is in, or `None` while it is granted (or unsaid).
-    #[must_use]
-    pub fn of_photos(permission: wire::PhotosMediaPermission) -> Option<Self> {
-        use wire::PhotosMediaPermission as P;
-        match permission {
-            P::NotAsked => Some(Self::NotAsked),
-            P::Denied => Some(Self::Refused),
-            P::Restricted => Some(Self::Restricted),
-            P::Limited => Some(Self::Limited),
-            P::Granted | P::Unspecified => None,
         }
     }
 
@@ -372,7 +359,7 @@ impl AlertBoard {
 
     fn signal(ctx: &crate::screen::Ctx) {
         ctx.post(
-            crate::agenda::notify::NAME,
+            crate::backup::alerts::NAME,
             wire::ScreenEvent {
                 kind: Some(wire::screen_event::Kind::Signalled(wire::Signalled {})),
             },
@@ -392,6 +379,7 @@ impl AlertBoard {
         self.lock().asking = true;
     }
 
+    #[cfg(test)]
     /// Whether `ask` was called since the service last spoke; clears it.
     pub(crate) fn take_ask(&self) -> bool {
         std::mem::take(&mut self.lock().asking)

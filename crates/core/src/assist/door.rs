@@ -48,16 +48,15 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_apps_kit::page::PageRequest;
-use centraid_apps_kit::reads::{FanOutBound, PageDoor as _, read_pages};
-use centraid_apps_kit::row::Row;
-use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
 use centraid_assist::native::door::Inverse;
-use centraid_assist::native::door::{Occurrence, Window, WindowQuery};
+use centraid_assist::native::door::{Window, WindowQuery};
 use centraid_assist::native::{Call, Door, Ran};
+use centraid_domain::page::PageRequest;
+use centraid_domain::reads::{FanOutBound, PageDoor as _, read_pages};
+use centraid_domain::row::Row;
+use centraid_domain::statement::{PageBindValue, PageOrder, PageQuery};
 use centraid_search::Target;
 use centraid_vault::commands::Registry;
-use centraid_vault::time::zone::FireZone;
 use centraid_vault::{Principal, Vault};
 use serde_json::Value;
 
@@ -83,8 +82,6 @@ pub struct CoreDoor {
     registry: Arc<Registry>,
     events: Arc<EventQueue>,
     owner: Principal,
-    /// The Locker session the handle holds: a typed secret is sealed under its key.
-    locker: Arc<crate::locker::phone::Cell>,
     /// The backup plane beside the vault file, which remembers a vault that moved.
     plane: crate::phone::Plane,
     calls: AtomicU64,
@@ -96,7 +93,6 @@ impl CoreDoor {
         registry: Arc<Registry>,
         events: Arc<EventQueue>,
         owner: Principal,
-        locker: Arc<crate::locker::phone::Cell>,
         plane: crate::phone::Plane,
     ) -> Self {
         Self {
@@ -104,7 +100,6 @@ impl CoreDoor {
             registry,
             events,
             owner,
-            locker,
             plane,
             calls: AtomicU64::new(0),
         }
@@ -284,7 +279,6 @@ impl Door for CoreDoor {
         let answer = self.with(|vault| {
             let ctx = crate::act::Ctx {
                 vault,
-                locker: &self.locker,
                 registry: &self.registry,
                 owner: &self.owner,
                 changes: &changes,
@@ -302,25 +296,6 @@ impl Door for CoreDoor {
         Ok(ran_of(&answer, call.app))
     }
 
-    fn events(&self, from_day: &str, to_day: &str, tz: &str) -> Result<Vec<Occurrence>, String> {
-        let zone = FireZone::named(tz).map_err(|_| format!("{tz} is not a time zone"))?;
-        self.with(|vault| {
-            let door = VaultDoor::new(vault);
-            let now = vault.clock().now_text();
-            let read = centraid_apps_calendar::occurrences(&door, from_day, to_day, &now, &zone);
-            if let Some(failure) = door.take_failure() {
-                return Err(format!("reading the events: {failure}"));
-            }
-            match read {
-                Ok((rows, None)) => Ok(rows),
-                Ok((_, Some(denial))) => Err(denial
-                    .message
-                    .unwrap_or_else(|| "the events are refused".to_owned())),
-                Err(error) => Err(format!("reading the events: {error}")),
-            }
-        })
-    }
-
     /// The vault's clock is the real one: each write has an instant of its own.
     fn advance(&self) {}
 
@@ -332,18 +307,6 @@ impl Door for CoreDoor {
     fn mint_id(&self) -> String {
         self.with(|vault| Ok(vault.ids().next()))
             .unwrap_or_else(|_| format!("closed-{}", self.calls.fetch_add(1, Ordering::SeqCst)))
-    }
-
-    fn locked_for(&self, command: &str, input: &Value) -> bool {
-        self.with(|vault| {
-            Ok(crate::locker::phone::locked_for(
-                vault,
-                &self.locker,
-                command,
-                input,
-            ))
-        })
-        .unwrap_or(false)
     }
 }
 

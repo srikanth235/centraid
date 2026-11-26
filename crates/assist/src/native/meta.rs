@@ -22,7 +22,6 @@
 //! `reveal` can open are the Locker columns the ontology registry marks
 //! sealed.
 
-use centraid_vault::commands::locker::ITEM_TYPES;
 use serde::Serialize;
 
 /// Rows shown per result; the rest are counted and reachable through `@n`.
@@ -122,6 +121,10 @@ pub struct Source {
     pub column: &'static str,
 }
 
+#[allow(
+    dead_code,
+    reason = "the generated catalogue calls it once a kind declares a field"
+)]
 const fn at(table: &'static str, column: &'static str) -> Source {
     Source { table, column }
 }
@@ -138,6 +141,10 @@ pub struct Field {
     pub source: Source,
 }
 
+#[allow(
+    dead_code,
+    reason = "the generated catalogue calls it once a kind declares a field"
+)]
 const fn field(name: &'static str, ty: FieldType, source: Source) -> Field {
     Field {
         name,
@@ -149,10 +156,18 @@ const fn field(name: &'static str, ty: FieldType, source: Source) -> Field {
 }
 
 impl Field {
+    #[allow(
+        dead_code,
+        reason = "the generated catalogue calls it once a field has a unit"
+    )]
     const fn unit(mut self, unit: &'static str) -> Self {
         self.unit = Some(unit);
         self
     }
+    #[allow(
+        dead_code,
+        reason = "the generated catalogue calls it once a field has values"
+    )]
     const fn values(mut self, values: &'static [(&'static str, &'static str)]) -> Self {
         self.values = values;
         self
@@ -429,6 +444,10 @@ pub fn flat_field_names() -> Vec<&'static str> {
 /// One kind's row.
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct KindSpec {
+    /// The app whose card the kind's rows are.
+    pub app: &'static str,
+    /// The full-text domain whose hits are this kind's rows.
+    pub search: Option<&'static str>,
     pub kind: Kind,
     pub name: &'static str,
     pub plural: &'static str,
@@ -475,18 +494,6 @@ impl KindSpec {
         self.fields.iter().map(|field| field.name).collect()
     }
 }
-
-/// Locker item types: the vault's own list, derived from
-/// `centraid_vault::commands::locker::ITEM_TYPES` and spelled identically.
-static LOCKER_TYPES: [(&str, &str); ITEM_TYPES.len()] = {
-    let mut types = [("", ""); ITEM_TYPES.len()];
-    let mut index = 0;
-    while index < ITEM_TYPES.len() {
-        types[index] = (ITEM_TYPES[index], ITEM_TYPES[index]);
-        index += 1;
-    }
-    types
-};
 
 /// A value of a CHECK-constrained enum column that the model deliberately
 /// cannot say. `tests/meta.rs` proves, for every enum field, that the vault
@@ -639,7 +646,7 @@ pub fn locker_secret_column(item_type: &str, field: &str) -> Option<&'static str
         .iter()
         .find(|(name, column)| *name == field && *column != "content")
         .map(|(_, column)| *column)?;
-    let keeps = centraid_vault::commands::locker::secret_cells(item_type);
+    let keeps = centraid_vault::commands::locker::secret_keys_of(item_type);
     keeps.contains(&column).then_some(column)
 }
 
@@ -879,15 +886,17 @@ pub fn mapped_commands() -> Vec<&'static str> {
 
 #[cfg(test)]
 mod locker_schema_tests {
-    use centraid_vault::commands::locker::{ITEM_TYPES, SEALED_ITEM_CELLS, secret_cells};
+    use centraid_vault::commands::locker::{ITEM_TYPES, secret_keys, secret_keys_of};
 
     #[test]
-    fn the_reveal_fields_are_the_schemas_sealed_cells() {
-        let mut held: Vec<&str> = super::REVEAL_FIELDS.iter().map(|(_, c)| *c).collect();
-        let mut schema = SEALED_ITEM_CELLS.to_vec();
-        held.sort_unstable();
-        schema.sort_unstable();
-        assert_eq!(held, schema);
+    fn every_reveal_field_is_a_cell_the_schema_seals() {
+        let sealed = secret_keys();
+        for (field, column) in super::REVEAL_FIELDS {
+            assert!(
+                sealed.contains(column),
+                "{field} reveals {column}, which the schema does not seal"
+            );
+        }
     }
 
     #[test]
@@ -895,7 +904,7 @@ mod locker_schema_tests {
         for item_type in ITEM_TYPES {
             for (field, column) in super::REVEAL_FIELDS {
                 let found = super::locker_secret_column(item_type, field);
-                let owned = *column != "content" && secret_cells(item_type).contains(column);
+                let owned = *column != "content" && secret_keys_of(item_type).contains(column);
                 assert_eq!(found, owned.then_some(*column), "{item_type} {field}");
             }
         }

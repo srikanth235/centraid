@@ -10,9 +10,8 @@ use std::collections::BTreeSet;
 
 use jiff::civil::Date;
 
-use crate::native::meta::Kind;
-use crate::native::phrases::{self, Context, Reading, RowDate};
-use crate::native::session::{Session, words};
+use crate::native::phrases::{self, Context, Reading};
+use crate::native::session::Session;
 
 /// "the first" to "the thirty-first": a day of the month, as a person says it.
 fn ordinal_word(day: i8) -> String {
@@ -106,47 +105,12 @@ impl Session {
         }
     }
 
-    /// The dated events a "before X" can anchor on: the pre-grounded rows and the focus line's.
-    fn anchor_rows(&self) -> Vec<RowDate> {
-        let mut numbers: Vec<usize> = self.preground.iter().copied().collect();
-        if let Some(line) = crate::native::prompt::focus_line(self) {
-            let mut rest = line.as_str();
-            while let Some(at) = rest.find('#') {
-                let digits: String = rest[at + 1..]
-                    .chars()
-                    .take_while(char::is_ascii_digit)
-                    .collect();
-                rest = &rest[at + 1 + digits.len()..];
-                if let Ok(number) = digits.parse::<usize>()
-                    && !numbers.contains(&number)
-                {
-                    numbers.push(number);
-                }
-            }
-        }
-        numbers
-            .into_iter()
-            .filter_map(|number| {
-                let row = self
-                    .by_number
-                    .get(number.wrapping_sub(1))
-                    .and_then(|key| self.world.row(key))?;
-                (row.kind == Kind::Event && !row.trashed).then_some(())?;
-                Some(RowDate {
-                    label: format!("#{number} event \"{}\"", row.name),
-                    words: words(&row.name),
-                    date: row.date?.date,
-                })
-            })
-            .collect()
-    }
-
     /// What the conversation adds to the `dates:` line of the message being read.
     #[must_use]
     pub fn dates_context(&self) -> Context {
         Context {
             that_day: self.that_day(),
-            rows: self.anchor_rows(),
+            rows: Vec::new(),
         }
     }
 

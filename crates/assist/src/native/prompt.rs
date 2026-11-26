@@ -515,24 +515,10 @@ pub fn kind_card(currency: &str) -> Vec<String> {
 /// to the trash (#1185) where S2 learned it could only be edited and unlinked. The runtime still
 /// takes such a call from S2; its prompt does not advertise one.
 #[must_use]
-pub fn kind_card_for(tools: ToolsMode, currency: &str) -> Vec<String> {
+pub fn kind_card_for(_tools: ToolsMode, currency: &str) -> Vec<String> {
     Kind::ALL
         .iter()
-        .map(|kind| {
-            let line = render::card_line(*kind, currency);
-            match (tools, kind) {
-                (ToolsMode::S2, Kind::Workout | Kind::DailyFigure) => {
-                    line.split(" · verbs: ").next().unwrap_or(&line).to_owned()
-                }
-                (ToolsMode::S2, Kind::Transaction) => {
-                    line.replace(" verbs: edit delete restore unlink", " verbs: edit unlink")
-                }
-                (ToolsMode::S2, Kind::Task) => line
-                    .replace(", starred (yes|no)", "")
-                    .replace(" restore star unstar ", " restore "),
-                _ => line,
-            }
-        })
+        .map(|kind| render::card_line(*kind, currency))
         .collect()
 }
 

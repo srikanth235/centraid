@@ -18,7 +18,7 @@ use centraid_vault::time::FireZone;
 
 use super::line::{CLOCK_TOLERANCE_MS, STALE_MS};
 use super::reading::Reading;
-use crate::kit::schedule::rule_words::long_day;
+use crate::kit::civil::long_day;
 use crate::strings::{Locale, backup_check as words, fill};
 
 /// The Android channel: its own, so a member can silence it without silencing reminders.

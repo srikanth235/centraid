@@ -188,19 +188,6 @@ mod tests {
     }
 
     #[test]
-    fn leaked_parameter_syntax_is_salvaged() {
-        let text = "<tool_call>\n<function=answer>\n<parameter=within>\n<parameter=rows>\n#34\n</parameter>\n</function>\n</tool_call>";
-        let call = parse_call(text).unwrap();
-        assert_eq!(call["args"], json!({"rows": ["#34"]}));
-        let text = "<tool_call>\n<function=answer>\n<parameter=within>\n<parameter=result>\ntasks\n</parameter>\n<parameter=linked_to>\n#31\n</parameter>\n</function>\n</tool_call>";
-        let call = parse_call(text).unwrap();
-        assert_eq!(call["args"], json!({"kind": "task", "linked_to": ["#31"]}));
-        let text = "<tool_call>\n<function=answer>\n<parameter=within>\n<parameter=result>\n<parameter=order>\namount asc\n</parameter>\n</function>\n</tool_call>";
-        let call = parse_call(text).unwrap();
-        assert_eq!(call["args"], json!({"order": "amount asc"}));
-    }
-
-    #[test]
     fn find_opens_a_row_by_rows_and_a_stray_row_is_rows() {
         let text = "<tool_call>\n<function=find>\n<parameter=rows>\n#7\n</parameter>\n</function>\n</tool_call>";
         assert_eq!(parse_call(text).unwrap()["args"], json!({"rows": ["#7"]}));

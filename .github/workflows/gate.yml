@@ -11,7 +11,7 @@ name: gate
 #                      (.github/actions/setup, `cargo-cache-save-pr`).
 #   engine             the on-device chat's llama.cpp build, too slow for the
 #                      `pr` profile (R-CHAT-10).
-#   ios                Swift 6 app/XCTest, HealthSeeder, and the Rust simulator core.
+#   ios                Swift 6 app/XCTest and the Rust simulator core.
 #   android            the Compose shell's Kotlin compiled against the Android SDK (no native
 #                      core: `compileDebugKotlin` stops before the libraries are packaged), on
 #                      the runner's own SDK.
@@ -55,7 +55,7 @@ jobs:
           IPHONEOS_DEPLOYMENT_TARGET="$(cat mobile/ios-deployment-target)"
           export IPHONEOS_DEPLOYMENT_TARGET
           mobile/scripts/ios-core.sh aarch64-apple-ios-sim 2>&1 | tee target/ios-verification/rust-core.log
-      - name: Compile Swift 6 app, run XCTest, and compile HealthSeeder
+      - name: Compile Swift 6 app and run XCTest
         run: bash mobile/scripts/verify-ios.sh
       - name: Upload iOS compiler and test evidence
         if: always()

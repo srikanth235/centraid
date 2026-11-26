@@ -25,8 +25,6 @@ syntax = "proto3";
 
 package centraid.core.v1;
 
-import "centraid/core/v1/agenda_glance_screens.proto";
-import "centraid/core/v1/agenda_screens.proto";
 import "centraid/core/v1/assist.proto";
 import "centraid/core/v1/chat_screens.proto";
 import "centraid/core/v1/imports_screens.proto";
@@ -35,18 +33,8 @@ import "centraid/core/v1/custody_screens.proto";
 import "centraid/core/v1/pair_screens.proto";
 import "centraid/core/v1/passes_screens.proto";
 import "centraid/core/v1/plumbing_screens.proto";
-import "centraid/core/v1/docs_screens.proto";
-import "centraid/core/v1/health_glance_screens.proto";
-import "centraid/core/v1/health_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
-import "centraid/core/v1/photos_home_screens.proto";
-import "centraid/core/v1/photos_lightbox_screens.proto";
-import "centraid/core/v1/photos_shelf_screens.proto";
-import "centraid/core/v1/locker_screens.proto";
-import "centraid/core/v1/money_screens.proto";
-import "centraid/core/v1/notes_screens.proto";
 import "centraid/core/v1/notify_screens.proto";
-import "centraid/core/v1/people_screens.proto";
 import "centraid/core/v1/route.proto";
 import "centraid/core/v1/vault_screens.proto";
 import "centraid/core/v1/shell_home_screens.proto";
@@ -287,52 +275,12 @@ message ScreenEvent {
     WordsEnterEvent words_enter = 1301;
     WordsShowEvent words_show = 1302;
     // ---- agenda (100-199) ----
-    AgendaHomeEvent agenda_home = 100;
-    AgendaEventEvent agenda_event = 101;
-    AgendaEditorEvent agenda_editor = 102;
-    TodoListEvent todo_list = 103;
-    TodoProjectEvent todo_project = 104;
-    TodoDetailEvent todo_detail = 105;
-    TodoCatchUpEvent todo_catch_up = 106;
     // ---- photos (800-899) ----
-    PhotosHomeEvent photos_home = 800;
-    PhotosShelfEvent photos_shelf = 801;
-    PhotosPickerEvent photos_picker = 802;
-    PhotosPlacesEvent photos_places = 803;
-    PhotosLightboxEvent photos_lightbox = 804;
-    PhotosEditorEvent photos_editor = 805;
     // ---- locker (400-499) ----
-    LockerWallEvent locker_wall = 400;
-    LockerHomeEvent locker_home = 401;
-    LockerItemEvent locker_item = 402;
-    LockerEditorEvent locker_editor = 403;
-    LockerExportEvent locker_export = 405;
-    LockerImportEvent locker_import = 406;
     // ---- money (500-599) ----
-    MoneyHomeEvent money_home = 500;
-    MoneyTransactionEvent money_transaction = 501;
-    MoneyTargetEvent money_target = 502;
-    MoneyRecurringEvent money_recurring = 504;
-    MoneyAccountsEvent money_accounts = 505;
-    MoneyCategoriesEvent money_categories = 506;
-    MoneyRulesEvent money_rules = 507;
-    MoneyImportEvent money_import = 508;
     // ---- docs (200-299) ----
-    DocsDriveEvent docs_drive = 200;
-    DocsDocumentEvent docs_document = 201;
-    DocsEditorEvent docs_editor = 202;
     // ---- notes (600-699) ----
-    HealthHomeEvent health_home = 300;
-    HealthMetricEvent health_metric = 301;
-    HealthWorkoutEvent health_workout = 302;
-    HealthConnectEvent health_connect = 303;
-    NotesHomeEvent notes_home = 600;
-    NotesEditorEvent notes_editor = 601;
     // ---- people (700-799) ----
-    PeopleHomeEvent people_home = 700;
-    PeoplePersonEvent people_person = 701;
-    PeopleEditorEvent people_editor = 702;
-    PeopleListsEvent people_lists = 703;
     // ---- pairing (1400-1449, lane H2) ----
     PairLaptopEvent pair_laptop = 1400;
     // ---- the kit (900-999) ----
@@ -428,52 +376,12 @@ message ViewState {
     WordsEnterState words_enter = 1301;
     WordsShowState words_show = 1302;
     // ---- agenda (100-199) ----
-    AgendaHomeState agenda_home = 100;
-    AgendaEventState agenda_event = 101;
-    AgendaEditorState agenda_editor = 102;
-    TodoListState todo_list = 103;
-    TodoProjectState todo_project = 104;
-    TodoDetailState todo_detail = 105;
-    TodoCatchUpState todo_catch_up = 106;
     // ---- photos (800-899) ----
-    PhotosHomeState photos_home = 800;
-    PhotosShelfState photos_shelf = 801;
-    PhotosPickerState photos_picker = 802;
-    PhotosPlacesState photos_places = 803;
-    PhotosLightboxState photos_lightbox = 804;
-    PhotosEditorState photos_editor = 805;
     // ---- locker (400-499) ----
-    LockerHomeState locker_home = 400;
-    LockerItemState locker_item = 401;
-    LockerEditorState locker_editor = 402;
-    LockerExportState locker_export = 404;
-    LockerImportState locker_import = 405;
-    LockerLockState locker_lock = 406;
     // ---- money (500-599) ----
-    MoneyHomeState money_home = 500;
-    MoneyTransactionState money_transaction = 501;
-    MoneyTargetState money_target = 502;
-    MoneyRecurringState money_recurring = 504;
-    MoneyAccountsState money_accounts = 505;
-    MoneyCategoriesState money_categories = 506;
-    MoneyRulesState money_rules = 507;
-    MoneyImportState money_import = 508;
     // ---- docs (200-299) ----
-    DocsDriveState docs_drive = 200;
-    DocsDocumentState docs_document = 201;
-    DocsEditorState docs_editor = 202;
     // ---- notes (600-699) ----
-    HealthHomeState health_home = 300;
-    HealthMetricState health_metric = 301;
-    HealthWorkoutState health_workout = 302;
-    HealthConnectState health_connect = 303;
-    NotesHomeState notes_home = 600;
-    NotesEditorState notes_editor = 601;
     // ---- people (700-799) ----
-    PeopleHomeState people_home = 700;
-    PeoplePersonState people_person = 701;
-    PeopleEditorState people_editor = 702;
-    PeopleListsState people_lists = 703;
     // ---- pairing (1400-1449, lane H2) ----
     PairLaptopState pair_laptop = 1400;
     // ---- the kit (900-999) ----
@@ -536,8 +444,6 @@ message Effect {
     // Clear only a still-matching sensitive Locker copy owned by this vault.
     // The shell carries only a digest/owner lease across process restart.
     ClipboardClearOwned clipboard_clear_owned = 28;
-    RenderEdit render_edit = 25;
-    ReadCamera read_camera = 26;
     LibraryDelete library_delete = 27;
     ContactsRead contacts_read = 18;
     // Open the OS maps app at an address (People's address channel).
@@ -555,10 +461,8 @@ message Effect {
     // Keep the widgets' snapshot: write the document to the shared container,
     // then reload the widgets (`agenda_glance_screens.proto`). 150 stays clear
     // of a parallel notifications branch.
-    AgendaGlance agenda_glance = 150;
     // ---- health (300-399): outside the app ----
     // Keep the Health widget's snapshot (`health_glance_screens.proto`).
-    HealthGlance health_glance = 350;
     PickFile pick_file = 200;
     FollowFolder follow_folder = 201;
     StopFollowing stop_following = 202;
@@ -871,46 +775,6 @@ message LibraryDeleted {
   bool failed = 4;
 }
 
-// WHAT RUST KNOWS ABOUT FREEING SPACE, as `photos::free_up` assembles it from
-// the core's census and `releasable` and the platform's last `LibraryDeleted`.
-// Never on the wire between a shell and Rust: it is the record the row's
-// sentences are made from (`photos::keep_originals`).
-message FreeUpFacts {
-  // The platform can delete from its library behind the system's own
-  // confirmation. False draws no row at all.
-  bool offered = 1;
-  // The census of originals on this phone answered.
-  bool counted = 2;
-  uint32 on_phone_count = 3;
-  uint64 on_phone_bytes = 4;
-  // How many of them are in albums the member keeps on this phone.
-  uint32 kept_count = 5;
-  // The core named what is safe to free (`releasable`) and how much.
-  bool checked = 6;
-  uint32 releasable_count = 7;
-  uint64 releasable_bytes = 8;
-  // What the last free-up came to; unspecified before the first.
-  Outcome outcome = 9;
-  // For `OUTCOME_FREED`: the bytes that went.
-  uint64 freed_bytes = 10;
-  // 11 was `platform_error`, the platform's own words: they stay in the shell's log, and the
-  // row says its own sentence for `OUTCOME_PLATFORM_ERROR` (#1185).
-  reserved 11;
-  reserved "platform_error";
-
-  enum Outcome {
-    OUTCOME_UNSPECIFIED = 0;
-    OUTCOME_FREED = 1;
-    // The member said no in the system's dialog, or nothing could go.
-    OUTCOME_NOTHING_REMOVED = 2;
-    // The library let them go and the core did not record it.
-    OUTCOME_NOT_RECORDED = 3;
-    // The core could not say what is safe, so nothing was deleted.
-    OUTCOME_NOT_CHECKED = 4;
-    OUTCOME_PLATFORM_ERROR = 5;
-  }
-}
-
 // THE OWNER CHECK: iOS `LAContext().evaluatePolicy(.deviceOwnerAuthentication,
 // localizedReason: reason)`; Android `BiometricPrompt` with
 // `setAllowedAuthenticators(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)`,
@@ -1029,8 +893,6 @@ message EffectResult {
     OwnerChecked owner_checked = 10;
     // ---- photos (#1135, lane D) ----
     OriginalsExported originals_exported = 12;
-    EditRendered edit_rendered = 14;
-    CameraRead camera_read = 15;
     ContactsSnapshot contacts = 16;
     LibraryDeleted library_deleted = 17;
     // ---- agenda (100-199): notifications (#1173) ----

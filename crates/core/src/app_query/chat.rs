@@ -209,7 +209,7 @@ pub(crate) fn threads(
                     Ok(Found::Denied(denial)) => {
                         return Ok((
                             Vec::new(),
-                            Some(centraid_apps_kit::Denial {
+                            Some(centraid_domain::Denial {
                                 code: denial.code,
                                 message: denial.message,
                                 revoked_at: denial.revoked_at,

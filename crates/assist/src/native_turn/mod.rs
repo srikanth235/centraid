@@ -742,16 +742,19 @@ fn value_line(session: &Session, value: &Value, result: Option<usize>) -> String
 fn member_actions(session: &Session, effect: &Value) -> (Vec<Card>, String) {
     let mut cards = Vec::new();
     let mut line = String::new();
+    let Some(locker) = Kind::ALL
+        .into_iter()
+        .find(|kind| kind.spec().entity == "locker_item")
+    else {
+        return (cards, line);
+    };
     for action in effect["member_actions"]
         .as_array()
         .into_iter()
         .flatten()
         .filter_map(MemberAction::of_json)
     {
-        let Some(row) = session
-            .world
-            .row(&(Kind::LockerItem, action.item_id.clone()))
-        else {
+        let Some(row) = session.world.row(&(locker, action.item_id.clone())) else {
             continue;
         };
         let Some(card) = cards::card_of(row, session.today()) else {

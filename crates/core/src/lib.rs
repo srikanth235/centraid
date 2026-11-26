@@ -58,14 +58,10 @@ pub mod config;
 pub mod convert;
 pub mod error;
 pub mod events;
-/// THE DEMO SCENARIO: one weekend at Tahoe across seven apps, seeded through
-/// the command plane into a dev fixture vault (`seed-demo-vault`) or a test's
-/// vault — never by a found, never into a member's vault. No Locker.
 pub mod example;
 pub mod handle;
 pub mod identity;
 pub mod load;
-pub mod locker;
 /// THE ORIGINALS ON THIS PHONE, AND THE ALBUMS WHOSE ORIGINALS STAY (#1029,
 /// the photos port). See `originals.proto`.
 pub mod originals;

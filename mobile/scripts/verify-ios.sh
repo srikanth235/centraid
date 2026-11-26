@@ -8,7 +8,6 @@ CENTRAID_IOS_DEPLOYMENT_TARGET="$(cat "$root/mobile/ios-deployment-target")"
 export CENTRAID_IOS_DEPLOYMENT_TARGET
 cd "$root/mobile/iosApp"
 xcodegen generate
-xcodegen generate --spec HealthSeeder/project.yml
 # Select a runtime supported by the selected SDK, rather than relying on the
 # runner's default simulator or a device name left over from a different Xcode.
 sdk_version="$(xcrun --sdk iphonesimulator --show-sdk-version)"
@@ -39,10 +38,6 @@ else
   trap 'xcrun simctl delete "$simulator"' EXIT
 fi
 destination="platform=iOS Simulator,id=$simulator"
-xcodebuild -project HealthSeeder/HealthSeeder.xcodeproj -scheme HealthSeeder \
-  -destination "$destination" -derivedDataPath "$artifacts/seeder-derived-data" \
-  -resultBundlePath "$artifacts/HealthSeeder.xcresult" build \
-  2>&1 | tee "$artifacts/health-seeder.log"
 # THE UNIT TESTS FIRST, ON AN APP WITH NO VAULT, THEN THE ACCESSIBILITY AUDIT
 # ON THE DEMO VAULT (#1202, S4). `UITests/` drives the real app through
 # `performAccessibilityAudit()`, and an audit of a Home with nothing on it proves

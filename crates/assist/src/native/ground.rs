@@ -60,7 +60,6 @@ use crate::native::dates::{self, Resolved};
 use crate::native::meta::{self, FieldType, Kind};
 use crate::native::session::Session;
 use crate::native::trace::Scope;
-use crate::native::whr::{Cond, Op};
 
 const WEEKDAYS: [(&str, i8); 17] = [
     ("monday", 1),
@@ -810,28 +809,6 @@ fn bare_pair(resolution: &str) -> Option<(Time, Time)> {
     }
 }
 
-/// What a reschedule's message says of its clock (`Session::time_words`).
-pub(crate) struct TimeWords {
-    /// The words of the clock as the dates line lists them: `to 5:30`.
-    pub phrase: String,
-    /// The message names no day and no shift of days: only a clock.
-    pub day_less: bool,
-    /// The one bare hour the message says, as its (morning, afternoon) readings.
-    pub bare: Option<(Time, Time)>,
-}
-
-/// Whether a resolution of the dates line is a clock and nothing else: `17:30`, or the two
-/// readings of a bare hour, `20:00 (pm) / 08:00 (am)`.
-fn is_clock_only(resolution: &str) -> bool {
-    resolution.split(" / ").all(|part| {
-        let part = part
-            .strip_suffix(" (am)")
-            .or_else(|| part.strip_suffix(" (pm)"))
-            .unwrap_or(part);
-        part.len() == 5 && part.as_bytes()[2] == b':' && part.parse::<Time>().is_ok()
-    })
-}
-
 /// "2 to 4pm": the clock at `words[index]` ends a range that started with a
 /// number, so it is not the start the call carries.
 fn ends_a_range(words: &[String], index: usize) -> bool {
@@ -1543,75 +1520,9 @@ impl Session {
         }
     }
 
-    /// The message says "same time" and no clock of its own: the time of a reschedule is the
-    /// row's (SPEC §14.1, "same time").
-    pub(crate) fn said_same_time(&self) -> bool {
-        let words = tokens(&self.message);
-        words
-            .windows(2)
-            .any(|pair| pair[0] == "same" && pair[1] == "time")
-            && !crate::native::phrases::read_dates(&self.message, self.now)
-                .iter()
-                .any(|reading| reading.resolution.contains(':'))
-    }
-
     /// What the current message says about dates.
     pub(crate) fn said(&self) -> Said {
         said(&self.message, self.now)
-    }
-
-    /// THE CLOCK A RESCHEDULE CARRIES, as the person said it (nt9, rules 2 and 3): the message
-    /// that names a clock, this one or, when the previous turn only asked, the one before it
-    /// ("move the call to 8", the ask, "the 22nd"). `None` when no such message names one.
-    pub(crate) fn time_words(&self) -> Option<TimeWords> {
-        let mut messages = vec![self.message.as_str()];
-        if self.date_context().asked_only {
-            messages.push(self.prev_message.as_str());
-        }
-        for message in messages {
-            let readings = crate::native::phrases::read_dates(message, self.now);
-            let Some(clock) = readings
-                .iter()
-                .find(|reading| is_clock_only(&reading.resolution))
-            else {
-                continue;
-            };
-            // a message that shifts the row ("a day later at 5") says a day without a phrase
-            let shifts = tokens(message).iter().any(|word| {
-                matches!(
-                    word.as_str(),
-                    "earlier"
-                        | "later"
-                        | "forward"
-                        | "ahead"
-                        | "day"
-                        | "days"
-                        | "week"
-                        | "weeks"
-                        | "month"
-                        | "months"
-                )
-            });
-            let day_less = !shifts
-                && readings
-                    .iter()
-                    .all(|reading| is_clock_only(&reading.resolution));
-            let said = said(message, self.now);
-            let bare = match said.bare.as_slice() {
-                [(_, am, pm)]
-                    if !said.timed && !said.range && !said.broad && said.clocks.is_empty() =>
-                {
-                    Some((*am, *pm))
-                }
-                _ => None,
-            };
-            return Some(TimeWords {
-                phrase: clock.phrase.clone(),
-                day_less,
-                bare,
-            });
-        }
-        None
     }
 
     /// What the previous turn showed of dates.
@@ -1809,33 +1720,6 @@ impl Default for Defaults {
 
 /// The note under a readout that took the active rows.
 pub const ACTIVE_NOTE: &str = "(active rows; add status = completed or all for the rest)";
-/// The `where` clause that selects the active rows of a container.
-const ACTIVE_CLAUSE: &str = "status != completed and status != cancelled";
-/// Words that ask for what is left to do (SPEC §14.1, status).
-const STATUS_WORDS: [&str; 5] = ["open", "left", "remaining", "still", "overdue"];
-/// "Due" is a status word of the same kind when the message asks what is due on a day or span
-/// ("what's due tomorrow"); "the next chore due" is the next-one convention's, not this one's.
-const DUE: &str = "due";
-/// The words of `EVERY_STATUS` that name a state a row has: "that i haven't done" is the open
-/// rows, not the done ones.
-const STATE_WORDS: [&str; 3] = ["done", "finished", "completed"];
-/// What turns a state word into the rows that lack it.
-const NEGATORS: [&str; 26] = [
-    "not", "never", "no", "haven't", "havent", "hasn't", "hasnt", "hadn't", "didn't", "didnt",
-    "don't", "dont", "isn't", "aren't", "wasn't", "weren't", "yet", "without", "haven", "hasn",
-    "hadn", "didn", "don", "isn", "aren", "wasn",
-];
-/// Words that ask for rows of every status.
-const EVERY_STATUS: [&str; 8] = [
-    "all",
-    "everything",
-    "done",
-    "completed",
-    "finished",
-    "cancelled",
-    "canceled",
-    "closed",
-];
 /// What may follow "next" without making it "the nearest one": a date unit or a count.
 const NEXT_NOT: [&str; 36] = [
     "week",
@@ -1885,38 +1769,9 @@ const FROM_TODAY: &str = r#"{"from":{"unit":"day","rel":0}}"#;
 /// And for "up to today".
 const UNTIL_TODAY: &str = r#"{"to":{"unit":"day","rel":0}}"#;
 
-/// The kinds a schedule dates: a task is due and an event starts, upcoming or past.
-fn scheduled(kind: Kind) -> bool {
-    matches!(kind, Kind::Task | Kind::Event)
-}
-
-fn cond_field(cond: &Cond) -> Option<&'static str> {
-    match cond {
-        Cond::Number { field, .. }
-        | Cond::Text { field, .. }
-        | Cond::Enum { field, .. }
-        | Cond::Bool { field, .. }
-        | Cond::Contains { field, .. }
-        | Cond::In { field, .. }
-        | Cond::Presence { field, .. } => Some(field),
-        Cond::LinkCount { .. } => None,
-    }
-}
-
-/// Whether the message asks for rows of every status: a word of `EVERY_STATUS`, except a state
-/// word the person negates ("what's due that i haven't done").
-fn lifts_status(words: &[String]) -> bool {
-    words.iter().enumerate().any(|(at, word)| {
-        EVERY_STATUS.contains(&word.as_str())
-            && !(STATE_WORDS.contains(&word.as_str())
-                && words[at.saturating_sub(3)..at]
-                    .iter()
-                    .any(|before| NEGATORS.contains(&before.as_str())))
-    })
-}
-
-fn says_any(words: &[String], list: &[&str]) -> bool {
-    words.iter().any(|word| list.contains(&word.as_str()))
+/// The kinds a schedule dates (due or starting, upcoming or past): none until the catalogue declares one.
+fn scheduled(_kind: Kind) -> bool {
+    false
 }
 
 /// "next" as the nearest upcoming one: the word is there, what follows it is not a date unit
@@ -1990,21 +1845,6 @@ fn is_blank(value: Option<&Value>) -> bool {
     }
 }
 
-/// `where` plus one more clause.
-fn add_where(out: &mut Map<String, Value>, clause: &str) {
-    let have = out
-        .get("where")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .unwrap_or_default();
-    let joined = if have.is_empty() {
-        clause.to_owned()
-    } else {
-        format!("{have} and {clause}")
-    };
-    out.insert("where".to_owned(), Value::String(joined));
-}
-
 impl Session {
     /// The conventions of a read (`find`, `answer`, `compute`): the call with the slots they
     /// fill, and one note per convention that applied. A call that does not parse comes back as
@@ -2075,42 +1915,6 @@ impl Session {
         let mut out = object.clone();
         let mut notes = Vec::new();
 
-        if kind == Kind::Task
-            && !selector
-                .conds
-                .iter()
-                .any(|c| cond_field(c) == Some("status"))
-        {
-            let every = lifts_status(&words);
-            let container = selector
-                .linked_to
-                .iter()
-                .any(|target| matches!(target.0, Kind::List | Kind::Task));
-            let asks_left = says_any(&words, &STATUS_WORDS)
-                || (words.iter().any(|word| word == DUE) && !says_next(&words));
-            if defaults.status_words && tool != "find" && !every && asks_left {
-                add_where(&mut out, "status = open");
-                notes.push("status: the message asks what is left; used status = open.".to_owned());
-            } else if defaults.active && !every && container {
-                add_where(&mut out, ACTIVE_CLAUSE);
-            }
-        }
-        // The note belongs to the clause, whoever wrote it.
-        if kind == Kind::Task
-            && let Ok(after) = self.selector(&out)
-            && !after.linked_to.is_empty()
-            && let [first, second] = after
-                .conds
-                .iter()
-                .filter(|c| cond_field(c) == Some("status"))
-                .collect::<Vec<_>>()
-                .as_slice()
-            && is_not(first, "completed", "cancelled")
-            && is_not(second, "completed", "cancelled")
-        {
-            notes.push(ACTIVE_NOTE.to_owned());
-        }
-
         // The rest read a listing of one dated kind, and not of what hangs off a task or an event
         // of another kind: "who's at the next rehearsal" is the next rehearsal in one call and the
         // people linked to it in another, and only the first is the next one.
@@ -2175,29 +1979,6 @@ impl Session {
                         .to_owned(),
                 );
             }
-            // THE CALL'S OWN SHAPE: the same read written as order, limit and `when` (the model
-            // spells "next" that way as often as with the slot) is the same query, and a row
-            // that is cancelled is never the next one.
-            if let Some(shape) = self.query_shape(&out, defaults)
-                && !says_any(&words, &EVERY_STATUS)
-                && let Ok(after) = self.selector(&out)
-                && !after
-                    .conds
-                    .iter()
-                    .any(|cond| cond_field(cond) == Some("status"))
-            {
-                let (clause, left_out) = match kind {
-                    Kind::Event => ("status != cancelled", "cancelled rows"),
-                    Kind::Task => (ACTIVE_CLAUSE, "completed and cancelled rows"),
-                    _ => ("", ""),
-                };
-                if !clause.is_empty() {
-                    add_where(&mut out, clause);
-                    notes.push(format!(
-                        "{shape}: the call reads the {shape} one; left out {left_out} ({clause})."
-                    ));
-                }
-            }
         }
         if defaults.biggest
             && tool == "answer"
@@ -2228,31 +2009,7 @@ impl Session {
     }
 }
 
-impl Session {
-    /// Whether a read is a next-query or a last-query by its own shape: `order: date asc` (or
-    /// `desc`), `limit: 1` and a `when` that starts today (or, for the last one, ends by it), in
-    /// any spelling the date grammar has.
-    fn query_shape(&self, call: &Map<String, Value>, defaults: Defaults) -> Option<&'static str> {
-        let selector = self.selector(call).ok()?;
-        let (field, desc) = selector.order.as_ref()?;
-        if field != "date" || selector.limit != Some(1) {
-            return None;
-        }
-        let (start, end) = selector.when?.ends();
-        let today = self.now.date();
-        if !desc && defaults.next && start.date() == today {
-            Some("next")
-        } else if *desc && defaults.last_one && start.date() == Date::MIN && end.date() <= today {
-            Some("last")
-        } else {
-            None
-        }
-    }
-}
-
-fn is_not(cond: &Cond, a: &str, b: &str) -> bool {
-    matches!(cond, Cond::Enum { field: "status", op: Op::Ne, value } if *value == a || *value == b)
-}
+impl Session {}
 
 fn self_limit(object: &Map<String, Value>) -> Option<i64> {
     match object.get("limit")? {

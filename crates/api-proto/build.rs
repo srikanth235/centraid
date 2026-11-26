@@ -16,7 +16,7 @@ use std::path::PathBuf;
 /// Every file in the tree, named rather than globbed: a `.proto` that is not on
 /// this list is a file nothing generates from, and a glob would hide that.
 /// `tests/tree.rs` asserts the list and the directory agree.
-const PROTOS: [&str; 53] = [
+const PROTOS: [&str; 30] = [
     "proto/centraid/core/v1/value.proto",
     "proto/centraid/core/v1/row.proto",
     "proto/centraid/core/v1/query.proto",
@@ -39,37 +39,10 @@ const PROTOS: [&str; 53] = [
     // the photos port). Its own file for `phone.proto`'s reason: the keep list
     // is a fact about the phone's disk and cannot be a registered command.
     "proto/centraid/core/v1/originals.proto",
-    // An app's own query, run in the core, and Agenda's four answers (#1046).
-    // Two files because the arm is the plane's and the answers are the app's:
-    // the next app's queries arrive as its own file and one more arm, and
-    // `app_query.proto` is the one both envelopes import.
-    "proto/centraid/core/v1/agenda.proto",
-    // People's five answers (#1046), the same shape as Agenda's.
-    "proto/centraid/core/v1/people.proto",
-    // Notes' eight answers (#1046), the same shape as Agenda's.
-    "proto/centraid/core/v1/notes.proto",
-    // Docs' four answers (#1046), the same shape as Agenda's.
-    "proto/centraid/core/v1/docs.proto",
-    // Locker's four answers and its session (#1047, D-5): the queries the
-    // phone asks while unlocked, and the one request that loads `K`.
-    "proto/centraid/core/v1/locker.proto",
     // The chat's history, as reads (R-CHAT-1): threads, one thread's messages
     // and whether a card's row is still there.
     "proto/centraid/core/v1/chat.proto",
-    // Home's search (R-CHROME-6): the powerbox's loader over every domain but
-    // Locker, asked from Home. Its own file because Home is not an app.
-    "proto/centraid/core/v1/vault_search.proto",
-    // A container as a search result (#1097): the one message the four owning
-    // apps' own search answers share.
-    "proto/centraid/core/v1/container.proto",
-    // Photos' own search (#1097, R-1097-25..27): the text and album legs, asked of
-    // the full-text door, and the correction.
-    "proto/centraid/core/v1/photos.proto",
-    // Money's ten answers, its import plan and Home's tile (#1099).
-    "proto/centraid/core/v1/money.proto",
-    // Health's six answers (#1129): today, a series, the trends, the workouts
-    // and one workout, and the follower engine's view of what the vault holds.
-    "proto/centraid/core/v1/health.proto",
+    // The shell's own reads, run in the core: the chat's history and the vault's holdings.
     "proto/centraid/core/v1/app_query.proto",
     // THE ONE READ AND THE ONE WRITE (#1135): `load(app, query, params)` and
     // `act(app, action, input)`, spoken through each app's manifest.
@@ -80,22 +53,6 @@ const PROTOS: [&str; 53] = [
     // (a leaf), Agenda's screens, and the runtime's own wire that imports them.
     "proto/centraid/core/v1/route.proto",
     "proto/centraid/core/v1/kit_screens.proto",
-    "proto/centraid/core/v1/agenda_screens.proto",
-    // Agenda outside the app (#1173): the widgets' snapshot and the platform's asks.
-    "proto/centraid/core/v1/agenda_glance_screens.proto",
-    // Photos' screens (#1135, lane D): the vocabulary every Photos screen shares
-    // (the cell, the selection bar, the album sheet), then one file per worker.
-    "proto/centraid/core/v1/photos_screens.proto",
-    "proto/centraid/core/v1/photos_home_screens.proto",
-    "proto/centraid/core/v1/photos_shelf_screens.proto",
-    "proto/centraid/core/v1/photos_lightbox_screens.proto",
-    "proto/centraid/core/v1/locker_screens.proto",
-    "proto/centraid/core/v1/money_screens.proto",
-    "proto/centraid/core/v1/docs_screens.proto",
-    "proto/centraid/core/v1/health_glance_screens.proto",
-    "proto/centraid/core/v1/health_screens.proto",
-    "proto/centraid/core/v1/notes_screens.proto",
-    "proto/centraid/core/v1/people_screens.proto",
     // The chat screen (#1135, lane I): the shell's 1600-1699 arms.
     "proto/centraid/core/v1/chat_screens.proto",
     // The phone imports (#1135, lane I): the shell's 1700-1899 arms.

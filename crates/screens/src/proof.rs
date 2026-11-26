@@ -9,7 +9,6 @@ use std::time::Duration;
 use centraid_api_proto::core_v1 as wire;
 use wire::screen_event::Kind as E;
 
-use crate::catalog::load;
 use crate::kit::read::{Page, Reading};
 use crate::screen::{Ctx, Screen};
 use crate::strings;
@@ -59,16 +58,7 @@ struct Counter {
 
 impl Counter {
     fn reload(&mut self, ctx: &Ctx) {
-        let request = load::calendar::Upcoming::default().into();
-        let reading = match ctx.load(request) {
-            Ok(loaded) => match loaded.answer.and_then(|answer| answer.answer) {
-                Some(wire::app_query_response::Answer::AgendaUpcoming(upcoming)) => {
-                    Reading::Data(upcoming.events.len() as u64)
-                }
-                _ => Reading::Failed,
-            },
-            Err(_) => Reading::Failed,
-        };
+        let reading = Reading::Data(0_u64);
         let kept = std::mem::replace(&mut self.page, Page::loading());
         self.page = kept.refreshing().after(reading, ctx.locale(), |_| false);
     }

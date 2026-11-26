@@ -75,8 +75,8 @@
 //! This door searches the personal vault. First-party apps share its trust
 //! boundary, and the index excludes sealed values regardless of the caller.
 
-use centraid_apps_kit::page::{Page, PageCursor, page_of, probe_limit};
-use centraid_apps_kit::spelling::{
+use centraid_domain::page::{Page, PageCursor, page_of, probe_limit};
+use centraid_domain::spelling::{
     fragment_is_read, is_known, near_words_close, rank_order, try_correct_words, words,
 };
 use centraid_ontology::jsvalue::js_number_to_string;
@@ -614,7 +614,7 @@ impl SqliteDoor<'_> {
     }
 }
 
-/// The words a typed word may have meant, in [`centraid_apps_kit::spelling::near_words`]'s
+/// The words a typed word may have meant, in [`centraid_domain::spelling::near_words`]'s
 /// tiers. The third tier, the typed fragment inside a
 /// longer word, is asked of the packed list ([`WordList::containing`]), which finds it in
 /// one search of its text and not one `contains` per word.
@@ -665,7 +665,7 @@ impl Search for SqliteDoor<'_> {
         // probe is the window plus one: the only thing separating "the window
         // filled" from "the rows ended here".
         let window = request.page.limit.min(MAX_MATCH_ROWS);
-        let clamped = centraid_apps_kit::page::PageRequest {
+        let clamped = centraid_domain::page::PageRequest {
             limit: window,
             after: request.page.after.clone(),
         };

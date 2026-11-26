@@ -25,7 +25,7 @@ use prost::Message;
 use wire::screen_event::Kind as E;
 
 use super::conditions::Reason;
-use super::conductor::{Action, BACKGROUND_WINDOW, Conductor, Drained, Registration};
+use super::conductor::{Action, Conductor, Drained, Registration};
 use super::rule::Rules;
 use super::windows;
 use crate::custody::secrets::VaultSecrets;
@@ -35,24 +35,6 @@ use crate::strings::{backup, backup_home};
 /// The pseudo-table the core announces when the backup ledger moved
 /// (`centraid_core` `phone::backup_reads::TABLE`).
 pub(crate) const LEDGER_TABLE: &str = "backup";
-
-/// What the core asked for again, as the roll names it: the hash in hex, the
-/// form the stage door's answer carries.
-fn needed(need: &wire::NeedBytes) -> wire::NeededBytes {
-    use std::fmt::Write as _;
-    wire::NeededBytes {
-        os_ref: need.os_ref.clone(),
-        media_type: need.media_type.clone(),
-        size: need.size,
-        content_hash: need
-            .content_hash
-            .iter()
-            .fold(String::new(), |mut hex, byte| {
-                let _ = write!(hex, "{byte:02x}");
-                hex
-            }),
-    }
-}
 
 /// The route name of the service.
 pub const NAME: &str = "passes.conductor";
@@ -98,9 +80,6 @@ struct Service {
     /// shell that re-reports the foreground (a screen re-reading its state) must
     /// not buy a camera-roll walk and a pass each time.
     foreground: Option<bool>,
-    /// Windows whose backup ended and whose follows are not done: the OS is told when the
-    /// follow coordinator says every store ran ([`crate::follow`]).
-    following: Vec<(String, bool)>,
 }
 
 impl Service {
@@ -114,7 +93,6 @@ impl Service {
             deferred: Vec::new(),
             started: false,
             foreground: None,
-            following: Vec::new(),
         }
     }
 
@@ -142,32 +120,19 @@ impl Service {
         self.outstanding.remove(at)
     }
 
-    /// Hand `kind` to the camera-roll service, for `vault`.
-    fn roll(ctx: &Ctx, vault: String, kind: wire::imports_camera_roll_event::Kind) {
-        ctx.post(
-            crate::imports::CAMERA_ROLL,
-            wire::ScreenEvent {
-                kind: Some(E::ImportsCameraRoll(wire::ImportsCameraRollEvent {
-                    vault_id: vault,
-                    kind: Some(kind),
-                })),
-            },
-        );
-    }
-
     fn perform(&mut self, actions: Vec<Action>, ctx: &Ctx, out: &mut Vec<wire::Effect>) {
         let rule = Rules::read(&self.secrets).rule;
         for action in actions {
             match action {
-                Action::Walk => Self::roll(
-                    ctx,
-                    ctx.vaults()
-                        .and_then(|vaults| vaults.foreground_id())
-                        .unwrap_or_default(),
-                    wire::imports_camera_roll_event::Kind::Walk(
-                        wire::imports_camera_roll_event::Walk {},
-                    ),
-                ),
+                // THERE IS NO CAMERA ROLL TO WALK OR FEED: the pass goes on as if it had finished.
+                Action::Walk => {
+                    let next = self.conductor.walked();
+                    self.perform(next, ctx, out);
+                }
+                Action::Stream { .. } => {
+                    let next = self.conductor.streamed(0);
+                    self.perform(next, ctx, out);
+                }
                 Action::Drain { vault, request } => {
                     self.conductor.record_pass(&vault, &request);
                     self.call(
@@ -177,15 +142,6 @@ impl Service {
                         VaultRequest::Drain(request),
                     );
                 }
-                Action::Stream { vault, needs } => Self::roll(
-                    ctx,
-                    vault,
-                    wire::imports_camera_roll_event::Kind::BytesNeeded(
-                        wire::imports_camera_roll_event::BytesNeeded {
-                            needs: needs.iter().map(needed).collect(),
-                        },
-                    ),
-                ),
                 Action::UploadsPending => self.effect(
                     Kind::Count,
                     uploads(wire::uploads_op::Op::Pending(wire::UploadsPending {})),
@@ -216,15 +172,6 @@ impl Service {
                     },
                     out,
                 ),
-                // A WINDOW THE OS GRANTED follows the phone's stores too, AFTER the backup and the
-                // camera roll: the OS is told once the coordinator says every store ran. The
-                // grace after leaving the screen is the upload's alone, so it is not held.
-                Action::WindowDone { window, drained }
-                    if window != BACKGROUND_WINDOW && ctx.follows().listening() =>
-                {
-                    ctx.follows().window(ctx, &window);
-                    self.following.push((window, drained));
-                }
                 Action::WindowDone { window, drained } => {
                     self.outstanding.push_back(Kind::Noted);
                     Self::window_done(window, drained, out);
@@ -280,17 +227,7 @@ impl Service {
             }
             E::DataChanged(_) => self.conductor.commit_landed(),
             E::TimerFired(fired) => self.conductor.timer(&fired.timer),
-            E::Signalled(_) => {
-                // The follow coordinator says a window's stores ran: tell the OS it is done.
-                for window in ctx.follows().take_released() {
-                    if let Some(at) = self.following.iter().position(|(held, _)| *held == window) {
-                        let (window, drained) = self.following.remove(at);
-                        self.outstanding.push_back(Kind::Noted);
-                        Self::window_done(window, drained, out);
-                    }
-                }
-                self.asked()
-            }
+            E::Signalled(_) => self.asked(),
             E::RollReported(report) => match report.kind {
                 // THE WALK ENDED, OR FAILED, OR HAD NONE TO WALK: the pass runs either way.
                 Some(wire::roll_reported::Kind::Walked(_)) => self.conductor.walked(),
@@ -338,16 +275,8 @@ impl Service {
             Some(Fact::Window(granted)) => self
                 .conductor
                 .window_granted(&granted.window, granted.deadline_ms),
-            // THE OS TOOK A WINDOW BACK: there is no one left to tell its follows ended, so the
-            // coordinator's late release finds nothing held and sends no `PassWindowDone`.
-            Some(Fact::Expired(expired)) => {
-                self.following.retain(|(held, _)| *held != expired.window);
-                Vec::new()
-            }
-            // A button pressed on a notification is the notify service's (`agenda.notify`),
-            // and an Agenda or Health intent is the glance service's (`agenda::glance`, `health::glance`).
-            Some(Fact::NotificationAnswered(_) | Fact::AgendaIntent(_) | Fact::HealthIntent(_))
-            | None => Vec::new(),
+            Some(Fact::Expired(_)) => Vec::new(),
+            Some(Fact::NotificationAnswered(_)) | None => Vec::new(),
             Some(Fact::Held(held)) => {
                 self.conductor.set_held(
                     held.vaults

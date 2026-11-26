@@ -14,7 +14,7 @@
 //!   there is no statement to run, and "nothing matched" would be a different
 //!   claim about the vault than the one the caller is owed.
 
-use centraid_apps_kit::spelling::{MAX_WORDS, words};
+use centraid_domain::spelling::{MAX_WORDS, words};
 
 use crate::SearchError;
 
@@ -41,7 +41,7 @@ pub const MIN_WORD_LETTERS: usize = 2;
 /// `report` narrows to the documents with the word `a` and not to every word that
 /// starts with it.
 ///
-/// The words are [`centraid_apps_kit::spelling::words`] — **one tokenization**,
+/// The words are [`centraid_domain::spelling::words`] — **one tokenization**,
 /// shared with the correction (`Search::correct`), so the word a member sees
 /// corrected is the word the index was asked for.
 ///

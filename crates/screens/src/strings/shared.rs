@@ -15,6 +15,14 @@ catalog! {
     plain download_original = ("Download original", "Download original");
     plain original_downloading = ("Downloading the original…", "Downloading the original…");
 
+    plain day_long = ("{weekday} {day} {month}", "{weekday} {day} {month}");
+    plain weekday_full_fri = ("Friday", "Friday");
+    plain weekday_full_mon = ("Monday", "Monday");
+    plain weekday_full_sat = ("Saturday", "Saturday");
+    plain weekday_full_sun = ("Sunday", "Sunday");
+    plain weekday_full_thu = ("Thursday", "Thursday");
+    plain weekday_full_tue = ("Tuesday", "Tuesday");
+    plain weekday_full_wed = ("Wednesday", "Wednesday");
     plain all_day = ("All day", "All day");
     plain autosave_changed_elsewhere = ("Changed on another device", "Changed on another device");
     plain stale_changed_note = ("This {noun} changed somewhere else.", "This {noun} changed somewhere else.");

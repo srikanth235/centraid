@@ -102,13 +102,9 @@ impl Laptop {
     fn readiness(ctx: &Ctx) -> Readiness {
         // The core's one statement of "this core holds the vault's keys" rides
         // every session answer; no vault at all is a refusal.
-        match ctx.locker(&wire::LockerSessionRequest {
-            step: Some(wire::locker_session_request::Step::State(
-                wire::LockerStateAsk::default(),
-            )),
-        }) {
-            Ok(answer) if answer.keyed => Readiness::Ready,
-            Ok(_) => Readiness::NeedsWords,
+        match ctx.keyed() {
+            Ok(true) => Readiness::Ready,
+            Ok(false) => Readiness::NeedsWords,
             Err(_) => Readiness::NoVault,
         }
     }

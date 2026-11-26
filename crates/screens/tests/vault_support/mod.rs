@@ -9,7 +9,7 @@ use std::sync::Arc;
 use centraid_api_proto::core_v1 as wire;
 use centraid_core::{Core, CoreConfig};
 use centraid_screens::custody::secrets::VaultSecrets;
-use centraid_screens::people::{self, routes};
+use centraid_screens::shell;
 use centraid_screens::testing::{Driver, FakeShell};
 use centraid_screens::vault::{self, Shelf};
 use centraid_screens::{Registry, Runtime};
@@ -90,15 +90,12 @@ pub struct Phone {
     _scratch: Option<Scratch>,
 }
 
-/// The tab People's home is rooted in, over the real People screens: a screen
-/// that reads the vault in front, to see a switch follow.
+/// The tab Home is rooted in, over the shell's screens: a screen that reads the vault in
+/// front, to see a switch follow.
 pub fn runtime(shelf: &Arc<Shelf>, secrets: &VaultSecrets) -> Runtime {
     Runtime::new(
-        people::registry().merge(vault::registry(shelf, secrets)),
-        vec![(
-            people::TAB.to_owned(),
-            routes::home(wire::PeopleDestination::People),
-        )],
+        shell::registry(secrets).merge(vault::registry(shelf, secrets)),
+        vec![(shell::TAB.to_owned(), shell::routes::home())],
     )
     .with_services(vault::services())
 }

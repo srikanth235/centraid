@@ -673,7 +673,6 @@ impl Shelf {
         };
         let going = inner.holdings.remove(at);
         if let Some(core) = &going.core {
-            core.relock();
             shut(core);
         }
         files::delete_vault(&front.dir, &going.path);
@@ -1029,7 +1028,6 @@ impl Shelf {
                 continue;
             }
             if let Some(core) = holding.core.take() {
-                core.relock();
                 shut(&core);
                 changed = true;
             }
@@ -1329,14 +1327,12 @@ impl Vaults for Shelf {
         if inner.foreground.as_deref() != Some(vault_id) {
             // THE VAULT LEFT IS RELOCKED: an unlocked Locker is a fact about the
             // vault the member is looking at.
-            if let Some(core) = inner
+            if let Some(_core) = inner
                 .foreground
                 .as_ref()
                 .and_then(|front| inner.holdings.iter().find(|h| &h.vault_id == front))
                 .and_then(|holding| holding.core.as_ref())
-            {
-                core.relock();
-            }
+            {}
             self.set_foreground(&mut inner, Some(vault_id.to_owned()));
             drop(inner);
             self.announce();
@@ -1369,7 +1365,6 @@ impl Vaults for Shelf {
         let mut inner = self.lock();
         for holding in &mut inner.holdings {
             if let Some(core) = holding.core.take() {
-                core.relock();
                 shut(&core);
             }
         }

@@ -1,0 +1,24 @@
+[package]
+name = "centraid-domain"
+description = "The app plane's declarations: the kinds, actions and reads the assistant and the shell are generated from, and the vault read door they share."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "centraid_domain"
+path = "src/lib.rs"
+
+[dependencies]
+centraid-ontology = { path = "../ontology" }
+centraid-vault = { path = "../vault" }
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

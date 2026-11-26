@@ -10,11 +10,11 @@
 use std::collections::BTreeMap;
 
 use centraid_api_proto::core_v1 as wire;
-use centraid_apps_kit::page::{PageCursor, PageRequest};
-use centraid_apps_kit::reads::PageDoor;
-use centraid_apps_kit::row::{Row, text_of};
-use centraid_apps_kit::statement::{PageBindValue, PageOrder, PageQuery};
-use centraid_apps_kit::{KitError, KitResult};
+use centraid_domain::page::{PageCursor, PageRequest};
+use centraid_domain::reads::PageDoor;
+use centraid_domain::row::{Row, text_of};
+use centraid_domain::statement::{PageBindValue, PageOrder, PageQuery};
+use centraid_domain::{KitError, KitResult};
 
 use super::{Answer, VaultDoor, settle};
 use crate::error::Result;
@@ -76,7 +76,7 @@ fn stat_of(stated: &str) -> Option<String> {
 
 /// `shell.followed-stores`: every phone store the vault follows, one row per origin.
 pub(crate) fn followed_stores(door: &VaultDoor<'_>) -> Result<Answer> {
-    let loaded = (|| -> KitResult<(wire::FollowedStores, Option<centraid_apps_kit::Denial>)> {
+    let loaded = (|| -> KitResult<(wire::FollowedStores, Option<centraid_domain::Denial>)> {
         let query = PageQuery::new(
             "followed.stores",
             "id, system, ref, label, device_id, fills",
@@ -112,7 +112,7 @@ pub(crate) fn followed_stores(door: &VaultDoor<'_>) -> Result<Answer> {
 
 /// `shell.files-followed`.
 pub(crate) fn files_followed(door: &VaultDoor<'_>) -> Result<Answer> {
-    let loaded = (|| -> KitResult<(wire::ImportsFilesHeld, Option<centraid_apps_kit::Denial>)> {
+    let loaded = (|| -> KitResult<(wire::ImportsFilesHeld, Option<centraid_domain::Denial>)> {
         let origins = all(
             door,
             &followed_origins("files.origins", "id, ref, label, fills"),

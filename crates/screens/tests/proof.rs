@@ -116,48 +116,6 @@ fn a_failed_copy_cancels_the_clear() {
 }
 
 #[test]
-fn a_write_to_a_table_the_screen_read_redraws_it_once() {
-    let mut driver = driver_with(Duration::from_secs(30));
-    driver.start();
-    let id = root(&driver);
-    let before = driver.views[&id].revision;
-    let before_count = data(&driver, id).count_label;
-
-    // A write by someone else through the one door.
-    let input = [
-        ("title", "Dinner"),
-        ("starts", "2099-01-01T18:00"),
-        ("zone", "UTC"),
-    ]
-    .into_iter()
-    .map(|(k, v)| {
-        (
-            k.to_owned(),
-            wire::Value {
-                kind: Some(wire::value::Kind::Text(v.to_owned())),
-            },
-        )
-    })
-    .collect();
-    let done = driver
-        .handle
-        .act(&wire::ActRequest {
-            app: "calendar".to_owned(),
-            action: "propose".to_owned(),
-            input,
-            invoke_key: "proof-1".to_owned(),
-            autosave: false,
-        })
-        .expect("act answers");
-    assert_eq!(done.status, wire::ActStatus::Executed as i32, "{done:?}");
-
-    let arrived = driver.pump(Duration::from_millis(300));
-    assert!(arrived >= 1, "the change was pushed to the shell");
-    assert_ne!(data(&driver, id).count_label, before_count);
-    assert!(driver.views[&id].revision > before);
-}
-
-#[test]
 fn the_stack_is_rusts_and_a_back_swipe_is_an_event() {
     let mut driver = driver_with(Duration::from_secs(30));
     driver.start();

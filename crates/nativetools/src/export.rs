@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use centraid_apps_kit::manifest::{CHAT_VERBS_JSON, ChatSurface, Manifest, parse_manifest};
+use centraid_domain::manifest::{CHAT_VERBS_JSON, ChatSurface, Manifest, parse_manifest};
 use serde_json::{Value, json};
 
 use crate::dates::{EXAMPLES, Unit};
@@ -79,24 +79,8 @@ pub fn phrases() -> Value {
     )
 }
 
-/// The nine app manifests, embedded: the catalog the chat tables are generated from.
-const MANIFESTS: [(&str, &str); 9] = [
-    (
-        "calendar",
-        include_str!("../../apps/calendar/manifest.json"),
-    ),
-    ("docs", include_str!("../../apps/docs/manifest.json")),
-    ("health", include_str!("../../apps/health/manifest.json")),
-    ("locker", include_str!("../../apps/locker/manifest.json")),
-    ("money", include_str!("../../apps/money/manifest.json")),
-    ("notes", include_str!("../../apps/notes/manifest.json")),
-    ("people", include_str!("../../apps/people/manifest.json")),
-    ("photos", include_str!("../../apps/photos/manifest.json")),
-    (
-        "reminders",
-        include_str!("../../apps/reminders/manifest.json"),
-    ),
-];
+/// The app manifests, embedded: none until the new plane declares an app.
+const MANIFESTS: [(&str, &str); 0] = [];
 
 /// Every bundled manifest, parsed, in `MANIFESTS` order.
 ///

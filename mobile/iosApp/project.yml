@@ -204,9 +204,7 @@ targets:
         # There is no share type anywhere in this bundle: the usage string
         # below is `NSHealthShareUsageDescription` alone, and
         # `healthkit-read-only` (`cargo xtask rules`) fails on an `NSHealthUpdateUsageDescription`,
-        # a non-empty access list, or a `toShare` that is not `[]`. The
-        # simulator seeder that writes test data is its own project
-        # (`HealthSeeder/project.yml`) and never part of this one.
+        # a non-empty access list, or a `toShare` that is not `[]`.
         com.apple.developer.healthkit: true
         com.apple.developer.healthkit.access: []
         # THE APP GROUP THE WIDGETS READ THROUGH (#1173). The app writes Agenda's

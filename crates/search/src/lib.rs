@@ -6,7 +6,7 @@
 //! `crates/vault`'s gate for every entity a command touched
 //! ([#1135](https://github.com/srikanth235/centraid/issues/1135)). This crate
 //! owns every `MATCH` statement in the workspace; the app kit's grammar has no
-//! `MATCH` production at all ([`centraid_apps_kit::grammar`]), which is what
+//! `MATCH` production at all ([`centraid_domain::grammar`]), which is what
 //! makes "an app cannot search by hand" a fact rather than a convention.
 //!
 //! A read joins `entity` on `n` for the kind and the trash filter, so a result
@@ -21,7 +21,7 @@
 //! | Promise | What enforces it |
 //! |---|---|
 //! | SQL lives here, not in an app | `cargo xtask rules`' `sql-confinement` |
-//! | Every read is a window | [`Search::query`] takes a [`centraid_apps_kit::page::PageRequest`], whose `limit` is required and has no default |
+//! | Every read is a window | [`Search::query`] takes a [`centraid_domain::page::PageRequest`], whose `limit` is required and has no default |
 //! | A window continues by keyset | [`Page::next`] is the last row's `(tier, rank, id)`; there is no offset to reconstruct |
 //! | A prefix search is affordable | Title matches first and uncapped, then the newest [`TAIL_ROWS`] other matches, ranked; the plan streams the index and never sorts every match ([`sqlite`]) |
 //! | One letter is not a search | A query whose words are all one character is [`SearchError::NoSearchableWords`], the empty term's answer on every surface ([`matching`]) |
@@ -40,7 +40,7 @@ pub mod sqlite;
 pub use matching::{MAX_MATCH_TOKENS, MIN_WORD_LETTERS, match_expression, title_expression};
 pub use sqlite::{SqliteDoor, TAIL_ROWS};
 
-use centraid_apps_kit::page::{Page, PageRequest};
+use centraid_domain::page::{Page, PageRequest};
 
 /// The most rows one MATCH can return, whatever a caller asks for.
 ///
@@ -294,7 +294,7 @@ pub trait Search {
     /// it included. It is a correction and never a wider match: a word some word of
     /// the vault starts with is kept, a word of fewer than four letters or with a
     /// digit is kept, and the replacement is always one whole word of the vault's
-    /// word list, chosen by [`centraid_apps_kit::spelling::near_words`] (one edit
+    /// word list, chosen by [`centraid_domain::spelling::near_words`] (one edit
     /// anywhere, a first-letter change only when nothing keeps the first letter,
     /// then a fragment inside a longer word) and ranked by the documents that
     /// hold it. The rule is the kit's, whose `within_one` the assistant's name
@@ -364,7 +364,7 @@ pub enum SearchError {
     IndexUnusable { detail: String },
 
     #[error("{0}")]
-    Window(#[from] centraid_apps_kit::error::KitError),
+    Window(#[from] centraid_domain::error::KitError),
 
     #[error("search: {0}")]
     Sqlite(String),

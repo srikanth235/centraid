@@ -502,7 +502,7 @@ fn a_cursor_that_is_not_a_tier_and_a_rank_is_refused() {
     let world = World::new();
     world.note("n1", "Garden", "");
     let mut asked = request(&["note"], "garden", 2);
-    asked.page.after = Some(centraid_apps_kit::page::PageCursor {
+    asked.page.after = Some(centraid_domain::page::PageCursor {
         sort_key: "-1.5".to_owned(),
         pk: "n1".to_owned(),
     });

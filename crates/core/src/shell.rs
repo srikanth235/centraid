@@ -10,8 +10,8 @@
 
 use std::sync::OnceLock;
 
-use centraid_apps_kit::actions::{ActionRow, act, confirmed};
-use centraid_apps_kit::manifest::{Manifest, parse_manifest};
+use centraid_domain::actions::{ActionRow, act, confirmed};
+use centraid_domain::manifest::{Manifest, parse_manifest};
 
 /// The manifest, embedded verbatim like an app's.
 pub const MANIFEST_JSON: &str = include_str!("shell/manifest.json");

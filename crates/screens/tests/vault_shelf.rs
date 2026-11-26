@@ -12,17 +12,9 @@ use centraid_screens::strings::{self, Locale};
 use centraid_screens::vault::{Found, FoundRefusal, Restored, files};
 use vault_support::*;
 
-/// Whether the core in front can open Locker: only a keyed core holds `K`.
+/// Whether the core in front holds the vault's keys: only a keyed core does.
 fn unlocks(phone: &Phone) -> bool {
-    phone
-        .driver
-        .handle
-        .locker_session(&wire::LockerSessionRequest {
-            step: Some(wire::locker_session_request::Step::Unlock(
-                wire::LockerUnlock::default(),
-            )),
-        })
-        .is_ok()
+    phone.driver.handle.keyed().unwrap_or(false)
 }
 
 fn made(found: &Found) -> &str {
@@ -364,60 +356,6 @@ fn a_vault_is_founded_in_a_directory_of_its_own_and_forgetting_deletes_it_whole(
     assert!(!home.exists(), "the directory goes whole");
     assert!(phone.dir.exists(), "the shelf's own directory stays");
     assert!(phone.holdings().vaults.is_empty());
-}
-
-#[test]
-fn the_first_vault_gets_the_starter_rows_and_the_second_does_not() {
-    let mut phone = Phone::new();
-    phone.launch();
-    phone.shelf.found(None, "First");
-    // The starter notes are ordinary rows of Notes: read through its library query.
-    let rows = |phone: &Phone| {
-        let core = phone.shelf.foreground_core().expect("a core in front");
-        let mut request = centraid_screens::catalog::load::notes::Library::default().request();
-        request.zone = "UTC".to_owned();
-        let answer = core.load(&request).expect("the library reads");
-        match answer.answer.and_then(|a| a.answer) {
-            Some(wire::app_query_response::Answer::NotesLibrary(library)) => library.notes.len(),
-            other => panic!("a library answered {other:?}"),
-        }
-    };
-    let first = rows(&phone);
-    phone.shelf.found(None, "Second");
-    let second = rows(&phone);
-    assert!(
-        first > second,
-        "starters add rows to the first vault only: {first} vs {second}"
-    );
-}
-
-#[test]
-fn the_first_vaults_starter_notes_read_newest_first_for_the_day_one_tile() {
-    let mut phone = Phone::new();
-    phone.launch();
-    phone.shelf.found(None, "First");
-    let core = phone.shelf.foreground_core().expect("a core in front");
-    let mut request = centraid_screens::catalog::load::notes::Library::default().request();
-    request.zone = "UTC".to_owned();
-    let answer = core.load(&request).expect("the library reads");
-    let Some(wire::app_query_response::Answer::NotesLibrary(library)) =
-        answer.answer.and_then(|a| a.answer)
-    else {
-        panic!("no library answered");
-    };
-    // THE HOME TILE SHOWS THESE TWO IN THIS ORDER (FirstHome board): the one written last is the
-    // newest, and the tie between two notes made in the same instant is broken the same way
-    // every time.
-    let titles: Vec<&str> = library
-        .notes
-        .iter()
-        .filter_map(|row| row.title.as_deref())
-        .collect();
-    assert_eq!(
-        titles.get(..2),
-        Some(&["Link with [[", "This note is yours"][..]),
-        "{titles:?}"
-    );
 }
 
 #[test]

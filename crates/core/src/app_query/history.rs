@@ -43,7 +43,7 @@ pub(crate) fn versions(
     let zone = zone_if_any(vault, zone)?;
     let local = |instant: &str| {
         zone.as_ref()
-            .and_then(|zone| centraid_apps_kit::civil::now_local(zone, instant))
+            .and_then(|zone| centraid_domain::civil::now_local(zone, instant))
             .unwrap_or_default()
     };
     let system = |who: Who| match who {
@@ -93,7 +93,7 @@ pub(crate) fn record(vault: &Vault, entity_id: &str, seq: i64, zone: &str) -> Re
     let zone = zone_if_any(vault, zone)?;
     let local = |instant: &str| {
         zone.as_ref()
-            .and_then(|zone| centraid_apps_kit::civil::now_local(zone, instant))
+            .and_then(|zone| centraid_domain::civil::now_local(zone, instant))
             .unwrap_or_default()
     };
     let system = |who: &Who| match who {

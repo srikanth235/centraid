@@ -13,7 +13,6 @@ package centraid.core.v1;
 
 import "centraid/core/v1/backup_screens.proto";
 import "centraid/core/v1/kit_screens.proto";
-import "centraid/core/v1/photos_home_screens.proto";
 import "centraid/core/v1/route.proto";
 
 // ONE TILE IS ONE OF THREE THINGS BEFORE IT IS A NUMBER. A read in flight is
@@ -433,7 +432,6 @@ message HomeEvent {
     AppearanceChosen appearance_chosen = 26;
     // What the phone says of photo access, told by the camera roll (no shell relays it): a refusal
     // changes only the Photos widget, which reads "Photo access is off · Open Settings".
-    PhotoAccessTold photo_access_told = 27;
   }
   // 5 was `appearance`, the key that flipped light and dark: Settings chooses it now.
   reserved 5;
@@ -463,7 +461,6 @@ message HomeEvent {
     bool none = 3;
   }
   message PhoneSchemeTold { bool dark = 1; }
-  message PhotoAccessTold { PhotosMediaPermission permission = 1; }
   message EntryAsked {
     enum Entry {
       ENTRY_UNSPECIFIED = 0;
