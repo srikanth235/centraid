@@ -68,7 +68,7 @@ Each with its reason in the module, and each recorded as a decision.
 | Consumer | What it uses |
 | --- | --- |
 | `crates/core` | `Vault` and its commands and doors; `backup::{snapshot, engine, state, staging, store, restore, retention, files, naming}` for the phone's passes. |
-| `crates/apps/kit` | `Vault::page_raw`, `page::and_row_filters`, `page::apply_field_mask`, `commands::Registry`. The kit builds the statement and the binds; the vault never sees a `PageQuery` and the kit never sees a `Connection`. |
+| `crates/core` (`api.rs`) | `Vault::page_raw`, `page::and_row_filters`, `page::apply_field_mask`, `commands::Registry`, until the read registry in `crates/domain` **(target)** replaces them. |
 | `crates/blobs` | `bytes::BlobStore`, which `ContentBytes` implements, and the device state's `local_bytes`. |
 | `crates/centraid` | `backup::restore::restore_check` for `doctor`, and `backup::drill::dump` for the restore drill. |
 
