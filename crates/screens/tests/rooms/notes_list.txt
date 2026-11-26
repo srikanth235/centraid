@@ -1,0 +1,13 @@
+room app_place key="notes" secure
+  header title="Notes"
+    filter clear=#filter/clear
+      menu #filter
+        section "Show"
+          item "Starred" #filter/starred
+  ready
+    section #section/lens "View"
+      trailing "Week" #lens/week
+    row #row/n1 "Bread" swipe="Move to trash" #row/n1/trash
+    row #row/n2 "Banana bread" swipe="Move to trash" #row/n2/trash
+    row #row/n3 "Taxes" swipe="Move to trash" #row/n3/trash
+  search placeholder="Search notes" #search

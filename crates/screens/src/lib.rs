@@ -13,6 +13,7 @@ pub mod pairing;
 pub mod passes;
 pub mod proof;
 pub mod registry;
+pub mod room;
 pub mod runtime;
 pub mod screen;
 pub mod shell;

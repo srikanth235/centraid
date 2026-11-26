@@ -1,0 +1,94 @@
+room app_place key="everything"
+  header title="Everything" subtitle="Scope"
+    back "Home" #back
+    key add icon="plus" "New" #key/add
+  band home=#band/home
+    tab "A" icon="a" selected #tab/a
+    tab "B" icon="b" #tab/b
+  ready
+    hero "Bread" noun="note" mark=glyph:note chips="Pinned":accent
+      line "Edited today"
+      primary "Catch up" icon="check" #hero/catch-up
+    section #section/a "Recent" count="2 of 9" next=#section/a/next
+      trailing "Show all" #section/a/all
+      row #row/1 "Banana bread" meta="Yesterday" trailing="$4.20":warning chips="Shared":net mark=glyph:note a11y="Banana bread, yesterday" swipe="Move to trash" #row/1/trash
+        menu #row/1/menu
+          section
+            item "Star" #row/1/star
+            item "Select" #row/1/select
+      row #row/2 "Pending one" dimmed pending
+    facts
+      fact "Phone" "555 0100" kind=phone open=#fact/phone/open copy=#fact/phone/copy
+      fact "Password" kind=secret sealed reveal=#fact/pw/reveal
+    form
+      text #field/title "Title" "Bread" rev=0 hint="What is it?" required focused
+      money #field/amount "Amount" "$4.20"
+      moment #field/due "Due" "Nov 30"
+      toggle #field/flag "Flagged" on
+      choice #field/kind "Kind"
+        option "A" selected
+        option "B"
+      item #field/home "In" "Recipes"
+      file #field/file "File" "scan.pdf"
+      secret #field/secret "Secret" masked
+      repeat "Guests" #guests
+        group #guest/1 remove=#guest/1/remove
+          text #field/guest-1 "Name" "Ana" rev=0
+        add "Add a guest" icon="plus" #guests/add
+      explicit save="Save"#form/save cancel="Cancel"#form/cancel dirty
+    form
+      autosave conflict "Changed elsewhere" refused reload="Reload"#autosave/reload
+    choice chips "View" multiple #choice/view
+      option "Day" id="day" selected
+      option "Week" id="week"
+    figure "Balance" "$1,204.00" caption="as of today" tone=seam
+    prose "See [[Taxes]] later"
+      link 4..13 #link/taxes
+    media image #media/1 thumb="thumb:1"
+    progress "Exporting" done=3 total=10 count="3 of 10"
+      cancel "Cancel" #progress/cancel
+    empty glyph="note" "No notes" body="Make one."
+      action "New note" icon="plus" #empty/add
+    wall "Locker is locked" body="Unlock with Face ID."
+      unlock "Unlock" #wall/unlock
+    tiles
+      tile "Notes" subtitle="12" glyph="note" #tile/notes
+    glance "Today" #glance/today
+      line "2 events"
+      line "1 task"
+    trash "Trash · 1" retention="30 days, then erased"
+      row #trash/1 "Old note" meta="Deleted today · Erased in 30 days" restore=#trash/1/restore purge=#trash/1/purge
+      empty_trash "Empty Trash" destructive #trash/empty
+    confirm outlined "Erase this note?" body="It cannot come back." yes="Erase"#confirm/yes no="Cancel"#confirm/no
+    menu #more
+      section
+        item "Sort"
+          item "Title" #more/sort/title
+    attachments "Attachments"
+      row #att/1 "Item"
+      menu #att/add
+        section
+          item "Scan" #att/add/scan
+    linked "Linked"
+      row #lnk/1 "Item"
+      add "Link" #lnk/add
+    mentioned_in "Mentioned in"
+      row #men/1 "Item"
+    says phone "Phone says" take="Take"
+      field "Name" stated="Ana B." mine="Ana" #says/name
+    earlier_versions "3 earlier versions" count=3 #earlier
+    origin "From Contacts, 3 Nov" #origin
+    calendar_grid day anchor="2026-11-26" create=#canvas
+      day "2026-11-26" label="Thu 26" today
+        item #cal/item/1 "Lunch" time="12:00"
+    photo_grid months
+      section "November"
+        tile #photo/1 a11y="Loaf"
+    note_editor #editor title="Bread"
+      body "Flour"
+    chart #chart summary="Up"
+      series line "Weight" points=1
+        point "p1" x="Nov" y="70 kg"
+  status "Done" action="Undo" #status/undo
+  search placeholder="Search" #search
+  selection

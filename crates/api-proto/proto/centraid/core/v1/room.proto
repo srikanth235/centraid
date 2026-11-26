@@ -875,3 +875,46 @@ message RoomCanvasEvent {
     RoomChartScrubbed chart_scrub = 8;
   }
 }
+
+enum RoomTransition {
+  ROOM_TRANSITION_UNSPECIFIED = 0;
+  ROOM_TRANSITION_REPLACE = 1;
+  ROOM_TRANSITION_PUSH = 2;
+  ROOM_TRANSITION_POP = 3;
+  ROOM_TRANSITION_RELOAD = 4;
+}
+
+// The room on top of one tab. Rust keeps each tab's stack; a shell draws what it is shown and
+// animates by `transition`. The same message answers a request and is pushed as an event.
+message RoomShown {
+  string tab = 1;
+  uint64 instance = 2;
+  uint32 depth = 3;
+  RoomTransition transition = 4;
+  Room room = 5;
+}
+
+// Open the room registered under `key` on `tab`: pushed over the tab's top room, or, with
+// `root`, replacing the tab's stack.
+message RoomOpen {
+  string key = 1;
+  string tab = 2;
+  bool root = 3;
+}
+
+message RoomSend {
+  uint64 instance = 1;
+  RoomEvent event = 2;
+}
+
+message RoomRequest {
+  oneof kind {
+    RoomOpen open = 1;
+    RoomSend send = 2;
+  }
+}
+
+// Zero shown when nothing the shell draws changed (a scroll report, a stale selector).
+message RoomResponse {
+  repeated RoomShown shown = 1;
+}
