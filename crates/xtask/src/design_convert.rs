@@ -1,80 +1,26 @@
-//! THE DARK MOCKUPS, GENERATED FROM THE LIGHT ONES (#1173), by `cargo xtask design`.
+//! ONE-SHOT: the conversion of the light boards to `var(--token)` (#1214, lane T1).
 //!
-//! `design/mockups/` holds one light screen per `X.dc.html` and its dark twin
-//! `XDark.dc.html`. The twin is never edited: this module writes it from the
-//! light screen and the `[mockups.dark]` section of `design/tokens.toml`, and
-//! `--check` fails when a committed twin is not what the generator would write.
-//! It replaces `make_dark.py`, which lived outside the repository.
-//!
-//! # What changes
-//!
-//! * Every literal colour in an inline `style`, and in an SVG `fill`, `stroke`
-//!   or `stop-color`, is swapped for its dark value. Nothing else about the
-//!   markup moves, except the serialiser's habits the committed twins carry:
-//!   an empty SVG shape is written `<path .../>`, `<br>` is `<br/>`, an empty
-//!   boolean attribute is bare (`disabled`), a link to another screen points at
-//!   that screen's dark twin, and the `<title>` ends in ` (dark)`.
-//! * The dark value depends on the ROLE the colour plays, not on the hex alone:
-//!   `#1C1B19` is `#F2EFEA` as text and `#3A3733` as a fill. The role comes from
-//!   the CSS property (`color` is text, `background` a fill, `border` and
-//!   `outline` a line, `box-shadow` a shadow) or the SVG attribute (`fill` and
-//!   `stroke` are ink, which falls back to the text value). A role an entry
-//!   does not list keeps the light value.
-//! * Three pieces of context keep a colour where the role alone would move it,
-//!   each described by a rule in the TOML: a document PAGE (a white sheet with a
-//!   small radius and a real height) is content, so it and everything inside it
-//!   stay light, except chrome laid over it with `position: absolute`; the iOS
-//!   switch THUMB (a 26 px white absolute circle) stays white; an app TILE (a
-//!   square, centred flex box filled with the ink colour, holding a white glyph)
-//!   keeps its fill. A Centraid brand icon swaps its white for the dark ground,
-//!   and the 120-wide tile form also drops its hairline and keeps its quarter
-//!   colours.
-//! * A light colour the table neither maps nor lists under `keep` is an error:
-//!   a new colour in a light screen forces a decision about its dark value.
-//!
-//! The scanner is deliberately not an HTML parser. The boards are written by a
-//! design tool in one regular shape, so a tag scanner with an element stack is
-//! enough, and the bytes between tags are copied untouched.
+//! Reads every light board, replaces each colour with the role token whose
+//! (light, dark) pair it is (the dark side is what the old `[mockups.dark]`
+//! table gave it in that position, so a dark twin renders as before), deletes
+//! HTML comments, corrects retired words, and reports what it did. Deleted once
+//! it has run.
 
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
 use anyhow::{Context, Result, anyhow, bail};
 use serde::Deserialize;
 
-/// The shared token file, relative to the repository root.
 pub const TOKENS: &str = "design/tokens.toml";
-
-/// The mockups directory, relative to the repository root.
 pub const MOCKUPS: &str = "design/mockups";
-
-/// The canvas that says which boards are light screens.
 const CANVAS: &str = "canvas.json";
-
-/// SVG shapes the serialiser writes self-closed when they hold nothing.
-const SHAPES: &[&str] = &[
-    "path", "circle", "rect", "line", "polyline", "polygon", "ellipse",
-];
 
 /// Elements with no end tag.
 const VOID: &[&str] = &[
     "br", "hr", "img", "input", "meta", "link", "base", "col", "wbr", "source", "area", "embed",
     "track", "param",
-];
-
-/// Void elements the serialiser writes with a slash. The head's `<meta>` and
-/// `<link>` stay bare in the committed twins.
-const SLASHED_VOID: &[&str] = &["br"];
-
-/// Boolean attributes the serialiser writes bare.
-const BOOLEAN_ATTRS: &[&str] = &[
-    "disabled",
-    "checked",
-    "hidden",
-    "readonly",
-    "required",
-    "selected",
-    "autofocus",
 ];
 
 /// Where a colour sits, which decides which of an entry's dark values applies.
@@ -472,18 +418,181 @@ fn role_of_property(prop: &str) -> Option<Role> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// The recorder: which role token a colour pair becomes
+// ---------------------------------------------------------------------------
+
+/// A light value and the dark value it takes where it sits.
+pub type Pair = (String, String);
+
+pub struct Recorder {
+    names: RefCell<BTreeMap<Pair, String>>,
+    taken: RefCell<BTreeSet<String>>,
+    role_light: BTreeMap<String, String>,
+    pub added: RefCell<BTreeMap<String, Pair>>,
+    pub uses: RefCell<BTreeMap<Pair, usize>>,
+    pub kept: RefCell<BTreeMap<String, usize>>,
+    table: HashSet<String>,
+}
+
+fn kind_word(role: Role) -> &'static str {
+    match role {
+        Role::Text => "text",
+        Role::Ink => "ink",
+        Role::Fill => "fill",
+        Role::Line => "line",
+        Role::Shadow => "shadow",
+    }
+}
+
+impl Recorder {
+    pub fn new(existing: &[crate::design_boards::CssRole], table: HashSet<String>) -> Self {
+        let mut names = BTreeMap::new();
+        let mut taken = BTreeSet::new();
+        let mut role_light = BTreeMap::new();
+        for role in existing {
+            names
+                .entry((hex_key(&role.light), norm_value(&role.dark)))
+                .or_insert_with(|| role.name.clone());
+            role_light
+                .entry(hex_key(&role.light))
+                .or_insert_with(|| role.name.clone());
+            taken.insert(role.name.clone());
+        }
+        Self {
+            names: RefCell::new(names),
+            taken: RefCell::new(taken),
+            role_light,
+            added: RefCell::default(),
+            uses: RefCell::default(),
+            kept: RefCell::default(),
+            table,
+        }
+    }
+
+    fn add(&self, base: String, pair: &Pair) -> String {
+        let mut name = base.clone();
+        let mut n = 2;
+        while self.taken.borrow().contains(&name) {
+            name = format!("{base}-{n}");
+            n += 1;
+        }
+        self.taken.borrow_mut().insert(name.clone());
+        self.names.borrow_mut().insert(pair.clone(), name.clone());
+        self.added.borrow_mut().insert(name.clone(), pair.clone());
+        name
+    }
+
+    /// A role fixed by hand (the icon hairline).
+    fn force(&self, name: &str, light: &str, dark: &str) -> String {
+        let pair = (light.to_owned(), dark.to_owned());
+        if let Some(have) = self.names.borrow().get(&pair) {
+            return have.clone();
+        }
+        self.add(name.to_owned(), &pair)
+    }
+
+    fn name_for(&self, light: &str, dark: &str, role: Role) -> Option<String> {
+        let pair = (light.to_owned(), dark.to_owned());
+        *self.uses.borrow_mut().entry(pair.clone()).or_default() += 1;
+        if light == "#FFFFFF" && dark == "#FFFFFF" {
+            let name = if role == Role::Fill {
+                "paper"
+            } else {
+                "on-fill"
+            };
+            if !self.taken.borrow().contains(name) {
+                self.taken.borrow_mut().insert(name.to_owned());
+                self.added
+                    .borrow_mut()
+                    .insert(name.to_owned(), pair.clone());
+            }
+            return Some(name.to_owned());
+        }
+        if let Some(name) = self.names.borrow().get(&pair) {
+            return Some(name.clone());
+        }
+        if light == "#FFFFFF" && dark == "#1C1B19" {
+            return Some(self.add("icon-ground".to_owned(), &pair));
+        }
+        if let Some(args) = light.strip_prefix("rgba(") {
+            let parts: Vec<&str> = args.trim_end_matches(')').split(',').collect();
+            let alpha = parts.get(3).and_then(|a| a.parse::<f64>().ok())?;
+            let percent = (alpha * 100.0).round();
+            let base = match parts.first().copied() {
+                Some("255") => format!("glass-{percent}"),
+                Some("0") if role == Role::Shadow => format!("shadow-{percent}"),
+                Some("0") => format!("scrim-{percent}"),
+                _ => {
+                    let hex: String = parts[..3]
+                        .iter()
+                        .filter_map(|p| p.parse::<u8>().ok())
+                        .map(|c| format!("{c:02x}"))
+                        .collect();
+                    format!("rgba-{hex}-{percent}")
+                }
+            };
+            return Some(self.add(base, &pair));
+        }
+        if light == dark {
+            if let Some(role_name) = self.role_light.get(light) {
+                return Some(self.add(format!("fixed-{role_name}"), &pair));
+            }
+            if self.table.contains(light) || role != Role::Fill {
+                return Some(self.add(
+                    format!(
+                        "fixed-{}",
+                        light.trim_start_matches('#').to_ascii_lowercase()
+                    ),
+                    &pair,
+                ));
+            }
+            *self.kept.borrow_mut().entry(light.to_owned()).or_default() += 1;
+            return None;
+        }
+        Some(self.add(
+            format!(
+                "{}-{}",
+                kind_word(role),
+                light.trim_start_matches('#').to_ascii_lowercase()
+            ),
+            &pair,
+        ))
+    }
+}
+
+fn norm_value(value: &str) -> String {
+    if value.starts_with('#') {
+        hex_key(value)
+    } else {
+        value.chars().filter(|c| !c.is_whitespace()).collect()
+    }
+}
+
+fn norm_token(token: &Token<'_>) -> String {
+    match token {
+        Token::Hex(hex) => hex_key(hex),
+        Token::Rgba(args) => format!(
+            "rgba({})",
+            args.iter().map(|a| a.trim()).collect::<Vec<_>>().join(",")
+        ),
+    }
+}
+
 /// The context one start tag maps its colours in.
 struct Scope<'a> {
     map: &'a DarkMap,
+    rec: &'a Recorder,
     tag: &'a str,
     paper: bool,
     icon: Option<Icon>,
-    /// This element's own `background` keeps its colour.
     keep_fill: bool,
+    hairline: bool,
+    keep: Cell<bool>,
 }
 
 impl Scope<'_> {
-    fn map_colour(&self, token: &Token<'_>, role: Role, attr: &str) -> Result<Option<String>> {
+    fn dark_of(&self, token: &Token<'_>, role: Role, attr: &str) -> Result<Option<String>> {
         if self.paper {
             return Ok(None);
         }
@@ -513,7 +622,27 @@ impl Scope<'_> {
         }
     }
 
-    /// `value` with every colour in it mapped for `role`.
+    fn map_colour(&self, token: &Token<'_>, role: Role, attr: &str) -> Result<Option<String>> {
+        let light = norm_token(token);
+        if self.hairline {
+            let dark = "rgba(228,224,216,0)";
+            return Ok(Some(format!(
+                "var(--{})",
+                self.rec.force("icon-hairline", &light, dark)
+            )));
+        }
+        let dark = self
+            .dark_of(token, role, attr)?
+            .map_or_else(|| light.clone(), |d| norm_value(&d));
+        match self.rec.name_for(&light, &dark, role) {
+            Some(name) => Ok(Some(format!("var(--{name})"))),
+            None => {
+                self.keep.set(true);
+                Ok(None)
+            }
+        }
+    }
+
     fn map_value(&self, value: &str, role: Role, attr: &str) -> Result<String> {
         let mut out = String::with_capacity(value.len());
         let mut at = 0;
@@ -534,15 +663,14 @@ impl Scope<'_> {
         let mut at = 0;
         for (ps, pe, vs, ve) in declarations(style) {
             let name = style[ps..pe].trim().to_ascii_lowercase();
-            let name = name.as_str();
             let value = &style[vs..ve];
             out.push_str(&style[at..vs]);
             if colour_tokens(value).is_empty() {
                 out.push_str(value);
             } else {
-                let role = role_of_property(name)
+                let role = role_of_property(&name)
                     .ok_or_else(|| anyhow!("a colour in unclassified CSS property `{name}`"))?;
-                out.push_str(&self.map_value(value, role, name)?);
+                out.push_str(&self.map_value(value, role, &name)?);
             }
             at = ve;
         }
@@ -627,21 +755,6 @@ fn tag_end(html: &str, at: usize) -> Option<usize> {
     None
 }
 
-/// Rewrite a link to a screen so it points at that screen's dark twin.
-fn dark_link(map: &DarkMap, href: &str) -> Option<String> {
-    let name = href.strip_suffix(".dc.html")?;
-    if name.ends_with("Dark") || name.contains('/') || name.contains(':') || name.is_empty() {
-        return None;
-    }
-    if let Some(twins) = &map.twins
-        && !twins.contains(href)
-    {
-        return None;
-    }
-    Some(format!("{name}Dark.dc.html"))
-}
-
-/// The result of rewriting one start tag.
 struct Rewritten {
     text: String,
     self_closed: bool,
@@ -651,11 +764,11 @@ struct Rewritten {
 
 fn rewrite_start_tag(
     map: &DarkMap,
+    rec: &Recorder,
     tag: &str,
     name: &str,
     parent: Option<&Frame>,
-    swallow_end: bool,
-) -> Result<Option<Rewritten>> {
+) -> Result<Rewritten> {
     let attrs = parse_attrs(tag, 1 + name.len());
     let get = |wanted: &str| {
         attrs
@@ -671,7 +784,6 @@ fn rewrite_start_tag(
         .contains(&hex_key(&rules.paper.background))
         && facts.height.is_some_and(|h| h >= rules.paper.min_height)
         && facts.radius.is_some_and(|r| r <= rules.paper.max_radius);
-    // Chrome laid over a page (an absolutely positioned badge) is not content.
     let paper = !facts.absolute && (parent.is_some_and(|p| p.paper) || paper_here);
     let square = matches!((facts.width, facts.height), (Some(w), Some(h)) if (w - h).abs() < 0.01);
     let width = facts.width.unwrap_or(0.0);
@@ -694,16 +806,17 @@ fn rewrite_start_tag(
             },
         );
     }
-    if icon == Some(Icon::Tile) && name == "rect" && get("fill") == Some("none") {
-        return Ok(None);
-    }
+    let hairline = icon == Some(Icon::Tile) && name == "rect" && get("fill") == Some("none");
 
     let scope = Scope {
         map,
+        rec,
         tag: name,
         paper,
         icon,
         keep_fill: knob || tile,
+        hairline,
+        keep: Cell::new(false),
     };
     let mut edits: Vec<(usize, usize, String)> = Vec::new();
     for attr in &attrs {
@@ -716,46 +829,39 @@ fn rewrite_start_tag(
             "fill" | "stroke" => Some(scope.map_value(value, Role::Ink, attr.name)?),
             "stop-color" | "flood-color" => Some(scope.map_value(value, Role::Fill, attr.name)?),
             "color" => Some(scope.map_value(value, Role::Text, attr.name)?),
-            "href" => dark_link(map, value),
             _ => None,
         };
         if let Some(mapped) = mapped.filter(|m| m != value) {
             edits.push((start, end, mapped));
         }
-        if value.is_empty() && BOOLEAN_ATTRS.contains(&attr.name) {
-            // `disabled=""` -> `disabled`
-            edits.push((attr.span.0 + attr.name.len(), attr.span.1, String::new()));
-        }
     }
-
+    if scope.keep.get() && get("data-keep").is_none() {
+        edits.push((1 + name.len(), 1 + name.len(), " data-keep".to_owned()));
+    }
     let mut text = tag.to_string();
     edits.sort_by_key(|e| std::cmp::Reverse(e.0));
     for (start, end, replacement) in edits {
         text.replace_range(start..end, &replacement);
     }
-    let already_closed = text.ends_with("/>");
-    let mut self_closed = already_closed;
-    let slash = SHAPES.contains(&name) && swallow_end || SLASHED_VOID.contains(&name);
-    if !already_closed && slash {
-        text.truncate(text.len() - 1);
-        text.push_str("/>");
-        self_closed = true;
-    }
-    Ok(Some(Rewritten {
+    Ok(Rewritten {
+        self_closed: text.ends_with("/>"),
         text,
-        self_closed,
         icon,
         paper,
-    }))
+    })
 }
 
-/// Generate the dark board for one light board.
-///
-/// # Errors
-/// A colour the table neither maps nor keeps, a colour in a CSS property with
-/// no role, or markup the scanner cannot read.
-pub fn dark_board(light_html: &str, map: &DarkMap) -> Result<String> {
-    let html = light_html;
+/// Words the rulings retired, corrected as the boards are converted.
+const WORDS: &[(&str, &str)] = &[
+    (
+        "Show: All photos or Favorites",
+        "Show: All photos or Starred",
+    ),
+    ("aria-label=\"Favorite\"", "aria-label=\"Star\""),
+    ("Photo, favorite", "Photo, starred"),
+];
+
+pub fn convert_board(html: &str, map: &DarkMap, rec: &Recorder) -> Result<String> {
     let mut out = String::with_capacity(html.len());
     let mut stack: Vec<Frame> = Vec::new();
     let mut at = 0;
@@ -769,8 +875,16 @@ pub fn dark_board(light_html: &str, map: &DarkMap) -> Result<String> {
         let rest = &html[at..];
         if rest.starts_with("<!--") {
             let end = rest.find("-->").map_or(rest.len(), |e| e + 3);
-            out.push_str(&rest[..end]);
+            let line_start = out.rfind('\n').map_or(0, |i| i + 1);
+            let alone = out[line_start..].trim().is_empty()
+                && rest[end..]
+                    .trim_start_matches([' ', '\t'])
+                    .starts_with('\n');
             at += end;
+            if alone {
+                out.truncate(line_start);
+                at += html[at..].find('\n').map_or(0, |i| i + 1);
+            }
             continue;
         }
         if rest.starts_with("<!") || rest.starts_with("<?") {
@@ -789,9 +903,6 @@ pub fn dark_board(light_html: &str, map: &DarkMap) -> Result<String> {
                 .next()
                 .unwrap_or("")
                 .to_ascii_lowercase();
-            if name == "title" {
-                out.push_str(&map.section.title_suffix);
-            }
             out.push_str(&rest[..end]);
             at += end;
             if let Some(pos) = stack.iter().rposition(|f| f.name == name) {
@@ -804,23 +915,11 @@ pub fn dark_board(light_html: &str, map: &DarkMap) -> Result<String> {
         let name: String = tag[1..]
             .chars()
             .take_while(|c| !c.is_whitespace() && !matches!(c, '/' | '>'))
-            .collect::<String>();
+            .collect();
         let lower = name.to_ascii_lowercase();
         at = end;
-
-        let empty_shape =
-            SHAPES.contains(&lower.as_str()) && html[at..].starts_with(&format!("</{lower}>"));
-        let rewritten = rewrite_start_tag(map, tag, &name, stack.last(), empty_shape)?;
-        let Some(rewritten) = rewritten else {
-            if empty_shape {
-                at += lower.len() + 3;
-            }
-            continue;
-        };
+        let rewritten = rewrite_start_tag(map, rec, tag, &name, stack.last())?;
         out.push_str(&rewritten.text);
-        if empty_shape {
-            at += lower.len() + 3;
-        }
         let void = VOID.contains(&lower.as_str());
         if !rewritten.self_closed && !void {
             stack.push(Frame {
@@ -832,19 +931,20 @@ pub fn dark_board(light_html: &str, map: &DarkMap) -> Result<String> {
         if matches!(lower.as_str(), "script" | "style") && !rewritten.self_closed {
             let close = format!("</{lower}>");
             let body_end = html[at..].find(&close).map_or(html.len(), |e| at + e);
-            out.push_str(&html[at..body_end]);
+            let body = &html[at..body_end];
+            if !colour_tokens(body).is_empty() {
+                bail!("a colour inside a <{lower}> block");
+            }
+            out.push_str(body);
             at = body_end;
         }
+    }
+    for (from, to) in WORDS {
+        out = out.replace(from, to);
     }
     Ok(out)
 }
 
-// ---------------------------------------------------------------------------
-// The whole directory
-// ---------------------------------------------------------------------------
-
-/// The light boards in `canvas.json`: the names of the screens on the `light`
-/// page.
 fn light_boards(dir: &Path) -> Result<Vec<String>> {
     let text =
         std::fs::read_to_string(dir.join(CANVAS)).with_context(|| format!("read {CANVAS}"))?;
@@ -854,65 +954,270 @@ fn light_boards(dir: &Path) -> Result<Vec<String>> {
         .ok_or_else(|| anyhow!("canvas.json has no `boards`"))?;
     let mut names: Vec<String> = boards
         .iter()
-        .filter(|(_, board)| board["page"] == "light")
+        .filter(|(name, board)| board["page"] == "light" && dir.join(name).exists())
         .map(|(name, _)| name.clone())
         .collect();
     names.sort();
     Ok(names)
 }
 
-fn dark_name(light: &str) -> String {
-    light.replacen(".dc.html", "Dark.dc.html", 1)
+/// Convert every light board. With `apply`, write the boards and the new roles.
+pub fn run(root: &Path, apply: bool) -> Result<()> {
+    let tokens = centraid_design::tokens::Tokens::load(root).context("tokens")?;
+    let roles = crate::design_boards::css_roles(&tokens);
+    let map = DarkMap::load(root)?;
+    let table = map
+        .section
+        .colors
+        .iter()
+        .map(|c| hex_key(&c.light))
+        .collect();
+    let rec = Recorder::new(&roles, table);
+    let dir = root.join(MOCKUPS);
+    let mut results = Vec::new();
+    for light in light_boards(&dir)? {
+        let html = std::fs::read_to_string(dir.join(&light))?;
+        let text = convert_board(&html, &map, &rec).with_context(|| format!("convert {light}"))?;
+        results.push((light, text));
+    }
+    let keeps: usize = results
+        .iter()
+        .map(|(_, t)| t.matches(" data-keep").count())
+        .sum();
+    eprintln!("boards: {}", results.len());
+    eprintln!("pairs used: {}", rec.uses.borrow().len());
+    eprintln!("roles added: {}", rec.added.borrow().len());
+    eprintln!("data-keep elements: {keeps}");
+    eprintln!("kept colours (no role):");
+    for (hex, n) in rec.kept.borrow().iter() {
+        eprintln!("  {hex} x{n}");
+    }
+    eprintln!("added roles:");
+    for (name, (l, d)) in rec.added.borrow().iter() {
+        eprintln!("  {name} = {l} -> {d}");
+    }
+    if apply {
+        for (light, text) in &results {
+            std::fs::write(dir.join(light), text)?;
+        }
+        let mut block = String::from("[board]\n");
+        for (name, (light, dark)) in rec.added.borrow().iter() {
+            block.push_str(&format!(
+                "{name} = {{ light = \"{light}\", dark = \"{dark}\" }}\n"
+            ));
+        }
+        let path = root.join(TOKENS);
+        let text = std::fs::read_to_string(&path)?;
+        let marker = "# design/mockups from the light";
+        let at = text.find(marker).ok_or_else(|| anyhow!("no marker"))?;
+        let mut text = text;
+        text.insert_str(at, &format!("{block}\n"));
+        std::fs::write(path, text)?;
+    }
+    let _ = (HashMap::<u8, u8>::new(), HashSet::<u8>::new());
+    Ok(())
 }
 
-/// The first line where two boards differ, with both lines shortened to the
-/// stretch around the difference.
-#[must_use]
-pub fn first_difference(have: &str, want: &str) -> String {
-    for (number, (a, b)) in have.lines().zip(want.lines()).enumerate() {
-        if a != b {
-            let common = a.bytes().zip(b.bytes()).take_while(|(x, y)| x == y).count();
-            let from = (0..=common.saturating_sub(40))
-                .rev()
-                .find(|&i| a.is_char_boundary(i) && b.is_char_boundary(i))
-                .unwrap_or(0);
-            let clip = |s: &str| -> String { s[from..].chars().take(120).collect() };
-            return format!(
-                "line {}: committed `{}` / generated `{}`",
-                number + 1,
-                clip(a),
-                clip(b)
-            );
+/// Link `./tokens.css` in every light board's `<helmet>`.
+pub fn add_links(root: &Path) -> Result<usize> {
+    let dir = root.join(MOCKUPS);
+    let mut done = 0;
+    for light in light_boards(&dir)? {
+        let path = dir.join(&light);
+        let text = std::fs::read_to_string(&path)?;
+        if text.contains("./tokens.css") {
+            continue;
+        }
+        let at = text
+            .find("<helmet>")
+            .ok_or_else(|| anyhow!("{light}: no <helmet>"))?
+            + "<helmet>".len();
+        let mut text = text;
+        text.insert_str(at, "\n<link rel=\"stylesheet\" href=\"./tokens.css\">");
+        std::fs::write(&path, text)?;
+        done += 1;
+    }
+    Ok(done)
+}
+
+// ---------------------------------------------------------------------------
+// The rulings: retired words, the Invites tab, "What … may read" rows
+// ---------------------------------------------------------------------------
+
+struct Elem {
+    start: usize,
+    open_end: usize,
+    end: usize,
+    parent: Option<usize>,
+}
+
+fn elements(html: &str) -> Vec<Elem> {
+    let mut out: Vec<Elem> = Vec::new();
+    let mut stack: Vec<(usize, String)> = Vec::new();
+    let mut at = 0;
+    while at < html.len() {
+        let Some(lt) = html[at..].find('<') else {
+            break;
+        };
+        at += lt;
+        let rest = &html[at..];
+        if rest.starts_with("<!--") {
+            at += rest.find("-->").map_or(rest.len(), |e| e + 3);
+            continue;
+        }
+        if rest.starts_with("<!") || rest.starts_with("<?") {
+            at += rest.find('>').map_or(rest.len(), |e| e + 1);
+            continue;
+        }
+        let Some(end) = tag_end(html, at) else { break };
+        if let Some(closing) = rest.strip_prefix("</") {
+            let name = closing
+                .split(['>', ' '])
+                .next()
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            if let Some(pos) = stack.iter().rposition(|(_, n)| *n == name) {
+                let (index, _) = stack[pos].clone();
+                out[index].end = end;
+                stack.truncate(pos);
+            }
+            at = end;
+            continue;
+        }
+        let name: String = html[at + 1..end]
+            .chars()
+            .take_while(|c| !c.is_whitespace() && !matches!(c, '/' | '>'))
+            .collect::<String>()
+            .to_ascii_lowercase();
+        let self_closed = html[at..end].ends_with("/>");
+        let void = VOID.contains(&name.as_str());
+        let parent = stack.last().map(|(i, _)| *i);
+        out.push(Elem {
+            start: at,
+            open_end: end,
+            end: if void || self_closed { end } else { html.len() },
+            parent,
+        });
+        if !void && !self_closed {
+            stack.push((out.len() - 1, name.clone()));
+        }
+        at = end;
+        if matches!(name.as_str(), "script" | "style") {
+            let close = format!("</{name}>");
+            at = html[at..].find(&close).map_or(html.len(), |e| at + e);
         }
     }
-    format!(
-        "committed has {} lines, generated has {}",
-        have.lines().count(),
-        want.lines().count()
-    )
+    out
 }
 
-/// Every dark board, generated from its light one: repository-relative path
-/// (`design/mockups/XDark.dc.html`) to text. `cargo xtask design` writes these
-/// and its `--check` (the gate's `design` step) compares them (#1173).
-///
-/// # Errors
-/// An unreadable tree, or a board that cannot be converted.
-pub fn dark_boards(root: &Path) -> Result<BTreeMap<String, String>> {
-    let dir = root.join(MOCKUPS);
-    let lights = light_boards(&dir)?;
-    let twins: BTreeSet<String> = lights.iter().cloned().collect();
-    let map = DarkMap::load(root)?.with_twins(twins);
-    let mut out = BTreeMap::new();
-    for light in &lights {
-        let html =
-            std::fs::read_to_string(dir.join(light)).with_context(|| format!("read {light}"))?;
-        let wanted = dark_board(&html, &map).with_context(|| format!("convert {light}"))?;
-        out.insert(format!("{MOCKUPS}/{}", dark_name(light)), wanted);
+/// Remove the nearest ancestor of the first `needle` whose start tag satisfies `row`.
+/// Returns whether anything was removed.
+fn remove_row(html: &mut String, needle: &str, row: impl Fn(&str) -> bool) -> Result<bool> {
+    let Some(index) = html.find(needle) else {
+        return Ok(false);
+    };
+    let elems = elements(html);
+    let mut best: Option<usize> = None;
+    for (i, e) in elems.iter().enumerate() {
+        if e.open_end <= index && index < e.end && best.is_none_or(|b| e.start >= elems[b].start) {
+            best = Some(i);
+        }
     }
-    Ok(out)
+    let mut cur = best.ok_or_else(|| anyhow!("{needle}: no element holds it"))?;
+    while !row(&html[elems[cur].start..elems[cur].open_end]) {
+        cur = elems[cur]
+            .parent
+            .ok_or_else(|| anyhow!("{needle}: no row found above it"))?;
+    }
+    let (mut start, mut end) = (elems[cur].start, elems[cur].end);
+    let line_start = html[..start].rfind('\n').map_or(0, |i| i + 1);
+    if html[line_start..start].trim().is_empty()
+        && html[end..]
+            .trim_start_matches([' ', '\t'])
+            .starts_with('\n')
+    {
+        start = line_start;
+        end += html[end..].find('\n').map_or(0, |i| i + 1);
+    }
+    html.replace_range(start..end, "");
+    Ok(true)
 }
 
-#[cfg(test)]
-#[path = "design_dark_tests.rs"]
-mod tests;
+const FLAG: &str = "M5 21V4h11l-2 4 2 4H5";
+const STAR: &str = "M12 3l2.8 5.8 6.2.9-4.5 4.4 1 6.2L12 17.4 6.5 20.3l1-6.2L3 9.7l6.2-.9z";
+
+const SHARED: &[(&str, &str)] = &[
+    ("Office NAS", "Office Mac"),
+    ("Parents’ NAS", "Parents’ Mac"),
+    ("Saved elsewhere · 24 words", "Saved elsewhere"),
+    ("Not saved yet · 24 words", "Not saved yet"),
+    (">Flagged<", ">Starred<"),
+    ("Flagged only", "Starred only"),
+    ("aria-label=\"Flagged\"", "aria-label=\"Starred\""),
+    ("aria-label=\"Flag\"", "aria-label=\"Star\""),
+    ("1 flagged", "1 starred"),
+    ("Flag · Delete", "Star · Delete"),
+    (">Retry<", ">Try again<"),
+    ("Your originals as one archive", "Your files as one archive"),
+    ("214 originals", "214 photos"),
+    ("Keep originals on this phone", "Keep photos on this phone"),
+    (
+        "Photos library, originals still coming back",
+        "Photos library, still coming back",
+    ),
+    ("thumbnails download", "photo previews download"),
+    (">Square<", ">1 : 1<"),
+    ("Cropped to Square", "Cropped to 1 : 1"),
+    ("NEVER THE SEED", "NEVER THE SECRET"),
+    (">Photograph<", ">Photo<"),
+    (">Agenda<", ">Calendar<"),
+    ("Agenda, 2 results", "Calendar, 2 results"),
+    ("Agenda · 2 more", "Calendar · 2 more"),
+    ("Centraid · Agenda", "Centraid · Reminders"),
+];
+
+/// Apply the rulings to every light board. Returns the boards it changed.
+pub fn fix(root: &Path) -> Result<Vec<String>> {
+    let dir = root.join(MOCKUPS);
+    let mut changed = Vec::new();
+    for name in light_boards(&dir)? {
+        let path = dir.join(&name);
+        let original = std::fs::read_to_string(&path)?;
+        let mut text = original.clone();
+        for (from, to) in SHARED {
+            text = text.replace(from, to);
+        }
+        text = text.replace(FLAG, STAR);
+        if let Some(at) = text.find("<title>Agenda ") {
+            let from = at + "<title>".len();
+            let rest = &text[from + "Agenda ".len()..];
+            let mut chars = rest.chars();
+            let first = chars
+                .next()
+                .map_or(String::new(), |c| c.to_uppercase().collect());
+            let tail: String = chars.collect();
+            text.replace_range(
+                from..from + "Agenda ".len() + rest.len(),
+                &format!("{first}{tail}"),
+            );
+        }
+        if name == "ImportReminders.dc.html" {
+            text = text.replace(">Agenda</h1>", ">Reminders</h1>");
+        }
+        while text.contains(">Invites<") || text.contains("Invites<span") {
+            if !remove_row(&mut text, "Invites", |tag| {
+                tag.contains("flex-direction: column")
+            })? {
+                break;
+            }
+        }
+        while remove_row(&mut text, "may read", |tag| {
+            tag.contains("border-bottom") || tag.starts_with("<a ") || tag.starts_with("<button")
+        })? {}
+        if text != original {
+            std::fs::write(&path, &text)?;
+            changed.push(name);
+        }
+    }
+    Ok(changed)
+}

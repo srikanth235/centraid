@@ -1,134 +1,6 @@
 {
   "attachments": {},
   "boards": {
-    "AgendaCatchUp.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · Reschedule (catch-up)",
-      "w": 390,
-      "x": 1410,
-      "y": 15080
-    },
-    "AgendaCatchUpDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "4 · Reschedule (catch-up) · dark",
-      "w": 390,
-      "x": 1410,
-      "y": 15080
-    },
-    "AgendaEvent.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "1 · Event details",
-      "w": 390,
-      "x": 0,
-      "y": 15080
-    },
-    "AgendaEventAttachments.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "13 · Event with attachments",
-      "w": 390,
-      "x": 5640,
-      "y": 3480
-    },
-    "AgendaEventAttachmentsDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "13 · Event with attachments · dark",
-      "w": 390,
-      "x": 5640,
-      "y": 3480
-    },
-    "AgendaEventCancel.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "2 · Cancel a repeating event",
-      "w": 390,
-      "x": 470,
-      "y": 15080
-    },
-    "AgendaEventCancelDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "2 · Cancel a repeating event · dark",
-      "w": 390,
-      "x": 470,
-      "y": 15080
-    },
-    "AgendaEventMenu.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "3 · Event menu",
-      "w": 390,
-      "x": 1880,
-      "y": 15080
-    },
-    "AgendaEventMenuDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "3 · Event menu · dark",
-      "w": 390,
-      "x": 1880,
-      "y": 15080
-    },
-    "AgendaEventDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "1 · Event details · dark",
-      "w": 390,
-      "x": 0,
-      "y": 15080
-    },
-    "AgendaProject.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "3 · Project",
-      "w": 390,
-      "x": 940,
-      "y": 15080
-    },
-    "AgendaProjectDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "3 · Project · dark",
-      "w": 390,
-      "x": 940,
-      "y": 15080
-    },
-    "AgendaQuickAddChip.dc.html": {
-      "h": 960,
-      "page": "light",
-      "title": "2 · Quick-add chip (iPhone and Android)",
-      "w": 880,
-      "x": 960,
-      "y": 23200
-    },
-    "AgendaQuickAddChipDark.dc.html": {
-      "h": 960,
-      "page": "dark",
-      "title": "2 · Quick-add chip (iPhone and Android) · dark",
-      "w": 880,
-      "x": 960,
-      "y": 23200
-    },
-    "AgendaTaskDetail.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "14 · Task with a link and attachments",
-      "w": 390,
-      "x": 6110,
-      "y": 3480
-    },
-    "AgendaTaskDetailDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "14 · Task with a link and attachments · dark",
-      "w": 390,
-      "x": 6110,
-      "y": 3480
-    },
     "AgendaWidgets.dc.html": {
       "h": 1290,
       "page": "light",
@@ -192,6 +64,38 @@
       "w": 412,
       "x": 940,
       "y": 22040
+    },
+    "AndroidEmptyReminders.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "2 · Reminders first open, Android",
+      "w": 412,
+      "x": 470,
+      "y": 76360
+    },
+    "AndroidEmptyRemindersDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "2 · Reminders first open, Android · dark",
+      "w": 412,
+      "x": 470,
+      "y": 76360
+    },
+    "AndroidFirstHome.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "1 · Home on first run, Android",
+      "w": 412,
+      "x": 0,
+      "y": 76360
+    },
+    "AndroidFirstHomeDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "1 · Home on first run, Android · dark",
+      "w": 412,
+      "x": 0,
+      "y": 76360
     },
     "AndroidHealth.dc.html": {
       "h": 915,
@@ -265,10 +169,26 @@
       "x": 2350,
       "y": 30680
     },
+    "AndroidMoreMoneyDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "6 · Money More on Android · dark",
+      "w": 412,
+      "x": 2350,
+      "y": 30680
+    },
     "AndroidNoteMenu.dc.html": {
       "h": 915,
       "page": "light",
       "title": "5 · Note menu on Android",
+      "w": 412,
+      "x": 1880,
+      "y": 30680
+    },
+    "AndroidNoteMenuDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "5 · Note menu on Android · dark",
       "w": 412,
       "x": 1880,
       "y": 30680
@@ -369,10 +289,34 @@
       "x": 470,
       "y": 30680
     },
+    "AndroidTrashConfirmDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "2 · Empty trash on Android · dark",
+      "w": 412,
+      "x": 470,
+      "y": 30680
+    },
+    "AndroidTrashDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "1 · Notes trash on Android · dark",
+      "w": 412,
+      "x": 0,
+      "y": 30680
+    },
     "AndroidUndo.dc.html": {
       "h": 915,
       "page": "light",
       "title": "3 · Undo after a delete on Android",
+      "w": 412,
+      "x": 940,
+      "y": 30680
+    },
+    "AndroidUndoDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "3 · Undo after a delete on Android · dark",
       "w": 412,
       "x": 940,
       "y": 30680
@@ -385,6 +329,14 @@
       "x": 1410,
       "y": 30680
     },
+    "AndroidVersionsDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "4 · Earlier versions on Android · dark",
+      "w": 412,
+      "x": 1410,
+      "y": 30680
+    },
     "Backup.dc.html": {
       "h": 844,
       "page": "archive",
@@ -392,6 +344,166 @@
       "w": 390,
       "x": 5120,
       "y": 0
+    },
+    "BackupBacklog.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Backup, a backlog that waited too long (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 13160
+    },
+    "BackupBacklogDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Backup, a backlog that waited too long (#1188) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 13160
+    },
+    "BackupBehind.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · One backup device behind (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 0
+    },
+    "BackupBehindDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · One backup device behind (#1188) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 0
+    },
+    "BackupBehindFull.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · A backup device is full (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 940
+    },
+    "BackupBehindFullDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · A backup device is full (#1188) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 940
+    },
+    "BackupCheck.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Check my backup, result (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 3760
+    },
+    "BackupCheckDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Check my backup, result (#1188) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 3760
+    },
+    "BackupCheckFailed.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Check my backup, the check did not finish (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 15040
+    },
+    "BackupCheckFailedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Check my backup, the check did not finish (#1188) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 15040
+    },
+    "BackupCheckKept.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Check my backup, last result kept (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 14100
+    },
+    "BackupCheckKeptDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Check my backup, last result kept (#1188) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 14100
+    },
+    "BackupCheckNotRun.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Check my backup, not checked (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 7520
+    },
+    "BackupCheckNotRunDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Check my backup, not checked (#1188) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 7520
+    },
+    "BackupCheckRunning.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Check my backup, running (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 2820
+    },
+    "BackupCheckRunningDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Check my backup, running (#1188) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 2820
+    },
+    "BackupChecked.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Check my backup, stated rate (#1191)",
+      "w": 390,
+      "x": 7520,
+      "y": 25380
+    },
+    "BackupCheckedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Check my backup, stated rate (#1191) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 25380
+    },
+    "BackupDeviceNotes.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · A backup that can’t be read, a piece sent again (#1191)",
+      "w": 390,
+      "x": 7520,
+      "y": 23500
+    },
+    "BackupDeviceNotesDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · A backup that can’t be read, a piece sent again (#1191) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 23500
     },
     "BackupFailed.dc.html": {
       "h": 844,
@@ -408,6 +520,166 @@
       "w": 390,
       "x": 1410,
       "y": 18560
+    },
+    "BackupHeld.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Old backup files waiting to go, with Undo (#1191)",
+      "w": 390,
+      "x": 7520,
+      "y": 22560
+    },
+    "BackupHeldDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Old backup files waiting to go, with Undo (#1191) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 22560
+    },
+    "BackupMovedOn.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Another phone took over the backup (#1191)",
+      "w": 390,
+      "x": 7520,
+      "y": 19740
+    },
+    "BackupMovedOnDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Another phone took over the backup (#1191) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 19740
+    },
+    "BackupNotifyAsk.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Backup, notification ask after pairing (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 9400
+    },
+    "BackupNotifyAskDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Backup, notification ask after pairing (#1188) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 9400
+    },
+    "BackupNotifyOff.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Backup, notifications off (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 10340
+    },
+    "BackupNotifyOffDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Backup, notifications off (#1188) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 10340
+    },
+    "BackupPairAgain.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Backup, a device no longer knows this phone: Pair again (#1202)",
+      "w": 390,
+      "x": 7520,
+      "y": 39960
+    },
+    "BackupPairAgainDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Backup, a device no longer knows this phone: Pair again (#1202) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 39960
+    },
+    "BackupPaused.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · A backup device is paused by its operator (#1191)",
+      "w": 390,
+      "x": 7520,
+      "y": 20680
+    },
+    "BackupPausedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · A backup device is paused by its operator (#1191) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 20680
+    },
+    "BackupPending.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Backup · Changes waiting",
+      "w": 390,
+      "x": 1410,
+      "y": 70840
+    },
+    "BackupPendingDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Backup · Changes waiting · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 70840
+    },
+    "BackupPhoneFull.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · This phone is too full to back up (#1188)",
+      "w": 390,
+      "x": 8000,
+      "y": 940
+    },
+    "BackupPhoneFullDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · This phone is too full to back up (#1188) · dark",
+      "w": 390,
+      "x": 8000,
+      "y": 940
+    },
+    "BackupRefusing.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Backup, a device is refusing the backup (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 17860
+    },
+    "BackupRefusingDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Backup, a device is refusing the backup (#1188) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 17860
+    },
+    "BackupRolledBack.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · A backup device holds an older backup (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 1880
+    },
+    "BackupRolledBackDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · A backup device holds an older backup (#1188) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 1880
     },
     "BackupRunning.dc.html": {
       "h": 844,
@@ -457,6 +729,134 @@
       "x": 0,
       "y": 2320
     },
+    "BackupSharedItems.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Backup · visible shared items",
+      "w": 390,
+      "x": 7520,
+      "y": 39000
+    },
+    "BackupSharedItemsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Backup · visible shared items · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 39000
+    },
+    "BackupStaleNotice.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Backup is stale: notification (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 4700
+    },
+    "BackupStaleNoticeDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Backup is stale: notification (#1188) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 4700
+    },
+    "BackupTooLarge.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Backup, a device refused a file as too large (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 16920
+    },
+    "BackupTooLargeDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Backup, a device refused a file as too large (#1188) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 16920
+    },
+    "BackupTooOld.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · A backup device needs an update (#1191)",
+      "w": 390,
+      "x": 7520,
+      "y": 21620
+    },
+    "BackupTooOldDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · A backup device needs an update (#1191) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 21620
+    },
+    "BackupUnpaired.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "11 · Backup, before anything is paired",
+      "w": 390,
+      "x": 1880,
+      "y": 75360
+    },
+    "BackupUnpairedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "11 · Backup, before anything is paired · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 75360
+    },
+    "BackupVaultDamaged.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · This phone’s vault is damaged (#1191)",
+      "w": 390,
+      "x": 7520,
+      "y": 24440
+    },
+    "BackupVaultDamagedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · This phone’s vault is damaged (#1191) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 24440
+    },
+    "BackupVaultDamagedOpen.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Vault damaged at launch (#1191)",
+      "w": 390,
+      "x": 7520,
+      "y": 27260
+    },
+    "BackupVaultDamagedOpenDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Vault damaged at launch (#1191) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 27260
+    },
+    "BackupWaiting.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Backup, records backed up, items waiting (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 12220
+    },
+    "BackupWaitingDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Backup, records backed up, items waiting (#1188) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 12220
+    },
     "Calendar.dc.html": {
       "h": 844,
       "page": "light",
@@ -489,10 +889,34 @@
       "x": 470,
       "y": 3480
     },
+    "CalendarRefused.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "11 · Calendar, access refused",
+      "w": 390,
+      "x": 940,
+      "y": 76360
+    },
+    "CalendarRefusedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "11 · Calendar, access refused · dark",
+      "w": 390,
+      "x": 940,
+      "y": 76360
+    },
     "CalendarReminders.dc.html": {
       "h": 844,
       "page": "light",
       "title": "A day with reminders: tick, repeat, overdue",
+      "w": 390,
+      "x": 470,
+      "y": 25960
+    },
+    "CalendarRemindersDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "A day with reminders: tick, repeat, overdue · dark",
       "w": 390,
       "x": 470,
       "y": 25960
@@ -505,28 +929,12 @@
       "x": 3780,
       "y": 28360
     },
-    "HealthTurnOn.dc.html": {
+    "CalendarStopPhoneDark.dc.html": {
       "h": 844,
-      "page": "light",
-      "title": "12 · Health More before it reads, with Turn on",
-      "w": 390,
-      "x": 5080,
-      "y": 28360
-    },
-    "ReadableColumn.dc.html": {
-      "h": 800,
-      "page": "light",
-      "title": "Wide screens · readable column",
-      "w": 1280,
-      "x": 0,
-      "y": 77000
-    },
-    "RemindersStopPhone.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "13 · Stop reading the phone's reminders, and turning it on",
+      "page": "dark",
+      "title": "11 · Stop reading the phone's calendars, and turning it on · dark",
       "w": 1230,
-      "x": 5560,
+      "x": 3780,
       "y": 28360
     },
     "CalendarStyle.dc.html": {
@@ -569,6 +977,70 @@
       "x": 1410,
       "y": 0
     },
+    "ChatCards.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · cards: proposed, done with Undo, undone, Undo refused",
+      "w": 390,
+      "x": 1410,
+      "y": 33100
+    },
+    "ChatCardsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · cards: proposed, done with Undo, undone, Undo refused · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 33100
+    },
+    "ChatCardsMore.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · cards: a chain of changes, stale, gone",
+      "w": 390,
+      "x": 2820,
+      "y": 34200
+    },
+    "ChatCardsMoreDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · cards: a chain of changes, stale, gone · dark",
+      "w": 390,
+      "x": 2820,
+      "y": 34200
+    },
+    "ChatCellular.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · mobile data choice",
+      "w": 390,
+      "x": 470,
+      "y": 32000
+    },
+    "ChatCellularDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · mobile data choice · dark",
+      "w": 390,
+      "x": 470,
+      "y": 32000
+    },
+    "ChatChecking.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · checking",
+      "w": 390,
+      "x": 2820,
+      "y": 32000
+    },
+    "ChatCheckingDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · checking · dark",
+      "w": 390,
+      "x": 2820,
+      "y": 32000
+    },
     "ChatDark.dc.html": {
       "h": 844,
       "page": "dark",
@@ -576,6 +1048,102 @@
       "w": 390,
       "x": 1410,
       "y": 0
+    },
+    "ChatDelete.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · delete sheet",
+      "w": 390,
+      "x": 2350,
+      "y": 34200
+    },
+    "ChatDeleteDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · delete sheet · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 34200
+    },
+    "ChatDictation.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · dictation (the button is absent, not disabled, where on-device recognition cannot be guaranteed)",
+      "w": 390,
+      "x": 3290,
+      "y": 33100
+    },
+    "ChatDictationDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · dictation (the button is absent, not disabled, where on-device recognition cannot be guaranteed) · dark",
+      "w": 390,
+      "x": 3290,
+      "y": 33100
+    },
+    "ChatDownload.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · download",
+      "w": 390,
+      "x": 0,
+      "y": 32000
+    },
+    "ChatDownloadDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · download · dark",
+      "w": 390,
+      "x": 0,
+      "y": 32000
+    },
+    "ChatDownloading.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · downloading",
+      "w": 390,
+      "x": 940,
+      "y": 32000
+    },
+    "ChatDownloadingDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · downloading · dark",
+      "w": 390,
+      "x": 940,
+      "y": 32000
+    },
+    "ChatEditResend.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · edit and send again",
+      "w": 390,
+      "x": 2350,
+      "y": 33100
+    },
+    "ChatEditResendDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · edit and send again · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 33100
+    },
+    "ChatFoundNothing.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · found nothing",
+      "w": 390,
+      "x": 0,
+      "y": 35300
+    },
+    "ChatFoundNothingDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · found nothing · dark",
+      "w": 390,
+      "x": 0,
+      "y": 35300
     },
     "ChatList.dc.html": {
       "h": 844,
@@ -593,12 +1161,292 @@
       "x": 1880,
       "y": 15080
     },
+    "ChatLowStorage.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · low storage",
+      "w": 390,
+      "x": 1880,
+      "y": 32000
+    },
+    "ChatLowStorageDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · low storage · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 32000
+    },
+    "ChatMessageActions.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · message actions (Copy on every message, Edit on the last member message, Try again on the last answer)",
+      "w": 390,
+      "x": 1880,
+      "y": 33100
+    },
+    "ChatMessageActionsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · message actions (Copy on every message, Edit on the last member message, Try again on the last answer) · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 33100
+    },
+    "ChatModelUpdate.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · model update row (empty chat only)",
+      "w": 390,
+      "x": 3290,
+      "y": 32000
+    },
+    "ChatModelUpdateDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · model update row (empty chat only) · dark",
+      "w": 390,
+      "x": 3290,
+      "y": 32000
+    },
+    "ChatPhotoDownload.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · photo reader, asked at the first attach",
+      "w": 390,
+      "x": 3290,
+      "y": 34200
+    },
+    "ChatPhotoDownloadDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · photo reader, asked at the first attach · dark",
+      "w": 390,
+      "x": 3290,
+      "y": 34200
+    },
+    "ChatRename.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · rename sheet",
+      "w": 390,
+      "x": 1880,
+      "y": 34200
+    },
+    "ChatRenameDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · rename sheet · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 34200
+    },
+    "ChatReveal.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · card reveal: shut, revealed, a code, gone, check cancelled",
+      "w": 390,
+      "x": 3290,
+      "y": 34200
+    },
+    "ChatRevealDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · card reveal: shut, revealed, a code, gone, check cancelled · dark",
+      "w": 390,
+      "x": 3290,
+      "y": 34200
+    },
+    "ChatRichText.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · lists, tables, code",
+      "w": 390,
+      "x": 2820,
+      "y": 33100
+    },
+    "ChatRichTextDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · lists, tables, code · dark",
+      "w": 390,
+      "x": 2820,
+      "y": 33100
+    },
+    "ChatStoppedFailed.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · stopped and failed",
+      "w": 390,
+      "x": 940,
+      "y": 33100
+    },
+    "ChatStoppedFailedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · stopped and failed · dark",
+      "w": 390,
+      "x": 940,
+      "y": 33100
+    },
+    "ChatStreaming.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · streaming, jump to latest",
+      "w": 390,
+      "x": 470,
+      "y": 33100
+    },
+    "ChatStreamingDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · streaming, jump to latest · dark",
+      "w": 390,
+      "x": 470,
+      "y": 33100
+    },
+    "ChatTooLong.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · message too long",
+      "w": 390,
+      "x": 470,
+      "y": 35300
+    },
+    "ChatTooLongDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · message too long · dark",
+      "w": 390,
+      "x": 470,
+      "y": 35300
+    },
+    "ChatUnavailable.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · unavailable (reasons: memory, processor, no engine in this build)",
+      "w": 390,
+      "x": 2350,
+      "y": 32000
+    },
+    "ChatUnavailableDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · unavailable (reasons: memory, processor, no engine in this build) · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 32000
+    },
+    "ChatUpdateNeeded.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · update needed",
+      "w": 390,
+      "x": 0,
+      "y": 33100
+    },
+    "ChatUpdateNeededDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · update needed · dark",
+      "w": 390,
+      "x": 0,
+      "y": 33100
+    },
+    "ChatWaitingWifi.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chat · waiting for Wi‑Fi",
+      "w": 390,
+      "x": 1410,
+      "y": 32000
+    },
+    "ChatWaitingWifiDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chat · waiting for Wi‑Fi · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 32000
+    },
+    "ChatsEmpty.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chats · empty",
+      "w": 390,
+      "x": 940,
+      "y": 34200
+    },
+    "ChatsEmptyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chats · empty · dark",
+      "w": 390,
+      "x": 940,
+      "y": 34200
+    },
+    "ChatsError.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chats · change not saved",
+      "w": 390,
+      "x": 1410,
+      "y": 34200
+    },
+    "ChatsErrorDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chats · change not saved · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 34200
+    },
+    "ChatsSearch.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chats · search results",
+      "w": 390,
+      "x": 0,
+      "y": 34200
+    },
+    "ChatsSearchDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chats · search results · dark",
+      "w": 390,
+      "x": 0,
+      "y": 34200
+    },
+    "ChatsSearchNone.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Chats · search found nothing",
+      "w": 390,
+      "x": 470,
+      "y": 34200
+    },
+    "ChatsSearchNoneDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Chats · search found nothing · dark",
+      "w": 390,
+      "x": 470,
+      "y": 34200
+    },
     "CodeMap.dc.html": {
       "h": 1960,
       "page": "rules",
       "title": "Code map",
       "w": 1200,
       "x": 2560,
+      "y": 0
+    },
+    "CourtyardIcon.dc.html": {
+      "h": 1060,
+      "page": "icon",
+      "title": "Centraid icon · courtyard",
+      "w": 1200,
+      "x": 0,
       "y": 0
     },
     "CradlePalettes.dc.html": {
@@ -673,6 +1521,22 @@
       "x": 1410,
       "y": 13920
     },
+    "DocEditorUnavailable.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "Docs · Editor unavailable",
+      "w": 412,
+      "x": 3290,
+      "y": 70840
+    },
+    "DocEditorUnavailableDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "Docs · Editor unavailable · dark",
+      "w": 412,
+      "x": 3290,
+      "y": 70840
+    },
     "DocVersions.dc.html": {
       "h": 844,
       "page": "light",
@@ -729,6 +1593,30 @@
       "x": 5140,
       "y": 27200
     },
+    "DocsFolderPathDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · A folder's path, ready and empty · dark",
+      "w": 804,
+      "x": 5140,
+      "y": 27200
+    },
+    "DocsMissing.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "Docs · Restored original",
+      "w": 412,
+      "x": 2820,
+      "y": 70840
+    },
+    "DocsMissingDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "Docs · Restored original · dark",
+      "w": 412,
+      "x": 2820,
+      "y": 70840
+    },
     "DocsStopFolder.dc.html": {
       "h": 844,
       "page": "light",
@@ -736,6 +1624,30 @@
       "w": 804,
       "x": 4240,
       "y": 27200
+    },
+    "DocsStopFolderDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Stop reading a followed folder · dark",
+      "w": 804,
+      "x": 4240,
+      "y": 27200
+    },
+    "DocsText.dc.html": {
+      "h": 915,
+      "page": "light",
+      "title": "Docs · Imported text preview",
+      "w": 412,
+      "x": 470,
+      "y": 70840
+    },
+    "DocsTextDark.dc.html": {
+      "h": 915,
+      "page": "dark",
+      "title": "Docs · Imported text preview · dark",
+      "w": 412,
+      "x": 470,
+      "y": 70840
     },
     "EmptyReminders.dc.html": {
       "h": 844,
@@ -801,6 +1713,22 @@
       "x": 470,
       "y": 18560
     },
+    "FirstHomeRefused.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "9 · Home, photo access refused",
+      "w": 390,
+      "x": 940,
+      "y": 75360
+    },
+    "FirstHomeRefusedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "9 · Home, photo access refused · dark",
+      "w": 390,
+      "x": 940,
+      "y": 75360
+    },
     "FirstImports.dc.html": {
       "h": 844,
       "page": "light",
@@ -816,6 +1744,134 @@
       "w": 390,
       "x": 1880,
       "y": 1160
+    },
+    "FirstOpenCalendar.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Calendar, first open",
+      "w": 390,
+      "x": 0,
+      "y": 74200
+    },
+    "FirstOpenCalendarDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Calendar, first open · dark",
+      "w": 390,
+      "x": 0,
+      "y": 74200
+    },
+    "FirstOpenDocs.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "3 · Docs, first open",
+      "w": 390,
+      "x": 940,
+      "y": 74200
+    },
+    "FirstOpenDocsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "3 · Docs, first open · dark",
+      "w": 390,
+      "x": 940,
+      "y": 74200
+    },
+    "FirstOpenHealth.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Health, first open",
+      "w": 390,
+      "x": 2350,
+      "y": 74200
+    },
+    "FirstOpenHealthDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Health, first open · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 74200
+    },
+    "FirstOpenHealthTrends.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Health, trends, first open",
+      "w": 390,
+      "x": 3290,
+      "y": 76360
+    },
+    "FirstOpenHealthTrendsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Health, trends, first open · dark",
+      "w": 390,
+      "x": 3290,
+      "y": 76360
+    },
+    "FirstOpenHealthWorkouts.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Health, workouts, first open",
+      "w": 390,
+      "x": 3760,
+      "y": 76360
+    },
+    "FirstOpenHealthWorkoutsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · Health, workouts, first open · dark",
+      "w": 390,
+      "x": 3760,
+      "y": 76360
+    },
+    "FirstOpenMoney.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "5 · Money, first open",
+      "w": 390,
+      "x": 1880,
+      "y": 74200
+    },
+    "FirstOpenMoneyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "5 · Money, first open · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 74200
+    },
+    "FirstOpenNotes.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · Notes, first open",
+      "w": 390,
+      "x": 470,
+      "y": 74200
+    },
+    "FirstOpenNotesDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · Notes, first open · dark",
+      "w": 390,
+      "x": 470,
+      "y": 74200
+    },
+    "FirstOpenPeople.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · People, first open",
+      "w": 390,
+      "x": 1410,
+      "y": 74200
+    },
+    "FirstOpenPeopleDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · People, first open · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 74200
     },
     "Health.dc.html": {
       "h": 844,
@@ -857,6 +1913,14 @@
       "x": 0,
       "y": 28200
     },
+    "HealthEmptyPeriodDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "6 · An empty period keeps its chips; a gone workout keeps its Undo · dark",
+      "w": 1218,
+      "x": 0,
+      "y": 28200
+    },
     "HealthMetric.dc.html": {
       "h": 844,
       "page": "light",
@@ -881,10 +1945,42 @@
       "x": 3810,
       "y": 24000
     },
+    "HealthSearchDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · Health search, in place · dark",
+      "w": 390,
+      "x": 3810,
+      "y": 24000
+    },
+    "HealthTurnOn.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "12 · Health More before it reads, with Turn on",
+      "w": 390,
+      "x": 5080,
+      "y": 28360
+    },
+    "HealthTurnOnDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "12 · Health More before it reads, with Turn on · dark",
+      "w": 390,
+      "x": 5080,
+      "y": 28360
+    },
     "HealthWidgets.dc.html": {
       "h": 1290,
       "page": "light",
       "title": "1 · Health widgets (iPhone and Android)",
+      "w": 880,
+      "x": 1920,
+      "y": 23200
+    },
+    "HealthWidgetsDark.dc.html": {
+      "h": 1290,
+      "page": "dark",
+      "title": "1 · Health widgets (iPhone and Android) · dark",
       "w": 880,
       "x": 1920,
       "y": 23200
@@ -904,6 +2000,70 @@
       "w": 390,
       "x": 0,
       "y": 16240
+    },
+    "HomeBackupDayTwo.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "12 · Home, a day after the first item",
+      "w": 390,
+      "x": 2350,
+      "y": 75360
+    },
+    "HomeBackupDayTwoDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "12 · Home, a day after the first item · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 75360
+    },
+    "HomeBackupPhotosWaiting.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Home, backed up, photos waiting (#1209)",
+      "w": 390,
+      "x": 8480,
+      "y": 2820
+    },
+    "HomeBackupPhotosWaitingDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Home, backed up, photos waiting (#1209) · dark",
+      "w": 390,
+      "x": 8480,
+      "y": 2820
+    },
+    "HomePhotoOne.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Home · One photo",
+      "w": 390,
+      "x": 1880,
+      "y": 70840
+    },
+    "HomePhotoOneDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Home · One photo · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 70840
+    },
+    "HomeRemindersEmpty.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Home · nothing due today",
+      "w": 390,
+      "x": 2350,
+      "y": 68680
+    },
+    "HomeRemindersEmptyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Home · nothing due today · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 68680
     },
     "HomeWidgets.dc.html": {
       "h": 844,
@@ -953,12 +2113,12 @@
       "x": 940,
       "y": 19720
     },
-    "LargeTextDocs.dc.html": {
+    "LargeTextActionsDark.dc.html": {
       "h": 844,
-      "page": "light",
-      "title": "3 · Largest text: Docs in one column",
+      "page": "dark",
+      "title": "2 · Largest text: action keys stack · dark",
       "w": 390,
-      "x": 1410,
+      "x": 940,
       "y": 19720
     },
     "LargeTextCalendarList.dc.html": {
@@ -969,20 +2129,12 @@
       "x": 1880,
       "y": 19720
     },
-    "LargeTextHealth.dc.html": {
+    "LargeTextCalendarListDark.dc.html": {
       "h": 844,
-      "page": "light",
-      "title": "5 · Largest text: Health range picker scrolls",
+      "page": "dark",
+      "title": "4 · Largest text: Calendar List, date above rows · dark",
       "w": 390,
-      "x": 2350,
-      "y": 19720
-    },
-    "LargeTextWeek.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "6 · Largest text: week strip held at xxxLarge",
-      "w": 390,
-      "x": 2820,
+      "x": 1880,
       "y": 19720
     },
     "LargeTextControls.dc.html": {
@@ -993,12 +2145,12 @@
       "x": 3760,
       "y": 19720
     },
-    "LargeTextRows.dc.html": {
+    "LargeTextControlsDark.dc.html": {
       "h": 844,
-      "page": "light",
-      "title": "7 · Largest text: values stack under their names, the safety number wraps",
+      "page": "dark",
+      "title": "8 · Largest text: controls stack, chart words hold, status and addresses stay whole · dark",
       "w": 390,
-      "x": 3290,
+      "x": 3760,
       "y": 19720
     },
     "LargeTextDark.dc.html": {
@@ -1009,12 +2161,12 @@
       "x": 0,
       "y": 19720
     },
-    "LargeTextActionsDark.dc.html": {
+    "LargeTextDocs.dc.html": {
       "h": 844,
-      "page": "dark",
-      "title": "2 · Largest text: action keys stack · dark",
+      "page": "light",
+      "title": "3 · Largest text: Docs in one column",
       "w": 390,
-      "x": 940,
+      "x": 1410,
       "y": 19720
     },
     "LargeTextDocsDark.dc.html": {
@@ -1025,12 +2177,12 @@
       "x": 1410,
       "y": 19720
     },
-    "LargeTextCalendarListDark.dc.html": {
+    "LargeTextHealth.dc.html": {
       "h": 844,
-      "page": "dark",
-      "title": "4 · Largest text: Calendar List, date above rows · dark",
+      "page": "light",
+      "title": "5 · Largest text: Health range picker scrolls",
       "w": 390,
-      "x": 1880,
+      "x": 2350,
       "y": 19720
     },
     "LargeTextHealthDark.dc.html": {
@@ -1039,6 +2191,30 @@
       "title": "5 · Largest text: Health range picker scrolls · dark",
       "w": 390,
       "x": 2350,
+      "y": 19720
+    },
+    "LargeTextRows.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Largest text: values stack under their names, the safety number wraps",
+      "w": 390,
+      "x": 3290,
+      "y": 19720
+    },
+    "LargeTextRowsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · Largest text: values stack under their names, the safety number wraps · dark",
+      "w": 390,
+      "x": 3290,
+      "y": 19720
+    },
+    "LargeTextWeek.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "6 · Largest text: week strip held at xxxLarge",
+      "w": 390,
+      "x": 2820,
       "y": 19720
     },
     "LargeTextWeekDark.dc.html": {
@@ -1057,6 +2233,14 @@
       "x": 1410,
       "y": 3480
     },
+    "ListDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · A list, adding inline · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 3480
+    },
     "ListQuickStaged.dc.html": {
       "h": 844,
       "page": "light",
@@ -1065,13 +2249,13 @@
       "x": 1410,
       "y": 4380
     },
-    "ListDark.dc.html": {
+    "ListQuickStagedDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "4 · A list, adding inline · dark",
+      "title": "4 · A list, quick add with a link and a photo staged · dark",
       "w": 390,
       "x": 1410,
-      "y": 3480
+      "y": 4380
     },
     "ListStyle.dc.html": {
       "h": 844,
@@ -1168,6 +2352,38 @@
       "w": 390,
       "x": 1880,
       "y": 16240
+    },
+    "LockerFirstCheck.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "7 · Locker, step 1: the owner check",
+      "w": 390,
+      "x": 0,
+      "y": 75360
+    },
+    "LockerFirstCheckDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · Locker, step 1: the owner check · dark",
+      "w": 390,
+      "x": 0,
+      "y": 75360
+    },
+    "LockerFirstItem.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "8 · Locker, step 2: the first item",
+      "w": 390,
+      "x": 470,
+      "y": 75360
+    },
+    "LockerFirstItemDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "8 · Locker, step 2: the first item · dark",
+      "w": 390,
+      "x": 470,
+      "y": 75360
     },
     "LockerItem.dc.html": {
       "h": 844,
@@ -1425,6 +2641,22 @@
       "x": 0,
       "y": 28360
     },
+    "MoreDocs.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "15 · Docs More, with What Docs may read",
+      "w": 390,
+      "x": 4660,
+      "y": 28360
+    },
+    "MoreDocsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "15 · Docs More, with What Docs may read · dark",
+      "w": 390,
+      "x": 4660,
+      "y": 28360
+    },
     "MoreHealth.dc.html": {
       "h": 844,
       "page": "light",
@@ -1465,36 +2697,20 @@
       "x": 940,
       "y": 28360
     },
-    "MoreNotes.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "14 · Notes More, with What Notes may read",
-      "w": 390,
-      "x": 4250,
-      "y": 28360
-    },
-    "MoreDocs.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "15 · Docs More, with What Docs may read",
-      "w": 390,
-      "x": 4660,
-      "y": 28360
-    },
-    "ReadsPage.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "9 · What an app may read, a page of its own",
-      "w": 390,
-      "x": 4630,
-      "y": 29520
-    },
     "MoreMoneyDark.dc.html": {
       "h": 844,
       "page": "dark",
       "title": "3 · Money More, with What Money may read and Trash · dark",
       "w": 390,
       "x": 940,
+      "y": 28360
+    },
+    "MoreNotes.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "14 · Notes More, with What Notes may read",
+      "w": 390,
+      "x": 4250,
       "y": 28360
     },
     "MoreNotesDark.dc.html": {
@@ -1505,29 +2721,37 @@
       "x": 4250,
       "y": 28360
     },
-    "MoreDocsDark.dc.html": {
+    "MorePhotos.dc.html": {
       "h": 844,
-      "page": "dark",
-      "title": "15 · Docs More, with What Docs may read · dark",
+      "page": "light",
+      "title": "Photos · More, export and trash",
       "w": 390,
-      "x": 4660,
-      "y": 28360
-    },
-    "ReadableColumnDark.dc.html": {
-      "h": 800,
-      "page": "dark",
-      "title": "Wide screens · readable column · dark",
-      "w": 1280,
       "x": 0,
-      "y": 77000
+      "y": 70840
     },
-    "ReadsPageDark.dc.html": {
+    "MorePhotosDark.dc.html": {
       "h": 844,
       "page": "dark",
-      "title": "9 · What an app may read, a page of its own · dark",
+      "title": "Photos · More, export and trash · dark",
       "w": 390,
-      "x": 4630,
-      "y": 29520
+      "x": 0,
+      "y": 70840
+    },
+    "NoteAttachments.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "2 · A note, attachments",
+      "w": 390,
+      "x": 4160,
+      "y": 30420
+    },
+    "NoteAttachmentsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "2 · A note, attachments · dark",
+      "w": 390,
+      "x": 4160,
+      "y": 30420
     },
     "NoteEditor.dc.html": {
       "h": 844,
@@ -1536,6 +2760,22 @@
       "w": 390,
       "x": 470,
       "y": 11600
+    },
+    "NoteEditorConflict.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Notes editor · conflict kept draft",
+      "w": 390,
+      "x": 1880,
+      "y": 50600
+    },
+    "NoteEditorConflictDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Notes editor · conflict kept draft · dark",
+      "w": 390,
+      "x": 1880,
+      "y": 50600
     },
     "NoteEditorDark.dc.html": {
       "h": 844,
@@ -1569,14 +2809,6 @@
       "x": 4160,
       "y": 29520
     },
-    "NoteAttachments.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "2 · A note, attachments",
-      "w": 390,
-      "x": 4160,
-      "y": 30420
-    },
     "NoteLinksDark.dc.html": {
       "h": 844,
       "page": "dark",
@@ -1609,10 +2841,26 @@
       "x": 1890,
       "y": 24000
     },
+    "NotesAboutDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · Notes about · dark",
+      "w": 390,
+      "x": 1890,
+      "y": 24000
+    },
     "NotesAboutPage.dc.html": {
       "h": 844,
       "page": "light",
       "title": "7 · Note about",
+      "w": 390,
+      "x": 2370,
+      "y": 24000
+    },
+    "NotesAboutPageDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · Note about · dark",
       "w": 390,
       "x": 2370,
       "y": 24000
@@ -1641,6 +2889,14 @@
       "x": 1410,
       "y": 24000
     },
+    "NotesImportDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · Import notes · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 24000
+    },
     "NotesJournal.dc.html": {
       "h": 844,
       "page": "light",
@@ -1656,6 +2912,86 @@
       "w": 390,
       "x": 4700,
       "y": 11600
+    },
+    "NotesJournalEmpty.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "10 · Notes, Journal with no entries",
+      "w": 390,
+      "x": 3030,
+      "y": 75360
+    },
+    "NotesJournalEmptyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "10 · Notes, Journal with no entries · dark",
+      "w": 390,
+      "x": 3030,
+      "y": 75360
+    },
+    "NotifyDateOnly.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Notifications: a day with no time",
+      "w": 390,
+      "x": 470,
+      "y": 36400
+    },
+    "NotifyDateOnlyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Notifications: a day with no time · dark",
+      "w": 390,
+      "x": 470,
+      "y": 36400
+    },
+    "NotifyPaused.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Notifications: paused until opened",
+      "w": 390,
+      "x": 1410,
+      "y": 36400
+    },
+    "NotifyPausedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Notifications: paused until opened · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 36400
+    },
+    "NotifyRefusedRow.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Notifications: refused, on the editor row",
+      "w": 390,
+      "x": 0,
+      "y": 36400
+    },
+    "NotifyRefusedRowDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Notifications: refused, on the editor row · dark",
+      "w": 390,
+      "x": 0,
+      "y": 36400
+    },
+    "NotifyShowDetails.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Notifications: show details",
+      "w": 390,
+      "x": 940,
+      "y": 36400
+    },
+    "NotifyShowDetailsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Notifications: show details · dark",
+      "w": 390,
+      "x": 940,
+      "y": 36400
     },
     "PairCheck.dc.html": {
       "h": 844,
@@ -1713,10 +3049,26 @@
       "x": 3330,
       "y": 24000
     },
+    "PeopleImportDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · Import people · dark",
+      "w": 390,
+      "x": 3330,
+      "y": 24000
+    },
     "PeopleListSheet.dc.html": {
       "h": 844,
       "page": "light",
       "title": "9 · Rename a list",
+      "w": 390,
+      "x": 4290,
+      "y": 24000
+    },
+    "PeopleListSheetDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "9 · Rename a list · dark",
       "w": 390,
       "x": 4290,
       "y": 24000
@@ -1729,6 +3081,14 @@
       "x": 3810,
       "y": 24000
     },
+    "PeopleListsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "8 · People lists, after a delete · dark",
+      "w": 390,
+      "x": 3810,
+      "y": 24000
+    },
     "PeopleMoreContacts.dc.html": {
       "h": 844,
       "page": "light",
@@ -1737,6 +3097,30 @@
       "x": 2850,
       "y": 24000
     },
+    "PeopleMoreContactsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · People more · dark",
+      "w": 390,
+      "x": 2850,
+      "y": 24000
+    },
+    "PeopleRefused.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "12 · People, access refused",
+      "w": 390,
+      "x": 1410,
+      "y": 76360
+    },
+    "PeopleRefusedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "12 · People, access refused · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 76360
+    },
     "PeopleStopContacts.dc.html": {
       "h": 844,
       "page": "light",
@@ -1744,6 +3128,30 @@
       "w": 390,
       "x": 4770,
       "y": 24000
+    },
+    "PeopleStopContactsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "10 · Stop reading contacts · dark",
+      "w": 390,
+      "x": 4770,
+      "y": 24000
+    },
+    "PeopleTouchEmpty.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "10 · People, Touch with no one yet",
+      "w": 390,
+      "x": 2190,
+      "y": 75360
+    },
+    "PeopleTouchEmptyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "10 · People, Touch with no one yet · dark",
+      "w": 390,
+      "x": 2190,
+      "y": 75360
     },
     "PermissionPhotos.dc.html": {
       "h": 844,
@@ -1793,6 +3201,22 @@
       "x": 470,
       "y": 13920
     },
+    "PersonLinks.dc.html": {
+      "h": 760,
+      "page": "light",
+      "title": "8 · Person links (Money, Photos, Docs, Locker)",
+      "w": 2070,
+      "x": 0,
+      "y": 24960
+    },
+    "PersonLinksDark.dc.html": {
+      "h": 760,
+      "page": "dark",
+      "title": "8 · Person links (Money, Photos, Docs, Locker) · dark",
+      "w": 2070,
+      "x": 0,
+      "y": 24960
+    },
     "PersonMenu.dc.html": {
       "h": 844,
       "page": "light",
@@ -1809,14 +3233,6 @@
       "x": 940,
       "y": 5800
     },
-    "PersonLinks.dc.html": {
-      "h": 760,
-      "page": "light",
-      "title": "8 · Person links (Money, Photos, Docs, Locker)",
-      "w": 2070,
-      "x": 0,
-      "y": 24960
-    },
     "PhotoEditor.dc.html": {
       "h": 844,
       "page": "light",
@@ -1832,6 +3248,54 @@
       "w": 390,
       "x": 1880,
       "y": 13920
+    },
+    "PhotoRemote.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Photos · Load a missing original",
+      "w": 390,
+      "x": 2350,
+      "y": 70840
+    },
+    "PhotoRemoteDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Photos · Load a missing original · dark",
+      "w": 390,
+      "x": 2350,
+      "y": 70840
+    },
+    "PhotoRemoteFailure.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Photos · Original download refused",
+      "w": 390,
+      "x": 3760,
+      "y": 70840
+    },
+    "PhotoRemoteFailureDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Photos · Original download refused · dark",
+      "w": 390,
+      "x": 3760,
+      "y": 70840
+    },
+    "PhotoVideo.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Photos · Video playback",
+      "w": 390,
+      "x": 940,
+      "y": 70840
+    },
+    "PhotoVideoDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Photos · Video playback · dark",
+      "w": 390,
+      "x": 940,
+      "y": 70840
     },
     "PhotoViewer.dc.html": {
       "h": 844,
@@ -1929,6 +3393,22 @@
       "x": 4700,
       "y": 12760
     },
+    "PhotosRefused.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "10 · Photos, access refused",
+      "w": 390,
+      "x": 1410,
+      "y": 75360
+    },
+    "PhotosRefusedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "10 · Photos, access refused · dark",
+      "w": 390,
+      "x": 1410,
+      "y": 75360
+    },
     "PhotosSearch.dc.html": {
       "h": 844,
       "page": "light",
@@ -1961,14 +3441,6 @@
       "x": 1410,
       "y": 16240
     },
-    "CourtyardIcon.dc.html": {
-      "h": 1060,
-      "page": "icon",
-      "title": "Centraid icon · courtyard",
-      "w": 1200,
-      "x": 0,
-      "y": 0
-    },
     "QuartersIcon.dc.html": {
       "h": 1060,
       "page": "archive",
@@ -1977,10 +3449,34 @@
       "x": 1260,
       "y": 0
     },
+    "ReadableColumn.dc.html": {
+      "h": 800,
+      "page": "light",
+      "title": "Wide screens · readable column",
+      "w": 1280,
+      "x": 0,
+      "y": 77000
+    },
+    "ReadableColumnDark.dc.html": {
+      "h": 800,
+      "page": "dark",
+      "title": "Wide screens · readable column · dark",
+      "w": 1280,
+      "x": 0,
+      "y": 77000
+    },
     "Reconnect.dc.html": {
       "h": 844,
       "page": "light",
       "title": "7 · Reconnect phone data",
+      "w": 390,
+      "x": 5250,
+      "y": 24000
+    },
+    "ReconnectDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "7 · Reconnect phone data · dark",
       "w": 390,
       "x": 5250,
       "y": 24000
@@ -2001,6 +3497,22 @@
       "x": 0,
       "y": 1160
     },
+    "RecoveryKeyPrompt.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Save your recovery key, after the first backup (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 6580
+    },
+    "RecoveryKeyPromptDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Save your recovery key, after the first backup (#1188) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 6580
+    },
     "RemindersFilterMenu.dc.html": {
       "h": 844,
       "page": "light",
@@ -2017,6 +3529,38 @@
       "x": 7050,
       "y": 3480
     },
+    "RemindersRefused.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "10 · Reminders, access refused",
+      "w": 390,
+      "x": 1800,
+      "y": 75360
+    },
+    "RemindersRefusedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "10 · Reminders, access refused · dark",
+      "w": 390,
+      "x": 1800,
+      "y": 75360
+    },
+    "RemindersStopPhone.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "13 · Stop reading the phone's reminders, and turning it on",
+      "w": 1230,
+      "x": 5560,
+      "y": 28360
+    },
+    "RemindersStopPhoneDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "13 · Stop reading the phone's reminders, and turning it on · dark",
+      "w": 1230,
+      "x": 5560,
+      "y": 28360
+    },
     "RemindersToday.dc.html": {
       "h": 844,
       "page": "light",
@@ -2024,6 +3568,30 @@
       "w": 390,
       "x": 0,
       "y": 25960
+    },
+    "RemindersTodayDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Today, Overdue first · dark",
+      "w": 390,
+      "x": 0,
+      "y": 25960
+    },
+    "RestoreAsk.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Restore, the newest backup found may not be the newest (#1191)",
+      "w": 390,
+      "x": 7520,
+      "y": 26320
+    },
+    "RestoreAskDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Restore, the newest backup found may not be the newest (#1191) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 26320
     },
     "RestoreHeld.dc.html": {
       "h": 844,
@@ -2041,6 +3609,134 @@
       "x": 940,
       "y": 1160
     },
+    "RestoreNewer.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Restore, a newer Centraid made the backup (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 11280
+    },
+    "RestoreNewerDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Restore, a newer Centraid made the backup (#1188) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 11280
+    },
+    "RestoreNone.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "4 · Restore, no backup will open (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 8460
+    },
+    "RestoreNoneDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "4 · Restore, no backup will open (#1188) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 8460
+    },
+    "RestoreOlder.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "1 · Restore offers an older backup (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 5640
+    },
+    "RestoreOlderDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "1 · Restore offers an older backup (#1188) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 5640
+    },
+    "RestoreOpened.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Home, restored, previews coming back (#1209)",
+      "w": 390,
+      "x": 8480,
+      "y": 4700
+    },
+    "RestoreOpenedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Home, restored, previews coming back (#1209) · dark",
+      "w": 390,
+      "x": 8480,
+      "y": 4700
+    },
+    "RestorePhotoOpen.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Photos viewer, original still coming back (#1209)",
+      "w": 390,
+      "x": 8480,
+      "y": 6580
+    },
+    "RestorePhotoOpenDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Photos viewer, original still coming back (#1209) · dark",
+      "w": 390,
+      "x": 8480,
+      "y": 6580
+    },
+    "RestorePhotos.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Photos, restored, originals coming back (#1209)",
+      "w": 390,
+      "x": 8480,
+      "y": 5640
+    },
+    "RestorePhotosDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Photos, restored, originals coming back (#1209) · dark",
+      "w": 390,
+      "x": 8480,
+      "y": 5640
+    },
+    "RestoreRecords.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Restore, records first (#1209)",
+      "w": 390,
+      "x": 8480,
+      "y": 3760
+    },
+    "RestoreRecordsDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Restore, records first (#1209) · dark",
+      "w": 390,
+      "x": 8480,
+      "y": 3760
+    },
+    "RestoreUnfinished.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Restore, a claim landed but the vault could not be kept (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 18800
+    },
+    "RestoreUnfinishedDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Restore, a claim landed but the vault could not be kept (#1188) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 18800
+    },
     "RestoreWords.dc.html": {
       "h": 844,
       "page": "light",
@@ -2056,6 +3752,22 @@
       "w": 390,
       "x": 470,
       "y": 1160
+    },
+    "RestoreWorking.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Restore, looking for the backup (#1188)",
+      "w": 390,
+      "x": 7520,
+      "y": 15980
+    },
+    "RestoreWorkingDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Restore, looking for the backup (#1188) · dark",
+      "w": 390,
+      "x": 7520,
+      "y": 15980
     },
     "Search.dc.html": {
       "h": 844,
@@ -2321,6 +4033,38 @@
       "x": 1880,
       "y": 27200
     },
+    "TrashPhotosConfirm.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Photos trash, delete a photo that is not backed up (#1209)",
+      "w": 390,
+      "x": 8480,
+      "y": 0
+    },
+    "TrashPhotosConfirmDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Photos trash, delete a photo that is not backed up (#1209) · dark",
+      "w": 390,
+      "x": 8480,
+      "y": 0
+    },
+    "TrashPhotosConfirmMany.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Photos trash, delete several photos, some not backed up (#1209)",
+      "w": 390,
+      "x": 8480,
+      "y": 940
+    },
+    "TrashPhotosConfirmManyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Photos trash, delete several photos, some not backed up (#1209) · dark",
+      "w": 390,
+      "x": 8480,
+      "y": 940
+    },
     "TrashPhotosDark.dc.html": {
       "h": 844,
       "page": "dark",
@@ -2328,6 +4072,22 @@
       "w": 390,
       "x": 1880,
       "y": 27200
+    },
+    "TrashPhotosEmpty.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "Photos trash, empty trash with photos not backed up (#1209)",
+      "w": 390,
+      "x": 8480,
+      "y": 1880
+    },
+    "TrashPhotosEmptyDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "Photos trash, empty trash with photos not backed up (#1209) · dark",
+      "w": 390,
+      "x": 8480,
+      "y": 1880
     },
     "TrashReminders.dc.html": {
       "h": 844,
@@ -2425,6 +4185,22 @@
       "x": 3290,
       "y": 28360
     },
+    "VersionPreview.dc.html": {
+      "h": 844,
+      "page": "light",
+      "title": "9 · Preview of an earlier version",
+      "w": 390,
+      "x": 0,
+      "y": 30400
+    },
+    "VersionPreviewDark.dc.html": {
+      "h": 844,
+      "page": "dark",
+      "title": "9 · Preview of an earlier version · dark",
+      "w": 390,
+      "x": 0,
+      "y": 30400
+    },
     "VersionsEvent.dc.html": {
       "h": 844,
       "page": "light",
@@ -2456,22 +4232,6 @@
       "w": 390,
       "x": 3290,
       "y": 29520
-    },
-    "VersionPreview.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "9 · Preview of an earlier version",
-      "w": 390,
-      "x": 0,
-      "y": 30400
-    },
-    "VersionPreviewDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "9 · Preview of an earlier version · dark",
-      "w": 390,
-      "x": 0,
-      "y": 30400
     },
     "VersionsPerson.dc.html": {
       "h": 844,
@@ -2568,1414 +4328,6 @@
       "w": 390,
       "x": 0,
       "y": 0
-    },
-    "ChatDownload.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · download",
-      "w": 390,
-      "x": 0,
-      "y": 32000
-    },
-    "ChatDownloadDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · download · dark",
-      "w": 390,
-      "x": 0,
-      "y": 32000
-    },
-    "ChatCellular.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · mobile data choice",
-      "w": 390,
-      "x": 470,
-      "y": 32000
-    },
-    "ChatCellularDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · mobile data choice · dark",
-      "w": 390,
-      "x": 470,
-      "y": 32000
-    },
-    "ChatDownloading.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · downloading",
-      "w": 390,
-      "x": 940,
-      "y": 32000
-    },
-    "ChatDownloadingDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · downloading · dark",
-      "w": 390,
-      "x": 940,
-      "y": 32000
-    },
-    "ChatWaitingWifi.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · waiting for Wi‑Fi",
-      "w": 390,
-      "x": 1410,
-      "y": 32000
-    },
-    "ChatWaitingWifiDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · waiting for Wi‑Fi · dark",
-      "w": 390,
-      "x": 1410,
-      "y": 32000
-    },
-    "ChatLowStorage.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · low storage",
-      "w": 390,
-      "x": 1880,
-      "y": 32000
-    },
-    "ChatLowStorageDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · low storage · dark",
-      "w": 390,
-      "x": 1880,
-      "y": 32000
-    },
-    "ChatUnavailable.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · unavailable (reasons: memory, processor, no engine in this build)",
-      "w": 390,
-      "x": 2350,
-      "y": 32000
-    },
-    "ChatUnavailableDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · unavailable (reasons: memory, processor, no engine in this build) · dark",
-      "w": 390,
-      "x": 2350,
-      "y": 32000
-    },
-    "ChatChecking.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · checking",
-      "w": 390,
-      "x": 2820,
-      "y": 32000
-    },
-    "ChatCheckingDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · checking · dark",
-      "w": 390,
-      "x": 2820,
-      "y": 32000
-    },
-    "ChatModelUpdate.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · model update row (empty chat only)",
-      "w": 390,
-      "x": 3290,
-      "y": 32000
-    },
-    "ChatModelUpdateDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · model update row (empty chat only) · dark",
-      "w": 390,
-      "x": 3290,
-      "y": 32000
-    },
-    "ChatUpdateNeeded.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · update needed",
-      "w": 390,
-      "x": 0,
-      "y": 33100
-    },
-    "ChatUpdateNeededDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · update needed · dark",
-      "w": 390,
-      "x": 0,
-      "y": 33100
-    },
-    "ChatStreaming.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · streaming, jump to latest",
-      "w": 390,
-      "x": 470,
-      "y": 33100
-    },
-    "ChatStreamingDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · streaming, jump to latest · dark",
-      "w": 390,
-      "x": 470,
-      "y": 33100
-    },
-    "ChatStoppedFailed.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · stopped and failed",
-      "w": 390,
-      "x": 940,
-      "y": 33100
-    },
-    "ChatStoppedFailedDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · stopped and failed · dark",
-      "w": 390,
-      "x": 940,
-      "y": 33100
-    },
-    "ChatCards.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · cards: proposed, done with Undo, undone, Undo refused",
-      "w": 390,
-      "x": 1410,
-      "y": 33100
-    },
-    "ChatCardsDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · cards: proposed, done with Undo, undone, Undo refused · dark",
-      "w": 390,
-      "x": 1410,
-      "y": 33100
-    },
-    "ChatMessageActions.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · message actions (Copy on every message, Edit on the last member message, Try again on the last answer)",
-      "w": 390,
-      "x": 1880,
-      "y": 33100
-    },
-    "ChatMessageActionsDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · message actions (Copy on every message, Edit on the last member message, Try again on the last answer) · dark",
-      "w": 390,
-      "x": 1880,
-      "y": 33100
-    },
-    "ChatEditResend.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · edit and send again",
-      "w": 390,
-      "x": 2350,
-      "y": 33100
-    },
-    "ChatEditResendDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · edit and send again · dark",
-      "w": 390,
-      "x": 2350,
-      "y": 33100
-    },
-    "ChatRichText.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · lists, tables, code",
-      "w": 390,
-      "x": 2820,
-      "y": 33100
-    },
-    "ChatRichTextDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · lists, tables, code · dark",
-      "w": 390,
-      "x": 2820,
-      "y": 33100
-    },
-    "ChatDictation.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · dictation (the button is absent, not disabled, where on-device recognition cannot be guaranteed)",
-      "w": 390,
-      "x": 3290,
-      "y": 33100
-    },
-    "ChatDictationDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · dictation (the button is absent, not disabled, where on-device recognition cannot be guaranteed) · dark",
-      "w": 390,
-      "x": 3290,
-      "y": 33100
-    },
-    "ChatsSearch.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chats · search results",
-      "w": 390,
-      "x": 0,
-      "y": 34200
-    },
-    "ChatsSearchDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chats · search results · dark",
-      "w": 390,
-      "x": 0,
-      "y": 34200
-    },
-    "ChatsSearchNone.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chats · search found nothing",
-      "w": 390,
-      "x": 470,
-      "y": 34200
-    },
-    "ChatsSearchNoneDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chats · search found nothing · dark",
-      "w": 390,
-      "x": 470,
-      "y": 34200
-    },
-    "ChatsEmpty.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chats · empty",
-      "w": 390,
-      "x": 940,
-      "y": 34200
-    },
-    "ChatsEmptyDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chats · empty · dark",
-      "w": 390,
-      "x": 940,
-      "y": 34200
-    },
-    "ChatsError.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chats · change not saved",
-      "w": 390,
-      "x": 1410,
-      "y": 34200
-    },
-    "ChatsErrorDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chats · change not saved · dark",
-      "w": 390,
-      "x": 1410,
-      "y": 34200
-    },
-    "ChatRename.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · rename sheet",
-      "w": 390,
-      "x": 1880,
-      "y": 34200
-    },
-    "ChatRenameDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · rename sheet · dark",
-      "w": 390,
-      "x": 1880,
-      "y": 34200
-    },
-    "ChatDelete.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · delete sheet",
-      "w": 390,
-      "x": 2350,
-      "y": 34200
-    },
-    "ChatDeleteDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · delete sheet · dark",
-      "w": 390,
-      "x": 2350,
-      "y": 34200
-    },
-    "BackupBehind.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · One backup device behind (#1188)",
-      "w": 390,
-      "x": 7520,
-      "y": 0
-    },
-    "BackupBehindFull.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · A backup device is full (#1188)",
-      "w": 390,
-      "x": 7520,
-      "y": 940
-    },
-    "BackupRolledBack.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · A backup device holds an older backup (#1188)",
-      "w": 390,
-      "x": 7520,
-      "y": 1880
-    },
-    "BackupCheckRunning.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · Check my backup, running (#1188)",
-      "w": 390,
-      "x": 7520,
-      "y": 2820
-    },
-    "BackupCheck.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · Check my backup, result (#1188)",
-      "w": 390,
-      "x": 7520,
-      "y": 3760
-    },
-    "BackupStaleNotice.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · Backup is stale: notification (#1188)",
-      "w": 390,
-      "x": 7520,
-      "y": 4700
-    },
-    "RestoreOlder.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "1 · Restore offers an older backup (#1188)",
-      "w": 390,
-      "x": 7520,
-      "y": 5640
-    },
-    "RecoveryKeyPrompt.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "1 · Save your recovery key, after the first backup (#1188)",
-      "w": 390,
-      "x": 7520,
-      "y": 6580
-    },
-    "ChatPhotoDownload.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · photo reader, asked at the first attach",
-      "w": 390,
-      "x": 3290,
-      "y": 34200
-    },
-    "ChatPhotoDownloadDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · photo reader, asked at the first attach · dark",
-      "w": 390,
-      "x": 3290,
-      "y": 34200
-    },
-    "ChatFoundNothing.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · found nothing",
-      "w": 390,
-      "x": 0,
-      "y": 35300
-    },
-    "ChatFoundNothingDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · found nothing · dark",
-      "w": 390,
-      "x": 0,
-      "y": 35300
-    },
-    "ChatTooLong.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · message too long",
-      "w": 390,
-      "x": 470,
-      "y": 35300
-    },
-    "ChatTooLongDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · message too long · dark",
-      "w": 390,
-      "x": 470,
-      "y": 35300
-    },
-    "ChatCardsMore.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · cards: a chain of changes, stale, gone",
-      "w": 390,
-      "x": 2820,
-      "y": 34200
-    },
-    "ChatCardsMoreDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · cards: a chain of changes, stale, gone · dark",
-      "w": 390,
-      "x": 2820,
-      "y": 34200
-    },
-    "NotifyRefusedRow.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Notifications: refused, on the editor row",
-      "w": 390,
-      "x": 0,
-      "y": 36400
-    },
-    "NotifyDateOnly.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Notifications: a day with no time",
-      "w": 390,
-      "x": 470,
-      "y": 36400
-    },
-    "NotifyShowDetails.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Notifications: show details",
-      "w": 390,
-      "x": 940,
-      "y": 36400
-    },
-    "NotifyPaused.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Notifications: paused until opened",
-      "w": 390,
-      "x": 1410,
-      "y": 36400
-    },
-    "NotifyRefusedRowDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Notifications: refused, on the editor row · dark",
-      "w": 390,
-      "x": 0,
-      "y": 36400
-    },
-    "NotifyDateOnlyDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Notifications: a day with no time · dark",
-      "w": 390,
-      "x": 470,
-      "y": 36400
-    },
-    "NotifyShowDetailsDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Notifications: show details · dark",
-      "w": 390,
-      "x": 940,
-      "y": 36400
-    },
-    "NotifyPausedDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Notifications: paused until opened · dark",
-      "w": 390,
-      "x": 1410,
-      "y": 36400
-    },
-    "BackupCheckNotRun.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · Check my backup, not checked (#1188)",
-      "w": 390,
-      "x": 7520,
-      "y": 7520
-    },
-    "RestoreNone.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · Restore, no backup will open (#1188)",
-      "w": 390,
-      "x": 7520,
-      "y": 8460
-    },
-    "BackupNotifyAsk.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · Backup, notification ask after pairing (#1188)",
-      "w": 390,
-      "x": 7520,
-      "y": 9400
-    },
-    "BackupNotifyOff.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · Backup, notifications off (#1188)",
-      "w": 390,
-      "x": 7520,
-      "y": 10340
-    },
-    "RestoreNewer.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · Restore, a newer Centraid made the backup (#1188)",
-      "w": 390,
-      "x": 7520,
-      "y": 11280
-    },
-    "BackupPhoneFull.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · This phone is too full to back up (#1188)",
-      "w": 390,
-      "x": 8000,
-      "y": 940
-    },
-    "BackupWaiting.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Backup, records backed up, items waiting (#1188)",
-      "w": 390,
-      "x": 7520,
-      "y": 12220
-    },
-    "BackupBacklog.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Backup, a backlog that waited too long (#1188)",
-      "w": 390,
-      "x": 7520,
-      "y": 13160
-    },
-    "BackupCheckKept.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Check my backup, last result kept (#1188)",
-      "w": 390,
-      "x": 7520,
-      "y": 14100
-    },
-    "BackupCheckFailed.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Check my backup, the check did not finish (#1188)",
-      "w": 390,
-      "x": 7520,
-      "y": 15040
-    },
-    "RestoreWorking.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Restore, looking for the backup (#1188)",
-      "w": 390,
-      "x": 7520,
-      "y": 15980
-    },
-    "BackupTooLarge.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Backup, a device refused a file as too large (#1188)",
-      "w": 390,
-      "x": 7520,
-      "y": 16920
-    },
-    "BackupRefusing.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Backup, a device is refusing the backup (#1188)",
-      "w": 390,
-      "x": 7520,
-      "y": 17860
-    },
-    "RestoreUnfinished.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Restore, a claim landed but the vault could not be kept (#1188)",
-      "w": 390,
-      "x": 7520,
-      "y": 18800
-    },
-    "ChatReveal.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Chat · card reveal: shut, revealed, a code, gone, check cancelled",
-      "w": 390,
-      "x": 3290,
-      "y": 34200
-    },
-    "ChatRevealDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Chat · card reveal: shut, revealed, a code, gone, check cancelled · dark",
-      "w": 390,
-      "x": 3290,
-      "y": 34200
-    },
-    "BackupMovedOn.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · Another phone took over the backup (#1191)",
-      "w": 390,
-      "x": 7520,
-      "y": 19740
-    },
-    "BackupPaused.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · A backup device is paused by its operator (#1191)",
-      "w": 390,
-      "x": 7520,
-      "y": 20680
-    },
-    "BackupTooOld.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · A backup device needs an update (#1191)",
-      "w": 390,
-      "x": 7520,
-      "y": 21620
-    },
-    "BackupHeld.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · Old backup files waiting to go, with Undo (#1191)",
-      "w": 390,
-      "x": 7520,
-      "y": 22560
-    },
-    "BackupDeviceNotes.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · A backup that can’t be read, a piece sent again (#1191)",
-      "w": 390,
-      "x": 7520,
-      "y": 23500
-    },
-    "BackupVaultDamaged.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · This phone’s vault is damaged (#1191)",
-      "w": 390,
-      "x": 7520,
-      "y": 24440
-    },
-    "BackupVaultDamagedOpen.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "5 · Vault damaged at launch (#1191)",
-      "w": 390,
-      "x": 7520,
-      "y": 27260
-    },
-    "BackupChecked.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · Check my backup, stated rate (#1191)",
-      "w": 390,
-      "x": 7520,
-      "y": 25380
-    },
-    "RestoreAsk.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Restore, the newest backup found may not be the newest (#1191)",
-      "w": 390,
-      "x": 7520,
-      "y": 26320
-    },
-    "BackupPending.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Backup · Changes waiting",
-      "w": 390,
-      "x": 1410,
-      "y": 70840
-    },
-    "BackupPendingDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Backup · Changes waiting · dark",
-      "w": 390,
-      "x": 1410,
-      "y": 70840
-    },
-    "BackupSharedItems.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Backup · visible shared items",
-      "w": 390,
-      "x": 7520,
-      "y": 39000
-    },
-    "BackupPairAgain.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Backup, a device no longer knows this phone: Pair again (#1202)",
-      "w": 390,
-      "x": 7520,
-      "y": 39960
-    },
-    "DocEditorUnavailable.dc.html": {
-      "h": 915,
-      "page": "light",
-      "title": "Docs · Editor unavailable",
-      "w": 412,
-      "x": 3290,
-      "y": 70840
-    },
-    "DocEditorUnavailableDark.dc.html": {
-      "h": 915,
-      "page": "dark",
-      "title": "Docs · Editor unavailable · dark",
-      "w": 412,
-      "x": 3290,
-      "y": 70840
-    },
-    "DocsMissing.dc.html": {
-      "h": 915,
-      "page": "light",
-      "title": "Docs · Restored original",
-      "w": 412,
-      "x": 2820,
-      "y": 70840
-    },
-    "DocsMissingDark.dc.html": {
-      "h": 915,
-      "page": "dark",
-      "title": "Docs · Restored original · dark",
-      "w": 412,
-      "x": 2820,
-      "y": 70840
-    },
-    "DocsText.dc.html": {
-      "h": 915,
-      "page": "light",
-      "title": "Docs · Imported text preview",
-      "w": 412,
-      "x": 470,
-      "y": 70840
-    },
-    "HomePhotoOne.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Home · One photo",
-      "w": 390,
-      "x": 1880,
-      "y": 70840
-    },
-    "HomePhotoOneDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Home · One photo · dark",
-      "w": 390,
-      "x": 1880,
-      "y": 70840
-    },
-    "HomeRemindersEmpty.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Home · nothing due today",
-      "w": 390,
-      "x": 2350,
-      "y": 68680
-    },
-    "HomeRemindersEmptyDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Home · nothing due today · dark",
-      "w": 390,
-      "x": 2350,
-      "y": 68680
-    },
-    "MorePhotos.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Photos · More, export and trash",
-      "w": 390,
-      "x": 0,
-      "y": 70840
-    },
-    "MorePhotosDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Photos · More, export and trash · dark",
-      "w": 390,
-      "x": 0,
-      "y": 70840
-    },
-    "NoteEditorConflict.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Notes editor · conflict kept draft",
-      "w": 390,
-      "x": 1880,
-      "y": 50600
-    },
-    "NoteEditorConflictDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Notes editor · conflict kept draft · dark",
-      "w": 390,
-      "x": 1880,
-      "y": 50600
-    },
-    "PhotoRemote.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Photos · Load a missing original",
-      "w": 390,
-      "x": 2350,
-      "y": 70840
-    },
-    "PhotoRemoteDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Photos · Load a missing original · dark",
-      "w": 390,
-      "x": 2350,
-      "y": 70840
-    },
-    "PhotoRemoteFailure.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Photos · Original download refused",
-      "w": 390,
-      "x": 3760,
-      "y": 70840
-    },
-    "PhotoRemoteFailureDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Photos · Original download refused · dark",
-      "w": 390,
-      "x": 3760,
-      "y": 70840
-    },
-    "PhotoVideo.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Photos · Video playback",
-      "w": 390,
-      "x": 940,
-      "y": 70840
-    },
-    "PhotoVideoDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Photos · Video playback · dark",
-      "w": 390,
-      "x": 940,
-      "y": 70840
-    },
-    "FirstOpenCalendar.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "1 · Calendar, first open",
-      "w": 390,
-      "x": 0,
-      "y": 74200
-    },
-    "FirstOpenCalendarDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "1 · Calendar, first open · dark",
-      "w": 390,
-      "x": 0,
-      "y": 74200
-    },
-    "FirstOpenNotes.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "2 · Notes, first open",
-      "w": 390,
-      "x": 470,
-      "y": 74200
-    },
-    "FirstOpenNotesDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "2 · Notes, first open · dark",
-      "w": 390,
-      "x": 470,
-      "y": 74200
-    },
-    "FirstOpenDocs.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "3 · Docs, first open",
-      "w": 390,
-      "x": 940,
-      "y": 74200
-    },
-    "FirstOpenDocsDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "3 · Docs, first open · dark",
-      "w": 390,
-      "x": 940,
-      "y": 74200
-    },
-    "FirstOpenPeople.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "4 · People, first open",
-      "w": 390,
-      "x": 1410,
-      "y": 74200
-    },
-    "FirstOpenPeopleDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "4 · People, first open · dark",
-      "w": 390,
-      "x": 1410,
-      "y": 74200
-    },
-    "FirstOpenMoney.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "5 · Money, first open",
-      "w": 390,
-      "x": 1880,
-      "y": 74200
-    },
-    "FirstOpenMoneyDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "5 · Money, first open · dark",
-      "w": 390,
-      "x": 1880,
-      "y": 74200
-    },
-    "FirstOpenHealth.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "6 · Health, first open",
-      "w": 390,
-      "x": 2350,
-      "y": 74200
-    },
-    "FirstOpenHealthDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "6 · Health, first open · dark",
-      "w": 390,
-      "x": 2350,
-      "y": 74200
-    },
-    "LockerFirstCheck.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "7 · Locker, step 1: the owner check",
-      "w": 390,
-      "x": 0,
-      "y": 75360
-    },
-    "LockerFirstCheckDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "7 · Locker, step 1: the owner check · dark",
-      "w": 390,
-      "x": 0,
-      "y": 75360
-    },
-    "LockerFirstItem.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "8 · Locker, step 2: the first item",
-      "w": 390,
-      "x": 470,
-      "y": 75360
-    },
-    "LockerFirstItemDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "8 · Locker, step 2: the first item · dark",
-      "w": 390,
-      "x": 470,
-      "y": 75360
-    },
-    "FirstHomeRefused.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "9 · Home, photo access refused",
-      "w": 390,
-      "x": 940,
-      "y": 75360
-    },
-    "FirstHomeRefusedDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "9 · Home, photo access refused · dark",
-      "w": 390,
-      "x": 940,
-      "y": 75360
-    },
-    "PhotosRefused.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "10 · Photos, access refused",
-      "w": 390,
-      "x": 1410,
-      "y": 75360
-    },
-    "PhotosRefusedDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "10 · Photos, access refused · dark",
-      "w": 390,
-      "x": 1410,
-      "y": 75360
-    },
-    "RemindersRefused.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "10 · Reminders, access refused",
-      "w": 390,
-      "x": 1800,
-      "y": 75360
-    },
-    "RemindersRefusedDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "10 · Reminders, access refused · dark",
-      "w": 390,
-      "x": 1800,
-      "y": 75360
-    },
-    "PeopleTouchEmpty.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "10 · People, Touch with no one yet",
-      "w": 390,
-      "x": 2190,
-      "y": 75360
-    },
-    "PeopleTouchEmptyDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "10 · People, Touch with no one yet · dark",
-      "w": 390,
-      "x": 2190,
-      "y": 75360
-    },
-    "CalendarInvitesEmpty.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "10 · Calendar, Invites with nothing waiting",
-      "w": 390,
-      "x": 2610,
-      "y": 75360
-    },
-    "CalendarInvitesEmptyDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "10 · Calendar, Invites with nothing waiting · dark",
-      "w": 390,
-      "x": 2610,
-      "y": 75360
-    },
-    "NotesJournalEmpty.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "10 · Notes, Journal with no entries",
-      "w": 390,
-      "x": 3030,
-      "y": 75360
-    },
-    "NotesJournalEmptyDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "10 · Notes, Journal with no entries · dark",
-      "w": 390,
-      "x": 3030,
-      "y": 75360
-    },
-    "BackupUnpaired.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "11 · Backup, before anything is paired",
-      "w": 390,
-      "x": 1880,
-      "y": 75360
-    },
-    "BackupUnpairedDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "11 · Backup, before anything is paired · dark",
-      "w": 390,
-      "x": 1880,
-      "y": 75360
-    },
-    "HomeBackupDayTwo.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "12 · Home, a day after the first item",
-      "w": 390,
-      "x": 2350,
-      "y": 75360
-    },
-    "HomeBackupDayTwoDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "12 · Home, a day after the first item · dark",
-      "w": 390,
-      "x": 2350,
-      "y": 75360
-    },
-    "AndroidFirstHome.dc.html": {
-      "h": 915,
-      "page": "light",
-      "title": "1 · Home on first run, Android",
-      "w": 412,
-      "x": 0,
-      "y": 76360
-    },
-    "AndroidFirstHomeDark.dc.html": {
-      "h": 915,
-      "page": "dark",
-      "title": "1 · Home on first run, Android · dark",
-      "w": 412,
-      "x": 0,
-      "y": 76360
-    },
-    "AndroidEmptyReminders.dc.html": {
-      "h": 915,
-      "page": "light",
-      "title": "2 · Reminders first open, Android",
-      "w": 412,
-      "x": 470,
-      "y": 76360
-    },
-    "AndroidEmptyRemindersDark.dc.html": {
-      "h": 915,
-      "page": "dark",
-      "title": "2 · Reminders first open, Android · dark",
-      "w": 412,
-      "x": 470,
-      "y": 76360
-    },
-    "CalendarRefused.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "11 · Calendar, access refused",
-      "w": 390,
-      "x": 940,
-      "y": 76360
-    },
-    "CalendarRefusedDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "11 · Calendar, access refused · dark",
-      "w": 390,
-      "x": 940,
-      "y": 76360
-    },
-    "PeopleRefused.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "12 · People, access refused",
-      "w": 390,
-      "x": 1410,
-      "y": 76360
-    },
-    "PeopleRefusedDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "12 · People, access refused · dark",
-      "w": 390,
-      "x": 1410,
-      "y": 76360
-    },
-    "FirstOpenHealthTrends.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "6 · Health, trends, first open",
-      "w": 390,
-      "x": 3290,
-      "y": 76360
-    },
-    "FirstOpenHealthTrendsDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "6 · Health, trends, first open · dark",
-      "w": 390,
-      "x": 3290,
-      "y": 76360
-    },
-    "FirstOpenHealthWorkouts.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "6 · Health, workouts, first open",
-      "w": 390,
-      "x": 3760,
-      "y": 76360
-    },
-    "FirstOpenHealthWorkoutsDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "6 · Health, workouts, first open · dark",
-      "w": 390,
-      "x": 3760,
-      "y": 76360
-    },
-    "TrashPhotosConfirm.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Photos trash, delete a photo that is not backed up (#1209)",
-      "w": 390,
-      "x": 8480,
-      "y": 0
-    },
-    "TrashPhotosConfirmDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Photos trash, delete a photo that is not backed up (#1209) · dark",
-      "w": 390,
-      "x": 8480,
-      "y": 0
-    },
-    "TrashPhotosConfirmMany.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Photos trash, delete several photos, some not backed up (#1209)",
-      "w": 390,
-      "x": 8480,
-      "y": 940
-    },
-    "TrashPhotosConfirmManyDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Photos trash, delete several photos, some not backed up (#1209) · dark",
-      "w": 390,
-      "x": 8480,
-      "y": 940
-    },
-    "TrashPhotosEmpty.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Photos trash, empty trash with photos not backed up (#1209)",
-      "w": 390,
-      "x": 8480,
-      "y": 1880
-    },
-    "TrashPhotosEmptyDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Photos trash, empty trash with photos not backed up (#1209) · dark",
-      "w": 390,
-      "x": 8480,
-      "y": 1880
-    },
-    "HomeBackupPhotosWaiting.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Home, backed up, photos waiting (#1209)",
-      "w": 390,
-      "x": 8480,
-      "y": 2820
-    },
-    "HomeBackupPhotosWaitingDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Home, backed up, photos waiting (#1209) · dark",
-      "w": 390,
-      "x": 8480,
-      "y": 2820
-    },
-    "RestoreRecords.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Restore, records first (#1209)",
-      "w": 390,
-      "x": 8480,
-      "y": 3760
-    },
-    "RestoreRecordsDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Restore, records first (#1209) · dark",
-      "w": 390,
-      "x": 8480,
-      "y": 3760
-    },
-    "RestoreOpened.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Home, restored, previews coming back (#1209)",
-      "w": 390,
-      "x": 8480,
-      "y": 4700
-    },
-    "RestoreOpenedDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Home, restored, previews coming back (#1209) · dark",
-      "w": 390,
-      "x": 8480,
-      "y": 4700
-    },
-    "RestorePhotos.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Photos, restored, originals coming back (#1209)",
-      "w": 390,
-      "x": 8480,
-      "y": 5640
-    },
-    "RestorePhotosDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Photos, restored, originals coming back (#1209) · dark",
-      "w": 390,
-      "x": 8480,
-      "y": 5640
-    },
-    "RestorePhotoOpen.dc.html": {
-      "h": 844,
-      "page": "light",
-      "title": "Photos viewer, original still coming back (#1209)",
-      "w": 390,
-      "x": 8480,
-      "y": 6580
-    },
-    "RestorePhotoOpenDark.dc.html": {
-      "h": 844,
-      "page": "dark",
-      "title": "Photos viewer, original still coming back (#1209) · dark",
-      "w": 390,
-      "x": 8480,
-      "y": 6580
     }
   },
   "createdOnFiles": {
@@ -4193,6 +4545,15 @@
       "w": 240,
       "x": 0,
       "y": 29320
+    },
+    "dark24": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "dark",
+      "text": "First run: every app, Locker, refused access and the backup nudge",
+      "w": 240,
+      "x": 0,
+      "y": 74000
     },
     "dark3": {
       "kind": "title1",
@@ -4419,6 +4780,15 @@
       "x": 0,
       "y": 30480
     },
+    "light25": {
+      "kind": "title1",
+      "maxW": 2740,
+      "page": "light",
+      "text": "First run: every app, Locker, refused access and the backup nudge",
+      "w": 240,
+      "x": 0,
+      "y": 74000
+    },
     "light3": {
       "kind": "title1",
       "maxW": 2740,
@@ -4481,24 +4851,6 @@
       "w": 240,
       "x": 0,
       "y": 10240
-    },
-    "light25": {
-      "kind": "title1",
-      "maxW": 2740,
-      "page": "light",
-      "text": "First run: every app, Locker, refused access and the backup nudge",
-      "w": 240,
-      "x": 0,
-      "y": 74000
-    },
-    "dark24": {
-      "kind": "title1",
-      "maxW": 2740,
-      "page": "dark",
-      "text": "First run: every app, Locker, refused access and the backup nudge",
-      "w": 240,
-      "x": 0,
-      "y": 74000
     }
   },
   "order": [

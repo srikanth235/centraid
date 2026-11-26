@@ -12,7 +12,7 @@
 //!
 //! This replaces the TypeScript emitters and `make_dark.py` it grew out of. The
 //! sites' sheet is [`crate::design_site`], the dark mockups are
-//! [`crate::design_dark`], and [`crate::design_site::lint`] checks what the
+//! [`crate::design_boards`], and [`crate::design_site::lint`] checks what the
 //! sites author on top of the sheet. The output is
 //! generated already formatted, so no formatter runs after it, and it is
 //! deterministic, so [`check`] can regenerate into memory and name every file
@@ -56,6 +56,11 @@ pub struct Emitted {
     /// What the sites author that the generated sheet does not support
     /// (`design_site::lint`): drift of a different kind, reported beside it.
     pub lint: Vec<String>,
+    /// Boards and parts whose part regions the generator refills (written, not compared: a
+    /// stale region is a `lint` problem that names the part file).
+    pub rewrites: BTreeMap<String, String>,
+    /// Dark twins on disk that no light board makes.
+    pub stale: Vec<String>,
 }
 
 // --- JavaScript-shaped number formatting ----------------------------------
@@ -1214,21 +1219,25 @@ pub fn emit(root: &Path) -> Result<Emitted> {
         design_words::swift(&words),
     );
 
-    // Agenda's static words for the platform, from its own catalogue.
-    let mut glance = crate::design_glance::resolve(&read(crate::design_glance::GLANCE_SOURCE)?)?;
-    crate::design_glance::add_health(&mut glance, &read(crate::design_glance::HEALTH_SOURCE)?)?;
-    put(
-        format!("{SWIFT_DIR}/GlanceWords.swift"),
-        crate::design_glance::swift_words(&glance),
-    );
-    put(
-        format!("{SWIFT_DIR}/AgendaShortcuts.swift"),
-        crate::design_glance::swift_shortcuts(&glance),
-    );
-    put(
-        format!("{ANDROID_RES}/values/glance_strings.xml"),
-        crate::design_glance::android_xml(&glance),
-    );
+    // The widgets' static words for the platform, from their own catalogue. The purge deleted
+    // that catalogue; the three files stay as committed until the widgets are rebuilt.
+    if root.join(crate::design_glance::GLANCE_SOURCE).exists() {
+        let mut glance =
+            crate::design_glance::resolve(&read(crate::design_glance::GLANCE_SOURCE)?)?;
+        crate::design_glance::add_health(&mut glance, &read(crate::design_glance::HEALTH_SOURCE)?)?;
+        put(
+            format!("{SWIFT_DIR}/GlanceWords.swift"),
+            crate::design_glance::swift_words(&glance),
+        );
+        put(
+            format!("{SWIFT_DIR}/AgendaShortcuts.swift"),
+            crate::design_glance::swift_shortcuts(&glance),
+        );
+        put(
+            format!("{ANDROID_RES}/values/glance_strings.xml"),
+            crate::design_glance::android_xml(&glance),
+        );
+    }
 
     // The redesign's colours, scale and radii.
     let assets = color_assets(&tokens);
@@ -1272,7 +1281,7 @@ pub fn emit(root: &Path) -> Result<Emitted> {
 
     // The sites: the sheet and the woff2 faces beside it.
     let sheet = site_sheet(&crate::design_site::body(&tokens)?);
-    let lint = crate::design_site::lint(root, &sheet)?;
+    let mut lint = crate::design_site::lint(root, &sheet)?;
     let mut woff2 = BTreeMap::new();
     let fonts_dir = root.join(FONT_SOURCE);
     for entry in
@@ -1325,11 +1334,19 @@ pub fn emit(root: &Path) -> Result<Emitted> {
             .map(|dir| (*dir).to_owned()),
     );
 
-    // The dark mockups, from the light ones.
-    for (path, text) in crate::design_dark::dark_boards(root)? {
+    // The boards: tokens.css, the parts and the dark twins.
+    let boards = crate::design_boards::generate(root, &tokens)?;
+    for (path, text) in boards.files {
         files.insert(path, text.into_bytes());
     }
-    Ok(Emitted { files, owned, lint })
+    lint.extend(boards.problems);
+    Ok(Emitted {
+        files,
+        owned,
+        lint,
+        rewrites: boards.rewrites,
+        stale: boards.stale,
+    })
 }
 
 fn list_files(root: &Path, dir: &str) -> Vec<String> {
@@ -1373,6 +1390,12 @@ pub fn write(root: &Path) -> Result<usize> {
             }
         }
     }
+    for relative in &emitted.stale {
+        std::fs::remove_file(root.join(relative)).with_context(|| format!("remove {relative}"))?;
+    }
+    for (relative, text) in &emitted.rewrites {
+        std::fs::write(root.join(relative), text).with_context(|| format!("write {relative}"))?;
+    }
     for (relative, bytes) in &emitted.files {
         let path: PathBuf = root.join(relative);
         if let Some(parent) = path.parent() {
@@ -1399,7 +1422,7 @@ pub fn compare(emitted: &Emitted, root: &Path) -> Vec<String> {
             Ok(have) => {
                 let detail = match (std::str::from_utf8(&have), std::str::from_utf8(bytes)) {
                     (Ok(have), Ok(want)) => {
-                        format!(" ({})", crate::design_dark::first_difference(have, want))
+                        format!(" ({})", crate::design_boards::first_difference(have, want))
                     }
                     _ => String::new(),
                 };
@@ -1420,6 +1443,12 @@ pub fn compare(emitted: &Emitted, root: &Path) -> Vec<String> {
         stray
             .into_iter()
             .map(|file| format!("{file}: not emitted by `cargo xtask design`")),
+    );
+    drift.extend(
+        emitted
+            .stale
+            .iter()
+            .map(|file| format!("{file}: a dark twin no light board makes")),
     );
     drift.extend(emitted.lint.iter().cloned());
     drift
