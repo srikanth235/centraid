@@ -17,7 +17,7 @@ The gate is canonical. Do not make standalone `cargo clippy --all-features` or b
 - Product code has no `unwrap()`. `expect` names the invariant. `unsafe` appears only in `core-ffi` and `assist-llama`; most other crates carry `#![forbid(unsafe_code)]`, and one without it must not add `unsafe`. Read [`../../../crates/core-ffi/CONTRACT.md`](../../../../crates/core-ffi/CONTRACT.md) before FFI edits.
 - The phone's Rust core is the vault's only writer. Write through `Vault::commit`; never run blocking SQLite work on an async task. SQL stays in vault, ontology, search, and apps-kit crates.
 - Keep work whose cost grows with the vault off request paths; paginate with keyset cursors and `LIMIT`.
-- Do not add dependencies for convenience. `cargo deny` checks licenses and advisories. Comments state obligations; cite history with an issue link.
+- Do not add dependencies for convenience. `cargo deny` checks licenses and advisories. Comments only when absolutely necessary ([the rule](../SKILL.md#comments-only-when-absolutely-necessary)).
 - A machine running `centraid-gateway` is a gateway.
 
 ### Compiler and clippy errors
