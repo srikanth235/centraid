@@ -56,6 +56,7 @@ class AbiRoundTripSpec : StringSpec({
             core.identityWarning!! shouldContain "NOT CHECKED"
 
             // --- the seeded read -------------------------------------------
+            var firstId = ""
             val parties = core.call(pageRequest(SEEDED_QUERY, limit = 100))
             parties.shouldBeAnsweredWith { envelope ->
                 val page = envelope.response?.page ?: error("a Page response")
@@ -64,6 +65,8 @@ class AbiRoundTripSpec : StringSpec({
                 // ended, and 200 were seeded.
                 page.next shouldNotBe null
                 page.rows.first().values.size shouldBe 2
+                firstId = page.rows.first().values.first().text
+                    ?: error("seeded row id must be text")
             }
 
             // --- a write, the one way a screen writes: `act` --------------
@@ -72,9 +75,9 @@ class AbiRoundTripSpec : StringSpec({
                     request_id = 7,
                     request = Request(
                         act = ActRequest(
-                            app = "people",
-                            action = "add-person",
-                            input = flatJson("""{"title":"Kotlin $runTag"}"""),
+                            app = "shell",
+                            action = "rename-chat",
+                            input = flatJson("""{"id":"$firstId","title":"Kotlin $runTag"}"""),
                             invoke_key = "mobile-abi-round-trip-$runTag",
                         ),
                     ),

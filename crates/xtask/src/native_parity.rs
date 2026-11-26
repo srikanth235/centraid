@@ -152,8 +152,9 @@ pub struct Floors {
     pub swift: usize,
 }
 
+// Ratcheted to 813 after the M2 purge (#1214) deleted per-app proto files.
 const FLOORS: Floors = Floors {
-    items: 1000,
+    items: 813,
     kotlin: 50,
     swift: 50,
 };
