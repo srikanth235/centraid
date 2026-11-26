@@ -105,13 +105,13 @@ fn the_relations_and_the_counts_are_the_codes() {
     assert_eq!(count("relations"), Rel::ALL.len());
     assert_eq!(count("tables"), TABLES.len());
     // The map's heading says the same numbers in words.
-    for word in ["Twenty-seven kinds", "three hosts", "seven relations"] {
+    for word in ["Twenty-five kinds", "three hosts", "seven relations"] {
         assert!(
             page.contains(word),
             "the map heading no longer says `{word}`"
         );
     }
-    assert_eq!((Kind::ALL.len(), Rel::ALL.len()), (27, 7));
+    assert_eq!((Kind::ALL.len(), Rel::ALL.len()), (25, 7));
 }
 
 #[test]

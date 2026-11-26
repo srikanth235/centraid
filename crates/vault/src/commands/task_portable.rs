@@ -6,8 +6,8 @@
 //! instant written as the wall clock of the task's zone, by its `due_timing`), status (done
 //! carries COMPLETED), priority, link, one alert (VALARM, minutes before it is due) per reminder
 //! row, and RRULE when it repeats. A sub-task names its parent (`RELATED-TO;RELTYPE=PARENT`), tags
-//! are CATEGORIES, the effort estimate is ESTIMATED-DURATION, and what RFC 5545 has no property
-//! for is `X-CENTRAID-LIST` (the project it is in), `X-CENTRAID-SECTION`, `X-CENTRAID-STARRED`,
+//! are CATEGORIES, and what RFC 5545 has no property
+//! for is `X-CENTRAID-LIST` (the task list it is in), `X-CENTRAID-STARRED`,
 //! `X-CENTRAID-SCHEDULED` (the day the member plans it) and `X-CENTRAID-SERIES` (the repeat's
 //! stable identity).
 //!
@@ -39,11 +39,9 @@ struct Task {
     series_id: Option<String>,
     url: Option<String>,
     description: Option<String>,
-    effort_min: Option<i64>,
     /// The task this one is a subtask of.
     parent_task: Option<String>,
     list: Option<String>,
-    section: Option<String>,
     tags: Vec<String>,
     starred: bool,
     /// Minutes before the due, one alert each.
@@ -83,13 +81,13 @@ const fn priority_of(mark: i64) -> Option<u8> {
     }
 }
 
-/// Where a task is filed, from its home up: `(the project, the section, the parent task)`. A
-/// subtask's list and section are the ones its parent is filed in.
+/// Where a task is filed, from its home up: `(the task list, the parent task)`. A subtask's list is
+/// the one its parent is filed in.
 fn filed(
     connection: &Connection,
     mut home: Option<String>,
-) -> Result<(Option<String>, Option<String>, Option<String>)> {
-    let (mut list, mut section, mut parent) = (None, None, None);
+) -> Result<(Option<String>, Option<String>)> {
+    let (mut list, mut parent) = (None, None);
     // A home has no loops (a trigger) and a hierarchy is shallow; the bound is a belt.
     for step in 0..64 {
         let Some(id) = home.take() else { break };
@@ -104,30 +102,24 @@ fn filed(
         if step == 0 && kind == "task" {
             parent = Some(id.clone());
         }
-        match kind.as_str() {
-            "project" => {
-                list.get_or_insert(title);
-                break;
-            }
-            "section" => {
-                section.get_or_insert(title);
-            }
-            _ => {}
+        if kind == "task_list" {
+            list = Some(title);
+            break;
         }
         home = above;
     }
-    Ok((list, section, parent))
+    Ok((list, parent))
 }
 
-/// The tasks to write: every live task, or those under one holder (a project, its sections and
-/// their tasks and subtasks), or one.
+/// The tasks to write: every live task, or those under one holder (a task list and
+/// its tasks and subtasks), or one.
 fn tasks(connection: &Connection, list: Option<&str>, one: Option<&str>) -> Result<Vec<Task>> {
     let mut statement = connection.prepare_cached(
         "WITH RECURSIVE under(id) AS (
            SELECT ?1 WHERE ?1 IS NOT NULL
            UNION ALL SELECT e.id FROM entity e JOIN under u ON e.parent_id = u.id)
          SELECT e.id, e.title, e.updated_at, t.status, t.priority, t.due, t.due_timing, t.zone,
-                t.scheduled_on, t.done_at, t.rule, t.series_id, t.url, t.description, t.effort_min,
+                t.scheduled_on, t.done_at, t.rule, t.series_id, t.url, t.description,
                 e.parent_id, e.starred_at IS NOT NULL
            FROM task t JOIN entity e ON e.id = t.id
           WHERE e.deleted_at IS NULL
@@ -153,15 +145,13 @@ fn tasks(connection: &Connection, list: Option<&str>, one: Option<&str>) -> Resu
                     series_id: row.get(11)?,
                     url: row.get(12)?,
                     description: row.get(13)?,
-                    effort_min: row.get(14)?,
                     parent_task: None,
                     list: None,
-                    section: None,
                     tags: Vec::new(),
-                    starred: row.get(16)?,
+                    starred: row.get(15)?,
                     leads: Vec::new(),
                 },
-                row.get::<_, Option<String>>(15)?,
+                row.get::<_, Option<String>>(14)?,
             ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -172,7 +162,7 @@ fn tasks(connection: &Connection, list: Option<&str>, one: Option<&str>) -> Resu
     )?;
     let mut out = Vec::with_capacity(rows.len());
     for (mut task, home) in rows {
-        (task.list, task.section, task.parent_task) = filed(connection, home)?;
+        (task.list, task.parent_task) = filed(connection, home)?;
         task.tags = labels
             .query_map([&task.id], |row| row.get(0))?
             .collect::<rusqlite::Result<_>>()?;
@@ -235,14 +225,8 @@ fn file(tasks: &[Task]) -> String {
             let tags: Vec<String> = task.tags.iter().map(|t| ical::escape_text(t)).collect();
             writer.line(&format!("CATEGORIES:{}", tags.join(",")));
         }
-        if let Some(minutes) = task.effort_min.filter(|m| *m > 0) {
-            writer.line(&format!("ESTIMATED-DURATION:PT{minutes}M"));
-        }
         if let Some(list) = task.list.as_deref() {
             writer.text("X-CENTRAID-LIST", list);
-        }
-        if let Some(section) = task.section.as_deref() {
-            writer.text("X-CENTRAID-SECTION", section);
         }
         if task.starred {
             writer.line("X-CENTRAID-STARRED:TRUE");

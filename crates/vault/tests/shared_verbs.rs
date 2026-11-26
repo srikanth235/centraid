@@ -280,11 +280,11 @@ fn moving_a_note_a_container_a_task_and_a_concept_is_one_command_and_one_path() 
         w.one::<f64>("SELECT position FROM container WHERE id = ?1", &[&inner]),
         7.5
     );
-    // A task goes to a project, then into a section of it, then under another task.
-    let project = w.container("project", "Move house", None);
-    let section = w.container("section", "Packing", Some(&project));
+    // A task goes to a task list, then to another, then holds a subtask.
+    let project = w.container("task_list", "Move house", None);
+    let other = w.container("task_list", "Packing", None);
     let task = w.task(Some(&project));
-    w.ok("entity.move", json!({"id": &task, "parent": &section}));
+    w.ok("entity.move", json!({"id": &task, "parent": &other}));
     let sub = w.task(Some(&task));
     assert_eq!(w.home(&sub), Some(task.clone()));
     // A concept is moved the same way: a tag inside a tag.
@@ -328,16 +328,7 @@ fn a_home_of_the_wrong_kind_a_loop_and_a_missing_home_are_refused_in_a_sentence(
         w.refused("container.move", json!({"id": &book, "parent": &book}))
             .contains("cannot go inside itself")
     );
-    // A kind that may not sit at the top needs a home: a section a project, an event a calendar.
-    assert!(
-        w.refused("container.create", json!({"kind": "section", "title": "S"}))
-            .contains("belongs in a project")
-    );
-    let section = w.container("section", "S", Some(&w.container("project", "P", None)));
-    assert!(
-        w.refused("entity.move", json!({"id": &section, "parent": null}))
-            .contains("belongs in a project")
-    );
+    // A kind that may not sit at the top needs a home: an event a calendar.
     let event = w.event("calendar:default");
     assert!(
         w.refused("entity.move", json!({"id": &event, "parent": null}))
@@ -465,21 +456,18 @@ fn nested_holders_each_name_their_own_holder_and_come_back_together() {
 fn an_account_a_person_and_a_task_hold_what_belongs_to_them() {
     let w = World::new();
     // A task holds its subtasks (a home), and a restore of the task brings them back.
-    let project = w.container("project", "P", None);
+    let project = w.container("task_list", "P", None);
     let task = w.task(Some(&project));
     let sub = w.task(Some(&task));
     w.ok("entity.trash", json!({"id": &task}));
     assert_eq!(w.trashed_by(&sub), Some(task.clone()));
     w.ok("entity.restore", json!({"id": &task}));
     assert!(!w.trashed(&sub));
-    // A project holds sections and tasks; its section holds its tasks.
-    let section = w.container("section", "S", Some(&project));
-    let in_section = w.task(Some(&section));
+    // A task list holds its tasks.
     w.ok("entity.trash", json!({"id": &project}));
-    assert_eq!(w.trashed_by(&section), Some(project.clone()));
-    assert_eq!(w.trashed_by(&in_section), Some(section.clone()));
+    assert_eq!(w.trashed_by(&task), Some(project.clone()));
     w.ok("entity.restore", json!({"id": &project}));
-    assert!(!w.trashed(&in_section));
+    assert!(!w.trashed(&task));
     // An account holds its lines.
     let account = w.mint();
     let line = w.mint();
@@ -820,7 +808,7 @@ fn emptying_the_trash_takes_one_kind_or_all_and_only_what_is_due_when_asked() {
 #[test]
 fn a_flag_is_an_instant_on_the_row_and_setting_it_is_not_an_edit() {
     let w = World::new();
-    let project = w.container("project", "Move house", None);
+    let project = w.container("task_list", "Move house", None);
     let note = w.note("N", None);
     // An edit first, so there is a revision for a flag to (not) add to.
     w.ok(
@@ -1337,9 +1325,8 @@ fn empty_trash_with_nested_holders_always_succeeds() {
     let b = w.bare(Kind::Document, "B", Some(&outer));
     let cal = w.container("calendar", "Work", None);
     let event = w.event(&cal);
-    let project = w.container("project", "P", None);
-    let section = w.container("section", "S", Some(&project));
-    let task = w.task(Some(&section));
+    let project = w.container("task_list", "P", None);
+    let task = w.task(Some(&project));
     w.ok("entity.trash", json!({"id": &inner}));
     w.ok("entity.trash", json!({"id": &event}));
     for id in [&outer, &cal, &project] {
@@ -1347,9 +1334,7 @@ fn empty_trash_with_nested_holders_always_succeeds() {
     }
     let out = w.ok("entity.empty_trash", json!({}));
     assert!(out["purged"].as_i64() >= Some(3));
-    for id in [
-        &outer, &inner, &a, &b, &cal, &event, &project, &section, &task,
-    ] {
+    for id in [&outer, &inner, &a, &b, &cal, &event, &project, &task] {
         assert!(!w.exists(id), "{id} survived the emptying");
     }
 }

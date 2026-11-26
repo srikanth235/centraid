@@ -203,10 +203,10 @@ fn the_calendar_is_the_events_home_and_a_move_is_the_shared_verb() {
             .status
             != centraid_vault::CommandStatus::Executed
     );
-    // An event is not at the top level, and not in a project.
+    // An event is not at the top level, and not in a task list.
     let sentence = w.refused("entity.move", json!({ "id": &id, "parent": null }));
     assert!(sentence.contains("calendar"), "{sentence}");
-    let project = w.container("project", "Roof");
+    let project = w.container("task_list", "Roof");
     let sentence = w.refused("entity.move", json!({ "id": &id, "parent": &project }));
     assert!(sentence.contains("does not go inside"), "{sentence}");
     let sentence = w.refused(
