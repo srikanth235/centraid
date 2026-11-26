@@ -1,9 +1,9 @@
 //! A conversation in the v0 tables (#1214): a chat is an ordinary trashable entity (L5); a turn is
 //! saved in one commit with its cards and attachments; a reason and a notice are lookup rows (A1);
-//! a proposal settles once; the routing record is the vault's object with `"v":1` (A3); the
-//! assistant's changes are the assistant's in history (B4); an attachment keeps its label when the
-//! item it named is purged and a thumbnail is released with its chat. The rules the database holds
-//! for these tables are also written as raw SQL in `schema_rules.rs`.
+//! a proposal settles once; the assistant's changes are the assistant's in history (B4); a card and
+//! an attachment hold no word of the item they show, so a purge leaves none of its words in a chat,
+//! and a thumbnail is released with its chat. The rules the database holds for these tables are also
+//! written as raw SQL in `schema_rules.rs`.
 
 mod common;
 
@@ -27,8 +27,8 @@ fn answered(text: &str) -> Value {
     json!({ "outcome": "answered", "text": text })
 }
 
-fn card(app: &str, entity: &str, id: &str) -> Value {
-    json!({ "app": app, "entity": entity, "id": id, "title": "Rent", "meta": "open" })
+fn card(id: &str) -> Value {
+    json!({ "entity_id": id, "qualifier": "due" })
 }
 
 fn turn_input(thread: Option<&str>, question: &str, answer: Value) -> Value {
@@ -104,6 +104,7 @@ fn plan(w: &World, sql: &str) -> String {
 #[test]
 fn a_turn_is_one_commit_with_its_cards_and_attachments() {
     let w = world("chat_turn");
+    let task = w.bare(Kind::Task, "Pay the rent", None);
     let saved = w.ok(
         "thread.save_turn",
         json!({
@@ -111,8 +112,7 @@ fn a_turn_is_one_commit_with_its_cards_and_attachments() {
           "turn": {
             "question": { "text": "what   is due\ntoday?", "attachments": [
               { "form": "image", "label": "receipt", "thumbnail_data_uri": PIXEL_A }] },
-            "answer": { "outcome": "answered", "text": "Rent.", "record_json": "{\"read\":1}",
-                        "cards": [card("reminders", "task", "t1")] }
+            "answer": { "outcome": "answered", "text": "Rent.", "cards": [card(&task)] }
           }
         }),
     );
@@ -138,7 +138,7 @@ fn a_turn_is_one_commit_with_its_cards_and_attachments() {
         w.one::<String>("SELECT scope FROM thread WHERE id = ?1", &[thread]),
         "calendar"
     );
-    // The thumbnail is rented from the blob plane; the card is a snapshot in the answer's own row.
+    // The thumbnail is rented from the blob plane; the card is a row naming the item and no word.
     assert_eq!(
         count(
             &w,
@@ -147,18 +147,35 @@ fn a_turn_is_one_commit_with_its_cards_and_attachments() {
         ),
         1
     );
-    let cards: Value = serde_json::from_str(&w.one::<String>(
-        "SELECT cards FROM message WHERE thread_id = ?1 AND ordinal = 1",
-        &[thread],
-    ))
-    .unwrap();
-    assert_eq!(cards[0]["app"], "reminders");
-    assert_eq!(cards[0]["id"], "t1");
-    // The reader gives it back whole.
+    assert_eq!(
+        w.strings(
+            "SELECT ordinal || ':' || CAST(position AS INTEGER) || ':' || entity_id || ':' || qualifier
+               FROM message_card WHERE thread_id = ?1",
+            &[thread]
+        ),
+        [format!("1:0:{task}:due")]
+    );
+    // The reader gives it back whole, with the title read now.
     let stored = w.vault().chat_thread(thread).unwrap().expect("a thread");
     assert_eq!(stored.messages.len(), 2);
-    assert_eq!(stored.messages[1].cards[0].row_id, "t1");
+    let shown = &stored.messages[1].cards[0];
+    assert_eq!(
+        (
+            shown.kind.as_str(),
+            shown.row_id.as_str(),
+            shown.qualifier.as_str()
+        ),
+        ("task", task.as_str(), "due")
+    );
+    assert_eq!(shown.title, "Pay the rent");
+    w.ok(
+        "entity.retitle",
+        json!({ "id": task, "title": "Pay the landlord" }),
+    );
+    let stored = w.vault().chat_thread(thread).unwrap().expect("a thread");
+    assert_eq!(stored.messages[1].cards[0].title, "Pay the landlord");
     assert_eq!(stored.messages[0].attachments[0].form, "image");
+    assert_eq!(stored.messages[0].attachments[0].label, "receipt");
     assert!(stored.messages[0].attachments[0].thumbnail_path.is_some());
     assert_eq!(stored.thread.scope_app.as_deref(), Some("calendar"));
 }
@@ -270,6 +287,7 @@ fn a_chat_is_renamed_trashed_restored_and_deleted_forever_like_every_kind() {
         ("thread", "id"),
         ("message", "thread_id"),
         ("message_attachment", "thread_id"),
+        ("message_card", "thread_id"),
     ] {
         assert_eq!(
             count(
@@ -574,22 +592,20 @@ fn a_retry_replaces_the_last_turn_and_only_that_one() {
 #[test]
 fn the_roster_is_the_schemas_not_a_check() {
     let w = world("chat_roster");
-    let attempt = |scope: Value, app: &str| {
+    let attempt = |scope: Value| {
         let mut input = json!({ "turn": { "question": { "text": "q" },
-            "answer": { "outcome": "answered", "text": "a", "cards": [card(app, "task", "t")] } } });
+            "answer": { "outcome": "answered", "text": "a" } } });
         input["scope_app"] = scope;
         w.run("thread.save_turn", input).status
     };
-    assert_eq!(attempt(json!(null), "reminders"), CommandStatus::Executed);
+    assert_eq!(attempt(json!(null)), CommandStatus::Executed);
+    for app in ["health", "locker", "photos", "reminders"] {
+        assert_eq!(attempt(json!(app)), CommandStatus::Executed, "{app}");
+    }
     // There is no `tasks` app: the tasks are Reminders'.
-    assert_ne!(attempt(json!(null), "tasks"), CommandStatus::Executed);
-    assert_eq!(attempt(json!(null), "locker"), CommandStatus::Executed);
-    assert_eq!(attempt(json!(null), "health"), CommandStatus::Executed);
-    assert_eq!(attempt(json!("health"), "notes"), CommandStatus::Executed);
-    assert_ne!(attempt(json!(null), "weather"), CommandStatus::Executed);
-    assert_ne!(attempt(json!("tasks"), "notes"), CommandStatus::Executed);
-    assert_eq!(attempt(json!("locker"), "notes"), CommandStatus::Executed);
-    assert_eq!(attempt(json!("photos"), "notes"), CommandStatus::Executed);
+    for app in ["tasks", "weather"] {
+        assert_ne!(attempt(json!(app)), CommandStatus::Executed, "{app}");
+    }
 }
 
 /// ONE APP IS ONE WORD (#1128, principle 6 of the model): no app word is in the vault's DDL. A
@@ -721,80 +737,222 @@ fn a_new_turn_dismisses_the_proposal_waiting_and_only_the_last_can_wait() {
 }
 
 #[test]
-fn the_record_is_the_vaults_object_with_its_version_and_cards_are_a_plain_array() {
-    let w = world("chat_record");
-    let saved = w.ok(
-        "thread.save_turn",
-        turn_input(
-            None,
-            "q",
-            json!({ "outcome": "answered", "text": "a", "record_json": "{\"read\":[\"tasks\"]}",
-                    "cards": [card("reminders", "task", "t1")] }),
-        ),
+fn a_card_is_an_item_and_a_closed_code_and_no_word_of_it() {
+    let w = world("chat_card_rows");
+    let note = w.bare(Kind::Note, "Quarterly zanzibar plan", None);
+    let thread = chat(&w, "q");
+    let saved = turn(
+        &w,
+        Some(&thread),
+        "q",
+        json!({ "outcome": "answered", "text": "a", "cards": [
+            { "entity_id": note }, { "entity_id": note, "qualifier": "edit_secret" }] }),
     );
-    let thread = saved["thread_id"].as_str().unwrap();
-    let record: Value = serde_json::from_str(&w.one::<String>(
-        "SELECT record FROM message WHERE thread_id = ?1 AND ordinal = 1",
-        &[thread],
-    ))
-    .unwrap();
-    assert_eq!(record["v"], 1, "the vault stamps its version");
+    let assistant = saved["assistant_ordinal"].as_i64().unwrap().to_string();
     assert_eq!(
-        record["read"],
-        json!(["tasks"]),
-        "and keeps the assistant's words"
-    );
-    // The user's own message has none; a card carries none and the list is an array.
-    assert_eq!(
-        count(
-            &w,
-            "SELECT count(*) FROM message WHERE thread_id = ?1 AND record IS NOT NULL",
-            &[thread]
+        w.strings(
+            "SELECT CAST(position AS INTEGER) || ':' || ifnull(qualifier, '-') FROM message_card
+              WHERE thread_id = ?1 AND ordinal = ?2 ORDER BY position",
+            &[&thread, &assistant]
         ),
-        1
+        ["0:-", "1:edit_secret"]
     );
-    assert_eq!(
-        w.one::<String>(
-            "SELECT json_type(cards) FROM message WHERE thread_id = ?1 AND ordinal = 1",
-            &[thread]
-        ),
-        "array"
-    );
-    assert_eq!(
-        count(
-            &w,
-            "SELECT count(*) FROM message, json_each(message.cards) c
-              WHERE thread_id = ?1 AND json_extract(c.value, '$.v') IS NOT NULL",
-            &[thread]
-        ),
-        0
-    );
-    // The reader hands the record back, version and all.
-    let history = w.vault().chat_history(thread, 5).unwrap();
-    let handed: Value = serde_json::from_str(history[0].record_json.as_deref().unwrap()).unwrap();
-    assert_eq!(handed["v"], 1);
-    // A record that is not an object, or of another version, is refused without quoting it.
-    for bad in ["[1]", "\"x\"", "not json", "{\"v\":2}", "{\"v\":\"1\"}"] {
-        let sentence = w.refused(
-            "thread.save_turn",
-            turn_input(
-                None,
-                "q",
-                json!({ "outcome": "answered", "record_json": bad }),
-            ),
-        );
-        assert!(
-            sentence.contains("JSON object of this vault's version"),
-            "{bad}: {sentence}"
+    // A card carries no title, subtitle, meta, app or entity word, and a code is a short closed word.
+    for bad in [
+        json!({ "entity_id": note, "title": "x" }),
+        json!({ "entity_id": note, "app": "notes" }),
+        json!({ "entity_id": note, "qualifier": "reveal:password" }),
+        json!({ "entity_id": note, "qualifier": "Due" }),
+        json!({ "entity_id": note, "qualifier": "a_code_that_is_much_too_long_to_be_one" }),
+        json!({ "title": "x" }),
+    ] {
+        assert_ne!(
+            w.run(
+                "thread.save_turn",
+                turn_input(
+                    Some(&thread),
+                    "q",
+                    json!({ "outcome": "answered", "cards": [bad.clone()] })
+                )
+            )
+            .status,
+            CommandStatus::Executed,
+            "{bad}"
         );
     }
-    // A record already at the vault's version is taken.
-    turn(
+    // An item that is not there is saved as a card with no item: a tombstone from the start.
+    let said = turn(
         &w,
-        None,
+        Some(&thread),
         "q",
-        json!({ "outcome": "answered", "record_json": "{\"v\":1,\"a\":2}" }),
+        json!({ "outcome": "answered", "text": "a", "cards": [card("not-an-item")] }),
     );
+    assert_eq!(
+        w.one::<Option<String>>(
+            "SELECT entity_id FROM message_card WHERE thread_id = ?1 AND ordinal = ?2",
+            &[
+                &thread,
+                &said["assistant_ordinal"].as_i64().unwrap().to_string()
+            ]
+        ),
+        None
+    );
+}
+
+#[test]
+fn a_purged_item_leaves_none_of_its_words_in_a_chat_and_its_card_is_a_tombstone() {
+    let w = world("chat_purge_words");
+    let note = w.bare(Kind::Note, "Quarterly zanzibar plan", None);
+    let photo = w.bare(Kind::Photo, "Zanzibar sunset", None);
+    let doc = document(&w, "Zanzibar itinerary", "text/plain", "some words");
+    let saved = w.ok(
+        "thread.save_turn",
+        json!({ "turn": { "question": { "text": "what is in these", "attachments": [
+            { "form": "photo", "entity_id": photo },
+            { "form": "document", "entity_id": doc }] },
+            "answer": { "outcome": "answered", "text": "It is a sunset.", "cards": [card(&note)] } } }),
+    );
+    let thread = saved["thread_id"].as_str().unwrap().to_owned();
+    w.ok(
+        "thread.save_turn",
+        json!({ "thread_id": thread, "turn": { "question": { "text": "and this?", "attachments": [
+            { "form": "image", "label": "receipt", "thumbnail_data_uri": PIXEL_A }] },
+            "answer": answered("A receipt.") } }),
+    );
+    let stored = w.vault().chat_thread(&thread).unwrap().unwrap();
+    assert_eq!(stored.messages[1].cards[0].title, "Quarterly zanzibar plan");
+    assert_eq!(
+        stored
+            .messages
+            .iter()
+            .flat_map(|m| &m.attachments)
+            .map(|a| a.label.as_str())
+            .collect::<Vec<_>>(),
+        ["Zanzibar sunset", "Zanzibar itinerary", "receipt"]
+    );
+    for id in [&note, &photo, &doc] {
+        w.ok("entity.trash", json!({ "id": id }));
+        w.ok("entity.purge", json!({ "id": id }));
+    }
+    // No text column of the chat holds a word of what was purged.
+    for (table, column) in [
+        ("message", "text"),
+        ("message_card", "qualifier"),
+        ("message_attachment", "label"),
+    ] {
+        for held in w.strings(
+            &format!("SELECT ifnull({column}, '') FROM {table} WHERE thread_id = ?1"),
+            &[&thread],
+        ) {
+            let held = held.to_lowercase();
+            assert!(
+                !held.contains("zanzibar") && !held.contains("quarterly"),
+                "{table}.{column}: {held}"
+            );
+        }
+    }
+    let stored = w.vault().chat_thread(&thread).unwrap().unwrap();
+    let card = &stored.messages[1].cards[0];
+    assert_eq!(card.title, centraid_vault::chat::DELETED_ITEM);
+    assert_eq!((card.kind.as_str(), card.row_id.as_str()), ("", ""));
+    let labels: Vec<&str> = stored
+        .messages
+        .iter()
+        .flat_map(|m| &m.attachments)
+        .map(|a| a.label.as_str())
+        .collect();
+    assert_eq!(
+        labels,
+        [
+            centraid_vault::chat::DELETED_PHOTO,
+            centraid_vault::chat::DELETED_DOCUMENT,
+            "receipt"
+        ],
+        "an image keeps its own label"
+    );
+}
+
+#[test]
+fn a_thread_reopens_with_the_live_title_of_an_attached_photo_or_a_tombstone() {
+    let w = world("chat_history");
+    let photo = w.bare(Kind::Photo, "Truckee river bend", None);
+    let doc = document(&w, "Tahoe packing list", "text/plain", "tent");
+    let thread = w.ok(
+        "thread.save_turn",
+        json!({ "turn": { "question": { "text": "what is this?", "attachments": [
+            { "form": "photo", "entity_id": photo },
+            { "form": "document", "entity_id": doc }] },
+            "answer": answered("A river.") } }),
+    )["thread_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    turn(&w, Some(&thread), "no attachment", answered("plain"));
+    turn(&w, Some(&thread), "an image", answered("A receipt."));
+    w.ok(
+        "thread.save_turn",
+        json!({ "thread_id": thread, "turn": { "question": { "text": "and this?", "attachments": [
+            { "form": "image", "label": "receipt", "thumbnail_data_uri": PIXEL_A }] },
+            "answer": { "outcome": "refused", "refusal": "model_failed" } } }),
+    );
+    let history = w.vault().chat_history(&thread, 8).unwrap();
+    assert_eq!(
+        history.len(),
+        1,
+        "only an answered turn that carried attachments"
+    );
+    assert_eq!(history[0].question, "what is this?");
+    assert_eq!(history[0].answer, "A river.");
+    let held: Vec<(&str, Option<&str>)> = history[0]
+        .attachments
+        .iter()
+        .map(|a| (a.form.as_str(), a.label.as_deref()))
+        .collect();
+    assert_eq!(
+        held,
+        [
+            ("photo", Some("Truckee river bend")),
+            ("document", Some("Tahoe packing list"))
+        ]
+    );
+    w.ok("entity.retitle", json!({ "id": photo, "title": "River" }));
+    let history = w.vault().chat_history(&thread, 8).unwrap();
+    assert_eq!(history[0].attachments[0].label.as_deref(), Some("River"));
+    // Purged, no column holds its title and the thread reopens with the tombstone.
+    w.ok("entity.trash", json!({ "id": photo }));
+    w.ok("entity.purge", json!({ "id": photo }));
+    for column in ["text"] {
+        for held in w.strings(
+            &format!("SELECT {column} FROM message WHERE thread_id = ?1"),
+            &[&thread],
+        ) {
+            assert!(
+                !held.contains("River") && !held.contains("Truckee"),
+                "{held}"
+            );
+        }
+    }
+    let history = w.vault().chat_history(&thread, 8).unwrap();
+    assert_eq!(history[0].attachments[0].label, None);
+    assert_eq!(
+        history[0].attachments[1].label.as_deref(),
+        Some("Tahoe packing list")
+    );
+    let stored = w.vault().chat_thread(&thread).unwrap().unwrap();
+    assert_eq!(
+        stored.messages[0].attachments[0].label,
+        centraid_vault::chat::DELETED_PHOTO
+    );
+    // Deleting the thread removes every row.
+    w.ok("entity.trash", json!({ "id": thread }));
+    w.ok("entity.purge", json!({ "id": thread }));
+    for table in ["message", "message_card", "message_attachment"] {
+        assert_eq!(
+            count(&w, &format!("SELECT count(*) FROM {table}"), &[]),
+            0,
+            "{table}"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -832,8 +990,8 @@ fn an_attachment_is_a_photo_a_document_or_an_image_and_names_only_its_own() {
     let saved = w.ok(
         "thread.save_turn",
         json!({ "turn": { "question": { "text": "all three", "attachments": [
-            { "form": "photo", "label": "Beach", "entity_id": photo },
-            { "form": "document", "label": "Notes", "entity_id": doc }] },
+            { "form": "photo", "entity_id": photo },
+            { "form": "document", "entity_id": doc }] },
             "answer": answered("ok") } }),
     );
     let thread = saved["thread_id"].as_str().unwrap();
@@ -850,6 +1008,15 @@ fn an_attachment_is_a_photo_a_document_or_an_image_and_names_only_its_own() {
         &[thread],
     );
     assert_eq!(forms, ["photo:1:0", "document:1:0", "image:0:1"]);
+    // Only an image stores a label: a photo's and a document's are read live.
+    assert_eq!(
+        w.strings(
+            "SELECT form || ':' || ifnull(label, '-') FROM message_attachment
+              WHERE thread_id = ?1 ORDER BY ordinal, position",
+            &[thread]
+        ),
+        ["photo:-", "document:-", "image:receipt"]
+    );
     // The thumbnail is a rented blob: a row, a file, and a renter.
     let thumb: String = w.one(
         "SELECT thumb FROM message_attachment WHERE form = 'image'",
@@ -869,18 +1036,16 @@ fn an_attachment_is_a_photo_a_document_or_an_image_and_names_only_its_own() {
         )
     };
     // A photo's id is not a document and the reverse; each names only its own.
-    assert!(
-        attach(json!({ "form": "photo", "label": "n", "entity_id": doc })).contains("not a photo")
-    );
-    assert!(
-        attach(json!({ "form": "document", "label": "n", "entity_id": photo }))
-            .contains("not a document")
-    );
+    assert!(attach(json!({ "form": "photo", "entity_id": doc })).contains("not a photo"));
+    assert!(attach(json!({ "form": "document", "entity_id": photo })).contains("not a document"));
     for bad in [
         json!({ "form": "image", "label": "n" }),
+        json!({ "form": "image", "thumbnail_data_uri": PIXEL_A }),
         json!({ "form": "image", "label": "n", "entity_id": photo, "thumbnail_data_uri": PIXEL_A }),
-        json!({ "form": "photo", "label": "n" }),
-        json!({ "form": "photo", "label": "n", "entity_id": photo, "thumbnail_data_uri": PIXEL_A }),
+        json!({ "form": "photo" }),
+        json!({ "form": "photo", "label": "n", "entity_id": photo }),
+        json!({ "form": "photo", "entity_id": photo, "thumbnail_data_uri": PIXEL_A }),
+        json!({ "form": "document", "label": "n", "entity_id": doc }),
         json!({ "form": "image", "label": "n", "thumbnail_data_uri": "data:text/plain;base64,AAAA" }),
     ] {
         assert!(
@@ -892,13 +1057,13 @@ fn an_attachment_is_a_photo_a_document_or_an_image_and_names_only_its_own() {
 }
 
 #[test]
-fn an_attached_item_purged_leaves_the_label_and_a_trashed_one_reads_as_lost() {
+fn a_trashed_attachment_reads_as_lost_and_a_purged_one_leaves_the_pointer_empty() {
     let w = world("chat_label");
     let doc = document(&w, "Notes", "text/plain", "some words");
     let saved = w.ok(
         "thread.save_turn",
         json!({ "turn": { "question": { "text": "read it", "attachments": [
-            { "form": "document", "label": "Notes", "entity_id": doc }] },
+            { "form": "document", "entity_id": doc }] },
             "answer": answered("ok") } }),
     );
     let thread = saved["thread_id"].as_str().unwrap();
@@ -907,6 +1072,7 @@ fn an_attached_item_purged_leaves_the_label_and_a_trashed_one_reads_as_lost() {
         stored.messages[0].attachments[0].entity_id.as_deref(),
         Some(doc.as_str())
     );
+    assert_eq!(stored.messages[0].attachments[0].label, "Notes");
     // The chat may read the document it was handed.
     assert!(matches!(
         w.vault().attachment_document(&doc).unwrap(),
@@ -914,10 +1080,14 @@ fn an_attached_item_purged_leaves_the_label_and_a_trashed_one_reads_as_lost() {
     ));
     assert_eq!(w.vault().attachable_documents(10).unwrap().len(), 1);
     // Trashed, it reads as lost and the row still names it; purged, the engine sets the pointer to
-    // NULL and the label stays.
+    // NULL and nothing of its title is left.
     w.ok("entity.trash", json!({ "id": doc }));
     let stored = w.vault().chat_thread(thread).unwrap().unwrap();
     assert_eq!(stored.messages[0].attachments[0].entity_id, None);
+    assert_eq!(
+        stored.messages[0].attachments[0].label,
+        centraid_vault::chat::DELETED_DOCUMENT
+    );
     assert_eq!(
         count(
             &w,
@@ -930,18 +1100,17 @@ fn an_attached_item_purged_leaves_the_label_and_a_trashed_one_reads_as_lost() {
         w.vault().attachment_document(&doc).unwrap(),
         centraid_vault::chat::DocumentSource::Missing
     ));
-    w.ok("entity.purge", json!({ "id": doc }));
+    w.ok("entity.restore", json!({ "id": doc }));
     assert_eq!(
-        w.one::<String>(
-            "SELECT label FROM message_attachment WHERE thread_id = ?1",
-            &[thread]
-        ),
+        w.vault().chat_thread(thread).unwrap().unwrap().messages[0].attachments[0].label,
         "Notes"
     );
+    w.ok("entity.trash", json!({ "id": doc }));
+    w.ok("entity.purge", json!({ "id": doc }));
     assert_eq!(
         count(
             &w,
-            "SELECT count(*) FROM message_attachment WHERE thread_id = ?1 AND entity_id IS NULL",
+            "SELECT count(*) FROM message_attachment WHERE thread_id = ?1 AND entity_id IS NULL AND label IS NULL",
             &[thread]
         ),
         1

@@ -205,6 +205,14 @@ pub const TABLES: &[(&str, Role)] = &[
         "message_attachment",
         Role::Outside("a chat's transcript is appended, never edited"),
     ),
+    (
+        "message_card",
+        Role::Outside("a chat's transcript is appended, never edited"),
+    ),
+    (
+        "snooze",
+        Role::Outside("a snooze moves one alert for a while and is not an edit of the item"),
+    ),
     ("locker_key", Role::Outside("custody's own bookkeeping")),
     ("entity_kind", LOOKUP),
     ("home_shape", LOOKUP),
