@@ -1811,6 +1811,12 @@ impl HandleState {
             K::Device(request) => Ok(response(wire::response::Kind::Device(
                 self.device_call(request)?,
             ))),
+            K::Follow(request) => Ok(response(wire::response::Kind::Follow(
+                self.follow_call(request)?,
+            ))),
+            K::ShareIn(request) => Ok(response(wire::response::Kind::ShareIn(
+                self.share_in_call(request)?,
+            ))),
             K::Notify(request) => Ok(response(wire::response::Kind::Notify(Box::new(
                 self.notify_call(request)?,
             )))),
@@ -3069,6 +3075,7 @@ fn request_kind(request: &wire::Request) -> RequestKind {
             // DOORS READ THE ALERT INDEX AND RUN IDEMPOTENT COMMANDS, EACH BOUNDED.
             | K::Room(_)
             | K::Device(_)
+            | K::Follow(_)
             | K::Notify(_)
             // A PHRASE STEP IS 24 WORDS AND ONE PBKDF2 (#1047 E1).
             | K::Phrase(_)
@@ -3116,7 +3123,9 @@ fn request_kind(request: &wire::Request) -> RequestKind {
         Some(K::CheckBackup(request)) if request.progress_only || request.stop => {
             RequestKind::Bounded
         }
-        Some(K::Drain(_) | K::Restore(_) | K::FetchOriginal(_) | K::CheckBackup(_)) => {
+        Some(
+            K::Drain(_) | K::Restore(_) | K::FetchOriginal(_) | K::CheckBackup(_) | K::ShareIn(_),
+        ) => {
             RequestKind::Unbounded
         }
     }

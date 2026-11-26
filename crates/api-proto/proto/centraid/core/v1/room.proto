@@ -946,3 +946,54 @@ message DeviceResponse {
   bool found = 1;
   string value = 2;
 }
+
+// FOLLOWING A PHONE STORE (app-plane §10; following.md): the shell reads the store and sends the
+// snapshot; the core runs the store's follow command, which merges it. `system` is one of
+// `contacts`, `calendar`, `files`, `camera_roll`, `reminders`, `health`, `health_readings`,
+// `statement`. A stop retires the origin and deletes nothing.
+enum FollowVerb {
+  FOLLOW_VERB_UNSPECIFIED = 0;
+  FOLLOW_VERB_PASS = 1;
+  FOLLOW_VERB_STOP = 2;
+}
+
+message FollowRequest {
+  FollowVerb verb = 1;
+  string system = 2;
+  // The command's input, as JSON: the snapshot of a pass, or the origin of a stop.
+  string input_json = 3;
+  string invoke_key = 4;
+}
+
+message FollowResponse {
+  // The command's output, as JSON.
+  string output_json = 1;
+  // The vault declined it, in its own sentence.
+  bool declined = 2;
+  string sentence = 3;
+}
+
+// THE SHARE-IN DRAIN (app-plane §10, D2): file what the share extension and the receiver left in
+// the inbox, delete what was filed. Idempotent by the item's uuid.
+message ShareInRequest {
+  string inbox_dir = 1;
+}
+
+enum ShareInFate {
+  SHARE_IN_FATE_UNSPECIFIED = 0;
+  SHARE_IN_FATE_FILED = 1;
+  SHARE_IN_FATE_ALREADY = 2;
+  SHARE_IN_FATE_KEPT = 3;
+}
+
+message ShareInItem {
+  string uuid = 1;
+  ShareInFate fate = 2;
+  // With KEPT: why it stays in the inbox. With FILED: where it went (`note`, `photo`, `document`,
+  // `people`).
+  string detail = 3;
+}
+
+message ShareInResponse {
+  repeated ShareInItem items = 1;
+}

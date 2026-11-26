@@ -9,6 +9,7 @@ pub mod inbox;
 pub mod open_url;
 pub mod registry;
 pub mod store;
+pub mod widget;
 
 pub use draft::{Draft, DraftError, Drafts};
 pub use registry::{DEVICE_KEYS, KeyDecl, KeyError, Owner, Place, Shape};
@@ -48,5 +49,92 @@ impl crate::handle::HandleState {
                 "a device request names get, put or delete".to_owned(),
             )),
         }
+    }
+}
+
+const FOLLOW_SYSTEMS: [&str; 8] = [
+    "contacts",
+    "calendar",
+    "files",
+    "camera_roll",
+    "reminders",
+    "health",
+    "health_readings",
+    "statement",
+];
+
+impl crate::handle::HandleState {
+    /// A shell's follow pass, or its stop of one.
+    pub(crate) fn follow_call(
+        &self,
+        request: &wire::FollowRequest,
+    ) -> crate::error::Result<wire::FollowResponse> {
+        let refused = |detail: String| crate::error::CoreError::InvalidRequest { detail };
+        if !FOLLOW_SYSTEMS.contains(&request.system.as_str()) {
+            return Err(refused(format!(
+                "`{}` is not a followed store",
+                request.system
+            )));
+        }
+        let name = match wire::FollowVerb::try_from(request.verb) {
+            Ok(wire::FollowVerb::Pass) => format!("follow.{}", request.system),
+            Ok(wire::FollowVerb::Stop) => "follow.stop".to_owned(),
+            _ => return Err(refused("a follow request names pass or stop".to_owned())),
+        };
+        let input: serde_json::Value = serde_json::from_str(&request.input_json)
+            .map_err(|error| refused(format!("the snapshot is not JSON: {error}")))?;
+        let outcome = self.command(&name, &input, &request.invoke_key)?;
+        let declined = outcome.status != centraid_vault::CommandStatus::Executed;
+        Ok(wire::FollowResponse {
+            output_json: outcome.output.to_string(),
+            declined,
+            sentence: outcome.reason.unwrap_or_default(),
+        })
+    }
+
+    /// A shell's drain of the share-in inbox.
+    pub(crate) fn share_in_call(
+        &self,
+        request: &wire::ShareInRequest,
+    ) -> crate::error::Result<wire::ShareInResponse> {
+        use inbox::{Fate, Route};
+        if request.inbox_dir.is_empty() {
+            return Err(crate::error::CoreError::InvalidRequest {
+                detail: "the share-in drain names the inbox".to_owned(),
+            });
+        }
+        let handle = crate::handle::Handle::of(self).ok_or(crate::error::CoreError::Closed)?;
+        let report = inbox::drain(
+            std::path::Path::new(&request.inbox_dir),
+            &inbox::CoreFiler(&handle),
+        );
+        Ok(wire::ShareInResponse {
+            items: report
+                .items
+                .into_iter()
+                .map(|(uuid, fate)| {
+                    let (fate, detail) = match fate {
+                        Fate::Filed(route) => (
+                            wire::ShareInFate::Filed,
+                            match route {
+                                Route::Note => "note",
+                                Route::Photo => "photo",
+                                Route::Document => "document",
+                                Route::Vcard | Route::CsvPeople => "people",
+                                Route::Later(_) => "",
+                            }
+                            .to_owned(),
+                        ),
+                        Fate::Already => (wire::ShareInFate::Already, String::new()),
+                        Fate::Kept(why) => (wire::ShareInFate::Kept, why),
+                    };
+                    wire::ShareInItem {
+                        uuid,
+                        fate: fate as i32,
+                        detail,
+                    }
+                })
+                .collect(),
+        })
     }
 }

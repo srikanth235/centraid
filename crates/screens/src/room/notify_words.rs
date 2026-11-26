@@ -60,6 +60,27 @@ impl Catalogue {
     }
 }
 
+impl centraid_core::device::widget::Words for Catalogue {
+    fn title(&self) -> String {
+        words::widget_today(self.locale)
+    }
+
+    fn empty(&self) -> String {
+        words::widget_nothing(self.locale)
+    }
+
+    fn counts(&self, events: u64, tasks: u64) -> String {
+        [
+            (events > 0).then(|| words::widget_events(self.locale, events)),
+            (tasks > 0).then(|| words::widget_tasks(self.locale, tasks)),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join(" · ")
+    }
+}
+
 impl Words for Catalogue {
     fn alert(&self, notice: &Notice, zone: &str) -> (String, String) {
         let title = if notice.title.trim().is_empty() {

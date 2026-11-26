@@ -153,6 +153,8 @@ message Request {
     RoomRequest room = 50;
     NotifyRequest notify = 51;
     DeviceRequest device = 52;
+    FollowRequest follow = 53;
+    ShareInRequest share_in = 54;
   }
 }
 
@@ -204,6 +206,8 @@ message Response {
     RoomResponse room = 50;
     NotifyResponse notify = 51;
     DeviceResponse device = 52;
+    FollowResponse follow = 53;
+    ShareInResponse share_in = 54;
   }
 }
 

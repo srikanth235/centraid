@@ -100,6 +100,9 @@ impl HandleState {
         let Some(service) = self.notify.get() else {
             return;
         };
+        if matches!(table, "event" | "task" | "entity" | "vault") {
+            self.widget_refresh(service);
+        }
         if !watches(table) {
             return;
         }
@@ -108,6 +111,27 @@ impl HandleState {
                 kind: Some(wire::event::Kind::Notify(Box::new(schedule))),
             });
         }
+    }
+
+    /// Write the widget snapshot when a commit changed what it shows (D6).
+    fn widget_refresh(&self, service: &Service) {
+        let (Ok(store), now) = (self.device(), ScreenCtx::now_ms(self).unwrap_or_default()) else {
+            return;
+        };
+        let zone = service.scheduler.zone();
+        let _ = self.with_vault(|vault| {
+            vault
+                .read(|connection| {
+                    Ok(crate::device::widget::refresh(
+                        connection,
+                        &store,
+                        now,
+                        &zone,
+                        service.words.as_ref(),
+                    ))
+                })
+                .map_err(Into::into)
+        });
     }
 
     /// The scheduler, for a producer that offers notices of its own (the backup's).

@@ -37,7 +37,7 @@ pub fn category_of(kind: &str) -> String {
 }
 
 /// The words a notification says. Every sentence is the catalogue's; the scheduler only picks one.
-pub trait Words: Send + Sync {
+pub trait Words: Send + Sync + crate::device::widget::Words {
     /// Title and body of an alert of an event, a task or a person's date.
     /// `zone` is the member's, in which a zoned instant is read.
     fn alert(&self, notice: &Notice, zone: &str) -> (String, String);

@@ -22,6 +22,10 @@ catalog! {
     plain notify_birthday = ("Birthday", "Birthday");
     plain notify_anniversary = ("Anniversary", "Anniversary");
     plain notify_date = ("Date", "Date");
+    plain widget_today = ("Today", "Today");
+    plain widget_nothing = ("Nothing today", "Nothing today");
+    counted widget_events = ("{n} event", "{n} events");
+    counted widget_tasks = ("{n} task", "{n} tasks");
     plain home_title = ("Centraid", "Centraid");
     plain home_settings_tile = ("Settings", "Settings");
     plain home_backup_tile = ("Backup", "Backup");

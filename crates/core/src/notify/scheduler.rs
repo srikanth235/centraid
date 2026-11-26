@@ -105,6 +105,12 @@ impl Scheduler {
         state.last = None;
     }
 
+    /// The member's zone, as the phone last said it.
+    #[must_use]
+    pub fn zone(&self) -> String {
+        self.lock().zone.clone()
+    }
+
     /// Show details on or off (the Settings row): a banner says only that one is due when off.
     pub fn set_details(&self, shown: bool) {
         self.lock().details = shown;

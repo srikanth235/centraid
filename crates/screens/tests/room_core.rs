@@ -238,3 +238,86 @@ fn the_core_pushes_the_notification_set_when_a_commit_reaches_the_alert_index() 
     );
     assert!(set.retain_delivered);
 }
+
+fn count(handle: &Handle, sql: &str) -> i64 {
+    handle
+        .with_vault(|vault| {
+            vault
+                .read(|c| Ok(c.query_row(sql, [], |row| row.get::<_, i64>(0))?))
+                .map_err(Into::into)
+        })
+        .unwrap()
+}
+
+#[test]
+fn the_share_in_drain_files_a_text_as_a_note_with_its_arrival_and_empties_the_inbox() {
+    let dir = tempfile::tempdir().unwrap();
+    let handle = phone(dir.path());
+    let inbox = dir.path().join("inbox");
+    let item = inbox.join("0192f0a0-0000-7000-8000-0000000000aa");
+    std::fs::create_dir_all(&item).unwrap();
+    std::fs::write(item.join("payload"), "Flour, eggs and butter").unwrap();
+    std::fs::write(
+        item.join("manifest.json"),
+        r#"{"v":1,"type":"text","uti_or_mime":"text/plain","name":"","from_app":"Safari","received_at":1}"#,
+    )
+    .unwrap();
+
+    let drain = || match ask(
+        &handle,
+        wire::request::Kind::ShareIn(wire::ShareInRequest {
+            inbox_dir: inbox.display().to_string(),
+        }),
+    ) {
+        wire::response::Kind::ShareIn(answer) => answer.items,
+        other => panic!("not a share-in answer: {other:?}"),
+    };
+    let first = drain();
+    assert_eq!(first.len(), 1);
+    assert_eq!(first[0].fate, wire::ShareInFate::Filed as i32);
+    assert_eq!(first[0].detail, "note");
+    assert_eq!(
+        count(
+            &handle,
+            "SELECT COUNT(*) FROM entity WHERE kind = 'note' AND arrived_via = 'share'"
+        ),
+        1
+    );
+    assert!(!item.exists());
+    assert!(
+        drain().is_empty(),
+        "the inbox is empty and a second drain files nothing"
+    );
+}
+
+#[test]
+fn a_follow_request_names_a_followed_store_and_a_verb() {
+    let dir = tempfile::tempdir().unwrap();
+    let handle = phone(dir.path());
+    let call = |system: &str, verb: wire::FollowVerb, input: &str| {
+        handle.call(&wire::Request {
+            kind: Some(wire::request::Kind::Follow(wire::FollowRequest {
+                verb: verb as i32,
+                system: system.to_owned(),
+                input_json: input.to_owned(),
+                invoke_key: "k".to_owned(),
+            })),
+        })
+    };
+    assert!(call("secrets", wire::FollowVerb::Pass, "{}").is_err());
+    assert!(call("contacts", wire::FollowVerb::Unspecified, "{}").is_err());
+    assert!(call("contacts", wire::FollowVerb::Pass, "not json").is_err());
+    let stopped = call(
+        "contacts",
+        wire::FollowVerb::Stop,
+        r#"{"origin_id":"nothing"}"#,
+    )
+    .expect("a stop of nothing is answered");
+    let Some(wire::response::Kind::Follow(answer)) = stopped.kind else {
+        panic!("a follow answer");
+    };
+    assert!(
+        answer.declined,
+        "the vault says so in its own sentence: {answer:?}"
+    );
+}

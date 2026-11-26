@@ -23,6 +23,20 @@ const DAY: i64 = 24 * HOUR;
 
 struct English;
 
+impl centraid_core::device::widget::Words for English {
+    fn title(&self) -> String {
+        "Today".to_owned()
+    }
+
+    fn empty(&self) -> String {
+        "Nothing today".to_owned()
+    }
+
+    fn counts(&self, events: u64, tasks: u64) -> String {
+        format!("{events} events, {tasks} tasks")
+    }
+}
+
 impl Words for English {
     fn alert(&self, notice: &Notice, _zone: &str) -> (String, String) {
         (notice.title.clone(), notice.at.clone().unwrap_or_default())
@@ -504,4 +518,71 @@ fn the_desired_function_reads_the_same_set_as_the_scheduler() {
         .unwrap();
     let via = world.set(&Scheduler::new(), NOW);
     assert_eq!(direct.all, via.all);
+}
+
+fn widget(world: &World) -> serde_json::Value {
+    let store = world.handle.device().unwrap();
+    serde_json::from_str(&store.get("widget.today").unwrap().expect("a snapshot")).unwrap()
+}
+
+fn refresh_widget(world: &World) -> bool {
+    let store = world.handle.device().unwrap();
+    world
+        .handle
+        .with_vault(|vault| {
+            vault
+                .read(|c| {
+                    Ok(centraid_core::device::widget::refresh(
+                        c, &store, NOW, "UTC", &English,
+                    ))
+                })
+                .map_err(Into::into)
+        })
+        .unwrap()
+        .unwrap()
+}
+
+#[test]
+fn the_widget_snapshot_names_todays_items_with_their_links_and_a_trash_clears_it_at_once() {
+    let world = World::new();
+    let event = world.event(70, "2026-11-26T15:00:00.000Z");
+    let task = world.task(71, "2026-11-26T18:00:00.000Z");
+    world.event(72, "2026-11-27T09:00:00.000Z");
+    assert!(refresh_widget(&world));
+    let snapshot = widget(&world);
+    assert_eq!(snapshot["v"], 1);
+    assert_eq!(snapshot["day"], "2026-11-26");
+    assert_eq!(snapshot["summary"], "1 events, 1 tasks");
+    let urls: Vec<&str> = snapshot["lines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|line| line["url"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        urls,
+        [
+            format!("centraid://open/event/{event}"),
+            format!("centraid://open/task/{task}")
+        ]
+    );
+    assert!(
+        !refresh_widget(&world),
+        "an unchanged snapshot is not written again"
+    );
+
+    common::command(
+        &world.handle,
+        "entity.trash",
+        &json!({ "ids": [event] }),
+        "t1",
+    );
+    assert!(refresh_widget(&world));
+    let after = widget(&world);
+    assert_eq!(after["summary"], "0 events, 1 tasks");
+    assert_eq!(
+        after["lines"].as_array().unwrap().len(),
+        1,
+        "the trashed event is gone"
+    );
 }
