@@ -23,9 +23,7 @@ mod ddl_rules;
 mod design_boards;
 #[cfg(test)]
 mod design_checks;
-mod design_convert;
 mod design_emit;
-mod design_glance;
 mod design_icon;
 mod design_site;
 mod design_words;
@@ -106,15 +104,6 @@ enum Command {
         /// Compare instead of write.
         #[arg(long)]
         check: bool,
-    },
-    #[command(hide = true)]
-    DesignConvert {
-        #[arg(long)]
-        apply: bool,
-        #[arg(long)]
-        links: bool,
-        #[arg(long)]
-        fix: bool,
     },
     /// Write the lists the gateway and the phone must agree on (#1191, L1): the `edge_shape` seed
     /// the vault's trigger test holds against, generated from the schema. `--check` compares.
@@ -323,20 +312,6 @@ fn main() -> ExitCode {
             }
         },
         Command::Lists { check } => match lists::run(&root, check) {
-            Ok(()) => true,
-            Err(error) => {
-                eprintln!("xtask: {error:#}");
-                false
-            }
-        },
-        Command::DesignConvert { apply, links, fix } => match if fix {
-            design_convert::fix(&root)
-                .map(|c| eprintln!("fixed {} boards: {}", c.len(), c.join(" ")))
-        } else if links {
-            design_convert::add_links(&root).map(|n| eprintln!("linked {n} boards"))
-        } else {
-            design_convert::run(&root, apply)
-        } {
             Ok(()) => true,
             Err(error) => {
                 eprintln!("xtask: {error:#}");

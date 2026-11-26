@@ -1219,26 +1219,6 @@ pub fn emit(root: &Path) -> Result<Emitted> {
         design_words::swift(&words),
     );
 
-    // The widgets' static words for the platform, from their own catalogue. The purge deleted
-    // that catalogue; the three files stay as committed until the widgets are rebuilt.
-    if root.join(crate::design_glance::GLANCE_SOURCE).exists() {
-        let mut glance =
-            crate::design_glance::resolve(&read(crate::design_glance::GLANCE_SOURCE)?)?;
-        crate::design_glance::add_health(&mut glance, &read(crate::design_glance::HEALTH_SOURCE)?)?;
-        put(
-            format!("{SWIFT_DIR}/GlanceWords.swift"),
-            crate::design_glance::swift_words(&glance),
-        );
-        put(
-            format!("{SWIFT_DIR}/AgendaShortcuts.swift"),
-            crate::design_glance::swift_shortcuts(&glance),
-        );
-        put(
-            format!("{ANDROID_RES}/values/glance_strings.xml"),
-            crate::design_glance::android_xml(&glance),
-        );
-    }
-
     // The redesign's colours, scale and radii.
     let assets = color_assets(&tokens);
     put(
