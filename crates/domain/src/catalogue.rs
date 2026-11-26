@@ -137,7 +137,12 @@ pub const ACTIONS: &[ActionDecl] = &[
     )
     .here(&[Scope::Account])
     .pair("rule.delete")
-    .say("create", &["rule"]),
+    .say("create", &["rule"])
+    .names(&[
+        ("category_id", &["category"]),
+        ("match", &["match"]),
+        ("text", &["name"]),
+    ]),
     act(
         "rule",
         "edit",
@@ -189,7 +194,14 @@ pub const ACTIONS: &[ActionDecl] = &[
     .here(&[Scope::Account, Scope::Day, Scope::Person])
     .with(&["edge.add"])
     .pair("entity.trash")
-    .say("create", &["transaction"]),
+    .say("create", &["transaction"])
+    .names(&[
+        ("account_id", &["account"]),
+        ("amount_minor", &["amount"]),
+        ("category_id", &["category"]),
+        ("posted_on", &["date"]),
+        ("title", &["name"]),
+    ]),
     act(
         "txn",
         "add",
@@ -243,7 +255,8 @@ pub const ACTIONS: &[ActionDecl] = &[
         ],
     )
     .set()
-    .hand(Handoff::Open),
+    .say("categorize", &["transaction"])
+    .names(&[("category_id", &["category"])]),
     act(
         "txn",
         "split",
@@ -737,7 +750,20 @@ pub const ACTIONS: &[ActionDecl] = &[
         &[req("a", Ty::Text), req("b", Ty::Text)],
     )
     .pair("link.remove")
-    .hand(Handoff::Open),
+    .say(
+        "link",
+        &[
+            "event",
+            "document",
+            "workout",
+            "locker_item",
+            "transaction",
+            "note",
+            "photo",
+            "task",
+            "person",
+        ],
+    ),
     act(
         "link",
         "remove",
@@ -988,7 +1014,8 @@ pub const ACTIONS: &[ActionDecl] = &[
             req("status", Ty::OneOf(&["accepted", "declined", "tentative"])),
         ],
     )
-    .hand(Handoff::Open),
+    .say("respond", &["event"])
+    .names(&[("status", &["answer"])]),
     act(
         "event",
         "export_ics",

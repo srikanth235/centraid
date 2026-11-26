@@ -26,6 +26,8 @@ pub use centraid_assist::native::door::{Call, Door, Ran, int, text};
 /// The device every command is invoked from.
 pub const DEVICE: &str = "nativetools";
 
+const HARNESS_LOCKER_KEY: [u8; 32] = *b"centraid-nativetools-harness-key";
+
 /// Commands run through [`Handle::run`] on a watched vault file, by `(command, outcome)` where the
 /// outcome is `executed`, `refused` or `failed`.
 pub type RunCounts = BTreeMap<(String, String), usize>;
@@ -244,6 +246,7 @@ impl Handle {
     /// Run one typed command as the owner at the clock's current instant. A
     /// refusal is a value, not an error.
     pub fn run(&self, name: &str, input: serde_json::Value) -> Result<Ran, String> {
+        let input = self.sealed(name, input)?;
         let outcome = self
             .vault
             .execute(
@@ -367,6 +370,88 @@ impl Handle {
 }
 
 impl Handle {
+    pub fn locker_key(&self) -> Result<(String, Vec<u8>), String> {
+        let key_id = self
+            .vault
+            .locker_generation()
+            .map_err(|error| error.to_string())?;
+        Ok((key_id, HARNESS_LOCKER_KEY.to_vec()))
+    }
+
+    fn sealed(
+        &self,
+        name: &str,
+        mut input: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        use centraid_vault::commands::locker::schema::{
+            SEALED_PLACEHOLDER, built_in, field_id_of, is_sealed_kind,
+        };
+        use centraid_vault::custody::locker_key::{encrypt_under_locker_key, is_locker_ciphertext};
+        if !matches!(name, "locker.add_item" | "locker.edit_item") {
+            return Ok(input);
+        }
+        let item_id = input["item_id"].as_str().unwrap_or_default().to_owned();
+        let item_type = input["type"].as_str().unwrap_or("login").to_owned();
+        let Some(fields) = input
+            .get_mut("fields")
+            .and_then(serde_json::Value::as_array_mut)
+        else {
+            return Ok(input);
+        };
+        let mut key_pair: Option<(String, Vec<u8>)> = None;
+        for field in fields.iter_mut() {
+            let Some(obj) = field.as_object_mut() else {
+                continue;
+            };
+            let field_key = obj
+                .get("field_key")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned);
+            let kind = obj
+                .get("kind")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+                .or_else(|| {
+                    field_key
+                        .as_deref()
+                        .and_then(|k| built_in(&item_type, k))
+                        .map(|b| b.kind.to_owned())
+                });
+            let Some(kind) = kind else {
+                continue;
+            };
+            if !is_sealed_kind(&kind) {
+                continue;
+            }
+            let Some(plain) = obj
+                .get("value")
+                .and_then(serde_json::Value::as_str)
+                .filter(|v| !v.is_empty() && *v != SEALED_PLACEHOLDER && !is_locker_ciphertext(v))
+                .map(str::to_owned)
+            else {
+                continue;
+            };
+            if key_pair.is_none() {
+                key_pair = Some(self.locker_key()?);
+            }
+            let (key_id, key) = key_pair.as_ref().expect("just set");
+            let field_id = obj
+                .get("field_id")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+                .or_else(|| field_key.as_deref().map(|k| field_id_of(&item_id, k)))
+                .unwrap_or_else(|| self.mint_id());
+            let sealed = encrypt_under_locker_key(key, key_id, &field_id, &plain)
+                .map_err(|error| error.to_string())?;
+            obj.insert("value".to_owned(), serde_json::Value::String(sealed));
+            obj.insert(
+                "key_id".to_owned(),
+                serde_json::Value::String(key_id.clone()),
+            );
+        }
+        Ok(input)
+    }
+
     /// Move the write-ahead log into the vault file and truncate it, so a
     /// seeded vault's file is the whole vault before it is copied
     /// (`.claude/skills/stack/sqlite/centraid.md`).

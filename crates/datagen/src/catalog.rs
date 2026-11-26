@@ -45,10 +45,13 @@ const VERB_CLASSES: &[(&str, ArgClass)] = &[
     ("reschedule", ArgClass::Date),
     ("add_to", ArgClass::Row),
     ("remove_from", ArgClass::Row),
+    ("link", ArgClass::Row),
     ("tag", ArgClass::Label),
     ("untag", ArgClass::Label),
+    ("categorize", ArgClass::Label),
     ("log", ArgClass::Choice),
     ("reveal", ArgClass::Choice),
+    ("respond", ArgClass::Choice),
 ];
 
 /// Verbs that are tools of their own (`create`, `edit`), not `do` verbs.
@@ -260,6 +263,10 @@ impl Catalog {
             let choices = match spec.name {
                 "log" => meta::LOG_KINDS.iter().map(|c| (*c).to_owned()).collect(),
                 "reveal" => sealed.clone(),
+                "respond" => ["accepted", "declined", "tentative"]
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect(),
                 _ => Vec::new(),
             };
             verbs.push(Verb {

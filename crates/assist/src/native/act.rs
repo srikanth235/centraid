@@ -54,8 +54,14 @@ pub(crate) struct PendingBulk {
 
 /// Which container a kind goes into with `add_to`.
 #[must_use]
-pub fn container_of(_kind: Kind) -> Option<Kind> {
-    None
+pub fn container_of(kind: Kind) -> Option<Kind> {
+    match kind {
+        Kind::Photo => Some(Kind::Album),
+        Kind::Note => Some(Kind::Notebook),
+        Kind::Document => Some(Kind::Folder),
+        Kind::Task => Some(Kind::List),
+        _ => None,
+    }
 }
 
 /// The refusal for a verb no action serves on a kind.
@@ -1282,7 +1288,9 @@ impl Session {
     ) -> Result<Outcome, String> {
         let mut plans = Vec::new();
         for key in targets {
-            if verb.command(key.0).is_none() {
+            let applicable = verb.command(key.0).is_some()
+                || (verb == Verb::Edit && !meta::edit_actions(key.0).is_empty());
+            if !applicable {
                 let kinds: Vec<&str> = verb.kinds().iter().map(|kind| kind.name()).collect();
                 let mut refusal = format!(
                     "error: {} does not apply to {}. {} applies to: {}.",
@@ -1694,6 +1702,9 @@ impl Session {
 
     /// Plan one verb on one row.
     fn plan(&mut self, verb: Verb, row: &Row, args: &Map<String, Value>) -> Result<Plan, String> {
+        if verb == Verb::Edit {
+            return self.plan_edit(row, args);
+        }
         let kind = row.kind;
         let id = row.id.clone();
         // THE ONE LOOKUP: the manifest action chat runs for this verb on this kind
@@ -1719,6 +1730,77 @@ impl Session {
         };
         let run = |steps: Vec<Step>, inverse: Vec<Step>| Plan::Run { steps, inverse };
         Ok(match verb {
+            Verb::Complete | Verb::Reopen => {
+                check_args(&[])?;
+                let old = match row.field("status") {
+                    Some(Val::Enum(s)) => *s,
+                    _ => "open",
+                };
+                let want = if verb == Verb::Complete {
+                    "completed"
+                } else {
+                    "open"
+                };
+                if old == want {
+                    let when = row
+                        .field("completed")
+                        .map(|value| format!(" ({})", value.show(None)))
+                        .unwrap_or_default();
+                    return Ok(Plan::Already(format!("is {want}{when}")));
+                }
+                let back_verb = match old {
+                    "completed" => Verb::Complete,
+                    "cancelled" => Verb::Cancel,
+                    _ => Verb::Reopen,
+                };
+                let back = back_verb.action(Kind::Task).unwrap_or(action);
+                run(
+                    vec![Step::of(action, target())],
+                    vec![Step::of(back, json!({ back.id_param: id }))],
+                )
+            }
+            Verb::Cancel => {
+                check_args(&[])?;
+                if row.field("status") == Some(&Val::Enum("cancelled")) {
+                    return Ok(Plan::Already("is cancelled".to_owned()));
+                }
+                match kind {
+                    Kind::Event => {
+                        let old = Kind::Event
+                            .spec()
+                            .field("status")
+                            .and_then(|field| {
+                                row.field("status").and_then(|value| match value {
+                                    Val::Enum(model) => field.vault_value(model),
+                                    _ => None,
+                                })
+                            })
+                            .unwrap_or("confirmed");
+                        let edit = Verb::Edit
+                            .action(Kind::Event)
+                            .ok_or_else(|| not_applicable(Verb::Edit, Kind::Event))?;
+                        run(
+                            vec![Step::of(action, target())],
+                            vec![Step::of(
+                                edit,
+                                input_of(edit, &id, &[("status", json!(old))]),
+                            )],
+                        )
+                    }
+                    Kind::Task => {
+                        let old = match row.field("status") {
+                            Some(Val::Enum("completed")) => Verb::Complete,
+                            _ => Verb::Reopen,
+                        };
+                        let back = old.action(Kind::Task).unwrap_or(action);
+                        run(
+                            vec![Step::of(action, target())],
+                            vec![Step::of(back, json!({ back.id_param: id }))],
+                        )
+                    }
+                    _ => return Err(not_applicable(verb, kind)),
+                }
+            }
             Verb::Delete | Verb::Restore => {
                 check_args(&[])?;
                 if verb == Verb::Delete && row.trashed {
@@ -1727,10 +1809,6 @@ impl Session {
                 if verb == Verb::Restore && !row.trashed {
                     return Ok(Plan::Already("is not in the trash".to_owned()));
                 }
-                // EVERY KIND COMES BACK THE SAME WAY: a trashed row, and what went to the trash
-                // with it, is restored by the action the manifest names as the delete's inverse
-                // (the vault's own `entity.restore`, a Locker item's by its own); the album,
-                // notebook or folder a delete takes out of the model included.
                 let back = action.inverse.ok_or_else(|| not_applicable(verb, kind))?;
                 let input = json!({ back.id_param: id });
                 run(
@@ -1750,7 +1828,6 @@ impl Session {
                     ));
                 }
                 let back = action.inverse.ok_or_else(|| not_applicable(verb, kind))?;
-                // a flag is named by the verb
                 let input = json!({"id": id, "flag": verb.spec().flag.unwrap_or("starred")});
                 run(
                     vec![Step::of(action, input.clone())],
@@ -1760,33 +1837,659 @@ impl Session {
                     }],
                 )
             }
-            // A VERB NO BESPOKE PLANNER OWNS is the catalog's: its action runs with the args chat
-            // stated, and the action the manifest names as its inverse takes it back.
+            Verb::AddTo | Verb::RemoveFrom => self.plan_membership(verb, row, args)?,
             Verb::Tag | Verb::Untag | Verb::Archive | Verb::Unarchive => {
                 self.plan_catalog(verb, row, args, action)?
             }
+            Verb::Log => {
+                if kind == Kind::Person {
+                    check_args(&["kind"])?;
+                    let raw = args
+                        .get("kind")
+                        .map(text_of)
+                        .unwrap_or_default()
+                        .trim()
+                        .to_lowercase();
+                    if !meta::LOG_KINDS.contains(&raw.as_str()) {
+                        return Err(format!(
+                            "error: log takes kind: {}.",
+                            meta::LOG_KINDS.join(" · ")
+                        ));
+                    }
+                    let touch_kind = match raw.as_str() {
+                        "visit" | "coffee" => "met-up",
+                        other => other,
+                    };
+                    let touch_id = self.door.mint_id();
+                    let back = action.inverse.ok_or_else(|| not_applicable(verb, kind))?;
+                    run(
+                        vec![Step::of(
+                            action,
+                            json!({"id": touch_id, "people": [id], "kind": touch_kind}),
+                        )],
+                        vec![Step {
+                            act: back.call(),
+                            input: json!({ back.id_param: touch_id }),
+                        }],
+                    )
+                } else {
+                    return Err(not_applicable(verb, kind));
+                }
+            }
+            Verb::Link => {
+                check_args(&["to"])?;
+                let Some(val) = args.get("to") else {
+                    return Err("error: link needs to: #n.".to_owned());
+                };
+                let targets = self.resolve_rows(val)?;
+                let [other] = targets.as_slice() else {
+                    return Err("error: to is exactly one #n.".to_owned());
+                };
+                if other.1 == id {
+                    return Err("error: an item cannot link to itself.".to_owned());
+                }
+                let (a, b) = if id < other.1 {
+                    (id.clone(), other.1.clone())
+                } else {
+                    (other.1.clone(), id.clone())
+                };
+                let input = json!({"a": a, "b": b});
+                let back = action.inverse.ok_or_else(|| not_applicable(verb, kind))?;
+                run(
+                    vec![Step::of(action, input.clone())],
+                    vec![Step {
+                        act: back.call(),
+                        input,
+                    }],
+                )
+            }
+            Verb::Unlink => {
+                if kind == Kind::Transaction {
+                    check_args(&[])?;
+                    let Some(Val::Text(other)) = row.field("transfer") else {
+                        return Ok(Plan::Already("is not a transfer".to_owned()));
+                    };
+                    let other = other.clone();
+                    let unlink_act =
+                        meta::lookup(Verb::Unlink, Kind::Transaction, Some("transfer"))
+                            .unwrap_or(action);
+                    run(
+                        vec![Step::of(unlink_act, json!({"id": id}))],
+                        vec![Step {
+                            act: Call::bare("txn.link_transfer"),
+                            input: json!({"id": id, "other_id": other}),
+                        }],
+                    )
+                } else {
+                    check_args(&["from", "to"])?;
+                    let Some(val) = args.get("from").or_else(|| args.get("to")) else {
+                        return Err("error: unlink needs from: #n.".to_owned());
+                    };
+                    let targets = self.resolve_rows(val)?;
+                    let [other] = targets.as_slice() else {
+                        return Err("error: unlink takes exactly one #n.".to_owned());
+                    };
+                    let (a, b) = if id < other.1 {
+                        (id.clone(), other.1.clone())
+                    } else {
+                        (other.1.clone(), id.clone())
+                    };
+                    let input = json!({"a": a, "b": b});
+                    let back = action.inverse.ok_or_else(|| not_applicable(verb, kind))?;
+                    run(
+                        vec![Step::of(action, input.clone())],
+                        vec![Step {
+                            act: back.call(),
+                            input,
+                        }],
+                    )
+                }
+            }
+            Verb::Categorize => {
+                check_args(&["category"])?;
+                let raw = args
+                    .get("category")
+                    .map(text_of)
+                    .map(|s| s.trim().to_owned())
+                    .filter(|s| !s.is_empty())
+                    .ok_or_else(|| "error: categorize needs category: <text>.".to_owned())?;
+                let cat_id = self.resolve_category_id(&raw);
+                let old_cat = match row.field("category") {
+                    Some(Val::Text(c)) => Some(self.resolve_category_id(c)),
+                    _ => None,
+                };
+                let inv = old_cat
+                    .map(|c| vec![Step::of(action, json!({"ids": [id], "category_id": c}))])
+                    .unwrap_or_default();
+                run(
+                    vec![Step::of(
+                        action,
+                        json!({"ids": [id], "category_id": cat_id}),
+                    )],
+                    inv,
+                )
+            }
+            Verb::Respond => {
+                check_args(&["answer"])?;
+                let raw = args
+                    .get("answer")
+                    .map(text_of)
+                    .map(|s| s.trim().to_lowercase())
+                    .filter(|s| matches!(s.as_str(), "accepted" | "declined" | "tentative"))
+                    .ok_or_else(|| {
+                        "error: respond takes answer: accepted | declined | tentative.".to_owned()
+                    })?;
+                run(
+                    vec![Step::of(
+                        action,
+                        json!({"id": id, "person_id": self.world.me, "status": raw}),
+                    )],
+                    Vec::new(),
+                )
+            }
+            Verb::Reschedule => self.plan_reschedule(row, args)?,
+            Verb::Edit => self.plan_edit(row, args)?,
             Verb::Create | Verb::Undo => unreachable!("handled by the caller"),
-            Verb::Complete
-            | Verb::Reopen
-            | Verb::Cancel
-            | Verb::AddTo
-            | Verb::RemoveFrom
-            | Verb::Log
-            | Verb::Unlink
-            | Verb::Reveal
-            | Verb::Reschedule
-            | Verb::Edit
-            | Verb::Link
+            Verb::Reveal
             | Verb::Merge
             | Verb::Purge
             | Verb::Import
             | Verb::Duplicate
             | Verb::Attach
             | Verb::Detach
-            | Verb::Respond
-            | Verb::Categorize
             | Verb::Apply => return Err(not_applicable(verb, kind)),
         })
+    }
+
+    fn resolve_category_id(&self, raw: &str) -> String {
+        if raw.starts_with("category:") {
+            return raw.to_owned();
+        }
+        let lowered = raw.to_lowercase();
+        for cat in self.world.of_kind(Kind::Category) {
+            if cat.name.to_lowercase() == lowered
+                || cat
+                    .field("key")
+                    .is_some_and(|v| matches!(v, Val::Text(k) if k.to_lowercase() == lowered))
+            {
+                return cat.id.clone();
+            }
+        }
+        format!("category:{lowered}")
+    }
+
+    fn plan_membership(
+        &mut self,
+        verb: Verb,
+        row: &Row,
+        args: &Map<String, Value>,
+    ) -> Result<Plan, String> {
+        let slot = if verb == Verb::AddTo { "to" } else { "from" };
+        for key in args.keys() {
+            if key != slot {
+                return Err(format!(
+                    "error: {} takes {slot}: #n, not \"{key}\".",
+                    verb.spec().name
+                ));
+            }
+        }
+        let expected = container_of(row.kind).ok_or_else(|| not_applicable(verb, row.kind))?;
+        let containers = match args.get(slot) {
+            Some(value) => self.resolve_rows(value)?,
+            None if verb == Verb::RemoveFrom && self.flags.normalize => {
+                let inside = self
+                    .world
+                    .neighbours(&row.key())
+                    .remove(&expected)
+                    .unwrap_or_default();
+                let [only] = inside.as_slice() else {
+                    return Err(format!("error: {} needs {slot}: #n.", verb.spec().name));
+                };
+                vec![only.clone()]
+            }
+            None => return Err(format!("error: {} needs {slot}: #n.", verb.spec().name)),
+        };
+        let [container] = containers.as_slice() else {
+            return Err(format!("error: {slot} is exactly one #n."));
+        };
+        if container.0 != expected {
+            let fits = self.did_you_mean(&[expected], container);
+            return Err(format!(
+                "error: a {} goes into a {}, and {} is a {}.{fits}",
+                row.kind.name(),
+                expected.name(),
+                self.named(container),
+                container.0.name()
+            ));
+        }
+        let key = row.key();
+        let inside = self.world.linked(&key, container);
+        let name = self.named(container);
+        if verb == Verb::AddTo && inside {
+            return Ok(Plan::Already(format!("is already in {name}")));
+        }
+        if verb == Verb::RemoveFrom && !inside {
+            return Ok(Plan::Already(format!("is not in {name}")));
+        }
+        let id = row.id.clone();
+        if row.kind == Kind::Photo {
+            let add = Verb::AddTo
+                .action(Kind::Photo)
+                .ok_or_else(|| not_applicable(Verb::AddTo, Kind::Photo))?;
+            let rem = Verb::RemoveFrom
+                .action(Kind::Photo)
+                .ok_or_else(|| not_applicable(Verb::RemoveFrom, Kind::Photo))?;
+            let input = json!({"from": container.1, "rel": "contains", "to": id});
+            return Ok(if verb == Verb::AddTo {
+                Plan::Run {
+                    steps: vec![Step::of(add, input.clone())],
+                    inverse: vec![Step::of(rem, input)],
+                }
+            } else {
+                Plan::Run {
+                    steps: vec![Step::of(rem, input.clone())],
+                    inverse: vec![Step::of(add, input)],
+                }
+            });
+        }
+        let current = self
+            .world
+            .neighbours(&key)
+            .get(&expected)
+            .and_then(|keys| keys.first().cloned());
+        let to = if verb == Verb::AddTo {
+            Some(container.1.clone())
+        } else {
+            None
+        };
+        let move_call = Call::bare("entity.move");
+        Ok(Plan::Run {
+            steps: vec![Step {
+                act: move_call,
+                input: json!({"id": id, "parent": to}),
+            }],
+            inverse: vec![Step {
+                act: move_call,
+                input: json!({"id": id, "parent": current.map(|c| c.1)}),
+            }],
+        })
+    }
+
+    fn plan_reschedule(&mut self, row: &Row, args: &Map<String, Value>) -> Result<Plan, String> {
+        for key in args.keys() {
+            if key != "to" {
+                return Err(format!(
+                    "error: reschedule takes to: <date>, not \"{key}\"."
+                ));
+            }
+        }
+        let raw = args
+            .get("to")
+            .ok_or_else(|| "error: reschedule needs to: <date expression>.".to_owned())?;
+        let expr = dates::parse(&dates::lenient(raw).0)?;
+        let resolved = dates::evaluate(&expr, self.now, row.date)?;
+        match row.kind {
+            Kind::Task => {
+                let point = resolved.point().ok_or_else(|| {
+                    format!(
+                        "error: a task is due at one day or instant; {} is a range.",
+                        resolved.echo()
+                    )
+                })?;
+                if row.date == Some(point) {
+                    return Ok(Plan::Already(format!("is already due {}", point.show())));
+                }
+                let action = Verb::Reschedule
+                    .action(Kind::Task)
+                    .ok_or_else(|| not_applicable(Verb::Reschedule, Kind::Task))?;
+                let spell = |s: Stamp| match s.time {
+                    Some(t) => format!("{}T{}", s.date, dates::clock(t)),
+                    None => s.date.to_string(),
+                };
+                Ok(Plan::Run {
+                    steps: vec![Step::of(action, json!({"id": row.id, "due": spell(point)}))],
+                    inverse: vec![Step::of(
+                        action,
+                        json!({"id": row.id, "due": row.date.map(spell)}),
+                    )],
+                })
+            }
+            Kind::Event => {
+                let edit = Verb::Edit
+                    .action(Kind::Event)
+                    .ok_or_else(|| not_applicable(Verb::Edit, Kind::Event))?;
+                let spell = |at: jiff::civil::DateTime| {
+                    format!("{}T{}", at.date(), dates::clock(at.time()))
+                };
+                let (starts, ends, timing) = match resolved {
+                    dates::Resolved::Between { from, to } => (spell(from), spell(to), "floating"),
+                    dates::Resolved::At(at) => {
+                        let mins = match row.field("duration") {
+                            Some(Val::Num(m)) if *m > 0 => *m,
+                            _ => 60,
+                        };
+                        let end = at
+                            .checked_add(jiff::Span::new().minutes(mins))
+                            .unwrap_or(at);
+                        (spell(at), spell(end), "floating")
+                    }
+                    dates::Resolved::Days { from, to } => {
+                        (from.to_string(), to.to_string(), "all-day")
+                    }
+                };
+                let mut inv = Vec::new();
+                if let Some(old_start) = row.date {
+                    let old_timing = row.extra.get("timing").map(String::as_str).unwrap_or(
+                        if old_start.time.is_some() {
+                            "floating"
+                        } else {
+                            "all-day"
+                        },
+                    );
+                    let (old_s, old_e) = if old_timing == "all-day" || old_start.time.is_none() {
+                        (old_start.date.to_string(), old_start.date.to_string())
+                    } else {
+                        let mins = match row.field("duration") {
+                            Some(Val::Num(m)) if *m > 0 => *m,
+                            _ => 60,
+                        };
+                        let oe = old_start
+                            .at()
+                            .checked_add(jiff::Span::new().minutes(mins))
+                            .unwrap_or_else(|_| old_start.at());
+                        (spell(old_start.at()), spell(oe))
+                    };
+                    inv.push(Step::of(
+                        edit,
+                        json!({"id": row.id, "starts": old_s, "ends": old_e, "timing": old_timing}),
+                    ));
+                }
+                Ok(Plan::Run {
+                    steps: vec![Step::of(
+                        edit,
+                        json!({"id": row.id, "starts": starts, "ends": ends, "timing": timing}),
+                    )],
+                    inverse: inv,
+                })
+            }
+            other => Err(not_applicable(Verb::Reschedule, other)),
+        }
+    }
+
+    fn plan_edit(&mut self, row: &Row, args: &Map<String, Value>) -> Result<Plan, String> {
+        if args.is_empty() {
+            return Err("error: edit needs at least one field: value.".to_owned());
+        }
+        let kind = row.kind;
+        let id = row.id.clone();
+        let mut steps = Vec::new();
+        let mut inverse = Vec::new();
+        let mut main_fields: Vec<(&str, Value)> = Vec::new();
+        for (key, value) in args {
+            let (base, append) = match key.strip_suffix('+') {
+                Some(b) => (b.trim(), true),
+                None => (key.as_str(), false),
+            };
+            if base == "pinned" && kind == Kind::Note {
+                let on = whr::parse_bool(&text_of(value).to_lowercase())
+                    .ok_or_else(|| "error: pinned takes yes or no.".to_owned())?;
+                let cmd = if on { "flag.set" } else { "flag.clear" };
+                let inv = if on { "flag.clear" } else { "flag.set" };
+                let input = json!({"id": id, "flag": "pinned"});
+                steps.push(Step {
+                    act: Call::bare(cmd),
+                    input: input.clone(),
+                });
+                inverse.push(Step {
+                    act: Call::bare(inv),
+                    input,
+                });
+                continue;
+            }
+            let text_val = if append {
+                let existing = match row.field(base) {
+                    Some(Val::Text(t)) => t.as_str(),
+                    _ => "",
+                };
+                let added = text_of(value);
+                if existing.is_empty() {
+                    added
+                } else {
+                    format!("{existing}\n{added}")
+                }
+            } else {
+                text_of(value)
+            };
+            match (kind, base) {
+                (_, "name" | "title") => {
+                    if let Some(action) = Verb::Edit.action(kind)
+                        && action.property_named("name").is_some()
+                    {
+                        main_fields.push(("name", json!(text_val)));
+                    } else {
+                        steps.push(Step {
+                            act: Call::bare("entity.retitle"),
+                            input: json!({"id": id, "title": text_val}),
+                        });
+                        inverse.push(Step {
+                            act: Call::bare("entity.retitle"),
+                            input: json!({"id": id, "title": row.name}),
+                        });
+                    }
+                }
+                (Kind::Person, "cadence") => {
+                    let days: i64 = text_val
+                        .trim()
+                        .parse()
+                        .map_err(|_| "error: cadence is a number of days.".to_owned())?;
+                    main_fields.push(("cadence_days", json!(days)));
+                }
+                (Kind::Task, "priority") => {
+                    let prio: i64 = text_val
+                        .trim()
+                        .parse()
+                        .map_err(|_| "error: priority is a number from 0 to 9.".to_owned())?;
+                    main_fields.push(("priority", json!(prio.clamp(0, 9))));
+                }
+                (Kind::Person, "role" | "nickname" | "met")
+                | (Kind::Task, "description")
+                | (Kind::Event, "description")
+                | (Kind::Note, "body") => {
+                    main_fields.push((base, json!(text_val)));
+                }
+                (Kind::Event, "duration") => {
+                    let mins: i64 = text_val
+                        .trim()
+                        .parse()
+                        .map_err(|_| "error: duration is a number of minutes.".to_owned())?;
+                    if let Some(start) = row.date
+                        && start.time.is_some()
+                    {
+                        let end = start
+                            .at()
+                            .checked_add(jiff::Span::new().minutes(mins.max(1)))
+                            .unwrap_or_else(|_| start.at());
+                        let end_str = format!("{}T{}", end.date(), dates::clock(end.time()));
+                        main_fields.push(("ends", json!(end_str)));
+                    }
+                }
+                (Kind::Workout, "moving" | "distance" | "energy" | "heart_rate" | "climb") => {
+                    let num: f64 = text_val
+                        .trim()
+                        .parse()
+                        .map_err(|_| format!("error: {base} is a number."))?;
+                    let prop = match base {
+                        "moving" => "moving_s",
+                        "distance" => "distance_m",
+                        "energy" => "energy_kcal",
+                        "heart_rate" => "heart_bpm",
+                        "climb" => "climb_m",
+                        _ => base,
+                    };
+                    if matches!(prop, "moving_s" | "heart_bpm") {
+                        main_fields.push((prop, json!(num.round() as i64)));
+                    } else {
+                        main_fields.push((prop, json!(num)));
+                    }
+                }
+                (Kind::Budget, "amount" | "carry") => {
+                    let (cat_id, month) = id
+                        .rsplit_once(':')
+                        .ok_or_else(|| "error: budget id has no month.".to_owned())?;
+                    let mut input = json!({"category_id": cat_id, "month": month});
+                    if base == "amount" {
+                        let amount: f64 = text_val
+                            .trim()
+                            .parse()
+                            .map_err(|_| "error: amount is a number.".to_owned())?;
+                        input["amount_minor"] =
+                            json!(crate::native::world::minor_of(amount, &self.world.currency));
+                    } else {
+                        let on = whr::parse_bool(&text_val.to_lowercase())
+                            .ok_or_else(|| "error: carry takes yes or no.".to_owned())?;
+                        let minor = match row.field("amount") {
+                            Some(Val::Money(m, _)) => *m,
+                            _ => 0,
+                        };
+                        input["amount_minor"] = json!(minor);
+                        input["carry"] = json!(on);
+                    }
+                    let old_minor = match row.field("amount") {
+                        Some(Val::Money(m, _)) => *m,
+                        _ => 0,
+                    };
+                    let old_carry = matches!(row.field("carry"), Some(Val::Bool(true)));
+                    steps.push(Step {
+                        act: Call::bare("budget.set"),
+                        input,
+                    });
+                    inverse.push(Step {
+                        act: Call::bare("budget.set"),
+                        input: json!({
+                            "category_id": cat_id,
+                            "month": month,
+                            "amount_minor": old_minor,
+                            "carry": old_carry,
+                        }),
+                    });
+                }
+                (Kind::LockerItem, "username" | "url" | "notes" | "password") => {
+                    let item_type = match row.field("type") {
+                        Some(Val::Enum(t)) => *t,
+                        _ => "login",
+                    };
+                    let field_key = if base == "password" {
+                        "password"
+                    } else {
+                        meta::locker_column(item_type, base)
+                            .ok_or_else(|| format!("error: a {item_type} item keeps no {base}."))?
+                    };
+                    steps.push(Step {
+                        act: Call::bare("locker.edit_item"),
+                        input: json!({
+                            "item_id": id,
+                            "type": item_type,
+                            "fields": [{"field_key": field_key, "value": text_val}],
+                        }),
+                    });
+                    if base != "password"
+                        && let Some(Val::Text(old_val)) = row.field(base)
+                        && old_val != SEALED
+                    {
+                        inverse.push(Step {
+                            act: Call::bare("locker.edit_item"),
+                            input: json!({
+                                "item_id": id,
+                                "type": item_type,
+                                "fields": [{"field_key": field_key, "value": old_val}],
+                            }),
+                        });
+                    }
+                }
+                _ => {
+                    let Some(action) = meta::edit_action(kind, base) else {
+                        return Err(format!(
+                            "error: {} has no editable field \"{base}\".",
+                            kind.name()
+                        ));
+                    };
+                    let prop = action.property_named(base).unwrap_or(base);
+                    main_fields.push((prop, json!(text_val)));
+                }
+            }
+        }
+        if !main_fields.is_empty() {
+            let action = Verb::Edit
+                .action(kind)
+                .ok_or_else(|| not_applicable(Verb::Edit, kind))?;
+            let input = input_of(action, &id, &main_fields);
+            let mut old_fields: Vec<(&str, Value)> = Vec::new();
+            for (prop, _) in &main_fields {
+                let old = match (*prop, kind) {
+                    ("name" | "title", _) => Some(json!(row.name)),
+                    ("cadence_days", Kind::Person) => Some(match row.field("cadence") {
+                        Some(Val::Num(n)) => json!(n),
+                        _ => Value::Null,
+                    }),
+                    ("priority", Kind::Task) => Some(match row.field("priority") {
+                        Some(Val::Num(n)) => json!(n),
+                        _ => json!(0),
+                    }),
+                    ("ends", Kind::Event) => row.date.and_then(|start| {
+                        start.time?;
+                        let mins = match row.field("duration") {
+                            Some(Val::Num(m)) if *m > 0 => *m,
+                            _ => 60,
+                        };
+                        let end = start
+                            .at()
+                            .checked_add(jiff::Span::new().minutes(mins))
+                            .ok()?;
+                        Some(json!(format!(
+                            "{}T{}",
+                            end.date(),
+                            dates::clock(end.time())
+                        )))
+                    }),
+                    ("moving_s", Kind::Workout) => Some(match row.field("moving") {
+                        Some(Val::Num(n)) => json!(n),
+                        _ => Value::Null,
+                    }),
+                    ("distance_m", Kind::Workout) => Some(match row.field("distance") {
+                        Some(Val::Num(n)) => json!(n),
+                        _ => Value::Null,
+                    }),
+                    ("energy_kcal", Kind::Workout) => Some(match row.field("energy") {
+                        Some(Val::Num(n)) => json!(n),
+                        _ => Value::Null,
+                    }),
+                    ("heart_bpm", Kind::Workout) => Some(match row.field("heart_rate") {
+                        Some(Val::Num(n)) => json!(n),
+                        _ => Value::Null,
+                    }),
+                    ("climb_m", Kind::Workout) => Some(match row.field("climb") {
+                        Some(Val::Num(n)) => json!(n),
+                        _ => Value::Null,
+                    }),
+                    (field, _) => Some(match row.field(field) {
+                        Some(Val::Text(t)) => json!(t),
+                        Some(Val::Num(n)) => json!(n),
+                        _ => Value::Null,
+                    }),
+                };
+                if let Some(val) = old {
+                    old_fields.push((*prop, val));
+                }
+            }
+            steps.push(Step::of(action, input));
+            if !old_fields.is_empty() {
+                inverse.push(Step::of(action, input_of(action, &id, &old_fields)));
+            }
+        }
+        if steps.is_empty() {
+            return Ok(Plan::Already("is already set".to_owned()));
+        }
+        Ok(Plan::Run { steps, inverse })
     }
 
     /// A verb the catalog backs and no bespoke planner owns (`tag`, `archive`): the manifest
@@ -2038,7 +2741,24 @@ impl Session {
         let action = Verb::Create
             .action(kind)
             .ok_or_else(|| not_applicable(Verb::Create, kind))?;
-        let allowed = meta::create_args(kind);
+        let mut allowed = meta::create_args(kind);
+        match kind {
+            Kind::Rule => {
+                for extra in ["name", "category", "match"] {
+                    if !allowed.contains(&extra) {
+                        allowed.push(extra);
+                    }
+                }
+            }
+            Kind::Transaction => {
+                for extra in ["name", "account", "amount", "date", "category"] {
+                    if !allowed.contains(&extra) {
+                        allowed.push(extra);
+                    }
+                }
+            }
+            _ => {}
+        }
         // an arg under another spelling of a field is that field (`due` is a task's `date`)
         let mut spelled = args.clone();
         for key in args.keys() {
@@ -2066,7 +2786,232 @@ impl Session {
             .filter(|name| !name.trim().is_empty())
             .ok_or_else(|| format!("error: create {} needs name: … in args.", kind.name()))?;
         let mint = || self.door.mint_id();
-        let input = input_of(action, &mint(), &[("name", json!(name))]);
+        let text = |field: &str| {
+            args.get(field)
+                .map(text_of)
+                .map(|s| s.trim().to_owned())
+                .filter(|s| !s.is_empty())
+        };
+        let number = |field: &str| -> Result<Option<i64>, String> {
+            let Some(val) = args.get(field) else {
+                return Ok(None);
+            };
+            let parsed = match val {
+                Value::Number(n) => n.as_i64(),
+                Value::String(s) => s.trim().parse::<i64>().ok(),
+                _ => None,
+            };
+            parsed
+                .map(Some)
+                .ok_or_else(|| format!("error: {field} is a whole number."))
+        };
+        let date = match args.get("date") {
+            Some(val) => {
+                let expr = dates::parse(&dates::lenient(val).0)?;
+                Some(dates::evaluate(&expr, self.now, None)?)
+            }
+            None => None,
+        };
+        let one_row =
+            |session: &Self, field: &str, expected: Kind| -> Result<Option<Key>, String> {
+                let Some(val) = args.get(field) else {
+                    return Ok(None);
+                };
+                let rows = session.resolve_rows(val)?;
+                let [only] = rows.as_slice() else {
+                    return Err(format!("error: {field} is exactly one #n."));
+                };
+                if only.0 != expected {
+                    return Err(format!(
+                        "error: {field} takes a {}, not a {}.",
+                        expected.name(),
+                        only.0.name()
+                    ));
+                }
+                Ok(Some(only.clone()))
+            };
+        let input = match kind {
+            Kind::Person => {
+                let mut input = json!({"id": mint(), "title": name});
+                if let Some(cadence) = number("cadence")?.filter(|d| *d > 0) {
+                    input["cadence_days"] = json!(cadence);
+                }
+                for f in ["role", "nickname", "met"] {
+                    if let Some(v) = text(f) {
+                        input[f] = json!(v);
+                    }
+                }
+                input
+            }
+            Kind::Event => {
+                let resolved = date.ok_or("error: create event needs date: <date expression>.")?;
+                let spell = |at: jiff::civil::DateTime| {
+                    format!("{}T{}", at.date(), dates::clock(at.time()))
+                };
+                let (starts, ends, timing) = match resolved {
+                    dates::Resolved::Between { from, to } => (spell(from), spell(to), "floating"),
+                    dates::Resolved::At(at) => {
+                        let minutes = number("duration")?.unwrap_or(60).max(1);
+                        let end = at
+                            .checked_add(jiff::Span::new().minutes(minutes))
+                            .map_err(|_| "error: that duration is out of range.".to_owned())?;
+                        (spell(at), spell(end), "floating")
+                    }
+                    dates::Resolved::Days { from, to } => {
+                        (from.to_string(), to.to_string(), "all-day")
+                    }
+                };
+                let mut input = json!({
+                    "id": mint(),
+                    "title": name,
+                    "starts": starts,
+                    "ends": ends,
+                    "timing": timing,
+                    "status": "tentative",
+                });
+                if let Some(desc) = text("description") {
+                    input["description"] = json!(desc);
+                }
+                input
+            }
+            Kind::Task => {
+                let mut input = json!({"id": mint(), "title": name});
+                if let Some(resolved) = date {
+                    let point = resolved.point().ok_or_else(|| {
+                        format!(
+                            "error: a task is due at one day or instant; {} is a range.",
+                            resolved.echo()
+                        )
+                    })?;
+                    let due = match point.time {
+                        Some(t) => format!("{}T{}", point.date, dates::clock(t)),
+                        None => point.date.to_string(),
+                    };
+                    input["due"] = json!(due);
+                }
+                if let Some(prio) = number("priority")? {
+                    input["priority"] = json!(prio.clamp(0, 9));
+                }
+                if let Some(desc) = text("description") {
+                    input["description"] = json!(desc);
+                }
+                if let Some(parent) = one_row(self, "parent", Kind::Task)? {
+                    input["parent_id"] = json!(parent.1);
+                } else if let Some(list) = one_row(self, "list", Kind::List)? {
+                    input["parent_id"] = json!(list.1);
+                }
+                input
+            }
+            Kind::Note => {
+                let body = text("body").unwrap_or_else(|| name.clone());
+                let mut input = json!({"id": mint(), "title": name, "body": body});
+                if let Some(nb) = one_row(self, "notebook", Kind::Notebook)? {
+                    input["notebook_id"] = json!(nb.1);
+                }
+                input
+            }
+            Kind::Document => {
+                let body = text("text").unwrap_or_else(|| name.clone());
+                let mut input = json!({
+                    "id": mint(),
+                    "title": name,
+                    "body_text": body,
+                    "media_type": "text/plain",
+                });
+                if let Some(folder) = one_row(self, "folder", Kind::Folder)? {
+                    input["folder_id"] = json!(folder.1);
+                }
+                input
+            }
+            Kind::Notebook | Kind::Folder | Kind::Album | Kind::List => {
+                json!({
+                    "id": mint(),
+                    "kind": kind.spec().entity,
+                    "title": name,
+                })
+            }
+            Kind::LockerItem => {
+                let kind_value = match text("type") {
+                    Some(v) => whr::enum_value(Kind::LockerItem, "type", &v)?,
+                    None => "login",
+                };
+                let mut fields: Vec<Value> = Vec::new();
+                for f in ["username", "url", "notes"] {
+                    if let Some(v) = text(f)
+                        && let Some(col) = meta::locker_column(kind_value, f)
+                    {
+                        fields.push(json!({"field_key": col, "value": v}));
+                    }
+                }
+                for (f, col) in meta::REVEAL_FIELDS {
+                    if *f != "content"
+                        && let Some(v) = text(f)
+                    {
+                        fields.push(json!({"field_key": col, "value": v}));
+                    }
+                }
+                let mut input = json!({"item_id": mint(), "type": kind_value, "title": name});
+                if !fields.is_empty() {
+                    input["fields"] = json!(fields);
+                }
+                input
+            }
+            Kind::Account => {
+                let Some(kind_value) = text("type") else {
+                    return Err(
+                        "error: create account needs type: checking | savings | credit card | cash."
+                            .to_owned(),
+                    );
+                };
+                let kind_value = whr::enum_value(Kind::Account, "type", &kind_value)?;
+                json!({"id": mint(), "title": name, "type": kind_value})
+            }
+            Kind::Rule => {
+                let category = text("category")
+                    .map(|c| self.resolve_category_id(&c))
+                    .unwrap_or_else(|| "category:food.dining".to_owned());
+                json!({
+                    "id": mint(),
+                    "match": text("match").unwrap_or_else(|| "contains".to_owned()),
+                    "text": name,
+                    "category_id": category,
+                })
+            }
+            Kind::Transaction => {
+                let account_id = text("account")
+                    .and_then(|acc| {
+                        let low = acc.to_lowercase();
+                        self.world
+                            .of_kind(Kind::Account)
+                            .find(|r| r.name.to_lowercase() == low || r.id == acc)
+                            .map(|r| r.id.clone())
+                    })
+                    .or_else(|| {
+                        self.world
+                            .of_kind(Kind::Account)
+                            .next()
+                            .map(|r| r.id.clone())
+                    })
+                    .ok_or_else(|| "error: create transaction needs an account.".to_owned())?;
+                let amount_f: f64 = text("amount").and_then(|s| s.parse().ok()).unwrap_or(-10.0);
+                let posted_on = date
+                    .and_then(|d| d.point())
+                    .map(|p| p.date.to_string())
+                    .unwrap_or_else(|| self.today().to_string());
+                let mut input = json!({
+                    "id": mint(),
+                    "account_id": account_id,
+                    "posted_on": posted_on,
+                    "amount_minor": crate::native::world::minor_of(amount_f, &self.world.currency),
+                    "title": name,
+                });
+                if let Some(cat) = text("category") {
+                    input["category_id"] = json!(self.resolve_category_id(&cat));
+                }
+                input
+            }
+            _ => input_of(action, &mint(), &[("name", json!(name))]),
+        };
         let id_out = action.id_param;
         let before = self.world.clone();
         let ran = self.write_step(&action.call(), &input)?;

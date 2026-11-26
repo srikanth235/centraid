@@ -58,4 +58,18 @@ pub const HELD_COUNTS: Read<Held> = read(
     Held::of,
 );
 
-pub const READS: &[ReadDecl] = &[STARRED.decl, IN_HOME.decl, HELD_COUNTS.decl];
+pub const HELD: Read<String> = read(
+    ReadDecl {
+        name: "entity.held",
+        shape: Shape::ByKey,
+        sql: "SELECT id FROM entity WHERE id = :id",
+        params: &[param("id", ParamTy::Id)],
+        reads: &["entity"],
+        across: &[],
+        bound: 1,
+        cursor: &[],
+    },
+    |row| row.get("id"),
+);
+
+pub const READS: &[ReadDecl] = &[STARRED.decl, IN_HOME.decl, HELD_COUNTS.decl, HELD.decl];

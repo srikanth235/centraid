@@ -8,12 +8,12 @@
   "catalog_hash": "487261c0f8548972e20267601cb0b672a6fd7d29c8f77e5fd01133a0fdce81dd",
   "tokenizer_blake3": "3fd498e7fff0650ca4cf62dccd4e0844ed5ad2f1abcee9adfda013fef06c4220",
   "stale": {
-    "since": "the kinds, verbs and actions are generated from the app plane's catalogue (#1214): a new kind card and prompt, the same tool catalogue; create and edit cover 13 kinds and almost only `name`; no money, measurement or Locker fields. Chat is meant to create Locker secrets, so those are gaps to fill, not exclusions",
+    "since": "rebuilt the assistant runtime against the v0 vault schema and restored link, categorize, and respond as Direct actions (#1214)",
     "level": "coverage",
     "at": {
-      "tools_hash": "c4a759dfe93337fc3f925ed7a7768030cf3658076a4224639b0860bccbd6fc4b",
-      "prompt_hash": "8b0d841580d89053ccf711a5a2ffd53eb2554b0d1ba9d5e0b7a38f862b551a6c",
-      "catalog_hash": "619b0a6040e51a36d7503d5927c4fb5a24a0206a0722640941c8e4f59ae2fc51"
+      "tools_hash": "66c140a52cd47febd0048451fd4e691b6a9475615d23d314a5cceec716d60e4c",
+      "prompt_hash": "e4bbba8d217605b014b1d2ea1bc784ea80b06f272c60fe4d902ae048bfeef203",
+      "catalog_hash": "55c2253fb9a7ecd8db4c86d0c5d9b31b0c0379c2dbd37fd0c5c6a570f4388471"
     }
   }
 }

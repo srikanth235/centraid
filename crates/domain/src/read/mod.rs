@@ -76,6 +76,15 @@ pub const fn desc(column: &'static str, param: &'static str) -> Key {
     }
 }
 
+#[must_use]
+pub const fn asc(column: &'static str, param: &'static str) -> Key {
+    Key {
+        column,
+        param,
+        ascending: true,
+    }
+}
+
 /// The most rows a page may hold.
 pub const MAX_PAGE: usize = 200;
 /// The page size a list declares unless it says otherwise.

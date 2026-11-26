@@ -1,14 +1,61 @@
 //! Reminders: tasks, and the lists that hold them.
 
 use crate::kind::{Export, Footer, KindDecl, Share, Trash, exported, plain};
-use crate::read::{Read, ReadDecl};
+use crate::read::{DEFAULT_PAGE, ParamTy, Read, ReadDecl, Shape, asc, param, read};
 
-use super::{Trashed, trash};
+use super::{Item, Trashed, trash};
 
-/// Tasks and task lists in the trash.
 pub const TRASH: Read<Trashed> = trash!("reminders.trash", "'task', 'task_list'");
 
-pub const READS: &[ReadDecl] = &[TRASH.decl];
+pub const TODAY_DUE: Read<Item> = read(
+    ReadDecl {
+        name: "reminders.today_due",
+        shape: Shape::PagedList,
+        sql: "SELECT t.id, n.title, t.due AS at \
+              FROM task t INDEXED BY task_by_due CROSS JOIN entity n ON n.id = t.id \
+              WHERE n.deleted_at IS NULL AND t.status = 'open' \
+                AND t.due >= :low AND t.due <= :high \
+                AND (t.due, t.id) > (:a, :b) \
+                AND ((t.due_timing = 'zoned' AND t.due >= :from AND t.due < :to) \
+                  OR (t.due_timing = 'floating' AND t.due >= :floating_from AND t.due <= :floating_to) \
+                  OR (t.due_timing = 'all-day' AND t.due = :day)) \
+              ORDER BY t.due ASC, t.id ASC LIMIT :n",
+        params: &[
+            param("day", ParamTy::Day),
+            param("from", ParamTy::Text),
+            param("to", ParamTy::Text),
+            param("floating_from", ParamTy::Text),
+            param("floating_to", ParamTy::Text),
+            param("low", ParamTy::Text),
+            param("high", ParamTy::Text),
+        ],
+        reads: &["task"],
+        across: &["entity"],
+        bound: DEFAULT_PAGE,
+        cursor: &[asc("at", "a"), asc("id", "b")],
+    },
+    Item::of,
+);
+
+pub const TODAY_SCHEDULED: Read<Item> = read(
+    ReadDecl {
+        name: "reminders.today_scheduled",
+        shape: Shape::PagedList,
+        sql: "SELECT t.id, n.title, ifnull(t.due, '') AS at \
+              FROM task t INDEXED BY task_by_scheduled CROSS JOIN entity n ON n.id = t.id \
+              WHERE n.deleted_at IS NULL AND t.status = 'open' \
+                AND t.scheduled_on = :day AND t.id > :a \
+              ORDER BY t.id ASC LIMIT :n",
+        params: &[param("day", ParamTy::Day)],
+        reads: &["task"],
+        across: &["entity"],
+        bound: DEFAULT_PAGE,
+        cursor: &[asc("id", "a")],
+    },
+    Item::of,
+);
+
+pub const READS: &[ReadDecl] = &[TRASH.decl, TODAY_DUE.decl, TODAY_SCHEDULED.decl];
 
 pub const KINDS: &[KindDecl] = &[
     KindDecl::new(

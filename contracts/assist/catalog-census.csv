@@ -14,7 +14,7 @@ rule.apply,rule,apply,,rule.apply,one,,restore,none,handoff:open
 txn.add,txn,add,,txn.add,one,account day person,pair:entity.trash,none,direct:create
 txn.add/csv,txn,add,csv,txn.add,one,account,pair:entity.trash,none,handoff:pick_file
 txn.edit,txn,edit,,txn.edit,one,,restore,none,direct:edit
-txn.categorize,txn,categorize,,txn.categorize,set,,restore,none,handoff:open
+txn.categorize,txn,categorize,,txn.categorize,set,,restore,none,direct:categorize
 txn.split,txn,split,,txn.split,one,,restore,none,direct:edit:split
 txn.link_transfer,txn,link_transfer,,txn.link_transfer,one,,pair:txn.unlink_transfer,none,handoff:open
 txn.unlink_transfer,txn,unlink_transfer,,txn.unlink_transfer,one,,pair:txn.link_transfer,none,direct:unlink:transfer
@@ -45,7 +45,7 @@ edge.add/contains,edge,add,contains,edge.add,one,,pair:edge.remove/contains,none
 edge.remove,edge,remove,,edge.remove,one,,pair:edge.add,none,handoff:open
 edge.remove/contains,edge,remove,contains,edge.remove,one,,pair:edge.add/contains,none,direct:remove_from
 edge.move,edge,move,,edge.move,one,,pair:edge.move,none,handoff:open
-link.add,link,add,,link.add,one,,pair:link.remove,none,handoff:open
+link.add,link,add,,link.add,one,,pair:link.remove,none,direct:link
 link.remove,link,remove,,link.remove,one,,pair:link.add,none,direct:unlink
 concept.merge,concept,merge,,concept.merge,one,,none,outlined,handoff:destructive
 history.keep_version,history,keep_version,,history.keep_version,one,,restore,none,handoff:open
@@ -59,7 +59,7 @@ event.edit,event,edit,,event.edit,one,,restore,none,direct:edit
 event.edit_occurrence,event,edit_occurrence,,event.edit_occurrence,one,,pair:event.edit_occurrence,none,direct:reschedule
 event.split,event,split,,event.split,one,,restore,none,direct:reschedule:split
 event.cancel,event,cancel,,event.cancel,one,,restore,none,direct:cancel
-event.respond,event,respond,,event.respond,one,,restore,none,handoff:open
+event.respond,event,respond,,event.respond,one,,restore,none,direct:respond
 event.export_ics,event,export_ics,,event.export_ics,one,,none,owner,handoff:owner_check
 alert.snooze,alert,snooze,,alert.snooze,one,,restore,none,direct:reschedule:snooze
 reminder.add,reminder,add,,reminder.add,one,,pair:reminder.remove,none,direct:edit:reminder

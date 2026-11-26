@@ -2,7 +2,7 @@
   "current": {
     "bytes": 563036064,
     "file_name": "Qwen3.5-0.8B-Q4_0.gguf",
-    "prompt_hash": "8b0d841580d89053ccf711a5a2ffd53eb2554b0d1ba9d5e0b7a38f862b551a6c",
+    "prompt_hash": "e4bbba8d217605b014b1d2ea1bc784ea80b06f272c60fe4d902ae048bfeef203",
     "score": null,
     "sha256": "57d1997790d1744fba5b40a7317df71ea5e2acee28c47e78f0cce39c0703f8cf",
     "special_tokens": [
@@ -41,7 +41,7 @@
       "<|vision_start|>"
     ],
     "special_tokens_source": "file",
-    "tools_hash": "c4a759dfe93337fc3f925ed7a7768030cf3658076a4224639b0860bccbd6fc4b",
+    "tools_hash": "66c140a52cd47febd0048451fd4e691b6a9475615d23d314a5cceec716d60e4c",
     "tools_mode": "sig",
     "url": "https://huggingface.co/ggml-org/Qwen3.5-0.8B-GGUF/resolve/8fea620810c4afa23dd6443f999a48574c1611a3/Qwen3.5-0.8B-Q4_0.gguf"
   },

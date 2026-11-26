@@ -223,6 +223,266 @@
     {
       "argument": "",
       "example": null,
+      "family": "schema",
+      "id": "act.log_takes_kind_x",
+      "source": "act.rs",
+      "template": "error: log takes kind: {}.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.link_needs_to_n",
+      "source": "act.rs",
+      "template": "error: link needs to: #n.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "cardinality",
+      "id": "act.to_is_exactly_one_n",
+      "source": "act.rs",
+      "template": "error: to is exactly one #n.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.an_item_cannot_link_to_itself",
+      "source": "act.rs",
+      "template": "error: an item cannot link to itself.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.unlink_needs_from_n",
+      "source": "act.rs",
+      "template": "error: unlink needs from: #n.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "cardinality",
+      "id": "act.unlink_takes_exactly_one_n",
+      "source": "act.rs",
+      "template": "error: unlink takes exactly one #n.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.categorize_needs_category_text",
+      "source": "act.rs",
+      "template": "error: categorize needs category: <text>.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.respond_takes_answer_accepted_declined_tentative",
+      "source": "act.rs",
+      "template": "error: respond takes answer: accepted | declined | tentative.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "schema",
+      "id": "act.x_takes_slot_n_not_key",
+      "source": "act.rs",
+      "template": "error: {} takes {slot}: #n, not \"{key}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.x_needs_slot_n",
+      "source": "act.rs",
+      "template": "error: {} needs {slot}: #n.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "cardinality",
+      "id": "act.slot_is_exactly_one_n",
+      "source": "act.rs",
+      "template": "error: {slot} is exactly one #n.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.a_x_goes_into_a_x",
+      "source": "act.rs",
+      "template": "error: a {} goes into a {}, and {} is a {}.{fits}",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.reschedule_takes_to_date_not_key",
+      "source": "act.rs",
+      "template": "error: reschedule takes to: <date>, not \"{key}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.reschedule_needs_to_date_expression",
+      "source": "act.rs",
+      "template": "error: reschedule needs to: <date expression>.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.a_task_is_due_at_one",
+      "source": "act.rs",
+      "template": "error: a task is due at one day or instant; {} is a range.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.edit_needs_at_least_one_field",
+      "source": "act.rs",
+      "template": "error: edit needs at least one field: value.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.pinned_takes_yes_or_no",
+      "source": "act.rs",
+      "template": "error: pinned takes yes or no.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.cadence_is_a_number_of_days",
+      "source": "act.rs",
+      "template": "error: cadence is a number of days.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.priority_is_a_number_from_0",
+      "source": "act.rs",
+      "template": "error: priority is a number from 0 to 9.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.duration_is_a_number_of_minutes",
+      "source": "act.rs",
+      "template": "error: duration is a number of minutes.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.base_is_a_number",
+      "source": "act.rs",
+      "template": "error: {base} is a number.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.budget_id_has_no_month",
+      "source": "act.rs",
+      "template": "error: budget id has no month.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.amount_is_a_number",
+      "source": "act.rs",
+      "template": "error: amount is a number.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.carry_takes_yes_or_no",
+      "source": "act.rs",
+      "template": "error: carry takes yes or no.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.a_item_type_item_keeps_no_base",
+      "source": "act.rs",
+      "template": "error: a {item_type} item keeps no {base}.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.x_has_no_editable_field_base",
+      "source": "act.rs",
+      "template": "error: {} has no editable field \"{base}\".",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
       "family": "value",
       "id": "act.x_needs_name_text",
       "source": "act.rs",
@@ -267,6 +527,76 @@
       "id": "act.create_x_needs_name_in_args",
       "source": "act.rs",
       "template": "error: create {} needs name: … in args.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.field_is_a_whole_number",
+      "source": "act.rs",
+      "template": "error: {field} is a whole number.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "cardinality",
+      "id": "act.field_is_exactly_one_n",
+      "source": "act.rs",
+      "template": "error: {field} is exactly one #n.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.field_takes_a_x_not_a",
+      "source": "act.rs",
+      "template": "error: {field} takes a {}, not a {}.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.create_event_needs_date_date_expression",
+      "source": "act.rs",
+      "template": "error: create event needs date: <date expression>.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.that_duration_is_out_of_range",
+      "source": "act.rs",
+      "template": "error: that duration is out of range.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.create_account_needs_type_checking_savings",
+      "source": "act.rs",
+      "template": "error: create account needs type: checking | savings | credit card | cash.",
+      "tool": "",
+      "why_no_example": "no example written for this family"
+    },
+    {
+      "argument": "",
+      "example": null,
+      "family": "value",
+      "id": "act.create_transaction_needs_an_account",
+      "source": "act.rs",
+      "template": "error: create transaction needs an account.",
       "tool": "",
       "why_no_example": "no example written for this family"
     },

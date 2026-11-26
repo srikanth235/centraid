@@ -241,6 +241,9 @@
           "list": {
             "type": "string"
           },
+          "match": {
+            "type": "string"
+          },
           "met": {
             "type": "string"
           },
@@ -389,6 +392,9 @@
           "list": {
             "type": "string"
           },
+          "match": {
+            "type": "string"
+          },
           "met": {
             "type": "string"
           },
@@ -507,6 +513,9 @@
               "undo",
               "tag",
               "untag",
+              "respond",
+              "categorize",
+              "link",
               "unlink",
               "archive",
               "unarchive"

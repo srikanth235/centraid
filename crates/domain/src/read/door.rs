@@ -79,14 +79,19 @@ pub struct Inspection {
     pub findings: Vec<Finding>,
 }
 
+enum Mode {
+    Policy(Policy),
+    InspectSchema,
+}
+
 /// A read-only door onto the vault file.
 pub struct Reader {
     connection: Connection,
-    active: Arc<Mutex<Option<Policy>>>,
+    active: Arc<Mutex<Option<Mode>>>,
 }
 
 /// Ends a read's policy when it drops, so a failure cannot leave one installed.
-struct Scope<'a>(&'a Mutex<Option<Policy>>);
+struct Scope<'a>(&'a Mutex<Option<Mode>>);
 
 impl Drop for Scope<'_> {
     fn drop(&mut self) {
@@ -107,13 +112,25 @@ impl Reader {
             OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
         connection.pragma_update(None, "query_only", "ON")?;
-        let active: Arc<Mutex<Option<Policy>>> = Arc::default();
+        let active: Arc<Mutex<Option<Mode>>> = Arc::default();
         let hook = Arc::clone(&active);
         connection.authorizer(Some(move |context: rusqlite::hooks::AuthContext<'_>| {
-            let judged = hook
-                .lock()
-                .ok()
-                .and_then(|slot| slot.as_ref().map(|policy| policy.judge(context)));
+            let judged = hook.lock().ok().and_then(|slot| {
+                slot.as_ref().map(|mode| match mode {
+                    Mode::Policy(policy) => policy.judge(context),
+                    Mode::InspectSchema => match context.action {
+                        rusqlite::hooks::AuthAction::Pragma {
+                            pragma_name: "table_info" | "index_list" | "index_info",
+                            ..
+                        } => rusqlite::hooks::Authorization::Allow,
+                        rusqlite::hooks::AuthAction::Select
+                        | rusqlite::hooks::AuthAction::Read { .. } => {
+                            rusqlite::hooks::Authorization::Allow
+                        }
+                        _ => rusqlite::hooks::Authorization::Deny,
+                    },
+                })
+            });
             judged.unwrap_or(rusqlite::hooks::Authorization::Deny)
         }))?;
         Ok(Self { connection, active })
@@ -127,7 +144,8 @@ impl Reader {
 
     fn enter(&self, read: &ReadDecl) -> Result<(Scope<'_>, Policy)> {
         let policy = Policy::of(read);
-        *self.active.lock().map_err(|_| ReadError::StaleCursor)? = Some(policy.clone());
+        *self.active.lock().map_err(|_| ReadError::StaleCursor)? =
+            Some(Mode::Policy(policy.clone()));
         Ok((Scope(&self.active), policy))
     }
 
@@ -176,7 +194,7 @@ impl Reader {
     /// # Errors
     /// A refusal of the authorizer, a declaration the statement contradicts, or SQLite's own.
     pub fn inspect(&self, read: &ReadDecl) -> Result<Inspection> {
-        let (_scope, policy) = self.enter(read)?;
+        let (scope, policy) = self.enter(read)?;
         drop(self.prepare(read, &policy)?);
         let touched = policy.seen().tables.into_iter().collect();
         let plan = plan::explain(&self.connection, read.sql, |statement| {
@@ -187,6 +205,9 @@ impl Reader {
             }
             Ok(())
         })?;
+        drop(scope);
+        *self.active.lock().map_err(|_| ReadError::StaleCursor)? = Some(Mode::InspectSchema);
+        let _inspect_scope = Scope(&self.active);
         let findings = plan::findings(&self.connection, read, &plan)?;
         Ok(Inspection {
             touched,
@@ -223,128 +244,151 @@ impl Reader {
         n: usize,
     ) -> Result<Answer<R>> {
         let decl = &read.decl;
-        let paged = decl.shape == Shape::PagedList;
-        if !paged && after.is_some() {
-            return Err(ReadError::Shape {
-                read: decl.name,
-                shape: decl.shape,
-            });
-        }
-        let keys = if paged {
-            Some(match after {
-                Some(text) => cursor::decode(decl, text)?,
-                None => cursor::first_page(decl),
-            })
-        } else {
-            None
-        };
+        let keys = cursor_keys(decl, after)?;
         let (_scope, policy) = self.enter(decl)?;
         let mut statement = self.prepare(decl, &policy)?;
-        for declared in decl.params {
-            let given = args
-                .values
-                .iter()
-                .find(|(name, _)| *name == declared.name)
-                .map(|(_, value)| value)
-                .ok_or(ReadError::Param {
-                    read: decl.name,
-                    name: declared.name.to_owned(),
-                    why: "is missing",
-                })?;
-            if !fits(declared.ty, given) {
-                return Err(ReadError::Param {
-                    read: decl.name,
-                    name: declared.name.to_owned(),
-                    why: "is not of its declared type",
-                });
-            }
-            if let Some(at) = statement.parameter_index(&format!(":{}", declared.name))? {
-                bind(&mut statement, at, given)?;
-            }
-        }
-        if let Some(extra) = args
+        execute(&mut statement, read, args, keys.as_deref(), n)
+    }
+}
+
+pub fn run_on<R>(connection: &Connection, read: &Read<R>, args: &Args) -> Result<Answer<R>> {
+    let decl = &read.decl;
+    let keys = cursor_keys(decl, args.after.as_deref())?;
+    let mut statement = connection.prepare(decl.sql)?;
+    execute(&mut statement, read, args, keys.as_deref(), decl.bound)
+}
+
+fn cursor_keys(decl: &ReadDecl, after: Option<&str>) -> Result<Option<Vec<Term>>> {
+    let paged = decl.shape == Shape::PagedList;
+    if !paged && after.is_some() {
+        return Err(ReadError::Shape {
+            read: decl.name,
+            shape: decl.shape,
+        });
+    }
+    if paged {
+        Ok(Some(match after {
+            Some(text) => cursor::decode(decl, text)?,
+            None => cursor::first_page(decl),
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
+fn execute<R>(
+    statement: &mut rusqlite::Statement<'_>,
+    read: &Read<R>,
+    args: &Args,
+    keys: Option<&[Term]>,
+    n: usize,
+) -> Result<Answer<R>> {
+    let decl = &read.decl;
+    let paged = decl.shape == Shape::PagedList;
+    for declared in decl.params {
+        let given = args
             .values
             .iter()
-            .find(|(name, _)| !decl.params.iter().any(|declared| declared.name == *name))
-        {
+            .find(|(name, _)| *name == declared.name)
+            .map(|(_, value)| value)
+            .ok_or(ReadError::Param {
+                read: decl.name,
+                name: declared.name.to_owned(),
+                why: "is missing",
+            })?;
+        if !fits(declared.ty, given) {
             return Err(ReadError::Param {
                 read: decl.name,
-                name: extra.0.to_owned(),
-                why: "is not declared",
+                name: declared.name.to_owned(),
+                why: "is not of its declared type",
             });
         }
-        let wanted = if paged { n + 1 } else { decl.bound + 1 };
-        if let Some(keys) = &keys {
-            for (key, term) in decl.cursor.iter().zip(keys) {
-                if let Some(at) = statement.parameter_index(&format!(":{}", key.param))? {
-                    bind(&mut statement, at, &Bound::from(term))?;
-                }
-            }
-            if let Some(at) = statement.parameter_index(":n")? {
-                bind(
-                    &mut statement,
-                    at,
-                    &Bound::Int(i64::try_from(wanted).unwrap_or(i64::MAX)),
-                )?;
-            }
+        if let Some(at) = statement.parameter_index(&format!(":{}", declared.name))? {
+            bind(statement, at, given)?;
         }
-        let columns: Vec<String> = statement.column_names().map(str::to_owned).collect();
-        let key_at: Vec<usize> = decl
-            .cursor
-            .iter()
-            .map(|key| {
-                columns
-                    .iter()
-                    .position(|column| column == key.column)
-                    .ok_or_else(|| ReadError::Declared {
-                        read: decl.name,
-                        why: format!(
-                            "its cursor key `{}` is not a column of the result",
-                            key.column
-                        ),
-                    })
-            })
-            .collect::<Result<_>>()?;
-        let mut rows = Vec::new();
-        let mut last: Vec<Term> = Vec::new();
-        let mut more = false;
-        let mut query = statement.raw_query();
-        while let Some(row) = query.next()? {
-            if rows.len() == if paged { n } else { decl.bound } {
-                more = true;
-                break;
-            }
-            rows.push((read.row)(row)?);
-            if paged {
-                last = key_at
-                    .iter()
-                    .map(|at| match row.get_ref(*at)? {
-                        ValueRef::Text(text) => {
-                            Ok(Term::Text(String::from_utf8_lossy(text).into_owned()))
-                        }
-                        ValueRef::Integer(number) => Ok(Term::Int(number)),
-                        _ => Err(ReadError::Declared {
-                            read: decl.name,
-                            why: "a cursor key is NULL, and a keyset cannot continue over one"
-                                .to_owned(),
-                        }),
-                    })
-                    .collect::<Result<_>>()?;
-            }
-        }
-        if more && !paged {
-            return Err(ReadError::Bound {
-                read: decl.name,
-                bound: decl.bound,
-            });
-        }
-        let next = if paged && more {
-            Some(cursor::encode(decl, &last)?)
-        } else {
-            None
-        };
-        Ok(Answer { rows, next })
     }
+    if let Some(extra) = args
+        .values
+        .iter()
+        .find(|(name, _)| !decl.params.iter().any(|declared| declared.name == *name))
+    {
+        return Err(ReadError::Param {
+            read: decl.name,
+            name: extra.0.to_owned(),
+            why: "is not declared",
+        });
+    }
+    let wanted = if paged { n + 1 } else { decl.bound + 1 };
+    if let Some(keys) = keys {
+        for (key, term) in decl.cursor.iter().zip(keys) {
+            if let Some(at) = statement.parameter_index(&format!(":{}", key.param))? {
+                bind(statement, at, &Bound::from(term))?;
+            }
+        }
+        if let Some(at) = statement.parameter_index(":n")? {
+            bind(
+                statement,
+                at,
+                &Bound::Int(i64::try_from(wanted).unwrap_or(i64::MAX)),
+            )?;
+        }
+    }
+    let columns: Vec<String> = statement.column_names().map(str::to_owned).collect();
+    let key_at: Vec<usize> = decl
+        .cursor
+        .iter()
+        .map(|key| {
+            columns
+                .iter()
+                .position(|column| column == key.column)
+                .ok_or_else(|| ReadError::Declared {
+                    read: decl.name,
+                    why: format!(
+                        "its cursor key `{}` is not a column of the result",
+                        key.column
+                    ),
+                })
+        })
+        .collect::<Result<_>>()?;
+    let mut rows = Vec::new();
+    let mut last: Vec<Term> = Vec::new();
+    let mut more = false;
+    let mut query = statement.raw_query();
+    while let Some(row) = query.next()? {
+        if rows.len() == if paged { n } else { decl.bound } {
+            more = true;
+            break;
+        }
+        rows.push((read.row)(row)?);
+        if paged {
+            last = key_at
+                .iter()
+                .map(|at| match row.get_ref(*at)? {
+                    ValueRef::Text(text) => {
+                        Ok(Term::Text(String::from_utf8_lossy(text).into_owned()))
+                    }
+                    ValueRef::Integer(number) => Ok(Term::Int(number)),
+                    _ => Err(ReadError::Declared {
+                        read: decl.name,
+                        why: "a cursor key is NULL, and a keyset cannot continue over one"
+                            .to_owned(),
+                    }),
+                })
+                .collect::<Result<_>>()?;
+        }
+    }
+    if more && !paged {
+        return Err(ReadError::Bound {
+            read: decl.name,
+            bound: decl.bound,
+        });
+    }
+    let next = if paged && more {
+        Some(cursor::encode(decl, &last)?)
+    } else {
+        None
+    };
+    Ok(Answer { rows, next })
 }
 
 impl From<&Term> for Bound {

@@ -83,7 +83,11 @@
       "command": "rule.add",
       "id_param": "id",
       "kind": "rule",
-      "names": [],
+      "names": [
+        "category",
+        "match",
+        "name"
+      ],
       "qualifier": null,
       "verb": "create"
     },
@@ -113,7 +117,13 @@
       "command": "txn.add",
       "id_param": "id",
       "kind": "transaction",
-      "names": [],
+      "names": [
+        "account",
+        "amount",
+        "category",
+        "date",
+        "name"
+      ],
       "qualifier": null,
       "verb": "create"
     },
@@ -126,6 +136,18 @@
       "names": [],
       "qualifier": null,
       "verb": "edit"
+    },
+    {
+      "action": "txn.categorize",
+      "app": "money",
+      "command": "txn.categorize",
+      "id_param": "id",
+      "kind": "transaction",
+      "names": [
+        "category"
+      ],
+      "qualifier": null,
+      "verb": "categorize"
     },
     {
       "action": "txn.split",
@@ -1172,6 +1194,96 @@
       "verb": "remove_from"
     },
     {
+      "action": "link.add",
+      "app": "calendar",
+      "command": "link.add",
+      "id_param": "id",
+      "kind": "event",
+      "names": [],
+      "qualifier": null,
+      "verb": "link"
+    },
+    {
+      "action": "link.add",
+      "app": "docs",
+      "command": "link.add",
+      "id_param": "id",
+      "kind": "document",
+      "names": [],
+      "qualifier": null,
+      "verb": "link"
+    },
+    {
+      "action": "link.add",
+      "app": "health",
+      "command": "link.add",
+      "id_param": "id",
+      "kind": "workout",
+      "names": [],
+      "qualifier": null,
+      "verb": "link"
+    },
+    {
+      "action": "link.add",
+      "app": "locker",
+      "command": "link.add",
+      "id_param": "id",
+      "kind": "locker item",
+      "names": [],
+      "qualifier": null,
+      "verb": "link"
+    },
+    {
+      "action": "link.add",
+      "app": "money",
+      "command": "link.add",
+      "id_param": "id",
+      "kind": "transaction",
+      "names": [],
+      "qualifier": null,
+      "verb": "link"
+    },
+    {
+      "action": "link.add",
+      "app": "notes",
+      "command": "link.add",
+      "id_param": "id",
+      "kind": "note",
+      "names": [],
+      "qualifier": null,
+      "verb": "link"
+    },
+    {
+      "action": "link.add",
+      "app": "photos",
+      "command": "link.add",
+      "id_param": "id",
+      "kind": "photo",
+      "names": [],
+      "qualifier": null,
+      "verb": "link"
+    },
+    {
+      "action": "link.add",
+      "app": "reminders",
+      "command": "link.add",
+      "id_param": "id",
+      "kind": "task",
+      "names": [],
+      "qualifier": null,
+      "verb": "link"
+    },
+    {
+      "action": "link.add",
+      "app": "people",
+      "command": "link.add",
+      "id_param": "id",
+      "kind": "person",
+      "names": [],
+      "qualifier": null,
+      "verb": "link"
+    },
+    {
       "action": "link.remove",
       "app": "calendar",
       "command": "link.remove",
@@ -1329,6 +1441,18 @@
       "names": [],
       "qualifier": null,
       "verb": "cancel"
+    },
+    {
+      "action": "event.respond",
+      "app": "calendar",
+      "command": "event.respond",
+      "id_param": "id",
+      "kind": "event",
+      "names": [
+        "answer"
+      ],
+      "qualifier": null,
+      "verb": "respond"
     },
     {
       "action": "alert.snooze",
@@ -2082,13 +2206,19 @@
       },
       {
         "action": "txn.categorize",
-        "chat": "handoff:open",
+        "chat": "direct",
         "command": "txn.categorize",
         "confirm": "none",
         "inverse": "restore",
         "kind": "txn",
         "qualifier": null,
-        "says": null,
+        "says": {
+          "kinds": [
+            "transaction"
+          ],
+          "qualifier": null,
+          "verb": "categorize"
+        },
         "target": "set",
         "verb": "categorize"
       },
@@ -2657,13 +2787,27 @@
       },
       {
         "action": "link.add",
-        "chat": "handoff:open",
+        "chat": "direct",
         "command": "link.add",
         "confirm": "none",
         "inverse": "link.remove",
         "kind": "link",
         "qualifier": null,
-        "says": null,
+        "says": {
+          "kinds": [
+            "event",
+            "document",
+            "workout",
+            "locker_item",
+            "transaction",
+            "note",
+            "photo",
+            "task",
+            "person"
+          ],
+          "qualifier": null,
+          "verb": "link"
+        },
         "target": "one",
         "verb": "add"
       },
@@ -2875,13 +3019,19 @@
       },
       {
         "action": "event.respond",
-        "chat": "handoff:open",
+        "chat": "direct",
         "command": "event.respond",
         "confirm": "none",
         "inverse": "restore",
         "kind": "event",
         "qualifier": null,
-        "says": null,
+        "says": {
+          "kinds": [
+            "event"
+          ],
+          "qualifier": null,
+          "verb": "respond"
+        },
         "target": "one",
         "verb": "respond"
       },
@@ -4055,7 +4205,7 @@
   "kinds": [
     {
       "app": "people",
-      "card": "person: name, date (last contacted), role, nickname, met, cadence (days), starred (yes|no) · links: events, tasks, notes · verbs: create edit delete restore star unstar add_to log unlink",
+      "card": "person: name, date (last contacted), role, nickname, met, cadence (days), starred (yes|no) · links: events, tasks, notes · verbs: create edit delete restore star unstar add_to log link unlink",
       "container": false,
       "date": {
         "label": "last contacted",
@@ -4154,6 +4304,7 @@
         "unstar",
         "add_to",
         "log",
+        "link",
         "unlink"
       ],
       "where_fields": [
@@ -4166,7 +4317,7 @@
     },
     {
       "app": "calendar",
-      "card": "event: name, date (start), status (confirmed|tentative|cancelled), duration (min), description · links: people · verbs: create edit reschedule cancel delete restore unlink",
+      "card": "event: name, date (start), status (confirmed|tentative|cancelled), duration (min), description · links: people · verbs: create edit reschedule cancel delete restore respond link unlink",
       "container": false,
       "date": {
         "label": "start",
@@ -4246,6 +4397,8 @@
         "cancel",
         "delete",
         "restore",
+        "respond",
+        "link",
         "unlink"
       ],
       "where_fields": [
@@ -4256,7 +4409,7 @@
     },
     {
       "app": "reminders",
-      "card": "task: name, date (due), status (open|completed|cancelled), priority (0 to 9), completed (date), description, starred (yes|no) · links: subtasks, people, list · verbs: create edit reschedule complete reopen cancel delete restore star unstar add_to tag untag unlink",
+      "card": "task: name, date (due), status (open|completed|cancelled), priority (0 to 9), completed (date), description, starred (yes|no) · links: subtasks, people, list · verbs: create edit reschedule complete reopen cancel delete restore star unstar add_to tag untag link unlink",
       "container": false,
       "date": {
         "label": "due",
@@ -4373,6 +4526,7 @@
         "add_to",
         "tag",
         "untag",
+        "link",
         "unlink"
       ],
       "where_fields": [
@@ -4385,7 +4539,7 @@
     },
     {
       "app": "notes",
-      "card": "note: name, date (created), body, pinned (yes|no), starred (yes|no) · links: notebook, people · verbs: create edit delete restore star unstar tag untag unlink",
+      "card": "note: name, date (created), body, pinned (yes|no), starred (yes|no) · links: notebook, people · verbs: create edit delete restore star unstar tag untag link unlink",
       "container": false,
       "date": {
         "label": "created",
@@ -4459,6 +4613,7 @@
         "unstar",
         "tag",
         "untag",
+        "link",
         "unlink"
       ],
       "where_fields": [
@@ -4469,7 +4624,7 @@
     },
     {
       "app": "docs",
-      "card": "document: name, date (created), starred (yes|no) · links: folder · verbs: create edit delete restore star unstar tag untag unlink",
+      "card": "document: name, date (created), starred (yes|no) · links: folder · verbs: create edit delete restore star unstar tag untag link unlink",
       "container": false,
       "date": {
         "label": "created",
@@ -4518,6 +4673,7 @@
         "unstar",
         "tag",
         "untag",
+        "link",
         "unlink"
       ],
       "where_fields": [
@@ -4526,7 +4682,7 @@
     },
     {
       "app": "photos",
-      "card": "photo: name, date (taken), starred (yes|no) · links: albums · verbs: edit delete restore star unstar add_to remove_from tag untag unlink archive unarchive",
+      "card": "photo: name, date (taken), starred (yes|no) · links: albums · verbs: edit delete restore star unstar add_to remove_from tag untag link unlink archive unarchive",
       "container": false,
       "date": {
         "label": "taken",
@@ -4576,6 +4732,7 @@
         "remove_from",
         "tag",
         "untag",
+        "link",
         "unlink",
         "archive",
         "unarchive"
@@ -4618,7 +4775,7 @@
     },
     {
       "app": "locker",
-      "card": "locker item: name, type (login|card|note|identity|wifi|password|ssh_key|api_credential|passport|bank_account|driving_licence|software_licence|crypto_wallet|membership|document), username, url, notes, starred (yes|no) · verbs: create edit delete restore star unstar reveal tag untag unlink archive unarchive",
+      "card": "locker item: name, type (login|card|note|identity|wifi|password|ssh_key|api_credential|passport|bank_account|driving_licence|software_licence|crypto_wallet|membership|document), username, url, notes, starred (yes|no) · verbs: create edit delete restore star unstar reveal tag untag link unlink archive unarchive",
       "container": false,
       "date": null,
       "entity": "locker_item",
@@ -4757,6 +4914,7 @@
         "reveal",
         "tag",
         "untag",
+        "link",
         "unlink",
         "archive",
         "unarchive"
@@ -4880,7 +5038,7 @@
     },
     {
       "app": "money",
-      "card": "transaction: name, date (posted), amount (USD), account, category, transfer, status (pending|posted) · verbs: create edit delete restore unlink",
+      "card": "transaction: name, date (posted), amount (USD), account, category, transfer, status (pending|posted) · verbs: create edit delete restore categorize link unlink",
       "container": false,
       "date": {
         "label": "posted",
@@ -4968,6 +5126,8 @@
         "edit",
         "delete",
         "restore",
+        "categorize",
+        "link",
         "unlink"
       ],
       "where_fields": [
@@ -5060,7 +5220,7 @@
     },
     {
       "app": "health",
-      "card": "workout: name, date (start), moving (s), distance (m), energy (kcal), heart_rate (bpm), climb (m) · verbs: create edit delete restore unlink",
+      "card": "workout: name, date (start), moving (s), distance (m), energy (kcal), heart_rate (bpm), climb (m) · verbs: create edit delete restore link unlink",
       "container": false,
       "date": {
         "label": "start",
@@ -5139,6 +5299,7 @@
         "edit",
         "delete",
         "restore",
+        "link",
         "unlink"
       ],
       "where_fields": [
@@ -5526,9 +5687,11 @@
     "event.edit",
     "event.edit_occurrence",
     "event.propose",
+    "event.respond",
     "event.split",
     "flag.clear",
     "flag.set",
+    "link.add",
     "link.remove",
     "locker.add_item",
     "locker.edit_item",
@@ -5562,6 +5725,7 @@
     "task.reopen",
     "touch.log",
     "txn.add",
+    "txn.categorize",
     "txn.edit",
     "txn.split",
     "txn.unlink_transfer",
@@ -6155,6 +6319,77 @@
       "flag": null,
       "name": "untag",
       "verb": "untag"
+    },
+    {
+      "args": "answer: accepted|declined|tentative",
+      "commands": [
+        [
+          "event",
+          "event.respond"
+        ]
+      ],
+      "done": "answered",
+      "flag": null,
+      "name": "respond",
+      "verb": "respond"
+    },
+    {
+      "args": "category: <text>",
+      "commands": [
+        [
+          "transaction",
+          "txn.categorize"
+        ]
+      ],
+      "done": "filed",
+      "flag": null,
+      "name": "categorize",
+      "verb": "categorize"
+    },
+    {
+      "args": "to: #n",
+      "commands": [
+        [
+          "person",
+          "link.add"
+        ],
+        [
+          "event",
+          "link.add"
+        ],
+        [
+          "task",
+          "link.add"
+        ],
+        [
+          "note",
+          "link.add"
+        ],
+        [
+          "document",
+          "link.add"
+        ],
+        [
+          "photo",
+          "link.add"
+        ],
+        [
+          "locker_item",
+          "link.add"
+        ],
+        [
+          "transaction",
+          "link.add"
+        ],
+        [
+          "workout",
+          "link.add"
+        ]
+      ],
+      "done": "linked",
+      "flag": null,
+      "name": "link",
+      "verb": "link"
     },
     {
       "args": "",

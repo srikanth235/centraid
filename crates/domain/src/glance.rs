@@ -1,101 +1,135 @@
-//! WHAT THE CORE'S DEVICE SERVICES READ: whether an entity exists, and what is on a day (the
-//! widget's Today). SQL lives only in the crates that may hold it; the core asks here. These are
-//! plain reads, not registered ones: Calendar's and Reminders' own `today` reads replace
-//! [`today`] when those apps land.
+use std::collections::BTreeMap;
 
 use rusqlite::Connection;
 
-/// One item on a day.
+use crate::apps::{self, calendar, entity, reminders};
+use crate::read::{Args, Read, ReadError, door::run_on};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Item {
     pub id: String,
     pub title: String,
 }
 
-/// A day, in the three spellings a stored moment takes.
 #[derive(Debug, Clone)]
 pub struct Day<'a> {
-    /// `YYYY-MM-DD`, the member's.
     pub day: &'a str,
-    /// The day's start and end as instants (`…Z`), for zoned moments.
     pub from: &'a str,
     pub to: &'a str,
-    /// The day's first and last minute as wall clocks, for floating moments.
     pub floating_from: &'a str,
     pub floating_to: &'a str,
 }
 
-/// What is on one day: events that start or run through it, and open tasks due or scheduled on it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Today {
     pub events: Vec<Item>,
     pub tasks: Vec<Item>,
 }
 
-/// Whether an entity with `id` exists, trashed or not.
-///
-/// # Errors
-/// SQLite's refusal.
-pub fn entity_held(connection: &Connection, id: &str) -> rusqlite::Result<bool> {
-    let held: i64 =
-        connection.query_row("SELECT COUNT(*) FROM entity WHERE id = ?1", [id], |row| {
-            row.get(0)
-        })?;
-    Ok(held > 0)
+fn to_rusqlite(error: ReadError) -> rusqlite::Error {
+    match error {
+        ReadError::Sql(inner) => inner,
+        other => rusqlite::Error::ToSqlConversionFailure(Box::new(other)),
+    }
 }
 
-fn items(
+fn collect_all(
     connection: &Connection,
-    sql: &str,
-    params: &[&dyn rusqlite::ToSql],
-) -> rusqlite::Result<Vec<Item>> {
-    let mut statement = connection.prepare(sql)?;
-    let rows = statement.query_map(params, |row| {
-        Ok(Item {
-            id: row.get(0)?,
-            title: row.get(1)?,
-        })
-    })?;
-    rows.collect()
+    read: &Read<apps::Item>,
+    args: &Args,
+) -> rusqlite::Result<Vec<apps::Item>> {
+    let mut out = Vec::new();
+    let mut after = None;
+    loop {
+        let mut ask = args.clone();
+        if let Some(cursor) = after {
+            ask = ask.after(cursor);
+        }
+        let page = run_on(connection, read, &ask).map_err(to_rusqlite)?;
+        out.extend(page.rows);
+        match page.next {
+            Some(next) => after = Some(next),
+            None => break,
+        }
+    }
+    Ok(out)
 }
 
-/// The live events and open tasks of `day`. A repeating event is not expanded.
-///
-/// # Errors
-/// SQLite's refusal.
+fn week_before(day: &str) -> String {
+    let iso = format!("{day}T00:00:00.000Z");
+    centraid_vault::time::recurrence::parse_instant_ms(&iso)
+        .map(|ms| centraid_vault::clock::format_iso_ms(ms - 7 * 86_400_000)[..10].to_owned())
+        .unwrap_or_else(|| day.to_owned())
+}
+
+fn merge_sorted(a: Vec<apps::Item>, b: Vec<apps::Item>) -> Vec<Item> {
+    let mut by_id: BTreeMap<String, (String, String)> = BTreeMap::new();
+    for item in a.into_iter().chain(b) {
+        by_id
+            .entry(item.id)
+            .or_insert_with(|| (item.at, item.title));
+    }
+    let mut rows: Vec<(String, String, String)> = by_id
+        .into_iter()
+        .map(|(id, (at, title))| (at, id, title))
+        .collect();
+    rows.sort();
+    rows.into_iter()
+        .map(|(_, id, title)| Item { id, title })
+        .collect()
+}
+
+pub fn entity_held(connection: &Connection, id: &str) -> rusqlite::Result<bool> {
+    if id.is_empty() || id.contains(char::is_whitespace) {
+        return Ok(false);
+    }
+    let answer =
+        run_on(connection, &entity::HELD, &Args::new().text("id", id)).map_err(to_rusqlite)?;
+    Ok(!answer.rows.is_empty())
+}
+
 pub fn today(connection: &Connection, day: &Day<'_>) -> rusqlite::Result<Today> {
-    let events = items(
+    let week_back = week_before(day.day);
+    let event_low = week_back.as_str().min(day.from);
+    let event_high = day.to.max(day.floating_to);
+    let short_events = collect_all(
         connection,
-        "SELECT e.id, n.title FROM event e JOIN entity n ON n.id = e.id
-          WHERE n.deleted_at IS NULL AND e.status <> 'cancelled' AND e.rule IS NULL AND (
-                (e.timing = 'zoned' AND e.starts >= ?1 AND e.starts < ?2)
-             OR (e.timing = 'floating' AND e.starts >= ?3 AND e.starts <= ?4)
-             OR (e.timing = 'all-day' AND e.starts <= ?5 AND ifnull(e.ends, e.starts) >= ?5))
-          ORDER BY e.starts, e.id",
-        &[
-            &day.from,
-            &day.to,
-            &day.floating_from,
-            &day.floating_to,
-            &day.day,
-        ],
+        &calendar::TODAY_SHORT,
+        &Args::new()
+            .day("day", day.day)
+            .text("from", day.from)
+            .text("to", day.to)
+            .text("floating_from", day.floating_from)
+            .text("floating_to", day.floating_to)
+            .text("low", event_low)
+            .text("high", event_high),
     )?;
-    let tasks = items(
+    let long_events = collect_all(
         connection,
-        "SELECT t.id, n.title FROM task t JOIN entity n ON n.id = t.id
-          WHERE n.deleted_at IS NULL AND t.status = 'open' AND (
-                (t.due_timing = 'zoned' AND t.due >= ?1 AND t.due < ?2)
-             OR (t.due_timing = 'floating' AND t.due >= ?3 AND t.due <= ?4)
-             OR (t.due_timing = 'all-day' AND t.due = ?5)
-             OR t.scheduled_on = ?5)
-          ORDER BY t.due, t.id",
-        &[
-            &day.from,
-            &day.to,
-            &day.floating_from,
-            &day.floating_to,
-            &day.day,
-        ],
+        &calendar::TODAY_LONG,
+        &Args::new().day("day", day.day),
     )?;
-    Ok(Today { events, tasks })
+    let task_low = day.day.min(day.from);
+    let task_high = day.to.max(day.floating_to);
+    let due_tasks = collect_all(
+        connection,
+        &reminders::TODAY_DUE,
+        &Args::new()
+            .day("day", day.day)
+            .text("from", day.from)
+            .text("to", day.to)
+            .text("floating_from", day.floating_from)
+            .text("floating_to", day.floating_to)
+            .text("low", task_low)
+            .text("high", task_high),
+    )?;
+    let scheduled_tasks = collect_all(
+        connection,
+        &reminders::TODAY_SCHEDULED,
+        &Args::new().day("day", day.day),
+    )?;
+    Ok(Today {
+        events: merge_sorted(short_events, long_events),
+        tasks: merge_sorted(due_tasks, scheduled_tasks),
+    })
 }

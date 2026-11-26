@@ -467,3 +467,148 @@ fn a_keyset_key_may_not_be_null() {
     world.notebook("Three");
     assert!(reader.run(&nullable, &Args::new()).is_err());
 }
+
+fn rust_sources(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            rust_sources(&path, out);
+        } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
+            out.push(path);
+        }
+    }
+}
+
+fn product_part(source: &str) -> &str {
+    source.split("\n#[cfg(test)]").next().unwrap_or(source)
+}
+
+#[test]
+fn every_index_has_a_reader() {
+    let world = World::new("reads-indexes");
+    let reader = world.reader();
+    let mut plans = Vec::new();
+    for read in the_registry() {
+        let inspection = reader
+            .inspect(read)
+            .unwrap_or_else(|error| panic!("{}: {error}", read.name));
+        plans.extend(inspection.plan.into_iter().map(|line| line.detail));
+    }
+    let repo = root();
+    let mut files = Vec::new();
+    for dir in [
+        "crates/vault/src",
+        "crates/domain/src",
+        "crates/search/src",
+        "crates/ontology/src",
+    ] {
+        rust_sources(&repo.join(dir), &mut files);
+    }
+    files.sort();
+    for file in &files {
+        let text = std::fs::read_to_string(file).expect("source reads");
+        for statement in centraid_vault::plans::statements_in_source(product_part(&text)) {
+            if statement.is_dynamic() {
+                continue;
+            }
+            if let Ok(plan) = world.vault.explain_query_plan(&statement.sql, &[]) {
+                plans.extend(plan);
+            }
+        }
+    }
+    let unread = world.vault.unread_indexes(&plans).expect("unread indexes");
+    // Exact ratchet: unique constraint plus indexes awaiting M3-M5 app room reads.
+    let awaiting: Vec<String> = [
+        "entity.entity_pinned",
+        "locker_item_field.locker_item_field_by_url",
+        "measurement.measurement_by_metric",
+        "message.message_by_notice",
+        "note.note_by_journal",
+        "person.person_by_cadence",
+        "person_date.person_date_one_of_a_single_kind",
+        "photo.photo_by_burst",
+        "photo.photo_by_taken",
+        "task.task_by_done",
+        "task.task_by_series",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect();
+    assert_eq!(
+        unread, awaiting,
+        "unread indexes changed; add a reader or shrink awaiting"
+    );
+}
+
+#[test]
+fn glance_reads_run_through_the_registered_reads() {
+    let world = World::new("reads-glance");
+    let book = world.notebook("Notes");
+    let held = world
+        .vault
+        .read(|conn| Ok(centraid_domain::glance::entity_held(conn, &book)?))
+        .expect("entity_held");
+    assert!(held);
+    let missing = world
+        .vault
+        .read(|conn| Ok(centraid_domain::glance::entity_held(conn, "no-such-id")?))
+        .expect("entity_held missing");
+    assert!(!missing);
+
+    let event_id = world.made(
+        "event.propose",
+        serde_json::json!({
+            "title": "Standup",
+            "starts": "2026-06-15T09:00",
+            "ends": "2026-06-15T09:30",
+            "timing": "floating",
+        }),
+    );
+    let long_id = world.made(
+        "event.propose",
+        serde_json::json!({
+            "title": "Summer trip",
+            "starts": "2026-06-01",
+            "ends": "2026-06-20",
+            "timing": "all-day",
+        }),
+    );
+    let due_id = world.made(
+        "task.add",
+        serde_json::json!({
+            "title": "Send invoice",
+            "due": "2026-06-15",
+        }),
+    );
+    let sched_id = world.made(
+        "task.add",
+        serde_json::json!({
+            "title": "Water plants",
+            "scheduled_on": "2026-06-15",
+        }),
+    );
+    let today = world
+        .vault
+        .read(|conn| {
+            Ok(centraid_domain::glance::today(
+                conn,
+                &centraid_domain::glance::Day {
+                    day: "2026-06-15",
+                    from: "2026-06-15T00:00:00.000Z",
+                    to: "2026-06-16T00:00:00.000Z",
+                    floating_from: "2026-06-15T00:00",
+                    floating_to: "2026-06-15T23:59",
+                },
+            )?)
+        })
+        .expect("today");
+    let event_ids: Vec<&str> = today.events.iter().map(|i| i.id.as_str()).collect();
+    let task_ids: Vec<&str> = today.tasks.iter().map(|i| i.id.as_str()).collect();
+    assert!(event_ids.contains(&event_id.as_str()), "{event_ids:?}");
+    assert!(event_ids.contains(&long_id.as_str()), "{event_ids:?}");
+    assert!(task_ids.contains(&due_id.as_str()), "{task_ids:?}");
+    assert!(task_ids.contains(&sched_id.as_str()), "{task_ids:?}");
+}
