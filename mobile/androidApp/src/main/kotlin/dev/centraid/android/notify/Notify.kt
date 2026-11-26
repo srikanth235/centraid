@@ -16,16 +16,27 @@ import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import centraid.core.v1.NotificationAnswered
 import centraid.core.v1.DeliveredNotification
+import centraid.core.v1.Envelope
+import centraid.core.v1.NotificationAnswered
 import centraid.core.v1.NotificationPermission
 import centraid.core.v1.NotificationVerb
 import centraid.core.v1.NotificationsScheduled
+import centraid.core.v1.NotifyLaunched
+import centraid.core.v1.NotifyPress
+import centraid.core.v1.NotifyPressOutcome
+import centraid.core.v1.NotifyPresses
+import centraid.core.v1.NotifyRequest
 import centraid.core.v1.PendingNotification
+import centraid.core.v1.Request
 import centraid.core.v1.ScheduleNotifications
 import centraid.core.v1.ShellFact
 import dev.centraid.android.MainActivity
 import dev.centraid.android.session.AppSession
+import dev.centraid.core.CentraidCore
+import dev.centraid.core.CoreOutcome
+import java.util.Locale
+import java.util.TimeZone
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -49,6 +60,10 @@ internal object Notify {
     const val BACKUP_CHANNEL: String = "backup-warnings"
     const val EXTRA_ID: String = "dev.centraid.notify.ID"
     const val EXTRA_VERB: String = "dev.centraid.notify.VERB"
+    const val EXTRA_ENTITY_ID: String = "dev.centraid.notify.ENTITY_ID"
+    const val EXTRA_DATE_ID: String = "dev.centraid.notify.DATE_ID"
+    const val EXTRA_FIELD_ID: String = "dev.centraid.notify.FIELD_ID"
+    const val PENDING_CAP: Int = 50
     private const val EXTRA_FINGERPRINT: String = "dev.centraid.notify.SOURCE_FINGERPRINT"
 
     /**
@@ -230,14 +245,93 @@ internal object Notify {
      * leaves the outbox only once the core has taken it; a press the process could not deliver is sent
      * again by [drain] at the next start (#1188, A6).
      */
-    suspend fun answer(context: Context, notificationId: String, verb: Int) {
-        val press = NotifyOutbox(context).add(notificationId, verb) ?: return
-        // Only a durably recorded genuine gesture consumes the card.
+    suspend fun answer(
+        context: Context,
+        notificationId: String,
+        verb: Int,
+        entityId: String = "",
+        dateId: String = "",
+        fieldId: String = "",
+    ) {
+        val press = NotifyOutbox(context).add(
+            notificationId = notificationId,
+            verb = verb,
+            entityId = entityId,
+            dateId = dateId,
+            fieldId = fieldId,
+            atMs = System.currentTimeMillis(),
+        ) ?: return
         NotificationManagerCompat.from(context.applicationContext).cancel(notificationId, SLOT)
         deliverPress(context, press)
     }
 
-    /** Replay only presses that have not received an exact terminal acknowledgement. */
+    suspend fun launched(context: Context, core: CentraidCore, ask: suspend () -> Boolean?) {
+        val outcome = core.call(
+            Envelope(
+                request_id = 0,
+                request = Request(
+                    notify = NotifyRequest(
+                        launched = NotifyLaunched(
+                            pending_cap = PENDING_CAP,
+                            zone = TimeZone.getDefault().id,
+                            locale = Locale.getDefault().toLanguageTag(),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val schedule = (outcome as? CoreOutcome.Answered)?.value?.response?.notify?.schedule ?: return
+        applyAndReport(context, core, schedule, ask)
+    }
+
+    suspend fun applyAndReport(
+        context: Context,
+        core: CentraidCore,
+        request: ScheduleNotifications,
+        ask: suspend () -> Boolean?,
+    ) {
+        val scheduled = schedule(context, request, ask)
+        core.call(
+            Envelope(
+                request_id = 0,
+                request = Request(notify = NotifyRequest(scheduled = scheduled)),
+            ),
+        )
+    }
+
+    suspend fun replayPresses(context: Context, core: CentraidCore) {
+        val outbox = NotifyOutbox(context)
+        val pending = outbox.pending()
+        if (pending.isEmpty()) return
+        val items = pending.map { press ->
+            NotifyPress(
+                id = press.pressId,
+                verb = NotificationVerb.fromValue(press.verb) ?: NotificationVerb.NOTIFICATION_VERB_UNSPECIFIED,
+                entity_id = press.entityId,
+                date_id = press.dateId,
+                field_id = press.fieldId,
+                at_ms = press.atMs,
+                key = press.pressId,
+            )
+        }
+        val outcome = core.call(
+            Envelope(
+                request_id = 0,
+                request = Request(notify = NotifyRequest(presses = NotifyPresses(items = items))),
+            ),
+        )
+        val response = (outcome as? CoreOutcome.Answered)?.value?.response?.notify ?: return
+        response.results.forEach { result ->
+            when (result.outcome) {
+                NotifyPressOutcome.NOTIFY_PRESS_OUTCOME_APPLIED,
+                NotifyPressOutcome.NOTIFY_PRESS_OUTCOME_ALREADY,
+                NotifyPressOutcome.NOTIFY_PRESS_OUTCOME_EXPIRED,
+                -> outbox.remove(result.id)
+                else -> Unit
+            }
+        }
+    }
+
     suspend fun drain(context: Context) {
         NotifyOutbox(context).pending().forEach { deliverPress(context, it) }
     }
@@ -337,7 +431,10 @@ internal object Notify {
                 Intent(app, NotifyActionReceiver::class.java)
                     .setData(uriOf("verb", item.notification_id, action.verb.value.toString()))
                     .putExtra(EXTRA_ID, item.notification_id)
-                    .putExtra(EXTRA_VERB, action.verb.value),
+                    .putExtra(EXTRA_VERB, action.verb.value)
+                    .putExtra(EXTRA_ENTITY_ID, item.entity_id)
+                    .putExtra(EXTRA_DATE_ID, item.date_id)
+                    .putExtra(EXTRA_FIELD_ID, item.field_id),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
             // DONE, SNOOZE AND THE REST WORK FROM THE LOCK SCREEN with no unlock (#1188, NA4): a broadcast

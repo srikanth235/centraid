@@ -85,11 +85,16 @@ internal fun SettingsScreen(
             onRetry = null,
         ) { state.data_?.let { data -> SettingsBody(data, onEvent, onOpen) } }
     }
-    // DOWNLOAD SETTINGS is a sheet of its own (Rust's `transfer_sheet`): the member's one transfer
-    // rule, the same three choices Home's gear draws.
     state.transfer_sheet?.let { rules ->
-        dev.centraid.android.kit.TransferRulesSheet(
-            sheet = rules,
+        dev.centraid.android.kit.OptionSheet(
+            title = rules.title,
+            options = rules.choices.map { choice ->
+                dev.centraid.android.kit.SheetOption(
+                    key = choice.stored,
+                    label = choice.sentence,
+                    selected = choice.picked,
+                )
+            },
             onPick = { stored -> onEvent(SettingsEvent(transfer_rule_chosen = SettingsEvent.TransferRuleChosen(stored = stored))) },
             onDismiss = { onEvent(SettingsEvent(transfer_rules_closed = SettingsEvent.TransferRulesClosed())) },
         )

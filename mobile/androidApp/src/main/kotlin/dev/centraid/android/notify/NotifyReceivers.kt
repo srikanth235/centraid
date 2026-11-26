@@ -30,10 +30,13 @@ public class NotifyActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val id = intent.getStringExtra(Notify.EXTRA_ID) ?: return
         val verb = intent.getIntExtra(Notify.EXTRA_VERB, 0)
+        val entityId = intent.getStringExtra(Notify.EXTRA_ENTITY_ID).orEmpty()
+        val dateId = intent.getStringExtra(Notify.EXTRA_DATE_ID).orEmpty()
+        val fieldId = intent.getStringExtra(Notify.EXTRA_FIELD_ID).orEmpty()
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
-                Notify.answer(context, id, verb)
+                Notify.answer(context, id, verb, entityId, dateId, fieldId)
             } finally {
                 pending.finish()
             }

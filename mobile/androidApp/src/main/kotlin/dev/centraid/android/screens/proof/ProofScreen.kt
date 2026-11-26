@@ -59,6 +59,11 @@ private fun Counter(view: CounterView, send: (CounterEvent) -> Unit) {
         ReadStateView(
             page = view.page!!,
             onRetry = { send(CounterEvent(retry_tapped = CounterRetryTapped())) },
+            skeleton = {
+                dev.centraid.android.kit.RowSkeleton(
+                    label = view.loading_label.ifEmpty { dev.centraid.android.kit.KitWords.OPENING },
+                )
+            },
         ) {
             view.data_?.let {
                 Column {

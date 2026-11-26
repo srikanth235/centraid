@@ -21,8 +21,6 @@ import centraid.core.v1.EffectRequest
 import centraid.core.v1.EffectResult
 import centraid.core.v1.HapticKind
 import centraid.core.v1.Route
-import dev.centraid.android.backup.MediaStoreDeleter
-import dev.centraid.android.screens.docs.DocsPickers
 import dev.centraid.android.screens.mediaPermissions
 import dev.centraid.android.screens.performExportOriginals
 import dev.centraid.android.screens.words.CodeScanDoor
@@ -50,9 +48,6 @@ import okio.ByteString.Companion.toByteString
 @Composable
 internal fun HostScreenEffects(
     session: AppSession.Open,
-    docs: DocsPickers,
-    health: AndroidHealth,
-    deleter: MediaStoreDeleter,
     openRoute: (Route) -> Unit,
 ) {
     val context = LocalContext.current
@@ -61,29 +56,18 @@ internal fun HostScreenEffects(
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { asking.answer(it) }
     val mediaAsk = remember { Ask<Unit>() }
     val mediaLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { mediaAsk.answer(Unit) }
-    // HEALTH CONNECT'S OWN PERMISSION SHEET, shown at the member's Connect tap only.
-    val healthLauncher = rememberLauncherForActivityResult(health.contract()) { granted -> health.permissionsAnswered(granted) }
-    // THE FILE SHEETS (Locker's import and export): the system's pickers, one out at a time.
     val picking = remember { Ask<android.net.Uri?>() }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { picking.answer(it) }
-    // SEVERAL FILES AT ONCE and a whole folder (`PickBytes.multiple`, `PickBytes.folder`).
     val pickingMany = remember { Ask<List<android.net.Uri>>() }
     val manyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { pickingMany.answer(it) }
     val pickingFolder = remember { Ask<android.net.Uri?>() }
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { pickingFolder.answer(it) }
-    // PROCESS-WIDE, NOT `remember`ed: the activity can be recreated (a font or locale change, a rotation)
-    // while the system's save sheet is up, and the answer must reach the export that is waiting for it
-    // and not a fresh `Ask` that nobody waits on, which left a 0-byte document and a screen that never heard.
     val saving = SaveSheet.ask
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { saving.answer(it) }
-    // PAIRING'S SCAN (`ScanCode`): the camera, or the photo picker on a phone with none.
     val scanDoor = remember { CodeScanDoor() }
     scanDoor.Host()
-    // THE CHAT'S PHOTO LIBRARY: the system photo picker, one image.
-    val photoDoor = remember { ChatEffects.PhotoDoor() }
-    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { photoDoor.picked(it) }
 
-    val host = remember(session, docs, health, deleter) {
+    val host = remember(session) {
         object : UiHost {
             private var shielded = false
 
@@ -112,15 +96,11 @@ internal fun HostScreenEffects(
                         EffectResult(done = EffectDone())
                     }
                     effect.owner_check != null -> OwnerPrompt.check(context, effect.owner_check!!)
-                    effect.health_read != null -> health.snapshot(effect.health_read!!) { healthLauncher.launch(it) }
                     effect.scan_code != null ->
                         scanDoor.scan(effect.scan_code!!.photo_label)?.let { EffectResult(code_scanned = CodeScanned(text = it)) }
                             ?: EffectResult(failed = EffectFailed(reason = EffectReason.CANCELLED, cancelled = true))
                     effect.model_download != null -> ChatEffects.download(context, session.screens, request, effect.model_download!!)
                     effect.delete_model_file != null -> ChatEffects.deleteModelFile(effect.delete_model_file!!)
-                    effect.pick_library_photo != null -> ChatEffects.pickLibraryPhoto(context, photoDoor) {
-                        photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                    }
                     effect.export_originals != null ->
                         effectAttempt { performExportOriginals(context, session.core, effect.export_originals!!) }
                             .getOrElse { failed(EffectReason.FAILED) }
@@ -134,8 +114,6 @@ internal fun HostScreenEffects(
                         val file = effect.save_file!!
                         saveFile(context, file, saving.ask { saver.launch(file.name) })
                     }
-                    // A STREAMED EXPORT (`SaveFilePath`): the same save sheet, the staged file copied by
-                    // streaming, and the staged file deleted whatever the answer was.
                     effect.save_file_path != null -> {
                         val file = effect.save_file_path!!
                         try {
@@ -144,35 +122,11 @@ internal fun HostScreenEffects(
                             withContext(NonCancellable + Dispatchers.IO) { File(file.path).delete() }
                         }
                     }
-                    // FREE UP SPACE: the system's own confirmation, then the hashes whose asset went.
-                    effect.library_delete != null -> {
-                        val done = CompletableDeferred<centraid.core.v1.LibraryDeleted>()
-                        deleter.delete(effect.library_delete!!.items) { done.complete(it) }
-                        EffectResult(library_deleted = done.await())
-                    }
                     effect.open_route != null -> {
                         effect.open_route!!.route?.let(openRoute)
                         EffectResult(done = EffectDone())
                     }
-                    effect.pick_file != null -> {
-                        docs.pick(effect.pick_file!!.kind, answer)
-                        null
-                    }
-                    effect.follow_folder != null -> {
-                        docs.follow(answer)
-                        null
-                    }
-                    effect.share_file != null ->
-                        effectAttempt { dev.centraid.android.screens.docs.performShareFile(context, effect.share_file!!) }
-                            .getOrElse { failed(EffectReason.FAILED) }
-                    effect.share_bytes != null ->
-                        effectAttempt { dev.centraid.android.screens.docs.performShareBytes(context, effect.share_bytes!!) }
-                            .getOrElse { failed(EffectReason.FAILED) }
-                    effect.stop_following != null -> {
-                        docs.stop(effect.stop_following!!.origin, answer)
-                        null
-                    }
-                    // Platform work this build does not perform: said by value, so nothing waits.
+                    effect.pick_file != null -> failed(EffectReason.UNSUPPORTED)
                     else -> failed(EffectReason.UNSUPPORTED)
                 }
             }

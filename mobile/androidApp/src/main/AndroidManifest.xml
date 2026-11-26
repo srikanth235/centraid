@@ -162,9 +162,6 @@
                  trusted. The core opens only a page the snapshot's own table names for that key,
                  and Agenda's home for any other, and an add writes nothing until the member taps
                  Add. -->
-            <meta-data
-                android:name="android.app.shortcuts"
-                android:resource="@xml/shortcuts" />
         </activity>
 
         <!-- AGENDA'S TWO HOME-SCREEN WIDGETS (#1173). Framework providers over RemoteViews
@@ -178,7 +175,7 @@
         <receiver
             android:name="dev.centraid.android.glance.UpNextWidget"
             android:exported="true"
-            android:label="@string/glance_widget_up_next_name">
+            android:label="Today">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -189,7 +186,7 @@
         <receiver
             android:name="dev.centraid.android.glance.RemindersWidget"
             android:exported="true"
-            android:label="@string/glance_widget_reminders_name">
+            android:label="Reminders">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -197,15 +194,10 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/glance_reminders_info" />
         </receiver>
-        <!-- HEALTH'S HOME-SCREEN WIDGET (#1185): the same kind of provider, drawing
-             `filesDir/health-glance.json` (Rust's `health.glance` service) and never opening the
-             vault. `home_screen` only, never `keyguard`; a tap sends
-             `dev.centraid.action.HEALTH_OPEN` with one opaque key to this app's activity
-             (`glance/HealthIntents.kt`). -->
         <receiver
             android:name="dev.centraid.android.glance.HealthWidget"
             android:exported="true"
-            android:label="@string/glance_widget_health_name">
+            android:label="Health">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -213,31 +205,6 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/glance_health_info" />
         </receiver>
-
-        <!-- "WHAT HEALTH MAY READ" FOR HEALTH CONNECT (#1129). Health Connect
-             shows an app's permissions only when it declares where its
-             rationale lives: the activity's own action on Android 13 and
-             below, and the alias's VIEW_PERMISSION_USAGE in the
-             HEALTH_PERMISSIONS category, guarded by the system's own
-             permission, on 14 and up. Both open Health's own words
-             (`HealthRationaleActivity`); neither reads or writes anything. -->
-        <activity
-            android:name="dev.centraid.android.screens.health.HealthRationaleActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
-            </intent-filter>
-        </activity>
-        <activity-alias
-            android:name="dev.centraid.android.screens.health.HealthPermissionUsage"
-            android:exported="true"
-            android:permission="android.permission.START_VIEW_PERMISSION_USAGE"
-            android:targetActivity="dev.centraid.android.screens.health.HealthRationaleActivity">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
-                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
-            </intent-filter>
-        </activity-alias>
 
         <!-- THE TWO WAYS "BACK UP NOW" KEEPS THE PROCESS ALIVE (#1080). Neither
              is exported: the job is bound only by the system's job scheduler,
@@ -285,19 +252,5 @@
                 android:resource="@xml/shared_copies" />
         </provider>
 
-        <!-- Docs' Scan row (#1047): the system camera app writes its
-             photograph into `docs-scans/` through this, and nothing else.
-             Not exported; the grant rides the capture intent. CAMERA is
-             declared (pairing's scan), so the capture intent needs the grant
-             and Docs asks for it at Scan. -->
-        <provider
-            android:name="dev.centraid.android.screens.docs.DocsScanProvider"
-            android:authorities="${applicationId}.docsscans"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/docs_scans" />
-        </provider>
     </application>
 </manifest>

@@ -66,7 +66,6 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.SecureFlagPolicy
-import centraid.core.v1.Autosave
 import centraid.core.v1.StatusLine as StatusLineMessage
 import dev.centraid.android.theme.centraidColor
 import dev.centraid.android.theme.centraidType
@@ -211,37 +210,19 @@ public fun AppPlace(
     meta: String = "",
     trailing: RoomAction? = null,
     search: RoomSearch? = null,
-    /** A KEY BEFORE THE FILTER (#1173): the tonal lock key of Locker's header; null elsewhere. */
     lead: RoomAction? = null,
-    /**
-     * THE HEADER'S FILTER BUTTON (R-CHROME-3): Rust's `FilterMenu`, drawn as a menu beside the
-     * app's one trailing action. Null where the app has nothing to filter or sort.
-     */
-    filter: RoomFilter? = null,
-    /** The scope the page is in, under the app's name (Notes' notebook, Money's month). */
-    subtitle: RoomSubtitle? = null,
-    /**
-     * A BAR OF THE PLACE'S OWN (#1173): the Calendar's header. [barLeading] stands at the start of
-     * the key row and the page draws no title; [barActions] sit before the app's keys.
-     */
     barLeading: (@Composable () -> Unit)? = null,
     barActions: (@Composable () -> Unit)? = null,
-    /** Reminders' board keeps its big title under the same bar; the Calendar's has none. */
     barShowsTitle: Boolean = false,
     status: String = "",
     statusLine: (@Composable () -> Unit)? = null,
     band: (@Composable () -> Unit)? = null,
     contentUnderBand: Boolean = false,
-    /** False keeps the full width (Photos, the Calendar's grids); the band stays in the readable column. */
     readable: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     CompositionLocalProvider(LocalAppAccentId provides app) {
     Column(modifier.fillMaxSize().background(Surface.page).testTag("$app-place")) {
-        // THE HEADER (#1173, round 9): THE TITLE SITS IN THE TOP ROW, large at the leading edge
-        // with the scope under it, and at most two keys at the trailing end (the tonal filter
-        // key, then the filled accent `+`). A place's own bar (the Calendar's month chip) is one
-        // control row under the title.
         val showsTitle = barLeading == null || barShowsTitle
         Row(
             Modifier.readableColumn(readable).padding(start = KitGeometry.GUTTER, end = KitGeometry.GUTTER, top = 8.dp, bottom = 8.dp),
@@ -249,8 +230,6 @@ public fun AppPlace(
             verticalAlignment = Alignment.Top,
         ) {
             if (!showsTitle && barLeading != null) {
-                // NO TITLE (the Calendar's Day and Week): the month chip is the page's name and
-                // stands in the top row, where the title would.
                 barLeading.invoke()
                 Spacer(Modifier.weight(1f))
             }
@@ -259,12 +238,10 @@ public fun AppPlace(
                 if (showsTitle && meta.isNotEmpty()) {
                     KitText(meta, KitType.Meta, Surface.meta)
                 }
-                if (showsTitle && subtitle != null) RoomSubtitleLine(subtitle)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 barActions?.invoke()
                 if (lead != null) HeaderVerb(lead)
-                if (filter != null) FilterMenuButton(app, filter)
                 if (trailing != null) HeaderVerb(trailing)
             }
         }
@@ -352,35 +329,24 @@ public fun PushedPage(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     trailing: RoomAction? = null,
-    /** A second key before the trailing one: the "…" that opens a page's verbs (a Locker item). */
     more: RoomAction? = null,
-    /** The header's filter menu, beside the one trailing action, for a pushed list (Docs' folder). */
-    filter: RoomFilter? = null,
-    /** The app's id, which the filter menu's test tags are made from (`<app>-filter-menu`). */
     app: String = "",
     status: String = "",
     statusLine: (@Composable () -> Unit)? = null,
     backSpoken: String? = null,
-    /** A scope line under the title (Trash's "3 items"): the machine's, empty for none. */
     meta: String = "",
-    /** The title in a colour of the page's own (a smart list's, a list's), with its glyph before it. */
     titleColor: androidx.compose.ui.graphics.Color? = null,
     titleIcon: String = "",
     titleTag: String? = null,
-    /** False keeps the full width (a Photos shelf); the status lines stay in the readable column. */
     readable: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     CompositionLocalProvider(LocalAppAccentId provides app.ifEmpty { LocalAppAccentId.current }) {
     Column(modifier.fillMaxSize().background(Surface.page).testTag("pushed-page")) {
-        // THE TITLE IS IN THE TOP ROW (#1173, round 9): the back chevron, the title inline beside
-        // it, the page's keys at the end; the scope line, if any, under the title.
         Row(
             Modifier.readableColumn(readable).padding(start = 4.dp, end = 8.dp, top = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // THE BACK KEY IS A CHEVRON (#1173): a drill-in page is the only place one appears.
-            // The parent's name is what a screen reader says.
             IconKey(
                 "ChevronLeft",
                 backSpoken ?: KitWords.backTo(parentTitle),
@@ -404,7 +370,6 @@ public fun PushedPage(
                     KitText(meta, KitType.Meta, Surface.meta, Modifier.testTag("page-meta"))
                 }
             }
-            if (filter != null) FilterMenuButton(app, filter)
             if (more != null) HeaderVerb(more)
             if (trailing != null) HeaderVerb(trailing)
         }
@@ -430,7 +395,7 @@ public fun PushedPage(
 @Composable
 public fun EditorRoom(
     title: String,
-    status: Autosave?,
+    status: String = "",
     onClose: () -> Unit,
     onDeparted: () -> Unit,
     modifier: Modifier = Modifier,
@@ -458,7 +423,9 @@ public fun EditorRoom(
                         modifier = Modifier.semantics { heading() },
                     )
                 }
-                AutosaveStatus(status)
+                if (status.isNotEmpty()) {
+                    KitText(status, KitType.Meta, Surface.meta)
+                }
             }
             if (trailing != null && trailing.pill) {
                 KitPillButton(trailing.label, trailing.onPress, testTag = trailing.testTag, enabled = trailing.enabled)

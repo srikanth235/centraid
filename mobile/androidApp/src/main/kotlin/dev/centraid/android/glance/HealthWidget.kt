@@ -203,15 +203,13 @@ public class HealthWidget : AppWidgetProvider() {
             for (slot in from until GRID_CELLS.size) views.show(GRID_CELLS[slot], false)
         }
 
-        /** No snapshot yet: the widget's own name and the catalogue's "open Centraid" sentence, never an empty day. */
         private fun bare(context: Context, views: RemoteViews): RemoteViews {
-            val name = context.getString(R.string.glance_widget_health_name)
-            val unavailable = context.getString(R.string.glance_widget_health_unavailable)
+            val name = "Health"
+            val unavailable = "Open Centraid"
             views.setTextViewText(R.id.glance_title, name)
             views.setTextViewText(R.id.glance_message, unavailable)
             views.show(R.id.glance_message, true)
             for (id in intArrayOf(R.id.health_figure, R.id.health_caption, R.id.health_sleep, R.id.health_hint)) {
-                // The small layout has these; the wide one has only the hint, and a missing id is skipped by RemoteViews.
                 views.show(id, false)
             }
             views.describe(R.id.glance_root, name, unavailable)

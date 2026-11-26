@@ -43,28 +43,26 @@ class TraversalTest {
     private fun scene(id: String) = Scenes.all.first { it.id == id }
 
     @Test
-    fun addingAReminderReadsTheListThenTheWayToAddOne() {
-        val order = read(scene("reminders"))
-        // The first thing is where the member is; the reminders are in their order; the band is last.
-        assertReadsIn("reminders", order, "Call the dentist", "Pay the rent", "Today, current place")
-        assertReadsIn("reminders", order, "New reminder")
+    fun homeReadsTitleThenTilesThenBand() {
+        val order = read(scene("home"))
+        assertReadsIn("home", order, "Centraid", "Backup", "Settings", "Home")
     }
 
     @Test
-    fun openingANoteReadsTheTitleTheNewKeyThenTheNotesInOrder() {
-        val order = read(scene("notes"))
-        assertReadsIn("notes", order, "Notes", "New note", "Groceries", "Trip plan", "Ideas", "Notes, current place")
+    fun settingsReadsTitleThenAppearanceOptions() {
+        val order = read(scene("settings"))
+        assertReadsIn("settings", order, "Settings", "APPEARANCE", "System", "Light", "Dark")
     }
 
     @Test
-    fun theLockerWallReadsWhatItIsThenHowToOpenIt() {
-        val order = read(scene("locker.wall"))
-        assertReadsIn("locker.wall", order, "Locker is locked", "Unlock with your fingerprint", "Unlock", "Use the 24 words")
+    fun backupReadsTitleThenStatusLine() {
+        val order = read(scene("backup"))
+        assertReadsIn("backup", order, "Backup", "Backed up")
     }
 
     @Test
     fun thePairPageReadsTheTitleThenTheStepsThenTheDecision() {
         val order = read(scene("pair.laptop"))
-        assertReadsIn("pair.laptop", order, "Pair a laptop", "centraid-gateway pair", "Scan the code", "Pairing code", "Cancel")
+        assertReadsIn("pair.laptop", order, "Pair a backup device", "centraid-gateway pair", "Scan the code", "Pairing code", "Cancel")
     }
 }

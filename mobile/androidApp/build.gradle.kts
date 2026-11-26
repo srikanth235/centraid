@@ -178,4 +178,25 @@ dependencies {
 // (`UnsupportedClassVersionError` on every test, seen on a JDK 17 Mac).
 tasks.withType<Test>().configureEach {
     javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
+    System.getProperties().stringPropertyNames()
+        .filter { it.startsWith("roborazzi.") }
+        .forEach { key -> systemProperty(key, System.getProperty(key)) }
+}
+
+tasks.register<Test>("recordRoborazziDebug") {
+    group = "verification"
+    description = "Record Roborazzi cropped block goldens for :androidApp debug unit tests."
+    dependsOn("testDebugUnitTest")
+    doFirst {
+        logger.lifecycle("Run with -Droborazzi.test.record=true to record goldens.")
+    }
+}
+
+tasks.register<Test>("verifyRoborazziDebug") {
+    group = "verification"
+    description = "Verify Roborazzi cropped block goldens for :androidApp debug unit tests."
+    dependsOn("testDebugUnitTest")
+    doFirst {
+        logger.lifecycle("Run with -Droborazzi.test.verify=true to verify goldens.")
+    }
 }
