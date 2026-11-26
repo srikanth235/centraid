@@ -57,10 +57,15 @@ import UserNotifications
 /// Actual delivered IDs and source fingerprints go back to Rust, so passing a moment
 /// alone never removes an unresolved reminder and a changed source can withdraw it.
 enum Notifications {
-    /// The key the notification's id travels under in `userInfo`, besides the request identifier.
     private static let idKey = "notification_id"
     private static let fingerprintKey = "notification_source_fingerprint"
+    private static let entityIDKey = "notification_entity_id"
+    private static let dateIDKey = "notification_date_id"
+    private static let fieldIDKey = "notification_field_id"
+    private static let channelIDKey = "notification_channel_id"
+    private static let openURLKey = "notification_open_url"
     private static let immediatesKey = "centraid.notification.immediates"
+    static let pendingCap: UInt32 = 64
 
     /// Perform `ScheduleNotifications` and say what the OS said.
     @MainActor static func schedule(_ schedule: Centraid_Core_V1_ScheduleNotifications) async -> Centraid_Core_V1_NotificationsScheduled {
@@ -159,7 +164,15 @@ enum Notifications {
         content.categoryIdentifier = item.categoryID
         content.threadIdentifier = item.threadID
         content.sound = .default
-        content.userInfo = [idKey: item.notificationID, fingerprintKey: item.sourceFingerprint]
+        content.userInfo = [
+            idKey: item.notificationID,
+            fingerprintKey: item.sourceFingerprint,
+            entityIDKey: item.entityID,
+            dateIDKey: item.dateID,
+            fieldIDKey: item.fieldID,
+            channelIDKey: item.channelID,
+            openURLKey: item.openURL,
+        ]
 
         var trigger: UNNotificationTrigger?
         if !item.immediate {
@@ -193,7 +206,13 @@ enum Notifications {
     /// arrived as. A tap on the notification itself is the default action and means open.
     /// A COLD LAUNCH FROM A NOTIFICATION has no store yet: opening the vaults is `ShellModel`'s
     /// (touched here), and the answer waits a bounded time for the store, as a background window does.
-    @MainActor static func answered(id: String, action: String) async {
+    @MainActor static func answered(
+        id: String,
+        action: String,
+        entityID: String = "",
+        dateID: String = "",
+        fieldID: String = ""
+    ) async {
         let verb: Centraid_Core_V1_NotificationVerb?
         if action == UNNotificationDefaultActionIdentifier {
             verb = .open
@@ -201,8 +220,13 @@ enum Notifications {
             verb = Int(action).flatMap { Centraid_Core_V1_NotificationVerb(rawValue: $0) }
         }
         guard let verb else { return }
-        // Persist the upstream idempotent press before cold startup can suspend this callback.
-        let press = NotificationOutbox.add(notificationID: id, verb: verb.rawValue)
+        let press = NotificationOutbox.add(
+            notificationID: id,
+            verb: verb.rawValue,
+            entityID: entityID,
+            dateID: dateID,
+            fieldID: fieldID
+        )
         NotificationStartupTrace.mark(.shellModelTouchStarted)
         _ = ShellModel.shared
         NotificationStartupTrace.mark(.shellModelTouched)
@@ -212,14 +236,73 @@ enum Notifications {
             return
         }
         NotificationStartupTrace.mark(.storeWaitCompleted)
+        if !entityID.isEmpty, let proto = press.proto() {
+            await sendPresses([proto], core: store.notifyCore)
+        }
         let matched = await store.answerNotification(id: id, verb: verb, pressID: press.pressID)
         NotificationStartupTrace.mark(.answerReturned, succeeded: matched)
         if matched { NotificationOutbox.remove(press.pressID) }
     }
 
-    /// Replay every persisted press through its original idempotency key. A startup failure
-    /// or callback expiry leaves it in the outbox; only its exact terminal schedule removes it.
+    @MainActor static func launch(core: any ScreenCore) async {
+        var launched = Centraid_Core_V1_NotifyLaunched()
+        launched.pendingCap = pendingCap
+        launched.zone = TimeZone.current.identifier
+        launched.locale = Locale.current.identifier
+        var notifyReq = Centraid_Core_V1_NotifyRequest()
+        notifyReq.kind = .launched(launched)
+        await applyNotify(notifyReq, core: core)
+    }
+
+    @MainActor static func askPermission(core: any ScreenCore) async {
+        var notifyReq = Centraid_Core_V1_NotifyRequest()
+        notifyReq.kind = .askPermission(Centraid_Core_V1_NotifyAskPermission())
+        await applyNotify(notifyReq, core: core)
+    }
+
+    @MainActor static func sendPresses(_ items: [Centraid_Core_V1_NotifyPress], core: any ScreenCore) async {
+        guard !items.isEmpty else { return }
+        var presses = Centraid_Core_V1_NotifyPresses()
+        presses.items = items
+        var notifyReq = Centraid_Core_V1_NotifyRequest()
+        notifyReq.kind = .presses(presses)
+        await applyNotify(notifyReq, core: core)
+    }
+
+    @MainActor static func applyScheduleAndReport(_ set: Centraid_Core_V1_ScheduleNotifications, core: any ScreenCore) async {
+        let scheduled = await schedule(set)
+        var notifyReq = Centraid_Core_V1_NotifyRequest()
+        notifyReq.kind = .scheduled(scheduled)
+        var request = Centraid_Core_V1_Request()
+        request.kind = .notify(notifyReq)
+        _ = try? await core.call(request)
+    }
+
+    @MainActor private static func applyNotify(_ notifyReq: Centraid_Core_V1_NotifyRequest, core: any ScreenCore) async {
+        var request = Centraid_Core_V1_Request()
+        request.kind = .notify(notifyReq)
+        guard let response = try? await core.call(request),
+              case .notify(let answer)? = response.kind
+        else { return }
+        for result in answer.results {
+            switch result.outcome {
+            case .applied, .already, .expired:
+                NotificationOutbox.remove(result.id)
+            case .refused, .unspecified, .UNRECOGNIZED:
+                break
+            }
+        }
+        if answer.hasSchedule {
+            await applyScheduleAndReport(answer.schedule, core: core)
+        }
+    }
+
     @MainActor static func drain(_ store: ScreenStore) async {
+        let pending = NotificationOutbox.pending()
+        let protoPresses = pending.filter { !$0.entityID.isEmpty }.compactMap { $0.proto() }
+        if !protoPresses.isEmpty {
+            await sendPresses(protoPresses, core: store.notifyCore)
+        }
         for press in NotificationOutbox.pending() {
             guard let verb = Centraid_Core_V1_NotificationVerb(rawValue: press.verb) else {
                 NotificationOutbox.remove(press.pressID)
@@ -259,8 +342,18 @@ final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Se
         NotificationStartupTrace.mark(.callbackEntered)
         let id = response.notification.request.identifier
         let action = response.actionIdentifier
+        let userInfo = response.notification.request.content.userInfo
+        let entityID = userInfo["notification_entity_id"] as? String ?? ""
+        let dateID = userInfo["notification_date_id"] as? String ?? ""
+        let fieldID = userInfo["notification_field_id"] as? String ?? ""
         NotificationHandoff.perform(answer: {
-            await Notifications.answered(id: id, action: action)
+            await Notifications.answered(
+                id: id,
+                action: action,
+                entityID: entityID,
+                dateID: dateID,
+                fieldID: fieldID
+            )
         }, completion: {
             NotificationStartupTrace.mark(.callbackCompleted)
             completionHandler()

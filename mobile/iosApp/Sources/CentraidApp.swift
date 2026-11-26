@@ -63,21 +63,7 @@ struct CentraidApp: App {
                     .environment(\.askChat, { shell.open($0) })
                     .kitRootTint()
             }
-            // THE ROOT'S TINT (design/behaviour.md § Controls): `link`
-            // ink on every platform control, not system blue.
             .kitRootTint()
-            // THE PICKERS A SCREEN CAN ASK FOR WHEREVER THE MEMBER IS: Docs' file
-            // picker and scanner (`PickFile`), and its folder picker (`FollowFolder`).
-            .background {
-                ZStack {
-                    DocsFilesRoot()
-                    DocsFollowRoot()
-                }
-                .frame(width: 0, height: 0)
-                .accessibilityHidden(true)
-            }
-            // A WIDGET'S TAP (#1173): `centraid://agenda?open=<key>`, the core's opaque
-            // key; the core answers with the page. Any other URL is ignored.
             .onOpenURL { shell.handleOpenURL($0) }
             // IOS'S CONTACT PICKER, for an import over limited access.
             .modifier(ContactAccessPickerHost(shell: shell))
@@ -113,16 +99,12 @@ struct CentraidApp: App {
     }
 }
 
-/// THE NAVIGATION ROOT: bare paper until Home has drawn, then the first-launch
-/// gate (Rust's, while the phone holds no vault) or Home. Its own view, so a
-/// Home update redraws the root and the stack's modifier chain stays small
-/// enough for the type checker.
 private struct ShellRoot: View {
     @ObservedObject var shell: ShellModel
 
     var body: some View {
-        if let store = shell.screens {
-            StoreRoot(shell: shell, store: store)
+        if let rooms = shell.rooms {
+            RoomHostView(store: rooms)
         } else if shell.vaultDamaged {
             VaultDamagedView()
         } else {
@@ -130,27 +112,4 @@ private struct ShellRoot: View {
         }
     }
 }
-
-private struct StoreRoot: View {
-    @ObservedObject var shell: ShellModel
-    @ObservedObject var store: ScreenStore
-
-    var body: some View {
-        if let home = store.homeView {
-            if home.hasFirstLaunch {
-                // THE FIRST-LAUNCH GATE: nothing of Home stands behind it.
-                FirstLaunchView(gate: home.firstLaunch, store: store)
-                    .onAppear { shell.path = [] }
-            } else {
-                HomeView(shell: shell)
-            }
-        } else {
-            BarePaper()
-        }
-    }
-}
 #endif
-
-// `HomeView` lives in `HomeView.swift`: Home is the graded springboard
-// (#1020, wave A), not a list of links, and it is too large to sit in the
-// composition root.

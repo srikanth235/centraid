@@ -69,16 +69,24 @@ actor Core {
         case bulk
     }
 
-    /// Screen updates the core pushed, in order: the stream ends when the core
-    /// closes or is poisoned.
     nonisolated let updates: AsyncStream<Centraid_Core_V1_ScreenUpdate>
     private nonisolated let updateSink: AsyncStream<Centraid_Core_V1_ScreenUpdate>.Continuation
+    nonisolated let roomUpdates: AsyncStream<Centraid_Core_V1_RoomShown>
+    private nonisolated let roomSink: AsyncStream<Centraid_Core_V1_RoomShown>.Continuation
+    nonisolated let notifyUpdates: AsyncStream<Centraid_Core_V1_ScheduleNotifications>
+    private nonisolated let notifySink: AsyncStream<Centraid_Core_V1_ScheduleNotifications>.Continuation
 
     private init(raw: Raw) {
         self.raw = raw
         let stream = AsyncStream<Centraid_Core_V1_ScreenUpdate>.makeStream()
         updates = stream.stream
         updateSink = stream.continuation
+        let rooms = AsyncStream<Centraid_Core_V1_RoomShown>.makeStream()
+        roomUpdates = rooms.stream
+        roomSink = rooms.continuation
+        let notify = AsyncStream<Centraid_Core_V1_ScheduleNotifications>.makeStream()
+        notifyUpdates = notify.stream
+        notifySink = notify.continuation
     }
 
     /// Open the front core over the vault directory. Blocking: call from a
@@ -171,6 +179,8 @@ actor Core {
     private nonisolated func startPump() {
         let raw = self.raw
         let sink = updateSink
+        let roomSink = self.roomSink
+        let notifySink = self.notifySink
         let stopping = stoppingPump
         let pending = pendingCalls
         pending.enter()
@@ -186,13 +196,23 @@ actor Core {
                 guard status == CENTRAID_OK else { break }
                 if let bytes,
                     let envelope = try? Centraid_Core_V1_Envelope(serializedBytes: bytes),
-                    case .event(let event)? = envelope.body,
-                    case .screen(let update)? = event.kind
+                    case .event(let event)? = envelope.body
                 {
-                    sink.yield(update)
+                    switch event.kind {
+                    case .screen(let update)?:
+                        sink.yield(update)
+                    case .room(let shown)?:
+                        roomSink.yield(shown)
+                    case .notify(let schedule)?:
+                        notifySink.yield(schedule)
+                    default:
+                        break
+                    }
                 }
             }
             sink.finish()
+            roomSink.finish()
+            notifySink.finish()
         }
         thread.name = "dev.centraid.core.events"
         thread.start()

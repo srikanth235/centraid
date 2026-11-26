@@ -10,10 +10,28 @@ import Foundation
 /// (`NotificationAnswered.pressID`), which runs the write under a key made from it, so a press sent
 /// twice is applied once. The file is excluded from the device backup, like the vault.
 enum NotificationOutbox {
-    struct Press: Codable, Equatable {
+    struct Press: Codable, Equatable, Sendable {
         var pressID: String
         var notificationID: String
         var verb: Int
+        var entityID: String = ""
+        var dateID: String = ""
+        var fieldID: String = ""
+        var atMs: Int64 = 0
+        var key: String = ""
+
+        func proto() -> Centraid_Core_V1_NotifyPress? {
+            guard let protoVerb = Centraid_Core_V1_NotificationVerb(rawValue: verb) else { return nil }
+            var press = Centraid_Core_V1_NotifyPress()
+            press.id = pressID
+            press.verb = protoVerb
+            press.entityID = entityID
+            press.dateID = dateID
+            press.fieldID = fieldID
+            press.atMs = atMs
+            press.key = key.isEmpty ? pressID : key
+            return press
+        }
     }
 
     private static let lock = NSLock()
@@ -25,15 +43,30 @@ enum NotificationOutbox {
         return base.appendingPathComponent("notification-outbox.json")
     }
 
-    /// Write a press down, and give it its id.
     @discardableResult
-    static func add(notificationID: String, verb: Int) -> Press {
-        let press = Press(pressID: UUID().uuidString, notificationID: notificationID, verb: verb)
+    static func add(
+        notificationID: String,
+        verb: Int,
+        entityID: String = "",
+        dateID: String = "",
+        fieldID: String = "",
+        atMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
+    ) -> Press {
+        let id = UUID().uuidString
+        let press = Press(
+            pressID: id,
+            notificationID: notificationID,
+            verb: verb,
+            entityID: entityID,
+            dateID: dateID,
+            fieldID: fieldID,
+            atMs: atMs,
+            key: id
+        )
         mutate { $0.append(press) }
         return press
     }
 
-    /// The core has it: the press leaves.
     static func remove(_ pressID: String) {
         mutate { $0.removeAll { $0.pressID == pressID } }
     }

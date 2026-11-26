@@ -63,8 +63,8 @@ final class ShellModel: ObservableObject {
     /// A page was opened while the Chat place showed: the stack's last pop returns there.
     private var returnsToChat = false
 
-    /// THE SCREEN RUNTIME'S STORE, once the core is open. Every view draws from it.
     @Published private(set) var screens: ScreenStore?
+    @Published private(set) var rooms: RoomStore?
     /// THE VAULT FILE IS DAMAGED (`CENTRAID_VAULT_DAMAGED` at open): no core exists, so the root
     /// draws `VaultDamagedView` in place of bare paper. Set once, at launch.
     @Published private(set) var vaultDamaged = false
@@ -312,7 +312,12 @@ final class ShellModel: ObservableObject {
             // A GATEWAY WAS PAIRED (`pair.laptop`): the mover must hold its certificate.
             if topic == "backup.destinations" { self?.refreshUploadPins() }
         }
+        let roomStore = RoomStore(core: core)
+        roomStore.onAppearanceChanged = { [weak self] scheme in
+            if self?.preferredScheme != scheme { self?.preferredScheme = scheme }
+        }
         screens = store
+        rooms = roomStore
         // Attach performers directly so startup effects can settle. Cold platform
         // callbacks receive this store only after its first snapshot succeeds.
         UploadSettlement.shared.attach(ScreenUploadSink(store))
@@ -331,8 +336,7 @@ final class ShellModel: ObservableObject {
             queuedFacts = []
             for fact in queued { store.report(fact) }
             refreshUploadPins()
-            // PRESSES THAT NEVER REACHED THE CORE (the app was suspended mid-press) go now, after the
-            // store is up and not holding it: each waits for Rust's answer.
+            await Notifications.launch(core: core)
             await Notifications.drain(store)
         }
     }
@@ -492,9 +496,8 @@ final class ShellModel: ObservableObject {
         }
     }
 
-    /// The foreground vault's name, for the chat's header.
     var foregroundVaultName: String {
-        screens?.homeView?.bar.vault.name ?? ""
+        rooms?.topRoom?.room.header.title ?? ""
     }
 
     /// THE COMPOSER'S SCOPE MENU: the chat opens on `app`, or on every app when

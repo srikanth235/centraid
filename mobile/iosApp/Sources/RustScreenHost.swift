@@ -1,24 +1,6 @@
 import SwiftUI
 
-// THE SHELL'S ONE PLACE THAT DRAWS A SCREEN RUST OWNS (#1135).
-//
-// A Rust-owned screen has no bridge, no route parameter and no machine on this
-// side: a row carries a `Route`, the shell pushes it (`ShellModel.open`), Rust
-// opens an instance and keeps its view state, and `ScreenStore` hands that to
-// the view below, which switches on `ViewState.kind`. The views add no copy,
-// format nothing, count nothing and start no timer; they send `ScreenEvent`s.
-//
-// THE STACK: Rust holds one per tab (`home`, rooted at Home; `chat`; `backup`); the shell's
-// `path` mirrors the home tab's. An entry pushed onto it sends `NavPush`
-// (`ShellModel.openRust`), and leaving it by any route sends `NavPopped`
-// (`ShellModel.rustPopped`).
-
-/// THE TABS RUST REGISTERS (`centraid_screens::standard`), by the ids it names
-/// them with: the three places of the band, and the phone imports' three hidden
-/// roots, which the band leaves out and the shell tells what only it knows.
 enum RustScreens {
-    /// The tab Home is the root of: every page, whichever app's, is pushed on it,
-    /// so back returns to Home.
     static let homeTab = "home"
     static let chatTab = "chat"
     static let backupTab = "backup"
@@ -26,14 +8,10 @@ enum RustScreens {
     static let madeTab = "imports-made"
 }
 
-/// ONE PUSH OF A RUST ROUTE: the route Rust built and a token unique to the
-/// push, so two pushes of the same route are two entries.
 struct RustEntry: Hashable, Identifiable {
     let token: Int
     var id: Int { token }
     let route: Centraid_Core_V1_Route
-    /// The tab whose stack holds it: Home's for a page, the place the member was in for a sheet
-    /// (a sheet opened from Chat must not select Home under itself).
     var tab: String = RustScreens.homeTab
 
     @MainActor private static var last = 0
@@ -44,7 +22,6 @@ struct RustEntry: Hashable, Identifiable {
     }
 }
 
-/// A Rust entry on the stack: bare paper until Rust has opened its instance.
 struct RustScreenHost: View {
     @ObservedObject var shell: ShellModel
     let entry: RustEntry
@@ -61,15 +38,12 @@ struct RustScreenHost: View {
     }
 }
 
-/// One instance's view state, drawn by its kind: a page on the shell's stack
-/// (`entry`), or a tab's root drawn in Home's place (`entry` nil), which never pops.
 struct RustScreenView: View {
     let shell: ShellModel
     @ObservedObject var store: ScreenStore
     let instance: UInt64
     let entry: RustEntry?
 
-    /// This entry leaves the stack (a finished screen, a back control).
     private func pop() {
         if let entry, shell.sheet == entry {
             shell.sheet = nil
@@ -79,62 +53,18 @@ struct RustScreenView: View {
         shell.path.removeLast()
     }
 
-    /// THE WORDS' DOOR ON A LOCKER WALL: the re-key page Rust names (`LockerWall.words_route`).
-    private var wordsRoute: Centraid_Core_V1_Route? {
-        let wall: Centraid_Core_V1_LockerWall?
-        switch store.views[instance]?.kind {
-        case .lockerHome(let state)?: wall = state.hasWall ? state.wall : nil
-        case .lockerItem(let state)?: wall = state.hasWall ? state.wall : nil
-        case .lockerEditor(let state)?: wall = state.hasWall ? state.wall : nil
-        case .lockerExport(let state)?: wall = state.hasWall ? state.wall : nil
-        case .lockerImport(let state)?: wall = state.hasWall ? state.wall : nil
-        case .lockerLock(let state)?: wall = state.hasWall ? state.wall : nil
-        default: wall = nil
-        }
-        guard let wall, wall.hasWordsRoute else { return nil }
-        return wall.wordsRoute
-    }
-
-    /// THE SCREEN, SHIELDED while Rust holds a `ScreenshotShield` for it: always wrapped, so the
-    /// view keeps its identity (and its state) as the shield goes on and off.
     var body: some View {
         WordsShield(secure: store.shielded.contains(instance)) {
-            if appId.isEmpty {
-                screen
-            } else {
-                screen.appAccent(appId)
-            }
+            screen
         }
         .environment(\.placeHome, { shell.popToRoot() })
         .environment(\.statusActed, { store.send(instance, .statusActed(.init())) })
     }
 
-    /// THE APP THIS PAGE BELONGS TO, so every row, tile, sheet and button inside it (and the sheets
-    /// it presents) wears that app's colour, not the shell's. A page that is no app's (Settings,
-    /// Backup, search, the words) stays the shell's; a view that states its own accent still wins.
-    private var appId: String {
-        switch store.views[instance]?.kind {
-        case .photosHome?, .photosShelf?, .photosPicker?, .photosPlaces?, .photosLightbox?, .photosEditor?: "photos"
-        case .lockerHome?, .lockerItem?, .lockerEditor?, .lockerExport?, .lockerImport?, .lockerLock?: "locker"
-        case .moneyHome?, .moneyTransaction?, .moneyTarget?, .moneyRecurring?, .moneyAccounts?, .moneyRules?,
-             .moneyCategories?, .moneyImport?: "money"
-        case .docsDrive?, .docsDocument?, .docsEditor?: "docs"
-        case .healthHome?, .healthMetric?, .healthWorkout?, .healthConnect?: "health"
-        case .notesHome?, .notesEditor?: "notes"
-        case .peopleHome?, .peoplePerson?, .peopleEditor?, .peopleLists?: "people"
-        // The kit's reads page wears the colour of the app it says it for.
-        case .reads(let reads)?: reads.appID
-        default: ""
-        }
-    }
-
     @ViewBuilder
     private var screen: some View {
         let open: (Centraid_Core_V1_Route) -> Void = { shell.open($0) }
-        let words: () -> Void = { if let route = wordsRoute { shell.open(route) } }
         switch store.views[instance]?.kind {
-        // THE 24 WORDS (lane H2): made, typed back and shown again. Each is
-        // finished by Rust (`finished`), and the shell pops it.
         case .wordsMake(let state)?:
             VaultWordsView(
                 state: state,
@@ -157,15 +87,6 @@ struct RustScreenView: View {
                     shell.wordsShowFinished()
                 }
             )
-        // HOME'S SEARCH (#1135, lane H1): a page pushed over Home.
-        case .homeSearch(let state)?:
-            ShellSearchView(
-                state: state,
-                send: { store.send(instance, .homeSearch($0)) },
-                open: open,
-                onCancel: pop
-            )
-        // SETTINGS (#1173): a page pushed from Home.
         case .settings(let state)?:
             SettingsView(
                 state: state,
@@ -173,62 +94,6 @@ struct RustScreenView: View {
                 open: open,
                 onBack: pop
             )
-        case .agendaHome(let state)?:
-            AgendaHomeView(
-                state: state,
-                send: { store.send(instance, .agendaHome($0)) },
-                open: open,
-                onHome: { shell.popToRoot() }
-            )
-        case .agendaEvent(let state)?:
-            AgendaEventView(
-                state: state,
-                send: { store.send(instance, .agendaEvent($0)) },
-                open: open,
-                onBack: pop,
-                onPhoneSays: { store.send(instance, .phoneSaysTaken($0)) }
-            )
-            .environment(\.appAccent, AppAccent("calendar"))
-        case .agendaEditor(let state)?:
-            AgendaEditorView(
-                state: state,
-                send: { store.send(instance, .agendaEditor($0)) },
-                onDone: pop
-            )
-            .environment(\.appAccent, AppAccent("calendar"))
-        case .todoList(let state)?:
-            TodoListView(
-                state: state,
-                send: { store.send(instance, .todoList($0)) },
-                open: open,
-                onBack: pop
-            )
-            .environment(\.appAccent, AppAccent("reminders"))
-        case .todoProject(let state)?:
-            TodoProjectView(
-                state: state,
-                send: { store.send(instance, .todoProject($0)) },
-                open: open,
-                onBack: pop
-            )
-            .environment(\.appAccent, AppAccent("reminders"))
-        case .todoDetail(let state)?:
-            TodoDetailView(
-                state: state,
-                send: { store.send(instance, .todoDetail($0)) },
-                open: open,
-                onClose: pop,
-                onPhoneSays: { store.send(instance, .phoneSaysTaken($0)) }
-            )
-            .environment(\.appAccent, AppAccent("reminders"))
-        case .todoCatchUp(let state)?:
-            TodoCatchUpView(
-                state: state,
-                send: { store.send(instance, .todoCatchUp($0)) },
-                open: open,
-                onBack: pop
-            )
-            .environment(\.appAccent, AppAccent("reminders"))
         case .backupCheck(let state)?:
             BackupCheckView(
                 state: state,
@@ -242,352 +107,29 @@ struct RustScreenView: View {
                 send: { store.send(instance, .backupHome($0)) },
                 open: open
             )
-        case .photosHome(let state)?:
-            PhotosHomeView(
-                state: state,
-                send: { store.send(instance, .photosHome($0)) },
-                open: open,
-                onHome: { shell.popToRoot() }
-            )
-        case .photosShelf(let state)?:
-            PhotoShelfView(
-                state: state,
-                send: { store.send(instance, .photosShelf($0)) },
-                open: open,
-                onBack: pop
-            )
-        case .photosPicker(let state)?:
-            PhotoPickerView(
-                state: state,
-                send: { store.send(instance, .photosPicker($0)) },
-                onFinished: pop
-            )
-        case .photosPlaces(let state)?:
-            PlacesView(
-                state: state,
-                send: { store.send(instance, .photosPlaces($0)) },
-                open: open
-            )
-        case .lockerHome(let state)?:
-            LockerHomeView(
-                state: state,
-                send: { store.send(instance, .lockerHome($0)) },
-                sendWall: { store.send(instance, .lockerWall($0)) },
-                open: open,
-                onWords: words,
-                onHome: { shell.popToRoot() }
-            )
-        case .lockerItem(let state)?:
-            LockerItemView(
-                state: state,
-                send: { store.send(instance, .lockerItem($0)) },
-                sendWall: { store.send(instance, .lockerWall($0)) },
-                open: open,
-                onWords: words,
-                onBack: pop
-            )
-        case .lockerEditor(let state)?:
-            LockerEditorView(
-                state: state,
-                send: { store.send(instance, .lockerEditor($0)) },
-                sendWall: { store.send(instance, .lockerWall($0)) },
-                onWords: words,
-                onClose: pop
-            )
-        case .lockerExport(let state)?:
-            LockerExportView(
-                state: state,
-                send: { store.send(instance, .lockerExport($0)) },
-                sendWall: { store.send(instance, .lockerWall($0)) },
-                onWords: words,
-                onBack: pop
-            )
-        case .lockerImport(let state)?:
-            LockerImportView(
-                state: state,
-                send: { store.send(instance, .lockerImport($0)) },
-                sendWall: { store.send(instance, .lockerWall($0)) },
-                onWords: words,
-                onBack: pop
-            )
-        case .lockerLock(let state)?:
-            LockerLockPageView(
-                state: state,
-                sendWall: { store.send(instance, .lockerWall($0)) },
-                onWords: words,
-                onClose: pop
-            )
-        case .moneyHome(let state)?:
-            MoneyHomeView(
-                state: state,
-                send: { store.send(instance, .moneyHome($0)) },
-                open: open,
-                onHome: { shell.popToRoot() }
-            )
-        case .moneyTransaction(let state)?:
-            MoneyTransactionView(
-                state: state,
-                send: { store.send(instance, .moneyTransaction($0)) },
-                open: open,
-                onBack: pop
-            )
-        case .moneyTarget(let state)?:
-            MoneyTargetView(
-                state: state,
-                send: { store.send(instance, .moneyTarget($0)) },
-                open: open,
-                onBack: pop
-            )
-        case .moneyRecurring(let state)?:
-            MoneyRecurringView(
-                state: state,
-                send: { store.send(instance, .moneyRecurring($0)) },
-                open: open,
-                onBack: pop
-            )
-        case .moneyAccounts(let state)?:
-            MoneyAccountsView(
-                state: state,
-                send: { store.send(instance, .moneyAccounts($0)) },
-                open: open,
-                onBack: pop
-            )
-        case .moneyRules(let state)?:
-            MoneyRulesView(
-                state: state,
-                send: { store.send(instance, .moneyRules($0)) },
-                open: open,
-                onBack: pop
-            )
-        case .moneyCategories(let state)?:
-            MoneyCategoriesView(
-                state: state,
-                send: { store.send(instance, .moneyCategories($0)) },
-                open: open,
-                onBack: pop
-            )
-        case .moneyImport(let state)?:
-            MoneyImportView(
-                state: state,
-                send: { store.send(instance, .moneyImport($0)) },
-                open: open,
-                onBack: pop
-            )
-        case .docsDrive(let state)?:
-            DocsDriveView(
-                state: state,
-                send: { store.send(instance, .docsDrive($0)) },
-                open: open,
-                onBack: pop,
-                onHome: { shell.popToRoot() }
-            )
-        case .docsDocument(let state)?:
-            DocsDocumentView(
-                state: state,
-                send: { store.send(instance, .docsDocument($0)) },
-                open: open,
-                onBack: pop,
-                onPhoneSays: { store.send(instance, .phoneSaysTaken($0)) }
-            )
-        case .docsEditor(let state)?:
-            DocsEditorView(
-                state: state,
-                send: { store.send(instance, .docsEditor($0)) },
-                onClose: pop
-            )
-        case .healthHome(let state)?:
-            HealthHomeView(
-                state: state,
-                send: { store.send(instance, .healthHome($0)) },
-                open: open,
-                onHome: { shell.popToRoot() }
-            )
-        case .healthMetric(let state)?:
-            HealthMetricView(
-                state: state,
-                send: { store.send(instance, .healthMetric($0)) },
-                onBack: pop
-            )
-        case .healthWorkout(let state)?:
-            HealthWorkoutView(
-                state: state,
-                send: { store.send(instance, .healthWorkout($0)) },
-                open: open,
-                onBack: pop,
-                onPhoneSays: { store.send(instance, .phoneSaysTaken($0)) }
-            )
-        case .healthConnect(let state)?:
-            HealthConnectView(
-                state: state,
-                send: { store.send(instance, .healthConnect($0)) },
-                onBack: pop
-            )
-        case .notesHome(let state)?:
-            NotesHomeView(
-                state: state,
-                send: { store.send(instance, .notesHome($0)) },
-                open: open,
-                onHome: { shell.popToRoot() }
-            )
-        case .notesEditor(let state)?:
-            NotesEditorView(
-                state: state,
-                send: { store.send(instance, .notesEditor($0)) },
-                open: open,
-                onClose: pop
-            )
-        case .peopleHome(let state)?:
-            PeopleHomeView(
-                state: state,
-                send: { store.send(instance, .peopleHome($0)) },
-                open: open,
-                onHome: { shell.popToRoot() }
-            )
-        case .peoplePerson(let state)?:
-            PeoplePersonView(
-                state: state,
-                send: { store.send(instance, .peoplePerson($0)) },
-                open: open,
-                onBack: pop,
-                onPhoneSays: { store.send(instance, .phoneSaysTaken($0)) }
-            )
-            .appAccent("people")
-        case .peopleEditor(let state)?:
-            PeopleEditorView(
-                state: state,
-                send: { store.send(instance, .peopleEditor($0)) },
-                onClose: pop
-            )
-            .appAccent("people")
-        case .peopleLists(let state)?:
-            PeopleListsView(
-                state: state,
-                send: { store.send(instance, .peopleLists($0)) },
-                onBack: pop
-            )
-            .appAccent("people")
         case .transfer(let state)?:
             CoreTransferView(
                 state: state,
                 send: { store.send(instance, .transfer($0)) },
                 onBack: pop
             )
-        case .trash(let state)?:
-            CoreTrashView(
-                state: state,
-                send: { store.send(instance, .trash($0)) },
-                onBack: pop
-            )
-        // "WHAT <APP> MAY READ" (owner, 2026-11-19): the kit's one reads page, from More.
-        case .reads(let state)?:
-            CoreReadsView(state: state, onBack: pop)
-        case .earlier(let state)?:
-            CoreEarlierView(
-                state: state,
-                send: { store.send(instance, .earlier($0)) },
-                open: open,
-                onBack: pop
-            )
-        case .earlierPreview(let state)?:
-            CoreEarlierPreviewView(
-                state: state,
-                send: { store.send(instance, .earlierPreview($0)) },
-                onBack: pop
-            )
-        // PAIRING A GATEWAY (#1135).
         case .pairLaptop(let state)?:
             PairLaptopPageView(
                 state: state,
                 send: { store.send(instance, .pairLaptop($0)) },
                 onDone: pop
             )
-        // PHOTOS' ONE-PHOTOGRAPH PAGES (#1135).
-        case .photosLightbox(let state)?:
-            PhotosLightboxView(
+        case .counter(let state)?:
+            ProofScreenView(
                 state: state,
-                send: { kind in
-                    var event = Centraid_Core_V1_PhotosLightboxEvent()
-                    event.kind = kind
-                    store.send(instance, .photosLightbox(event))
-                },
-                open: open,
-                onClose: pop
+                send: { store.send(instance, .counter($0)) }
             )
-        case .photosEditor(let state)?:
-            PhotosEditorView(
-                state: state,
-                send: { kind in
-                    var event = Centraid_Core_V1_PhotosEditorEvent()
-                    event.kind = kind
-                    store.send(instance, .photosEditor(event))
-                },
-                onClose: pop,
-                // A SAVE REPLACES THE EDITOR WITH THE NEW PHOTOGRAPH: it comes off
-                // the stack and the lightbox on what the member just made goes on.
-                onSaved: { route in
-                    pop()
-                    shell.open(route)
-                }
-            )
-        // THE CHAT as a page (#1135, lane I): a search's Ask (`chat.ask`) or a found conversation
-        // (`chat.thread`). The tab's root draws the same state through `HomeView`.
-        case .chat?:
-            ChatPageView(shell: shell, store: store, instance: instance, onBack: pop, open: open)
-        // HOME is the root of the `home` tab, drawn by `HomeView`, never pushed.
         default:
-            // A PAGE THE CORE CLOSED LEAVES THE STACK (#1202, S13): a restore closes every screen, the
-            // words page's own among them, and the page stayed on screen as bare paper with a back key
-            // although `path` was already empty (SwiftUI kept the pushed destination while the root
-            // beneath it changed from the welcome screen to Home). Nothing is left to draw for a closed
-            // instance, so its entry leaves `path` and, when the stack still shows it, the stack is
-            // rebuilt. A page still opening is untouched.
             BarePaper()
                 .onAppear {
                     guard let entry, store.closedInstances.contains(instance) else { return }
                     DispatchQueue.main.async { shell.dropClosedPage(entry) }
                 }
-        }
-    }
-}
-
-/// A chat page: its own `ChatModel` over this instance, so the page and the tab hold their own
-/// thread. Rust waits for the first `opened` (it names the models directory) before it starts.
-private struct ChatPageView: View {
-    let shell: ShellModel
-    let store: ScreenStore
-    let instance: UInt64
-    let onBack: () -> Void
-    let open: (Centraid_Core_V1_Route) -> Void
-
-    @StateObject private var model: ChatModel
-    @State private var typing = false
-
-    init(
-        shell: ShellModel,
-        store: ScreenStore,
-        instance: UInt64,
-        onBack: @escaping () -> Void,
-        open: @escaping (Centraid_Core_V1_Route) -> Void
-    ) {
-        self.shell = shell
-        self.store = store
-        self.instance = instance
-        self.onBack = onBack
-        self.open = open
-        _model = StateObject(wrappedValue: ChatModel(page: instance))
-    }
-
-    var body: some View {
-        ChatView(
-            chat: model,
-            typing: $typing,
-            onOpenRoute: open,
-            onSetScope: { model.open(app: $0, vaultName: shell.foregroundVaultName, scopeChosen: true) },
-            onBack: onBack
-        )
-        .onAppear {
-            model.attach(store: store)
-            if !model.opened { model.open(app: "", vaultName: shell.foregroundVaultName) }
         }
     }
 }

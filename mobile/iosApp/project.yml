@@ -372,7 +372,6 @@ targets:
       - path: Shared
       - path: Design
         includes:
-          - GlanceWords.swift
           - DesignScale.swift
           - Theme.swift
       - path: Resources/Fonts

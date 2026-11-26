@@ -63,36 +63,6 @@ final class BoldTextLayoutTests: XCTestCase {
         assertFits("Home band, five places", HomeBand(places: five) { _ in }, sizes: [.large, .accessibility3])
     }
 
-    // MARK: Calendar
-
-    private func strip() -> Centraid_Core_V1_AgendaWeekStrip {
-        var strip = Centraid_Core_V1_AgendaWeekStrip()
-        for (index, initial) in ["M", "T", "W", "T", "F", "S", "S"].enumerated() {
-            var day = Centraid_Core_V1_AgendaStripDay()
-            day.day = "2026-11-\(16 + index)"
-            day.weekdayInitial = initial
-            day.dayNumber = "\(16 + index)"
-            day.isToday = index == 3
-            day.isSelected = index == 3
-            day.isWeekend = index > 4
-            day.accessibilityLabel = "\(initial) \(16 + index)"
-            strip.days.append(day)
-        }
-        return strip
-    }
-
-    func testCalendarWeekStripUnderBoldText() {
-        assertFits("Calendar week strip", AgendaWeekStripView(strip: strip()) { _ in }, sizes: [.large, .accessibility3])
-    }
-
-    func testCalendarHeaderKeysUnderBoldText() {
-        var header = Centraid_Core_V1_AgendaCalendarHeader()
-        header.monthLabel = "November"
-        header.monthIconKey = "ChevronLeft"
-        header.monthAccessibility = "Back to November"
-        assertFits("Calendar month chip", AgendaMonthChip(header: header) { _ in }, sizes: [.large, .accessibility3])
-    }
-
     // MARK: What the audit's Dynamic Type exemption for the Home eyebrow rests on
 
     /// The 11pt eyebrow is the system's caption2 face, which UIFontMetrics holds at 11pt for the four

@@ -14,9 +14,19 @@ import UIKit
 /// WHAT THE STORE TALKS TO: the core (`Core`), or a test's stand-in for it.
 protocol ScreenCore: Sendable {
     func call(_ request: Centraid_Core_V1_Request) async throws -> Centraid_Core_V1_Response
-    /// The same call on a lane of its own (`Core.Lane`): the stage door's bytes.
     func call(_ request: Centraid_Core_V1_Request, lane: Core.Lane) async throws -> Centraid_Core_V1_Response
     var updates: AsyncStream<Centraid_Core_V1_ScreenUpdate> { get }
+    var roomUpdates: AsyncStream<Centraid_Core_V1_RoomShown> { get }
+    var notifyUpdates: AsyncStream<Centraid_Core_V1_ScheduleNotifications> { get }
+}
+
+extension ScreenCore {
+    var roomUpdates: AsyncStream<Centraid_Core_V1_RoomShown> {
+        AsyncStream { $0.finish() }
+    }
+    var notifyUpdates: AsyncStream<Centraid_Core_V1_ScheduleNotifications> {
+        AsyncStream { $0.finish() }
+    }
 }
 
 extension Core: ScreenCore {}
@@ -41,6 +51,7 @@ final class ScreenStore: ObservableObject {
     var onAnnounce: ((String) -> Void)?
 
     private let core: any ScreenCore
+    var notifyCore: any ScreenCore { core }
     typealias NotificationScheduler = @MainActor (Centraid_Core_V1_ScheduleNotifications) async -> Centraid_Core_V1_NotificationsScheduled
     private let scheduleNotifications: NotificationScheduler
     private var startup: Task<Bool, Never>?
@@ -124,6 +135,14 @@ final class ScreenStore: ObservableObject {
             Task { [core] in
                 for await update in core.updates { self.apply(update) }
             }
+            #if os(iOS)
+            Task { [core] in
+                for await schedule in core.notifyUpdates {
+                    if Task.isCancelled { break }
+                    await Notifications.applyScheduleAndReport(schedule, core: core)
+                }
+            }
+            #endif
             NotificationStartupTrace.mark(.snapshotStarted)
             let ready = await request(.snapshot(Centraid_Core_V1_SnapshotRequest()))
             NotificationStartupTrace.mark(.snapshotCompleted, succeeded: ready)
@@ -324,13 +343,7 @@ final class ScreenStore: ObservableObject {
         navigate(.popped(popped))
     }
 
-    /// HOME'S INSTANCE: the root of the `home` tab.
     var homeInstance: UInt64? { entries(of: RustScreens.homeTab).first?.instance }
-
-    /// Home's latest state, once it has been drawn.
-    var homeView: Centraid_Core_V1_HomeState? {
-        homeInstance.flatMap { views[$0] }?.homeState
-    }
 
     /// Send an event to Home.
     func sendHome(_ kind: Centraid_Core_V1_HomeEvent.OneOf_Kind) {
@@ -397,29 +410,6 @@ final class ScreenStore: ObservableObject {
         for view in update.views
         where !closed.contains(view.instance) && view.revision > (views[view.instance]?.revision ?? 0) {
             views[view.instance] = view
-            if let home = view.homeState {
-                onHomeScheme?(home.scheme)
-                if homeTold != view.instance {
-                    homeTold = view.instance
-                    onHomeAppeared?()
-                }
-            }
-            // A VAULT WAS JUST MADE: the made-vault imports read Photos, then Contacts, Calendar
-            // and Reminders using existing grants. Only an explicit import may ask for access.
-            if case let .wordsMake(make)? = view.kind, make.finished, !make.madeLine.isEmpty,
-                madeTold.insert(view.instance).inserted
-            {
-                var made = Centraid_Core_V1_ImportsMadeEvent()
-                made.made = .with { $0.reminders = true; $0.includeCompleted = false }
-                sendRoot(RustScreens.madeTab, .importsMade(made))
-            }
-        }
-        // THE NEXT WORDS OF A STREAMING ANSWER (#1188 C14), applied in order to the view they were
-        // made against; one made against another revision is dropped and the next full view repairs it.
-        for delta in update.deltas where !closed.contains(delta.instance) {
-            if let held = views[delta.instance], let grown = ViewDeltas.apply(delta, to: held) {
-                views[delta.instance] = grown
-            }
         }
         for effect in update.effects { enqueue(effect) }
     }
@@ -600,13 +590,6 @@ final class ScreenStore: ObservableObject {
             }
             #endif
             answer(request, done)
-        // THE PHONE IMPORTS (#1135, `imports`): the library, its link, its stage and its
-        // derivatives; the folders; the reminders. Every decision is Rust's.
-        case .libraryPermission(let permission)?:
-            var read = Centraid_Core_V1_LibraryPermissionRead()
-            read.permission = permission.ask ? await PhoneLibrary.requestPermission() : PhoneLibrary.permission()
-            read.deviceID = PhoneCalendar.deviceID
-            answer(request, .libraryPermissionRead(read))
         case .rollPage(let page)?:
             let paged = await Task.detached(priority: .utility) {
                 await PhoneLibrary.page(cursor: page.cursor, limit: Int(page.limit))
@@ -617,18 +600,7 @@ final class ScreenStore: ObservableObject {
         case .libraryDerivatives(let derivatives)?:
             await PhoneLibrary.derivatives(derivatives, core: core)
             answer(request, done)
-        case .libraryDelete(let delete)?:
-            answer(request, .libraryDeleted(await PhotoLibraryDeleter.delete(delete)))
         #endif
-        case .linkRead?:
-            answer(request, .linkReading(linkReading?() ?? Self.unknownLink))
-        case .foldersRead(let read)?:
-            let listing = await Task.detached(priority: .utility) { FolderReader.list(read) }.value
-            answer(request, .foldersListing(listing))
-        case .stageFolderFile(let file)?:
-            answer(request, .folderFileStaged(await FolderReader.stage(file, core: core)))
-        case .remindersRead(let read)?:
-            answer(request, await PhoneReminders.snapshot(read))
         // THE VAULT'S SECRETS (lane H2): the device-only and synchronised stores, and
         // whether the synchronised one would carry a key to another device.
         case .secrets(let batch)?:
@@ -710,102 +682,44 @@ final class ScreenStore: ObservableObject {
             GatewayBrowsing.shared.perform(request.instance, browse) { [weak self] outcome in
                 self?.answer(request, outcome)
             }
-        case .calendarRead(let read)?:
-            answer(request, await PhoneCalendar.snapshot(read))
-        case .contactsRead(let read)?:
-            answer(request, await PhoneContacts.snapshot(read))
-            if read.askPermission, PhoneContacts.limited { onContactsLimited?() }
-        case .phoneWatch(let watch)?:
-            self.watch(request, watch)
-        // PHOTOS' ONE-PHOTOGRAPH PAGES (#1135): the camera the original's header
-        // names, and the editor's pixel work.
-        case .readCamera(let read)?:
-            answer(request, await PhotoEffects.camera(read))
-        #if os(iOS)
-        case .renderEdit(let render)?:
-            answer(request, await PhotoEffects.renderEdit(render, core: core))
-        #endif
-        // HEALTH'S STORE (#1135): read over the window Rust placed, for the types it names.
-        case .healthRead(let read)?:
-            answer(request, await HealthKitReader.snapshot(read))
         case .openRoute(let open)?:
             onOpenRoute?(open.route)
             answer(request, done)
-        // AGENDA'S WIDGET SNAPSHOT (#1173): kept in the App Group container for the widgets
-        // and Siri, then the widgets reload. A missing container or a failed write is a failure.
-        case .agendaGlance(let glance)?:
-            do {
-                try AgendaGlanceWriter.keep(glance)
-                answer(request, done)
-            } catch {
-                answer(request, .failed(Self.failure(String(describing: error))))
-            }
-        // HEALTH'S WIDGET SNAPSHOT (#1185): the same path, for the Health widget.
-        case .healthGlance(let glance)?:
-            do {
-                try HealthGlanceWriter.keep(glance)
-                answer(request, done)
-            } catch {
-                answer(request, .failed(Self.failure(String(describing: error))))
-            }
         case .vaultCommand(let command)?:
-            // THE SHELF IS RUST'S: only the platform's own doors reach a shell (Settings, for a
-            // notification grant or a low disk).
-            #if os(iOS)
-            if case let .open(destination)? = command.kind, destination == .phone || destination == .notifications,
-                let url = URL(string: UIApplication.openSettingsURLString)
-            {
-                UIApplication.shared.open(url, options: [:], completionHandler: nil)
+            switch command.kind {
+            case .make(let make)?:
+                if make { sendHome(.make(.init())) }
+            case .restore(let restore)?:
+                if restore { sendHome(.restore(.init())) }
+            case .open(let destination)?:
+                #if os(iOS)
+                if destination == .phone || destination == .notifications,
+                   let url = URL(string: UIApplication.openSettingsURLString)
+                {
+                    UIApplication.shared.open(url, options: [:], completionHandler: nil)
+                }
+                #endif
+            case nil:
+                break
             }
-            #endif
             answer(request, done)
-        // DOCS' FILES (#1135): the file picker and scanner (answered more than once under
-        // one effect: progress, then the file), and the folder picker.
         case .pickFile(let pick)?:
             DocsFiles.shared.pick(pick.kind, core: core) { [weak self] outcome in
                 Task { @MainActor [weak self] in self?.answer(request, outcome) }
             }
-        case .shareFile(let share)?:
-            if let reason = DocsShare.present(share) {
-                answer(request, .failed(Self.failure(reason == EffectReason.storageFull ? reason : EffectReason.unreadable)))
-            } else {
-                answer(request, done)
-            }
-        case .shareBytes(let share)?:
-            if let reason = DocsShare.presentBytes(share) {
-                answer(request, .failed(Self.failure(reason == EffectReason.noWindow ? EffectReason.unwritable : reason)))
-            } else {
-                answer(request, done)
-            }
-        case .followFolder?:
-            DocsFollow.shared.request { [weak self] outcome in
-                Task { @MainActor [weak self] in self?.answer(request, outcome) }
-            }
-        case .stopFollowing(let stop)?:
-            DocsFollow.shared.stop(stop.origin) { outcome in answer(request, outcome) }
-        // THE MODEL'S (OR THE PHOTO READER'S) DOWNLOAD: the shell owns the transfer, and the chat
-        // hears progress and the end as events (`ChatModel`).
         case .modelDownload(let download)?:
             ChatModelDownloader.shared.start(ChatAsset(download))
             answer(request, done)
-        // THE MODEL FILE THE NEW ONE REPLACED: a name in the models folder, nothing else.
         case .deleteModelFile(let gone)?:
             if !gone.fileName.isEmpty, !gone.fileName.contains("/"), !gone.fileName.contains("..") {
                 try? FileManager.default.removeItem(
                     at: URL(fileURLWithPath: gone.modelsDir).appendingPathComponent(gone.fileName))
             }
             answer(request, done)
-        // THE CAPTURE SHIELD, per screen: the host wraps the instance's content in `WordsShield`
-        // while it holds one. No screen asks today (Locker shields through its own `secure`).
         case .screenshotShield(let shield)?:
             if shield.on { shielded.insert(request.instance) } else { shielded.remove(request.instance) }
             answer(request, done)
-        #if os(iOS)
-        case .pickLibraryPhoto?:
-            LibraryPhotoPerformer.pick { [weak self] outcome in self?.answer(request, outcome) }
-        #endif
         default:
-            // Platform work this build does not perform: say so, by value.
             answer(request, .failed(Self.failure(EffectReason.unsupported)))
         }
     }
@@ -845,12 +759,36 @@ final class ScreenStore: ObservableObject {
         send(request.instance, .effectResult(result))
     }
 
-    static func failure(_ reason: String, denied: Bool = false, cancelled: Bool = false) -> Centraid_Core_V1_EffectFailed {
+    static func failure(
+        _ reason: String,
+        denied: Bool = false,
+        cancelled: Bool = false,
+        restricted: Bool = false,
+        limited: Bool = false
+    ) -> Centraid_Core_V1_EffectFailed {
         var failed = Centraid_Core_V1_EffectFailed()
         failed.reason = reason
         failed.denied = denied
         failed.cancelled = cancelled
+        failed.restricted = restricted
+        failed.limited = limited
         return failed
+    }
+
+    static func isResting(_ vault: Centraid_Core_V1_HeldVault) -> Bool {
+        vault.resting
+    }
+
+    static func confirmedCount(_ line: Centraid_Core_V1_BackupLine) -> UInt64 {
+        line.confirmed
+    }
+
+    static func statusTimestampMs(_ status: Centraid_Core_V1_ShellBackupStatus) -> Int64 {
+        status.nowMs
+    }
+
+    static func changedTables(_ changed: Centraid_Core_V1_DataChanged) -> [String] {
+        changed.tables
     }
 
     /// START OR STOP WATCHING A PHONE STORE. While on, each change of the store
@@ -986,10 +924,4 @@ final class ScreenStore: ObservableObject {
 }
 
 
-extension Centraid_Core_V1_HomeState {
-    /// An app's tile, whose `route` is the app's front door.
-    func homeTile(of app: String) -> Centraid_Core_V1_HomeTile? {
-        guard case let .data(data)? = content else { return nil }
-        return data.tiles.first { $0.appID == app }
-    }
-}
+
