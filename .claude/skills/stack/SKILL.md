@@ -8,6 +8,8 @@ description: >-
 
 Read `centraid.md` first for each language: it holds this repo's constraints and check. `general/` holds style references; `licenses/` sits beside what it covers.
 
+**The repo page wins over `general/`.** If a digest says one thing and `centraid.md` says another, follow `centraid.md`. A digest is advice from outside; the repo page is a decision.
+
 | File type | Read | Check |
 | --- | --- | --- |
 | `.rs`, Cargo | [rust/centraid.md](rust/centraid.md) | `cargo xtask gate --profile local` |
@@ -16,6 +18,7 @@ Read `centraid.md` first for each language: it holds this repo's constraints and
 | `.ts`, `.mjs`, scripts | [typescript/centraid.md](typescript/centraid.md) | `bun run check` |
 | SQL, schema, queries | [sqlite/centraid.md](sqlite/centraid.md) | `cargo test -p centraid-vault` |
 | `.py` (the trainer) | [python/centraid.md](python/centraid.md) | `python3 experiments/adapter-train/run_tests.py` |
+| A security review: a Rust change at the trust boundary, a new dependency, an API or wire design, `.github/workflows/`, a property test | [security/centraid.md](security/centraid.md), then the skill for the job in [security/general/INDEX.md](security/general/INDEX.md) | the check of the language; `python3 .claude/skills/stack/security/sync.py --check` after a sync |
 
 Which gate profile to run, and how to report it: [land](../land/SKILL.md).
 
@@ -38,3 +41,7 @@ This holds in every language here (Rust, Swift, Kotlin, TypeScript, SQL, Python)
   - a TODO without an issue link.
 - **One line where one line will do.** A comment that needs a paragraph is usually a doc that belongs in a skill.
 - **Touching a file:** delete the comments in what you change that fail this rule. Don't add new ones to match the file's old style.
+
+## Every language
+
+- **APIs hide complexity from their callers, agents first.** Most callers are the assistant and lanes, which read a signature and a one-line description and act. Give each module, read, action and tool a small surface that does a whole job: one call that takes intent and returns a result, or an error that says what to do next, not a sequence of low-level steps the caller must order, retry or clean up. Defaults that are right, no flag the caller must know to set, invariants enforced inside rather than documented for the caller. When a caller would need to read the implementation to use it safely, the API is wrong. This is the design rule for the app plane's reads and actions.

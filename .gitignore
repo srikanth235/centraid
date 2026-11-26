@@ -18,6 +18,7 @@ output/playwright/
 target
 .claude/*
 !.claude/skills/
+!.claude/settings.json
 # Python bytecode (not source).
 __pycache__
 *.pyc
