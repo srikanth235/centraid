@@ -641,3 +641,42 @@ fn a_take_that_has_nothing_to_take_is_refused_with_a_sentence_and_writes_nothing
         "Grace"
     );
 }
+
+#[test]
+fn an_imported_date_is_silent_until_the_member_asks_and_the_follower_writes_no_reminder() {
+    let w = World::new("follow_dates_silent");
+    let records = |birthday: &str| {
+        vec![json!({ "external_id": "g", "fields": { "title": "Grace",
+            "dates": [{ "kind": "birthday", "date": birthday }] } })]
+    };
+    pass(&w, "phone-1", true, records("1990-05-17"));
+    let grace = id_of(&w, "Grace");
+    let held = |w: &World| {
+        (
+            w.one::<i64>(
+                "SELECT COUNT(*) FROM person_date WHERE person_id = ?1",
+                &[&grace],
+            ),
+            w.one::<i64>("SELECT COUNT(*) FROM reminder", &[]),
+            w.one::<i64>("SELECT COUNT(*) FROM alert", &[]),
+        )
+    };
+    assert_eq!(held(&w), (1, 0, 0), "a date arrives with no alert");
+    pass(&w, "phone-1", true, records("1991-06-18"));
+    assert_eq!(held(&w), (1, 0, 0), "a changed date is still silent");
+    let date: String = w.one(
+        "SELECT id FROM person_date WHERE person_id = ?1",
+        &[&grace],
+    );
+    w.ok(
+        "reminder.add",
+        json!({ "entity_id": &grace, "date_id": &date, "offset_min": 1440 }),
+    );
+    assert_eq!(w.one::<i64>("SELECT COUNT(*) FROM reminder", &[]), 1, "the member asked");
+    pass(&w, "phone-1", true, records("1992-07-19"));
+    assert_eq!(
+        w.one::<i64>("SELECT COUNT(*) FROM reminder", &[]),
+        1,
+        "the follower neither adds to nor takes away the member's reminder"
+    );
+}
