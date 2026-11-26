@@ -33,6 +33,8 @@ impl World {
         let now = self.vault.clock().now_text();
         self.vault
             .commit(|tx| {
+                let id = format!("note:{id}");
+                let id = id.as_str();
                 tx.insert_entity(id, Kind::Note, title, &now)?;
                 tx.connection()
                     .execute("INSERT INTO note (id, body) VALUES (?1, ?2)", [id, body])?;
@@ -48,7 +50,7 @@ impl World {
         self.vault
             .commit(|tx| {
                 for index in 0..count {
-                    let id = format!("{prefix}{index:04}");
+                    let id = format!("note:{prefix}{index:04}");
                     tx.insert_entity(&id, Kind::Note, title, &now)?;
                     tx.connection().execute(
                         "INSERT INTO note (id, body) VALUES (?1, ?2)",
@@ -64,6 +66,8 @@ impl World {
         let now = self.vault.clock().now_text();
         self.vault
             .commit(|tx| {
+                let id = format!("person:{id}");
+                let id = id.as_str();
                 tx.insert_entity(id, Kind::Person, name, &now)?;
                 tx.connection().execute(
                     "INSERT INTO person (id, nickname) VALUES (?1, ?2)",
@@ -131,7 +135,10 @@ fn request(kinds: &[&str], query: &str, limit: usize) -> SearchRequest {
 }
 
 fn ids(found: &[(String, String)]) -> Vec<&str> {
-    found.iter().map(|(_, id)| id.as_str()).collect()
+    found
+        .iter()
+        .map(|(_, id)| id.split_once(':').map_or(id.as_str(), |(_, rest)| rest))
+        .collect()
 }
 
 #[test]

@@ -7,12 +7,12 @@ The rules that never bend are in [safety.md](./safety.md). This file follows one
 - [`crates/assist`](../../../crates/assist/README.md) is the plane: the tool runtime (`native/`), the turn loop (`native_turn/`), the attached and free replies, the `Model` trait. It holds no vault and no engine. Every read and write goes through the `Door` trait ([`native/door.rs`](../../../crates/assist/src/native/door.rs)); it never writes SQL.
 - [`crates/assist-llama`](../../../crates/assist-llama/src/lib.rs) is the one engine: llama.cpp behind `Model` and `ModelLoader`. Nothing else links llama.cpp.
 - [`crates/core/src/assist/mod.rs`](../../../crates/core/src/assist/mod.rs) joins the plane to an open vault: sessions in memory, the event queue, the saved turn.
-- [`crates/screens/src/chat`](../../../crates/screens/src/chat/mod.rs) is the screen. It decides what each phase shows and never re-decides what the assistant decided.
+- The chat screen (target; the old one was deleted with the app plane) is the screen. It decides what each phase shows and never re-decides what the assistant decided.
 
 ## The screen
 
 - The phases are `CHECKING`, `NEEDS_MODEL`, `DOWNLOADING`, `LOADING`, `READY`, plus `UNAVAILABLE` for a build that cannot run a model. A thread exists only in `READY`.
-- The shell owns the download. What it fetches (URL at a commit, SHA-256, size) is read from the model record by [`asset.rs`](../../../crates/screens/src/chat/asset.rs). Pin changes are in [model.md](./model.md).
+- The shell owns the download. What it fetches (URL at a commit, SHA-256, size) is read from the model record by the chat screen (target). Pin changes are in [model.md](./model.md).
 - Status, start, cancel, confirm and dismiss are inline calls. Loading the model and sending a turn run off the runtime lock on the core's pool and come back as `OffThreadDone`.
 - A turn ends twice on the wire: a terminal event, then the answer to `send`. The event only draws words. The answer comes after the save and settles the turn once, by the turn id the screen minted.
 - A message over `MESSAGE_MAX` (800 characters) is refused in the screen before it is sent.

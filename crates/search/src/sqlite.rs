@@ -135,14 +135,14 @@ impl<'connection> SqliteDoor<'connection> {
         for table in ["search", "search_vocab"] {
             let held: i64 = connection
                 .query_row(
-                    "SELECT COUNT(*) FROM sqlite_master WHERE name = ?1",
+                    "SELECT COUNT(*) FROM ix.sqlite_master WHERE name = ?1",
                     [table],
                     |row| row.get(0),
                 )
-                .map_err(|error| SearchError::Sqlite(error.to_string()))?;
+                .unwrap_or(0);
             if held == 0 {
                 return Err(SearchError::IndexUnusable {
-                    detail: format!("`{table}` is not in this file"),
+                    detail: format!("`{table}` is not in the index file"),
                 });
             }
         }

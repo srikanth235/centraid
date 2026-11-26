@@ -177,6 +177,7 @@ fn the_drawer_searches_threads_and_says_what_it_corrected() {
         serde_json::json!({ "id": other, "title": "Teeth appointment" }),
     );
     assert_eq!(ids(&scratch.drawer("teeth", 0)), [other.as_str()]);
+    scratch.run("entity.trash", serde_json::json!({ "id": other }));
     scratch.run("entity.purge", serde_json::json!({ "id": other }));
     assert!(scratch.drawer("teeth", 0).threads.is_empty());
     assert!(scratch.drawer("dentist", 0).threads.is_empty());
