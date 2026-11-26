@@ -1960,7 +1960,7 @@ fn a_task_has_a_title_a_due_in_the_form_its_timing_says_and_a_day_of_its_own() {
         "due, due_timing, zone, scheduled_on, priority, effort_min, url",
         "'2026-03-02T08:00:00.000Z', 'zoned', 'Europe/Paris', '2026-03-01', 9, 30, 'https://example.com'",
     ));
-    // Done is exactly when it says when, in the clock's one form; a snooze belongs to an open task.
+    // Done is exactly when it says when, in the clock's one form; a task is done once.
     w.refuses(&format!("UPDATE task SET status = 'done' WHERE id = '{t}'"));
     w.refuses(&format!(
         "UPDATE task SET done_at = '{AT}' WHERE id = '{t}'"
@@ -1969,22 +1969,7 @@ fn a_task_has_a_title_a_due_in_the_form_its_timing_says_and_a_day_of_its_own() {
         "UPDATE task SET status = 'done', done_at = '2026-03-01' WHERE id = '{t}'"
     ));
     w.takes(&format!(
-        "UPDATE task SET snoozed_until = '{AT}' WHERE id = '{t}'"
-    ));
-    w.refuses(&format!(
-        "UPDATE task SET snoozed_until = '2026-03-01T09:00' WHERE id = '{t}'"
-    ));
-    w.refuses(&format!(
         "UPDATE task SET status = 'done', done_at = '{AT}' WHERE id = '{t}'"
-    ));
-    w.takes(&format!(
-        "UPDATE task SET snoozed_until = NULL WHERE id = '{t}'"
-    ));
-    w.takes(&format!(
-        "UPDATE task SET status = 'done', done_at = '{AT}' WHERE id = '{t}'"
-    ));
-    w.refuses(&format!(
-        "UPDATE task SET snoozed_until = '{AT}' WHERE id = '{t}'"
     ));
 }
 
@@ -2408,41 +2393,21 @@ fn a_chat_needs_a_title_and_a_message_is_a_state_machine_with_lookup_reasons() {
     ));
     // A lookup row a message uses is not taken away.
     w.refuses("DELETE FROM message_refusal WHERE code = 'no_tool_fits'");
-    // The record is the vault's object and carries "v":1; the cards are an array and carry none.
-    for bad in [
-        "[1]",
-        "'x'",
-        "'{\"a\":1}'",
-        "'{\"v\":2}'",
-        "'{\"v\":\"1\"}'",
-        "'{bad'",
-    ] {
-        let bad = bad.trim_matches('\'');
-        w.refuses(&message(
-            3,
-            "assistant",
-            "answered",
-            ", record",
-            &format!(", '{bad}'"),
-        ));
-    }
-    w.refuses(&message(3, "user", "sent", ", record", ", '{\"v\":1}'"));
-    w.takes(&message(
-        3,
-        "assistant",
-        "answered",
-        ", record",
-        ", '{\"v\":1,\"read\":[]}'",
-    ));
-    w.refuses(&message(4, "assistant", "answered", ", cards", ", '{}'"));
-    w.refuses(&message(4, "assistant", "answered", ", cards", ", 'nope'"));
-    w.takes(&message(
-        4,
-        "assistant",
-        "answered",
-        ", cards",
-        ", '[{\"app\":\"notes\"}]'",
-    ));
+    // A message holds no routing record and no card snapshot: a card is a row of its own.
+    let columns: Vec<String> = w
+        .scratch
+        .vault
+        .read(|c| {
+            Ok(c.prepare("SELECT name FROM pragma_table_info('message')")?
+                .query_map([], |row| row.get(0))?
+                .collect::<rusqlite::Result<_>>()?)
+        })
+        .unwrap();
+    assert!(
+        !columns
+            .iter()
+            .any(|name| name == "record" || name == "cards")
+    );
     // A message is never born settled, and a thread holds one proposal waiting.
     for settled in ["applied", "dismissed", "stale", "failed"] {
         w.refuses_with(
@@ -2490,40 +2455,220 @@ fn an_attachment_is_a_photo_a_document_or_an_image_and_a_purged_item_leaves_its_
          INSERT INTO message (thread_id, ordinal, role, text, outcome, created_at, updated_at)
            VALUES ('{chat}', 0, 'user', 'q', 'sent', '{AT}', '{AT}');"
     ));
-    let attach = |position: i64, form: &str, entity: &str, thumb: &str| {
+    let attach = |position: i64, form: &str, label: &str, entity: &str, thumb: &str| {
         format!(
             "INSERT INTO message_attachment (thread_id, ordinal, position, form, label, entity_id, thumb)
-             VALUES ('{chat}', 0, {position}, '{form}', 'l', {entity}, {thumb})"
+             VALUES ('{chat}', 0, {position}, '{form}', {label}, {entity}, {thumb})"
         )
     };
     let quoted = |value: &str| format!("'{value}'");
-    // An image is its thumbnail and no vault item; a photo or a document holds no thumbnail.
-    w.refuses(&attach(0, "image", "NULL", "NULL"));
-    w.refuses(&attach(0, "image", &quoted(&photo), &quoted(&hash)));
-    w.refuses(&attach(0, "photo", "NULL", &quoted(&hash)));
-    w.refuses(&attach(0, "document", &quoted(&doc), &quoted(&hash)));
-    w.refuses(&attach(0, "video", &quoted(&doc), "NULL"));
-    w.refuses(&attach(0, "image", "NULL", &quoted(&"cd".repeat(32))));
-    w.refuses(&attach(-1, "photo", &quoted(&photo), "NULL"));
-    w.takes(&attach(0, "image", "NULL", &quoted(&hash)));
-    w.takes(&attach(1, "photo", &quoted(&photo), "NULL"));
-    w.takes(&attach(2, "document", &quoted(&doc), "NULL"));
-    w.refuses(&attach(2, "document", &quoted(&doc), "NULL"));
+    let label = quoted("l");
+    // An image is its thumbnail and its label and no vault item; a photo or a document holds no
+    // thumbnail and no label (its title is read live).
+    w.refuses(&attach(0, "image", &label, "NULL", "NULL"));
+    w.refuses(&attach(0, "image", "NULL", "NULL", &quoted(&hash)));
+    w.refuses(&attach(0, "image", &label, &quoted(&photo), &quoted(&hash)));
+    w.refuses(&attach(0, "photo", "NULL", "NULL", &quoted(&hash)));
+    w.refuses(&attach(0, "photo", &label, &quoted(&photo), "NULL"));
+    w.refuses(&attach(
+        0,
+        "document",
+        "NULL",
+        &quoted(&doc),
+        &quoted(&hash),
+    ));
+    w.refuses(&attach(0, "video", "NULL", &quoted(&doc), "NULL"));
+    w.refuses(&attach(
+        0,
+        "image",
+        &label,
+        "NULL",
+        &quoted(&"cd".repeat(32)),
+    ));
+    w.refuses(&attach(-1, "photo", "NULL", &quoted(&photo), "NULL"));
+    w.takes(&attach(0, "image", &label, "NULL", &quoted(&hash)));
+    w.takes(&attach(1, "photo", "NULL", &quoted(&photo), "NULL"));
+    w.takes(&attach(2, "document", "NULL", &quoted(&doc), "NULL"));
+    w.refuses(&attach(2, "document", "NULL", &quoted(&doc), "NULL"));
     // A thumbnail is rented: the blob is not deleted from under it.
     w.refuses(&format!("DELETE FROM blob WHERE hash = '{hash}'"));
-    // The item is purged and the label stays, pointing at nothing.
+    // The item is purged and the attachment points at nothing, holding no word of it; the image
+    // keeps its own label.
     w.takes(&format!("DELETE FROM entity WHERE id = '{doc}'"));
     assert_eq!(
         w.scratch
             .vault
             .read(|c| Ok(c.query_row(
-                "SELECT count(*) FROM message_attachment WHERE form = 'document' AND label = 'l' AND entity_id IS NULL",
+                "SELECT count(*) FROM message_attachment WHERE form = 'document' AND label IS NULL AND entity_id IS NULL",
                 [],
                 |r| r.get::<_, i64>(0)
             )?))
             .unwrap(),
         1
     );
+    assert_eq!(
+        w.scratch
+            .vault
+            .read(|c| Ok(c.query_row(
+                "SELECT count(*) FROM message_attachment WHERE form = 'image' AND label = 'l'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )?))
+            .unwrap(),
+        1
+    );
+}
+
+#[test]
+fn a_card_is_an_item_and_a_closed_code_and_a_purged_item_leaves_a_tombstone() {
+    let w = World::new("rules_card");
+    let chat = w.entity(215, "thread", "Chat");
+    let note = w.entity(216, "note", "Zanzibar");
+    w.takes(&format!(
+        "INSERT INTO thread (id) VALUES ('{chat}');
+         INSERT INTO message (thread_id, ordinal, role, text, outcome, created_at, updated_at)
+           VALUES ('{chat}', 0, 'assistant', 'a', 'answered', '{AT}', '{AT}');"
+    ));
+    let card = |position: i64, entity: &str, qualifier: &str| {
+        format!(
+            "INSERT INTO message_card (thread_id, ordinal, position, entity_id, qualifier)
+             VALUES ('{chat}', 0, {position}, {entity}, {qualifier})"
+        )
+    };
+    let note_ref = format!("'{note}'");
+    w.refuses(&card(0, "'no-such-entity'", "NULL"));
+    for bad in [
+        "'Due'",
+        "'due date'",
+        "'reveal:password'",
+        "'1due'",
+        "''",
+        "'due______________________'",
+    ] {
+        w.refuses(&card(0, &note_ref, bad));
+    }
+    w.refuses(&card(-1, &note_ref, "NULL"));
+    w.refuses(&format!(
+        "INSERT INTO message_card (thread_id, ordinal, position) VALUES ('{chat}', 7, 0)"
+    ));
+    w.takes(&card(0, &note_ref, "NULL"));
+    w.takes(&card(1, &note_ref, "'edit_secret'"));
+    w.refuses(&card(1, &note_ref, "'due'"));
+    // The item is purged: the card stays, pointing at nothing.
+    w.takes(&format!("DELETE FROM entity WHERE id = '{note}'"));
+    assert_eq!(
+        w.scratch
+            .vault
+            .read(|c| Ok(c.query_row(
+                "SELECT count(*) FROM message_card WHERE entity_id IS NULL",
+                [],
+                |r| r.get::<_, i64>(0)
+            )?))
+            .unwrap(),
+        2
+    );
+    // The chat is deleted: its cards go with its messages.
+    w.takes(&format!("DELETE FROM entity WHERE id = '{chat}'"));
+    assert_eq!(
+        w.scratch
+            .vault
+            .read(
+                |c| Ok(c.query_row("SELECT count(*) FROM message_card", [], |r| r
+                    .get::<_, i64>(0))?)
+            )
+            .unwrap(),
+        0
+    );
+}
+
+#[test]
+fn a_snooze_names_a_target_a_reminder_may_name_and_goes_with_its_item() {
+    let w = World::new("rules_snooze");
+    let count = |w: &World| -> i64 {
+        w.scratch
+            .vault
+            .read(|c| Ok(c.query_row("SELECT count(*) FROM snooze", [], |r| r.get(0))?))
+            .unwrap()
+    };
+    let snooze = |entity: &str, kind: &str, date: &str, field: &str, until: &str| {
+        format!(
+            "INSERT INTO snooze (entity_id, entity_kind, date_id, field_id, until)
+             VALUES ({entity}, '{kind}', {date}, {field}, '{until}')"
+        )
+    };
+    let quoted = |value: &str| format!("'{value}'");
+    let event = id(220);
+    w.takes(&format!(
+        "INSERT INTO entity (id, kind, title, parent_id, parent_kind, created_at, updated_at)
+         VALUES ('{event}', 'event', 'Standup', 'calendar:default', 'calendar', '{AT}', '{AT}')"
+    ));
+    let task = w.entity(221, "task", "Call");
+    let note = w.entity(222, "note", "N");
+    let person = w.entity(223, "person", "Ada");
+    let item = w.entity(224, "locker_item", "Bank");
+    w.takes(&format!(
+        "INSERT INTO event (id, starts, timing) VALUES ('{event}', '2030-03-01T10:00', 'floating');
+         INSERT INTO task (id) VALUES ('{task}');
+         INSERT INTO person (id) VALUES ('{person}');
+         INSERT INTO person_date (id, person_id, kind, single, date)
+           VALUES ('{}', '{person}', 'birthday', 1, '1990-03-14');
+         INSERT INTO locker_item (id, type) VALUES ('{item}', 'login');
+         INSERT INTO locker_item_field (id, item_id, label, kind, value_text, created_at, updated_at)
+           VALUES ('{}', '{item}', 'Expiry', 'date', '2030-01-31', '{AT}', '{AT}');
+         INSERT INTO locker_item_field (id, item_id, label, kind, value_text, created_at, updated_at)
+           VALUES ('{}', '{item}', 'Note', 'text', 'words', '{AT}', '{AT}');",
+        id(225),
+        id(226),
+        id(227)
+    ));
+    let (date, expiry, text) = (quoted(&id(225)), quoted(&id(226)), quoted(&id(227)));
+    let later = "2030-02-01T08:00:00.000Z";
+    // The target is a reminder's: an event or a task directly, a person by a date of theirs, a
+    // Locker item by a date field of its own.
+    w.refuses(&snooze(&quoted(&note), "note", "NULL", "NULL", later));
+    w.refuses(&snooze(&quoted(&person), "person", "NULL", "NULL", later));
+    w.refuses(&snooze(
+        &quoted(&item),
+        "locker_item",
+        "NULL",
+        "NULL",
+        later,
+    ));
+    w.refuses(&snooze(&quoted(&event), "event", &date, "NULL", later));
+    w.refuses(&snooze(&quoted(&person), "person", &date, &expiry, later));
+    w.refuses(&snooze(&quoted(&item), "locker_item", "NULL", &text, later));
+    w.refuses(&snooze(&quoted(&event), "task", "NULL", "NULL", later));
+    for bad in [
+        "2030-02-01T08:00:00Z",
+        "2030-02-01",
+        "tomorrow",
+        "2030-02-30T08:00:00.000Z",
+    ] {
+        w.refuses(&snooze(&quoted(&event), "event", "NULL", "NULL", bad));
+    }
+    w.takes(&snooze(&quoted(&event), "event", "NULL", "NULL", later));
+    w.takes(&snooze(&quoted(&task), "task", "NULL", "NULL", later));
+    w.takes(&snooze(&quoted(&person), "person", &date, "NULL", later));
+    w.takes(&snooze(
+        &quoted(&item),
+        "locker_item",
+        "NULL",
+        &expiry,
+        later,
+    ));
+    // One snooze to a target.
+    w.refuses(&snooze(&quoted(&event), "event", "NULL", "NULL", later));
+    assert_eq!(count(&w), 4);
+    // A date or a field of its own goes: so does its snooze, and no other.
+    w.takes(&format!("DELETE FROM person_date WHERE id = '{}'", id(225)));
+    assert_eq!(count(&w), 3);
+    w.takes(&format!(
+        "DELETE FROM locker_item_field WHERE id = '{}'",
+        id(226)
+    ));
+    assert_eq!(count(&w), 2);
+    w.takes(&format!("DELETE FROM entity WHERE id = '{event}'"));
+    assert_eq!(count(&w), 1);
 }
 
 // ---------------------------------------------------------------------------------------------

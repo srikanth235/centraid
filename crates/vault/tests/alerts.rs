@@ -181,6 +181,13 @@ impl World {
             .expect("reads")
     }
 
+    fn snoozes(&self) -> i64 {
+        self.scratch
+            .vault
+            .read(|c| Ok(c.query_row("SELECT count(*) FROM snooze", [], |r| r.get(0))?))
+            .expect("count")
+    }
+
     fn rows(&self) -> Vec<Alert> {
         self.scratch
             .vault
@@ -439,9 +446,10 @@ fn a_repeating_task_holds_its_next_firing_and_a_snooze_is_its_one_alert() {
     let s = w.task(2, "2026-03-01T09:00:00.000Z", "zoned", Some("UTC"), None);
     let (a, b) = (w.remind(&s, 15), w.remind(&s, 0));
     is(w.key(&a), "fixed", "2026-03-01T08:45:00.000Z");
-    w.sql(&format!(
-        "UPDATE task SET snoozed_until = '2026-03-01T10:00:00.000Z' WHERE id = '{s}'"
-    ));
+    w.ok(
+        "alert.snooze",
+        json!({ "entity_id": s, "until": "2026-03-01T10:00:00Z" }),
+    );
     is(w.key(&b), "fixed", "2026-03-01T10:00:00.000Z");
     assert!(w.key(&a).is_none(), "a snooze leaves the task one alert");
     let due: String = w
@@ -450,20 +458,180 @@ fn a_repeating_task_holds_its_next_firing_and_a_snooze_is_its_one_alert() {
         .read(|c| Ok(c.query_row("SELECT due FROM task WHERE id = ?1", [&s], |r| r.get(0))?))
         .expect("due");
     assert_eq!(due, "2026-03-01T09:00:00.000Z");
-    w.sql(&format!(
-        "UPDATE task SET snoozed_until = NULL WHERE id = '{s}'"
-    ));
-    is(w.key(&a), "fixed", "2026-03-01T08:45:00.000Z");
-    is(w.key(&b), "fixed", "2026-03-01T09:00:00.000Z");
-    // Done: no alert.
+    // A second snooze replaces the first.
+    w.ok(
+        "alert.snooze",
+        json!({ "entity_id": s, "until": "2026-03-01T11:00:00.000Z" }),
+    );
+    is(w.key(&b), "fixed", "2026-03-01T11:00:00.000Z");
+    assert_eq!(w.snoozes(), 1);
+    // Done: no alert and no snooze.
     w.sql(&format!(
         "UPDATE task SET status = 'done', done_at = '{AT}' WHERE id = '{s}'"
     ));
     assert!(w.key(&a).is_none() && w.key(&b).is_none());
+    assert_eq!(w.snoozes(), 0);
     // A date-only due: 09:00 that day, the lead counted back.
     let day = w.task(3, "2026-03-02", "all-day", None, None);
     let r = w.remind(&day, 60);
     is(w.key(&r), "floating", "2026-03-02T08:00");
+}
+
+#[test]
+fn a_snooze_moves_only_the_alert_it_names_for_every_kind_a_reminder_goes_on() {
+    let w = World::new("alerts_snooze_kinds");
+    let event = w.event(1, "2030-03-01T10:00", "floating", None, None);
+    let person = w.person(2, "Ada");
+    let birthday = w.date(&person, 3, "birthday", "1990-03-14", None);
+    let wedding = w.date(&person, 4, "anniversary", "2015-06-01", Some("Wedding"));
+    let (item, _, text, expiry) = w.item(10);
+    let on_event = w.remind(&event, 10);
+    let on_birthday = w.add(&person, Some(&birthday), None, 0).unwrap();
+    let on_wedding = w.add(&person, Some(&wedding), None, 0).unwrap();
+    let on_expiry = w.add(&item, None, Some(&expiry), 0).unwrap();
+    let before = w.dump();
+
+    let snooze = |input: Value| w.ok("alert.snooze", input);
+    let until = "2026-02-01T08:00:00.000Z";
+    let moved = |w: &World, reminder: &str| {
+        let was = w.key(reminder);
+        assert_eq!(
+            was,
+            Some(("fixed".to_owned(), until.to_owned())),
+            "{reminder}"
+        );
+    };
+
+    snooze(json!({ "entity_id": person, "date_id": birthday, "until": until }));
+    moved(&w, &on_birthday);
+    for untouched in [&on_wedding, &on_event, &on_expiry] {
+        assert_eq!(
+            w.key(untouched).map(|(_, key)| key),
+            before
+                .iter()
+                .find(|line| line.starts_with(untouched.as_str()))
+                .map(|line| line.split('|').nth(3).unwrap().to_owned()),
+            "{untouched}"
+        );
+    }
+    snooze(json!({ "entity_id": item, "field_id": expiry, "until": until }));
+    moved(&w, &on_expiry);
+    snooze(json!({ "entity_id": event, "until": until }));
+    moved(&w, &on_event);
+    moved(&w, &on_birthday);
+    assert!(
+        w.key(&on_wedding).is_some_and(|(_, key)| key != until),
+        "the other date of the same person did not move"
+    );
+    assert_eq!(w.snoozes(), 3);
+
+    // A date's own edit ends its snooze and no other: the birthday moves, the Locker expiry stays;
+    // saving the same date, or editing a text field of the item, ends nothing.
+    w.sql(&format!(
+        "UPDATE person_date SET date = date WHERE id = '{birthday}';
+         UPDATE locker_item_field SET value_text = 'other words' WHERE id = '{text}';
+         UPDATE locker_item_field SET value_text = value_text WHERE id = '{expiry}'"
+    ));
+    assert_eq!(w.snoozes(), 3);
+    w.sql(&format!(
+        "UPDATE person_date SET date = '1990-03-15' WHERE id = '{birthday}'"
+    ));
+    assert_eq!(w.snoozes(), 2);
+    assert_ne!(
+        w.key(&on_birthday).map(|(_, key)| key),
+        Some(until.to_owned())
+    );
+    moved(&w, &on_expiry);
+    w.sql(&format!(
+        "UPDATE locker_item_field SET value_text = '2031-01-31' WHERE id = '{expiry}'"
+    ));
+    assert_eq!(w.snoozes(), 1);
+    // An event's time edit ends its snooze; its title does not.
+    w.sql(&format!(
+        "UPDATE entity SET title = 'Weekly' WHERE id = '{event}'"
+    ));
+    assert_eq!(w.snoozes(), 1);
+    w.sql(&format!(
+        "UPDATE event SET starts = '2030-03-01T11:00' WHERE id = '{event}'"
+    ));
+    assert_eq!(w.snoozes(), 0);
+    // A lead added, changed or removed ends the snooze of its own target.
+    snooze(json!({ "entity_id": event, "until": until }));
+    w.ok(
+        "reminder.add",
+        json!({ "entity_id": event, "offset_min": 30 }),
+    );
+    assert_eq!(w.snoozes(), 0);
+}
+
+#[test]
+fn editing_a_tasks_due_clears_its_snooze_and_saving_the_same_due_does_not() {
+    let w = World::new("alerts_snooze_task_due");
+    let t = w.task(1, "2030-03-01T09:00:00.000Z", "zoned", Some("UTC"), None);
+    let r = w.remind(&t, 0);
+    let until = "2030-03-01T09:30:00.000Z";
+    let snooze = || w.ok("alert.snooze", json!({ "entity_id": t, "until": until }));
+    snooze();
+    w.sql(&format!(
+        "UPDATE task SET due = due, rule = rule, status = status WHERE id = '{t}'"
+    ));
+    assert_eq!(w.snoozes(), 1, "the same due is not an edit of it");
+    is(w.key(&r), "fixed", until);
+    w.sql(&format!(
+        "UPDATE task SET due = '2030-03-01T10:00:00.000Z' WHERE id = '{t}'"
+    ));
+    assert_eq!(w.snoozes(), 0);
+    is(w.key(&r), "fixed", "2030-03-01T10:00:00.000Z");
+    // Cancelling and finishing end a snooze; reopening does not bring one back.
+    snooze();
+    w.sql(&format!(
+        "UPDATE task SET status = 'cancelled' WHERE id = '{t}'"
+    ));
+    assert_eq!(w.snoozes(), 0);
+}
+
+#[test]
+fn a_snooze_is_refused_where_there_is_no_alert_to_move() {
+    let w = World::new("alerts_snooze_refused");
+    let until = "2030-02-01T08:00:00.000Z";
+    let event = w.event(1, "2030-03-01T10:00", "floating", None, None);
+    let bare = w.event(2, "2030-03-01T10:00", "floating", None, None);
+    let task = w.task(3, "2030-03-01T10:00", "floating", None, None);
+    w.remind(&event, 10);
+    w.remind(&task, 10);
+    let person = w.person(4, "Ada");
+    let birthday = w.date(&person, 5, "birthday", "1990-03-14", None);
+    w.add(&person, Some(&birthday), None, 0).unwrap();
+    let note = common::insert_note(&w.scratch.vault, "N").expect("a note");
+    let refused = |input: Value, fragment: &str| {
+        let why = w.run("alert.snooze", input).expect_err("refused");
+        assert!(why.contains(fragment), "`{why}` should say `{fragment}`");
+    };
+    refused(json!({ "entity_id": bare, "until": until }), "no reminder");
+    refused(
+        json!({ "entity_id": person, "until": until }),
+        "no reminder",
+    );
+    refused(
+        json!({ "entity_id": note, "until": until }),
+        "no alert to snooze",
+    );
+    refused(
+        json!({ "entity_id": id(999), "until": until }),
+        "nothing with the id",
+    );
+    refused(
+        json!({ "entity_id": event, "until": "2025-01-01T00:00:00Z" }),
+        "future",
+    );
+    refused(json!({ "entity_id": event, "until": "tomorrow" }), "until");
+    w.sql(&format!(
+        "UPDATE task SET status = 'done', done_at = '{AT}' WHERE id = '{task}'"
+    ));
+    refused(json!({ "entity_id": task, "until": until }), "open task");
+    w.ok("entity.trash", json!({ "id": event }));
+    refused(json!({ "entity_id": event, "until": until }), "trash");
+    assert_eq!(w.snoozes(), 0);
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -204,10 +204,13 @@ fn a_task_is_refused_what_a_sentence_says_and_the_database_holds_too() {
         w.refused("task.edit", json!({ "id": id, "rule": "FREQ=DAILY" }))
             .contains("needs a due date")
     );
-    // A task with no alert can still be told to snooze: it only moves a reminder that is there.
-    w.ok(
-        "task.edit",
-        json!({ "id": id, "snoozed_until": "2026-03-02T10:00:00Z" }),
+    // A task has no snooze of its own to edit: `alert.snooze` moves the alert of a reminder that is there.
+    assert!(
+        w.refused(
+            "alert.snooze",
+            json!({ "entity_id": id, "until": "2099-03-02T10:00:00Z" })
+        )
+        .contains("no reminder")
     );
     // A task made with the id of another is refused, and an edit of a note is.
     assert!(
@@ -694,24 +697,14 @@ fn a_snooze_moves_the_alert_and_not_the_due_and_an_edit_of_the_due_ends_it() {
         &w,
         json!({ "title": "Call", "due": "2026-03-02T10:00:00Z", "reminders": [0, 60] }),
     );
-    assert_eq!(
-        fires(&w, &id),
-        [
-            (0, "fixed".to_owned(), "2026-03-02T10:00:00.000Z".to_owned()),
-            (
-                60,
-                "fixed".to_owned(),
-                "2026-03-02T09:00:00.000Z".to_owned()
-            ),
-        ]
-    );
+    let snooze_count = || w.one::<i64>("SELECT count(*) FROM snooze WHERE entity_id = ?1", &[&id]);
     w.ok(
-        "task.edit",
-        json!({ "id": id, "snoozed_until": "2026-03-02T11:30:00Z" }),
+        "alert.snooze",
+        json!({ "entity_id": id, "until": "2099-03-02T11:30:00Z" }),
     );
     assert_eq!(
         fires(&w, &id),
-        [(0, "fixed".to_owned(), "2026-03-02T11:30:00.000Z".to_owned())],
+        [(0, "fixed".to_owned(), "2099-03-02T11:30:00.000Z".to_owned())],
         "the task's one alert, on its smallest lead"
     );
     assert_eq!(
@@ -719,51 +712,33 @@ fn a_snooze_moves_the_alert_and_not_the_due_and_an_edit_of_the_due_ends_it() {
         Some("2026-03-02T10:00:00.000Z"),
         "the due is unmoved"
     );
-    assert_eq!(
-        w.one::<String>("SELECT snoozed_until FROM task WHERE id = ?1", &[&id]),
-        "2026-03-02T11:30:00.000Z"
-    );
-    // An edit that says nothing of the snooze keeps it; one of the due ends it.
+    // An edit that says nothing of the due keeps it, and so does one that states the same due.
     w.ok("task.edit", json!({ "id": id, "priority": 2 }));
-    assert!(
-        w.one::<Option<String>>("SELECT snoozed_until FROM task WHERE id = ?1", &[&id])
-            .is_some()
+    w.ok(
+        "task.edit",
+        json!({ "id": id, "due": "2026-03-02T10:00:00Z" }),
     );
+    assert_eq!(snooze_count(), 1);
+    // An edit of the due ends it.
     w.ok(
         "task.edit",
         json!({ "id": id, "due": "2026-03-02T12:00:00Z" }),
     );
-    assert_eq!(
-        w.one::<Option<String>>("SELECT snoozed_until FROM task WHERE id = ?1", &[&id]),
-        None
-    );
+    assert_eq!(snooze_count(), 0);
     assert_eq!(fires(&w, &id).len(), 2);
-    // A snooze may be cleared by stating none, and is ended by finishing.
+    // Finishing a task ends it too, and a finished task cannot be snoozed.
     w.ok(
-        "task.edit",
-        json!({ "id": id, "snoozed_until": "2026-03-02T13:00:00Z" }),
-    );
-    w.ok("task.edit", json!({ "id": id, "snoozed_until": null }));
-    assert_eq!(fires(&w, &id).len(), 2);
-    w.ok(
-        "task.edit",
-        json!({ "id": id, "snoozed_until": "2026-03-02T13:00:00Z" }),
+        "alert.snooze",
+        json!({ "entity_id": id, "until": "2099-03-02T13:00:00Z" }),
     );
     w.ok("task.cancel", json!({ "id": id }));
-    assert_eq!(
-        w.one::<Option<String>>("SELECT snoozed_until FROM task WHERE id = ?1", &[&id]),
-        None
-    );
+    assert_eq!(snooze_count(), 0);
     assert!(
         w.refused(
-            "task.edit",
-            json!({ "id": id, "snoozed_until": "2026-03-02T13:00:00Z" })
+            "alert.snooze",
+            json!({ "entity_id": id, "until": "2099-03-02T13:00:00Z" })
         )
         .contains("open task")
-    );
-    assert!(
-        w.refused("task.edit", json!({ "id": id, "snoozed_until": "soon" }))
-            .contains("snoozed_until")
     );
 }
 
