@@ -8,7 +8,6 @@ blob.stage
 budget.set
 budget.set_carry
 category.add
-category.merge
 checkpoint.record
 container.create
 container.move
