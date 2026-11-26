@@ -136,7 +136,7 @@ fn a_document_a_line_a_photograph_and_a_login_may_be_joined_to_a_person_and_noth
 // ---------------------------------------------------------------------------
 
 #[test]
-fn a_persons_trash_takes_notes_and_touches_and_never_a_document_a_line_a_photo_or_a_login() {
+fn a_persons_trash_takes_touches_and_never_a_note_a_document_a_line_a_photo_or_a_login() {
     let w = World::new("widen_trash");
     let ada = w.person("Ada");
     let words = note(&w, "N", "about Ada");
@@ -151,7 +151,11 @@ fn a_persons_trash_takes_notes_and_touches_and_never_a_document_a_line_a_photo_o
     edge(&w, &t.login, "with", &ada);
 
     w.ok("entity.trash", json!({ "id": ada }));
-    assert!(trashed(&w, &words) && trashed(&w, &touch));
+    assert!(trashed(&w, &touch));
+    assert!(
+        !trashed(&w, &words),
+        "a note about them is the member's own and stays"
+    );
     for kept in t.all() {
         assert!(!trashed(&w, kept), "{kept} is the member's own and stays");
     }
@@ -159,7 +163,7 @@ fn a_persons_trash_takes_notes_and_touches_and_never_a_document_a_line_a_photo_o
     assert!(!trashed(&w, &words) && !trashed(&w, &touch));
     w.ok("entity.trash", json!({ "id": ada }));
     w.ok("entity.purge", json!({ "id": ada }));
-    assert!(!exists(&w, &words) && !exists(&w, &touch));
+    assert!(exists(&w, &words) && !exists(&w, &touch));
     for kept in t.all() {
         assert!(exists(&w, kept), "{kept} outlives the person");
     }
