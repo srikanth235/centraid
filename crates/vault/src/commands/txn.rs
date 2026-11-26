@@ -192,19 +192,30 @@ pub(crate) fn refile_parts_of(ctx: &CommandCtx<'_, '_>, category: &str) -> Resul
             |row| row.get(0),
         )
         .optional()?;
+    let Some(group) = &group else {
+        connection.execute(
+            "DELETE FROM txn_split WHERE txn_id IN (SELECT txn_id FROM txn_split WHERE category_id = ?1)",
+            [category],
+        )?;
+        return Ok(());
+    };
+    refile_parts_into(ctx, category, group)
+}
+
+/// File every part that names `from` under `into` instead, so each line keeps summing and keeps
+/// its other parts; two parts left under one category become one (amounts added, the first one's
+/// memo, in order).
+pub(crate) fn refile_parts_into(ctx: &CommandCtx<'_, '_>, from: &str, into: &str) -> Result<()> {
+    let connection = ctx.connection();
     let lines: Vec<String> = connection
         .prepare_cached("SELECT DISTINCT txn_id FROM txn_split WHERE category_id = ?1")?
-        .query_map([category], |row| row.get(0))?
+        .query_map([from], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?;
     for id in lines {
-        let Some(group) = &group else {
-            connection.execute("DELETE FROM txn_split WHERE txn_id = ?1", [id.as_str()])?;
-            continue;
-        };
         let mut merged: Vec<Part> = Vec::new();
         for mut part in parts_of(connection, &id)? {
-            if part.category_id == category {
-                part.category_id.clone_from(group);
+            if part.category_id == from {
+                part.category_id = into.to_owned();
             }
             match merged
                 .iter_mut()
